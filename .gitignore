@@ -1,0 +1,28 @@
+# === Local secrets & per-user config — never commit ===
+mailmind.config.json
+
+# === Learned rules (personal keep/block lists; regenerated at runtime) ===
+mailmind_rules.json
+
+# === Local data & caches (regenerated) ===
+mailmind.db
+mailmind.db-shm
+mailmind.db-wal
+*.sqlite
+*.db-journal
+*.jsonl
+
+# === Logs ===
+*.log
+
+# === Backups & screenshots (may contain real mail) ===
+.redesign_backup/
+screenshots/
+mm-*.png
+
+# === Python ===
+__pycache__/
+*.pyc
+
+# === macOS ===
+.DS_Store

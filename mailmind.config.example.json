@@ -1,0 +1,43 @@
+{
+  "_README": [
+    "Copy this file to 'mailmind.config.json' (git-ignored) and edit it.",
+    "Each account has a 'type' (gmail | imap | proton) and a 'credential'.",
+    "",
+    "TWO WAYS TO SUPPLY A PASSWORD — pick whichever per account, mix freely:",
+    "  OPTION A — self-contained (no extra tools): put the password right here.",
+    "     \"credential\": \"my-password\"            (string shorthand), or",
+    "     \"credential\": {\"plain\": \"my-password\"}",
+    "  OPTION B — keep secrets out of the file:",
+    "     \"credential\": {\"op\": \"op://Vault/Item/Field\"}   1Password CLI (op)",
+    "     \"credential\": {\"env\": \"SOME_ENV_VAR\"}           an environment variable",
+    "     \"credential\": {\"proton_bridge\": true}            local Proton Bridge password",
+    "",
+    "Switch an existing op/env config to self-contained any time:",
+    "     python3 config.py materialize            (all accounts), or",
+    "     python3 config.py materialize you@x.com  (one). Then: python3 config.py check",
+    "",
+    "Type defaults: gmail=imap.gmail.com:993 TLS (needs a Google App Password);",
+    "  imap=:993 TLS (set host/port; port 143 + \"starttls\":true for STARTTLS);",
+    "  proton=127.0.0.1:1143 STARTTLS via the local Bridge app.",
+    "Optional per-account keys: host, port, starttls, trash, strip_spaces, disabled."
+  ],
+  "accounts": [
+    {"email": "you@gmail.com", "type": "gmail",
+     "_note": "OPTION A, self-contained. Gmail/Workspace needs an App Password (myaccount.google.com/apppasswords).",
+     "credential": "abcd efgh ijkl mnop"},
+
+    {"email": "you@company.com", "type": "imap",
+     "host": "mail.yourhost.com", "port": 993, "trash": "Trash",
+     "_note": "Generic hosted mailbox (cPanel/Dovecot/etc). Some servers use trash \"INBOX.Trash\".",
+     "credential": {"plain": "your-mailbox-password"}},
+
+    {"email": "secure@company.com", "type": "imap",
+     "host": "mail.yourhost.com", "port": 143, "starttls": true,
+     "_note": "OPTION B: same account, but the secret lives in 1Password instead of this file.",
+     "credential": {"op": "op://Private/Your Mail Item/password"}},
+
+    {"email": "you@proton.me", "type": "proton",
+     "_note": "Install Proton Bridge, then set MAILMIND_PROTON_BRIDGE_PASS or ~/.config/mailmind/proton_bridge_pass",
+     "credential": {"proton_bridge": true}}
+  ]
+}
