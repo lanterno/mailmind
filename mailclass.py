@@ -220,11 +220,17 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
     full = from_addr.strip().lower()
 
     # 0) learned overrides win over all heuristics — the user's explicit verdicts.
+    #    Exact-sender rules beat domain rules (a blocked noreply@ overrides a
+    #    kept whole-domain), and within each scope keep beats block.
     rules = _rules()
-    if full in rules["keep_senders"] or _domain_listed(domain, rules["keep_domains"]):
-        return PROTECTED, "high", "kept by rule"
-    if full in rules["block_senders"] or _domain_listed(domain, rules["block_domains"]):
-        return BLOCKED, "high", "blocked by rule"
+    if full in rules["keep_senders"]:
+        return PROTECTED, "high", "kept by rule (sender)"
+    if full in rules["block_senders"]:
+        return BLOCKED, "high", "blocked by rule (sender)"
+    if _domain_listed(domain, rules["keep_domains"]):
+        return PROTECTED, "high", "kept by rule (domain)"
+    if _domain_listed(domain, rules["block_domains"]):
+        return BLOCKED, "high", "blocked by rule (domain)"
 
     # 1) spam/scam wins over the remaining heuristics (incl. gmail-sent scams)
     if _is_scam(local, domain, subject, name):
@@ -270,11 +276,6 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
 
 NOTIF_RE = re.compile(r"(no-?reply|do-?not-?reply|notification|notify|mailer-daemon|automated|noreply)", re.I)
 RE_FWD = re.compile(r"^\s*(re|fwd|fw|aw|wg|tr|rv|r[ée]f)\s*:", re.I)  # reply/forward prefixes (multi-lingual)
-
-
-def bucket(from_addr, subject="", has_list_unsub=False, from_name=""):
-    """Back-compat thin wrapper returning just the bucket string."""
-    return classify(from_addr, subject, from_name, has_list_unsub)[0]
 
 
 def is_junk(bucket_name):

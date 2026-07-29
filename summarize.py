@@ -33,7 +33,42 @@ Body:
 """
 
 
+# --- triage schema: when the CLI supports --json-schema the model returns a guaranteed-valid
+#     object in a top-level `structured_output` field, killing the old regex-scrape parse-error class.
+TRIAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+        "category": {"type": "string",
+                     "enum": ["action-needed", "personal", "work-job", "finance", "calendar", "info", "other"]},
+        "action": {"type": "string"},
+    },
+    "required": ["summary", "importance", "category"],
+}
+
+_SCHEMA_OK = None
+
+
+def _supports_schema():
+    """Cache whether the installed claude CLI accepts --json-schema (cheap help-text probe,
+    no API call). Older CLIs fall back to the text + regex path automatically."""
+    global _SCHEMA_OK
+    if _SCHEMA_OK is None:
+        if os.environ.get("MAILMIND_NO_SCHEMA"):
+            _SCHEMA_OK = False
+        else:
+            try:
+                r = subprocess.run(["claude", "--help"], capture_output=True, text=True,
+                                   timeout=15, cwd=NEUTRAL_CWD)
+                _SCHEMA_OK = "--json-schema" in (r.stdout + r.stderr)
+            except Exception:
+                _SCHEMA_OK = False
+    return _SCHEMA_OK
+
+
 def call_claude(prompt):
+    """Plain text result (used by summarize_thread). Unchanged signature."""
     cmd = ["claude", "-p", prompt, "--output-format", "text"]
     if MODEL:
         cmd += ["--model", MODEL]
@@ -41,6 +76,41 @@ def call_claude(prompt):
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip()[:200] or "claude failed")
     return r.stdout.strip()
+
+
+def _loose_json(out):
+    m = re.search(r"\{.*\}", out, re.S)
+    return json.loads(m.group(0)) if m else {}
+
+
+def call_claude_json(prompt, schema):
+    """Run claude expecting a JSON object matching `schema`. Returns the validated dict
+    from the top-level `structured_output` field when the CLI supports --json-schema,
+    else best-effort regex-parsed JSON from the text path. Raises RuntimeError ONLY on a
+    transport failure (non-zero exit) so the caller can distinguish retry from fallback;
+    a successful-but-unparseable reply yields {}."""
+    use = _supports_schema()
+    cmd = ["claude", "-p", prompt]
+    cmd += (["--output-format", "json", "--json-schema", json.dumps(schema)] if use
+            else ["--output-format", "text"])
+    if MODEL:
+        cmd += ["--model", MODEL]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=NEUTRAL_CWD)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip()[:200] or "claude failed")
+    out = r.stdout
+    if use:
+        try:
+            obj = json.loads(out)
+            if isinstance(obj.get("structured_output"), dict):
+                return obj["structured_output"]
+            out = obj.get("result", out)   # flag accepted but no structured field -> parse the prose
+        except Exception:
+            pass
+    try:
+        return _loose_json(out)
+    except Exception:
+        return {}
 
 
 def parse(out):
@@ -58,14 +128,19 @@ def summarize_one(row):
     prompt = PROMPT.format(frm=frm, subject=row["subject"] or "(no subject)",
                            date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
     try:
-        out = call_claude(prompt)
+        obj = call_claude_json(prompt, TRIAGE_SCHEMA)
     except Exception:
         return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
-    try:
-        s, imp, cat, act = parse(out)
-        return row["pk"], (s, imp, cat, act, (MODEL or "claude-cli"))
-    except Exception:  # claude replied but not JSON -> store a fallback, don't loop forever
-        return row["pk"], ((row["subject"] or "(no subject)"), 2, "other", "", "parse-error")
+    if obj.get("summary"):
+        try:
+            imp = max(1, min(5, int(obj.get("importance", 2))))
+        except Exception:
+            imp = 2
+        return row["pk"], (str(obj["summary"])[:600], imp,
+                           str(obj.get("category", "other"))[:32],
+                           str(obj.get("action", ""))[:200], (MODEL or "claude-cli"))
+    # successful call but no usable summary -> store a fallback, don't loop forever
+    return row["pk"], ((row["subject"] or "(no subject)"), 2, "other", "", "parse-error")
 
 
 def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
