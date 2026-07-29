@@ -1,5 +1,5 @@
 # === Local secrets & per-user config — never commit ===
-mailmind.config.json
+mailmind.config.json*
 
 # === Learned rules (personal keep/block lists; regenerated at runtime) ===
 mailmind_rules.json
@@ -8,6 +8,7 @@ mailmind_rules.json
 mailmind.db
 mailmind.db-shm
 mailmind.db-wal
+mailmind_views.json
 *.sqlite
 *.db-journal
 *.jsonl
@@ -19,6 +20,7 @@ mailmind.db-wal
 .redesign_backup/
 screenshots/
 mm-*.png
+*.bak-*
 
 # === Python ===
 __pycache__/

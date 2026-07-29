@@ -32,13 +32,14 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
 import mailclass
+import pool
 import rules
 
 AUDIT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sweep_audit.jsonl")
 
 HDR_BATCH = 300
 MOVE_BATCH = 200
-HDR_FIELDS = "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT LIST-UNSUBSCRIBE LIST-ID)])"
+HDR_FIELDS = "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID LIST-UNSUBSCRIBE LIST-ID)])"
 
 
 def dec(s):
@@ -57,7 +58,6 @@ def dec(s):
 
 
 def _uid(meta):
-    import re
     m = re.search(r"UID (\d+)", meta.decode("utf-8", "replace"))
     return m.group(1) if m else None
 
@@ -81,6 +81,7 @@ def fetch_headers(M):
             name, addr = parseaddr(msg.get("From", ""))
             rows.append({"uid": uid, "from": addr.lower(), "name": dec(name),
                          "subject": dec(msg.get("Subject", "")),
+                         "mid": (msg.get("Message-ID", "") or "").strip(),
                          "bulk": bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))})
     return rows
 
@@ -109,12 +110,8 @@ def plan_account(acct):
     res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
            "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
     try:
-        M = accounts.connect(acct)
-        rows = classify_rows(fetch_headers(M))
-        try:
-            M.logout()
-        except Exception:
-            pass
+        with pool.borrow(acct) as M:      # pooled read: reuse the login (no fresh connect per /api/stats)
+            rows = classify_rows(fetch_headers(M))   # ctx-mgr ALWAYS closes → no socket leak on fetch error
     except Exception as e:
         res["error"] = f"{type(e).__name__}: {e}"
         return res
@@ -128,6 +125,33 @@ def plan_account(acct):
     res["top_senders"] = {b: [s for s, _ in Counter(r["from"] for r in rs).most_common(4)]
                           for b, rs in by.items()}
     res["_rows"] = rows  # internal: used by cmd_plan/sweep, dropped before serialization
+    return res
+
+
+def plan_account_db(acct):
+    """DB-sourced twin of plan_account — NO IMAP, instant. Re-classifies the STORED INBOX rows with
+    the same mailclass (so it reflects current keep/block rules and matches what a live sweep would
+    move). Accurate because auto-reconcile keeps the stored INBOX in sync with the server. Used by the
+    Curate drawer (/api/stats), which was a ~3s live 8-account header scan; the Sweep buttons still
+    re-verify live before moving anything."""
+    import store
+    res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
+           "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
+    c = store.conn()
+    rows = c.execute("""SELECT from_addr, from_name, subject, list_unsub_raw FROM messages
+                        WHERE account=? AND folder='INBOX' AND deleted=0""", (acct["email"],)).fetchall()
+    c.close()
+    by = defaultdict(list)
+    for r in rows:
+        addr = (r["from_addr"] or "").lower()
+        b = mailclass.classify(addr, r["subject"] or "", r["from_name"] or "",
+                               bool(r["list_unsub_raw"]))[0]
+        by[b].append(addr)
+    res["in_inbox"] = len(rows)
+    res["by_bucket"] = {b: len(v) for b, v in by.items()}
+    res["junk"] = sum(len(by[b]) for b in mailclass.JUNK_BUCKETS)
+    res["keep"] = len(rows) - res["junk"]
+    res["top_senders"] = {b: [s for s, _ in Counter(v).most_common(4)] for b, v in by.items()}
     return res
 
 
@@ -251,6 +275,87 @@ def sweep_account(acct, dry=False):
     return out
 
 
+def sweep_account_ai(acct, dry=False):
+    """AI-verdict sweep: trash INBOX messages MailMind flagged is_junk=1 (the AI
+    classifier that reads the body — catches header-less newsletters the mailclass
+    header sweep misses). Matched to the LIVE inbox by Message-ID so UIDs are always
+    current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. Move to Trash
+    (reversible), verified + audited; prune the local DB by Message-ID."""
+    import store
+    r = rules.load()
+    keep_senders, keep_domains = set(r["keep_senders"]), set(r["keep_domains"])
+
+    def _keep_ruled(fa):
+        fa = (fa or "").lower(); dom = fa.partition("@")[2]
+        return fa in keep_senders or any(dom == d or dom.endswith("." + d) for d in keep_domains)
+
+    c = store.conn()
+    junk_mids = set(m for (m,) in c.execute(
+        """SELECT message_id FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1
+           AND deleted=0 AND (snoozed_until IS NULL OR snoozed_until=0)
+           AND message_id IS NOT NULL AND message_id!=''""", (acct["email"],)).fetchall())
+    c.close()
+    out = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
+           "kept_by_rule": 0, "error": None}
+    if not junk_mids:
+        return out
+    try:
+        M = accounts.connect(acct)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    try:                                    # single try/finally so M is ALWAYS logged out (no socket leak)
+        live = fetch_headers(M)
+        targets, kept = [], 0
+        for h in live:
+            if h.get("mid") and h["mid"] in junk_mids:
+                if _keep_ruled(h["from"]):
+                    kept += 1
+                else:
+                    targets.append(h)
+        out["planned"], out["kept_by_rule"] = len(targets), kept
+        if dry or not targets:
+            return out
+        audit(acct["email"], [{"uid": t["uid"], "from": t["from"], "subject": t["subject"],
+                               "bucket": "ai-junk", "reason": "is_junk (AI verdict)"} for t in targets])
+        moved, stragglers = move_verified(M, [t["uid"] for t in targets], accounts.trash_folder(acct))
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
+    out["moved"], out["stragglers"] = moved, stragglers
+    strag = set(stragglers)
+    c = store.conn()
+    for t in targets:                       # prune by Message-ID (validity-independent)
+        if t["uid"] in strag:
+            continue
+        row = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
+                        (acct["email"], t["mid"])).fetchone()
+        if row:
+            store.delete_message(c, row["pk"])
+    c.commit()
+    c.close()
+    return out
+
+
+def cmd_sweep_ai(accts, dry=False):
+    grand_p = grand_m = grand_k = 0
+    for a in accts:
+        r = sweep_account_ai(a, dry=dry)
+        if r["error"]:
+            print(f"{a['email']:38} ERROR: {r['error']}")
+            continue
+        tag = f"would trash {r['planned']}" if dry else f"moved {r['moved']}/{r['planned']}"
+        strag = f"  !{len(r['stragglers'])} stragglers" if r.get("stragglers") else ""
+        print(f"{a['email']:38} {tag:>16}   (kept by rule: {r['kept_by_rule']}){strag}")
+        grand_p += r["planned"]; grand_m += r.get("moved", 0); grand_k += r["kept_by_rule"]
+    print(f"\nTOTAL: planned {grand_p}" + ("" if dry else f" · moved {grand_m}") + f" · kept-by-rule {grand_k}")
+
+
 def cmd_plan(accts, do_sweep=False, dry=False):
     grand = 0
     for a in accts:
@@ -284,7 +389,8 @@ def cmd_empty_trash(accts):
             continue
         try:
             M = accounts.connect(a)
-            M.select('"[Gmail]/Trash"', readonly=False)
+            tf = accounts.trash_folder(a)          # [Gmail]/Trash for gmail, "Trash" for plain IMAP
+            M.select(f'"{tf}"', readonly=False)
             typ, d = M.uid("SEARCH", None, "ALL")
             uids = d[0].split()
             if not uids:
@@ -337,6 +443,8 @@ def main():
         cmd_plan(accts, do_sweep=False)
     elif cmd == "sweep":
         cmd_plan(accts, do_sweep=True, dry=dry)
+    elif cmd == "sweep-ai":
+        cmd_sweep_ai(accts, dry=dry)
     elif cmd == "empty-trash":
         cmd_empty_trash(accts)
     else:

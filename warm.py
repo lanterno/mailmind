@@ -1,0 +1,107 @@
+"""Optional background multi-folder warming. Default OFF: with MAILMIND_WARM_FOLDERS unset
+nothing runs, so search/threading stay INBOX-only exactly as before.
+
+When enabled per-account, the always-on sync tick also pulls a per-account ROLE SET — Drafts,
+Archive/All-Mail, Sent — so search and conversation threading cover more than just INBOX. It
+REUSES ingest.sync_folder(), so it inherits every invariant for free: UIDVALIDITY check,
+read-only SELECT, BODY.PEEK / headers-only for non-INBOX (no bandwidth blowup), watermark-only
+incremental pulls, mute/follow-up resolution.
+
+Politeness/safety:
+  • Staggered: Drafts every tick, Archive every 2nd, Sent every 3rd (Sent is the heavy one).
+  • First-touch bounded: a brand-new warm of a huge folder pulls only the most recent
+    WARM_RECENT UIDs (recent= cap in sync_folder), so it never drags thousands in one pass.
+  • Runs INSIDE sync_guarded's single-flight, AFTER the INBOX sync, so it never delays new mail.
+  • A 0.5s pause between folders; each folder opens its own fresh connection (never the pool).
+
+Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts (Bridge included only if explicitly listed)
+         MAILMIND_WARM_FOLDERS=a@x,b@y      → only those accounts
+"""
+import os
+import time
+import threading
+
+import accounts
+import ingest
+import mailops
+
+WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
+_ROLES = {                          # role -> LIST hints (matched against flags + name)
+    "drafts": ("drafts", "\\drafts"),
+    "archive": ("all mail", "\\all", "archive"),
+    "sent": ("sent", "\\sent"),
+}
+_STAGGER = {"drafts": 1, "archive": 2, "sent": 3}   # warm role every Nth tick
+
+_resolved = {}         # email -> {role: folder_name|None}  (folder names are stable; resolve once)
+_lock = threading.Lock()
+_tick = 0
+
+
+def _enabled(acct):
+    v = os.environ.get("MAILMIND_WARM_FOLDERS", "").strip()
+    if not v:
+        return False
+    if v.lower() in ("1", "all", "on", "true", "yes"):
+        return True
+    return acct["email"] in {x.strip() for x in v.split(",") if x.strip()}
+
+
+def _roles_for(acct):
+    """Resolve (and cache) this account's Drafts/Archive/Sent folder names in one LIST."""
+    with _lock:
+        if acct["email"] in _resolved:
+            return _resolved[acct["email"]]
+    out = {}
+    try:
+        M = accounts.connect(acct)
+        try:
+            for role, hints in _ROLES.items():
+                try:
+                    out[role] = mailops._find_folder(M, hints)
+                except Exception:
+                    out[role] = None
+        finally:
+            try:
+                M.logout()
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[warm] resolve {acct['email']}: {type(e).__name__}", flush=True)
+        return {}                       # don't cache a failed resolve — retry next tick
+    with _lock:
+        _resolved[acct["email"]] = out
+    return out
+
+
+def warm_tick(emails=None):
+    """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
+    after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS enables the account."""
+    global _tick
+    if not os.environ.get("MAILMIND_WARM_FOLDERS", "").strip():
+        return
+    _tick += 1
+    for a in accounts.accounts():
+        if emails is not None and a["email"] not in emails:
+            continue
+        if not _enabled(a):
+            continue
+        roles = _roles_for(a)
+        for role, every in _STAGGER.items():
+            if _tick % every != 0:
+                continue
+            # Gmail "All Mail" is a SUPERSET of INBOX (every message is also there) — warming it
+            # would duplicate INBOX in search/threading. Skip Archive for Gmail; Sent/Drafts are
+            # distinct. Non-Gmail Archive is a separate store, so warm it normally.
+            if role == "archive" and a.get("kind") == "gmail":
+                continue
+            folder = roles.get(role)
+            if not folder or folder.upper() == "INBOX":
+                continue
+            try:
+                r = ingest.sync_folder(a, folder, full=False, recent=WARM_RECENT)
+                if r and (r[0] or 0):
+                    print(f"[warm] {a['email']} {folder}: +{r[0]}", flush=True)
+            except Exception as e:
+                print(f"[warm] {a['email']} {folder}: {type(e).__name__}: {e}", flush=True)
+            time.sleep(0.5)

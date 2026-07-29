@@ -31,15 +31,30 @@ def preload_creds():
     return config.preload()
 
 
-def connect(acct):
+class LoginUnreachable(OSError):
+    """A connect-time login failure (expired/revoked credentials, Bridge restart). Subclasses
+    OSError so it's a member of the offline-queue's _UNREACHABLE set — a mutation during an auth
+    outage is QUEUED + retried rather than silently applied locally only."""
+
+
+def imap_quote(s):
+    """Wrap a value as an IMAP quoted-string so embedded quotes/specials (e.g. a malformed
+    sender Message-ID like <…b'AB'…>) can't break a SEARCH/command."""
+    return '"' + (s or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def connect(acct, timeout=60):
     if acct["starttls"]:  # e.g. Proton Bridge: plain socket + STARTTLS, self-signed localhost cert
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        M = imaplib.IMAP4(acct["host"], acct["port"], timeout=60)
+        M = imaplib.IMAP4(acct["host"], acct["port"], timeout=timeout)
         M.starttls(ctx)
     else:  # direct TLS (Gmail + most hosted IMAP on 993)
         M = imaplib.IMAP4_SSL(acct["host"], acct["port"],
-                              ssl_context=ssl.create_default_context(), timeout=60)
-    M.login(acct["email"], config.resolve_credential(acct))
+                              ssl_context=ssl.create_default_context(), timeout=timeout)
+    try:
+        M.login(acct["email"], config.resolve_credential(acct))
+    except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one
+        raise LoginUnreachable(str(e)) from e
     return M
