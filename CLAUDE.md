@@ -4,6 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+A `justfile` wraps everything below — `just` alone lists the recipes. The raw commands
+work identically if `just` isn't installed.
+
+```bash
+just verify                       # lint + compile + all tests + frontend check — run before committing
+just dev                          # read-only server, no background sync (safest for local work)
+just run [port]                   # the real thing (default http://127.0.0.1:8721)
+```
+
 ```bash
 python3 server.py [port]          # run the app (default http://127.0.0.1:8721)
 MAILMIND_NOSYNC=1 python3 server.py   # serve read-only, no background sync (safe for local dev)
@@ -26,9 +35,13 @@ comment out cases or copy one into a REPL. `test_css_sanitizer.py` collects call
 from `globals()` whose names start with `test_`, so you can gate it by renaming.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
-de-facto lint (`pyflakes *.py`); it is currently clean except one known warning in
-`readmutq.py` (a lambda closing over an `except ... as e` name — safe because `_commit`
-invokes it synchronously).
+de-facto lint. `just lint` runs it against a one-entry baseline — a known warning in
+`readmutq.py` (a lambda closing over an `except ... as e` name, safe because `_commit`
+invokes it synchronously) — and fails on anything new. If you fix that, drop it from
+`BASELINE` in the justfile.
+
+`just check-frontend` parses every inline `<script>` with `node --check`, checks CSS
+brace balance, and rejects raw control bytes in `dashboard.html` (see Conventions).
 
 ## Constraints
 

@@ -399,9 +399,13 @@ python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 le
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 ```
 
-Each exits non-zero on failure. Separately, `scripts/backfill.sh` is a resilient
-summarization backfill — it re-runs `summarize.py` until every non-junk message
-has a summary, backing off when the `claude` CLI rate-limits.
+Each exits non-zero on failure. With [`just`](https://just.systems) installed,
+`just test` runs all three and `just verify` adds lint, byte-compile and a
+frontend syntax check — `just` on its own lists every recipe.
+
+Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
+re-runs `summarize.py` until every non-junk message has a summary, backing off
+when the `claude` CLI rate-limits.
 
 ## Privacy & contributing
 
