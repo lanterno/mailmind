@@ -84,7 +84,7 @@ def engine():
 def describe_engine():
     """One line for the startup log."""
     if engine() == "api":
-        return "Claude API · " + model_label()
+        return "Claude API · " + model_label() + " · key from " + claude_api.key_source()
     return "claude CLI" + (" · " + MODEL if MODEL else "")
 
 

@@ -7,6 +7,9 @@ Accounts live in `mailmind.config.json` (NOT git-tracked). Copy
     "host": "...", "port": 993, "starttls": false, "trash": "Trash",
     "credential": { ... one of the styles below ... } }
 
+An optional top-level "anthropic_api_key" holds the Claude API key, in any of the same styles
+(proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment.
+
 Credential styles (so this works for anyone, with or without 1Password):
   { "plain": "the-password" }                       inline (kept off git via .gitignore)
   { "op": "op://Vault/Item/Field" }                 read from 1Password CLI at runtime
@@ -163,6 +166,15 @@ def resolve_credential(acct):
                 last = e
         raise last
     raise RuntimeError(f"no credential configured for {acct['email']}")
+
+
+def anthropic_key():
+    """The Claude API key from the top-level "anthropic_api_key" (any credential style above),
+    or None when the file sets none. Raises when it is set but can't be resolved."""
+    cred = _raw().get("anthropic_api_key")
+    if not cred:
+        return None
+    return resolve_credential({"email": "anthropic_api_key", "credential": cred}).strip()
 
 
 def preload():
@@ -434,6 +446,11 @@ def check():
             print(f"  ok    {a['email']:42} ({len(v)} chars)")
         except Exception as e:
             print(f"  FAIL  {a['email']:42} {e}")
+    if _raw().get("anthropic_api_key"):
+        try:
+            print(f"  ok    {'anthropic_api_key':42} ({len(anthropic_key() or '')} chars)")
+        except Exception as e:
+            print(f"  FAIL  {'anthropic_api_key':42} {e}")
 
 
 if __name__ == "__main__":

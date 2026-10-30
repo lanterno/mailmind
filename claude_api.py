@@ -2,7 +2,8 @@
 urllib rather than the SDK: one user turn per call, structured output when a schema is given,
 and Anthropic's server-side refusal fallback on the models that take it.
 
-The key comes from ANTHROPIC_API_KEY. ANTHROPIC_BASE_URL points the client somewhere else
+The key comes from mailmind.config.json's "anthropic_api_key", else ANTHROPIC_API_KEY.
+ANTHROPIC_BASE_URL points the client somewhere else
 (a proxy, or the local stub the tests run). Nothing here retries forever: a failed call raises
 RuntimeError and the caller decides, exactly as it did for a failed `claude` CLI run.
 """
@@ -12,6 +13,8 @@ import time
 import random
 import urllib.error
 import urllib.request
+
+import config
 
 MODEL = "claude-opus-5-5"          # MAILMIND_MODEL overrides it (see summarize.MODEL)
 EFFORT = "medium"                  # sent explicitly: models differ in their default
@@ -32,8 +35,25 @@ _UNSUPPORTED = {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "m
                 "minLength", "maxLength"}
 
 
+def _key():
+    """(key, where it came from). The config file wins, so a MailMind-only key isn't shadowed
+    by one the shell exports for other tools. A config key that can't be resolved is no key,
+    not a quiet switch to the environment's."""
+    try:
+        k = config.anthropic_key()
+    except Exception:
+        return "", "mailmind.config.json"
+    if k is not None:
+        return k, "mailmind.config.json"
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip(), "ANTHROPIC_API_KEY"
+
+
 def key():
-    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    return _key()[0]
+
+
+def key_source():
+    return _key()[1]
 
 
 def api_schema(schema):
