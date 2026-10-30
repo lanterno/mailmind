@@ -567,7 +567,7 @@
     .rd-pos{display:none}
   }
   @container pane (max-width:840px){
-    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash],.rd-back){font-size:0;gap:0}
+    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash],[data-tca=archive],[data-tca=trash],.rd-back){font-size:0;gap:0}
     .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=unread]){display:none}
     .rd-actions .rd-more{display:inline-flex}
   }
@@ -1774,8 +1774,8 @@ function initialsOf(name,addr){
 }
 function rowMarkup(it,sub){const m=state.cmarked.has(it.pk),n=it.count||1;
   const needs=!!String(it.action||"").trim(), gist=it.bucket==="NOTIF"?"":(it.summary||"");
-  // Archive/Delete act on one message, so a multi-message conversation row offers Snooze only (it snoozes the whole thread)
-  const acts=(n>1?"":`<button data-racts="archive" tabindex="-1" title="Archive (e)" aria-label="Archive">${ico("archive")}</button><button class="del" data-racts="trash" tabindex="-1" title="Delete (d)" aria-label="Delete">${ico("trash")}</button>`)
+  const what=convoRow(it)?" conversation":"";   // a conversation row archives/deletes every message in it, server-side
+  const acts=`<button data-racts="archive" tabindex="-1" title="Archive${what} (e)" aria-label="Archive${what}">${ico("archive")}</button><button class="del" data-racts="trash" tabindex="-1" title="Delete${what} (d)" aria-label="Delete${what}">${ico("trash")}</button>`
     +`<button data-racts="snooze" tabindex="-1" title="Snooze (h)" aria-label="Snooze">${ico("clock")}</button>`;
   return `<div class="row cmsg${it.seen?"":" unread"}${needs?" needs":""}${it.pk===state.csel?" sel":""}${m?" marked":""}" data-pk="${it.pk}"${it.thread_id?` data-tid="${esc(it.thread_id)}"`:""}>
     <div class="avwrap"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
@@ -1903,16 +1903,18 @@ async function cbulk(action, anchor){
   if(action==="archive"||action==="trash"||action==="junk"){
     const path={archive:"/api/archive",trash:"/api/trash",junk:"/api/junk"}[action];
     const verb={archive:"Archived",trash:"Trashed",junk:"Marked junk"}[action];
+    const paths=new Map(pks.map(p=>[p, action!=="junk"&&convoRow(cfindAny(p))?"/api/thread/"+action:path]));   // a conversation row files whole; decide while the rows are still listed
     state.cmsgs=state.cmsgs.filter(x=>!state.cmarked.has(x.pk));
     state.searchItems=(state.searchItems||[]).filter(x=>!state.cmarked.has(x.pk));
     if(state.cmarked.has(state.csel))state.csel=null;
     state.cmarked.clear(); renderClientList();
     if(state.csel==null){ const first=(state.searching?state.searchItems:state.cmsgs)[0]; if(first)openClientMsg(first.pk,false); else clearReader(); }
-    const grp=undoGroup(); let fail=0, undoable=false;
-    for(const pk of pks){ try{ const r=await cpost(path,{pk,undo_group:grp}); if(!r.ok)fail++; else if(r.undoable)undoable=true; }catch(e){ fail++; } }
-    toast(fail?`${verb} ${pks.length-fail}, ${fail} failed`:`${verb} ${pks.length}`);
+    const grp=undoGroup(); let fail=0, undoable=false, partial=false;
+    for(const pk of pks){ try{ const r=await cpost(paths.get(pk),{pk,undo_group:grp}); if(!r.ok)fail++;
+      else{ if(r.undoable)undoable=true; if(r.failed)partial=true; if(r.pks)cForget(r.pks); } }catch(e){ fail++; } }
+    toast(fail?`${verb} ${pks.length-fail}, ${fail} failed`:partial?`${verb} ${pks.length} — some messages stayed`:`${verb} ${pks.length}`);
     if(undoable)showUndoFloat(`${verb} ${pks.length-fail}`);
-    if(fail)loadCMessages(); return;
+    if(fail||partial)loadCMessages(); return;
   }
   const seen=action==="read"?true:action==="unread"?false:null;  // star -> null
   pks.forEach(pk=>{ const it=cfindAny(pk); if(it){ if(seen!==null)it.seen=seen?1:0; else it.flagged=1; } });
@@ -2343,6 +2345,8 @@ async function openThread(tid, latestPk, scroll, acct){
     <button class="cab" data-tca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>${ico("bell-off")}</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-tca="dismiss" title="Dismiss follow-up"><span>'+ico("check")+'</span> Done</button>':''}
     <span class="rd-sp" aria-hidden="true"></span>
+    <button class="cab" data-tca="archive" title="Archive conversation (e)" aria-label="Archive conversation"><span>${ico("archive")}</span> Archive</button>
+    <button class="cab cab-del" data-tca="trash" title="Delete conversation (d / ⌫ / #)" aria-label="Delete conversation"><span>${ico("trash")}</span> Delete</button>
     <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
     <button class="cab rd-more" data-more title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><span>${ico("more")}</span></button>
     ${readerNavHtml()}</div>`;
@@ -2350,7 +2354,7 @@ async function openThread(tid, latestPk, scroll, acct){
     <div class="rd-subj">${esc(subj)} <span class="thr-n">${d.count} messages</span></div>
     <div class="ai-card" id="aiCard" hidden></div>
     <div class="thread" id="thread"></div>
-    ${upNextHtml(false)}`;
+    ${upNextHtml(true)}`;
   storedSummaryCard(cfindAny(latestPk));
   const wrap=$("#thread");
   wrap.innerHTML=d.items.map((m,i)=>`
@@ -2833,13 +2837,25 @@ function cRemove(pk){ const list=state.searching?state.searchItems:state.cmsgs; 
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft chip state
   healPk(pk).then(()=>renderClientList());
   if(state.csel===pk){ if(next)openConversation(next,true); else clearReader(); } }   // as j would: a conversation opens in the thread reader
+function cForget(pks){   // the server filed these along with the row acted on (the rest of its conversation): drop them everywhere
+  const gone=new Set(pks), keep=x=>!gone.has(x.pk), was=state.cmsgs.length+(state.searchItems||[]).length+state.all.length;
+  state.cmsgs=state.cmsgs.filter(keep); state.searchItems=(state.searchItems||[]).filter(keep); state.all=state.all.filter(keep);
+  gone.forEach(p=>{ state.cmarked.delete(p); _draftReady.delete(p); _draftingPks.delete(p); });
+  if(state.cmsgs.length+state.searchItems.length+state.all.length!==was){ renderClientList(); renderBrief(); }   // else leave the row's heal running
+}
 async function cremoveAction(pk,path,obj,verb,act){ if(!cfindAny(pk))return;   // a search hit may live outside the current folder's cmsgs
   const snap=state.cmsgs.slice(), ssnap=(state.searchItems||[]).slice(), wasSel=state.csel;
   cRemove(pk);
-  try{ const r=await cpost(path,obj); if(!r.ok)throw new Error(r.msg||r.error||"err"); toast(verb); if(r.undoable)showUndoFloat(verb); }
+  try{ const r=await cpost(path,obj); if(!r.ok)throw new Error(r.msg||r.error||"err");
+    if(r.pks)cForget(r.pks);
+    const n=r.count||1;   // a conversation route reports how many messages it filed, and how many it couldn't
+    toast(r.failed?`${verb} ${n} of ${n+r.failed} — the rest stayed`:n>1?`${verb} ${n} messages`:verb);
+    if(r.undoable)showUndoFloat(n>1?`${verb} ${n}`:verb);
+    if(r.failed)loadCMessages(); }
   catch(e){ state.cmsgs=snap; state.searchItems=ssnap; state.csel=wasSel; renderClientList(); if(wasSel===pk)openClientMsg(pk,false); toast("Couldn’t "+act); } }
-function carchive(pk){ return cremoveAction(pk,"/api/archive",{pk},"Archived","archive"); }
-function ctrash(pk){ return cremoveAction(pk,"/api/trash",{pk},"Trashed","delete"); }
+function convoTarget(pk){ return convoRow(cfind(pk)) || (!!state.thread && state.csel===pk); }   // a conversation row, or the conversation open in the reader
+function carchive(pk){ return cremoveAction(pk,convoTarget(pk)?"/api/thread/archive":"/api/archive",{pk},"Archived","archive"); }   // a conversation files whole
+function ctrash(pk){ return cremoveAction(pk,convoTarget(pk)?"/api/thread/trash":"/api/trash",{pk},"Trashed","delete"); }
 function cjunk(pk){ return cremoveAction(pk,"/api/junk",{pk},"Marked junk","mark junk"); }
 
 /* ---------------- compose / reply / forward ---------------- */
@@ -4158,6 +4174,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
     if(a==="dismiss")return doDismissFollowup(muteTarget());
     if(a==="replylater")return doReplyLater(muteTarget());
     if(a==="rldone")return doReplyLaterDone(muteTarget());
+    if(a==="archive"||a==="trash"){ if(state.csel!=null)(a==="archive"?carchive:ctrash)(state.csel); return; }   // the whole conversation
     const pk=state.thread&&state.thread.reply_pk; if(pk==null)return;
     if(a==="reply")replyTo(pk,false); else if(a==="draftready"){ _draftReady.has(pk)?openDraftAhead(pk):replyTo(pk,false); }
     else if(a==="replyall")replyTo(pk,true); else if(a==="forward")forwardMsg(pk); return; }
