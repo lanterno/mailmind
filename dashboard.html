@@ -698,6 +698,45 @@
   .bf-subj:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
   .bf-gist{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--soft)}
   .bf-need .rchip{margin-top:9px}
+  /* a card's verbs, as the reader has them: reply (or the pre-written draft), read, snooze, archive, delete */
+  .bf-acts{display:flex;align-items:center;gap:4px;margin-top:10px;flex-wrap:wrap}
+  .bf-acts .sp{flex:1}
+  .bf-act{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 12px;border-radius:10px;border:1px solid var(--line-hi);
+    background:var(--panel);color:var(--ink);font:700 13px/1 var(--font-ui);cursor:pointer}
+  .bf-act:hover{border-color:var(--mute)}
+  .bf-act.ai{background:var(--ai-wash);border-color:color-mix(in srgb,var(--ai) 35%,transparent);color:var(--ai)}
+  .bf-act.quiet{border-color:transparent;background:none;color:var(--soft)}
+  .bf-act.quiet:hover{background:var(--hover);color:var(--ink)}
+  .bf-ic{display:inline-grid;place-items:center;width:32px;height:32px;border:none;border-radius:10px;background:none;color:var(--mute);cursor:pointer}
+  .bf-ic:hover{background:var(--hover);color:var(--ink)}
+  .bf-ic.del{color:var(--err)}
+  .bf-act .ico,.bf-ic .ico{width:16px;height:16px}
+  /* beside Needs you: Today & next (the invites in your mail) and Waiting on others. Below it on a
+     narrow pane; a column of its own from 940px, where the brief widens to make room */
+  .bf-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
+  .bf-side{display:grid;gap:14px;align-content:start}
+  .bs-card{padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--panel)}
+  .bs-card h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font:800 11px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+  .bs-card h3 .ico{width:15px;height:15px}
+  .bs-ev{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px;padding:6px 0}
+  .bs-ev time{font:800 13px/1.3 var(--font-ui);font-variant-numeric:tabular-nums;color:var(--ink)}
+  .bs-ev time small{display:block;font-weight:600;font-size:12px;color:var(--mute)}
+  .bs-t{all:unset;display:block;font-size:13.5px;font-weight:700;line-height:1.35;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+  .bs-t:hover{text-decoration:underline;text-underline-offset:3px}
+  .bs-t:focus-visible,.bs-wt:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .bs-ev small.m,.bs-wt small{display:block;font-size:12.5px;line-height:1.4;color:var(--mute)}
+  .bs-wt{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center;width:100%;padding:6px 0;cursor:pointer}
+  .bs-wt b{display:block;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bs-wt:hover b{text-decoration:underline;text-underline-offset:3px}
+  .bs-more{all:unset;display:block;margin-top:6px;font-size:12.5px;font-weight:700;color:var(--primary-ink);cursor:pointer}
+  .bs-more:hover{text-decoration:underline}
+  @container pane (min-width:940px){
+    body.mode-client .reader.brief-pane:has(.bf-side)>:not(.rd-actions,.bf-hero){width:min(1100px,calc(100% - 80px))}
+    body.mode-client .reader.brief-pane:has(.bf-side)>.bf-card{max-width:800px;margin-left:max(40px,calc((100% - 1100px) / 2))}
+    .reader.brief-pane:has(.bf-side) .bf-hero .bf-ht{width:min(1100px,calc(100% - 80px))}
+    .bf-grid:has(>.bf-side){grid-template-columns:minmax(0,1fr) 320px}
+    .bf-grid>.bf-side{margin-top:30px}
+  }
   /* the scene's motion: grass sways, clouds drift, birds cross; fireflies, stars and the moon by night (reduced motion stills it) */
   .scene .sway{transform-box:fill-box;transform-origin:50% 100%;animation:sway 5.5s ease-in-out infinite alternate}
   .scene .sway.b{animation-duration:6.5s;animation-delay:-2s}
@@ -2912,20 +2951,73 @@ function briefRowHtml(){
   return `<button class="brief-row${briefOpen()&&state.csel==null?" sel":""}" data-brief-row><span class="bthumb" aria-hidden="true">${sceneSvg("bt",{par:"xMaxYMax slice",seed:4})}</span>
     <span><b>Today’s brief</b><small${n?' class="sun"':""}>${briefRowNote(n)}</small></span></button>`;
 }
+let _briefSide={up:[],wait:[]}, _briefSideAt=0;
+async function loadBriefSide(){
+  if(Date.now()-_briefSideAt<60000)return; _briefSideAt=Date.now();
+  const accts=state.accountsList||[];
+  const [up,...ws]=await Promise.all([api("/api/upcoming").catch(()=>null),
+    ...accts.map(a=>api(`/api/messages?account=${encodeURIComponent(a)}&folder=__waiting__&limit=40`).catch(()=>null))]);
+  const wait=[].concat(...ws.map((w,i)=>((w&&w.items)||[]).filter(x=>x.kind==="sent").map(x=>({...x,account:accts[i]}))));
+  _briefSide={up:(up&&up.items)||[], wait:wait.sort((a,b)=>(a.ts||0)-(b.ts||0))};   // longest wait first
+  renderBrief();
+}
+function evWhen(e){   // [big, small]: "3:00 pm" over "today", "Sat" over "8:10 am", "Thu 6" over "all day" (a week out)
+  const d=new Date(e.start), t0=new Date(); t0.setHours(0,0,0,0);
+  const days=Math.round((new Date(d).setHours(0,0,0,0)-t0)/864e5);
+  const time=e.all_day?"all day":d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}).toLowerCase();
+  if(days<=0) return e.all_day?["Today","all day"]:[time,"today"];
+  return [d.toLocaleDateString(undefined,days<7?{weekday:"short"}:{weekday:"short",day:"numeric"}),time];
+}
+function waitAge(ts){ const d=Math.floor((Date.now()/1000-(ts||0))/86400); return d<1?"today":d===1?"1 day":d+" days"; }
+function nameIn(addr){ const a=String(addr||""), n=a.replace(/<[^>]*>/,"").replace(/"/g,"").trim(); return n||a.replace(/[<>]/g,"").trim(); }
+function briefSideHtml(){
+  const up=_briefSide.up.slice(0,4), wait=_briefSide.wait, multi=(state.accountsList||[]).length>1;
+  const ev=e=>{ const [a,b]=evWhen(e), sub=[e.location,e.organizer].filter(Boolean).join(" · ");
+    return `<div class="bs-ev"><time datetime="${esc(e.start)}">${esc(a)}<small>${esc(b)}</small></time><div style="min-width:0">
+      <button class="bs-t" data-bopen="${e.pk}">${esc(e.summary||"(no title)")}</button>${sub||e.invite?`<small class="m">${esc(sub)}${e.invite?`${sub?" · ":""}invite`:""}</small>`:""}</div></div>`; };
+  const wt=w=>{ const who=nameIn(w.to)||"—";
+    return `<button class="bs-wt" data-bopen="${w.pk}"><span class="av" style="--h:${avHue(w.to)}" aria-hidden="true">${esc(initialsOf(who,w.to))}</span>
+      <span style="min-width:0"><b>${esc(who)}</b><small>${esc(w.subject||"(no subject)")} · ${esc(waitAge(w.ts))}${multi?" · "+esc(nameOf(w.account)):""}</small></span></button>`; };
+  return (up.length?`<section class="bs-card" aria-label="Today and next"><h3>${ico("cal")}Today &amp; next</h3>${up.map(ev).join("")}</section>`:"")
+    +(wait.length?`<section class="bs-card" aria-label="Waiting on others"><h3>${ico("hourglass")}Waiting on others</h3>${wait.slice(0,3).map(wt).join("")}
+      ${wait.length>3?`<button class="bs-more" data-brief="__waiting__">See all ${wait.length}</button>`:""}</section>`:"");
+}
+const _briefPeeked=new Set();
+async function briefDraftPeek(){   // which Needs-you cards already have a pre-written reply: read-only peeks, once a card
+  const pks=needsYou().slice(0,BRIEF_CAP).map(x=>x.pk).filter(pk=>!_briefPeeked.has(pk)&&!_draftReady.has(pk));
+  if(!pks.length)return; pks.forEach(pk=>_briefPeeked.add(pk));
+  const got=await Promise.all(pks.map(pk=>api(`/api/ai/draft-ahead?pk=${pk}&peek=1`).catch(()=>null)));
+  if(got.some((d,i)=>d&&d.ok&&d.status==="ready"&&_draftReady.add(pks[i])))renderBrief();
+}
+async function trashSel(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)return;   // archiveSel's twin, for the brief's cards
+  try{ const r=await cpost("/api/trash",{pk});
+    if(r.ok){ afterRemove(pk); toast("Deleted · in the mailbox's Trash"); if(r.undoable)showUndoFloat("Deleted"); refreshStats(); }
+    else toast("Couldn’t delete: "+(r.msg||r.error||"")); }
+  catch(e){ toast("Delete failed"); } }
+function briefCardAct(a,pk,el){   // a Needs-you card's buttons: the reader's verbs, without opening the message first
+  if(a==="draft"){ if(_draftReady.has(pk))openDraftAhead(pk); else replyTo(pk,false); }
+  else if(a==="reply") replyTo(pk,false);
+  else if(a==="read") openFromBrief(pk);
+  else if(a==="snooze") openSnoozeMenu(el,{pk});
+  else if(a==="archive") archiveSel(pk);
+  else if(a==="trash") trashSel(pk);
+}
 function showBrief(open){   // open: asked for (the row, k, ⌘K), so a phone moves to the pane
   state.csel=null; state.thread=null; clearTimeout(_seenTimer);
   $$(".row.cmsg.sel").forEach(r=>r.classList.remove("sel"));
   document.body.classList.toggle("reading", !!open);
   if(!_briefData && !_todayInflight && !_briefAsked){ _briefAsked=true; loadBrief(false); }
-  renderBrief(true);
+  renderBrief(true); loadBriefSide();
   const b=$("#rows .brief-row"); if(b)b.classList.add("sel");
 }
 function renderBrief(force){   // force: (re)open it; otherwise refresh in place, and only when something changed
   const r=$("#reader"); if(!force&&!briefOpen())return;
   const html=briefHtml(); if(!force&&r._briefHtml===html)return;
   r.className="reader brief-pane"; r._briefHtml=html; r.innerHTML=html; if(force)r.scrollTop=0;
+  briefDraftPeek();
   const sm=$("#rows .brief-row small"); if(sm){ const n=needsYou().length; sm.className=n?"sun":""; sm.textContent=briefRowNote(n); }   // in place: the row may hold focus
 }
+const BRIEF_CAP=12;   // Needs-you cards shown before "Show all"
 function briefHtml(){
   const now=new Date(), h=now.getHours(), b=_briefData, needs=needsYou();
   const greet=h<5?"Working late":h<12?"Good morning":h<18?"Good afternoon":"Good evening";
@@ -2941,22 +3033,27 @@ function briefHtml(){
   t.push(`<button class="bf-tally" data-brief="week">${ico("cal")}Your week</button>`);
   const topics=briefTopics().map((g,i)=>g.items.length?`<button class="bf-topic" data-brief-topic="${i}">${esc(g.label)}<b>${g.items.length}</b></button>`:"").join("");
   const nt=tidyCandidates().length;
-  const multi=(state.accountsList||[]).length>1, CAP=12;
-  const card=it=>`<article class="bf-need"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
+  const multi=(state.accountsList||[]).length>1, CAP=BRIEF_CAP, side=briefSideHtml();
+  const card=it=>{ const subj=esc(it.subject||"(no subject)");
+    return `<article class="bf-need" data-pk="${it.pk}"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
     <div style="min-width:0"><div class="bf-n1"><b>${esc(it.from_name||it.from_addr||"—")}</b>${multi?`<span class="acctchip">${esc(nameOf(it.account))}</span>`:""}<time>${esc(it.when||"")}</time></div>
       <button class="bf-subj" data-bopen="${it.pk}">${esc(it.subject||"(no subject)")}</button>
       ${it.summary?`<p class="bf-gist">${esc(it.summary)}</p>`:""}
-      ${String(it.action||"").trim()?`<span class="rchip need">${esc(it.action)}</span>`:""}</div></article>`;
+      ${String(it.action||"").trim()?`<span class="rchip need">${esc(it.action)}</span>`:""}
+      <footer class="bf-acts">${_draftReady.has(it.pk)?`<button class="bf-act ai" data-bact="draft" title="Opens the pre-written reply in the composer; nothing sends until you do">${ico("wind")}Use draft</button>`
+        :`<button class="bf-act" data-bact="reply">${ico("reply")}Reply</button>`}<button class="bf-act quiet" data-bact="read">${ico("eye")}Read</button><span class="sp"></span>
+        <button class="bf-ic" data-bact="snooze" title="Snooze" aria-label="Snooze “${subj}”">${ico("clock")}</button><button class="bf-ic" data-bact="archive" title="Archive" aria-label="Archive “${subj}”">${ico("archive")}</button><button class="bf-ic del" data-bact="trash" title="Delete" aria-label="Delete “${subj}”">${ico("trash")}</button></footer></div></article>`; };
   return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>${ico("left")}</span> List</button><span class="rd-sp" aria-hidden="true"></span>
       <button class="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)"${_todayInflight?" disabled":""}><span>${ico("refresh")}</span> Refresh brief</button></div>
     <header class="bf-hero">${sceneSvg("bz",{seed:21,par:"xMaxYMax slice"})}<div class="bf-ht"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></div></header>
     <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd"><span class="ai-mark">${ico("wind")}Your brief</span></div>${narr}
       ${topics?`<div class="bf-topics" aria-label="Topics in today’s mail">${topics}</div>`:""}<div class="bf-tallies">${t.join("")}</div></section>
-    <h2 class="bf-h" id="bfNeeds">Needs you</h2>
+    <div class="bf-grid"><div style="min-width:0"><h2 class="bf-h" id="bfNeeds">Needs you</h2>
     ${needs.length?`<div class="bf-needs">${needs.slice(0,CAP).map(card).join("")}</div>${needs.length>CAP?`<button class="bf-tally" data-brief="needs">Show all ${needs.length}</button>`:""}`
       :'<p class="bf-calm">Nothing needs you right now.</p>'}
     ${nt?`<div class="bf-tidy"><span>${ico("wind")} <b>${nt}</b> low-priority message${nt>1?"s":""} the AI rates as safe to file: no next step, nothing asked of you.</span>
-      <button class="bf-tally" data-brief="tidyreview">Review</button><button class="bf-tally" data-brief="tidy">File to Archive</button></div>`:""}`;
+      <button class="bf-tally" data-brief="tidyreview">Review</button><button class="bf-tally" data-brief="tidy">File to Archive</button></div>`:""}</div>
+    ${side?`<aside class="bf-side" aria-label="Your day">${side}</aside>`:""}</div>`;
 }
 function briefTopics(){   // the brief's topic groups, resolved against the digest (a group can name mail the digest no longer holds)
   const by=new Map((state.all||[]).map(x=>[x.pk,x]));
@@ -2968,7 +3065,7 @@ function briefAct(a){
   else if(a==="tidy") doTidy();
   else if(a==="commits") openCommitments();
   else if(a==="week") openReview();
-  else if(a==="refresh"||a==="retry"){ loadBrief(a==="refresh"); renderBrief(); }
+  else if(a==="refresh"||a==="retry"){ loadBrief(a==="refresh"); if(a==="refresh"){ _briefSideAt=0; loadBriefSide(); } renderBrief(); }
   else if(a.startsWith("__")) selectFolder(a);
 }
 /* Lists the digest answers rather than a folder holds: Needs you, a topic from the brief, mail that
@@ -4392,6 +4489,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
   const bf=e.target.closest("[data-brief]"); if(bf){ briefAct(bf.dataset.brief); return; }
   const tp=e.target.closest("[data-brief-topic]"); if(tp){ const g=briefTopics()[+tp.dataset.briefTopic]; if(g)openDigestList("__dg_topic__",g.label,g.items); return; }
+  const ba=e.target.closest("[data-bact]"); if(ba){ e.stopPropagation(); briefCardAct(ba.dataset.bact,+ba.closest("[data-pk]").dataset.pk,ba); return; }
   const bo=e.target.closest("[data-bopen]"); if(bo){ openFromBrief(+bo.dataset.bopen); return; }
   const mo=e.target.closest("[data-more]"); if(mo){ e.stopPropagation(); if($("#moreMenu"))closeMoreMenu(); else openMoreMenu(mo); return; }
   const rs=e.target.closest("[data-readset]"); if(rs){ e.stopPropagation(); if($("#readMenu"))closeReadMenu(); else openReadMenu(rs); return; }
