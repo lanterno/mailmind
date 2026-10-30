@@ -2833,14 +2833,14 @@ function cRemove(pk){ const list=state.searching?state.searchItems:state.cmsgs; 
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft chip state
   healPk(pk).then(()=>renderClientList());
   if(state.csel===pk){ if(next)openClientMsg(next.pk,true); else clearReader(); } }
-async function cremoveAction(pk,path,obj,verb){ if(!cfindAny(pk))return;   // a search hit may live outside the current folder's cmsgs
+async function cremoveAction(pk,path,obj,verb,act){ if(!cfindAny(pk))return;   // a search hit may live outside the current folder's cmsgs
   const snap=state.cmsgs.slice(), ssnap=(state.searchItems||[]).slice(), wasSel=state.csel;
   cRemove(pk);
   try{ const r=await cpost(path,obj); if(!r.ok)throw new Error(r.msg||r.error||"err"); toast(verb); if(r.undoable)showUndoFloat(verb); }
-  catch(e){ state.cmsgs=snap; state.searchItems=ssnap; state.csel=wasSel; renderClientList(); if(wasSel===pk)openClientMsg(pk,false); toast("Couldn’t "+verb.toLowerCase()); } }
-function carchive(pk){ return cremoveAction(pk,"/api/archive",{pk},"Archived"); }
-function ctrash(pk){ return cremoveAction(pk,"/api/trash",{pk},"Trashed"); }
-function cjunk(pk){ return cremoveAction(pk,"/api/junk",{pk},"Marked junk"); }
+  catch(e){ state.cmsgs=snap; state.searchItems=ssnap; state.csel=wasSel; renderClientList(); if(wasSel===pk)openClientMsg(pk,false); toast("Couldn’t "+act); } }
+function carchive(pk){ return cremoveAction(pk,"/api/archive",{pk},"Archived","archive"); }
+function ctrash(pk){ return cremoveAction(pk,"/api/trash",{pk},"Trashed","delete"); }
+function cjunk(pk){ return cremoveAction(pk,"/api/junk",{pk},"Marked junk","mark junk"); }
 
 /* ---------------- compose / reply / forward ---------------- */
 function composeIsOpen(){ return state.compose!==null; }
