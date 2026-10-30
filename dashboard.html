@@ -64,6 +64,7 @@
     --scrim:rgba(4,8,20,.55);           /* modal backdrop */
     --notif-ink:#0C1620;                /* text on a --notif fill (swipe badge) */
     --mono-s:45%; --mono-l:72%;         /* avatar monogram glyph S/L — flips darker on paper */
+    --acct-1:#8FB0E3; --acct-2:#9FCB8C; --acct-3:#E9AE62; --acct-4:#D3A2D0; --acct-5:#86CBC6; --acct-6:#E89FA6;   /* account dots, in config order */
     /* the sky the panels sit on; panel and pop shadows; paper grain (an SVG noise tile); the search glyph */
     --sky-1:#08122A; --sky-2:#122345; --sky-3:#26365A;
     --sh-panel:0 1px 0 rgba(170,190,240,.06) inset,0 0 0 1px rgba(150,175,230,.10),0 18px 40px -22px rgba(0,0,0,.85);
@@ -91,6 +92,7 @@
     --gold-ink:#2A1A00; --ai-ink:#FFFFFF;
     --raise-hi:#EEE7D8; --scroll-hi:#B7A981; --scrim:rgba(40,56,82,.30); --notif-ink:#FFFFFF;
     --mono-s:60%; --mono-l:32%;
+    --acct-1:#3D6596; --acct-2:#5C8F4D; --acct-3:#C47A28; --acct-4:#8A4F86; --acct-5:#2F7A78; --acct-6:#A8454F;
     --sh-1:0 1px 2px rgba(38,64,104,.08);
     --sh-2:0 4px 16px -4px rgba(38,64,104,.16);
     --sh-3:0 28px 60px -28px rgba(30,52,90,.45);
@@ -108,6 +110,7 @@
   body.theme-light.theme-dusk{
     --bg:#FCF7EE; --bg2:#F7EFE2; --panel:#FFFCF6; --panel-hi:#3A467012; --line:#EBDDC8; --line-hi:#DAC7AA;
     --ink:#27211C; --soft:#4A4036; --mute:#685B4C; --faint:#6E6253;
+    --acct-1:#4A5E99; --acct-2:#6B8A3E; --acct-3:#C2702A; --acct-4:#84497F; --acct-5:#2F7370; --acct-6:#A3424C;
     --primary:#3A4670; --primary-hi:#2C3759; --on-primary:#FFFFFF; --primary-ink:#3A4670; --primary-wash:#E8E6F0; --focus:#3A4670;
     --gold:#7C4805; --gold-hi:#5D3604; --sun:#E39A3A; --gold-wash:#FBE9CF;
     --ember:#A13D27; --ai:#45612F; --ai-wash:#EDF0DC; --err:#A13D27;
@@ -205,23 +208,29 @@
   /* ---- Mailbox mode ---- */
   /* the account switcher heading the rail, and its menu */
   #monos:empty{display:none}
-  #monos{padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  #monos{margin-bottom:6px}
   .frail-list{display:flex;flex-direction:column;gap:1px}
-  .acct-sw{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 8px;border:none;border-radius:var(--r-md);
-    background:none;color:var(--soft);font:inherit;text-align:left;cursor:pointer;transition:background var(--t-fast)}
-  .acct-sw:hover,.acct-sw[aria-expanded="true"]{background:var(--hover)}
+  .acct-sw{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);color:var(--soft);font:inherit;text-align:left;cursor:pointer;transition:border-color var(--t-fast)}
+  .acct-sw:hover,.acct-sw[aria-expanded="true"]{border-color:var(--line-hi)}
+  .acct-stack{display:flex;flex:none}
+  .acct-stack i{width:13px;height:13px;border-radius:50%;background:var(--a);border:2px solid var(--panel);margin-left:-5px}
+  .acct-stack i:first-child{margin-left:0}
+  .acct-menu .acct-stack{width:30px;justify-content:center}
+  .acct-menu .am-ttl{padding:6px 8px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+  .acct-menu .am-chk{flex:none;color:var(--primary-ink)}
+  .acct-menu hr{border:none;border-top:1px solid var(--line);margin:4px 2px}
   .acct-sw .as-txt,.acct-menu .am-txt{display:flex;flex-direction:column;min-width:0;flex:1}
   .acct-sw b,.acct-menu b{font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .acct-sw small,.acct-menu small{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .acct-menu small.err{color:var(--err)}
-  .acct-sw .as-chev{flex:none;color:var(--faint);font-size:11px}
+  .acct-sw small.err,.acct-menu small.err{color:var(--err)}
+  .acct-sw .as-chev{flex:none;width:16px;height:16px;color:var(--faint)}
   .acct-menu{position:fixed;z-index:95;width:290px;max-width:calc(100vw - 20px);max-height:min(70vh,560px);overflow-y:auto;
     background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);box-shadow:var(--sh-3);padding:6px;
     display:flex;flex-direction:column;gap:1px}
   .acct-menu button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:none;border-radius:var(--r-sm);
     background:none;color:var(--soft);font:inherit;text-align:left;cursor:pointer}
   .acct-menu button:hover,.acct-menu button:focus-visible,.acct-menu button[aria-checked="true"]{background:var(--sel)}
-  .acct-menu .mono-dot .led,.acct-sw .mono-dot .led{border-color:var(--panel)}
   /* where you are: heads the list */
   .client-ctx{font-size:13px;color:var(--soft);line-height:1.4}
   .client-ctx:empty{display:none}
@@ -1087,7 +1096,6 @@
   .read-menu .rs-sz-l{font-size:15px!important} .read-menu .rs-sz-xl{font-size:17px!important}
   .read-menu .rs-note{margin:0;font-size:12px;line-height:1.45;color:var(--mute)}
   .cab .rs-aa{font-weight:700;letter-spacing:-.02em}
-  .all-dot{color:var(--primary-ink)!important;border-style:dashed}
   .load-more{display:block;width:calc(100% - 26px);margin:10px 13px;background:var(--sel);
     border:none;border-radius:var(--r-sm);color:var(--soft);font:inherit;font-size:12.5px;font-weight:500;padding:9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .load-more:hover{background:var(--raise-hi);color:var(--ink)}
@@ -1535,16 +1543,18 @@ function watchSync(){   // while the server syncs, re-read the digest so the pil
     if(!(state.lastSync&&state.lastSync.running)||n>60){ clearInterval(_statusPoll); _statusPoll=0; renderStatus(); } },5000);
 }
 function onSyncDone(){ clearTimeout(_syncDoneT); _syncDoneT=setTimeout(()=>loadDigest(true),1500); }   // one per account → one refresh
-function monoFace(a){   // an account's monogram, its sync health on the LED; "__all__" is the merged inbox
-  if(a==="__all__") return `<span class="mono-dot all-dot" aria-hidden="true">${ico("inbox")}</span>`;
-  const st=((state.statusMap||{})[a]||{}).health||"";
-  return `<span class="mono-dot ${esc(st)}" aria-hidden="true" style="color:hsl(${hue(a)} var(--mono-s) var(--mono-l))">${esc((nameOf(a)[0]||"?").toUpperCase())}<span class="led"></span></span>`;
+function acctColor(a){ return `var(--acct-${Math.max(0,(state.accountsList||[]).indexOf(a))%6+1})`; }
+function acctDots(accts){   // each account's own color; several overlap into a stack
+  return `<span class="acct-stack" aria-hidden="true">${accts.slice(0,4).map(a=>`<i style="--a:${acctColor(a)}"></i>`).join("")}</span>`;
 }
+function acctDown(a){ return (((state.statusMap||{})[a]||{}).health||"")==="error"; }
 function renderMonos(){   // the account switcher heading the rail
   const list=state.accountsList||[], cur=state.allInbox?"__all__":state.account;
   if(!list.length||!cur){ $("#monos").innerHTML=""; return; }
-  const name=cur==="__all__"?"All inboxes":nameOf(cur), sub=cur==="__all__"?`${list.length} account${list.length===1?"":"s"}, one inbox`:cur;
-  $("#monos").innerHTML=`<button class="acct-sw" id="acctSw" aria-haspopup="menu" aria-expanded="false" title="${esc(name)} — switch account" aria-label="Account: ${esc(name)}. Switch account">${monoFace(cur)}<span class="as-txt"><b>${esc(name)}</b><small>${esc(sub)}</small></span><span class="as-chev" aria-hidden="true">▾</span></button>`;
+  const down=list.filter(acctDown).length;
+  const name=cur==="__all__"?"All inboxes":nameOf(cur);
+  const sub=cur==="__all__"?(down?`${down} of ${list.length} can’t connect`:`${list.length} account${list.length===1?"":"s"}, one inbox`):acctDown(cur)?"can’t connect":cur;
+  $("#monos").innerHTML=`<button class="acct-sw" id="acctSw" aria-haspopup="menu" aria-expanded="false" title="${esc(name)} — switch account" aria-label="Account: ${esc(name)}${down?` (${esc(sub)})`:""}. Switch account">${acctDots(cur==="__all__"?list:[cur])}<span class="as-txt"><b>${esc(name)}</b><small${down&&(cur==="__all__"||acctDown(cur))?' class="err"':""}>${esc(sub)}</small></span>${ico("down","as-chev")}</button>`;
 }
 function switchAccount(a){
   clearSearch(false);
@@ -1555,18 +1565,19 @@ function openAcctMenu(){
   closeAcctMenu(); closeStatusMenu();
   const anchor=$("#acctSw"); if(!anchor)return;
   const list=state.accountsList||[], cur=state.allInbox?"__all__":state.account;
-  const item=a=>{ const h=a==="__all__"?"":(((state.statusMap||{})[a]||{}).health||"");
-    const sub=a==="__all__"?`${list.length} account${list.length===1?"":"s"}, one inbox`:h==="error"?"can’t connect":a;
-    return `<button role="menuitemradio" aria-checked="${a===cur}" data-acct="${esc(a)}">${monoFace(a)}<span class="am-txt"><b>${esc(a==="__all__"?"All inboxes":nameOf(a))}</b><small${h==="error"?' class="err"':""}>${esc(sub)}</small></span></button>`; };
-  const m=document.createElement("div"); m.className="acct-menu"; m.id="acctMenu"; m.setAttribute("role","menu"); m.setAttribute("aria-label","Switch account");
-  m.innerHTML=item("__all__")+list.map(item).join("");
+  const item=a=>{ const bad=a!=="__all__"&&acctDown(a);
+    const sub=a==="__all__"?`${list.length} account${list.length===1?"":"s"}, one inbox`:bad?"can’t connect":a;
+    return `<button role="menuitemradio" aria-checked="${a===cur}" data-acct="${esc(a)}">${acctDots(a==="__all__"?list:[a])}<span class="am-txt"><b>${esc(a==="__all__"?"All inboxes":nameOf(a))}</b><small${bad?' class="err"':""}>${esc(sub)}</small></span>${a===cur?ico("check","am-chk"):""}</button>`; };
+  const m=document.createElement("div"); m.className="acct-menu"; m.id="acctMenu"; m.setAttribute("role","menu"); m.setAttribute("aria-label","Show mail from");
+  m.innerHTML=`<div class="am-ttl" aria-hidden="true">Show mail from</div>`+item("__all__")+list.map(item).join("")+`<hr><button role="menuitem" data-manage>${ico("sliders")}<span class="am-txt"><b>Add or manage accounts</b></span></button>`;
   document.body.appendChild(m);
   const r=anchor.getBoundingClientRect();
   m.style.top=Math.max(10,Math.min(r.bottom+6,window.innerHeight-m.offsetHeight-10))+"px";
   m.style.left=Math.max(10,Math.min(r.left,window.innerWidth-m.offsetWidth-10))+"px";
   anchor.setAttribute("aria-expanded","true");
   (m.querySelector('[aria-checked="true"]')||m.querySelector("button")).focus();
-  m.addEventListener("click",e=>{ e.stopPropagation(); const it=e.target.closest("[data-acct]"); if(!it)return; closeAcctMenu(); switchAccount(it.dataset.acct); });
+  m.addEventListener("click",e=>{ e.stopPropagation(); if(e.target.closest("[data-manage]")){ closeAcctMenu(); settingsOpen(true); return; }
+    const it=e.target.closest("[data-acct]"); if(!it)return; closeAcctMenu(); switchAccount(it.dataset.acct); });
   setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_acctOutside); },0);   // after the opening click finishes
   window.addEventListener("blur",_acctBlur);
 }
