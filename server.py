@@ -937,7 +937,7 @@ def messages_in(account, folder, offset, limit, group=False):
         # collapse to conversations: one row per thread (the latest message) + rollups
         rows = c.execute(
             """WITH fm AS (
-                 SELECT m.*, s.importance,
+                 SELECT m.*, s.importance, s.summary, s.action, s.category,
                    ROW_NUMBER() OVER (PARTITION BY m.thread_id ORDER BY m.ts DESC, m.pk DESC) rn,
                    COUNT(*)        OVER (PARTITION BY m.thread_id) cnt,
                    SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
@@ -955,7 +955,8 @@ def messages_in(account, folder, offset, limit, group=False):
     else:
         rows = c.execute(
             """SELECT m.pk, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
-                      m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance
+                      m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
+                      s.summary, s.action, s.category
                FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
                WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL """
             + _MUTED_EXCL.format(t="m") + """
@@ -974,6 +975,7 @@ def messages_in(account, folder, offset, limit, group=False):
             "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
             "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
             "importance": r["importance"], "thread_id": r["thread_id"],
+            "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
             "ts": r["ts"], "account": account,
         }
         if group:
