@@ -71,8 +71,10 @@ Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbo
 `sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE → SSE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
-The app presents two modes over the same data: **Briefing** (priority list / daily brief)
-and **Mailbox** (real folder-and-account client).
+The app is one view, a real folder-and-account client whose Inbox opens on today's brief
+(`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative).
+A separate Briefing view existed until it was folded into this one; `body.mode-client`
+survives as a CSS specificity hook, not a mode.
 
 ### Routing — there is no router
 

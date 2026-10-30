@@ -57,7 +57,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Make AI presence and setup state visible** · high value · effort S — `digest_json()` returns
   items/stats/accounts/aliases/status/sync and nothing about the model; grepping every module for
   `ai_available`, `ai_model` or a `claude --version` probe returns zero hits. A user with no claude
-  CLI installed today gets a silently degraded Briefing and one per-request error string. Needs a
+  CLI installed today gets a silently degraded brief and one per-request error string. Needs a
   startup probe cached in server state, two keys on `/api/digest`, a calm empty-state card, and a
   one-line "nothing leaves 127.0.0.1" explainer.
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
@@ -72,7 +72,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Read-only agenda peek and a "happening soon" nudge** · medium value · effort M — Invites are
   parsed per-message-open in `_invite_for()` and discarded; the schema has no events table, so
   there is no queryable set of upcoming meetings. Needs VEVENT persistence at ingest (or a scan
-  over messages with a text/calendar part) plus a rail or briefing widget. Clean follow-on to the
+  over messages with a text/calendar part) plus a rail entry or a line in today's brief. Clean follow-on to the
   shipped invite parser.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
   "auto-triage the ambiguous residual": the Screener already is a learning Imbox that writes
@@ -129,11 +129,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   real, editable search box. Missing is the search-shaped front door — bare prose with no prefix
   still goes to `/api/search` as literal FTS — plus a labelled, dismissible "translated" chip so you
   can get the literal search back.
-- **One search grammar in both modes** · medium value · effort M — Two engines are live: mailbox mode
-  hits `/api/search`, while Briefing routes to `applyFilters()`, a substring test over already-loaded
-  digest rows, so `from:` / `is:unread` / `category:` silently do nothing there. Placeholders were
-  made mode-aware as a stopgap; the real fix is routing Briefing through `/api/search`, or at minimum
-  running `search.build()` client-side over `state.all`.
 - **Cross-account virtual folders** · medium value · effort M — `snoozed_in`, `muted_in`,
   `waiting_in` and `replylater_in` are each `WHERE m.account=?`, and `folders_for(account)` counts
   per account, so there is no all-accounts Snoozed to match the shipped all-inboxes ✉ dot. Saved
@@ -159,9 +154,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `COUNT(*) OVER (PARTITION BY m.thread_id)` inside `WHERE m.account=? AND m.folder=?`, while
   `thread_json()` selects across all folders — so a thread with a reply in Sent shows "2" and opens
   3. Either count account-wide or relabel the tooltip from "N messages" to "N in this folder".
-- **Keep the query when switching folders or modes** · low value · effort S — `selectFolder()` calls
-  `clearSearch(false)`, which wipes both `#search`'s value and `state.q`; `setMode()` likewise only
-  rewrites the placeholder. Preserving at least the text would make exploring results far less
+- **Keep the query when switching folders** · low value · effort S — `selectFolder()` calls
+  `clearSearch(false)`, which wipes both `#search`'s value and `state.q`. Preserving at least the text would make exploring results far less
   retype-heavy.
 
 ## Speed and the connection layer
@@ -209,20 +203,20 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 ## Keyboard, screen readers and reversibility
 
 - **Real listbox semantics for the message list** · high value · effort M — `<div id="rows">` carries
-  no role, and both `rowMarkup()` and the Briefing `renderList()` emit plain `<div class="row"
-  data-pk>` with no `role="option"`, no `aria-selected` and no tabindex; `markSel()` only toggles a
-  CSS class and `move()`/`cmove()` never call `.focus()`. A screen-reader user can hear the palette
+  no role, and `rowMarkup()` emits plain `<div class="row cmsg" data-pk>` with no `role="option"`,
+  no `aria-selected` and no tabindex; selection is only a CSS class and `cmove()` never calls
+  `.focus()`. A screen-reader user can hear the palette
   and the recipient autocomplete — both correctly `role="listbox"` — but not the actual message
   list. Biggest remaining a11y gap.
 - **Finish the row hover cluster, and hover-to-prefetch** · medium value · effort S — `rowMarkup()`'s
   `.racts` cluster offers Archive, Delete and Snooze (Snooze only on multi-message conversation
   rows); Star and Mark-read are still key- or toolbar-only. Separately, a debounced `mouseover` on
   `#rows` calling the existing `prefetchBody` would make the first open of a hovered row instant
-  (today prefetch fires only on open, thread expansion and the next Focus card).
+  (today prefetch fires only on open and on thread expansion).
 - **Live regions on the toast, send float and undo float** · medium value · effort S — `#srLive`
   exists and works, but it is called from only nine sites; `toast()`, `#sendFloat` and `#undoFloat`
   carry no `aria-live` or `role="status"`, so toasts, send status and the Undo countdown are silent.
-  Briefing's `select()` never announces either. Pair this with the outstanding amber-on-dark contrast
+  Pair this with the outstanding amber-on-dark contrast
   check on `--faint` / `--mute`.
 - **One `toastAction()` primitive with a draining bar** · medium value · effort M — `toast()` (2600ms
   on `#toast`) and `showUndoFloat()` (8000ms on `#undoFloat`) are two independent primitives with two
@@ -230,24 +224,17 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   window legible. Collapse toast / showUndoFloat / showSendFloat into `toastAction(label, undoFn, ms)`
   with a CSS width-transition bar; `startUndoCountdown()` already proves the pattern, but only for
   sends.
-- **Briefing-mode triage parity** · medium value · effort S — Briefing rows vanish instantly
-  (`afterRemove()` filters state and rebuilds via `renderList()`, never touching `healPk()`), while
-  Mailbox rows collapse smoothly. And `blockIt()` — the doubly-consequential verb, since it trashes
-  the message *and* writes a persistent rule — is the one action with no Undo affordance, unlike
-  `trash()` and `archiveSel()`.
 - **One key registry driving keys, palette and legend** · medium value · effort M —
   `buildPaletteEntries()` already carries a `key` field on most entries, but the legend is
   hand-written `<kbd>` markup and the actual handling lives in a separate switch in the keydown
   listener. Three sources of truth that can and do drift; emit the legend from the registry grouped
-  by `modes` and dispatch the switch through the same table.
-- **Persistent context bar in both modes** · medium value · effort S — `#clientCtx` exists and is
-  populated in nine places, but `body:not(.mode-client) .client-ctx{display:none}` hides it entirely
-  in Briefing, where the original "no 'where am I' indicator" complaint still holds verbatim. Also:
-  make the account and folder segments clickable (they are plain text today) and append the unread
-  count already sitting in state.
-- **Remember the last view across reloads** · medium value · effort S — Boot restores seven
-  layout/mode preferences but not the location: there is no `mm_account` / `mm_folder` /
-  `mm_allinbox` key, so `setMode('client')` always lands on `accountsList[0]` INBOX. Still the
+  by section and dispatch the switch through the same table.
+- **A clickable context bar** · low value · effort S — `#clientCtx` says where you are, but its
+  account and folder segments are plain text. Make them clickable and append the unread count
+  already sitting in state.
+- **Remember the last view across reloads** · medium value · effort S — Boot restores layout
+  preferences but not the location: there is no `mm_account` / `mm_folder` /
+  `mm_allinbox` key, so `openMailbox()` always lands on `accountsList[0]` INBOX. Still the
   ~15-line change: write the tuple on `selectFolder` / `enterAllInbox` / monogram click, read it in
   the boot IIFE before `openClient()`.
 - **Sticky "N new" pill for snooze-wake** · low value · effort S — New mail gets a persistent
@@ -305,13 +292,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **60-second guided first run** · medium value · effort M — `.firstrun` is a static empty state
   shown only when no accounts are connected; there are no coach-marks and no localStorage flag
   gating a walkthrough. The surfaces worth explaining have multiplied since this was first proposed
-  — mode toggle, the folder rail and focus reading, ⌘K, the ⚡ to-do filter, importance colors, `?ask` / `!do`
-  prefixes, the Screener — so it is worth more now, not less. Gate on one flag and reuse the
+  — today's brief, the folder rail and focus reading, ⌘K, `?ask` / `!do` prefixes, the
+  Screener — so it is worth more now, not less. Gate on one flag and reuse the
   existing scrim and z-ladder.
-- **First-sync feedback in Mailbox, with a live count** · medium value · effort S — The "Reading your
-  inbox for the first time…" spinner exists in Briefing only; `renderClientList()` shows a bare
-  "Nothing here." while a first sync runs, so a user who lands in Mailbox after adding an account
-  gets no signal. And the string is fixed — `sync()` polls `/api/digest` every 3s but reads only
+- **First-sync feedback, with a live count** · medium value · effort S — The "Reading your inbox
+  for the first time…" spinner went with the Briefing view; `renderClientList()` shows a bare
+  "Nothing here." while a first sync runs, so a user who has just added an account gets no
+  signal. And the string is fixed — `sync()` polls `/api/digest` every 3s but reads only
   `d.sync.running`, ignoring the message count already in `d.stats`, so "read N messages so far…" is
   two lines inside the existing loop.
 - **Honest empty vs. silently-failed folder** · low value · effort S — A first-open `sync_folder`

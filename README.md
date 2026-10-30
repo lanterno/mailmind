@@ -49,10 +49,9 @@ grammar), `threads.py`, `mailparse.py`, `sanitize_html.py` (the reader's
 whitelist sanitizer), `ics.py` (invites), `realtime.py` (IMAP IDLE → SSE), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
-The app runs in two modes over the same data: a **Briefing** — a dense priority
-list plus reader, or a single-stream daily brief — and a **Mailbox** — a real
-folder-and-account client whose Inbox opens on the same brief. Curation tools (sweep junk, keep/block rules,
-reconcile, audit) live in a slide-in drawer.
+The app is one view: a real folder-and-account client whose Inbox opens on
+today's AI brief. Curation tools (sweep junk, keep/block rules, reconcile, audit)
+live in a slide-in drawer.
 
 ## Features
 
@@ -76,15 +75,11 @@ and the `claude` CLI on your own machine.
   the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
   opening the message shows the same summary at the top, with no extra AI call, and
   `i` asks for the full one. Rows are grouped by day.
-- **Today's brief opens the Inbox.** With no message open, the Mailbox reading pane
+- **Today's brief opens the Inbox.** With no message open, the reading pane
   shows the day's AI brief, tallies for what needs you, what's waiting and your
   commitments, and the messages that need you, each with its summary and next step.
   A pinned row at the top of the Inbox (or `k` from the first message) brings it back,
   so opening the Inbox marks nothing read.
-- **The daily brief as a single stream.** Read one message-card at a time with an
-  AI narrative intro, clickable topic chips, `j`/`k` navigation and a progress rail
-  across the top — or flip to the classic two-pane **List** at any moment. The choice
-  is remembered.
 - **Messages open instantly.** The reader paints subject, sender and folder from the
   list immediately behind a shimmer skeleton, and escalates to an honest "first open
   of an older message can take a minute" hint if the server is slow.
@@ -180,8 +175,8 @@ UI. Nothing is ever sent automatically.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
-- **A synthesized "Today" card** above the list, in prose, with quick-jump chips that
-  set the filters for you — computed once a day and cached across restarts.
+- **A synthesized daily brief** in prose, with topic chips that list the messages
+  behind each topic — computed once a day and cached across restarts.
 - **"Since you last looked."** The `▾ N new` pill is augmented with a two-to-three
   sentence summary of what actually arrived; the plain count is always the floor.
 - **Weekly Review** — an AI retrospective of the last 7 days: sent/received stats, who
@@ -260,7 +255,7 @@ UI. Nothing is ever sent automatically.
 - **Nothing is ever sent or deleted behind your back.** AI drafts wait for you, bulk
   actions require a preview and a confirm, and every destructive action is reversible.
 - **You always know what's happening** — a first-run welcome with a Connect-account
-  button, an honest "reading your inbox for the first time" state, an explicit "the
+  button, an explicit "the
   `claude` CLI isn't reachable" message rather than an endless spinner, and an inline
   Retry on every error panel.
 
@@ -277,8 +272,7 @@ UI. Nothing is ever sent automatically.
   moss means only "the AI said this", and rust is for delete.
   Applied before first paint, so there's no flash, and the mail body follows the app.
 - **On a phone:** single-pane list-to-reader swap, an off-canvas folder drawer, swipe
-  left to archive / right to snooze to tomorrow 8am with a live badge, chevrons to walk
-  the brief, and a Back gesture that unwinds reader → list → modal instead of leaving
+  left to archive / right to snooze to tomorrow 8am with a live badge, and a Back gesture that unwinds reader → list → modal instead of leaving
   the app.
 - **Accessibility is wired in** — modal focus traps with focus restore and the rest of
   the page inert, accessible names on every mail frame, an aria-live region announcing
