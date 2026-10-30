@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Shippori+Mincho:wght@600;700&family=Klee+One:wght@600&display=swap" rel="stylesheet">
 <style>
   /* ═══════════════════ MEADOW ═══════════════════
-     Paper on sky. Night (the default, below) and Day (body.theme-light) share one set of
+     Paper on sky. Night (below), Day (body.theme-light, the default) and Dusk (.theme-light.theme-dusk) share one set of
      tokens. Aizome indigo (--primary) is every action, selection and focus ring. Sun gold
      marks only what needs you: --gold is its text tone, --sun its fill. Moss (--ai) is only
      ever the AI's voice. Rust (--err, --ember) marks Delete and errors. Nunito Sans carries
@@ -104,6 +104,27 @@
     --leaf-1:#A6CB72; --leaf-2:#5E9147; --leaf-3:#2F5A35; --trunk:#5C4737; --roof:#B1523A; --wall:#F5EBD8; --window:#5B7789; --path:#E8DDBF;
     --stars:0; --glow:0; --sunny:1;
   }
+  /* ═══════ Dusk — the evening Meadow (a light theme: it rides on .theme-light and swaps the tokens) ═══════ */
+  body.theme-light.theme-dusk{
+    --bg:#FCF7EE; --bg2:#F7EFE2; --panel:#FFFCF6; --panel-hi:#3A467012; --line:#EBDDC8; --line-hi:#DAC7AA;
+    --ink:#27211C; --soft:#4A4036; --mute:#685B4C; --faint:#6E6253;
+    --primary:#3A4670; --primary-hi:#2C3759; --on-primary:#FFFFFF; --primary-ink:#3A4670; --primary-wash:#E8E6F0; --focus:#3A4670;
+    --gold:#7C4805; --gold-hi:#5D3604; --sun:#E39A3A; --gold-wash:#FBE9CF;
+    --ember:#A13D27; --ai:#45612F; --ai-wash:#EDF0DC; --err:#A13D27;
+    --sel:#E8E6F0; --hover:#F7EFE2; --bg3:#F0E5D3; --raise-hi:#F0E5D3; --scrim:rgba(80,46,40,.28);
+    --sh-1:0 1px 2px rgba(120,60,50,.08);
+    --sh-2:0 4px 16px -4px rgba(120,60,50,.16);
+    --sh-3:0 0 0 1px rgba(120,80,40,.13),0 28px 60px -28px rgba(110,50,40,.5);
+    --sky-1:#E59A6E; --sky-2:#F2C496; --sky-3:#F3E2C8;
+    --sh-panel:0 1px 0 rgba(255,255,255,.7) inset,0 0 0 1px rgba(120,80,40,.11),0 14px 34px -22px rgba(120,60,50,.5);
+    --sh-pop:0 0 0 1px rgba(120,80,40,.13),0 28px 60px -28px rgba(110,50,40,.5);
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .28 0 0 0 0 .18 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23685B4C' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    --cloud-1:#FFE8CF; --cloud-2:#F9CFAE; --cloud-3:#B98A99; --disc:#FFE2A6; --disc-glow:rgba(255,206,140,.9);
+    --mtn:#A88C9E; --hill-far:#8D8B76; --hill-mid:#6E7C52; --hill-near:#56673F; --hill-lit:#B3A05C; --meadow:#7A8448;
+    --leaf-1:#C9B562; --leaf-2:#6F7E3F; --leaf-3:#3B4527; --trunk:#4E3A2D; --roof:#9E4532; --wall:#F3DFC4; --window:#F7C66C; --path:#EED3A8;
+    --stars:0; --glow:.75; --sunny:1;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   [hidden]{display:none!important}   /* author display rules (.acct-alert flex etc.) must never beat the hidden attribute */
   body{background:var(--sky-3) linear-gradient(180deg,var(--sky-1) 0%,var(--sky-2) 34%,var(--sky-3) 100%) no-repeat;color:var(--ink);font-family:var(--font-ui);
@@ -147,7 +168,8 @@
   #composeBtn:hover{background:var(--primary-hi)}
   #composeBtn .tb-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;margin-left:2px;padding:0 4px;
     border:1px solid color-mix(in srgb,var(--on-primary) 35%,transparent);border-bottom-width:2px;border-radius:5px;font:700 10.5px/1 var(--font-mono)}
-  body.theme-light #themeBtn .tm-moon,body:not(.theme-light) #themeBtn .tm-sun{display:none}
+  #themeBtn .tm-sun,#themeBtn .tm-dusk,#themeBtn .tm-moon{display:none}
+  body.theme-light:not(.theme-dusk) #themeBtn .tm-sun,body.theme-dusk #themeBtn .tm-dusk,body:not(.theme-light) #themeBtn .tm-moon{display:block}
   .search-tog,.search-x{display:none}
   /* <=760: the full row doesn't fit — search folds into an icon that opens it across the bar (body.search-open),
      help leaves (no keyboard), Compose and the status pill keep only their glyphs */
@@ -424,6 +446,10 @@
   .legnote b{color:var(--soft);font-weight:600}
   .legtoggle{display:flex;align-items:center;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);cursor:pointer}
   .legtoggle input{accent-color:var(--primary)}
+  .legtheme{cursor:default}
+  .legtheme button{padding:4px 10px;border:1px solid var(--line-hi);border-radius:var(--r-pill);background:none;color:var(--soft);font:inherit;font-weight:600;cursor:pointer}
+  .legtheme button[aria-pressed="true"]{background:var(--sel);border-color:transparent;color:var(--primary-ink)}
+  .legtheme span{color:var(--faint)}
   /* command palette (⌘K) */
   .palette{position:fixed;inset:0;z-index:130;display:none;justify-items:center;align-items:start;padding-top:12vh;background:var(--scrim)}
   .palette.show{display:grid}
@@ -1191,6 +1217,7 @@
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.6A8.2 8.2 0 1 1 9.4 4a6.6 6.6 0 0 0 10.6 10.6z"/></symbol>
+  <symbol id="i-dusk" viewBox="0 0 24 24"><path d="M3 18h18M6 14.5a6 6 0 0 1 12 0M12 4.5v2.5M4.9 8.4l1.6 1.4M19.1 8.4l-1.6 1.4M7 21.5h10"/></symbol>
   <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 9.4-4.9M18 11v5.5l1.5 2H9"/><path d="M10 20.5a2 2 0 0 0 4 0M4 4l16 16"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></symbol>
@@ -1204,7 +1231,7 @@
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9.5 7h10.5M9.5 12h10.5M9.5 17h10.5M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></symbol>
   <symbol id="i-todo" viewBox="0 0 24 24"><path d="M11 7h9M11 12h9M11 17h9"/><path d="m3.5 7 1.6 1.6L8 5.7M3.5 12l1.6 1.6L8 10.7M3.5 17l1.6 1.6L8 15.7"/></symbol>
 </svg>
-<script>try{if(localStorage.getItem("mm_theme")!=="dark")document.body.classList.add("theme-light");}catch(e){document.body.classList.add("theme-light");}</script>
+<script>try{const t=localStorage.getItem("mm_theme");if(t!=="dark")document.body.classList.add("theme-light");if(t==="dusk")document.body.classList.add("theme-dusk");}catch(e){document.body.classList.add("theme-light");}</script>
 <header class="top">
   <div class="r1">
     <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="rail" aria-expanded="false"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sidebar"/></svg></button>
@@ -1215,7 +1242,7 @@
     <div class="tools">
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
       <button class="status-pill" id="statusBtn" aria-haspopup="dialog" aria-expanded="false" title="Sync, reconcile and curation"><i class="sdot" aria-hidden="true"></i><span id="statusTxt">Connecting…</span></button>
-      <button class="tbtn icon" id="themeBtn" title="Day or Night" aria-label="Switch to Night"><svg class="ico tm-sun" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><svg class="ico tm-moon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg></button>
+      <button class="tbtn icon" id="themeBtn" title="Day, Dusk or Night" aria-label="Theme"><svg class="ico tm-sun" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><svg class="ico tm-moon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><svg class="ico tm-dusk" aria-hidden="true" focusable="false"><use href="#i-dusk"/></svg></button>
       <button class="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg></button>
       <button class="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sliders"/></svg></button>
       <button class="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pen"/></svg><span class="tb-lbl"> Compose</span><kbd class="tb-kbd" aria-hidden="true">C</kbd></button>
@@ -1315,7 +1342,9 @@
   <div class="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
   <div class="legh"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg> How MailMind uses AI</div>
   <div class="legnote">Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by <b>Claude</b> — through the Claude API when an API key is set, otherwise the Claude CLI on this machine. Only the text of the mail being summarized, drafted or asked about is sent to Anthropic; your mailbox itself stays in a database on this machine. Email bodies render inside a locked sandbox that can't run code or phone home.</div>
-  <label class="legtoggle"><input type="checkbox" id="legTheme"> <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg> Day — the light Meadow theme (also ⌘K → “Toggle theme”)</label>
+  <div class="legtoggle legtheme" id="legTheme" role="group" aria-label="Theme">Theme
+    <button type="button" data-theme-set="day">Day</button><button type="button" data-theme-set="dusk">Dusk</button><button type="button" data-theme-set="night">Night</button>
+    <span>also the sun button, or ⌘K → “Theme”</span></div>
   <label class="legtoggle"><input type="checkbox" id="legNoKeys"> Disable single-key shortcuts (use ⌘/Ctrl chords only)</label>
 </div></div>
 
@@ -2071,18 +2100,27 @@ function applyReadWidth(){ document.body.style.setProperty("--measure",READ_W[re
 function themeIsLight(){ return document.body.classList.contains("theme-light"); }
 // a theme token's current value, for documents (the mail iframe) that can't see our CSS
 function tk(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
-function setTheme(light){
-  document.body.classList.toggle("theme-light", !!light);
-  try{ localStorage.setItem("mm_theme", light?"light":"dark"); }catch(e){}
-  const c=$("#legTheme"); if(c)c.checked=!!light;
-  const tb=$("#themeBtn"); if(tb)tb.setAttribute("aria-label", light?"Switch to Night":"Switch to Day");
+const THEMES=["day","dusk","night"], THEME_NAME={day:"Day",dusk:"Dusk",night:"Night"};
+function themeName(){ return !themeIsLight()?"night":document.body.classList.contains("theme-dusk")?"dusk":"day"; }
+function nextTheme(){ return THEMES[(THEMES.indexOf(themeName())+1)%THEMES.length]; }
+function paintThemeControls(){
+  const t=themeName();
+  $$("#legTheme [data-theme-set]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.themeSet===t));
+  const tb=$("#themeBtn"); if(tb)tb.setAttribute("aria-label", `Theme: ${THEME_NAME[t]} — switch to ${THEME_NAME[nextTheme()]}`);
+}
+function setTheme(t){
+  const light=t!=="night";
+  document.body.classList.toggle("theme-light", light);
+  document.body.classList.toggle("theme-dusk", t==="dusk");
+  try{ localStorage.setItem("mm_theme", t==="night"?"dark":t==="dusk"?"dusk":"light"); }catch(e){}
+  paintThemeControls();
   // repaint an open message so its iframe polarity follows the app theme (unless the user pinned mail theme)
   if(!localStorage.getItem("mm_mailtheme")){
     if(state.thread) openThread(state.thread.thread_id, state.thread.reply_pk||state.csel, false, state.thread.account);
     else if(state.csel!=null && document.body.classList.contains("reading")) openClientMsg(state.csel,false);
   }
 }
-function toggleTheme(){ const light=!themeIsLight(); setTheme(light); toast(light?"Day theme":"Night theme"); }
+function toggleTheme(){ const t=nextTheme(); setTheme(t); toast(THEME_NAME[t]+" theme"); }
 function _foldPlainQuote(t){   // t is HTML-escaped plain text; fold a trailing reply quote
   const lines=t.split("\n");
   let idx=-1;
@@ -4563,7 +4601,7 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Reading settings — width, text, mail colors", enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", fn:()=>reconcile()});
   E.push({group:"Commands", label:"Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
-  E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
+  THEMES.filter(t=>t!==themeName()).forEach(t=>E.push({group:"Commands", label:"Theme → "+THEME_NAME[t], fn:()=>{ setTheme(t); toast(THEME_NAME[t]+" theme"); }}));
   E.push({group:"Commands", label:"Settings", key:",", fn:()=>settingsOpen(true)});
   E.push({group:"Commands", label:"Keyboard help", key:"?", fn:()=>toggleLegend(true)});
   return E.filter(e=>e.enabled?e.enabled():true);
@@ -4638,14 +4676,14 @@ $("#helpBtn").addEventListener("click",()=>toggleLegend());
 $("#themeBtn").addEventListener("click",()=>toggleTheme());
 $("#legNoKeys").addEventListener("change",e=>{ state.noKeys=e.target.checked;
   try{localStorage.setItem("mm_nokeys",state.noKeys?"1":"0");}catch(e){} });
-$("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
+$("#legTheme").addEventListener("click",e=>{ const b=e.target.closest("[data-theme-set]"); if(b)setTheme(b.dataset.themeSet); });
 
 /* ---------- boot ---------- */
 (async()=>{ await loadDigest(false); loadStats(); loadOutbox(); connectEvents();
   try{ if(localStorage.getItem("mm_threadview")==="0"){ state.threadView=false; const b=$("#threadToggle"); if(b){b.classList.remove("on");b.innerHTML=ico("list")+" Messages";} } }catch(e){}
   try{ const sc=localStorage.getItem("mm_searchscope"); if(sc)state.searchScope=sc; }catch(e){}
   try{ if(localStorage.getItem("mm_nokeys")==="1"){ state.noKeys=true; const c=$("#legNoKeys"); if(c)c.checked=true; } }catch(e){}
-  try{ const lt=$("#legTheme"); if(lt)lt.checked=themeIsLight(); $("#themeBtn").setAttribute("aria-label", themeIsLight()?"Switch to Night":"Switch to Day"); }catch(e){}   // theme already applied by the early inline script
+  try{ paintThemeControls(); }catch(e){}   // theme already applied by the early inline script
   try{ localStorage.removeItem("mm_mode"); localStorage.removeItem("mm_brief_view"); }catch(e){}   // Briefing's keys: it retired into Mailbox
   try{ let r=localStorage.getItem("mm_rail");
     if(r==null){ r=localStorage.getItem("mm_mb_view")==="classic"?"wide":"narrow"; localStorage.removeItem("mm_mb_view"); }   // the retired Classic view showed folder names
