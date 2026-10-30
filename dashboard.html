@@ -1255,7 +1255,7 @@
   <div class="legh">Search operators</div>
   <div class="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
   <div class="legh">✦ How MailMind uses AI</div>
-  <div class="legnote">Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox all run through a <b>local Claude CLI on this machine</b> — your mail is read on-device and is never uploaded to a third-party server. Email bodies render inside a locked sandbox that can't run code or phone home.</div>
+  <div class="legnote">Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by <b>Claude</b> — through the Claude API when an API key is set, otherwise the Claude CLI on this machine. Only the text of the mail being summarized, drafted or asked about is sent to Anthropic; your mailbox itself stays in a database on this machine. Email bodies render inside a locked sandbox that can't run code or phone home.</div>
   <label class="legtoggle"><input type="checkbox" id="legTheme"> <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg> Day — the light Meadow theme (also ⌘K → “Toggle theme”)</label>
   <label class="legtoggle"><input type="checkbox" id="legNoKeys"> Disable single-key shortcuts (use ⌘/Ctrl chords only)</label>
 </div></div>
@@ -3220,7 +3220,7 @@ function showAiCard(kind,d){
   if(kind==="loading") el.innerHTML=`<div class="ai-hd">✦ Summary</div>
     <div class="rd-skel"><div class="skb"></div><div class="skb"></div><div class="skb short"></div></div>
     <div class="rd-skelhint"><span class="spin">✦</span> Reading the thread…</div>`;
-  else if(kind==="unavailable") el.innerHTML=`<div class="ai-err">AI summary is unavailable right now (claude not reachable). <button class="ai-rerun" data-airerun>Try again</button></div>`;
+  else if(kind==="unavailable") el.innerHTML=`<div class="ai-err">AI summary is unavailable right now (Claude not reachable). <button class="ai-rerun" data-airerun>Try again</button></div>`;
   else el.innerHTML=`<div class="ai-err">Couldn’t summarize${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-airerun>Retry</button></div>`;
 }
 function storedSummaryCard(it){   // the summary ingest already wrote — shown at once, no AI call; "Full summary" asks for the deeper one
