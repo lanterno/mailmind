@@ -152,9 +152,7 @@
   body:not(.mode-client) .client-ctx{display:none}
   .client-ctx{font-size:12px;color:var(--soft)}
   .client-ctx b{color:var(--ink);font-weight:600}
-  body.mode-client .split{grid-template-columns:210px minmax(300px,34%) 1fr}
-  body.mode-client .folderrail{display:flex;flex-direction:column;gap:1px;overflow-y:auto;
-    background:var(--bg2);padding:10px 8px}
+  body.mode-client .folderrail{display:flex;flex-direction:column;gap:1px;overflow-y:auto;padding:10px 8px}
   .frow{display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:var(--r-sm);cursor:pointer;
     font-size:13px;color:var(--mute);transition:background var(--t-fast),color var(--t-fast)}
   .frow:hover{background:var(--panel-hi);color:var(--soft)}
@@ -233,7 +231,7 @@
 
   /* rows: the importance SPINE — a 3px heat-ramp tick down the left edge,
      full-height + amber when selected. Read the inbox by color temperature. */
-  .row{display:block;position:relative;padding:11px 16px 11px 19px;border-bottom:1px solid rgba(30,36,48,.55);cursor:pointer;transition:background var(--t-fast)}
+  .row{display:block;position:relative;padding:11px 16px 11px 19px;border-bottom:1px solid var(--line);cursor:pointer;transition:background var(--t-fast)}
   .row::before{content:"";position:absolute;left:6px;top:50%;transform:translateY(-50%);width:3px;height:calc(100% - 22px);
     border-radius:var(--r-pill);background:transparent;transition:height var(--t-fast),background var(--t-fast)}
   .row:hover{background:var(--hover)}
@@ -497,63 +495,99 @@
   .set-form .pwwrap .eye{position:absolute;right:8px;top:11px;background:none;border:none;color:var(--mute);cursor:pointer;font-size:12px}
   .set-help{font-size:11px;color:var(--faint);margin-top:5px;line-height:1.5}
 
-  /* Back button + hamburger are desktop-hidden by default; the <=820 block reveals them */
-  .rd-back{display:none} .railtoggle{display:none}
+  /* Back button + hamburger are desktop-hidden by default; Mailbox reveals the hamburger, <=820 the Back button */
+  .rd-back{display:none} .railtoggle{display:none} .splitter{display:none} .rd-sp{display:none}
 
-  /* ═══════════ Focus-Flow Mailbox (body.mb-focus + mode-client) ═══════════
-     A calm two-pane: quiet worklist + wide reading column, folders demoted to
-     the off-canvas drawer (☰ / g / ⌘K). Scoped restyle; all wiring (rows,
-     reader, search, compose, keyboard) is unchanged. Toggle back via ☰ Classic. */
-  .mbview{display:none} body.mode-client .mbview{display:inline-flex}   /* the Focus⇄Classic toggle (mailbox only) */
-  /* two columns (the folder rail leaves the flow → summoned drawer). Desktop only — at ≤820 the
-     responsive single-column + drawer rules already match this, and a 2-col would overflow a phone. */
-  @media (min-width:821px){ body.mb-focus.mode-client .split{grid-template-columns:360px 1fr!important} }
-  /* bottom triage DOCK (desktop): the already-wired reader action bar becomes an
-     opaque floating pill centered on the reading column — content can never ghost
-     through it, and the reader reserves its height. Rarer verbs stay on keys + palette. */
-  @media (min-width:821px){
-    body.mb-focus.mode-client .reader{padding-bottom:calc(var(--dock-h) + 24px)}
-    body.mb-focus.mode-client .rd-actions{position:fixed;left:calc(360px + (100vw - 360px)/2);transform:translateX(-50%);bottom:16px;z-index:20;margin:0;
-      width:max-content;max-width:calc(100vw - 360px - 48px);padding:8px;border-bottom:none;
-      background:var(--panel);border-radius:var(--r-lg);box-shadow:var(--sh-dock);justify-content:center;flex-wrap:wrap}
-    body.mb-focus.mode-client .rd-actions .cab{padding:10px 12px}
-    body.mb-focus.mode-client .rd-actions [data-ca="replyall"],
-    body.mb-focus.mode-client .rd-actions [data-ca="forward"],
-    body.mb-focus.mode-client .rd-actions [data-ca="mute"],
-    body.mb-focus.mode-client .rd-actions [data-ca="unmute"],
-    body.mb-focus.mode-client .rd-actions [data-ca="replylater"],
-    body.mb-focus.mode-client .rd-actions [data-ca="rldone"],
-    body.mb-focus.mode-client .rd-actions [data-ca="dismiss"],
-    body.mb-focus.mode-client .rd-actions [data-ca="unread"]{display:none}
-  }
-  /* 821-1159px: the dock pill wraps to two rows (~100px) — reserve accordingly so
-     the last line of a long email can never hide behind it */
-  @media (min-width:821px) and (max-width:1159px){
-    body.mb-focus.mode-client .reader{padding-bottom:calc(var(--dock-h) + 88px)}
-  }
-  body.mb-focus.mode-client .railtoggle{display:inline-flex;align-items:center;justify-content:center;
+  /* ═══════════ Mailbox shell (body.mode-client) ═══════════
+     Folders · list · reading pane as paper panels on the sky, all on one screen.
+     The rail is icons (64px) or icons + names (224px): ☰ or [ switches, persisted as
+     mm_rail. At <=1100px it becomes a drawer. The splitter sets the list width
+     (drag, ←/→, double-click resets; mm_list_w). Focus reading (↵, Esc leaves)
+     hides rail and list. Briefing never gets .mode-client, so none of this reaches it. */
+  body.mode-client{--gap:8px;--rail-w:64px;--list-w:372px;--measure:760px}
+  body.mode-client.rail-wide{--rail-w:224px}
+  body.mode-client .split{position:relative;gap:var(--gap);padding:var(--gap);background:var(--bg2)}
+  body.mode-client .folderrail,body.mode-client .list,body.mode-client .reader{min-width:0;min-height:0;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1)}
+  body.mode-client .listhead{background:var(--panel)}
+  body.mode-client .rd-extbar{background:var(--panel)}
+  body.mode-client .railtoggle{display:inline-flex;align-items:center;justify-content:center;
     width:34px;height:34px;flex:none;background:none;border:none;
     border-radius:var(--r-sm);color:var(--mute);cursor:pointer;font-size:14px;transition:background var(--t-fast)}
-  body.mb-focus.mode-client .railtoggle:hover{background:var(--panel-hi);color:var(--ink)}
-  body.mb-focus.mode-client .folderrail{position:fixed;left:0;top:var(--top);bottom:0;width:min(300px,86vw);
-    z-index:38;transform:translateX(-100%);visibility:hidden;background:var(--panel);border-right:1px solid var(--line-hi);
-    transition:transform var(--t-med) var(--ease),visibility 0s var(--t-med);box-shadow:var(--sh-3)}
-  body.mb-focus.mode-client.rail-open .folderrail{transform:none;visibility:visible;transition:transform var(--t-med) var(--ease),visibility 0s 0s}
-  /* wide reading column — fills the pane up to the worklist (no centered cap) */
-  body.mb-focus .reader{max-width:none;padding:26px max(40px,4vw) 96px 38px}
-  /* quiet worklist: airy two-line rows, calm spine */
-  body.mb-focus .list{background:var(--bg)}
-  body.mb-focus .row{padding:13px 16px 14px 19px;border-bottom:1px solid var(--line)}
-  body.mb-focus .row.i1::before,body.mb-focus .row.i2::before,body.mb-focus .row.i3::before,body.mb-focus .row.i4::before,body.mb-focus .row.i5::before{background:transparent}
-  body.mb-focus .row.unread::before{background:var(--primary)}
-  body.mb-focus .row.sel{background:var(--sel)}
-  body.mb-focus .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
-  body.mb-focus .r1{font-size:11.5px;color:var(--mute)}
-  body.mb-focus .r2sub{font-size:14px;line-height:1.35;-webkit-line-clamp:1;margin-top:4px}
-  body.mb-focus .r2sub .sj{color:var(--soft);font-weight:500}
-  body.mb-focus .r2sub .sn{color:var(--faint);font-weight:400}
-  body.mb-focus .row.unread .r2sub .sj{color:var(--ink);font-weight:600}
-  body.mb-focus .listhead{background:var(--bg)}
+  body.mode-client .railtoggle:hover{background:var(--panel-hi);color:var(--ink)}
+  @media (min-width:1101px){
+    body.mode-client .split{grid-template-columns:var(--rail-w) var(--list-w) minmax(0,1fr)}
+    /* icon rail: names stay in the accessibility tree (visually hidden), counts become a dot */
+    body.mode-client:not(.rail-wide) .folderrail{padding:8px 6px;overflow-x:hidden}
+    body.mode-client:not(.rail-wide) .frow{position:relative;justify-content:center;min-height:40px;padding:0}
+    body.mode-client:not(.rail-wide) .frow .ic2{width:auto;font-size:16px;opacity:1}
+    body.mode-client:not(.rail-wide) .frow .fn{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+    body.mode-client:not(.rail-wide) .frow .vdel{display:none}
+    body.mode-client:not(.rail-wide) .frow .unread{position:absolute;top:7px;right:9px;width:8px;height:8px;border-radius:50%;
+      overflow:hidden;font-size:0;background:var(--primary);box-shadow:0 0 0 2px var(--panel)}
+    body.mode-client:not(.rail-wide) .frow.on .unread{box-shadow:0 0 0 2px var(--sel)}
+    body.mode-client:not(.rail-wide) .frail-acct{height:1px;padding:0;margin:8px 8px;overflow:hidden;font-size:0;background:var(--line)}
+    body.mode-client:not(.rail-wide) .frail-acct:first-child{display:none}
+  }
+  /* <=1100: two panels; the rail leaves the flow and becomes a drawer (☰ / [ / g / ⌘K).
+     visibility:hidden when closed drops it from the tab order and the accessibility tree. */
+  @media (max-width:1100px){
+    body.mode-client .split{grid-template-columns:var(--list-w) minmax(0,1fr)}
+    body.mode-client .folderrail{position:fixed;left:0;top:var(--top);bottom:0;width:min(290px,86vw);z-index:38;
+      transform:translateX(-100%);visibility:hidden;border-radius:0 var(--r-lg) var(--r-lg) 0;box-shadow:var(--sh-3);
+      transition:transform var(--t-med) var(--ease),visibility 0s var(--t-med)}
+    body.mode-client.rail-open .folderrail{transform:none;visibility:visible;transition:transform var(--t-med) var(--ease),visibility 0s 0s}
+  }
+  @media (min-width:821px){
+    /* splitter: sits in the gap between list and reader; a keyboard-operable separator */
+    body.mode-client .splitter{display:block;position:absolute;z-index:3;top:var(--gap);bottom:var(--gap);width:var(--gap);
+      left:calc(var(--gap) * 2 + var(--rail-w) + var(--list-w));cursor:col-resize;touch-action:none;border-radius:var(--r-xs)}
+    body.mode-client .splitter::after{content:"";position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:44px;margin-top:-22px;
+      border-radius:2px;background:var(--mute);opacity:0;transition:opacity var(--t-fast)}
+    body.mode-client .splitter:hover::after,body.mode-client .splitter:focus-visible::after,body.mode-client .splitter.drag::after{opacity:.7}
+    /* focus reading: the pane takes the whole width */
+    body.mode-client.read-focus .split{grid-template-columns:minmax(0,1fr)}
+    body.mode-client.read-focus .folderrail,body.mode-client.read-focus .list,body.mode-client.read-focus .splitter{display:none}
+    /* wide pane, centred reading measure, the action bar pinned to the top of the pane */
+    body.mode-client .reader{max-width:none;padding:0 0 72px;container:pane / inline-size}
+    body.mode-client .reader>:not(.rd-actions){width:min(var(--measure),calc(100% - 64px));margin-inline:auto}
+    body.mode-client .reader>.rd-iframe{display:block}   /* an inline iframe ignores auto margins */
+    body.mode-client .rd-actions{position:sticky;top:0;z-index:3;height:52px;margin:0 0 24px;padding:0 10px;gap:2px;
+      flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--panel);border-bottom:1px solid var(--line)}
+    body.mode-client .rd-actions .cab{flex:none;padding:8px 10px}
+    body.mode-client .rd-actions .cab:disabled{opacity:.4;cursor:default;background:none}
+    body.mode-client .rd-sp{display:block;flex:1 1 0;min-width:8px}
+    body.mode-client .rd-extbar{top:52px}   /* the 'External' frame pins just under the action bar */
+    /* narrower panes: secondary verbs drop to icons, then leave the bar (keys + ⌘K still reach them) */
+    @container pane (max-width:1180px){
+      .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=star],[data-ca=unread]){font-size:0;gap:0}
+      .rd-pos{display:none}
+    }
+    @container pane (max-width:840px){
+      .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash]){font-size:0;gap:0}
+      .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=unread]){display:none}
+    }
+    @container pane (max-width:620px){
+      .rd-actions .cab{font-size:0;gap:0}
+      .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk]){display:none}
+    }
+  }
+  @media (min-width:821px) and (max-width:1100px){ body.mode-client .splitter{left:calc(var(--gap) + var(--list-w))} }   /* the rail is a drawer here */
+  .rd-nav{display:inline-flex;align-items:center;gap:2px;flex:none}
+  .rd-focus{display:none}
+  @media (min-width:821px){ body.mode-client .rd-focus{display:inline-flex} }
+  .cab[aria-pressed="true"]{background:var(--sel);color:var(--primary-ink)}
+  .rd-pos{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;margin:0 6px}
+  /* the worklist: airy two-line rows, one calm unread spine */
+  body.mode-client .row{padding:13px 16px 14px 19px}
+  body.mode-client .row.i1::before,body.mode-client .row.i2::before,body.mode-client .row.i3::before,body.mode-client .row.i4::before,body.mode-client .row.i5::before{background:transparent}
+  body.mode-client .row.unread::before{background:var(--primary)}
+  body.mode-client .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
+  body.mode-client .r1{font-size:11.5px;color:var(--mute)}
+  body.mode-client .r2sub{font-size:14px;line-height:1.35;-webkit-line-clamp:1;margin-top:4px}
+  body.mode-client .r2sub .sj{color:var(--soft);font-weight:500}
+  body.mode-client .r2sub .sn{color:var(--faint);font-weight:400}
+  body.mode-client .row.unread .r2sub .sj{color:var(--ink);font-weight:600}
   /* ===== Structural collapse to a single pane (tablet + phone): one pane visible, rail as a drawer ===== */
   @media (max-width:820px){
     .split{grid-template-columns:1fr}
@@ -564,18 +598,10 @@
     .top .r2{overflow-x:auto;-webkit-overflow-scrolling:touch}
     .list{border-right:none}
     .rd-back{display:inline-flex}            /* Back button (only while the swap is active) */
-    /* hamburger opens the folder rail (mailbox mode only — the rail is hidden in Briefing) */
-    body.mode-client .railtoggle{display:inline-flex;align-items:center;justify-content:center;
-      width:38px;height:38px;flex:none;background:none;border:none;
-      border-radius:var(--r-sm);color:var(--mute);cursor:pointer;font-size:15px}
-    body.mode-client .railtoggle:hover{background:var(--panel-hi);color:var(--ink)}
-    /* folder rail becomes an off-canvas left drawer; visibility:hidden when closed drops it from
-       the tab order + a11y tree (scoped to this media query → desktop & resize unaffected) */
-    body.mode-client .folderrail{position:fixed;left:0;top:var(--top);bottom:0;width:min(280px,82vw);
-      z-index:38;transform:translateX(-100%);visibility:hidden;background:var(--panel);
-      transition:transform var(--t-med) var(--ease),visibility 0s var(--t-med);
-      box-shadow:var(--sh-3)}
-    body.mode-client.rail-open .folderrail{transform:none;visibility:visible;transition:transform var(--t-med) var(--ease),visibility 0s 0s}
+    body.mode-client .railtoggle{width:38px;height:38px;font-size:15px}
+    /* one pane at a time: the panels go edge to edge */
+    body.mode-client .split{padding:0;gap:0}
+    body.mode-client .list,body.mode-client .reader{border:none;border-radius:0;box-shadow:none}
     /* 16px form fields → iOS Safari won't zoom on focus (covers the full tablet range, not just <=600) */
     .search,.cmp-subj,.cmp-textarea,.chipfield .ci,.snooze-menu .snz-custom input{font-size:16px}
   }
@@ -1057,15 +1083,11 @@
 <script>try{if(localStorage.getItem("mm_theme")==="light")document.body.classList.add("theme-light");}catch(e){}</script>
 <header class="top">
   <div class="r1">
-    <button class="railtoggle" id="railToggle" title="Folders" aria-label="Toggle folders">☰</button>
+    <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="folderrail" aria-expanded="false">☰</button>
     <div class="brand">✉ Mail<b>Mind</b></div>
     <div class="seg modeseg" id="modeseg" title="Briefing ⇄ Mailbox (m)">
       <button data-mode="summary" class="on">Briefing</button>
       <button data-mode="client">Mailbox</button>
-    </div>
-    <div class="seg mbview client-only" id="mbView" title="Focus ⇄ Classic mailbox">
-      <button data-mb="focus" class="on">✦ Focus</button>
-      <button data-mb="classic">☰ Classic</button>
     </div>
     <span class="live" id="live">reading inboxes…</span>
     <input class="search" id="search" placeholder="Search…   ?ask · !do   ( / )" aria-label="search">
@@ -1103,6 +1125,9 @@
 
 <main class="split">
   <aside class="folderrail" id="folderrail"></aside>
+  <div class="splitter client-only" id="splitter" role="separator" aria-orientation="vertical" aria-controls="list"
+    aria-label="Message list width" aria-valuemin="300" aria-valuemax="560" aria-valuenow="372" tabindex="0"
+    title="Drag to resize · ←/→ · double-click resets"></div>
   <section class="list" id="list" tabindex="0">
     <div class="listhead"><span id="count">—</span>
       <button class="thread-toggle client-only on" id="threadToggle" title="Group into conversations">💬 Conversations</button>
@@ -1178,7 +1203,8 @@
     <div>
       <div class="legh">Mailbox</div>
       <div class="g">
-        <kbd>j</kbd><span>/ <kbd>k</kbd> move · <kbd>↵</kbd>/<kbd>o</kbd> open</span>
+        <kbd>j</kbd><span>/ <kbd>k</kbd> move · <kbd>o</kbd> open · <kbd>↵</kbd> focus reading</span>
+        <kbd>[</kbd><span>folders: icons ⇄ names · drag the list edge to resize</span>
         <kbd>n</kbd><span>/ <kbd>p</kbd> next / prev unread</span>
         <kbd>r</kbd><span>reply · <kbd>a</kbd> all · <kbd>f</kbd> forward · <kbd>c</kbd> compose</span>
         <kbd>e</kbd><span>archive · <kbd>d</kbd>/<kbd>⌫</kbd>/<kbd>#</kbd> delete · <kbd>b</kbd> junk</span>
@@ -1633,6 +1659,7 @@ function setMode(m){
   try{localStorage.setItem("mm_mode",m);}catch(e){}
   // the search box means different things per mode — say so in the placeholder
   $("#search").placeholder = m==="client" ? "Ask a question (start with ?) or search —  is:unread, from:amazon" : "Filter these cards…   ( / )";
+  if(m!=="client") setReadFocus(false);
   if(m==="client"){ document.body.classList.remove("focus-on"); closeFsAsk(); if(!state.account) state.account=(state.accountsList||[])[0]||""; renderMonos(); openClient(); }
   else { $("#clientCtx").textContent=""; document.body.classList.remove("reading"); state.sel=null; state.focusIntro=true; applyFilters(false); loadTodayCard(false); applyBriefView(state.briefView); }
 }
@@ -1886,11 +1913,24 @@ function setLoading(el, label, slow){
 }
 function readerSkeleton(it){
   const s=it||{};
-  return `<div class="rd-top"><span class="rd-tag">${esc({__snoozed__:"Snoozed",__muted__:"Muted",__waiting__:"Waiting"}[state.folder]||state.folder)}</span></div>
+  return `${readerBarSkel()}
+    <div class="rd-top"><span class="rd-tag">${esc({__snoozed__:"Snoozed",__muted__:"Muted",__waiting__:"Waiting"}[state.folder]||state.folder)}</span></div>
     <div class="rd-subj">${esc(s.subject||"")}</div>
     <div class="rd-from"><span class="nm">${esc(s.from_name||"")}</span> <span class="ad">${esc(s.from_addr||"")}</span></div>
     <div class="rd-skel"><div class="skb"></div><div class="skb"></div><div class="skb short"></div><div class="skb"></div><div class="skb"></div><div class="skb short"></div></div>
     <div class="rd-skelhint" id="rdSkelHint"></div>`;
+}
+function readerBarSkel(){   // the action bar while a body loads: navigation only — verbs wait for the loaded message
+  return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list">‹ List</button><span class="rd-sp" aria-hidden="true"></span>${readerNavHtml()}</div>`;
+}
+function readerNavHtml(){   // right end of the reading pane's action bar: focus reading, position, previous / next
+  const list=state.searching?state.searchItems:state.cmsgs, n=list.length, i=list.findIndex(x=>x.pk===state.csel);
+  const more=(state.searching?state.searchHasMore:state.cHasMore)?"+":"";
+  return `<span class="rd-nav">
+    <button class="cab rd-focus" data-readfocus aria-pressed="${readFocusOn()}" title="Focus reading — hide folders and list (↵)" aria-label="Focus reading"><span>⤢</span></button>
+    ${i<0?"":`<span class="rd-pos">${i+1} of ${n}${more}</span>`}
+    <button class="cab" data-nav="-1" title="Previous (k)" aria-label="Previous message"${i<=0?" disabled":""}><span>↑</span></button>
+    <button class="cab" data-nav="1" title="Next (j)" aria-label="Next message"${i<0||i>=n-1?" disabled":""}><span>↓</span></button></span>`;
 }
 /* prefetch: warm the SQLite body cache for the next rows so j/k feels instant */
 const _prefetched=new Set(), _prefetchInflight=new Set();
@@ -2082,7 +2122,8 @@ function renderClientReader(d){
   const actions=isDraft?`<div class="rd-actions">
     <button class="cab rd-back" data-back title="Back to list">‹ List</button>
     <button class="cab" data-ca="edit" title="Edit draft"><span>✎</span> Edit</button>
-    <button class="cab cab-del" data-ca="trash" title="Delete (d / ⌫ / #)"><span>🗑</span> Delete</button></div>`
+    <button class="cab cab-del" data-ca="trash" title="Delete (d / ⌫ / #)"><span>🗑</span> Delete</button>
+    <span class="rd-sp" aria-hidden="true"></span>${readerNavHtml()}</div>`
    :`<div class="rd-actions">
     <button class="cab rd-back" data-back title="Back to list">‹ List</button>
     ${replyChipHtml(d.pk)}
@@ -2095,12 +2136,14 @@ function renderClientReader(d){
       :'<button class="cab" data-ca="replylater" title="Reply later (l)"><span>📌</span> Later</button>'}
     <button class="cab" data-ca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>🔕</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-ca="dismiss" title="Dismiss follow-up"><span>✓</span> Done</button>':''}
+    <span class="rd-sp" aria-hidden="true"></span>
     <button class="cab" data-ca="archive" title="Archive (e)"><span>🗄</span> Archive</button>
     <button class="cab cab-del" data-ca="trash" title="Delete (d / ⌫ / #)"><span>🗑</span> Delete</button>
     <button class="cab" data-ca="junk" title="Mark junk (b)"><span>⊘</span> Junk</button>
-    <button class="cab${it.flagged?" on":""}" data-ca="star" title="Star (s)">${it.flagged?"★ Starred":"☆ Star"}</button>
+    <button class="cab${it.flagged?" on":""}" data-ca="star" title="Star (s)">${it.flagged?"<span>★</span> Starred":"<span>☆</span> Star"}</button>
     <button class="cab" data-ca="unread" title="Mark unread (u)"><span>✉</span> Unread</button>
-    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors">${mailThemeDark?"◐":"◑"}</button></div>`;
+    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors" aria-label="Toggle mail appearance"><span>${mailThemeDark?"◐":"◑"}</span></button>
+    ${readerNavHtml()}</div>`;
   rd.innerHTML=`
     ${actions}
     <div class="ai-card" id="aiCard" hidden></div>
@@ -2161,6 +2204,7 @@ async function openThread(tid, latestPk, scroll, acct){
   state.csel=latestPk; $$(".row.cmsg").forEach(r=>r.classList.toggle("sel", r.dataset.tid===tid));
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   setLoading(rd, "Loading conversation…", "Still fetching — the first open can be slow.");
+  rd.insertAdjacentHTML("afterbegin", readerBarSkel());
   const seq=++state.cseq;
   let d; try{ d=await api(`/api/thread?account=${encodeURIComponent(acct)}&thread_id=${encodeURIComponent(tid)}`); }
   catch(e){ rd.innerHTML='<div class="nores">Couldn’t load.</div>'; return; }
@@ -2180,7 +2224,9 @@ async function openThread(tid, latestPk, scroll, acct){
       :'<button class="cab" data-tca="replylater" title="Reply later (l)"><span>📌</span> Later</button>'}
     <button class="cab" data-tca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>🔕</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-tca="dismiss" title="Dismiss follow-up"><span>✓</span> Done</button>':''}
-    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors">${mailThemeDark?"◐":"◑"}</button></div>`;
+    <span class="rd-sp" aria-hidden="true"></span>
+    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors" aria-label="Toggle mail appearance"><span>${mailThemeDark?"◐":"◑"}</span></button>
+    ${readerNavHtml()}</div>`;
   rd.innerHTML=`${actions}
     <div class="rd-subj">${esc(subj)} <span class="thr-n">${d.count} messages</span></div>
     <div class="ai-card" id="aiCard" hidden></div>
@@ -2501,8 +2547,43 @@ async function cmarkseen(pk){ const it=cfindAny(pk); if(it&&it.seen)return; if(i
   catch(e){ if(it)it.seen=0; refreshRow(pk); } }
 /* ---------- mobile: folder-rail drawer + reader back ---------- */
 function isMobile(){ try{ return matchMedia("(max-width:820px)").matches; }catch(e){ return false; } }
-function toggleRail(){ document.body.classList.toggle("rail-open"); _syncScrim(); }
-function closeRail(){ if(document.body.classList.contains("rail-open")){ document.body.classList.remove("rail-open"); _syncScrim(); } }
+/* ---- Mailbox shell: folder rail, list width, focus reading ----
+   Wide windows: ☰ / [ switch the rail between icons and icons + names (rail-wide, kept in mm_rail).
+   <=1100px: the same control opens the rail as a drawer (rail-open). */
+const _railDocked=matchMedia("(min-width:1101px)");
+function _syncRailBtn(){
+  const b=$("#railToggle"); if(!b)return; const docked=_railDocked.matches;
+  b.setAttribute("aria-expanded", document.body.classList.contains(docked?"rail-wide":"rail-open"));
+  b.setAttribute("aria-label", docked?(document.body.classList.contains("rail-wide")?"Show folder icons only":"Show folder names"):"Folders");
+}
+function applyRailWide(on){
+  document.body.classList.toggle("rail-wide", !!on);
+  try{ localStorage.setItem("mm_rail", on?"wide":"narrow"); }catch(e){}
+  _syncRailBtn();
+}
+function toggleRail(){
+  setReadFocus(false);   // asking for the folders means leaving focus reading
+  if(_railDocked.matches) applyRailWide(!document.body.classList.contains("rail-wide"));
+  else { document.body.classList.toggle("rail-open"); _syncScrim(); _syncRailBtn(); }
+}
+function closeRail(){ if(document.body.classList.contains("rail-open")){ document.body.classList.remove("rail-open"); _syncScrim(); _syncRailBtn(); } }
+_railDocked.addEventListener("change",()=>{ closeRail(); _syncRailBtn(); });   // a drawer left open must not strand the scrim once the rail docks
+const LIST_W0=372;
+let _listW=LIST_W0;
+function applyListW(w, save){
+  _listW=Math.max(300, Math.min(560, Math.round(w)));
+  document.body.style.setProperty("--list-w", _listW+"px");
+  $("#splitter").setAttribute("aria-valuenow", _listW);
+  if(save){ try{ localStorage.setItem("mm_list_w", _listW); }catch(e){} }
+}
+function readFocusOn(){ return document.body.classList.contains("read-focus"); }
+function setReadFocus(on){
+  on=!!on && !isMobile();   // a phone already shows one pane at a time
+  if(on===readFocusOn())return;
+  document.body.classList.toggle("read-focus", on);
+  $$("#reader [data-readfocus]").forEach(b=>b.setAttribute("aria-pressed", on));
+  if(on) closeRail();
+}
 function backToList(){ document.body.classList.remove("reading"); }
 /* ---------- row "heal": collapse a row out before the list re-renders (reduced-motion → instant) ---------- */
 function _reduceMotion(){ try{ return matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } }
@@ -2954,14 +3035,6 @@ function applyGroupFilter(i){
    Gated by body.focus-on, only meaningful in briefing mode. Mailbox is untouched. */
 let _briefData=null, _fsBodyTok=0;
 function focusOn(){ return state.mode!=="client" && state.briefView==="focus"; }
-// Focus ⇄ Classic mailbox. mb-focus is a body class (CSS scoped to .mode-client, so inert in Briefing).
-function applyMbView(v){
-  const mb = v==="classic" ? "classic" : "focus";
-  try{ localStorage.setItem("mm_mb_view", mb); }catch(e){}
-  document.body.classList.toggle("mb-focus", mb==="focus");
-  $$("#mbView button").forEach(b=>{ const on=b.dataset.mb===mb; b.classList.toggle("on",on); b.setAttribute("aria-checked",on); });
-  if(mb!=="focus") closeRail();   // leaving Focus → don't strand the summoned folder drawer open
-}
 function applyBriefView(v,fromInit){
   state.briefView=(v==="list")?"list":"focus";
   try{ localStorage.setItem("mm_brief_view",state.briefView); }catch(e){}
@@ -3836,7 +3909,6 @@ async function doRemove(email){
 /* ---------- events ---------- */
 $("#search").addEventListener("input",e=>{state.q=e.target.value; if(state.mode==="client")onClientSearch(); else applyFilters(true);});
 $("#modeseg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.mode);});
-$("#mbView").addEventListener("click",e=>{const b=e.target.closest("button");if(b)applyMbView(b.dataset.mb);});
 $("#briefView").addEventListener("click",e=>{const b=e.target.closest("button");if(b)applyBriefView(b.dataset.bv);});
 $("#fsActs").addEventListener("click",e=>{const b=e.target.closest("[data-fsact]");if(b)fsAct(b.dataset.fsact);});
 /* ── mobile: prev/next tap on the Focus card ── */
@@ -3938,6 +4010,20 @@ $("#folderrail").addEventListener("click",e=>{
   closeRail();                       // mobile: picking a folder closes the drawer
 });
 $("#railToggle").addEventListener("click",toggleRail);
+// splitter: drag, or focus it and use ←/→ (Home/End for the limits) — the keyboard path is the WCAG 2.5.7 alternative to dragging
+$("#splitter").addEventListener("pointerdown",e=>{
+  const sp=e.currentTarget; e.preventDefault(); sp.setPointerCapture(e.pointerId); sp.classList.add("drag");
+  const x0=e.clientX, w0=_listW;
+  const mv=ev=>applyListW(w0+ev.clientX-x0);
+  const up=()=>{ sp.classList.remove("drag"); sp.removeEventListener("pointermove",mv); sp.removeEventListener("pointerup",up); sp.removeEventListener("pointercancel",up); applyListW(_listW,true); };
+  sp.addEventListener("pointermove",mv); sp.addEventListener("pointerup",up); sp.addEventListener("pointercancel",up);
+});
+$("#splitter").addEventListener("keydown",e=>{
+  const w={ArrowLeft:_listW-24, ArrowRight:_listW+24, Home:300, End:560}[e.key];
+  if(w!=null){ e.preventDefault(); applyListW(w,true); }
+});
+$("#splitter").addEventListener("dblclick",()=>applyListW(LIST_W0,true));
+$("#rows").addEventListener("dblclick",e=>{ if(state.mode==="client" && e.target.closest(".row.cmsg") && !e.target.closest("[data-mark]")) setReadFocus(true); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); });
 $("#impseg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   $$("#impseg button").forEach(x=>{const on=x===b;x.classList.toggle("on",on);x.setAttribute("aria-checked",on);}); state.min=+b.dataset.min; applyFilters(true);});
@@ -4046,6 +4132,8 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   const ct=e.target.closest("[data-contact]"); if(ct){ e.stopPropagation(); openContactCard(ct.dataset.contact, ct); return; }
   const rb=e.target.closest("[data-rsvp]"); if(rb){ const row=rb.closest(".inv-rsvp"); inviteRsvp(+row.dataset.rsvpPk, rb.dataset.rsvp, row); return; }
   if(e.target.closest("[data-back]")){ backToList(); return; }
+  const nv=e.target.closest("[data-nav]"); if(nv){ cmove(+nv.dataset.nav); return; }
+  if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
   if(e.target.closest("[data-bodytheme]")){ toggleMailTheme(); return; }
   if(e.target.closest("[data-airerun]")){ summarize(true); return; }
   const texp=e.target.closest("[data-texp]"); if(texp){ expandMember(+texp.dataset.texp); return; }
@@ -4189,7 +4277,7 @@ document.addEventListener("keydown",e=>{
   // commitments agenda overlay: Esc closes it before anything else
   if(e.key==="Escape" && $("#reviewPanel").classList.contains("show")){ closeReview(); e.preventDefault(); return; }   // reviewPanel paints above commitPanel (same z, later in DOM) → close it first
   if(e.key==="Escape" && $("#commitPanel").classList.contains("show")){ closeCommitments(); e.preventDefault(); return; }
-  // summoned folder drawer (Focus mailbox / mobile): Esc closes it before anything else
+  // folder drawer (<=1100px): Esc closes it before anything else
   if(e.key==="Escape" && document.body.classList.contains("rail-open")){ closeRail(); e.preventDefault(); return; }
   // snooze popover open: digits 1-4 pick a preset, Esc closes; swallow everything else
   if($("#snoozeMenu")){ if(/^[1-4]$/.test(e.key)){ doSnooze(SNOOZE_PRESETS[+e.key-1][0]); e.preventDefault(); } else if(e.key==="Escape")closeSnoozeMenu(); else if(e.key!=="Tab"&&e.key!=="Enter"&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
@@ -4230,17 +4318,21 @@ document.addEventListener("keydown",e=>{
     else if(k==="h"&&sel!=null){ const btn=$('#reader [data-ca="snooze"],#reader [data-tca="snooze"]'); openSnoozeMenu(btn||$("#reader")); }
     else if(k==="w"){ if(marked)cbulk("mute"); else if(sel!=null){ if(state.folder==="__muted__")doUnmute(muteTarget()); else doMute(muteTarget()); } }
     else if(k==="l"&&sel!=null){ if(state.folder==="__replylater__")doReplyLaterDone(muteTarget()); else doReplyLater(muteTarget()); }
+    else if(k==="Enter"&&e.target.closest("button,a[href],[role=separator]"))return;   // ↵ on a focused control activates that control, nothing more
+    else if(k==="Enter"&&sel!=null&&!isMobile())setReadFocus(!readFocusOn());   // desktop: the open message is already in the pane → ↵ toggles focus reading
     else if((k==="Enter"||k==="o")&&sel!=null){ const it=cfindAny(sel); if(it)openConversation(it,true); document.body.classList.add("reading"); }
+    else if(k==="[")toggleRail();
     else if(k==="g"){ state.gotoArmed=true; toast("Go to folder:  i·s·a·t·k·d·z·w·l"); state.gotoT=setTimeout(()=>state.gotoArmed=false,1800); }
     else if(k==="z")undo();
     else if(k==="v"&&state.searching&&!state.viewId)saveCurrentSearch();
     else if(k==="/"){$("#search").focus();}
     else if(k==="Escape"){ if($("#legend").classList.contains("show"))$("#legend").classList.remove("show");
+      else if(readFocusOn())setReadFocus(false);
       else if(state.cmarked.size)cmarkClear();
       else if(isMobile()&&document.body.classList.contains("reading"))document.body.classList.remove("reading");   // phone: reader → back to the (possibly search) list; a second Esc then clears
       else if(state.searching){ clearSearch(false); loadCMessages(); }
       else document.body.classList.remove("reading"); } else return;
-    if(["j","k","n","p","e","#","d","Delete","Backspace","s","u","x","b","r","a","f","c","i","h","w","o","g","z","v","/"].includes(k))e.preventDefault(); return;
+    if(["j","k","n","p","e","#","d","Delete","Backspace","s","u","x","b","r","a","f","c","i","h","w","o","g","z","v","/","["].includes(k))e.preventDefault(); return;
   }
   // ── Focus Flow brief: a calm single-stream keyboard (j/k walk, r reply, l later, y keep, e trash, b block, o open, a ask) ──
   if(focusOn()){
@@ -4329,6 +4421,8 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Undo last action", key:"z", fn:()=>undo()});
   E.push({group:"Commands", label:"Sync now", fn:()=>sync()});
   E.push({group:"Commands", label:"Toggle conversations / messages", modes:["client"], fn:()=>setThreadView(!state.threadView)});
+  E.push({group:"Commands", label:readFocusOn()?"Leave focus reading":"Focus reading — hide folders and list", key:"↵", modes:["client"], enabled:()=>!isMobile(), fn:()=>setReadFocus(!readFocusOn())});
+  E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", modes:["client"], fn:()=>toggleRail()});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", modes:["summary"], fn:()=>reconcile()});
   E.push({group:"Commands", label:"✦ Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
   E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
@@ -4414,7 +4508,10 @@ $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
   try{ if(localStorage.getItem("mm_nokeys")==="1"){ state.noKeys=true; const c=$("#legNoKeys"); if(c)c.checked=true; } }catch(e){}
   try{ const lt=$("#legTheme"); if(lt)lt.checked=themeIsLight(); }catch(e){}   // theme already applied by the early inline script
   try{ const bv=localStorage.getItem("mm_brief_view"); if(bv==="list"||bv==="focus")state.briefView=bv; }catch(e){}
-  try{ applyMbView(localStorage.getItem("mm_mb_view")||"focus"); }catch(e){}   // Focus mailbox on by default
+  try{ let r=localStorage.getItem("mm_rail");
+    if(r==null){ r=localStorage.getItem("mm_mb_view")==="classic"?"wide":"narrow"; localStorage.removeItem("mm_mb_view"); }   // the retired Classic view showed folder names
+    applyRailWide(r==="wide"); }catch(e){}
+  try{ applyListW(+localStorage.getItem("mm_list_w")||LIST_W0); }catch(e){}
   try{ if(localStorage.getItem("mm_mode")==="client") setMode("client"); }catch(e){}
   if(state.mode!=="client"){ state.focusIntro=true; applyBriefView(state.briefView,true); }   // brief opens on the narrative
   loadViews();   // app-global saved views/lanes — load immediately, not gated on a slow folder list
