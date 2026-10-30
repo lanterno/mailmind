@@ -180,7 +180,7 @@ def summarize(account, thread_id, scope="thread", force=False):
             print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "summary unavailable", "retry": True}, 502
         parsed = _parse(out)
-        model = (_sz.MODEL or "claude-cli")
+        model = _sz.model_label()
         if parsed is None:                          # replied but not JSON: cache a safe fallback, don't loop
             parsed = {"tldr": subject, "points": [(rows[-1]["snippet"] or "")[:200]],
                       "action": "", "participants": []}

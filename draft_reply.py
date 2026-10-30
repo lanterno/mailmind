@@ -67,4 +67,4 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
     body = (obj.get("body") or "").strip() if isinstance(obj, dict) else ""
     if not body:
         return {"ok": False, "error": "no draft produced", "retry": True}, 502
-    return {"ok": True, "body": body[:6000], "tone": tone, "model": (_sz.MODEL or "claude-cli")}, 200
+    return {"ok": True, "body": body[:6000], "tone": tone, "model": _sz.model_label()}, 200

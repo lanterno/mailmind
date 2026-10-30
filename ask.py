@@ -116,7 +116,7 @@ def ask(account, question):
     if not rows:
         return {"ok": True, "account": account, "question": question,
                 "answer": "I couldn’t find any messages matching that in your mail.",
-                "cited_pks": [], "sources": [], "model": _sz.MODEL or "claude-cli",
+                "cited_pks": [], "sources": [], "model": _sz.model_label(),
                 "generated": datetime.now(timezone.utc).isoformat()}, 200
 
     # body-coverage cascade + bounded packing; only packed pks are citable
@@ -139,7 +139,7 @@ def ask(account, question):
     if not blocks:
         return {"ok": True, "account": account, "question": question,
                 "answer": "I found related messages but none have readable text indexed yet.",
-                "cited_pks": [], "sources": [], "model": _sz.MODEL or "claude-cli",
+                "cited_pks": [], "sources": [], "model": _sz.model_label(),
                 "generated": datetime.now(timezone.utc).isoformat()}, 200
 
     prompt = _PROMPT.format(question=question, blocks="\n\n".join(blocks))
@@ -174,5 +174,5 @@ def ask(account, question):
     } for pk in cited]
 
     return {"ok": True, "account": account, "question": question, "answer": answer,
-            "cited_pks": cited, "sources": sources, "model": _sz.MODEL or "claude-cli",
+            "cited_pks": cited, "sources": sources, "model": _sz.model_label(),
             "generated": datetime.now(timezone.utc).isoformat()}, 200

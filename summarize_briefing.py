@@ -275,7 +275,7 @@ def build_delta(accounts_set, since_ts):
             print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "delta unavailable", "retry": True}, 502
         headline, items = _clean_delta(obj) if isinstance(obj, dict) else ("", [])
-        model = (_sz.MODEL or "claude-cli")
+        model = _sz.model_label()
         if not headline:                        # replied but unusable -> deterministic, cached once
             headline, items = _delta_fallback(rows)
             model = "fallback"
@@ -342,7 +342,7 @@ def build(accounts_set, force=False):
             print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
         narrative, groups = _clean(obj, valid) if isinstance(obj, dict) else ("", [])
-        model = (_sz.MODEL or "claude-cli")
+        model = _sz.model_label()
         if not narrative:                       # replied but unusable: cache a deterministic card
             fb = _fallback(rows)
             narrative, groups, model = fb["narrative"], fb["groups"], "fallback"

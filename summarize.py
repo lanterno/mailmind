@@ -67,6 +67,11 @@ def _supports_schema():
     return _SCHEMA_OK
 
 
+def model_label():
+    """The model name stored beside each AI result and shown under it in the UI."""
+    return MODEL or "claude-cli"
+
+
 def call_claude(prompt):
     """Plain text result (used by summarize_thread). Unchanged signature."""
     cmd = ["claude", "-p", prompt, "--output-format", "text"]
@@ -138,7 +143,7 @@ def summarize_one(row):
             imp = 2
         return row["pk"], (str(obj["summary"])[:600], imp,
                            str(obj.get("category", "other"))[:32],
-                           str(obj.get("action", ""))[:200], (MODEL or "claude-cli"))
+                           str(obj.get("action", ""))[:200], model_label())
     # successful call but no usable summary -> store a fallback, don't loop forever
     return row["pk"], ((row["subject"] or "(no subject)"), 2, "other", "", "parse-error")
 

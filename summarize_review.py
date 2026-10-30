@@ -218,7 +218,7 @@ def build(accounts_set, force=False):
             with _st._AI_SEM:
                 obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA)
             ai = _clean(obj)
-            model = (_sz.MODEL or "claude-cli")
+            model = _sz.model_label()
             # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is
             # a few sentences; anything shorter falls back to the deterministic narrative (still useful).
             if len(ai["narrative"]) < 40 or len(ai["narrative"].split()) < 7:
