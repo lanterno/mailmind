@@ -117,6 +117,23 @@
   .tbtn:hover{background:var(--panel-hi);color:var(--ink)}
   .tbtn:disabled{opacity:.55;cursor:default}
   #composeBtn{background:var(--primary);color:var(--on-primary);font-weight:600}
+  .search-tog,.search-x{display:none}
+  /* <=760: the full row doesn't fit — search folds into an icon that opens it across the bar (body.search-open),
+     help leaves (no keyboard), Compose and the status pill keep only their glyphs */
+  @media (max-width:760px){
+    .top .r1{gap:6px}
+    .search{display:none}
+    .search-tog{display:inline-flex;margin-left:auto;flex:none}
+    .tools{margin-left:0}
+    #helpBtn{display:none}
+    #composeBtn .lbl{display:none}
+    #composeBtn,.tools .tbtn.icon{width:40px;height:40px;padding:0;justify-content:center;flex:none}
+    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
+    body.search-open .top .r1>:not(.search):not(.search-x){display:none}
+    body.search-open .search{display:block;flex:1;min-width:0}
+    body.search-open .search-x{display:inline-flex;flex:none}
+  }
+  @media (max-width:340px){ .brand{display:none} }
   #composeBtn:hover{background:var(--primary-hi);color:var(--on-primary)}
   @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -690,11 +707,9 @@
     body{height:100dvh}
     .split{height:calc(100dvh - var(--top))}
     .top{padding:0 8px}
-    .top .r1{gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}   /* toolbar swipes instead of clipping */
     .brand{font-size:15px}
     .search{flex:1;min-width:140px;font-size:16px}            /* 16px → no iOS focus-zoom */
     .tools{gap:2px} .tbtn{padding:9px 10px;min-height:40px;flex:none}
-    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
     .reader{padding:16px 14px calc(var(--dock-h) + 28px)}
     .rd-iframe{min-height:100px}
     .feed-river{padding:10px 12px calc(var(--dock-h) + 16px)} .paper-trail{padding:8px 12px calc(var(--dock-h) + 16px)} .ask-wrap{padding:12px 12px calc(var(--dock-h) + 16px)}
@@ -1078,12 +1093,14 @@
     <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="rail" aria-expanded="false">☰</button>
     <div class="brand">✉ Mail<b>Mind</b></div>
     <input class="search" id="search" placeholder="Ask a question (start with ?) or search — is:unread, from:amazon" aria-label="search">
+    <button class="tbtn search-x" id="searchX">Cancel</button>
+    <button class="tbtn icon search-tog" id="searchTog" title="Search or ask your inbox (/)" aria-label="Search or ask your inbox">🔍</button>
     <div class="tools">
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
       <button class="status-pill" id="statusBtn" aria-haspopup="dialog" aria-expanded="false" title="Sync, reconcile and curation"><i class="sdot" aria-hidden="true"></i><span id="statusTxt">Connecting…</span></button>
       <button class="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help">?</button>
       <button class="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings">⚙</button>
-      <button class="tbtn" id="composeBtn" title="Compose (c)">✏ Compose</button>
+      <button class="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose">✏<span class="lbl"> Compose</span></button>
     </div>
   </div>
 </header>
@@ -2566,7 +2583,16 @@ async function openSearchHit(pk){
   // already open this way; the body API is pk-scoped so no account/folder jump is needed.)
   openClientMsg(pk,true);
 }
-function clearSearch(silent){ state.searching=false; state.asking=false; state.askAnswer=null; state.searchItems=[]; state.viewId=null; if(!silent){ $("#search").value=""; state.q=""; } }
+function clearSearch(silent){ state.searching=false; state.asking=false; state.askAnswer=null; state.searchItems=[]; state.viewId=null; if(!silent){ $("#search").value=""; state.q=""; closeSearchBar(); } }
+/* the compact top bar (<=760px) keeps search behind an icon; open, it spans the bar until cleared or cancelled */
+const _compactTop=matchMedia("(max-width:760px)");
+function openSearchBar(){ if(_compactTop.matches)document.body.classList.add("search-open"); $("#search").focus(); }
+function closeSearchBar(){ document.body.classList.remove("search-open"); }
+function cancelSearchBar(){
+  const was=state.searching||state.asking||$("#search").value.trim();
+  clearSearch(false); $("#search").blur();
+  if(was){ if(state.allInbox)loadAllInboxes(); else loadCMessages(); }
+}
 function cfindAny(pk){ return cfind(pk) || (state.searchItems||[]).find(x=>x.pk===pk) || (state.thread&&(state.thread.items||[]).find(x=>x.pk===pk)); }
 
 /* ---------- client-mode message actions (optimistic + rollback) ---------- */
@@ -3853,6 +3879,11 @@ async function doRemove(email){
 
 /* ---------- events ---------- */
 $("#search").addEventListener("input",e=>{state.q=e.target.value; onClientSearch();});
+$("#search").addEventListener("blur",()=>{ if(!$("#search").value.trim())closeSearchBar(); });   // an empty bar folds back; a live query stays shown
+$("#searchTog").addEventListener("click",openSearchBar);
+$("#searchX").addEventListener("mousedown",e=>e.preventDefault());   // keep focus in the field so blur doesn't fold the bar under the tap
+$("#searchX").addEventListener("click",cancelSearchBar);
+_compactTop.addEventListener("change",e=>{ if(!e.matches)closeSearchBar(); });
 /* ── mobile: swipe a mailbox row — left = archive, right = snooze to tomorrow (both reversible via z) ── */
 let _sw=null;
 function _swStart(e){
@@ -4255,7 +4286,7 @@ document.addEventListener("keydown",e=>{
   else if(k==="g"){ state.gotoArmed=true; toast("Go to folder:  i·s·a·t·k·d·z·w·l"); state.gotoT=setTimeout(()=>state.gotoArmed=false,1800); }
   else if(k==="z")undo();
   else if(k==="v"&&state.searching&&!state.viewId)saveCurrentSearch();
-  else if(k==="/"){$("#search").focus();}
+  else if(k==="/")openSearchBar();
   else if(k==="Escape"){ if($("#legend").classList.contains("show"))$("#legend").classList.remove("show");
     else if(readFocusOn())setReadFocus(false);
     else if(state.cmarked.size)cmarkClear();
@@ -4279,7 +4310,7 @@ function buildPaletteEntries(){
   E.push({group:"Navigation", label:"⚡ Commitments — your to-dos", fn:()=>openCommitments()});
   E.push({group:"Navigation", label:"📅 Weekly review — how your week went", fn:()=>openReview()});
   E.push({group:"Navigation", label:"🗂 Documents — find any attachment", fn:()=>openDocs()});
-  E.push({group:"Navigation", label:"⚡ Do… — natural-language bulk action", fn:()=>{ const s=$("#search"); if(s){ s.focus(); s.value="!"; state.q="!"; try{s.setSelectionRange(1,1);}catch(_){} onClientSearch(); } }});
+  E.push({group:"Navigation", label:"⚡ Do… — natural-language bulk action", fn:()=>{ const s=$("#search"); if(s){ openSearchBar(); s.value="!"; state.q="!"; try{s.setSelectionRange(1,1);}catch(_){} onClientSearch(); } }});
   (state.accountsList||[]).forEach(a=>{
     E.push({group:"Navigation", label:"Account · "+nameOf(a), fn:()=>{ clearSearch(false); state.allInbox=false; state.account=a; renderMonos(); loadFolders(); }});
     (state.foldersByAcct&&state.foldersByAcct[a]||[]).forEach(f=>{
