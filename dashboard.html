@@ -4656,6 +4656,7 @@ document.addEventListener("keydown",e=>{
   if(settingsIsOpen()){ if(e.key==="Escape"){ if(pendingRemove){pendingRemove=null;renderSettings();} else if($("#setList").querySelector(".set-form")){renderSettings();} else settingsOpen(false); e.preventDefault(); } else if(e.key===","||e.key==="g"){ settingsOpen(false); e.preventDefault(); } else if(e.key==="?"){ $("#legend").classList.toggle("show"); e.preventDefault(); } return; }
   if(e.metaKey||e.ctrlKey||e.altKey)return;        // never hijack browser/OS chords (Cmd+R, Cmd+S, …)
   if(state.armed){ if(e.key==="Enter")confirmSweep(); else if(e.key==="Escape")abortSweep(); e.preventDefault(); return; }
+  if(e.key==="Escape" && $("#drawer").classList.contains("open") && !$("#legend").classList.contains("show")){ openDrawer(false); e.preventDefault(); return; }   // Curate drawer (an armed sweep, or help above it, takes Esc first)
   if(state.noKeys && e.key!=="Escape" && e.key!=="?")return;   // WCAG 2.1.4 opt-out (set in the help overlay)
   const k=e.key.length===1?e.key.toLowerCase():e.key;          // Shift+E etc. still match
   // global (both modes)
