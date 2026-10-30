@@ -244,7 +244,7 @@
   .rd-more{display:none}
   .snooze-menu .mi-ic{display:inline-block;width:22px;text-align:center}
   .cab-del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
-  .cab-draft{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent);transition:background var(--t-fast),color var(--t-fast)}   /* ✦ pre-drafted reply waiting */
+  .cab-draft{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent);transition:background var(--t-fast),color var(--t-fast)}   /* a pre-drafted reply waiting */
   .cab-draft:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 18%,transparent)}
   .cab-drafting span{animation:drpulse 2.4s ease-in-out infinite}
   @keyframes drpulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -415,7 +415,7 @@
   .legend kbd{background:var(--bg);border:1px solid var(--line-hi);border-bottom-width:2px;border-radius:var(--r-xs);padding:1px 6px;color:var(--soft);font-size:11px;font-family:var(--font-mono)}
   .legend .box{max-width:640px}
   .legcols{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px}
-  .legh{font-size:11.5px;font-weight:600;color:var(--faint);margin:14px 0 6px}
+  .legh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--faint);margin:14px 0 6px}
   .legcols .legh:first-child,.legcols>div>.legh{margin-top:0}
   .legnote{margin:12px 0 4px;font-size:11.5px;color:var(--faint);line-height:1.5}
   .legnote b{color:var(--soft);font-weight:600}
@@ -819,7 +819,7 @@
     color:var(--ink);font-family:var(--font-reading);font-size:16px;line-height:1.6;padding:14px 16px}
   .cmp-textarea:focus{outline:none;border-color:var(--focus)}
   .cmp-airow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 6px}
-  .cmp-airow .air-label{font-size:11.5px;color:var(--ai);font-weight:600;margin-right:2px}
+  .cmp-airow .air-label{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ai);font-weight:600;margin-right:2px}
   .airw{background:color-mix(in srgb,var(--ai) 8%,transparent);border:none;border-radius:var(--r-pill);
     color:var(--soft);font:inherit;font-size:11.5px;font-weight:500;padding:4px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .airw:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 16%,transparent)}
@@ -897,7 +897,9 @@
   .ctx-save:hover{color:var(--primary-ink)}
   /* ---------- Phase 5: AI card · snooze menu · realtime pill ---------- */
   .ai-card{border:none;border-left:3px solid var(--ai);background:var(--panel);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px;box-shadow:var(--sh-1)}
-  .ai-card .ai-hd{font-size:11.5px;color:var(--ai);margin-bottom:7px;font-weight:600}
+  .ai-card .ai-hd{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--ai);margin-bottom:8px;font-weight:600}
+  .ai-mark{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ai)}
+  .ai-mark .ico{width:16px;height:16px}
   .ai-card .ai-cached,.ai-card .ai-stale{font-weight:400;color:var(--faint)}
   .ai-card .ai-tldr{font-family:var(--font-reading);font-size:16px;line-height:1.55;color:var(--ink)}
   .ai-card .ai-points{margin:9px 0 0;padding-left:18px;font-size:13.5px;line-height:1.55;color:var(--soft)}
@@ -972,7 +974,7 @@
   /* Ask-your-inbox — a grounded prose answer + cited source cards (the "?" search mode) */
   .ask-wrap{max-width:720px;margin:0 auto;padding:16px 24px 70px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
   .ask-wrap .ai-card{margin:0}
-  .ai-card .ai-hd .ask-q{color:var(--faint);font-weight:400;font-style:italic;margin-left:8px}
+  .ai-card .ai-hd .ask-q{color:var(--faint);font-weight:400;font-style:italic}
   .ask-answer{font-family:var(--font-reading);font-size:16.5px;line-height:1.66;color:var(--ink);white-space:pre-wrap;margin:8px 0 4px}
   .ask-err{color:var(--err);font-size:13.5px;display:flex;align-items:center;gap:10px}
   .ask-srcs-hd{font-size:11.5px;font-weight:600;color:var(--faint);margin:2px 2px -2px}
@@ -1102,13 +1104,13 @@
   .rv-panel{max-width:720px}
   .rv-scroll{overflow-y:auto;padding:2px;scrollbar-color:var(--line-hi) transparent}
   .rv-narr{font-family:var(--font-reading);font-size:18px;line-height:1.6;color:var(--ink);border-left:3px solid var(--ai);padding-left:18px;margin-bottom:6px}   /* the AI-voice grammar */
-  .rv-eyebrow{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ai);margin-bottom:10px}
+  .rv-eyebrow{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ai);margin-bottom:10px}
   .rv-stats{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 6px}
   .rv-stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:9px 13px;min-width:78px}
   .rv-stat .n{font-family:var(--font-display);font-size:21px;font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1}
   .rv-stat.hot .n{color:var(--gold)} .rv-stat .l{font-size:10.5px;color:var(--faint);margin-top:4px}
   .rv-sec{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:20px 0 8px}
-  .rv-sec.next{color:var(--ai)}
+  .rv-sec.next{display:flex;align-items:center;gap:6px;color:var(--ai)}
   .rv-item{display:flex;align-items:flex-start;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;margin-bottom:7px;cursor:pointer;transition:border-color var(--t-fast),background var(--t-fast)}
   .rv-item:hover{border-color:var(--line-hi);background:var(--panel-hi)}
   .rv-item .ic{flex:none;font-size:13px;line-height:1.4;color:var(--ai)}
@@ -1198,7 +1200,6 @@
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20.5 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.8a7.5 7.5 0 1 1 15.1-3.2z"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9.5 7h10.5M9.5 12h10.5M9.5 17h10.5M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></symbol>
   <symbol id="i-todo" viewBox="0 0 24 24"><path d="M11 7h9M11 12h9M11 17h9"/><path d="m3.5 7 1.6 1.6L8 5.7M3.5 12l1.6 1.6L8 10.7M3.5 17l1.6 1.6L8 15.7"/></symbol>
-  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5C12.8 9 15 11.2 20.5 12 15 12.8 12.8 15 12 20.5 11.2 15 9 12.8 3.5 12 9 11.2 11.2 9 12 3.5z"/></symbol>
 </svg>
 <script>try{if(localStorage.getItem("mm_theme")!=="dark")document.body.classList.add("theme-light");}catch(e){document.body.classList.add("theme-light");}</script>
 <header class="top">
@@ -1262,7 +1263,7 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer">
   <button class="x" id="drawerX">✕</button>
-  <h3>✦ Senders flooding you</h3>
+  <h3>Senders flooding you</h3>
   <div id="floodList"><div style="color:var(--faint);font-size:11px">Measuring…</div></div>
   <h3>Inboxes</h3>
   <div id="railAccounts"><div style="color:var(--faint);font-size:11px">Measuring live inboxes…</div></div>
@@ -1308,7 +1309,7 @@
   </div>
   <div class="legh">Search operators</div>
   <div class="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
-  <div class="legh">✦ How MailMind uses AI</div>
+  <div class="legh"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg> How MailMind uses AI</div>
   <div class="legnote">Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by <b>Claude</b> — through the Claude API when an API key is set, otherwise the Claude CLI on this machine. Only the text of the mail being summarized, drafted or asked about is sent to Anthropic; your mailbox itself stays in a database on this machine. Email bodies render inside a locked sandbox that can't run code or phone home.</div>
   <label class="legtoggle"><input type="checkbox" id="legTheme"> <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg> Day — the light Meadow theme (also ⌘K → “Toggle theme”)</label>
   <label class="legtoggle"><input type="checkbox" id="legNoKeys"> Disable single-key shortcuts (use ⌘/Ctrl chords only)</label>
@@ -1341,7 +1342,7 @@
     <div class="cmp-row cmp-optrow" id="cmpBccRow" hidden><label>Bcc</label><div class="chipfield" id="cmpBcc" data-cf="bcc"></div></div>
     <div class="cmp-row"><label>Subject</label><input id="cmpSubject" class="cmp-subj" placeholder="Subject" aria-label="subject"></div>
     <div class="cmp-airow" id="cmpAiRow" aria-label="AI rewrite (acts on the selection, or the whole message)">
-      <span class="air-label">✦ Rewrite</span>
+      <span class="air-label"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg><span class="air-t">Rewrite</span></span>
       <button class="airw" data-rw="shorten">Shorten</button>
       <button class="airw" data-rw="elaborate">Elaborate</button>
       <button class="airw" data-rw="formal">Formal</button>
@@ -1357,7 +1358,7 @@
     <span class="sendpill" id="cmpPill" aria-live="polite"></span>
     <input type="file" id="cmpFile" multiple hidden>
     <button class="abtn" id="cmpAttachBtn" title="Attach files"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clip"/></svg> Attach</button>
-    <button class="abtn ai" id="cmpAiDraft" title="Draft a reply with AI" hidden>✦ Draft</button>
+    <button class="abtn ai" id="cmpAiDraft" title="Draft a reply with AI" hidden><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg><span class="ai-t">Draft</span></button>
     <span class="cmp-saved" id="cmpSaved" aria-live="polite"></span>
     <button class="abtn" id="cmpDiscard" style="margin-left:auto">Discard</button>
     <button class="abtn" id="cmpSaveDraft" title="Save draft (⌘/Ctrl+S)">Save draft</button>
@@ -1610,7 +1611,7 @@ async function loadFloodSenders(){
   const el=$("#floodList"); if(!el)return;
   let d; try{ d=await api("/api/cleanup/senders"); }catch(e){ el.innerHTML='<div style="color:var(--faint);font-size:11px">Couldn’t load.</div>'; return; }
   const s=(d&&d.senders)||[];
-  if(!s.length){ el.innerHTML='<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">No sender is flooding you right now. ✦</div>'; return; }
+  if(!s.length){ el.innerHTML='<div style="color:var(--faint);font-size:11.5px;padding:6px 2px">No sender is flooding you right now.</div>'; return; }
   el.innerHTML=s.map(x=>{
     const hot=(x.unseen_ratio||0)>=0.7, multi=((x.accounts||[]).length)>1;
     const chips=[`<span class="flood-chip">${x.count} msg${x.count===1?"":"s"}</span>`,
@@ -1674,7 +1675,7 @@ async function cleanupConfirm(){
   catch(e){ if(win)win.close(); toast("Cleanup failed"); return; }
   if(!d.ok){ if(win)win.close(); toast(d.error||"failed"); return; }
   if(win){ if(d.browser_url){ try{win.opener=null;}catch(_){} win.location=d.browser_url; } else win.close(); }
-  const stmap={unsubscribed_oneclick:"unsubscribed ✦",mailto_sent:"unsub email sent",needs_browser:"opened the unsub page",no_method:"no unsub link",failed:"unsub couldn’t send — retry later",no_token:"unsub not sent — reopen to retry",skipped:""};
+  const stmap={unsubscribed_oneclick:"unsubscribed",mailto_sent:"unsub email sent",needs_browser:"opened the unsub page",no_method:"no unsub link",failed:"unsub couldn’t send — retry later",no_token:"unsub not sent — reopen to retry",skipped:""};
   const extra=stmap[d.status]||"";
   toast(`Blocked · swept ${d.swept}${extra?" · "+extra:""}`);
   showUndoFloat(`Cleaned up ${p.from_addr} — Undo (z)`);
@@ -2299,7 +2300,7 @@ function renderClientReader(d){
     ${replyChipHtml(d.pk)}
     <button class="cab" data-ca="replyall" title="Reply all (a)" aria-label="Reply all"><span>${ico("replyall")}</span> All</button>
     <button class="cab" data-ca="forward" title="Forward (f)"><span>${ico("forward")}</span> Forward</button>
-    <button class="cab" data-ca="summarize" title="AI summary (i)"><span>${ico("spark")}</span> Summarize</button>
+    <button class="cab" data-ca="summarize" title="AI summary (i)"><span>${ico("wind")}</span> Summarize</button>
     <button class="cab" data-ca="snooze" title="Snooze (h)"><span>${ico("clock")}</span> Snooze</button>
     ${state.folder==='__replylater__'
       ?'<button class="cab" data-ca="rldone" title="Done — remove from Reply later"><span>'+ico("check")+'</span> Done</button>'
@@ -2327,7 +2328,7 @@ function renderClientReader(d){
   storedSummaryCard(it);
   const fr=rd.querySelector("iframe"); fr._mail=d;
   fr.addEventListener("load",()=>{ sizeMailFrame(fr,400,30); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
-  if(!isDraft && state.folder!=="__muted__") armDraftAhead(d.pk, _draftEligibleClient(it));   // instant peek + dwell kick — "Reply" may already be "✦ Draft ready"
+  if(!isDraft && state.folder!=="__muted__") armDraftAhead(d.pk, _draftEligibleClient(it));   // instant peek + dwell kick — "Reply" may already be "Draft ready"
 }
 async function loadImagesFor(pk){
   let d; try{ d=await api(`/api/message/${pk}/body?images=1`); }catch(e){ return; }
@@ -2391,7 +2392,7 @@ async function openThread(tid, latestPk, scroll, acct){
     <button class="cab" data-tca="reply"><span>${ico("reply")}</span> Reply</button>
     <button class="cab" data-tca="replyall" title="Reply all" aria-label="Reply all"><span>${ico("replyall")}</span> All</button>
     <button class="cab" data-tca="forward"><span>${ico("forward")}</span> Forward</button>
-    <button class="cab" data-tca="summarize"><span>${ico("spark")}</span> Summarize</button>
+    <button class="cab" data-tca="summarize"><span>${ico("wind")}</span> Summarize</button>
     <button class="cab" data-tca="snooze"><span>${ico("clock")}</span> Snooze</button>
     ${state.folder==='__replylater__'
       ?'<button class="cab" data-tca="rldone" title="Done — remove from Reply later"><span>'+ico("check")+'</span> Done</button>'
@@ -2478,7 +2479,7 @@ function onClientSearch(){
 async function runAsk(){
   const seq=++state.askSeq, q=state.askQuery.trim(); if(!q)return;
   state.asking=true; state.searching=false;
-  $("#clientCtx").innerHTML=`✦ <b>Ask</b> · your inbox`;
+  $("#clientCtx").innerHTML=`${ico("wind")} <b>Ask</b> · your inbox`;
   $("#count").textContent="asking…";
   renderAskUI("loading");
   let d; try{ d=await cpost("/api/ai/ask",{account: state.searchScope==="account"?state.account:"all", question:q}); }
@@ -2492,9 +2493,9 @@ async function runAsk(){
 function renderAskUI(kind,d){
   const rows=$("#rows"); if(!rows)return;
   if(kind==="loading"){ rows.innerHTML=`<div class="ask-wrap"><div class="ai-card">
-    <div class="ai-hd">✦ Answer<span class="ask-q">${esc(state.askQuery||"")}</span></div>
+    <div class="ai-hd"><span class="ai-mark">${ico("wind")}Answer</span><span class="ask-q">${esc(state.askQuery||"")}</span></div>
     <div class="rd-skel"><div class="skb"></div><div class="skb"></div><div class="skb"></div><div class="skb short"></div></div>
-    <div class="rd-skelhint"><span class="spin">✦</span> Reading your inbox…</div></div></div>`; return; }
+    <div class="rd-skelhint"><span class="spin">${ico("wind")}</span> Reading your inbox…</div></div></div>`; return; }
   if(kind==="error"){ rows.innerHTML=`<div class="ask-wrap"><div class="ai-card"><div class="ask-err">Couldn’t answer: ${esc((d&&d.error)||"error")} <button class="ai-rerun" data-askrerun>Retry</button></div></div></div>`; return; }
   const srcs=(d.sources||[]).map(s=>`<div class="ask-src" data-asksrc="${s.pk}">
       <div class="ask-src-from">${esc(s.from||"")}${state.searchScope!=="account"&&s.account?` · ${esc(short(s.account))}`:""}</div>
@@ -2503,7 +2504,7 @@ function renderAskUI(kind,d){
     </div>`).join("");
   rows.innerHTML=`<div class="ask-wrap">
     <div class="ai-card">
-      <div class="ai-hd">✦ Answer <span class="ask-q">${esc(d.question||state.askQuery)}</span></div>
+      <div class="ai-hd"><span class="ai-mark">${ico("wind")}Answer</span><span class="ask-q">${esc(d.question||state.askQuery)}</span></div>
       <div class="ask-answer">${esc(d.answer||"")}</div>
       <div class="ai-foot">${esc(d.model||"claude")} · grounded in your mail · <button class="ai-rerun" data-askrerun>↻ Ask again</button></div>
     </div>
@@ -2528,7 +2529,7 @@ async function runDo(cmd, seq){
     if(!q){ renderDoUI("nofilter",{cmd}); return; }   // couldn't map anything safe → keep the panel with guidance
     closeDoPanel();
     $("#search").value=q; state.q=q; state.searching=true;
-    $("#clientCtx").innerHTML=`✦ <b>Search</b>${d.empty?` · nothing to ${esc(cmd)}`:""}`;
+    $("#clientCtx").innerHTML=`${ico("search")} <b>Search</b>${d.empty?` · nothing to ${esc(cmd)}`:""}`;
     return runSearch();
   }
   state._doPlan=d; state._doArmed=false;
@@ -2595,7 +2596,7 @@ function renderSearchList(){
   const isFeed=state.viewId==="__lane_feed__", isTrail=state.viewId==="__lane_papertrail__";
   if((state.viewId||"").startsWith("__dg_")){   // a list from the digest (openDigestList)
     $("#count").textContent=`${v.length} message${v.length===1?"":"s"}`;
-    $("#clientCtx").innerHTML=`✦ <b>${esc(state.digestTitle||"")}</b> · from today’s brief · <button class="ctx-save" data-dg-back>‹ Inbox</button>`;
+    $("#clientCtx").innerHTML=`${ico("wind")} <b>${esc(state.digestTitle||"")}</b> · from today’s brief · <button class="ctx-save" data-dg-back>‹ Inbox</button>`;
     renderBulk();
     $("#rows").innerHTML=v.length?v.map(it=>rowMarkup(it, it.alias||short(it.account))).join(""):'<div class="nores">Nothing left here.</div>';
     return;
@@ -2830,7 +2831,7 @@ function renderBrief(force){   // force: (re)open it; otherwise refresh in place
 function briefHtml(){
   const now=new Date(), h=now.getHours(), b=_briefData, needs=needsYou();
   const greet=h<5?"Working late":h<12?"Good morning":h<18?"Good afternoon":"Good evening";
-  const narr=_todayInflight?'<p class="bf-wait"><span class="spin">✦</span> Reading your inbox…</p>'
+  const narr=_todayInflight?`<p class="bf-wait"><span class="spin">${ico("wind")}</span> Reading your inbox…</p>`
     :b&&b.narrative?`<p class="ai-tldr bf-narr">${esc(b.narrative)}</p>`
     :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(_briefErr)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
     :'<p class="bf-wait">Nothing to brief yet.</p>';
@@ -2851,12 +2852,12 @@ function briefHtml(){
   return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>${ico("left")}</span> List</button><span class="rd-sp" aria-hidden="true"></span>
       <button class="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)"${_todayInflight?" disabled":""}><span>${ico("refresh")}</span> Refresh brief</button></div>
     <header class="bf-hero">${sceneSvg("bz",{seed:21,par:"xMaxYMax slice"})}<div class="bf-ht"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></div></header>
-    <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd">✦ Your brief</div>${narr}
+    <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd"><span class="ai-mark">${ico("wind")}Your brief</span></div>${narr}
       ${topics?`<div class="bf-topics" aria-label="Topics in today’s mail">${topics}</div>`:""}<div class="bf-tallies">${t.join("")}</div></section>
     <h2 class="bf-h" id="bfNeeds">Needs you</h2>
     ${needs.length?`<div class="bf-needs">${needs.slice(0,CAP).map(card).join("")}</div>${needs.length>CAP?`<button class="bf-tally" data-brief="needs">Show all ${needs.length}</button>`:""}`
       :'<p class="bf-calm">Nothing needs you right now.</p>'}
-    ${nt?`<div class="bf-tidy"><span>✦ <b>${nt}</b> low-priority message${nt>1?"s":""} the AI rates as safe to file: no next step, nothing asked of you.</span>
+    ${nt?`<div class="bf-tidy"><span>${ico("wind")} <b>${nt}</b> low-priority message${nt>1?"s":""} the AI rates as safe to file: no next step, nothing asked of you.</span>
       <button class="bf-tally" data-brief="tidyreview">Review</button><button class="bf-tally" data-brief="tidy">File to Archive</button></div>`:""}`;
 }
 function briefTopics(){   // the brief's topic groups, resolved against the digest (a group can name mail the digest no longer holds)
@@ -3200,7 +3201,7 @@ async function aiDraftReply(){
   const cmp=state.compose; if(!cmp)return;
   if(cmp.origPk==null){ toast("Open a reply to draft one"); return; }
   const btn=$("#cmpAiDraft"); if(!btn||btn.disabled)return;   // a generation is already in flight for this composer
-  const prev=btn.textContent; btn.disabled=true; btn.textContent="✦ Drafting…";
+  const t=btn.querySelector(".ai-t"), prev=t.textContent; btn.disabled=true; t.textContent="Drafting…";
   try{
     const d=await cpost("/api/ai/draft-reply",{pk:cmp.origPk, account:cmp.from, tone:"balanced"});
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"draft failed"));
@@ -3208,7 +3209,7 @@ async function aiDraftReply(){
     $("#cmpBody").value=body; cmp.body=body; cmp.dirty=true; $("#cmpBody").focus();
     toast("Draft ready — review and edit before sending");
   }catch(e){ toast("Couldn’t draft: "+(e.message||"")); }
-  finally{ btn.disabled=false; btn.textContent=prev; }
+  finally{ btn.disabled=false; t.textContent=prev; }
 }
 async function aiRewrite(op){
   const cmp=state.compose; if(!cmp)return;
@@ -3218,7 +3219,7 @@ async function aiRewrite(op){
   let lang="English";
   if(op==="translate"){ lang=(prompt("Translate to which language?","Spanish")||"").trim(); if(!lang)return; }
   const btns=$$("#cmpAiRow .airw"); btns.forEach(b=>b.disabled=true);
-  const row=$("#cmpAiRow"); const lbl=$("#cmpAiRow .air-label"); const prev=lbl.textContent; lbl.textContent="✦ Rewriting…";
+  const row=$("#cmpAiRow"); const lbl=$("#cmpAiRow .air-t"); const prev=lbl.textContent; lbl.textContent="Rewriting…";
   try{
     const d=await cpost("/api/ai/rewrite",{text,op,lang});
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"rewrite failed"));
@@ -3326,7 +3327,7 @@ async function retrySend(id){
   catch(e){ toast("Retry failed"); }
 }
 
-/* ---------- AI summarize (✦) ---------- */
+/* ---------- AI summarize (the wind mark) ---------- */
 function aiTarget(){
   if(state.thread) return {account:state.thread.account, thread_id:state.thread.thread_id};
   if(state.csel!=null) return {pk:state.csel};
@@ -3345,9 +3346,9 @@ async function summarize(force){
 }
 function showAiCard(kind,d){
   const el=$("#aiCard"); if(!el)return; el.hidden=false; el.classList.remove("stored");
-  if(kind==="loading") el.innerHTML=`<div class="ai-hd">✦ Summary</div>
+  if(kind==="loading") el.innerHTML=`<div class="ai-hd"><span class="ai-mark">${ico("wind")}Summary</span></div>
     <div class="rd-skel"><div class="skb"></div><div class="skb"></div><div class="skb short"></div></div>
-    <div class="rd-skelhint"><span class="spin">✦</span> Reading the thread…</div>`;
+    <div class="rd-skelhint"><span class="spin">${ico("wind")}</span> Reading the thread…</div>`;
   else if(kind==="unavailable") el.innerHTML=`<div class="ai-err">AI summary is unavailable right now (Claude not reachable). <button class="ai-rerun" data-airerun>Try again</button></div>`;
   else el.innerHTML=`<div class="ai-err">Couldn’t summarize${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-airerun>Retry</button></div>`;
 }
@@ -3355,10 +3356,10 @@ function storedSummaryCard(it){   // the summary ingest already wrote — shown 
   const el=$("#aiCard"); if(!el||!it||it.bucket==="NOTIF")return;
   const sum=String(it.summary||"").trim(), act=String(it.action||"").trim(); if(!sum&&!act)return;
   el.hidden=false; el.classList.add("stored");
-  el.innerHTML=`<div class="ai-hd">✦ Summary</div>
+  el.innerHTML=`<div class="ai-hd"><span class="ai-mark">${ico("wind")}Summary</span></div>
     ${sum?`<div class="ai-tldr">${esc(sum)}</div>`:""}
     ${act?`<div class="ai-action">→ ${esc(act)}</div>`:""}
-    <div class="ai-foot">Saved summary · <button class="ai-rerun" data-aifull>✦ Full summary (i)</button></div>`;
+    <div class="ai-foot">Saved summary · <button class="ai-rerun" data-aifull>${ico("wind")} Full summary (i)</button></div>`;
 }
 function upNextHtml(canArchive){   // the foot of the reading pane: what comes next, and the one-step way there
   const list=state.searching?state.searchItems:state.cmsgs, i=list.findIndex(x=>x.pk===state.csel);
@@ -3373,7 +3374,7 @@ function upNextHtml(canArchive){   // the foot of the reading pane: what comes n
 function renderAiCard(d){
   const el=$("#aiCard"); if(!el)return; el.hidden=false; el.classList.remove("stored");
   const pts=(d.points||[]).map(p=>`<li>${esc(p)}</li>`).join("");
-  el.innerHTML=`<div class="ai-hd">✦ Summary${d.cached?' <span class="ai-cached">cached</span>':""}${d.stale?' <span class="ai-stale">thread grew — <button class="ai-rerun" data-airerun>re-run</button></span>':""}</div>
+  el.innerHTML=`<div class="ai-hd"><span class="ai-mark">${ico("wind")}Summary</span>${d.cached?' <span class="ai-cached">cached</span>':""}${d.stale?' <span class="ai-stale">thread grew — <button class="ai-rerun" data-airerun>re-run</button></span>':""}</div>
     <div class="ai-tldr">${esc(d.tldr||"")}</div>
     ${pts?`<ul class="ai-points">${pts}</ul>`:""}
     ${d.action?`<div class="ai-action">→ ${esc(d.action)}</div>`:""}
@@ -3474,12 +3475,12 @@ async function openDraftAhead(pk){
   }finally{ _openingDraft=null; }
 }
 function replyChipHtml(pk){            // reader-pane Reply button, three states (derived, so re-renders keep it)
-  if(_draftReady.has(pk)) return `<button class="cab cab-draft" data-ca="draftready" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)"><span>${ico("spark")}</span> Draft ready</button>`;
-  if(_draftingPks.has(pk)) return `<button class="cab cab-drafting" data-ca="reply" title="AI is drafting a reply in the background — click for a plain reply now"><span>${ico("spark")}</span> Drafting…</button>`;
+  if(_draftReady.has(pk)) return `<button class="cab cab-draft" data-ca="draftready" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)"><span>${ico("wind")}</span> Draft ready</button>`;
+  if(_draftingPks.has(pk)) return `<button class="cab cab-drafting" data-ca="reply" title="AI is drafting a reply in the background — click for a plain reply now"><span>${ico("wind")}</span> Drafting…</button>`;
   return `<button class="cab" data-ca="reply" title="Reply (r)"><span>${ico("reply")}</span> Reply</button>`;
 }
 function threadReplyChipHtml(pk){      // thread reader variant (acts via data-tca on state.thread.reply_pk)
-  if(_draftReady.has(pk)) return `<button class="cab cab-draft" data-tca="draftready" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do"><span>${ico("spark")}</span> Draft ready</button>`;
+  if(_draftReady.has(pk)) return `<button class="cab cab-draft" data-tca="draftready" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do"><span>${ico("wind")}</span> Draft ready</button>`;
   return `<button class="cab" data-tca="reply"><span>${ico("reply")}</span> Reply</button>`;
 }
 function updateReaderDraftChip(pk){    // swap ONLY the button — a full reader re-render reloads the iframe (flicker/scroll loss)
@@ -3513,10 +3514,10 @@ function renderReview(d){
   $("#rvRange").textContent="· last 7 days";
   const stat=(n,l,hot)=>`<div class="rv-stat${hot?" hot":""}"><div class="n">${n}</div><div class="l">${esc(l)}</div></div>`;
   const stats=`<div class="rv-stats">${stat(s.sent||0,"sent")}${stat(s.received||0,"received")}${stat(s.needs_you||0,"need you",(s.needs_you||0)>0)}${stat(s.waiting_on||0,"awaiting reply")}${s.reply_later?stat(s.reply_later,"reply-later"):""}${s.cleaned?stat(s.cleaned,"cleaned up"):""}</div>`;
-  const nextSec=(d.next||[]).length?`<div class="rv-sec next">✦ Start next week with</div>`+d.next.map(t=>`<div class="rv-item"><span class="ic">→</span><div class="body"><div class="t">${esc(t)}</div></div></div>`).join(""):"";
-  const needSec=(d.needs||[]).length?`<div class="rv-sec">Still needs you (${d.needs.length})</div>`+d.needs.map(n=>`<div class="rv-item need" data-rv-pk="${n.pk}" data-rv-acct="${esc(n.account)}" data-rv-tid="${esc(n.thread_id||"")}"><span class="ic">●</span><div class="body"><div class="t">${esc(n.subject)}</div><div class="m"><span class="who">${esc(n.who)}</span>${n.action?" · "+esc(n.action):""}</div></div></div>`).join(""):`<div class="rv-sec">Still needs you</div><div class="rv-empty">Nothing important is unanswered. ✦</div>`;
+  const nextSec=(d.next||[]).length?`<div class="rv-sec next">${ico("wind")} Start next week with</div>`+d.next.map(t=>`<div class="rv-item"><span class="ic">→</span><div class="body"><div class="t">${esc(t)}</div></div></div>`).join(""):"";
+  const needSec=(d.needs||[]).length?`<div class="rv-sec">Still needs you (${d.needs.length})</div>`+d.needs.map(n=>`<div class="rv-item need" data-rv-pk="${n.pk}" data-rv-acct="${esc(n.account)}" data-rv-tid="${esc(n.thread_id||"")}"><span class="ic">●</span><div class="body"><div class="t">${esc(n.subject)}</div><div class="m"><span class="who">${esc(n.who)}</span>${n.action?" · "+esc(n.action):""}</div></div></div>`).join(""):`<div class="rv-sec">Still needs you</div><div class="rv-empty">Nothing important is unanswered.</div>`;
   const waitSec=(d.waiting||[]).length?`<div class="rv-sec">You’re waiting on a reply</div>`+d.waiting.map(w=>`<div class="rv-item wait" data-rv-pk="${w.pk}" data-rv-acct="${esc(w.account)}" data-rv-tid="${esc(w.thread_id||"")}"><span class="ic">◷</span><div class="body"><div class="t">${esc(w.subject)}</div><div class="m">to ${esc(w.to||"—")}</div></div></div>`).join(""):"";
-  body.innerHTML=`<div class="rv-eyebrow">✦ Your week</div><p class="rv-narr">${esc(d.narrative||"")}</p>${stats}${nextSec}${needSec}${waitSec}<div class="rv-foot">${d.model==="fallback"?"summary from your data":esc(d.model||"claude")}${d.generated?" · "+esc(d.generated.slice(0,10)):""}${d.cached?" · cached":""}${d.stale?' · <span class="ai-stale">mail changed — <button class="ai-rerun" data-rv-retry>refresh</button></span>':""}</div>`;
+  body.innerHTML=`<div class="rv-eyebrow">${ico("wind")} Your week</div><p class="rv-narr">${esc(d.narrative||"")}</p>${stats}${nextSec}${needSec}${waitSec}<div class="rv-foot">${d.model==="fallback"?"summary from your data":esc(d.model||"claude")}${d.generated?" · "+esc(d.generated.slice(0,10)):""}${d.cached?" · cached":""}${d.stale?' · <span class="ai-stale">mail changed — <button class="ai-rerun" data-rv-retry>refresh</button></span>':""}</div>`;
 }
 function reviewOpen(pk, acct, tid){
   closeReview();
@@ -3569,7 +3570,7 @@ function renderCommitList(){
   const all=commitments(); const cs=all.slice(0,COMMIT_CAP);   // glanceable top slice (prioritized); the rest load as you clear
   const nEl=$("#commitN"); if(nEl)nEl.textContent=all.length>COMMIT_CAP?`${all.length} · top ${COMMIT_CAP}`:all.length;
   const el=$("#commitList"); if(!el)return;
-  if(!cs.length){ el.innerHTML='<div class="commit-empty">No open commitments — you’re on top of it. ✦</div>'; return; }
+  if(!cs.length){ el.innerHTML='<div class="commit-empty">No open commitments — you’re on top of it.</div>'; return; }
   el.innerHTML=cs.map(it=>{ const lvl=Math.max(1,Math.min(5,it.importance||1));
     return `<div class="commit-row" data-pk="${it.pk}">
       <button class="cm-check" data-cm="done" title="Done — archive" aria-label="Done">✓</button>
@@ -3698,7 +3699,7 @@ function renderScreener(){
   $("#count").textContent=`${state.screener.length} to screen`;
   renderBulk();
   const rows=$("#rows");
-  if(!state.screener.length){ rows.innerHTML='<div class="nores allclear"><div class="ac-h">✦ Screener clear</div><div class="ac-b">Every sender in this inbox has been allowed or screened out.</div></div>'; return; }
+  if(!state.screener.length){ rows.innerHTML='<div class="nores allclear"><div class="ac-h">Screener clear</div><div class="ac-b">Every sender in this inbox has been allowed or screened out.</div></div>'; return; }
   rows.innerHTML=state.screener.map(s=>`<div class="scr-row" data-scr="${esc(s.from_addr)}">
     <span class="mono-dot" style="color:hsl(${hue(s.from_addr)} var(--mono-s) var(--mono-l))">${esc((s.from_name||s.from_addr||"?")[0].toUpperCase())}</span>
     <div class="scr-who"><div class="scr-nm">${esc(s.from_name)}</div><div class="scr-ad">${esc(s.from_addr)} · ${s.count} msg · ${esc(s.when)}</div></div>
@@ -4140,7 +4141,7 @@ $("#doPanel").addEventListener("click",e=>{
     if(!state._doArmed){ state._doArmed=true; ccf.textContent="Click again to confirm"; ccf.classList.add("armed"); return; }
     cleanupConfirm(); return; }
   if(e.target.closest("[data-do-cancel]")){ doDismiss(); return; }
-  if(e.target.closest("[data-do-search]")){ const q=(state._doPlan&&state._doPlan.filter)||""; state._doPlan=null; state.doSeq++; closeDoPanel(); state.searching=true; $("#search").value=q; state.q=q; $("#clientCtx").innerHTML=`✦ <b>Search</b>`; runSearch(); return; }
+  if(e.target.closest("[data-do-search]")){ const q=(state._doPlan&&state._doPlan.filter)||""; state._doPlan=null; state.doSeq++; closeDoPanel(); state.searching=true; $("#search").value=q; state.q=q; $("#clientCtx").innerHTML=`${ico("search")} <b>Search</b>`; runSearch(); return; }
 });
 function doDismiss(){ state._doPlan=null; state._cleanupPlan=null; state.doSeq++; closeDoPanel(); const s=$("#search");
   if(s&&s.value.startsWith("!")){ clearSearch(false); state.doSeq++; loadCMessages(); }   // restore the mailbox (don't leave a stale/ghost search under the closed modal)
@@ -4556,7 +4557,7 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", fn:()=>toggleRail()});
   E.push({group:"Commands", label:"Reading settings — width, text, mail colors", enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", fn:()=>reconcile()});
-  E.push({group:"Commands", label:"✦ Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
+  E.push({group:"Commands", label:"Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
   E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
   E.push({group:"Commands", label:"Settings", key:",", fn:()=>settingsOpen(true)});
   E.push({group:"Commands", label:"Keyboard help", key:"?", fn:()=>toggleLegend(true)});
