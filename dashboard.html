@@ -1189,18 +1189,14 @@
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
-<body>
+<body class="mode-client">
 <script>try{if(localStorage.getItem("mm_theme")==="light")document.body.classList.add("theme-light");}catch(e){}</script>
 <header class="top">
   <div class="r1">
     <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="folderrail" aria-expanded="false">☰</button>
     <div class="brand">✉ Mail<b>Mind</b></div>
-    <div class="seg modeseg" id="modeseg" title="Briefing ⇄ Mailbox (m)">
-      <button data-mode="summary" class="on">Briefing</button>
-      <button data-mode="client">Mailbox</button>
-    </div>
     <span class="live" id="live">reading inboxes…</span>
-    <input class="search" id="search" placeholder="Search…   ?ask · !do   ( / )" aria-label="search">
+    <input class="search" id="search" placeholder="Ask a question (start with ?) or search — is:unread, from:amazon" aria-label="search">
     <div class="tools">
       <button class="tbtn client-only" id="composeBtn" title="Compose (c)">✏ Compose</button>
       <button class="tbtn icon" id="notifyBtn" title="Enable desktop notifications" aria-label="Enable desktop notifications" hidden>🔔</button>
@@ -1311,9 +1307,9 @@
   <h3 id="legendTitle">Keyboard</h3>
   <div class="legcols">
     <div>
-      <div class="legh">Mailbox</div>
+      <div class="legh">Mail</div>
       <div class="g">
-        <kbd>j</kbd><span>/ <kbd>k</kbd> move · <kbd>o</kbd> open · <kbd>↵</kbd> focus reading</span>
+        <kbd>j</kbd><span>/ <kbd>k</kbd> move (<kbd>k</kbd> at the top: today’s brief) · <kbd>o</kbd> open · <kbd>↵</kbd> focus reading</span>
         <kbd>[</kbd><span>folders: icons ⇄ names · drag the list edge to resize</span>
         <kbd>n</kbd><span>/ <kbd>p</kbd> next / prev unread</span>
         <kbd>r</kbd><span>reply · <kbd>a</kbd> all · <kbd>f</kbd> forward · <kbd>c</kbd> compose</span>
@@ -1324,25 +1320,17 @@
       </div>
     </div>
     <div>
-      <div class="legh">Briefing</div>
-      <div class="g">
-        <kbd>j</kbd><span>/ <kbd>k</kbd> next / previous</span>
-        <kbd>e</kbd><span>archive · <kbd>#</kbd>/<kbd>⌫</kbd> trash · <kbd>y</kbd> keep · <kbd>b</kbd> block</span>
-        <kbd>o</kbd><span>open original · <kbd>c</kbd> curate drawer</span>
-        <kbd>1</kbd><span>–<kbd>5</kbd> importance · <kbd>t</kbd> to-do · <kbd>r</kbd> reconcile</span>
-      </div>
       <div class="legh">Anywhere</div>
       <div class="g">
-        <kbd>m</kbd><span>Briefing ⇄ Mailbox · <kbd>/</kbd> search</span>
+        <kbd>/</kbd><span>search · <kbd>?</kbd>question asks your inbox · <kbd>⌘K</kbd> commands</span>
         <kbd>z</kbd><span>undo last action (archive · delete · junk · move · snooze · mute)</span>
-        <kbd>v</kbd><span>save the current search as a pinned View (Mailbox)</span>
+        <kbd>v</kbd><span>save the current search as a pinned View</span>
         <kbd>,</kbd><span>settings · <kbd>?</kbd> help · <kbd>Esc</kbd> back/close</span>
         <kbd>⌘</kbd><span>+<kbd>↵</kbd> send · +<kbd>S</kbd> draft (composing)</span>
       </div>
     </div>
   </div>
-  <div class="legnote"><b>e</b> archives everywhere now. A few keys still differ by mode — <b>b</b> block/junk, <b>c</b> curate/compose, <b>r</b> reply/reconcile.</div>
-  <div class="legh">Search operators (Mailbox)</div>
+  <div class="legh">Search operators</div>
   <div class="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
   <div class="legh">✦ How MailMind uses AI</div>
   <div class="legnote">Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox all run through a <b>local Claude CLI on this machine</b> — your mail is read on-device and is never uploaded to a third-party server. Email bodies render inside a locked sandbox that can't run code or phone home.</div>
@@ -1414,7 +1402,7 @@ const CATLABEL={"action-needed":"Action","work-job":"Work","finance":"Finance","
 const BVAR={"spam/scam":"--scam","blocked":"--block","newsletters/marketing":"--mkt","automated-notifications":"--notif","receipts/transactional":"--txn","personal/protected":"--keep","other/personal-ish":"--personal"};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={all:[],view:[],sel:null,q:"",min:3,account:"",cat:"",todo:false,sort:"prio",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
-  mode:"summary",folder:"INBOX",folders:[],cmsgs:[],csel:null,cseq:0,cmarked:new Set(),
+  mode:"client",folder:"INBOX",folders:[],cmsgs:[],csel:null,cseq:0,cmarked:new Set(),
   compose:null,myAddrs:new Set(),outbox:[],failedSend:null,
   threadView:true,thread:null,searching:false,searchItems:[],searchSeq:0,searchScope:"all",sseLive:false,allInbox:false,
   views:[],viewId:null,screener:[],screenerCount:0,replylaterCount:0,
@@ -1436,7 +1424,7 @@ async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o
 /* ---------- load + filter ---------- */
 async function loadDigest(silent){
   let d; try{ d=await api("/api/digest?min=1&account="); }
-  catch(e){ if(!silent){ $("#rows").innerHTML='<div class="nores">Couldn’t reach the server. <button class="ai-rerun" id="dgRetry">Retry</button></div>'; const b=$("#dgRetry"); if(b)b.onclick=()=>loadDigest(false); setTimeout(()=>loadDigest(true),5000); } return; }
+  catch(e){ if(!silent&&!state.account){ $("#rows").innerHTML='<div class="nores">Couldn’t reach the server. <button class="ai-rerun" id="dgRetry">Retry</button></div>'; const b=$("#dgRetry"); if(b)b.onclick=()=>loadDigest(false); setTimeout(()=>loadDigest(true),5000); } return; }
   state.all=d.items||[]; state.stats=d.stats||{}; state.statusMap=d.status||{};
   // prune pre-draft state for pks no longer in ANY live surface (bounds memory; drops stale chips for
   // gone messages). The union matters: a digest reload must never clobber chips owned by the reader,
@@ -1459,7 +1447,7 @@ async function loadDigest(silent){
   if(state.mode!=="client"){   // Mailbox shares #rows and #reader: the digest only paints them in Briefing (setMode repaints on the way back)
     applyFilters(silent);
     loadTodayCard(false);      // fire-and-forget; never blocks the list
-  } else if(!state.account && state.accountsList.length){ state.account=state.accountsList[0]; renderMonos(); openClient(); }   // the first account just arrived
+  } else if(!state.account) openMailbox();   // boot, or the first account just arrived
   else renderBrief();          // the brief's needs-you list reads the digest
 }
 let _alertDismissed=new Set();
@@ -1767,15 +1755,9 @@ async function sync(){ const b=$("#syncBtn"); if(b.disabled)return;   // guard: 
 
 /* ---------- Mailbox mode (full email client) ---------- */
 const FOLDER_ICON={inbox:"📥",sent:"📤",drafts:"📝",archive:"🗄",trash:"🗑",junk:"⊘",custom:"›",snoozed:"⏰"};
-function setMode(m){
-  state.mode=m; document.body.classList.toggle("mode-client", m==="client");
-  $$("#modeseg button").forEach(b=>b.classList.toggle("on", b.dataset.mode===m));
-  try{localStorage.setItem("mm_mode",m);}catch(e){}
-  // the search box means different things per mode — say so in the placeholder
-  $("#search").placeholder = m==="client" ? "Ask a question (start with ?) or search —  is:unread, from:amazon" : "Filter these cards…   ( / )";
-  if(m!=="client") setReadFocus(false);
-  if(m==="client"){ document.body.classList.remove("focus-on"); closeFsAsk(); if(!state.account) state.account=(state.accountsList||[])[0]||""; renderMonos(); openClient(); }
-  else { $("#clientCtx").textContent=""; document.body.classList.remove("reading"); state.sel=null; state.focusIntro=true; applyFilters(false); loadTodayCard(false); applyBriefView(state.briefView); }
+function openMailbox(){   // the only view: folders, list and reader, its Inbox opening on today's brief
+  if(!state.account) state.account=(state.accountsList||[])[0]||"";
+  renderMonos(); openClient();
 }
 async function openClient(){
   if(!state.account){
@@ -1850,7 +1832,6 @@ function selectView(id){
   const v=(state.views||[]).find(x=>x.id===id); if(!v)return;
   let q=v.q;
   if(v.dynamic==="last7"||q==="__LAST7__"){ const d=new Date(Date.now()-7*864e5); q="after:"+d.toISOString().slice(0,10); }
-  if(state.mode!=="client")setMode("client");
   state.viewId=id; state.q=q; $("#search").value=q; runSearch(); renderFolders();
 }
 async function saveCurrentSearch(){
@@ -3649,7 +3630,6 @@ function renderReview(d){
 }
 function reviewOpen(pk, acct, tid){
   closeReview();
-  if(state.mode!=="client")setMode("client");
   if(acct && state.account!==acct){ state.account=acct; state.allInbox=false; renderMonos(); }
   if(tid){ openThread(tid, pk, true, acct); } else { openClientMsg(pk, true); }
 }
@@ -3691,8 +3671,7 @@ function docOpen(pk, acct){
   const acctChanged=acct && state.account!==acct;
   if(acct){ state.account=acct; state.allInbox=false; }      // set the doc's account FIRST so the loads below target it
   renderMonos();
-  if(state.mode!=="client")setMode("client");                // loads folders + list for state.account
-  else if(acctChanged)loadFolders();                          // already client, switched account → refresh rail + list
+  if(acctChanged)loadFolders();   // switched account → refresh rail + list
   openClientMsg(pk, true);   // reader shows the doc's email; csel is set synchronously, so the async list-load won't clobber it (guarded in loadCMessages)
 }
 const COMMIT_CAP=60;
@@ -3927,13 +3906,12 @@ function _contactCardClick(e){
   const o=e.target.closest("[data-cc-open]");
   if(o){ const pk=+o.dataset.ccOpen, acct=o.dataset.ccAcct, tid=o.dataset.ccTid; closeContactCard();
     if(state.account!==acct){ state.account=acct; renderMonos(); }
-    if(state.mode!=="client")setMode("client");
     if(tid){ openThread(tid, pk, true, acct); } else { openClientMsg(pk, true); } return; }
   const cmp=e.target.closest("[data-cc-compose]");
   if(cmp){ const a=cmp.dataset.ccCompose; closeContactCard(); composeOpen({mode:"new", to:[a]}); return; }
   const srch=e.target.closest("[data-cc-search]");
   if(srch){ const a=srch.dataset.ccSearch; closeContactCard();
-    if(state.mode!=="client")setMode("client"); state.viewId=null; state.q="from:"+a; $("#search").value=state.q; runSearch(); return; }
+     state.viewId=null; state.q="from:"+a; $("#search").value=state.q; runSearch(); return; }
 }
 
 /* ---------- drafts ---------- */
@@ -4281,7 +4259,6 @@ async function doRemove(email){
 
 /* ---------- events ---------- */
 $("#search").addEventListener("input",e=>{state.q=e.target.value; if(state.mode==="client")onClientSearch(); else applyFilters(true);});
-$("#modeseg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.mode);});
 $("#briefView").addEventListener("click",e=>{const b=e.target.closest("button");if(b)applyBriefView(b.dataset.bv);});
 $("#fsActs").addEventListener("click",e=>{const b=e.target.closest("[data-fsact]");if(b)fsAct(b.dataset.fsact);});
 /* ── mobile: prev/next tap on the Focus card ── */
@@ -4679,7 +4656,6 @@ document.addEventListener("keydown",e=>{
   if(state.noKeys && e.key!=="Escape" && e.key!=="?")return;   // WCAG 2.1.4 opt-out (set in the help overlay)
   const k=e.key.length===1?e.key.toLowerCase():e.key;          // Shift+E etc. still match
   // global (both modes)
-  if(k==="m"){ setMode(state.mode==="client"?"summary":"client"); e.preventDefault(); return; }
   if(k===","){ settingsOpen(true); e.preventDefault(); return; }
   if(k==="?"){ toggleLegend(); e.preventDefault(); return; }
   // go-to-folder chord (Mailbox): g then i/s/a/t/k/d/z
@@ -4768,21 +4744,19 @@ let _legendOpener=null;
 let _palOpener=null, _palSel=0, _palEntries=[];
 function _cap(s){ return s?s[0].toUpperCase()+s.slice(1):s; }
 function selectAccountThenFolder(a, name){
-  if(state.mode!=="client")setMode("client");
   if(state.account!==a){ state.allInbox=false; state.account=a; renderMonos(); loadFolders().then(()=>selectFolder(name)); }
   else selectFolder(name);
 }
 function buildPaletteEntries(){
   const E=[]; const sel=()=>state.mode==="client"&&(state.csel!=null||state.thread);
   // NAVIGATION
-  E.push({group:"Navigation", label:"All inboxes", fn:()=>{ if(state.mode!=="client")setMode("client"); clearSearch(false); enterAllInbox(); }});
-  E.push({group:"Navigation", label:"Toggle Briefing / Mailbox", fn:()=>setMode(state.mode==="client"?"summary":"client")});
-  E.push({group:"Navigation", label:"⚡ Commitments — your to-dos", fn:()=>{ if(state.mode==="client")setMode("summary"); openCommitments(); }});
+  E.push({group:"Navigation", label:"All inboxes", fn:()=>{ clearSearch(false); enterAllInbox(); }});
+  E.push({group:"Navigation", label:"⚡ Commitments — your to-dos", fn:()=>openCommitments()});
   E.push({group:"Navigation", label:"📅 Weekly review — how your week went", fn:()=>openReview()});
   E.push({group:"Navigation", label:"🗂 Documents — find any attachment", fn:()=>openDocs()});
-  E.push({group:"Navigation", label:"⚡ Do… — natural-language bulk action", fn:()=>{ if(state.mode!=="client")setMode("client"); const s=$("#search"); if(s){ s.focus(); s.value="!"; state.q="!"; try{s.setSelectionRange(1,1);}catch(_){} onClientSearch(); } }});
+  E.push({group:"Navigation", label:"⚡ Do… — natural-language bulk action", fn:()=>{ const s=$("#search"); if(s){ s.focus(); s.value="!"; state.q="!"; try{s.setSelectionRange(1,1);}catch(_){} onClientSearch(); } }});
   (state.accountsList||[]).forEach(a=>{
-    E.push({group:"Navigation", label:"Account · "+nameOf(a), fn:()=>{ if(state.mode!=="client")setMode("client"); clearSearch(false); state.allInbox=false; state.account=a; renderMonos(); loadFolders(); }});
+    E.push({group:"Navigation", label:"Account · "+nameOf(a), fn:()=>{ clearSearch(false); state.allInbox=false; state.account=a; renderMonos(); loadFolders(); }});
     (state.foldersByAcct&&state.foldersByAcct[a]||[]).forEach(f=>{
       const lbl=nameOf(a)+" / "+(f.role==="custom"?f.name:_cap(f.role));
       E.push({group:"Navigation", label:lbl, fn:()=>selectAccountThenFolder(a, f.name)});
@@ -4790,7 +4764,7 @@ function buildPaletteEntries(){
     E.push({group:"Navigation", label:nameOf(a)+" / Snoozed", fn:()=>selectAccountThenFolder(a,"__snoozed__")});
     E.push({group:"Navigation", label:nameOf(a)+" / Waiting", fn:()=>selectAccountThenFolder(a,"__waiting__")});
   });
-  (state.views||[]).forEach(v=>E.push({group:"Views", label:v.name+(v.id.startsWith("__lane_")?" (lane)":""), fn:()=>{ if(state.mode!=="client")setMode("client"); selectView(v.id); }}));
+  (state.views||[]).forEach(v=>E.push({group:"Views", label:v.name+(v.id.startsWith("__lane_")?" (lane)":""), fn:()=>{ selectView(v.id); }}));
   // ACTIONS on the current selection (only when one exists)
   const pk=()=>state.csel;
   E.push({group:"Actions", label:"Archive", key:"e", enabled:sel, fn:()=>carchive(pk())});
@@ -4816,7 +4790,7 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Today’s brief", modes:["client"], fn:()=>{ if(briefHere())showBrief(true); else if(state.allInbox)loadAllInboxes(); else selectFolder("INBOX"); }});
   E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", modes:["client"], fn:()=>toggleRail()});
   E.push({group:"Commands", label:"Reading settings — width, text, mail colors", modes:["client"], enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
-  E.push({group:"Commands", label:"Reconcile (prune ghosts)", modes:["summary"], fn:()=>reconcile()});
+  E.push({group:"Commands", label:"Reconcile (prune ghosts)", fn:()=>reconcile()});
   E.push({group:"Commands", label:"✦ Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
   E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
   E.push({group:"Commands", label:"Settings", key:",", fn:()=>settingsOpen(true)});
@@ -4900,22 +4874,21 @@ $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
   try{ const sc=localStorage.getItem("mm_searchscope"); if(sc)state.searchScope=sc; }catch(e){}
   try{ if(localStorage.getItem("mm_nokeys")==="1"){ state.noKeys=true; const c=$("#legNoKeys"); if(c)c.checked=true; } }catch(e){}
   try{ const lt=$("#legTheme"); if(lt)lt.checked=themeIsLight(); }catch(e){}   // theme already applied by the early inline script
-  try{ const bv=localStorage.getItem("mm_brief_view"); if(bv==="list"||bv==="focus")state.briefView=bv; }catch(e){}
+  try{ localStorage.removeItem("mm_mode"); localStorage.removeItem("mm_brief_view"); }catch(e){}   // Briefing's keys: it retired into Mailbox
   try{ let r=localStorage.getItem("mm_rail");
     if(r==null){ r=localStorage.getItem("mm_mb_view")==="classic"?"wide":"narrow"; localStorage.removeItem("mm_mb_view"); }   // the retired Classic view showed folder names
     applyRailWide(r==="wide"); }catch(e){}
   try{ applyListW(+localStorage.getItem("mm_list_w")||LIST_W0); }catch(e){}
   applyReadWidth();
-  try{ if(localStorage.getItem("mm_mode")==="client") setMode("client"); }catch(e){}
-  if(state.mode!=="client"){ state.focusIntro=true; applyBriefView(state.briefView,true); }   // brief opens on the narrative
   loadViews();   // app-global saved views/lanes — load immediately, not gated on a slow folder list
   // prefetch every account's folder list in the background so the ⌘K palette can offer
-  // cross-account folder navigation instantly (loadDigest already populated accountsList)
+  // cross-account folder navigation instantly (loadDigest already populated accountsList;
+  // the open account's list is already on its way through loadFolders)
   try{ state.foldersByAcct=state.foldersByAcct||{};
-    (state.accountsList||[]).forEach(a=>{ if(!state.foldersByAcct[a]) api("/api/folders?account="+encodeURIComponent(a))
+    (state.accountsList||[]).forEach(a=>{ if(a!==state.account&&!state.foldersByAcct[a]) api("/api/folders?account="+encodeURIComponent(a))
       .then(d=>{ state.foldersByAcct[a]=d.folders||[]; }).catch(()=>{}); }); }catch(e){} })();
 // polls are the fallback when SSE is down; when live, events drive refreshes instead
-setInterval(()=>{ if(document.hidden||state.armed||reconciling||state.mode==="client"||state.sseLive)return; loadDigest(true); },45000);
+setInterval(()=>{ if(document.hidden||state.armed||reconciling||state.sseLive)return; loadDigest(true); },45000);   // the brief's counts, when SSE is down
 setInterval(()=>{ if(document.hidden||state.armed)return; loadStats(); },120000);
 setInterval(()=>{ if(document.hidden||state.sseLive)return; loadOutbox(); },20000);
 </script>
