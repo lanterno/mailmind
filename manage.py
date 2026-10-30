@@ -10,6 +10,7 @@ Usage:
   python3 manage.py inventory [email|all]   # every folder + message/unseen counts
   python3 manage.py plan   [email|all]      # classify + show what would be trashed
   python3 manage.py sweep  [email|all] [--dry]   # move junk buckets to Trash (verified + audited)
+  python3 manage.py expire [email|all] [--dry]   # move INBOX mail past its expiry rule to Trash
   python3 manage.py empty-trash [email|all]      # Gmail only (Proton refused — use native button)
   python3 manage.py keep   <sender|domain> ...   # always keep (learned rule)
   python3 manage.py block  <sender|domain> ...   # always trash (learned rule)
@@ -24,9 +25,10 @@ import re
 import json
 import email
 import time
+import imaplib
 from datetime import datetime, timezone
 from email.header import decode_header
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +42,7 @@ AUDIT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sweep_aud
 HDR_BATCH = 300
 MOVE_BATCH = 200
 HDR_FIELDS = "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID LIST-UNSUBSCRIBE LIST-ID)])"
+EXP_FIELDS = "(UID INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)])"
 
 
 def dec(s):
@@ -342,6 +345,116 @@ def sweep_account_ai(acct, dry=False):
     return out
 
 
+def _arrival_ts(meta, msg):
+    """Epoch seconds a message arrived: IMAP INTERNALDATE, else its Date header, else None
+    (an unknown age never expires)."""
+    t = imaplib.Internaldate2tuple(meta)
+    if t:
+        return time.mktime(t)
+    try:
+        return parsedate_to_datetime(msg.get("Date", "")).timestamp()
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def select_expired(rows, expire, now):
+    """Rows whose sender has an expiry rule and whose arrival is older than it. Pure — no IMAP.
+    Tags each hit with r['hours']."""
+    out = []
+    for r in rows:
+        hours = rules.expiry_hours(r["from"], expire)
+        if hours and r.get("ts") is not None and now - r["ts"] > hours * 3600:
+            r["hours"] = hours
+            out.append(r)
+    return out
+
+
+def expire_account(acct, dry=False, now=None):
+    """Move INBOX mail past its expiry rule (rules.EXPIRE) to Trash — verified, audited, and
+    pruned from the local DB by Message-ID. Ages come from the live server, so this is right
+    whether or not the store is synced. Errors are captured, not raised."""
+    import store
+    expire = rules.load()[rules.EXPIRE]
+    out = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [], "error": None}
+    if not expire:
+        return out
+    try:
+        M = accounts.connect(acct)
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    try:                                    # single try/finally so M is ALWAYS logged out (no socket leak)
+        M.select('"INBOX"', readonly=True)
+        uids = set()
+        for token in expire:                # coarse server-side filter; select_expired matches exactly
+            typ, d = M.uid("SEARCH", None, "FROM", f'"{token}"')
+            if typ == "OK" and d and d[0]:
+                uids.update(d[0].split())
+        ids = sorted(uids, key=int)
+        rows = []
+        for i in range(0, len(ids), HDR_BATCH):
+            typ, data = M.uid("FETCH", b",".join(ids[i:i + HDR_BATCH]).decode(), EXP_FIELDS)
+            for part in data:
+                if not isinstance(part, tuple):
+                    continue
+                uid = _uid(part[0])
+                if uid is None:
+                    continue
+                msg = email.message_from_bytes(part[1])
+                rows.append({"uid": uid, "from": parseaddr(msg.get("From", ""))[1].lower(),
+                             "subject": dec(msg.get("Subject", "")),
+                             "mid": (msg.get("Message-ID", "") or "").strip(),
+                             "ts": _arrival_ts(part[0], msg)})
+        targets = select_expired(rows, expire, now if now is not None else time.time())
+        out["planned"] = len(targets)
+        if dry or not targets:
+            return out
+        for t in targets:
+            t["bucket"], t["reason"] = "expired", f"expire rule: older than {t['hours']}h"
+        audit(acct["email"], targets)       # log BEFORE moving so a crash still records intent
+        moved, stragglers = move_verified(M, [t["uid"] for t in targets], accounts.trash_folder(acct))
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
+    out["moved"], out["stragglers"] = moved, stragglers
+    strag = set(stragglers)
+    c = store.conn()
+    for t in targets:                       # prune by Message-ID (pk is not stable)
+        if t["uid"] in strag or not t["mid"]:
+            continue
+        row = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
+                        (acct["email"], t["mid"])).fetchone()
+        if row:
+            store.delete_message(c, row["pk"])
+    c.commit()
+    c.close()
+    return out
+
+
+def cmd_expire(accts, dry=False):
+    expire = rules.load()[rules.EXPIRE]
+    if not expire:
+        print("no expiry rules — add one with: python3 rules.py expire <sender|domain> <hours>")
+        return
+    print("rules: " + ", ".join(f"{t} {h}h" for t, h in expire.items()))
+    grand_p = grand_m = 0
+    for a in accts:
+        r = expire_account(a, dry=dry)
+        if r["error"]:
+            print(f"{a['email']:38} ERROR: {r['error']}")
+            continue
+        tag = f"would trash {r['planned']}" if dry else f"moved {r['moved']}/{r['planned']}"
+        strag = f"  !{len(r['stragglers'])} stragglers" if r.get("stragglers") else ""
+        print(f"{a['email']:38} {tag:>16}{strag}")
+        grand_p += r["planned"]; grand_m += r.get("moved", 0)
+    print(f"\nTOTAL: expired {grand_p}" + ("" if dry else f" · moved {grand_m}"))
+
+
 def cmd_sweep_ai(accts, dry=False):
     grand_p = grand_m = grand_k = 0
     for a in accts:
@@ -430,6 +543,8 @@ def main():
         r = rules.load()
         for k in rules.KEYS:
             print(f"{k} ({len(r[k])}): {', '.join(r[k]) or '—'}")
+        print(f"{rules.EXPIRE} ({len(r[rules.EXPIRE])}): "
+              f"{', '.join(f'{t} {h}h' for t, h in r[rules.EXPIRE].items()) or '—'}")
         return
     target = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else "all"
     dry = "--dry" in sys.argv
@@ -445,6 +560,8 @@ def main():
         cmd_plan(accts, do_sweep=True, dry=dry)
     elif cmd == "sweep-ai":
         cmd_sweep_ai(accts, dry=dry)
+    elif cmd == "expire":
+        cmd_expire(accts, dry=dry)
     elif cmd == "empty-trash":
         cmd_empty_trash(accts)
     else:

@@ -247,6 +247,55 @@ def reconcile_loop():
         time.sleep(max(30, _RECONCILE_INTERVAL // n))  # spread the full cycle across accounts
 
 
+# Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
+# to Trash on an own timer. Same shape as reconcile — one account per _ops_lock hold, taken
+# NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
+def _expire_secs():
+    try:
+        return int(os.environ.get("MAILMIND_EXPIRE_SECS", "3600"))  # 0 disables
+    except ValueError:
+        print("[expire] bad MAILMIND_EXPIRE_SECS — using 3600", flush=True)
+        return 3600
+
+
+_EXPIRE_INTERVAL = _expire_secs()
+
+
+def _auto_expire_one(acct):
+    if not _ops_lock.acquire(blocking=False):
+        return                                        # user op live — yield, retry next cycle
+    try:
+        res = manage.expire_account(acct)
+    finally:
+        _ops_lock.release()
+    if res.get("error"):
+        print(f"[expire] {acct['email']}: {res['error']}", flush=True)
+        return
+    if not res.get("moved"):
+        return
+    invalidate_stats()
+    _invalidate_folders(acct["email"])
+    try:                                              # same refresh as a ghost prune: open lists drop the rows
+        realtime.publish("reconcile", {"account": acct["email"], "pruned": res["moved"]})
+    except Exception:
+        pass
+    print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
+
+
+def expire_loop():
+    if _EXPIRE_INTERVAL <= 0:
+        return
+    time.sleep(min(180, _EXPIRE_INTERVAL))            # let the boot sync settle first
+    while True:
+        if rules.load()[rules.EXPIRE]:
+            for a in accounts.accounts():
+                try:
+                    _auto_expire_one(a)
+                except Exception as e:
+                    print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
+        time.sleep(_EXPIRE_INTERVAL)
+
+
 def wake_snoozed():
     """Resurface messages whose snooze time has passed: clear the snooze, mark unread,
     and push a realtime event so they pop back into the inbox view. Pure-local, no IMAP."""
@@ -3488,6 +3537,7 @@ if __name__ == "__main__":
         threading.Thread(target=body_backfill_tick, daemon=True).start()  # make old mail full-text searchable
         threading.Thread(target=draft_ahead_tick, daemon=True).start()    # top-K reply pre-gen (AI-polite)
         threading.Thread(target=reconcile_loop, daemon=True).start()      # periodic ghost prune (MAILMIND_RECONCILE_SECS)
+        threading.Thread(target=expire_loop, daemon=True).start()         # age-out expiry rules (MAILMIND_EXPIRE_SECS)
         realtime.start()                 # per-account IMAP IDLE workers + SSE dispatch
     print(f"MailMind → http://127.0.0.1:{PORT}  (serving now)", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
