@@ -310,6 +310,21 @@
   .listhead{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
     padding:10px 16px 8px;font-size:11.5px;font-weight:500;color:var(--faint);display:flex;flex-direction:column;gap:4px;z-index:2;font-variant-numeric:tabular-nums}
   .listhead .lh-row{display:flex;justify-content:space-between;align-items:center}
+  /* the folder's name in the display face; a context line (search, Ask, Do, Screener…) takes its place */
+  .listhead .lh1{display:flex;align-items:center;gap:8px;min-height:30px}
+  .lh-title{flex:1;min-width:0;margin:0;font:700 21px/1.1 var(--font-display);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .listhead:has(>.client-ctx:not(:empty)) :is(.lh1,.lh-tabs){display:none}
+  .lh1:has(>.lh-title:empty){display:none}
+  /* the Inbox's three tabs; their counts stand in for the count line */
+  .lh-tabs{display:flex;gap:2px;margin:2px -7px -8px}
+  .listhead:has(>.client-ctx:empty)>.lh-tabs:not([hidden])~.lh-row{display:none}
+  .lh-tab{position:relative;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 9px;border:0;background:none;color:var(--mute);
+    font:700 13.5px/1 var(--font-ui);cursor:pointer}
+  .lh-tab:hover,.lh-tab[aria-selected="true"]{color:var(--ink)}
+  .lh-tab[aria-selected="true"]::after{content:"";position:absolute;left:7px;right:7px;bottom:-1px;height:2.5px;border-radius:2px;background:var(--primary)}
+  .lh-tab .n{font-variant-numeric:tabular-nums;color:var(--mute)}
+  .lh-tab .n.sun{color:var(--gold)}
+  .nores .linkbtn{background:none;border:none;padding:0;color:var(--primary-ink);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
   .listhead select{background:none;border:none;color:var(--mute);font:inherit;font-size:11.5px;cursor:pointer}
 
   /* rows: the importance SPINE — a 3px heat-ramp tick down the left edge,
@@ -1270,9 +1285,11 @@
     title="Drag to resize · ←/→ · double-click resets"></div>
   <section class="list" id="list" tabindex="0">
     <div class="listhead">
-      <div class="client-ctx" id="clientCtx"></div>
-      <div class="lh-row"><span id="count">—</span>
+      <div class="lh1"><h2 class="lh-title" id="listTitle"></h2>
         <button class="thread-toggle on" id="threadToggle" title="Group into conversations"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg> Conversations</button></div>
+      <div class="client-ctx" id="clientCtx"></div>
+      <div class="lh-tabs" id="lhTabs" role="tablist" aria-label="Inbox" hidden></div>
+      <div class="lh-row"><span id="count">—</span></div>
     </div>
     <div class="bulkbar" id="bulkbar" hidden></div>
     <div id="rows"></div>
@@ -1845,7 +1862,7 @@ async function deleteView(id){
 async function loadCMessages(){
   if(state.folder==="__screener__"){ renderScreener(); return; }   // the Screener is a sender-tray, not a message list
   const seq=++state.cseq, acct=state.account, fol=state.folder;
-  $("#clientCtx").innerHTML=`<b>${esc(nameOf(acct))}</b> · ${esc(fol)}`;
+  listTitle(folderTitle(fol)); $("#clientCtx").innerHTML="";
   $("#count").textContent="loading…";
   const grp=state.threadView?"&group=thread":"";
   const fol0=fol;
@@ -1860,7 +1877,7 @@ async function loadCMessages(){
   // state.csel synchronously before this async load resolves; clobbering it would show the wrong email.
   if(state.csel==null){
     if(briefHere()) showBrief(false);   // the Inbox opens on today's brief, not its first message
-    else if(state.cmsgs.length && !isMobile()) openConversation(state.cmsgs[0],false);
+    else if(listInView().length && !isMobile()) openConversation(listInView()[0],false);
     else if(state.cmsgs.length){ document.body.classList.remove("reading"); }
     else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
   }
@@ -1896,6 +1913,30 @@ function _dayGroup(ts){   // list section for a message time (epoch seconds), by
   const days=Math.round((t-d)/86400000);
   return days<=0?"Today":days===1?"Yesterday":days<7?"Past week":"Earlier";
 }
+const FOLDER_TITLE={__snoozed__:"Snoozed",__muted__:"Muted",__waiting__:"Waiting",__replylater__:"Reply later",__screener__:"Screener"};
+function folderTitle(name){   // as the rail names it
+  const f=(state.folders||[]).find(x=>x.name===name);
+  return FOLDER_TITLE[name]||(!f||f.role==="custom"?name:f.role[0].toUpperCase()+f.role.slice(1));
+}
+function listTitle(t){ $("#listTitle").textContent=t; }
+const INBOX_TABS=[["needs","Needs you"],["all","Everything"],["unread","Unread"]];
+state.inboxTab=(()=>{ try{ const t=localStorage.getItem("mm_inbox_tab"); return INBOX_TABS.some(x=>x[0]===t)?t:"needs"; }catch(e){ return "needs"; } })();
+function tabFilter(v){   // the Inbox's tab; a message you just opened stays put until you move on
+  if(!briefHere())return v;
+  return state.inboxTab==="needs"?v.filter(it=>needsIt(it)||it.pk===state.csel)
+    :state.inboxTab==="unread"?v.filter(it=>!it.seen||it.pk===state.csel):v;
+}
+function listInView(){ return state.searching?state.searchItems:tabFilter(state.cmsgs); }   // what j/k and "next" walk
+function setInboxTab(t){
+  state.inboxTab=t; try{ localStorage.setItem("mm_inbox_tab",t); }catch(e){}
+  renderClientList(); const b=$(`#lhTabs [data-tab="${t}"]`); if(b)b.focus();
+}
+function renderTabs(v,more){
+  const el=$("#lhTabs"); el.hidden=!briefHere(); if(el.hidden)return;
+  const n={needs:v.filter(needsIt).length, all:v.length+more, unread:v.filter(it=>!it.seen).length};
+  el.innerHTML=INBOX_TABS.map(([id,label])=>{ const on=state.inboxTab===id;
+    return `<button class="lh-tab" role="tab" id="tab-${id}" data-tab="${id}" aria-selected="${on}" aria-controls="rows" tabindex="${on?0:-1}">${label}<span class="n${id==="needs"&&n.needs?" sun":""}">${n[id]}</span></button>`; }).join("");
+}
 function renderClientList(){
   if(state.searching){ renderSearchList(); return; }
   const q=state.q.toLowerCase();
@@ -1904,9 +1945,12 @@ function renderClientList(){
   const noun=state.threadView?"conversation":"message";
   const more=(state.cHasMore&&!q)?"+":"";   // server has more than the loaded page
   $("#count").textContent=`${v.length}${more} ${noun}${v.length===1&&!more?"":"s"}`;
+  renderTabs(v,more); v=tabFilter(v);
   renderBulk();
   const br=briefHere()&&!q?briefRowHtml():"";
-  if(!v.length){ $("#rows").innerHTML=br+'<div class="nores">Nothing here.</div>'; return; }
+  if(!v.length){ $("#rows").innerHTML=br+(briefHere()&&state.inboxTab!=="all"&&state.cmsgs.length
+      ?`<div class="nores">${state.inboxTab==="needs"?"Nothing needs you.":"Nothing unread."} Everything else is in <button class="linkbtn" data-tab="all">Everything</button>.</div>`
+      :'<div class="nores">Nothing here.</div>'); return; }
   // day sections only for real folders listed newest-first (virtual folders sort by their own clock)
   const byDay=!(state.folder||"").startsWith("__") && v.every((it,i)=>it.ts && (i===0||v[i-1].ts>=it.ts));
   let grp="";
@@ -1950,7 +1994,7 @@ function enterAllInbox(){
 }
 async function loadAllInboxes(){
   const seq=++state.cseq;
-  $("#clientCtx").innerHTML=`<b>All inboxes</b> · ${(state.sendAccounts||[]).length} accounts`;
+  listTitle("Inbox"); $("#clientCtx").innerHTML="";
   $("#count").textContent="loading…";
   const grp=state.threadView?"&group=thread":"";
   const accts=state.sendAccounts||state.accountsList||[];
@@ -2025,13 +2069,13 @@ async function cbulk(action, anchor){
   if(fail)loadCMessages();
 }
 function cmove(dir){
-  const list=state.searching?state.searchItems:state.cmsgs; if(!list.length)return;
+  const list=listInView(); if(!list.length)return;
   let i=list.findIndex(x=>x.pk===state.csel);
   if(i===0&&dir<0&&briefHere()){ showBrief(true); const b=$("#rows .brief-row"); if(b)b.scrollIntoView({block:"nearest"}); return; }   // above the first message: the brief
   i=i<0?0:Math.max(0,Math.min(list.length-1,i+dir)); openConversation(list[i],true);
 }
 function cmoveUnread(dir){   // jump to the next/prev UNREAD conversation
-  const list=state.searching?state.searchItems:state.cmsgs; if(!list.length)return;
+  const list=listInView(); if(!list.length)return;
   let i=list.findIndex(x=>x.pk===state.csel);
   for(let j=i+dir; j>=0 && j<list.length; j+=dir){ if(!list[j].seen){ openConversation(list[j],true); return; } }
   toast(dir>0?"No more unread below":"No more unread above");
@@ -2525,8 +2569,7 @@ function onClientSearch(){
   state.asking=false; state.askAnswer=null; state.askSeq++;
   state.doSeq++; state._doPlan=null; closeDoPanel();  // also supersede + close any in-flight do-plan modal
   if(!raw){ clearSearch(false);
-    $("#clientCtx").innerHTML = state.allInbox ? `<b>All inboxes</b> · ${(state.sendAccounts||[]).length} accounts`
-                                               : `<b>${esc(nameOf(state.account))}</b> · ${esc(state.folder)}`;   // drop the stale search label
+    $("#clientCtx").innerHTML="";   // drop the stale search label: the folder's title shows again
     if(wasAsking)loadCMessages(); else renderClientList(); renderFolders(); return; }
   _searchTimer=setTimeout(runSearch, 250);
 }
@@ -2784,8 +2827,9 @@ function clearReader(){ if(briefHere()){ showBrief(false); return; }
 let _briefErr=null, _briefAsked=false;
 function briefHere(){ return !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
 function briefOpen(){ return $("#reader").classList.contains("brief-pane"); }
-function needsYou(){   // the to-do test: a next step, an action-needed category, or importance 4+
-  return (state.all||[]).filter(it=>String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4)
+function needsIt(it){ return !!(String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4); }   // the to-do test: a next step, an action-needed category, or importance 4+
+function needsYou(){
+  return (state.all||[]).filter(needsIt)
     .sort((a,b)=>(b.importance||0)-(a.importance||0)||b.pk-a.pk);
 }
 /* The Meadow scene from the mockup: sky, sun or moon, clouds, hills, a tree and a cottage, painted
@@ -3011,7 +3055,7 @@ function healNode(node){
   return new Promise(res=>setTimeout(res,240));
 }
 function healPk(pk){ return healNode($(`#rows [data-pk="${CSS.escape(String(pk))}"]`)); }   // deferred render re-syncs DOM to current state (idempotent → race-safe with undo)
-function cRemove(pk){ const list=state.searching?state.searchItems:state.cmsgs;   // "next" comes from the list the user is looking at
+function cRemove(pk){ const list=listInView();   // "next" comes from the list the user is looking at
   const i=list.findIndex(x=>x.pk===pk); const next=list[i+1]||list[i-1]||null;
   state.cmsgs=state.cmsgs.filter(x=>x.pk!==pk);
   state.searchItems=(state.searchItems||[]).filter(x=>x.pk!==pk);   // acting from search heals the results too
@@ -4268,6 +4312,12 @@ $("#rows").addEventListener("click",e=>{
   const it=(state.searching?state.searchItems:state.cmsgs).find(x=>x.pk===+r.dataset.pk); if(it)openConversation(it,false); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.closest("#scopeTog"))toggleSearchScope(); });
 $("#threadToggle").addEventListener("click",()=>setThreadView(!state.threadView));
+$("#lhTabs").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(b)setInboxTab(b.dataset.tab); });
+$("#lhTabs").addEventListener("keydown",e=>{   // a tablist: ←/→ move between the tabs
+  if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return; e.preventDefault(); e.stopPropagation();
+  const i=INBOX_TABS.findIndex(x=>x[0]===state.inboxTab), d=e.key==="ArrowRight"?1:INBOX_TABS.length-1;
+  setInboxTab(INBOX_TABS[(i+d)%INBOX_TABS.length][0]); });
+$("#rows").addEventListener("click",e=>{ const b=e.target.closest(".nores [data-tab]"); if(b)setInboxTab(b.dataset.tab); });
 $("#bulkbar").addEventListener("click",e=>{const b=e.target.closest("[data-bulk]");if(b)cbulk(b.dataset.bulk,b);});
 
 /* compose wiring */
