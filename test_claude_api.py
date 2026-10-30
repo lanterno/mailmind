@@ -5,6 +5,7 @@ All addresses are fictional.
 Run: python3 test_claude_api.py"""
 import os
 import json
+import tempfile
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -12,8 +13,11 @@ for var in ("MAILMIND_AI", "MAILMIND_MODEL", "MAILMIND_NO_SCHEMA"):
     os.environ.pop(var, None)
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"     # never the real one, even by accident
 
+import config
 import claude_api
 import summarize
+
+config.CONFIG = os.path.join(tempfile.mkdtemp(), "mailmind.config.json")   # the real one may hold a key
 
 _seen = []        # (headers, body) per request, oldest first
 _replies = []     # (status, headers, body) queued per test; the default is a plain JSON answer
@@ -56,9 +60,16 @@ def _fresh(*replies):
     os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"
     for var in ("MAILMIND_AI", "MAILMIND_NO_SCHEMA"):
         os.environ.pop(var, None)
+    if os.path.exists(config.CONFIG):
+        os.remove(config.CONFIG)
     summarize.MODEL = None
     _seen.clear()
     _replies[:] = list(replies)
+
+
+def _config(**top):
+    with open(config.CONFIG, "w") as f:
+        json.dump({"accounts": [], **top}, f)
 
 
 ROW = {"pk": 7, "from_name": "Mira Okafor", "from_addr": "mira@example.test",
@@ -211,6 +222,24 @@ def test_engine_follows_the_key_unless_told_otherwise():
     assert summarize.engine() == "cli"
     os.environ["MAILMIND_AI"] = "api"
     assert summarize.engine() == "api"
+
+def test_a_key_in_the_config_file_wins_over_the_environment():
+    _fresh()
+    _config(anthropic_api_key="sk-ant-config-key")
+    summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+    assert _seen[0][0]["x-api-key"] == "sk-ant-config-key", _seen[0][0]
+    assert summarize.describe_engine() == "Claude API · claude-opus-5-5 · key from mailmind.config.json"
+    os.environ["MAILMIND_TEST_KEY"] = "sk-ant-env-ref-key"
+    _config(anthropic_api_key={"env": "MAILMIND_TEST_KEY"})
+    assert claude_api.key() == "sk-ant-env-ref-key"
+    del os.environ["MAILMIND_TEST_KEY"]
+    _config(anthropic_api_key="")                              # empty is unset: the environment's key
+    assert claude_api.key() == "sk-ant-test-key" and claude_api.key_source() == "ANTHROPIC_API_KEY"
+
+def test_a_config_key_that_cannot_be_read_is_no_key():
+    _fresh()
+    _config(anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
+    assert claude_api.key() == "" and summarize.engine() == "cli"   # not the environment's key
 
 
 if __name__ == "__main__":
