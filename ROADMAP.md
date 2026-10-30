@@ -193,8 +193,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   account switch. There is no equivalent for messages — `loadCMessages()` always refetches
   `/api/messages`, so the row area still goes empty every time.
 - **Self-host the fonts, add gzip and ETag** · high value · effort M — dashboard.html still
-  preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Geist, Geist Mono and
-  Source Serif 4 — the only remote dependency in an app whose README sells local-first and
+  preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Nunito Sans and
+  Shippori Mincho — the only remote dependency in an app whose README sells local-first and
   privacy-first, so this is a stated-values violation, not just latency. Server side there is no
   `Content-Encoding` or `ETag` anywhere (the only zlib use is `crc32` for a cache fingerprint, and
   the only caching header is one `no-cache`); gzip is ~15 lines in the response path and worth real
@@ -214,13 +214,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   CSS class and `move()`/`cmove()` never call `.focus()`. A screen-reader user can hear the palette
   and the recipient autocomplete — both correctly `role="listbox"` — but not the actual message
   list. Biggest remaining a11y gap.
-- **Per-row hover action rail, and hover-to-prefetch** · high value · effort M — `rowMarkup()` emits
-  exactly one interactive child, the multi-select checkbox; there is no `.rowacts` cluster and no
-  `@media (hover:hover)` block anywhere (the only hover query is the inverse, revealing the checkbox
-  on touch). A mouse user must select a row and use the reader dock or a key, while a phone user gets
-  a swipe gesture. Add an absolutely-positioned Archive/Delete/Snooze/Star/Mark-read cluster plus a
-  debounced `mouseover` on `#rows` calling the existing `prefetchBody` (today it fires only on open,
-  thread expansion and the next Focus card).
+- **Finish the row hover cluster, and hover-to-prefetch** · medium value · effort S — `rowMarkup()`'s
+  `.racts` cluster offers Archive, Delete and Snooze (Snooze only on multi-message conversation
+  rows); Star and Mark-read are still key- or toolbar-only. Separately, a debounced `mouseover` on
+  `#rows` calling the existing `prefetchBody` would make the first open of a hovered row instant
+  (today prefetch fires only on open, thread expansion and the next Focus card).
 - **Live regions on the toast, send float and undo float** · medium value · effort S — `#srLive`
   exists and works, but it is called from only nine sites; `toast()`, `#sendFloat` and `#undoFloat`
   carry no `aria-live` or `role="status"`, so toasts, send status and the Undo countdown are silent.
@@ -266,29 +264,25 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   to `from_addr` — the only "spoof" matches in the file are CSS comments about iframe chrome.
 - **Serif plain-text bodies, and a cached image reload** · medium value · effort M — `bodyDoc()`'s
   plain-text branch emits `pre{white-space:pre-wrap;font:15px/1.6 ui-monospace}` — pre-wrap landed,
-  monospace stayed, and `--font-reading` (Source Serif 4) is declared but never used inside the
-  iframe. Separately, `loadImagesFor(pk)` unconditionally refetches the body with `images=1` and
+  monospace stayed, and `--font-reading` (now an alias of the Nunito Sans UI face) is never used
+  inside the iframe; a size and serif choice for plain-text mail belongs here too. Separately, `loadImagesFor(pk)` unconditionally refetches the body with `images=1` and
   re-renders the whole reader; memoize the payload per pk and swap only the srcdoc so toggling twice
   neither refetches nor loses scroll position. The iframe has a `min-height` and height transition
   but its true height is still applied only in the `load` handler, so opening still jumps.
 - **Replace emoji with an inline-SVG monoline icon set** · medium value · effort L — Now the largest
-  craft gap, since the type system, the amber/periwinkle palette and the light theme all landed.
+  craft gap, since the type system and the Meadow palette with its Day theme have landed.
   Emoji are still the entire icon vocabulary (✦×46, ⚡×15, ⏰×10, ☰×7, 📎×7 …), including the literal
   `FOLDER_ICON` map and the toolbar; there is no `<symbol>` sprite and no `<use>` anywhere. Needs ~24
   glyphs using `currentColor` plus a swap of `FOLDER_ICON`, `.tbtn`, `.cab`, `.mono-dot` and the
   inline emoji in template literals.
 - **Density modes (Comfortable / Cozy / Compact)** · low value · effort M — Zero matches for
-  `density` or `data-density`; row metrics are hardcoded, with one override in `body.mb-focus .row`.
-  Lower value than when first written, since Focus/Classic partly serves the same "I have 8 accounts
-  and want to see more" need, but a `--row-pad` / `--row-lh` pair under `body[data-density]` is clean
-  and pairs naturally with the missing Preferences pane.
+  `density` or `data-density`; Mailbox row metrics are hardcoded in the `.row.cmsg` rules. Worth more
+  now that rows carry a two-line summary and a next-step chip (about six rows per screen at 900px):
+  a `--row-pad` / `--row-lh` pair under `body[data-density]`, with Compact clamping the gist to one
+  line and hiding the chip, pairs naturally with the missing Preferences pane.
 - **High-contrast toggle** · low value · effort S — Unbuilt: no `body.hc`, no preference. Lower
   priority now that the base palette passes AA, but the light theme proved the pattern — one
   body-class override of the `:root` token block is the whole feature.
-- **Zen key for the reader** · low value · effort S — The wide, chrome-light reading column shipped
-  and is the default (`body.mb-focus`), which arguably supersedes the original proposal. If still
-  wanted, the remainder is a `.` keystroke that also hides the 360px worklist and caps the column at
-  ~760px, reusing the existing `body.reading` single-pane mechanism.
 
 ## Setup, first run and housekeeping
 
@@ -308,7 +302,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **60-second guided first run** · medium value · effort M — `.firstrun` is a static empty state
   shown only when no accounts are connected; there are no coach-marks and no localStorage flag
   gating a walkthrough. The surfaces worth explaining have multiplied since this was first proposed
-  — mode toggle, Focus vs Classic, ⌘K, the ⚡ to-do filter, importance colors, `?ask` / `!do`
+  — mode toggle, the folder rail and focus reading, ⌘K, the ⚡ to-do filter, importance colors, `?ask` / `!do`
   prefixes, the Screener — so it is worth more now, not less. Gate on one flag and reuse the
   existing scrim and z-ladder.
 - **First-sync feedback in Mailbox, with a live count** · medium value · effort S — The "Reading your

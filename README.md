@@ -62,9 +62,19 @@ and the `claude` CLI on your own machine.
 
 ### Reading
 
-- **A calm reading surface.** Desktop is a two-pane quiet worklist (360px) beside a
-  wide reading column, with folders and accounts summoned into an off-canvas drawer;
-  `☰ Classic` restores the original three-pane layout and phones stay single-column.
+- **Everything on one screen.** Folders, list and reading pane sit side by side as
+  paper panels. The folder rail is icons or icons with names (`☰` or `[`), and becomes
+  a drawer on narrower windows; drag the list's edge (or focus it and use ←/→) to set
+  its width. Both choices are remembered. Phones stay single-column.
+- **A reading pane built for going through mail.** The message sits in a centred
+  column with the action bar pinned above it — previous/next, your place in the list
+  ("3 of 48") and every verb — and an **Up next** box at the end names the next
+  message, with **Archive & next** one click away. `↵` switches to focus reading,
+  which hides folders and list; `Esc` brings them back.
+- **Summaries before you open anything.** List rows show the stored AI summary under
+  the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
+  opening the message shows the same summary at the top, with no extra AI call, and
+  `i` asks for the full one. Rows are grouped by day.
 - **The daily brief as a single stream.** Read one message-card at a time with an
   AI narrative intro, clickable topic chips, `j`/`k` navigation and a progress rail
   across the top — or flip to the classic two-pane **List** at any moment. The choice
@@ -100,7 +110,9 @@ and the `claude` CLI on your own machine.
 - **One-key triage with real undo.** `e` archives *everywhere* (it never trashes),
   destructive verbs live on `#`/Delete/Backspace, and `z` — or a floating Undo
   button — reverses archive, delete, junk, move, snooze and mute, server-side.
-- **Bulk triage on demand.** Mark rows with `x` or the row checkboxes, then archive,
+- **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
+  without opening it (conversations offer Snooze, which covers the whole thread).
+- **Bulk triage on demand.** Mark rows with `x` or the checkbox on each avatar, then archive,
   delete, read, unread, star, junk, snooze or mute the whole set as **one** undo group.
 - **Snooze, mute, reply-later and Waiting.** A numbered snooze preset popover (plus a
   native date-time picker for custom times) with its own Snoozed folder; a 📌 reply-later
@@ -245,13 +257,15 @@ UI. Nothing is ever sent automatically.
 
 ### Keyboard, theming & accessibility
 
-- **Full keyboard control** — `j`/`k`/`n`/`p` to move, `Enter`/`o` to open, `e`/`d`/`b`/
-  `s`/`u`/`x` to triage, `l` reply-later, `w` waiting, `v` save a view, `z` undo,
+- **Full keyboard control** — `j`/`k`/`n`/`p` to move, `o` to open, `↵` for focus reading,
+  `[` to show or hide folder names, `e`/`d`/`b`/`s`/`u`/`x` to triage, `l` reply-later,
+  `w` waiting, `v` save a view, `z` undo,
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
   account, saved views, the actions available on the selected message, and app commands.
-- **Two full themes** — a cool-graphite **Slate** dark system where amber means "act on
-  this" and periwinkle means "the AI said this", and a warm cream **Paper** light mode.
+- **Two full themes in the Meadow palette** — a deep-blue **Night** (the default) and a
+  cream **Day**, where indigo marks actions and selection, gold means only "needs you",
+  moss means only "the AI said this", and rust is for delete.
   Applied before first paint, so there's no flash, and the mail body follows the app.
 - **On a phone:** single-pane list-to-reader swap, an off-canvas folder drawer, swipe
   left to archive / right to snooze to tomorrow 8am with a live badge, chevrons to walk
