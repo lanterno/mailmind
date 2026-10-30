@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css
+test: test-classifier test-sanitize test-css test-expire
 
 # Classifier behaviour
 test-classifier:
@@ -36,6 +36,10 @@ test-sanitize:
 # CSS sanitizer unit tests
 test-css:
     {{py}} test_css_sanitizer.py
+
+# Expiry rules: storage, sender/domain matching, age selection
+test-expire:
+    {{py}} test_expire.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
@@ -131,6 +135,18 @@ block +tokens:
 
 rules:
     {{py}} manage.py rules
+
+# Expire a sender/domain's INBOX mail after N hours (0 clears).  just expire-after github.com 72
+expire-after token hours:
+    {{py}} rules.py expire {{token}} {{hours}}
+
+# Preview what the expiry rules would move to Trash right now
+expire-dry target="all":
+    {{py}} manage.py expire {{target}} --dry
+
+# Move INBOX mail past its expiry rule to Trash (the server also does this hourly)
+expire target="all":
+    {{py}} manage.py expire {{target}}
 
 # ── data ──────────────────────────────────────────────────────────────────────
 
