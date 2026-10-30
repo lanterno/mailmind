@@ -858,6 +858,64 @@ def muted_in(account, offset, limit):
             "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
+def _local_naive(d):
+    """A parsed calendar time as local wall-clock time; a floating (naive) one is already that."""
+    return d.astimezone().replace(tzinfo=None) if d.tzinfo else d
+
+
+def upcoming(account=None, now=None, limit=5, days=60):
+    """Today & next: the events in calendar invites from the last `days` of mail that haven't ended
+    yet, soonest first. Pure-local: it reads only bodies already fetched, never IMAP. One row per
+    event UID, from the newest message that carries it (an update replaces the original, a
+    cancellation removes it). Times are local wall-clock ISO strings."""
+    now = now or datetime.now()
+    c = store.conn()
+    rows = c.execute(
+        """SELECT m.pk, m.account, m.folder, m.thread_id, a.part_id
+           FROM attachments a JOIN messages m ON m.pk=a.message_pk
+           WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?)
+             AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
+           ORDER BY m.ts DESC, m.pk DESC""",
+        (int(now.timestamp()) - days * 86400, account, account)).fetchall()
+    seen, items = set(), []
+    for r in rows:
+        if _folder_role(r["folder"], "", "") in ("trash", "junk"):
+            continue
+        try:
+            raw = store.get_body(c, r["pk"])
+            payload, _ct = mailparse.extract_part(raw, r["part_id"])
+            inv = ics.parse(payload.decode("utf-8", "replace"))
+        except Exception:
+            continue
+        if not inv or not inv.get("start_iso"):
+            continue
+        key = inv.get("uid") or (inv["summary"], inv["start_iso"])
+        if key in seen:
+            continue
+        seen.add(key)
+        if inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED":
+            continue
+        try:
+            start = _local_naive(datetime.fromisoformat(inv["start_iso"]))
+            end = (_local_naive(datetime.fromisoformat(inv["end_iso"])) if inv.get("end_iso")
+                   else start + timedelta(days=1 if inv["all_day"] else 0))
+        except Exception:
+            continue
+        if max(start, end) <= now:
+            continue
+        org = inv.get("organizer") or {}
+        items.append({
+            "pk": r["pk"], "account": r["account"], "thread_id": r["thread_id"],
+            "summary": inv["summary"], "location": inv.get("location", ""),
+            "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
+            "all_day": inv["all_day"], "organizer": org.get("name") or org.get("email") or "",
+            "invite": inv.get("method") == "REQUEST", "recurrence": inv.get("recurrence", ""),
+        })
+    c.close()
+    items.sort(key=lambda x: x["start"])
+    return {"ok": True, "items": items[:limit]}
+
+
 def waiting_in(account, offset, limit):
     """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
     c = store.conn()
@@ -879,6 +937,7 @@ def waiting_in(account, offset, limit):
             "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
             "ts": r["ts"], "count": r["thread_count"], "waiting": True,
             "waiting_label": label, "kind": r["f_kind"],
+            "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
         })
     return {"ok": True, "account": account, "folder": "__waiting__", "items": items, "waiting": True,
             "total": total, "offset": offset, "has_more": offset + len(items) < total}
@@ -3294,6 +3353,8 @@ class H(BaseHTTPRequestHandler):
                 self._json(messages_in(q.get("account", [None])[0], q.get("folder", ["INBOX"])[0],
                                        int(q.get("offset", ["0"])[0]), int(q.get("limit", ["80"])[0]),
                                        group=(q.get("group", [""])[0] == "thread")))
+            elif u.path == "/api/upcoming":     # read-only: invites in fetched mail, nothing fetched
+                self._json(upcoming(q.get("account", [None])[0] or None))
             elif u.path == "/api/thread":
                 self._json(thread_json(q.get("account", [None])[0], q.get("thread_id", [None])[0]))
             elif u.path == "/api/search":
