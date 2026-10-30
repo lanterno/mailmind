@@ -12,7 +12,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Reply, compose and send
 
-- **Reply variants and one-tap micro-replies** · high value · effort S — The single-shot `✦ Draft`
+- **Reply variants and one-tap micro-replies** · high value · effort S — The single-shot `Draft`
   works and never auto-sends, but it reaches only one tone: `aiDraftReply()` posts a hardcoded
   `tone:"balanced"`, even though `draft_reply.py` already implements `_TONES` (brief, balanced,
   warm, formal) and accepts a free-text `instruction` the UI never sends. Missing: a
@@ -188,8 +188,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   account switch. There is no equivalent for messages — `loadCMessages()` always refetches
   `/api/messages`, so the row area still goes empty every time.
 - **Self-host the fonts, add gzip and ETag** · high value · effort M — dashboard.html still
-  preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Nunito Sans and
-  Shippori Mincho — the only remote dependency in an app whose README sells local-first and
+  preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Nunito Sans,
+  Shippori Mincho and Klee One — the only remote dependency in an app whose README sells local-first and
   privacy-first, so this is a stated-values violation, not just latency. Server side there is no
   `Content-Encoding` or `ETag` anywhere (the only zlib use is `crc32` for a cache fingerprint, and
   the only caching header is one `no-cache`); gzip is ~15 lines in the response path and worth real

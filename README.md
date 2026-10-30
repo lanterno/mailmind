@@ -76,7 +76,8 @@ and Claude (the Claude API, or the `claude` CLI on your own machine).
   opening the message shows the same summary at the top, with no extra AI call, and
   `i` asks for the full one. Rows are grouped by day.
 - **Today's brief opens the Inbox.** With no message open, the reading pane
-  shows the day's AI brief, tallies for what needs you, what's waiting and your
+  shows the day's AI brief on a painted landscape (sun by day, moon and stars by
+  night), tallies for what needs you, what's waiting and your
   commitments, and the messages that need you, each with its summary and next step.
   A pinned row at the top of the Inbox (or `k` from the first message) brings it back,
   so opening the Inbox marks nothing read.
@@ -196,11 +197,11 @@ automatically.
 - **Weekly Review** — an AI retrospective of the last 7 days: sent/received stats, who
   is still waiting on you, who you're waiting on, and three concrete things to start
   next week with. Every item is clickable into the thread.
-- **✦ Draft.** One click writes an editable reply into the composer from the whole
+- **Draft.** One click writes an editable reply into the composer from the whole
   thread. For mail the AI rates important or action-needed, a background pre-drafter can
-  have it ready *before* you press Reply — the Reply button reads **✦ Draft ready** — and
+  have it ready *before* you press Reply — the Reply button reads **Draft ready** — and
   pre-drafts survive restarts.
-- **✦ Rewrite toolbar** over the composer: Shorten, Elaborate, Formal, Friendly, Fix
+- **Rewrite toolbar** over the composer: Shorten, Elaborate, Formal, Friendly, Fix
   grammar, Translate — acting on your selection or the whole draft, with one-step Undo.
 - **Ask your inbox.** Prefix a search with `?` and get a grounded plain-English answer
   with cited source cards you can click into. Retrieval is local FTS; citations are
@@ -281,13 +282,15 @@ automatically.
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
   account, saved views, the actions available on the selected message, and app commands.
-- **Two full themes in the Meadow palette** — a deep-blue **Night** (the default) and a
-  cream **Day**, where indigo marks actions and selection, gold means only "needs you",
+- **Two full themes in the Meadow palette** — a cream **Day** (the default) and a
+  deep-blue **Night**, switched by the sun/moon button, with the panels laid on a sky
+  that follows the theme. Indigo marks actions and selection, gold means only "needs you",
   moss means only "the AI said this", and rust is for delete.
   Applied before first paint, so there's no flash, and the mail body follows the app.
 - **One drawn icon set** — toolbars, folders and menus share one set of monoline icons,
   inline SVG in the page itself (no emoji, no icon font, no extra request), so they look
-  alike on every platform and take their color from the theme.
+  alike on every platform and take their color from the theme. The wind mark is the
+  only symbol for the AI.
 - **On a phone:** single-pane list-to-reader swap, an off-canvas folder drawer, swipe
   left to archive / right to snooze to tomorrow 8am with a live badge, and a Back gesture that unwinds reader → list → modal instead of leaving
   the app.
