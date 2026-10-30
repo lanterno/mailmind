@@ -145,6 +145,9 @@
   #composeBtn{min-height:34px;padding:0 12px;border-radius:10px;background:var(--primary);color:var(--on-primary);font-size:13.5px;font-weight:700;
     box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 8px 18px -10px var(--primary)}
   #composeBtn:hover{background:var(--primary-hi)}
+  #composeBtn .tb-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;margin-left:2px;padding:0 4px;
+    border:1px solid color-mix(in srgb,var(--on-primary) 35%,transparent);border-bottom-width:2px;border-radius:5px;font:700 10.5px/1 var(--font-mono)}
+  body.theme-light #themeBtn .tm-moon,body:not(.theme-light) #themeBtn .tm-sun{display:none}
   .search-tog,.search-x{display:none}
   /* <=760: the full row doesn't fit — search folds into an icon that opens it across the bar (body.search-open),
      help leaves (no keyboard), Compose and the status pill keep only their glyphs */
@@ -153,8 +156,8 @@
     .search{display:none}
     .search-tog{display:inline-flex;margin-left:auto;flex:none}
     .tools{margin-left:0}
-    #helpBtn{display:none}
-    #composeBtn .tb-lbl{display:none}
+    #helpBtn,#themeBtn{display:none}
+    #composeBtn .tb-lbl,#composeBtn .tb-kbd{display:none}
     #composeBtn,.tools .tbtn.icon{width:40px;height:40px;padding:0;justify-content:center;flex:none}
     .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
     body.search-open .top .r1>:not(.search):not(.search-x){display:none}
@@ -1188,6 +1191,7 @@
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.6A8.2 8.2 0 1 1 9.4 4a6.6 6.6 0 0 0 10.6 10.6z"/></symbol>
   <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 9.4-4.9M18 11v5.5l1.5 2H9"/><path d="M10 20.5a2 2 0 0 0 4 0M4 4l16 16"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></symbol>
@@ -1212,9 +1216,10 @@
     <div class="tools">
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
       <button class="status-pill" id="statusBtn" aria-haspopup="dialog" aria-expanded="false" title="Sync, reconcile and curation"><i class="sdot" aria-hidden="true"></i><span id="statusTxt">Connecting…</span></button>
+      <button class="tbtn icon" id="themeBtn" title="Day or Night" aria-label="Switch to Night"><svg class="ico tm-sun" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><svg class="ico tm-moon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg></button>
       <button class="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg></button>
       <button class="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sliders"/></svg></button>
-      <button class="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pen"/></svg><span class="tb-lbl"> Compose</span></button>
+      <button class="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-pen"/></svg><span class="tb-lbl"> Compose</span><kbd class="tb-kbd" aria-hidden="true">C</kbd></button>
     </div>
   </div>
 </header>
@@ -2071,6 +2076,7 @@ function setTheme(light){
   document.body.classList.toggle("theme-light", !!light);
   try{ localStorage.setItem("mm_theme", light?"light":"dark"); }catch(e){}
   const c=$("#legTheme"); if(c)c.checked=!!light;
+  const tb=$("#themeBtn"); if(tb)tb.setAttribute("aria-label", light?"Switch to Night":"Switch to Day");
   // repaint an open message so its iframe polarity follows the app theme (unless the user pinned mail theme)
   if(!localStorage.getItem("mm_mailtheme")){
     if(state.thread) openThread(state.thread.thread_id, state.thread.reply_pk||state.csel, false, state.thread.account);
@@ -4630,6 +4636,7 @@ $("#plist").addEventListener("click",e=>{ const r=e.target.closest("[data-idx]")
 $("#plist").addEventListener("mousemove",e=>{ const r=e.target.closest("[data-idx]"); if(r&&+r.dataset.idx!==_palSel){ _palSel=+r.dataset.idx; renderPalette(); } });
 $("#palette").addEventListener("click",e=>{ if(e.target.id==="palette")closePalette(); });
 $("#helpBtn").addEventListener("click",()=>toggleLegend());
+$("#themeBtn").addEventListener("click",()=>toggleTheme());
 $("#legNoKeys").addEventListener("change",e=>{ state.noKeys=e.target.checked;
   try{localStorage.setItem("mm_nokeys",state.noKeys?"1":"0");}catch(e){} });
 $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
@@ -4639,7 +4646,7 @@ $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
   try{ if(localStorage.getItem("mm_threadview")==="0"){ state.threadView=false; const b=$("#threadToggle"); if(b){b.classList.remove("on");b.innerHTML=ico("list")+" Messages";} } }catch(e){}
   try{ const sc=localStorage.getItem("mm_searchscope"); if(sc)state.searchScope=sc; }catch(e){}
   try{ if(localStorage.getItem("mm_nokeys")==="1"){ state.noKeys=true; const c=$("#legNoKeys"); if(c)c.checked=true; } }catch(e){}
-  try{ const lt=$("#legTheme"); if(lt)lt.checked=themeIsLight(); }catch(e){}   // theme already applied by the early inline script
+  try{ const lt=$("#legTheme"); if(lt)lt.checked=themeIsLight(); $("#themeBtn").setAttribute("aria-label", themeIsLight()?"Switch to Night":"Switch to Day"); }catch(e){}   // theme already applied by the early inline script
   try{ localStorage.removeItem("mm_mode"); localStorage.removeItem("mm_brief_view"); }catch(e){}   // Briefing's keys: it retired into Mailbox
   try{ let r=localStorage.getItem("mm_rail");
     if(r==null){ r=localStorage.getItem("mm_mb_view")==="classic"?"wide":"narrow"; localStorage.removeItem("mm_mb_view"); }   // the retired Classic view showed folder names
