@@ -3587,9 +3587,11 @@ function openSnoozeMenu(anchor, override){
   // a click inside acts here and stops; the next click outside closes the menu
   m.addEventListener("click",e=>{ e.stopPropagation(); const s=e.target.closest("[data-snz]"); if(s){ if(s.dataset.snz==="un")doUnsnooze(); else doSnooze(s.dataset.snz); } });
   setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_snoozeOutside); },0);   // after the opening click finishes
+  window.addEventListener("blur",_snoozeBlur);   // a click in the mail body (see frameTookFocus)
 }
 function _snoozeOutside(e){ if(!e.target.closest("#snoozeMenu"))closeSnoozeMenu(); }
-function closeSnoozeMenu(){ const m=$("#snoozeMenu"); if(m)m.remove(); _snoozeOverride=null; document.removeEventListener("click",_snoozeOutside); }
+function _snoozeBlur(){ setTimeout(()=>{ if(frameTookFocus())closeSnoozeMenu(); },0); }
+function closeSnoozeMenu(){ const m=$("#snoozeMenu"); if(m)m.remove(); _snoozeOverride=null; document.removeEventListener("click",_snoozeOutside); window.removeEventListener("blur",_snoozeBlur); }
 function _snoozeAffected(t){ return t.pks ? t.pks.slice() : (t.pk!=null?[t.pk]:[]); }
 async function doSnooze(preset){ return _snooze({preset}); }
 async function doSnoozeAt(v){ return _snooze({until:v}); }
