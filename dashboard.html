@@ -1796,6 +1796,7 @@ async function loadFolders(refreshOnly){
   if(!cached && !refreshOnly) loadCMessages();  // when cached we already kicked the list load above
 }
 function renderFolders(){
+  if(!state.account)return;   // first run: no account, no folders — firstRun owns the empty rail
   const snz="__snoozed__";
   const rows=state.folders.map(f=>{
     const lbl=f.role==="custom"?f.name:f.role[0].toUpperCase()+f.role.slice(1);
