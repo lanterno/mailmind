@@ -2832,7 +2832,7 @@ function cRemove(pk){ const list=state.searching?state.searchItems:state.cmsgs; 
   state.cmarked.delete(pk);   // drop from bulk selection so the count/actions can't go stale
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft chip state
   healPk(pk).then(()=>renderClientList());
-  if(state.csel===pk){ if(next)openClientMsg(next.pk,true); else clearReader(); } }
+  if(state.csel===pk){ if(next)openConversation(next,true); else clearReader(); } }   // as j would: a conversation opens in the thread reader
 async function cremoveAction(pk,path,obj,verb,act){ if(!cfindAny(pk))return;   // a search hit may live outside the current folder's cmsgs
   const snap=state.cmsgs.slice(), ssnap=(state.searchItems||[]).slice(), wasSel=state.csel;
   cRemove(pk);
