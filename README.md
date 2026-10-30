@@ -62,9 +62,9 @@ and the `claude` CLI on your own machine.
 ### Reading
 
 - **Everything on one screen.** Folders, list and reading pane sit side by side as
-  paper panels. The folder rail is icons or icons with names (`☰` or `[`), and becomes
-  a drawer on narrower windows; drag the list's edge (or focus it and use ←/→) to set
-  its width. Both choices are remembered. Phones stay single-column.
+  paper panels. The folder rail is icons or icons with names (the sidebar button or
+  `[`), and becomes a drawer on narrower windows; drag the list's edge (or focus it and
+  use ←/→) to set its width. Both choices are remembered. Phones stay single-column.
 - **A reading pane built for going through mail.** The message sits in a centred
   column with the action bar pinned above it — previous/next, your place in the list
   ("3 of 48") and every verb — and an **Up next** box at the end names the next
@@ -271,6 +271,9 @@ UI. Nothing is ever sent automatically.
   cream **Day**, where indigo marks actions and selection, gold means only "needs you",
   moss means only "the AI said this", and rust is for delete.
   Applied before first paint, so there's no flash, and the mail body follows the app.
+- **One drawn icon set** — toolbars, folders and menus share one set of monoline icons,
+  inline SVG in the page itself (no emoji, no icon font, no extra request), so they look
+  alike on every platform and take their color from the theme.
 - **On a phone:** single-pane list-to-reader swap, an off-canvas folder drawer, swipe
   left to archive / right to snooze to tomorrow 8am with a live badge, and a Back gesture that unwinds reader → list → modal instead of leaving
   the app.

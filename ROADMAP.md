@@ -259,12 +259,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   from the live tokens (`tk("--bg")`, `tk("--ink")`), which are the light ones under
   `body.theme-light`. Choosing Dark under Aa there leaves plain text on light paper and inverts rich
   mail onto a light page. Dark needs its own night palette that doesn't follow the app theme.
-- **Replace emoji with an inline-SVG monoline icon set** · medium value · effort L — Now the largest
-  craft gap, since the type system and the Meadow palette with its Day theme have landed.
-  Emoji are still the entire icon vocabulary (✦×46, ⚡×15, ⏰×10, ☰×7, 📎×7 …), including the literal
-  `FOLDER_ICON` map and the toolbar; there is no `<symbol>` sprite and no `<use>` anywhere. Needs ~24
-  glyphs using `currentColor` plus a swap of `FOLDER_ICON`, `.tbtn`, `.cab`, `.mono-dot` and the
-  inline emoji in template literals.
 - **Density modes (Comfortable / Cozy / Compact)** · low value · effort M — Zero matches for
   `density` or `data-density`; Mailbox row metrics are hardcoded in the `.row.cmsg` rules. Worth more
   now that rows carry a two-line summary and a next-step chip (about six rows per screen at 900px):
