@@ -1173,6 +1173,46 @@ def do_trash(body):
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
 
+def do_thread_file(path, body):
+    """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
+    anchor's folder, which is what a conversation row stands for. Members are resolved here, never
+    sent by the client (pk isn't stable, and a list row only knows its newest message). Each one
+    goes through the per-message op, so locking, the offline queue and undo descriptors are
+    unchanged; one undo group spans them all, so a single Undo restores the conversation. A
+    message without a thread_id is a conversation of one, never the folder's unthreaded pool."""
+    try:
+        pk = int(body.get("pk"))
+    except (TypeError, ValueError):
+        return {"ok": False, "msg": "bad pk"}
+    c = store.conn()
+    row = store.get_message(c, pk)
+    if not row:
+        pks = []
+    elif (row["thread_id"] or "").strip():
+        pks = [r["pk"] for r in c.execute(
+            "SELECT pk FROM messages WHERE account=? AND folder=? AND thread_id=? "
+            "ORDER BY ts DESC, pk DESC", (row["account"], row["folder"], row["thread_id"]))]
+    else:
+        pks = [pk]
+    c.close()
+    if not pks:
+        return {"ok": False, "msg": "not found"}
+    group = body.get("undo_group") or "thread:" + secrets.token_hex(6)
+    filed, queued, undoable, msg = [], 0, False, ""
+    for p in pks:
+        one = {"pk": p, "undo_group": group, "mutation_id": body.get("mutation_id")}
+        res = do_write("/api/archive", one) if path == "/api/thread/archive" else do_trash(one)
+        if res.get("ok"):
+            filed.append(p)
+            queued += res.get("status") == "queued"
+            undoable = undoable or bool(res.get("undoable"))
+        else:
+            msg = res.get("msg") or msg
+    return {"ok": bool(filed), "msg": msg if not filed else ("queued" if queued else "filed"),
+            "pks": filed, "count": len(filed), "failed": len(pks) - len(filed),
+            "queued": queued, "undoable": undoable}
+
+
 # --------------------------------------------------------------------- undo
 def undo_push(desc, group=None):
     """Push a reverse descriptor. With a group id, coalesce consecutive pushes into one
@@ -3357,6 +3397,8 @@ class H(BaseHTTPRequestHandler):
                 self._json({"ok": ok}, 200 if ok else 404)
             elif u.path == "/api/trash":
                 self._json(do_trash(b))
+            elif u.path in ("/api/thread/archive", "/api/thread/trash"):
+                self._json(do_thread_file(u.path, b))
             elif u.path == "/api/undo":
                 res, code = do_undo()
                 self._json(res, code)
