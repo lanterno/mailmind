@@ -1593,6 +1593,7 @@ function curItem(){ return state.all.find(x=>x.pk===state.sel); }
 function afterRemove(pk){
   state.all=state.all.filter(x=>x.pk!==pk);
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft state (no stale chip / grow)
+  if(state.mode==="client"){ if(cfindAny(pk))cRemove(pk); renderBrief(); return; }   // Mailbox shares #rows/#reader: heal its lists, never paint Briefing's
   const idx=state.view.findIndex(x=>x.pk===pk);
   state.view=state.view.filter(x=>x.pk!==pk);
   renderList(); renderCats();
@@ -2895,6 +2896,7 @@ function cRemove(pk){ const list=state.searching?state.searchItems:state.cmsgs; 
   const i=list.findIndex(x=>x.pk===pk); const next=list[i+1]||list[i-1]||null;
   state.cmsgs=state.cmsgs.filter(x=>x.pk!==pk);
   state.searchItems=(state.searchItems||[]).filter(x=>x.pk!==pk);   // acting from search heals the results too
+  state.all=state.all.filter(x=>x.pk!==pk); renderBrief();   // the brief counts what needs you from the digest
   state.cmarked.delete(pk);   // drop from bulk selection so the count/actions can't go stale
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft chip state
   healPk(pk).then(()=>renderClientList());
@@ -4321,7 +4323,9 @@ $("#commitPanel").addEventListener("click",e=>{
   if(cm==="done"){ archiveSel(pk); _commitAfter(row); }               // fulfilled → archive (reversible via z)
   else if(cm==="later"){ _snoozeOverride={pk}; doSnooze("tomorrow"); _commitAfter(row); }
   else if(cm==="openmsg"){ openIt(pk); }
-  else { closeCommitments(); if(state.mode!=="client" && state.all.some(x=>x.pk===pk)){ state.focusIntro=false; select(pk,false); } }   // open in the brief stream
+  else { closeCommitments();
+    if(state.mode==="client") openFromBrief(pk);   // in the Mailbox reader, where every verb is
+    else if(state.all.some(x=>x.pk===pk)){ state.focusIntro=false; select(pk,false); } }   // open in the brief stream
 });
 $("#folderrail").addEventListener("click",e=>{
   const del=e.target.closest("[data-vdel]"); if(del){ e.stopPropagation(); deleteView(del.dataset.vdel); return; }
