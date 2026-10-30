@@ -3571,6 +3571,15 @@ def _after_readmut():
     realtime.publish("readmutq", {})     # a queued read-mutation drained — refresh views
 
 
+class _Server(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        # A browser dropping a socket (reload, closed tab, unused preconnect) isn't a fault worth
+        # a traceback; anything else still prints one.
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
+
+
 if __name__ == "__main__":
     store.init()
     # The outbox drains on its own worker, serialized with live IMAP ops via _ops_lock;
@@ -3594,4 +3603,4 @@ if __name__ == "__main__":
         realtime.start()                 # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {summarize.describe_engine()}", flush=True)
     print(f"MailMind → http://127.0.0.1:{PORT}  (serving now)", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+    _Server(("127.0.0.1", PORT), H).serve_forever()
