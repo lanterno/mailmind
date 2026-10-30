@@ -46,6 +46,7 @@
     --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif;
     --font-reading:var(--font-ui);
     --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --font-hand:"Klee One","Hiragino Maru Gothic ProN",ui-rounded,"Nunito Sans",sans-serif;   /* the brief, in the AI's hand */
     /* on-fill text */
     --gold-ink:#2A1A00; --ai-ink:#0F2016;
     /* radius */
@@ -69,6 +70,11 @@
     --sh-pop:0 0 0 1px rgba(150,175,230,.14),0 30px 70px -28px rgba(0,0,0,.9);
     --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .8 0 0 0 0 .85 0 0 0 0 1 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A7A193' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    /* the painted scene (scene()): its colors, and whether stars, glow and sun show */
+    --cloud-1:#4C5D84; --cloud-2:#33446A; --cloud-3:#18223F; --disc:#F1ECD4; --disc-glow:rgba(225,225,200,.35);
+    --mtn:#22325A; --hill-far:#1C3242; --hill-mid:#172C2C; --hill-near:#122420; --hill-lit:#2B4636; --meadow:#1D3A2B;
+    --leaf-1:#3F6448; --leaf-2:#23412E; --leaf-3:#12241A; --trunk:#2A221C; --roof:#59302A; --wall:#4A4A55; --window:#FFC468; --path:#3A4A52;
+    --stars:1; --glow:1; --sunny:0;
   }
   /* ═══════ Day — the light Meadow (toggle in ? help or the palette) ═══════
      Same identity on cream paper: the signal colours go DARKER so they read as text,
@@ -93,6 +99,10 @@
     --sh-pop:0 0 0 1px rgba(104,86,52,.12),0 28px 60px -28px rgba(30,52,90,.55);
     --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .3 0 0 0 0 .2 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23655E50' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    --cloud-1:#FFFFFF; --cloud-2:#F4F3EE; --cloud-3:#AFC2D8; --disc:#FFF6DC; --disc-glow:rgba(255,243,206,.85);
+    --mtn:#A3B9CB; --hill-far:#86AA8C; --hill-mid:#62915F; --hill-near:#4D7E4B; --hill-lit:#93BC6E; --meadow:#6E9C55;
+    --leaf-1:#A6CB72; --leaf-2:#5E9147; --leaf-3:#2F5A35; --trunk:#5C4737; --roof:#B1523A; --wall:#F5EBD8; --window:#5B7789; --path:#E8DDBF;
+    --stars:0; --glow:0; --sunny:1;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   [hidden]{display:none!important}   /* author display rules (.acct-alert flex etc.) must never beat the hidden attribute */
@@ -574,7 +584,7 @@
   body.mode-client .reader>:not(.rd-actions){width:min(var(--measure),calc(100% - 64px));margin-inline:auto}
   body.mode-client .reader>.rd-iframe{display:block}   /* an inline iframe ignores auto margins */
   body.mode-client .rd-actions{position:sticky;top:0;z-index:3;height:52px;margin:0 0 24px;padding:0 10px;gap:2px;
-    flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--panel);border-bottom:1px solid var(--line)}
+    flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--grain),var(--panel);border-bottom:1px solid var(--line)}
   body.mode-client .rd-actions .cab{flex:none;padding:8px}
   body.mode-client .rd-actions .cab:disabled{opacity:.4;cursor:default;background:none}
   body.mode-client .rd-sp{display:block;flex:1 1 0;min-width:8px}
@@ -603,18 +613,26 @@
   body.mode-client .reader .ai-card{background:var(--ai-wash);border-left:none;box-shadow:none;padding:14px 18px;margin-bottom:20px}
   body.mode-client .reader .ai-card .ai-tldr{font-size:15.5px}
   /* Today's brief: the Inbox's reading pane while no message is open (showBrief), and its pinned row */
-  .bf-hero{padding:30px 0 18px}
-  .bf-date{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
-  .bf-hero h1{margin:8px 0 0;font-family:var(--font-display);font-weight:600;font-size:34px;line-height:1.15;letter-spacing:-.02em;color:var(--ink)}
-  body.mode-client .reader .ai-card.bf-card{padding:18px 20px}
-  .bf-card .bf-narr{font-size:17px;line-height:1.65;text-wrap:pretty}
+  /* the scene runs edge to edge under the action bar; the greeting sits in the reading column, the card overlaps the hills */
+  body.mode-client .reader.brief-pane .rd-actions{margin-bottom:0}
+  body.mode-client .reader.brief-pane>.bf-hero{position:relative;width:auto;height:220px;margin-inline:0;overflow:hidden}
+  .bf-hero>svg{position:absolute;inset:0;width:100%;height:100%}
+  .bf-hero .bf-ht{position:absolute;top:32px;left:50%;transform:translateX(-50%);width:min(var(--measure),calc(100% - 64px))}
+  .bf-date{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+  .bf-hero h1{margin:10px 0 0;font-family:var(--font-display);font-weight:700;font-size:40px;line-height:1.1;color:var(--ink)}
+  @container pane (max-width:700px){ .bf-hero .bf-ht{top:22px} .bf-hero h1{font-size:30px} }
+  body.mode-client .reader .ai-card.bf-card{position:relative;margin-top:-84px;padding:20px 24px 18px;border-radius:18px;
+    background:var(--grain),var(--panel);box-shadow:var(--sh-pop)}
+  .bf-card .ai-hd{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  body.mode-client .reader .bf-card .bf-narr{font-family:var(--font-hand);font-weight:600;font-size:18px;line-height:1.7;color:var(--ai);text-wrap:pretty}
   .bf-card .bf-wait{color:var(--mute);font-size:15px}
   .bf-tallies{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-  .bf-tally{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 13px;border-radius:var(--r-pill);border:1px solid var(--line-hi);
-    background:var(--panel);color:var(--soft);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .bf-tally{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line-hi);
+    background:var(--bg);color:var(--soft);font:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
   .bf-tally:hover{color:var(--ink);border-color:var(--mute)}
-  .bf-tally b{color:var(--ink);font-variant-numeric:tabular-nums}
-  .bf-tally.sun{background:var(--gold-wash);border-color:transparent;color:var(--gold)}
+  .bf-tally b{color:var(--ink);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+  .bf-tally.sun{background:var(--gold-wash);border-color:color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold)}
+  .bf-tally.sun::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--sun)}
   .bf-tally.sun b{color:var(--gold)}
   .bf-h{margin:30px 0 12px;font-family:var(--font-display);font-weight:600;font-size:20px;color:var(--ink)}
   .bf-needs{display:grid;gap:10px}
@@ -628,6 +646,21 @@
   .bf-subj:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
   .bf-gist{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--soft)}
   .bf-need .rchip{margin-top:9px}
+  /* the scene's motion: grass sways, clouds drift, birds cross; fireflies, stars and the moon by night (reduced motion stills it) */
+  .scene .sway{transform-box:fill-box;transform-origin:50% 100%;animation:sway 5.5s ease-in-out infinite alternate}
+  .scene .sway.b{animation-duration:6.5s;animation-delay:-2s}
+  .scene .sway.c{animation-duration:4.8s;animation-delay:-1s}
+  @keyframes sway{from{transform:skewX(-3deg)}to{transform:skewX(4deg)}}
+  .scene .cdrift{animation:cdrift 70s ease-in-out infinite alternate}
+  @keyframes cdrift{to{transform:translateX(-36px)}}
+  .scene .bird{animation:bird 26s linear infinite}
+  @keyframes bird{to{transform:translate(-260px,-24px)}}
+  .scene .stars{opacity:var(--stars)}
+  .scene .ff{opacity:var(--glow);animation:ff 3.8s ease-in-out infinite alternate}
+  @keyframes ff{0%{opacity:0}50%{opacity:var(--glow)}100%{opacity:.15;transform:translate(6px,-8px)}}
+  .scene .sunbody{opacity:var(--sunny)}
+  .scene .moonbody{opacity:var(--stars)}
+  .scene .winglow{opacity:var(--glow)}
   .bf-calm{margin:0;color:var(--mute);font-size:14.5px}
   .bf-topics{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
   .bf-topic{border:none;border-radius:var(--r-pill);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;padding:5px 11px;cursor:pointer}
@@ -641,7 +674,8 @@
   .brief-row:hover{background:var(--hover)}
   .brief-row.sel{background:var(--sel)}
   .brief-row:focus-visible{box-shadow:inset 0 0 0 2px var(--focus)}
-  .brief-row .bf-sun{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--ai-wash);color:var(--ai);font-size:15px}
+  .brief-row .bthumb{width:34px;height:34px;border-radius:10px;overflow:hidden;display:block}
+  .brief-row .bthumb svg{width:100%;height:100%;display:block}
   .brief-row b{display:block;font-size:14px;color:var(--ink)}
   .brief-row small{display:block;margin-top:1px;font-size:13px;color:var(--mute)}
   .brief-row small.sun{color:var(--gold)}
@@ -2699,10 +2733,84 @@ function needsYou(){   // the to-do test: a next step, an action-needed category
   return (state.all||[]).filter(it=>String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4)
     .sort((a,b)=>(b.importance||0)-(a.importance||0)||b.pk-a.pk);
 }
+/* The Meadow scene from the mockup: sky, sun or moon, clouds, hills, a tree and a cottage, painted
+   from the theme's scene tokens so it follows Day and Night. p prefixes the SVG ids (one per copy
+   on the page). It is seeded, so a (p, o) pair always draws the same picture: cached. */
+function rnd(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const PUFFS = [[-74, 2, 30], [-40, -8, 38], [0, -14, 46], [44, -6, 36], [80, 4, 26], [-30, -46, 32], [10, -60, 40], [48, -40, 28], [-4, -96, 30], [24, -88, 25], [-22, -80, 22]];
+function cloud(p, x, y, s, o = 1, extra = '') {
+  return `<g transform="translate(${x} ${y}) scale(${s})" opacity="${o}" ${extra}><g clip-path="url(#${p}cb)">${PUFFS.map(([dx, dy, r]) => `<circle cx="${dx}" cy="${dy}" r="${r}" fill="url(#${p}cl)"/>`).join('')}</g></g>`;
+}
+function scene(p, o = {}) {
+  const R = rnd(o.seed || 11);
+  let stars = ''; for (let i = 0; i < 70; i++) stars += `<circle cx="${(R() * 1200).toFixed(0)}" cy="${(R() * 170).toFixed(0)}" r="${(R() * 1.3 + .3).toFixed(2)}" fill="#fff" opacity="${(R() * .6 + .3).toFixed(2)}"/>`;
+  let grass = ''; const groups = ['', ' b', ' c'];
+  for (let gI = 0; gI < 3; gI++) {
+    let blades = '';
+    for (let i = 0; i < 46; i++) {
+      const x = R() * 1200, h = 10 + R() * 22, lean = (R() - .4) * 10, base = 322 - R() * 8;
+      blades += `<path d="M${x.toFixed(1)} ${base.toFixed(1)}q${(lean * .4).toFixed(1)} ${(-h * .55).toFixed(1)} ${lean.toFixed(1)} ${(-h).toFixed(1)}" stroke="var(--${R() > .5 ? 'hill-lit' : 'meadow'})" stroke-width="${(1.2 + R()).toFixed(1)}" fill="none" stroke-linecap="round"/>`;
+    }
+    grass += `<g class="sway${groups[gI]}">${blades}</g>`;
+  }
+  let ff = ''; for (let i = 0; i < 12; i++) ff += `<circle class="ff" style="animation-delay:${(-R() * 4).toFixed(1)}s" cx="${(560 + R() * 620).toFixed(0)}" cy="${(250 + R() * 60).toFixed(0)}" r="1.8" fill="#FFE59A" filter="url(#${p}glow)"/>`;
+  const canopy = [[-44, 10, 22], [-26, -10, 28], [2, -22, 33], [30, -8, 27], [48, 10, 21], [-8, 6, 31], [22, 14, 24], [-30, 16, 19], [8, -40, 22]];
+  const house = `<g transform="translate(842 249)">
+      <ellipse cx="2" cy="1" rx="26" ry="3" fill="var(--leaf-3)" opacity=".25"/>
+      <rect x="-14" y="-15" width="30" height="15" fill="var(--wall)"/>
+      <rect x="6" y="-27" width="4" height="9" fill="var(--trunk)"/>
+      <path d="M-18 -14 L1 -28 L20 -14z" fill="var(--roof)"/>
+      <rect x="-8" y="-11" width="6" height="6" fill="var(--window)"/>
+      <circle class="winglow" cx="-5" cy="-8" r="16" fill="url(#${p}wg)"/>
+    </g>
+    <path d="M848 252 C 820 268 760 282 702 298 C 668 308 646 316 630 322" stroke="var(--path)" stroke-width="3.2" fill="none" opacity=".55" stroke-linecap="round"/>`;
+  return `<svg class="scene" viewBox="0 0 1200 320" preserveAspectRatio="${o.par || 'xMidYMax slice'}" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="${p}sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-1)"/><stop offset=".55" style="stop-color:var(--sky-2)"/><stop offset="1" style="stop-color:var(--sky-3)"/></linearGradient>
+    <radialGradient id="${p}sun" cx="1080" cy="70" r="380" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:var(--disc-glow)"/><stop offset="1" style="stop-color:var(--disc-glow);stop-opacity:0"/></radialGradient>
+    <linearGradient id="${p}cl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--cloud-1)"/><stop offset=".5" style="stop-color:var(--cloud-2)"/><stop offset="1" style="stop-color:var(--cloud-3)"/></linearGradient>
+    <clipPath id="${p}cb" clipPathUnits="userSpaceOnUse"><rect x="-200" y="-220" width="400" height="244"/></clipPath>
+    <linearGradient id="${p}mid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hill-mid)"/><stop offset="1" style="stop-color:var(--hill-near)"/></linearGradient>
+    <linearGradient id="${p}near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--meadow)"/><stop offset="1" style="stop-color:var(--hill-near)"/></linearGradient>
+    <radialGradient id="${p}leaf" cx=".34" cy=".28" r=".85"><stop offset="0" style="stop-color:var(--leaf-1)"/><stop offset=".55" style="stop-color:var(--leaf-2)"/><stop offset="1" style="stop-color:var(--leaf-3)"/></radialGradient>
+    <radialGradient id="${p}wg"><stop offset="0" stop-color="#FFC768" stop-opacity=".7"/><stop offset="1" stop-color="#FFC768" stop-opacity="0"/></radialGradient>
+    <filter id="${p}paint" x="-5%" y="-10%" width="110%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".018 .04" numOctaves="2" seed="4" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="${p}tex" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="9"/><feColorMatrix values="0 0 0 0 .3 0 0 0 0 .3 0 0 0 0 .25 0 0 0 .22 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+    <radialGradient id="${p}halo"><stop offset=".25" style="stop-color:var(--disc-glow)"/><stop offset="1" style="stop-color:var(--disc-glow);stop-opacity:0"/></radialGradient>
+    <mask id="${p}moon"><rect x="1040" y="30" width="80" height="80" fill="#fff"/><circle cx="1091" cy="63" r="19" fill="#000"/></mask>
+    <filter id="${p}glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.2"/></filter>
+  </defs>
+  <rect width="1200" height="320" fill="url(#${p}sky)"/>
+  <rect width="1200" height="320" fill="url(#${p}sun)"/>
+  <g class="stars">${stars}</g>
+  <circle class="sunbody" cx="1080" cy="70" r="30" fill="var(--disc)"/>
+  <g class="moonbody"><circle cx="1080" cy="70" r="70" fill="url(#${p}halo)"/><circle cx="1080" cy="70" r="22" fill="var(--disc)" mask="url(#${p}moon)"/></g>
+  <g filter="url(#${p}paint)">
+    <g class="cdrift">${cloud(p, 930, 178, 1.3)}${cloud(p, 1130, 196, .8, .95)}${cloud(p, 700, 66, .34, .9)}${cloud(p, 760, 150, .22, .8)}</g>
+    <path d="M0 205 C 90 186 150 170 230 178 C 320 186 360 160 450 150 C 540 140 600 172 690 176 C 780 180 830 158 920 168 C 1010 178 1080 192 1200 184 L1200 320 L0 320Z" fill="var(--mtn)" opacity=".85"/>
+    <path d="M0 230 C 140 212 260 208 380 216 C 500 224 600 236 720 230 C 840 224 940 206 1060 212 C 1120 215 1170 222 1200 224 L1200 320 L0 320Z" fill="var(--hill-far)"/>
+    <path d="M0 260 C 120 242 240 238 360 246 C 480 254 560 262 680 258 C 800 254 860 244 960 242 C 1060 240 1140 252 1200 250 L1200 320 L0 320Z" fill="url(#${p}mid)"/>
+  </g>
+  ${house}
+  <g transform="translate(1012 242)">
+    <ellipse cx="6" cy="2" rx="52" ry="5" fill="var(--leaf-3)" opacity=".3"/>
+    <path d="M-5 1 C -4 -16 -7 -28 -11 -38 L -4 -39 C 0 -28 3 -16 6 1Z" fill="var(--trunk)"/>
+    <path d="M-6 -24 C -16 -30 -22 -36 -26 -44 M0 -28 C 8 -36 16 -40 26 -44" stroke="var(--trunk)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g transform="translate(0 -62)" filter="url(#${p}paint)">${canopy.map(([dx, dy, r]) => `<circle cx="${dx}" cy="${dy}" r="${r}" fill="url(#${p}leaf)"/>`).join('')}</g>
+  </g>
+  <path d="M0 302 C 160 286 320 278 480 284 C 640 290 760 302 900 294 C 1020 287 1120 278 1200 282 L1200 320 L0 320Z" fill="url(#${p}near)"/>
+  <rect width="1200" height="320" filter="url(#${p}tex)" opacity=".5" style="mix-blend-mode:multiply"/>
+  ${grass}
+  <g class="bird" stroke="var(--soft)" stroke-width="1.6" fill="none" stroke-linecap="round" opacity=".55"><path d="M820 92q5-5 10 0q5-5 10 0"/><path d="M846 104q4-4 8 0q4-4 8 0"/></g>
+  ${ff}
+</svg>`;
+}
+const _sceneCache={};
+function sceneSvg(p,o){ const k=p+JSON.stringify(o); return _sceneCache[k]||(_sceneCache[k]=scene(p,o)); }
 function briefRowNote(n){ return n?`${n} need${n===1?"s":""} you`:"Nothing needs you"; }
 function briefRowHtml(){
   const n=needsYou().length;
-  return `<button class="brief-row${briefOpen()&&state.csel==null?" sel":""}" data-brief-row><span class="bf-sun" aria-hidden="true">✦</span>
+  return `<button class="brief-row${briefOpen()&&state.csel==null?" sel":""}" data-brief-row><span class="bthumb" aria-hidden="true">${sceneSvg("bt",{par:"xMaxYMax slice",seed:4})}</span>
     <span><b>Today’s brief</b><small${n?' class="sun"':""}>${briefRowNote(n)}</small></span></button>`;
 }
 function showBrief(open){   // open: asked for (the row, k, ⌘K), so a phone moves to the pane
@@ -2742,7 +2850,7 @@ function briefHtml(){
       ${String(it.action||"").trim()?`<span class="rchip need">${esc(it.action)}</span>`:""}</div></article>`;
   return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>${ico("left")}</span> List</button><span class="rd-sp" aria-hidden="true"></span>
       <button class="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)"${_todayInflight?" disabled":""}><span>${ico("refresh")}</span> Refresh brief</button></div>
-    <header class="bf-hero"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></header>
+    <header class="bf-hero">${sceneSvg("bz",{seed:21,par:"xMaxYMax slice"})}<div class="bf-ht"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></div></header>
     <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd">✦ Your brief</div>${narr}
       ${topics?`<div class="bf-topics" aria-label="Topics in today’s mail">${topics}</div>`:""}<div class="bf-tallies">${t.join("")}</div></section>
     <h2 class="bf-h" id="bfNeeds">Needs you</h2>
