@@ -3407,9 +3407,9 @@ function snoozeTarget(){
   return null;
 }
 function openSnoozeMenu(anchor, override){
+  closeSnoozeMenu();                   // first: closing clears the override, so it must run before the override is set
   _snoozeOverride=override||null;
-  const t=snoozeTarget(); if(!t)return;
-  closeSnoozeMenu();
+  const t=snoozeTarget(); if(!t){ _snoozeOverride=null; return; }
   const m=document.createElement("div"); m.className="snooze-menu"; m.id="snoozeMenu"; m.setAttribute("role","menu");
   const inSnoozed=state.folder==="__snoozed__" && !override;
   m.innerHTML=SNOOZE_PRESETS.map(([k,l],i)=>`<button role="menuitem" data-snz="${k}"><span class="snz-n">${i+1}</span> ${l}</button>`).join("")
@@ -3420,11 +3420,12 @@ function openSnoozeMenu(anchor, override){
   m.style.top=(r.bottom+4)+"px"; m.style.left=Math.min(r.left,window.innerWidth-210)+"px";
   const f=m.querySelector("button"); if(f)f.focus();   // move focus in for keyboard/AT
   $("#snzWhen").addEventListener("change",e=>{ if(e.target.value)doSnoozeAt(e.target.value); });
-  // don't let a click INSIDE the menu close it; close on the next outside click
-  m.addEventListener("click",e=>e.stopPropagation());
-  setTimeout(()=>document.addEventListener("click",closeSnoozeMenu,{once:true}),0);
+  // a click inside acts here and stops; the next click outside closes the menu
+  m.addEventListener("click",e=>{ e.stopPropagation(); const s=e.target.closest("[data-snz]"); if(s){ if(s.dataset.snz==="un")doUnsnooze(); else doSnooze(s.dataset.snz); } });
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_snoozeOutside); },0);   // after the opening click finishes
 }
-function closeSnoozeMenu(){ const m=$("#snoozeMenu"); if(m)m.remove(); _snoozeOverride=null; }
+function _snoozeOutside(e){ if(!e.target.closest("#snoozeMenu"))closeSnoozeMenu(); }
+function closeSnoozeMenu(){ const m=$("#snoozeMenu"); if(m)m.remove(); _snoozeOverride=null; document.removeEventListener("click",_snoozeOutside); }
 function _snoozeAffected(t){ return t.pks ? t.pks.slice() : (t.pk!=null?[t.pk]:[]); }
 async function doSnooze(preset){ return _snooze({preset}); }
 async function doSnoozeAt(v){ return _snooze({until:v}); }
@@ -4083,8 +4084,6 @@ $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block 
 });
 $("#cmpAiDraft").addEventListener("click",aiDraftReply);
 $("#cmpAiRow").addEventListener("click",e=>{ const b=e.target.closest("[data-rw]"); if(b){ aiRewrite(b.dataset.rw); return; } if(e.target.closest("#cmpRwUndo"))aiRewriteUndo(); });
-document.addEventListener("click",e=>{ const s=e.target.closest("[data-snz]"); if(!s)return;
-  const k=s.dataset.snz; if(k==="un")doUnsnooze(); else doSnooze(k); });
 $("#cmpCcToggle").addEventListener("click",()=>{ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; const i=fieldEl("cc").querySelector(".ci"); if(i)i.focus(); });
 $("#cmpAttachBtn").addEventListener("click",()=>$("#cmpFile").click());
 $("#cmpFile").addEventListener("change",e=>{ addAttachments(e.target.files); e.target.value=""; });
