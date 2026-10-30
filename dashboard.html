@@ -164,15 +164,10 @@
   .frow:hover .vdel{opacity:1}
   .frow .vdel:hover{color:var(--err)}
   .frail-acct{font-size:11.5px;font-weight:500;color:var(--faint);padding:14px 11px 4px}
-  /* client message rows: unread = bold/brighter */
-  .row.cmsg .r2sub .sj{color:var(--soft)}
-  .row.cmsg.unread .r1 .from{color:var(--ink);font-weight:600}
-  .row.cmsg.unread .r2sub .sj{font-weight:600;color:var(--ink)}
-  .row.cmsg:not(.unread) .r1 .from{color:var(--mute)}
+  /* client message rows (layout: "the worklist" in the Mailbox shell block) */
   .row.cmsg .tags{margin-left:6px;display:inline-flex;gap:4px}
   .row.cmsg .jb{font-size:11px;font-weight:500;color:var(--faint);background:var(--panel-hi);border:none;border-radius:var(--r-xs);padding:1px 6px}
-  .row.cmsg{display:flex;align-items:flex-start;gap:9px}
-  .row.cmsg .cmsg-body{flex:1;min-width:0}
+  .row.cmsg .cmsg-body{min-width:0}
   .row.cmsg.marked{background:color-mix(in srgb,var(--primary-wash) 60%,transparent)}
   .cbx{flex:none;width:18px;height:18px;margin-top:2px;border:1px solid var(--line-hi);border-radius:var(--r-xs);background:var(--bg);
     color:var(--on-primary);font-size:11px;line-height:1;display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity var(--t-fast),background var(--t-fast)}
@@ -578,16 +573,53 @@
   @media (min-width:821px){ body.mode-client .rd-focus{display:inline-flex} }
   .cab[aria-pressed="true"]{background:var(--sel);color:var(--primary-ink)}
   .rd-pos{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;margin:0 6px}
-  /* the worklist: airy two-line rows, one calm unread spine */
-  body.mode-client .row{padding:13px 16px 14px 19px}
-  body.mode-client .row.i1::before,body.mode-client .row.i2::before,body.mode-client .row.i3::before,body.mode-client .row.i4::before,body.mode-client .row.i5::before{background:transparent}
-  body.mode-client .row.unread::before{background:var(--primary)}
-  body.mode-client .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
-  body.mode-client .r1{font-size:11.5px;color:var(--mute)}
-  body.mode-client .r2sub{font-size:14px;line-height:1.35;-webkit-line-clamp:1;margin-top:4px}
-  body.mode-client .r2sub .sj{color:var(--soft);font-weight:500}
-  body.mode-client .r2sub .sn{color:var(--faint);font-weight:400}
-  body.mode-client .row.unread .r2sub .sj{color:var(--ink);font-weight:600}
+  /* the worklist: rounded rows on the paper. Avatar · sender and time · subject · the AI gist in moss
+     (or the plain preview) · a gold chip when the summary names a next step. No dividers, no spines:
+     unread is a dot, the open message is the wash. Hover shows Archive / Delete / Snooze (keys e d h). */
+  body.mode-client #rows{padding:4px 6px 24px}
+  .row.cmsg{display:grid;grid-template-columns:34px minmax(0,1fr);gap:11px;align-items:start;
+    padding:10px 10px 11px;border:none;border-radius:var(--r-md)}
+  .row.cmsg::before{left:1px;top:24px;width:6px;height:6px;transform:none;border-radius:50%;background:transparent}
+  .row.cmsg.unread::before{background:var(--primary)}
+  .row.cmsg.sel{background:var(--sel)}
+  .row.cmsg.sel::before{height:6px}
+  .row.cmsg.sel:not(.unread)::before{background:transparent}
+  .row.cmsg:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--focus)}
+  .avwrap{position:relative;width:34px;height:34px}
+  .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;letter-spacing:.02em;
+    background:hsl(var(--h) 24% 30%);color:hsl(var(--h) 50% 88%)}
+  body.theme-light .av{background:hsl(var(--h) 40% 86%);color:hsl(var(--h) 40% 25%)}
+  .avwrap .cbx{position:absolute;top:5px;left:5px;width:24px;height:24px;margin:0;border:2px solid var(--mute);border-radius:7px;
+    background:var(--panel);font-size:13px}
+  .avwrap .cbx.on{background:var(--primary);border-color:var(--primary)}
+  .avwrap .cbx:focus-visible{opacity:1}
+  .row.cmsg .r1{font-size:13.5px;gap:6px;color:var(--mute)}
+  .row.cmsg .r1 .from{font-weight:600;color:var(--soft)}
+  .row.cmsg.unread .r1 .from{font-weight:800;color:var(--ink)}
+  .row.cmsg .r1 .when{font-family:var(--font-ui);font-size:12px;padding-left:8px}
+  .row.cmsg.needs .r1 .when{color:var(--gold);font-weight:700}
+  .row.cmsg .r2sub{display:block;margin-top:2px;font-size:14px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.cmsg .r2sub .sj{font-weight:500;color:var(--soft)}
+  .row.cmsg.unread .r2sub .sj{font-weight:700;color:var(--ink)}
+  .row.cmsg .gist{margin-top:4px;font-size:13.5px;line-height:1.45;color:var(--ai);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .row.cmsg .pv{margin-top:3px;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.cmsg .r4{display:flex;gap:6px;margin-top:7px;min-width:0}
+  .rchip{display:inline-block;max-width:100%;padding:3px 9px;border-radius:var(--r-pill);font-size:12px;font-weight:600;
+    background:var(--panel-hi);color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rchip.need{background:var(--gold-wash);color:var(--gold)}
+  .rgrp{padding:14px 10px 6px;font-size:12px;font-weight:700;color:var(--mute)}
+  .rgrp:first-child{padding-top:8px}
+  .racts{display:none}
+  .racts button{width:30px;height:30px;display:grid;place-items:center;border:none;background:none;border-radius:var(--r-sm);
+    color:var(--mute);font-size:14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .racts button:hover{background:var(--panel-hi);color:var(--ink)}
+  .racts .del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+  @media (hover:hover) and (min-width:821px){
+    .row.cmsg:hover .racts{display:flex;position:absolute;right:6px;top:6px;gap:1px;padding:2px 2px 2px 10px;border-radius:var(--r-sm);background:var(--hover)}
+    .row.cmsg.sel:hover .racts{background:var(--sel)}
+    .row.cmsg.marked:hover .racts{background:color-mix(in srgb,var(--primary-wash) 60%,var(--panel))}
+  }
   /* ===== Structural collapse to a single pane (tablet + phone): one pane visible, rail as a drawer ===== */
   @media (max-width:820px){
     .split{grid-template-columns:1fr}
@@ -629,7 +661,7 @@
   }
   /* ===== touch devices (incl. hybrid touch+hover tablets): reveal hover-only affordances ===== */
   @media (hover:none),(pointer:coarse){
-    .row.cmsg .cbx{opacity:1} .fr-arch{opacity:1} .frow .vdel{opacity:1}
+    .fr-arch{opacity:1} .frow .vdel{opacity:1}
   }
   /* ===== row "heal": collapse + fade on removal (archive/trash/junk/mute/snooze/screen-out/feed) ===== */
   @keyframes rowHeal{from{opacity:1}60%{opacity:0}to{opacity:0;transform:translateX(16px)}}
@@ -1765,9 +1797,20 @@ async function loadCMessages(){
     else { const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
   }
 }
+const avHue=a=>{let h=0;for(const c of(a||""))h=(h*31+c.charCodeAt(0))%360;return h;};   // full wheel at low saturation — amber stays the needs-you signal
+function initialsOf(name,addr){
+  const all=/@/.test(name||"")?[]:(String(name||"").match(/\p{L}[\p{L}\p{M}]*/gu)||[]);
+  const caps=all.filter(x=>x[0]!==x[0].toLowerCase()), w=caps.length>=2?caps:all;   // "Library of Ash Hollow" → LA, not LO
+  return (w.length?w.slice(0,2).map(x=>x[0]).join(""):(String(addr||name||"?").match(/\p{L}|\d/u)||["?"])[0]).toUpperCase();
+}
 function rowMarkup(it,sub){const m=state.cmarked.has(it.pk),n=it.count||1;
-  return `<div class="row cmsg${it.seen?"":" unread"}${it.pk===state.csel?" sel":""}${m?" marked":""}" data-pk="${it.pk}"${it.thread_id?` data-tid="${esc(it.thread_id)}"`:""}>
-    <button class="cbx${m?" on":""}" data-mark="${it.pk}" aria-label="select" title="Select (x)">${m?"✓":""}</button>
+  const needs=!!String(it.action||"").trim(), gist=it.bucket==="NOTIF"?"":(it.summary||"");
+  // Archive/Delete act on one message, so a multi-message conversation row offers Snooze only (it snoozes the whole thread)
+  const acts=(n>1?"":`<button data-racts="archive" tabindex="-1" title="Archive (e)" aria-label="Archive">🗄</button><button class="del" data-racts="trash" tabindex="-1" title="Delete (d)" aria-label="Delete">🗑</button>`)
+    +`<button data-racts="snooze" tabindex="-1" title="Snooze (h)" aria-label="Snooze">⏰</button>`;
+  return `<div class="row cmsg${it.seen?"":" unread"}${needs?" needs":""}${it.pk===state.csel?" sel":""}${m?" marked":""}" data-pk="${it.pk}"${it.thread_id?` data-tid="${esc(it.thread_id)}"`:""}>
+    <div class="avwrap"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
+      <button class="cbx${m?" on":""}" data-mark="${it.pk}" aria-label="Select" aria-pressed="${m}" title="Select (x)">${m?"✓":""}</button></div>
     <div class="cmsg-body">
       <div class="r1"><span class="from">${esc(it.from_name)}</span>
         ${n>1?`<span class="thr-count" title="${n} messages">${n}</span>`:""}
@@ -1775,8 +1818,16 @@ function rowMarkup(it,sub){const m=state.cmarked.has(it.pk),n=it.count||1;
         ${it.is_junk?'<span class="tags"><span class="jb">'+esc((it.bucket||"junk").split("/")[0])+'</span></span>':""}
         ${sub?`<span class="acctchip">${esc(sub)}</span>`:""}
         <span class="when">${esc(it.waiting_label||it.when)}</span></div>
-      <div class="r2sub"><span class="sj">${esc(it.subject)}</span> <span class="sn">— ${esc(it.snippet)}</span></div>
-    </div></div>`;}
+      <div class="r2sub">${it.seen?"":'<span class="visually-hidden">Unread. </span>'}<span class="sj">${esc(it.subject)}</span></div>
+      ${gist?`<div class="gist"><span class="visually-hidden">Summary: </span>${esc(gist)}</div>`:`<div class="pv">${esc(it.snippet||"")}</div>`}
+      ${needs?`<div class="r4"><span class="rchip need" title="${esc(it.action)}"><span class="visually-hidden">Next step: </span>${esc(it.action)}</span></div>`:""}
+    </div>
+    <div class="racts">${acts}</div></div>`;}
+function _dayGroup(ts){   // list section for a message time (epoch seconds), by local calendar day
+  const t=new Date(); t.setHours(0,0,0,0); const d=new Date(ts*1000); d.setHours(0,0,0,0);
+  const days=Math.round((t-d)/86400000);
+  return days<=0?"Today":days===1?"Yesterday":days<7?"Past week":"Earlier";
+}
 function renderClientList(){
   if(state.searching){ renderSearchList(); return; }
   const q=state.q.toLowerCase();
@@ -1787,7 +1838,12 @@ function renderClientList(){
   $("#count").textContent=`${v.length}${more} ${noun}${v.length===1&&!more?"":"s"}`;
   renderBulk();
   if(!v.length){ $("#rows").innerHTML='<div class="nores">Nothing here.</div>'; return; }
-  $("#rows").innerHTML=v.map(it=>rowMarkup(it, state.allInbox?(it.alias||short(it.account)):"")).join("")
+  // day sections only for real folders listed newest-first (virtual folders sort by their own clock)
+  const byDay=!(state.folder||"").startsWith("__") && v.every((it,i)=>it.ts && (i===0||v[i-1].ts>=it.ts));
+  let grp="";
+  $("#rows").innerHTML=v.map(it=>{
+    let h=""; if(byDay){ const g=_dayGroup(it.ts); if(g!==grp){ grp=g; h=`<div class="rgrp" role="presentation">${g}</div>`; } }
+    return h+rowMarkup(it, state.allInbox?(it.alias||short(it.account)):""); }).join("")
     +((state.cHasMore&&!q)?'<button class="load-more" data-loadmore="list">Load 200 more</button>':"");
 }
 async function loadMoreClient(){
@@ -4024,7 +4080,7 @@ $("#splitter").addEventListener("keydown",e=>{
   if(w!=null){ e.preventDefault(); applyListW(w,true); }
 });
 $("#splitter").addEventListener("dblclick",()=>applyListW(LIST_W0,true));
-$("#rows").addEventListener("dblclick",e=>{ if(state.mode==="client" && e.target.closest(".row.cmsg") && !e.target.closest("[data-mark]")) setReadFocus(true); });
+$("#rows").addEventListener("dblclick",e=>{ if(state.mode==="client" && e.target.closest(".row.cmsg") && !e.target.closest("[data-mark],[data-racts]")) setReadFocus(true); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); });
 $("#impseg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   $$("#impseg button").forEach(x=>{const on=x===b;x.classList.toggle("on",on);x.setAttribute("aria-checked",on);}); state.min=+b.dataset.min; applyFilters(true);});
@@ -4056,6 +4112,11 @@ $("#rows").addEventListener("click",e=>{
   if(lm){ lm.textContent="Loading…"; (lm.dataset.loadmore==="search"?loadMoreSearch():loadMoreClient()); return; }
   const cb=e.target.closest("[data-mark]");
   if(cb){ cmarkToggle(+cb.dataset.mark); e.stopPropagation(); return; }
+  const ra=e.target.closest("[data-racts]");
+  if(ra){ e.stopPropagation(); const pk=+ra.closest(".row").dataset.pk, it=cfindAny(pk), a=ra.dataset.racts;
+    if(a==="archive")carchive(pk); else if(a==="trash")ctrash(pk);
+    else if(it)openSnoozeMenu(ra, (it.count||1)>1&&it.thread_id?{thread_id:it.thread_id, account:it.account||state.account}:{pk});
+    return; }
   const r=e.target.closest(".row");if(!r)return;
   if(state.mode==="client"){ const it=(state.searching?state.searchItems:state.cmsgs).find(x=>x.pk===+r.dataset.pk); if(it)openConversation(it,false); }
   else select(+r.dataset.pk,false);});
