@@ -96,8 +96,16 @@
   .top .r1{display:flex;align-items:center;gap:12px}
   .brand{font-family:var(--font-display);font-weight:600;font-size:16.5px;color:var(--ink);letter-spacing:-.02em;white-space:nowrap}
   .brand b{color:var(--primary-ink);font-weight:600}
-  .live{font-size:11.5px;color:var(--faint);margin-left:2px;font-variant-numeric:tabular-nums}
-  .live b{color:var(--soft);font-weight:500}
+  /* sync status: one quiet pill; Sync now, Reconcile and Curate live in its popover */
+  .status-pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;margin-right:4px;border:none;
+    border-radius:var(--r-pill);background:var(--bg);color:var(--soft);font:inherit;font-size:12.5px;font-weight:500;
+    white-space:nowrap;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .status-pill:hover,.status-pill[aria-expanded="true"]{background:var(--panel-hi);color:var(--ink)}
+  .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mute)}
+  .sdot.ok{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+  .sdot.busy{background:var(--syncing);animation:sdotPulse 1.4s ease-in-out infinite}
+  .sdot.err{background:var(--err);box-shadow:0 0 0 3px color-mix(in srgb,var(--err) 24%,transparent)}
+  @keyframes sdotPulse{50%{opacity:.35}}
   .search{flex:1;min-width:120px;max-width:560px;background:var(--bg);border:1px solid transparent;border-radius:var(--r-pill);
     color:var(--ink);font-size:13.5px;padding:9px 16px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
   .search::placeholder{color:var(--faint)}
@@ -107,7 +115,6 @@
     font-size:12.5px;font-weight:500;padding:8px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast);
     white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
   .tbtn:hover{background:var(--panel-hi);color:var(--ink)}
-  .tbtn.syncing .ic{animation:spin 1s linear infinite;display:inline-block}
   .tbtn:disabled{opacity:.55;cursor:default}
   #composeBtn{background:var(--primary);color:var(--on-primary);font-weight:600}
   #composeBtn:hover{background:var(--primary-hi);color:var(--on-primary)}
@@ -668,9 +675,10 @@
     .split{height:calc(100dvh - var(--top))}
     .top{padding:8px 12px 0;gap:6px}
     .top .r1{gap:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}   /* toolbar swipes instead of clipping */
-    .brand{font-size:15px} .live{display:none}
+    .brand{font-size:15px}
     .search{flex:1;min-width:140px;font-size:16px}            /* 16px → no iOS focus-zoom */
     .tools{gap:2px} .tbtn{padding:9px 10px;min-height:40px;flex:none}
+    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
     .top .r2{flex-wrap:nowrap;padding-bottom:6px}
     .chips,.monos{flex-wrap:nowrap}
     .reader{padding:16px 14px calc(var(--dock-h) + 28px)}
@@ -934,6 +942,23 @@
   .snooze-menu .snz-custom{display:flex;flex-direction:column;gap:4px;color:var(--soft);font:inherit;font-size:11.5px;padding:8px 13px}
   .snooze-menu .snz-custom input{background:var(--bg);border:1px solid transparent;border-radius:var(--r-xs);color:var(--ink);font:inherit;font-size:12.5px;padding:5px 7px;color-scheme:dark}
   /* Aa — reading settings: column width, plain-text face and size, mail colors */
+  .status-menu{position:fixed;z-index:95;width:320px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line-hi);
+    border-radius:var(--r-md);box-shadow:var(--sh-3);padding:14px 8px 8px;display:flex;flex-direction:column;gap:10px}
+  .status-menu .sm-info{padding:0 8px;display:flex;flex-direction:column;gap:5px}
+  .status-menu .sm-hd{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:700;color:var(--ink)}
+  .status-menu .sm-sub{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .status-menu .sm-sub b{color:var(--soft);font-weight:600}
+  .status-menu .sm-accts{display:flex;flex-direction:column;gap:4px;margin-top:4px;padding-top:8px;border-top:1px solid var(--line)}
+  .status-menu .sm-acct{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--soft)}
+  .status-menu .sm-acct small{margin-left:auto;font-size:11.5px;color:var(--faint)}
+  .status-menu .sm-acct small.err{color:var(--err)}
+  .status-menu .sm-acts{display:flex;flex-direction:column;border-top:1px solid var(--line);padding-top:6px}
+  .status-menu .sm-acts button{background:none;border:none;border-radius:var(--r-sm);text-align:left;color:var(--soft);font:inherit;
+    font-size:13px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px}
+  .status-menu .sm-acts button:hover:not(:disabled),.status-menu .sm-acts button:focus-visible{background:var(--sel);color:var(--ink)}
+  .status-menu .sm-acts button:disabled{opacity:.5;cursor:default}
+  .status-menu .sm-acts small{margin-left:auto;font-size:11px;color:var(--faint)}
+  .status-menu .mi-ic{display:inline-block;width:20px;text-align:center}
   .read-menu{position:fixed;z-index:95;width:300px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line-hi);
     border-radius:var(--r-md);box-shadow:var(--sh-3);padding:14px 16px;display:flex;flex-direction:column;gap:12px}
   .read-menu h3{margin:0;font-size:13.5px;font-weight:700;color:var(--ink)}
@@ -1038,17 +1063,13 @@
   <div class="r1">
     <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="folderrail" aria-expanded="false">☰</button>
     <div class="brand">✉ Mail<b>Mind</b></div>
-    <span class="live" id="live">reading inboxes…</span>
     <input class="search" id="search" placeholder="Ask a question (start with ?) or search — is:unread, from:amazon" aria-label="search">
     <div class="tools">
-      <button class="tbtn" id="composeBtn" title="Compose (c)">✏ Compose</button>
-      <button class="tbtn icon" id="notifyBtn" title="Enable desktop notifications" aria-label="Enable desktop notifications" hidden>🔔</button>
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
-      <button class="tbtn" id="reconBtn" title="Strike deleted mail (r)"><span class="ic">⟲</span> Reconcile</button>
-      <button class="tbtn" id="syncBtn" title="Sync"><span class="ic">↻</span> Sync</button>
-      <button class="tbtn" id="curateBtn" title="Curation (c)">⌗ Curate</button>
-      <button class="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings">⚙</button>
+      <button class="status-pill" id="statusBtn" aria-haspopup="dialog" aria-expanded="false" title="Sync, reconcile and curation"><i class="sdot" aria-hidden="true"></i><span id="statusTxt">Connecting…</span></button>
       <button class="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help">?</button>
+      <button class="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings">⚙</button>
+      <button class="tbtn" id="composeBtn" title="Compose (c)">✏ Compose</button>
     </div>
   </div>
   <div class="r2">
@@ -1249,7 +1270,7 @@ async function loadDigest(silent){
   // sendable identities come from the configured-account list (works even before sync / under NOSYNC)
   state.sendAccounts=(d.send_accounts&&d.send_accounts.length)?d.send_accounts:(d.accounts||[]);
   state.myAddrs=new Set([...(d.send_accounts||[]),...(d.accounts||[])].map(e=>(e||"").toLowerCase()));
-  renderMonos(); renderLive();
+  renderMonos(); renderStatus();
   renderAccountAlert();
   if(!state.account) openMailbox();   // boot, or the first account just arrived
   else renderBrief();                 // the brief's needs-you list reads the digest
@@ -1265,16 +1286,75 @@ function renderAccountAlert(){
   $("#aaFix").onclick=()=>settingsOpen(true);
   $("#aaX").onclick=()=>{ bad.forEach(e=>_alertDismissed.add(e)); renderAccountAlert(); };
 }
-function greetWord(){ const h=new Date().getHours(); return h<5?"Good night":h<12?"Good morning":h<17?"Good afternoon":h<22?"Good evening":"Good night"; }
-function renderLive(){
-  const s=state.stats||{}, live=state.live!=null?state.live.toLocaleString():"—";
-  const sy=state.lastSync; const txt=sy&&sy.running?"syncing…":(sy&&sy.last?"as of "+new Date(sy.last).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"");
-  const todo=(state.all||[]).filter(it=>it.action||it.category==="action-needed"||(it.importance||0)>=4).length;
-  const greet=(state.all&&state.all.length)
-    ? `${greetWord()} — <b>${todo}</b> to-do`
-    : greetWord();
-  $("#live").innerHTML=`${greet} · <b>${live}</b> live · <b>${(s.summarized||0).toLocaleString()}</b> summarized ${txt?"· "+txt:""}`;
+/* ---------- sync status: the pill names the one thing that matters; the popover has the rest ---------- */
+let _manualSync=false, _statusPoll=0, _syncDoneT=0;
+function badAccounts(){ return Object.entries(state.statusMap||{}).filter(([,st])=>st&&st.health==="error").map(([e])=>e); }
+function syncLabel(){
+  const bad=badAccounts(), sy=state.lastSync||{};
+  if(bad.length) return {cls:"err", txt:bad.length===1?`${nameOf(bad[0])} can’t connect`:`${bad.length} accounts can’t connect`};
+  if(reconciling) return {cls:"busy", txt:"Reconciling…"};
+  if(_manualSync||sy.running||Object.values(state.statusMap||{}).some(st=>st&&st.health==="syncing")) return {cls:"busy", txt:"Syncing…"};
+  if(sy.last){ const d=new Date(sy.last), today=d.toDateString()===new Date().toDateString();
+    return {cls:"ok", txt:"Synced "+(today?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):d.toLocaleDateString([],{month:"short",day:"numeric"}))}; }
+  return {cls:"", txt:"Not synced yet"};
 }
+function renderStatus(){
+  const L=syncLabel(), b=$("#statusBtn"); if(!b)return;
+  b.querySelector(".sdot").className="sdot "+L.cls; $("#statusTxt").textContent=L.txt;
+  b.setAttribute("aria-label","Sync status: "+L.txt);
+  const info=$("#statusMenu .sm-info"); if(info)info.innerHTML=statusInfoHtml(L);   // in place: a focused button keeps focus
+  const sb=$('#statusMenu [data-st="sync"]'); if(sb)sb.disabled=L.txt==="Syncing…";
+  const rb=$('#statusMenu [data-st="reconcile"]'); if(rb)rb.disabled=reconciling;
+  watchSync();
+}
+function statusInfoHtml(L){
+  const sy=state.lastSync||{}, s=state.stats||{};
+  const live=state.live!=null?`<b>${state.live.toLocaleString()}</b> in your inboxes`:"counting your inboxes…";
+  const accts=(state.accountsList||[]).map(a=>{ const h=((state.statusMap||{})[a]||{}).health||"";
+    return `<div class="sm-acct"><i class="sdot ${h==="error"?"err":h==="syncing"?"busy":h==="ok"?"ok":""}" aria-hidden="true"></i><span>${esc(nameOf(a))}</span>`
+      +`<small${h==="error"?' class="err"':""}>${h==="error"?"can’t connect":h==="syncing"?"syncing…":h==="ok"?"connected":""}</small></div>`; }).join("");
+  return `<div class="sm-hd"><i class="sdot ${L.cls}" aria-hidden="true"></i>${esc(L.txt)}</div>
+    ${sy.last&&sy.result?`<div class="sm-sub">Last sync: ${esc(sy.result)}</div>`:""}
+    <div class="sm-sub">${live} · <b>${(s.summarized||0).toLocaleString()}</b> summarized</div>
+    ${(state.accountsList||[]).length>1||badAccounts().length?`<div class="sm-accts">${accts}</div>`:""}`;
+}
+function openStatusMenu(){
+  closeStatusMenu(); closeMoreMenu(); closeReadMenu(); closeSnoozeMenu();
+  const anchor=$("#statusBtn"), L=syncLabel();
+  const notify=window.Notification&&Notification.permission==="default";
+  const m=document.createElement("div"); m.className="status-menu"; m.id="statusMenu"; m.setAttribute("role","dialog"); m.setAttribute("aria-label","Sync status");
+  m.innerHTML=`<div class="sm-info">${statusInfoHtml(L)}</div><div class="sm-acts">
+    <button data-st="sync"${L.txt==="Syncing…"?" disabled":""}><span class="mi-ic" aria-hidden="true">↻</span>Sync now</button>
+    <button data-st="reconcile"${reconciling?" disabled":""}><span class="mi-ic" aria-hidden="true">⟲</span>Reconcile<small>drop mail deleted elsewhere</small></button>
+    <button data-st="curate"><span class="mi-ic" aria-hidden="true">⌗</span>Curate<small>noisy senders, rules, audit</small></button>
+    ${badAccounts().length?'<button data-st="settings"><span class="mi-ic" aria-hidden="true">⚙</span>Fix connections in Settings</button>':""}
+    ${notify?'<button data-st="notify"><span class="mi-ic" aria-hidden="true">🔔</span>Turn on desktop notifications</button>':""}</div>`;
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=(r.bottom+6)+"px"; m.style.left=Math.max(10,Math.min(r.right-m.offsetWidth,window.innerWidth-m.offsetWidth-10))+"px";
+  anchor.setAttribute("aria-expanded","true");
+  (m.querySelector(".sm-acts button:not(:disabled)")||m).focus();
+  m.addEventListener("click",e=>{ e.stopPropagation(); const it=e.target.closest("[data-st]"); if(!it||it.disabled)return; const a=it.dataset.st;
+    if(a==="notify"){ Notification.requestPermission().then(()=>toast(Notification.permission==="granted"?"Notifications on":"Notifications blocked")); closeStatusMenu(true); return; }
+    closeStatusMenu();
+    if(a==="sync")sync(); else if(a==="reconcile")reconcile(); else if(a==="curate")openDrawer(true); else if(a==="settings")settingsOpen(true); });
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_statusOutside); },0);   // after the opening click finishes
+  window.addEventListener("blur",_statusBlur);
+  if(state.live==null||!state.liveStats) loadStats();   // the live inbox count is an IMAP scan: only when asked
+}
+function _statusOutside(e){ if(!e.target.closest("#statusMenu"))closeStatusMenu(); }
+function _statusBlur(){ setTimeout(()=>{ if(frameTookFocus())closeStatusMenu(); },0); }
+function closeStatusMenu(refocus){
+  const m=$("#statusMenu"); if(!m)return;
+  m.remove(); document.removeEventListener("click",_statusOutside); window.removeEventListener("blur",_statusBlur);
+  const b=$("#statusBtn"); b.setAttribute("aria-expanded","false"); if(refocus)b.focus();
+}
+function watchSync(){   // while the server syncs, re-read the digest so the pill lands on "Synced" when it ends
+  if(_statusPoll||!(state.lastSync&&state.lastSync.running))return;
+  let n=0; _statusPoll=setInterval(async()=>{ n++; await loadDigest(true);
+    if(!(state.lastSync&&state.lastSync.running)||n>60){ clearInterval(_statusPoll); _statusPoll=0; renderStatus(); } },5000);
+}
+function onSyncDone(){ clearTimeout(_syncDoneT); _syncDoneT=setTimeout(()=>loadDigest(true),1500); }   // one per account → one refresh
 function renderMonos(){
   const allDot=`<div class="mono-dot all-dot${state.allInbox?" on":""}" data-acct="__all__" title="All inboxes">✉</div>`;
   $("#monos").innerHTML=allDot+state.accountsList.map(a=>{
@@ -1317,7 +1397,7 @@ async function refreshStats(){ if(!$("#drawer").classList.contains("open"))retur
   try{ await loadStats(); }catch(e){} }
 async function loadStats(){
   let d; try{ d=await api("/api/stats"); }catch(e){ return; }
-  state.liveStats=d; state.live=d.totals.in_inbox; renderLive();
+  state.liveStats=d; state.live=d.totals.in_inbox; renderStatus();
   $("#railAccounts").innerHTML=d.accounts.map(a=>{
     const total=a.in_inbox||0;
     const segs=d.buckets.map(b=>{const n=(a.by_bucket||{})[b.name]||0;if(!n)return"";return `<i style="width:${total?n/total*100:0}%;background:var(${BVAR[b.name]||"--mute"})" title="${esc(b.name)}:${n}"></i>`;}).join("");
@@ -1425,9 +1505,8 @@ async function cleanupConfirm(){
 
 /* ---------- reconcile ---------- */
 let reconciling=false;
-async function reconcile(){ if(reconciling)return; reconciling=true;
-  const b=$("#reconBtn"); if(b){ b.classList.add("syncing"); b.disabled=true; }   // in-flight feedback
-  const done=()=>{ reconciling=false; if(b){ b.classList.remove("syncing"); b.disabled=false; } };
+async function reconcile(){ if(reconciling)return; reconciling=true; renderStatus();   // in-flight feedback on the pill
+  const done=()=>{ reconciling=false; renderStatus(); };
   try{ const dry=await api("/api/reconcile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account:"all",dry_run:true})});
     if(!dry.total_ghosts){ toast("Nothing to reconcile — the record is straight."); done(); return; }
     toast("Reconciling — striking "+dry.total_ghosts+" ghosts…");
@@ -1437,9 +1516,9 @@ async function reconcile(){ if(reconciling)return; reconciling=true;
   }catch(e){ toast("Reconcile failed"); } done(); }
 
 /* ---------- sync ---------- */
-async function sync(){ const b=$("#syncBtn"); if(b.disabled)return;   // guard: no double-submit / leaked poll loop
-  b.classList.add("syncing"); b.disabled=true; toast("Syncing…");
-  const done=()=>{ b.classList.remove("syncing"); b.disabled=false; };
+async function sync(){ if(_manualSync)return;   // guard: no double-submit / leaked poll loop
+  _manualSync=true; renderStatus(); toast("Syncing…");
+  const done=()=>{ _manualSync=false; };
   try{ await api("/api/refresh",{method:"POST"}); }catch(e){}
   let n=0; const iv=setInterval(async()=>{ n++; let d; try{ d=await api("/api/digest?min=1&account="); }catch(e){ return; }
     if(!(d.sync&&d.sync.running)||n>40){ clearInterval(iv); done(); loadDigest(true); loadStats(); toast("Sync complete"); } },3000); }
@@ -3440,7 +3519,7 @@ function connectEvents(){
     const v=_viewingPk(); if(v!=null && !_draftReady.has(v))draftPeek(v); };   // resurface drafts completed during an SSE outage
   es.onerror=()=>{ state.sseLive=false; };   // EventSource auto-reconnects
   es.addEventListener("new-mail", e=>onNewMail(JSON.parse(e.data)));
-  es.addEventListener("sync-done", ()=>{ $("#syncBtn").classList.remove("syncing"); });
+  es.addEventListener("sync-done", onSyncDone);
   es.addEventListener("snooze-wake", e=>onSnoozeWake(JSON.parse(e.data)));
   es.addEventListener("mute", e=>onMute(JSON.parse(e.data)));
   es.addEventListener("reconcile", e=>onReconcile(JSON.parse(e.data)));   // ghosts pruned server-side → refresh the open list
@@ -3480,13 +3559,6 @@ function onReconcile(d){
   else if(state.account===d.account && state.folder.toUpperCase()==="INBOX"){ loadCMessages(); }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=0; bumpTitle(); } });   // refocus alone ≠ "looked at new mail" (the inbox isn't reloaded) → don't advance the watermark here
-function refreshNotifyBtn(){
-  const b=$("#notifyBtn"); if(!b)return;
-  b.hidden = !(window.Notification && Notification.permission==="default");
-}
-$("#notifyBtn")&&$("#notifyBtn").addEventListener("click",()=>{
-  if(window.Notification) Notification.requestPermission().then(()=>{ refreshNotifyBtn(); toast(Notification.permission==="granted"?"Notifications on":"Notifications blocked"); });
-});
 function onSnoozeWake(d){
   if(d.accounts && d.accounts.includes(state.account)
      && !state.compose && !state.searching && !state.asking && state.cmarked.size===0){ loadCMessages(); }
@@ -3962,14 +4034,14 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
     else if(a==="replylater")doReplyLater(muteTarget()); else if(a==="rldone")doReplyLaterDone(muteTarget());
     else if(a==="edit")editDraft(pk); return; }
 });
-$("#curateBtn").addEventListener("click",()=>openDrawer(!$("#drawer").classList.contains("open")));
+$("#statusBtn").addEventListener("click",e=>{ e.stopPropagation(); if($("#statusMenu"))closeStatusMenu(); else openStatusMenu(); });
 $("#drawerX").addEventListener("click",()=>openDrawer(false));
 $("#scrim").addEventListener("click",()=>{ if(settingsIsOpen())settingsOpen(false); openDrawer(false); closeRail(); });
 $("#settingsBtn").addEventListener("click",()=>settingsOpen(!settingsIsOpen()));
 $("#setClose").addEventListener("click",()=>settingsOpen(false));
 $("#setDone").addEventListener("click",()=>settingsOpen(false));
 $("#setAdd").addEventListener("click",()=>openForm(null));
-$("#reconBtn").addEventListener("click",reconcile); $("#syncBtn").addEventListener("click",sync);
+
 $("#railAccounts").addEventListener("click",e=>{const b=e.target.closest(".sweep");if(b)armSweep(b.dataset.acct);});
 $("#floodList").addEventListener("click",e=>{const r=e.target.closest("[data-flood],[data-flood-go]");if(r)openCleanupPreview(r.dataset.floodGo||r.dataset.flood);});
 $("#keepList").addEventListener("click",rmChip); $("#blockList").addEventListener("click",rmChip);
@@ -4083,6 +4155,10 @@ document.addEventListener("keydown",e=>{
   // ⋯ More open: ↑/↓ move, Esc closes back to ⋯; swallow the rest
   if($("#moreMenu")){ if(e.key==="Escape")closeMoreMenu(true);
     else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ const bs=$$("#moreMenu button"), i=bs.indexOf(document.activeElement); bs[(i+(e.key==="ArrowDown"?1:bs.length-1))%bs.length].focus(); }
+    if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" ")e.preventDefault(); return; }
+  // sync status open: Esc closes back to the pill; ↑/↓ move between its actions; swallow the rest
+  if($("#statusMenu")){ if(e.key==="Escape")closeStatusMenu(true);
+    else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ const bs=$$("#statusMenu .sm-acts button:not(:disabled)"), i=bs.indexOf(document.activeElement); if(bs.length)bs[(i+(e.key==="ArrowDown"?1:bs.length-1))%bs.length].focus(); }
     if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" ")e.preventDefault(); return; }
   // reading settings open: Esc closes back to Aa; Tab/Enter/Space/arrows work its buttons; swallow the rest
   if($("#readMenu")){ if(e.key==="Escape")closeReadMenu(true); if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" "&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
@@ -4270,7 +4346,7 @@ $("#legNoKeys").addEventListener("change",e=>{ state.noKeys=e.target.checked;
 $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
 
 /* ---------- boot ---------- */
-(async()=>{ await loadDigest(false); loadStats(); loadOutbox(); connectEvents(); refreshNotifyBtn();
+(async()=>{ await loadDigest(false); loadStats(); loadOutbox(); connectEvents();
   try{ if(localStorage.getItem("mm_threadview")==="0"){ state.threadView=false; const b=$("#threadToggle"); if(b){b.classList.remove("on");b.textContent="☰ Messages";} } }catch(e){}
   try{ const sc=localStorage.getItem("mm_searchscope"); if(sc)state.searchScope=sc; }catch(e){}
   try{ if(localStorage.getItem("mm_nokeys")==="1"){ state.noKeys=true; const c=$("#legNoKeys"); if(c)c.checked=true; } }catch(e){}
