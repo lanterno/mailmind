@@ -33,8 +33,6 @@
     --gold:#F6CC86; --gold-hi:#FADDA8; --sun:#F2B65A; --gold-wash:#3A3121;
     --ember:#F0957A;
     --ai:#AED6A2; --ai-wash:#1D3229;   /* moss — the AI's voice, never plain chrome */
-    /* importance heat ramp, hot→cold (solid — low tiers must stay visible) */
-    --i5:#FFC94D; --i4:#F58E51; --i3:#C7A878; --i2:#8794AD; --i1:#6C7A96;
     /* categories */
     --keep:#7CC79A; --txn:#6CC2D1; --personal:#F0A8C4; --scam:#FF8577;
     --block:#E48A73; --mkt:#E8A867; --notif:#8EA9DB;
@@ -56,7 +54,6 @@
     --sh-1:0 1px 2px rgba(0,0,0,.35);
     --sh-2:0 4px 16px -4px rgba(0,0,0,.5);
     --sh-3:0 30px 70px -28px rgba(0,0,0,.85);
-    --sh-dock:0 8px 28px -8px rgba(0,0,0,.55),0 0 0 1px var(--line-hi);
     /* motion */
     --ease:cubic-bezier(.22,.8,.3,1); --t-fast:120ms; --t-med:220ms;
     --dock-h:64px;                      /* scrollers under a dock pad by this + 24px */
@@ -66,7 +63,6 @@
     --scrim:rgba(4,8,20,.55);           /* modal backdrop */
     --notif-ink:#0C1620;                /* text on a --notif fill (swipe badge) */
     --mono-s:45%; --mono-l:72%;         /* avatar monogram glyph S/L — flips darker on paper */
-    --rd-imp1:#A3ADC2; --rd-imp2:#99A5BC;  /* reader importance numerals, lifted for AA on --sel */
   }
   /* ═══════ Day — the light Meadow (toggle in ? help or the palette) ═══════
      Same identity on cream paper: the signal colours go DARKER so they read as text,
@@ -77,18 +73,15 @@
     --primary:#2D4B70; --primary-hi:#223A58; --on-primary:#FFFFFF; --primary-ink:#2D4B70; --primary-wash:#E2E9F2; --focus:#2D4B70;
     --gold:#7E4F06; --gold-hi:#5E3A04; --sun:#E3A136; --gold-wash:#FAEDD2;
     --ember:#A3412A; --ai:#37633D; --ai-wash:#E7EFDF;
-    --i5:#B84A14; --i4:#9C6A08; --i3:#746645; --i2:#6C7A8C; --i1:#7E848E;
     --keep:#3B7342; --txn:#7A6A2E; --personal:#8A6D10; --scam:#B3261E; --block:#8E3B1F; --mkt:#A0620F; --notif:#4E6E8E;
     --ok:#3B7342; --err:#A3412A; --on-err:#FFFFFF; --syncing:#8B5E07;
     --sel:#E2E9F2; --hover:#F6F1E6;
     --gold-ink:#2A1A00; --ai-ink:#FFFFFF;
     --raise-hi:#EEE7D8; --scroll-hi:#B7A981; --scrim:rgba(40,56,82,.30); --notif-ink:#FFFFFF;
     --mono-s:60%; --mono-l:32%;
-    --rd-imp1:#5C6472; --rd-imp2:#4E5C6E;
     --sh-1:0 1px 2px rgba(38,64,104,.08);
     --sh-2:0 4px 16px -4px rgba(38,64,104,.16);
     --sh-3:0 28px 60px -28px rgba(30,52,90,.45);
-    --sh-dock:0 8px 28px -8px rgba(38,64,104,.22),0 0 0 1px var(--line-hi);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   [hidden]{display:none!important}   /* author display rules (.acct-alert flex etc.) must never beat the hidden attribute */
@@ -125,13 +118,6 @@
   .seg button{background:none;border:none;border-radius:var(--r-xs);color:var(--mute);font-size:12px;font-weight:500;padding:5px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .seg button:hover{color:var(--soft)}
   .seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:var(--sh-1)}
-  .chips{display:flex;gap:2px;flex-wrap:wrap}
-  .chip{background:none;border:none;border-radius:var(--r-sm);color:var(--mute);white-space:nowrap;
-    font-size:12.5px;font-weight:500;padding:6px 10px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .chip:hover{color:var(--soft);background:var(--panel-hi)}
-  .chip.on{color:var(--ink);background:var(--sel)}
-  .chip.todo.on{color:var(--gold);background:var(--gold-wash)}
-  .sep{width:1px;height:18px;background:var(--line-hi);margin:0 4px}
   .monos{display:flex;margin-left:auto;padding-left:6px}
   .mono-dot{position:relative;width:24px;height:24px;border-radius:50%;border:2px solid var(--bg2);background:var(--sel);
     display:grid;place-items:center;font-size:10.5px;font-weight:600;color:var(--soft);cursor:pointer;
@@ -146,10 +132,6 @@
   .split{display:grid;grid-template-columns:minmax(330px,38%) 1fr;height:calc(100vh - var(--top))}
   .folderrail{display:none}
   /* ---- Mailbox mode ---- */
-  .modeseg{flex:none}
-  body.mode-client .briefing-only{display:none!important}
-  body:not(.mode-client) .client-only{display:none!important}
-  body:not(.mode-client) .client-ctx{display:none}
   .client-ctx{font-size:12px;color:var(--soft)}
   .client-ctx b{color:var(--ink);font-weight:600}
   body.mode-client .folderrail{display:flex;flex-direction:column;gap:1px;overflow-y:auto;padding:10px 8px}
@@ -215,13 +197,13 @@
     .list{overflow-y:auto;background:var(--bg);scrollbar-color:var(--line-hi) transparent}
   .list::-webkit-scrollbar,.reader::-webkit-scrollbar,.drawer::-webkit-scrollbar,
   .feed-river::-webkit-scrollbar,.paper-trail::-webkit-scrollbar,.ask-wrap::-webkit-scrollbar,
-  .fs-scroll::-webkit-scrollbar,.plist::-webkit-scrollbar,.folderrail::-webkit-scrollbar{width:10px}
+  .plist::-webkit-scrollbar,.folderrail::-webkit-scrollbar{width:10px}
   .list::-webkit-scrollbar-thumb,.reader::-webkit-scrollbar-thumb,.drawer::-webkit-scrollbar-thumb,
   .feed-river::-webkit-scrollbar-thumb,.paper-trail::-webkit-scrollbar-thumb,.ask-wrap::-webkit-scrollbar-thumb,
-  .fs-scroll::-webkit-scrollbar-thumb,.plist::-webkit-scrollbar-thumb,.folderrail::-webkit-scrollbar-thumb{
+  .plist::-webkit-scrollbar-thumb,.folderrail::-webkit-scrollbar-thumb{
     background:var(--line-hi);border-radius:var(--r-pill);border:2px solid transparent;background-clip:padding-box}
   .list::-webkit-scrollbar-thumb:hover,.reader::-webkit-scrollbar-thumb:hover,.drawer::-webkit-scrollbar-thumb:hover{background:var(--scroll-hi);border:2px solid transparent;background-clip:padding-box}
-  .reader,.drawer,.feed-river,.paper-trail,.ask-wrap,.fs-scroll,.plist,.folderrail{scrollbar-color:var(--line-hi) transparent}
+  .reader,.drawer,.feed-river,.paper-trail,.ask-wrap,.plist,.folderrail{scrollbar-color:var(--line-hi) transparent}
   .listhead{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
     padding:8px 16px;font-size:11.5px;font-weight:500;color:var(--faint);display:flex;justify-content:space-between;z-index:2;font-variant-numeric:tabular-nums}
   .listhead select{background:none;border:none;color:var(--mute);font:inherit;font-size:11.5px;cursor:pointer}
@@ -234,27 +216,19 @@
   .row:hover{background:var(--hover)}
   .row.sel{background:var(--sel)}
   .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
-  .row.i5::before{background:var(--i5)} .row.i4::before{background:var(--i4)} .row.i3::before{background:var(--i3)}
-  .row.i2::before{background:var(--i2)} .row.i1::before{background:var(--i1)}
-  .row.sel.i5::before,.row.sel.i4::before,.row.sel.i3::before,.row.sel.i2::before,.row.sel.i1::before{background:var(--primary)}
   .r1{display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--mute)}
   .r1 .from{color:var(--soft);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .r1 .acct{color:var(--faint);font-size:11px;flex:none}
   .r1 .when{margin-left:auto;color:var(--faint);font-size:11px;flex:none;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-  .r1 .fl{flex:none;color:var(--gold)}
   .r2sub{margin-top:3px;font-size:13.5px;line-height:1.4;color:var(--ink);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .r2sub .sj{font-weight:500;color:var(--ink)}
   .r2sub .sn{color:var(--mute);font-weight:400}
-  .row.unseen .r1 .from::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--primary);margin-right:6px;vertical-align:middle}
 
   /* ---------- reader ---------- */
   .reader{overflow-y:auto;padding:32px 40px 80px;max-width:860px}
   .reader.empty-pane{display:grid;place-items:center;color:var(--faint);font-size:13.5px;text-align:center;max-width:none}
   .rd-top{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mute);margin-bottom:14px;flex-wrap:wrap}
-  .rd-imp{font-family:var(--font-mono);font-weight:500;font-size:13px;line-height:1;padding:5px 8px;border-radius:var(--r-xs);background:var(--sel)}
-  .rd-imp.i5{color:var(--i5)} .rd-imp.i4{color:var(--i4)} .rd-imp.i3{color:var(--i3)}
-  .rd-imp.i2{color:var(--rd-imp2)} .rd-imp.i1{color:var(--rd-imp1)}   /* low tiers lifted for AA on the --sel pill (ramp tokens stay for the 3px spines) */
   .rd-tag{font-size:11.5px;font-weight:500;padding:4px 10px;background:var(--sel);border:none;border-radius:var(--r-pill);color:var(--soft)}
   .rd-when{margin-left:auto;color:var(--faint);font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
   .rd-subj{font-family:var(--font-display);font-weight:600;font-size:26px;line-height:1.2;letter-spacing:-.02em;color:var(--ink);margin:2px 0 10px}
@@ -281,16 +255,6 @@
   .contact-card .cc-actions button{flex:1;background:var(--sel);border:none;border-radius:var(--r-sm);
     color:var(--soft);font:inherit;font-size:12px;font-weight:500;padding:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .contact-card .cc-actions button:hover{background:var(--raise-hi);color:var(--ink)}
-  .rd-from .vf{color:var(--ok)} .rd-from .uv{color:var(--faint);font-style:italic}
-  .rd-from .bk{width:8px;height:8px;border-radius:50%;display:inline-block}
-  /* the app-wide "AI wrote this" grammar: serif prose + periwinkle rule */
-  .rd-summary{font-family:var(--font-reading);font-size:18px;line-height:1.65;color:var(--ink);
-    border-left:3px solid var(--ai);padding-left:18px}
-  .rd-action{margin-top:20px;background:var(--panel);border:1px solid var(--line-hi);border-left:3px solid var(--sun);border-radius:var(--r-md);
-    padding:14px 16px;font-family:var(--font-reading);font-size:15.5px;line-height:1.5;color:var(--ink);display:flex;gap:12px}
-  .rd-action .lab{font-family:var(--font-ui);font-size:11.5px;font-weight:600;color:var(--gold);flex:none;padding-top:3px}
-  .rd-bar{display:flex;gap:4px;margin-top:26px;flex-wrap:wrap;position:sticky;bottom:12px;width:max-content;max-width:100%;
-    background:var(--panel);border-radius:var(--r-lg);box-shadow:var(--sh-dock);padding:8px}
   .abtn{background:none;border:none;border-radius:var(--r-sm);color:var(--mute);font-size:12.5px;font-weight:500;
     padding:10px 14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast);display:inline-flex;gap:7px;align-items:center}
   .abtn:hover{color:var(--ink);background:var(--panel-hi)}
@@ -302,11 +266,6 @@
   .set-sig{width:100%;background:var(--bg);border:1px solid transparent;border-radius:var(--r-sm);color:var(--ink);
     font:inherit;font-size:13px;padding:9px 11px;resize:vertical;min-height:56px}
   .set-sig:focus{outline:none;border-color:var(--focus)}
-  .abtn.keep:hover{color:var(--keep);background:color-mix(in srgb,var(--keep) 12%,transparent)} .abtn.block:hover{color:var(--block);background:color-mix(in srgb,var(--block) 14%,transparent)}
-  .abtn.trash:hover{color:var(--ember);background:color-mix(in srgb,var(--ember) 12%,transparent)}
-  .rd-meta{margin-top:18px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:12px;line-height:1.7}
-  .rd-meta .dotb{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
-  .kbdhint{margin-top:6px;color:var(--faint);font-size:11px}
 
   .nores{padding:50px 20px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.9}
   .nores b{color:var(--soft)}
@@ -501,7 +460,8 @@
      mm_rail. At <=1100px it becomes a drawer. The splitter sets the list width
      (drag, ←/→, double-click resets; mm_list_w). Focus reading (↵, Esc leaves)
      hides rail and list. The reading measure is set from Aa (mm_read, applyReadWidth).
-     Briefing never gets .mode-client, so none of this reaches it. */
+     <body> always carries .mode-client now that Mailbox is the only view; the prefix stays
+     because these rules depend on its extra specificity over the base rules above. */
   body.mode-client{--gap:8px;--rail-w:64px;--list-w:372px;--measure:760px}
   body.mode-client.rail-wide{--rail-w:224px}
   body.mode-client .split{position:relative;gap:var(--gap);padding:var(--gap);background:var(--bg2)}
@@ -849,17 +809,9 @@
   .ai-card .ai-points{margin:9px 0 0;padding-left:18px;font-size:13.5px;line-height:1.55;color:var(--soft)}
   .ai-card .ai-action{margin-top:9px;font-size:13.5px;color:var(--gold);font-weight:600}
   .ai-card .ai-foot{margin-top:10px;font-size:11.5px;color:var(--faint);display:flex;gap:10px;align-items:center}
-  .ai-card .ai-load,.ai-card .ai-err{font-size:13.5px;color:var(--soft);display:flex;align-items:center;gap:10px}
-  .ai-card .ai-load{color:var(--ai)}
+  .ai-card .ai-err{font-size:13.5px;color:var(--soft);display:flex;align-items:center;gap:10px}
   .ai-rerun{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
   .ai-rerun:hover{color:var(--ai)}
-  .ai-card.today{border-left-color:var(--ai);background:var(--panel)}
-  .ai-card.today .ai-hd{color:var(--ai)}
-  .ai-card.today .ai-load{color:var(--ai)}
-  .today-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
-  .today-chip{background:var(--sel);border:none;border-radius:var(--r-pill);color:var(--soft);
-    font:inherit;font-size:12px;font-weight:500;padding:4px 12px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .today-chip:hover{background:var(--raise-hi);color:var(--ink)}
   .invite-card{border:none;border-left:3px solid var(--keep);background:var(--panel);
     border-radius:var(--r-md);padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh-1)}
   .invite-card .inv-hd{font-size:11px;color:var(--keep);font-weight:600;margin-bottom:5px}
@@ -928,7 +880,6 @@
   .ask-wrap .ai-card{margin:0}
   .ai-card .ai-hd .ask-q{color:var(--faint);font-weight:400;font-style:italic;margin-left:8px}
   .ask-answer{font-family:var(--font-reading);font-size:16.5px;line-height:1.66;color:var(--ink);white-space:pre-wrap;margin:8px 0 4px}
-  .ai-load{display:flex;align-items:center;gap:9px;color:var(--soft);font-size:13.5px;padding:6px 0}
   .ask-err{color:var(--err);font-size:13.5px;display:flex;align-items:center;gap:10px}
   .ask-srcs-hd{font-size:11.5px;font-weight:600;color:var(--faint);margin:2px 2px -2px}
   .ask-srcs-hd.ask-nosrc{color:var(--faint)}   /* "No specific message cited." is information, not decoration */
@@ -1008,115 +959,14 @@
   .new-pill--ai:hover{background:var(--panel);filter:brightness(1.1)}
   .new-pill--ai .np-head{font-size:11px;font-weight:600;color:var(--ai)}
   .new-pill--ai .np-delta{font-family:var(--font-reading);font-size:13.5px;line-height:1.45;color:var(--soft);font-weight:400}
-  /* ───────── Focus Flow — the calm single-stream daily brief (body.focus-on, briefing mode) ───────── */
-  .brief-view{display:none}                       /* the Focus|List toggle (briefing only) */
-  body:not(.mode-client) .brief-view{display:inline-flex}
-  #focusStage{display:none}
-  body.focus-on:not(.mode-client) #list,
-  body.focus-on:not(.mode-client) #reader{display:none}
-  body.focus-on:not(.mode-client) #focusStage{display:block;grid-column:1 / -1}
-  .focus-stage{position:relative;height:100%;overflow:hidden;background:var(--bg)}
-  /* the day's progress: a 3px amber thread across the top of the stage —
-     fills left→right as cards clear; shimmers while any account syncs */
-  .fs-rail{position:absolute;left:0;right:0;top:0;height:3px;background:var(--line);z-index:3}
-  .fs-rail .fill{position:absolute;left:0;top:0;height:100%;border-radius:0 var(--r-pill) var(--r-pill) 0;background:var(--primary);transition:width .5s var(--ease)}
-  body.anysync .fs-rail .fill{animation:railshim 2.2s ease-in-out infinite}
-  @keyframes railshim{0%,100%{opacity:1}50%{opacity:.6}}
-  .fs-scroll{height:100%;overflow-y:auto;overflow-x:hidden;display:flex;justify-content:center;
-    padding-bottom:calc(var(--dock-h) + 96px)}   /* +96: the pill is 2 flex lines (buttons + up-next), and can wrap to 3 */
-  .fs-card{width:100%;max-width:680px;margin:5vh auto 0;height:max-content;background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-xl);
-    box-shadow:var(--sh-2);padding:38px 44px 34px;animation:fsIn .42s var(--ease) both}
-  .fs-card.leave-up{animation:fsUp .28s var(--ease) both} .fs-card.leave-down{animation:fsDown .28s var(--ease) both}
-  @keyframes fsIn{from{opacity:0;transform:translateY(24px) scale(.992)}to{opacity:1;transform:none}}
-  @keyframes fsUp{to{opacity:0;transform:translateY(-30px) scale(.986)}}
-  @keyframes fsDown{to{opacity:0;transform:translateY(30px) scale(.986)}}
-  .fs-kicker{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:500;color:var(--faint);margin-bottom:15px;flex-wrap:wrap}
-  .fs-kicker .who{color:var(--primary-ink);font-weight:600} .fs-kicker .sep{color:var(--line-hi)}
-  .fs-kicker .vf{color:var(--keep)} .fs-kicker .uv{color:var(--syncing);font-style:italic;font-weight:400}
-  .fs-kicker .lane{margin-left:auto;background:var(--sel);border:none;border-radius:var(--r-pill);padding:3px 11px;color:var(--mute);font-size:11px}
-  .fs-subj{font-family:var(--font-display);font-weight:650;font-size:28px;line-height:1.18;letter-spacing:-.02em;color:var(--ink);margin:0 0 18px}
-  /* the AI's voice: serif prose behind a periwinkle rule */
-  .fs-brief{border-left:3px solid var(--ai);padding:2px 0 2px 18px;margin:0 0 24px}
-  .fs-brief .lbl{font-size:11px;font-weight:600;color:var(--ai);margin-bottom:7px}
-  .fs-brief p{margin:0;font-family:var(--font-reading);font-size:17.5px;line-height:1.62;color:var(--soft)}
-  .fs-todo{display:inline-flex;align-items:center;gap:8px;margin-top:13px;font-size:12.5px;font-weight:500;color:var(--gold);background:var(--gold-wash);border:none;border-radius:var(--r-sm);padding:8px 13px}
-  .fs-body-wrap{margin-top:6px}
-  .fs-body-wrap .rd-iframe{width:100%;border:1px solid var(--line-hi);background:var(--panel);color-scheme:light;border-radius:var(--r-md);min-height:80px}
-  .fs-bodyload{font-size:12px;color:var(--faint);padding:10px 0}
-  /* intro card (the AI day-brief narrative) */
-  .fs-intro .eyebrow{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ai);margin-bottom:14px}
-  .fs-intro .narr{font-family:var(--font-reading);font-size:20px;line-height:1.6;color:var(--ink);margin:0 0 26px}
-  .fs-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:26px}
-  .fs-chip{font-size:12.5px;font-weight:500;color:var(--soft);background:var(--sel);border:none;border-radius:var(--r-pill);padding:8px 14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .fs-chip:hover{background:var(--raise-hi);color:var(--ink)} .fs-chip b{color:var(--primary-ink);font-weight:500;margin-left:5px;font-family:var(--font-mono);font-size:11.5px}
-  /* at wide widths the intro becomes narrative + agenda, side by side */
-  @media (min-width:1100px){
-    /* the wide two-column intro only engages when the agenda column actually rendered */
-    .fs-card.fs-intro:has(.fs-chips){max-width:880px;position:relative;padding-right:330px;min-height:340px}
-    .fs-intro .narr{max-width:58ch}
-    .fs-intro .fs-chips{display:flex;flex-direction:column;gap:2px;position:absolute;right:44px;top:96px;width:250px;margin:0;
-      max-height:calc(100% - 140px);overflow-y:auto}
-    .fs-intro .fs-chip{display:flex;justify-content:space-between;align-items:baseline;gap:10px;text-align:left;width:100%;background:none;border-radius:var(--r-sm);padding:9px 12px;border-bottom:1px solid var(--line)}
-    .fs-intro .fs-chip:hover{background:var(--panel-hi)}
-  }
-  /* Tidy line — the AI→action loop (in the brief intro + today card) */
-  .tidy-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 8px;padding:12px 15px;
-    border:none;border-left:3px solid var(--ai);border-radius:var(--r-md);background:var(--bg2);
-    font-size:12.5px;color:var(--soft)}
-  .tidy-line b{color:var(--ink);font-weight:600}
-  .tidy-btn{font-size:12px;font-weight:500;color:var(--mute);background:var(--sel);
-    border:none;border-radius:var(--r-sm);padding:7px 12px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .tidy-btn:hover{background:var(--raise-hi);color:var(--ink)}
-  .tidy-btn.go{margin-left:auto;color:var(--ai);background:color-mix(in srgb,var(--ai) 12%,transparent)}
-  /* ── mobile touch: swipe rows (left=archive, right=snooze) + Focus-card prev/next ── */
+  /* ── mobile touch: swipe rows (left=archive, right=snooze) ── */
   body.mode-client .row.cmsg{touch-action:pan-y}   /* allow vertical scroll; horizontal is the swipe gesture */
   #swipeBadge{position:fixed;z-index:50;display:none;align-items:center;gap:7px;
     font-size:12.5px;font-weight:600;padding:9px 14px;border-radius:var(--r-md);pointer-events:none;height:36px}
   #swipeBadge.show{display:flex}
   #swipeBadge.archive{background:var(--primary);color:var(--on-primary)}
   #swipeBadge.snooze{background:var(--notif);color:var(--notif-ink)}
-  .fs-nav{position:absolute;top:0;bottom:64px;width:46px;z-index:3;display:none;align-items:center;justify-content:center;
-    border:none;background:none;color:var(--faint);font-size:26px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-  .fs-nav.prev{left:0} .fs-nav.next{right:0}
-  @media (hover:none),(pointer:coarse){ body.focus-on:not(.mode-client) .fs-nav{display:flex} }
-  .fs-nav:active{color:var(--primary-ink)}
-  .fs-begin{font-size:13px;font-weight:600;color:var(--on-primary);background:var(--primary);border:none;border-radius:var(--r-md);padding:12px 20px;cursor:pointer;transition:background var(--t-fast)}
-  .fs-begin:hover{background:var(--primary-hi)}
-  /* triage DOCK: the gutter container never intercepts clicks; the inner pill is
-     the opaque elevated surface — content cannot ghost through it by construction */
-  .fs-triage{position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;padding:0 24px 16px;background:none;pointer-events:none}
-  .fs-triage .inner{display:flex;align-items:center;justify-content:center;gap:4px;max-width:760px;width:max-content;flex-wrap:wrap;
-    pointer-events:auto;background:var(--panel);border-radius:var(--r-lg);box-shadow:var(--sh-dock);padding:8px 10px}
-  .fs-triage .inner:empty{display:none}   /* zero state / empty intro: no phantom pill */
-  .fs-act{display:inline-flex;align-items:center;gap:8px;background:none;border:none;border-radius:var(--r-sm);color:var(--soft);
-    font-size:12.5px;font-weight:500;padding:10px 13px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .fs-act:hover{background:var(--panel-hi);color:var(--ink)}
-  .fs-act .ky{font-size:11px;color:var(--faint);background:var(--bg);border:none;border-radius:var(--r-xs);padding:1px 6px;font-family:var(--font-mono)}
-  .fs-act:hover .ky{color:var(--primary-ink)} .fs-act.prim{background:var(--primary);color:var(--on-primary);font-weight:600}
-  .fs-act.prim:hover{background:var(--primary-hi)} .fs-act.prim .ky{background:rgba(0,0,0,.18);color:var(--on-primary)}
-  .fs-act.keep:hover{color:var(--keep);background:color-mix(in srgb,var(--keep) 12%,transparent)} .fs-act.block:hover{color:var(--block);background:color-mix(in srgb,var(--block) 14%,transparent)}
-    .fs-upnext{flex-basis:100%;text-align:center;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;padding:0 8px 4px}
-  .fs-upnext b{color:var(--mute);font-weight:500}
-  /* zero state — the day ends on the AI's color */
-  .fs-zero{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 30px}
-  body.focus-on .fs-zero.show{display:flex;animation:fsIn .5s var(--ease) both}
-  .fs-zero .mark{font-size:36px;color:var(--ai);margin-bottom:10px}
-  .fs-zero h2{font-family:var(--font-display);font-weight:600;font-size:26px;letter-spacing:-.02em;color:var(--ink);margin:0 0 10px}
-  .fs-zero p{font-family:var(--font-reading);font-size:16.5px;color:var(--mute);max-width:430px;line-height:1.6;margin:0;font-style:italic}
-  .fs-zero .recap{margin-top:22px;font-family:var(--font-mono);font-size:12px;color:var(--faint)}
-  /* focus ask overlay */
-  .fs-ask{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;background:var(--scrim);backdrop-filter:blur(4px)}
-  .fs-ask.show{display:flex;animation:fsFade .2s ease both} @keyframes fsFade{from{opacity:0}to{opacity:1}}
-  .fs-ask .panel{max-width:660px;width:100%;margin-top:13vh;padding:0 30px}
-  .fs-ask .q{font-size:12px;color:var(--faint);margin-bottom:14px}
-  .fs-ask .ans{font-family:var(--font-reading);font-size:19px;line-height:1.62;color:var(--ink);animation:fsIn .4s var(--ease) both}
-  .fs-ask .src{margin-top:22px;display:flex;flex-direction:column;gap:9px}
-  .fs-ask .src .lbl{font-size:11px;font-weight:600;color:var(--faint)}
-  .fs-ask .card{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);padding:12px 15px;cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast)}
-  .fs-ask .card:hover{border-color:var(--primary);background:var(--sel)}
-  .fs-ask .card .f{font-size:11px;font-weight:600;color:var(--primary-ink)}
-  .fs-ask .card .s{font-size:14px;color:var(--soft);margin-top:3px}
-  .fs-ask .hint{margin-top:18px;font-size:11.5px;color:var(--faint)}
+  @keyframes fsFade{from{opacity:0}to{opacity:1}}   /* overlays fade in (Do, Commitments, Review, Documents) */
   /* ── Commitments: the AI's extracted to-dos as one checkable agenda ── */
   .commit-overlay{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;background:var(--scrim);backdrop-filter:blur(4px)}
   .commit-overlay.show{display:flex;animation:fsFade .2s ease both}
@@ -1179,13 +1029,6 @@
   .doc-dl{flex:none;color:var(--mute);font-size:16px;padding:2px 6px;border-radius:var(--r-xs);text-decoration:none}
   .doc-dl:hover{background:var(--raise-hi);color:var(--primary-ink)}
   .doc-empty{color:var(--faint);font-size:13px;font-style:italic;padding:24px 4px;text-align:center}
-  @media (max-width:640px){
-    .fs-card{margin-top:2vh;padding:24px 20px 22px;border-radius:var(--r-lg)} .fs-subj{font-size:23px} .fs-intro .narr{font-size:17.5px}
-    .fs-triage{padding:0 10px 10px}
-    .fs-triage .inner{flex-wrap:nowrap;overflow-x:auto;max-width:100%;width:100%;justify-content:flex-start;padding:6px 8px;
-      padding-bottom:max(6px,env(safe-area-inset-bottom))}
-    .fs-act{min-height:44px;flex:none} .fs-upnext{display:none}
-  }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -1198,7 +1041,7 @@
     <span class="live" id="live">reading inboxes…</span>
     <input class="search" id="search" placeholder="Ask a question (start with ?) or search — is:unread, from:amazon" aria-label="search">
     <div class="tools">
-      <button class="tbtn client-only" id="composeBtn" title="Compose (c)">✏ Compose</button>
+      <button class="tbtn" id="composeBtn" title="Compose (c)">✏ Compose</button>
       <button class="tbtn icon" id="notifyBtn" title="Enable desktop notifications" aria-label="Enable desktop notifications" hidden>🔔</button>
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
       <button class="tbtn" id="reconBtn" title="Strike deleted mail (r)"><span class="ic">⟲</span> Reconcile</button>
@@ -1209,19 +1052,6 @@
     </div>
   </div>
   <div class="r2">
-    <div class="seg briefing-only" id="impseg" role="radiogroup" aria-label="importance">
-      <button data-min="1" role="radio">All</button>
-      <button data-min="3" role="radio" class="on" aria-checked="true">≥3</button>
-      <button data-min="4" role="radio">≥4</button>
-      <button data-min="5" role="radio">5</button>
-    </div>
-    <button class="chip todo briefing-only" id="todoBtn" title="needs action / reply">⚡ To-do</button>
-    <span class="sep briefing-only"></span>
-    <div class="chips briefing-only" id="cats"></div>
-    <div class="seg brief-view" id="briefView" role="radiogroup" aria-label="brief layout" title="Focus ⇄ List">
-      <button data-bv="focus" role="radio" class="on" aria-checked="true">✦ Focus</button>
-      <button data-bv="list" role="radio">☰ List</button>
-    </div>
     <span class="client-ctx" id="clientCtx"></span>
     <div class="monos" id="monos"></div>
   </div>
@@ -1231,38 +1061,18 @@
 
 <main class="split">
   <aside class="folderrail" id="folderrail"></aside>
-  <div class="splitter client-only" id="splitter" role="separator" aria-orientation="vertical" aria-controls="list"
+  <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-controls="list"
     aria-label="Message list width" aria-valuemin="300" aria-valuemax="560" aria-valuenow="372" tabindex="0"
     title="Drag to resize · ←/→ · double-click resets"></div>
   <section class="list" id="list" tabindex="0">
     <div class="listhead"><span id="count">—</span>
-      <button class="thread-toggle client-only on" id="threadToggle" title="Group into conversations">💬 Conversations</button>
-      <select id="sort" class="briefing-only"><option value="prio">Priority</option><option value="date">Newest</option></select>
+      <button class="thread-toggle on" id="threadToggle" title="Group into conversations">💬 Conversations</button>
     </div>
     <div class="bulkbar" id="bulkbar" hidden></div>
-    <div class="ai-card today briefing-only" id="todayCard" hidden></div>
     <div id="rows"></div>
   </section>
   <section class="reader empty-pane" id="reader">Select a message to read its summary.</section>
-  <section class="focus-stage briefing-only" id="focusStage" aria-label="daily brief">
-    <div class="fs-rail" aria-hidden="true"><div class="fill" id="fsFill"></div></div>
-    <div class="fs-scroll" id="fsScroll"><article class="fs-card" id="fsCard"></article></div>
-    <div class="fs-zero" id="fsZero">
-      <div class="mark">✦</div><h2>Nothing needs you.</h2>
-      <p>Today's brief is done. The rest of your mail waits in the mailbox whenever you want it. — MailMind</p>
-      <div class="recap" id="fsRecap"></div>
-    </div>
-    <div class="fs-triage" id="fsTriage"><div class="inner" id="fsActs"></div></div>
-    <button class="fs-nav prev" id="fsPrev" aria-label="Previous">‹</button>
-    <button class="fs-nav next" id="fsNext" aria-label="Next">›</button>
-  </section>
 </main>
-<div class="fs-ask" id="fsAsk"><div class="panel">
-  <input id="fsAskIn" placeholder="Ask your inbox…   (Enter)" aria-label="ask your inbox"
-    style="width:100%;background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);color:var(--ink);font-family:var(--font-ui);font-size:15px;padding:13px 16px;outline:none;box-shadow:var(--sh-3)">
-  <div class="q" id="fsAskQ" style="margin-top:16px"></div><div class="ans" id="fsAskA"></div>
-  <div class="src" id="fsAskSrc"></div><div class="hint">Enter to ask · click a source to open it · Esc to close</div>
-</div></div>
 <div class="commit-overlay" id="commitPanel" aria-label="commitments"><div class="commit-panel">
   <div class="commit-hd">⚡ Commitments <span class="n" id="commitN"></span><span class="sub">the AI's to-dos pulled from your mail</span></div>
   <div class="commit-list" id="commitList"></div>
@@ -1397,18 +1207,15 @@
 
 <script>
 "use strict";
-const CATS=[["","All"],["action-needed","⚡ Action"],["work-job","Work"],["finance","Finance"],["calendar","Calendar"],["personal","Personal"],["info","Info"],["other","Other"]];
-const CATLABEL={"action-needed":"Action","work-job":"Work","finance":"Finance","calendar":"Calendar","personal":"Personal","info":"Info","other":"Other"};
 const BVAR={"spam/scam":"--scam","blocked":"--block","newsletters/marketing":"--mkt","automated-notifications":"--notif","receipts/transactional":"--txn","personal/protected":"--keep","other/personal-ish":"--personal"};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const state={all:[],view:[],sel:null,q:"",min:3,account:"",cat:"",todo:false,sort:"prio",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
-  mode:"client",folder:"INBOX",folders:[],cmsgs:[],csel:null,cseq:0,cmarked:new Set(),
+const state={all:[],q:"",account:"",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
+  folder:"INBOX",folders:[],cmsgs:[],csel:null,cseq:0,cmarked:new Set(),
   compose:null,myAddrs:new Set(),outbox:[],failedSend:null,
   threadView:true,thread:null,searching:false,searchItems:[],searchSeq:0,searchScope:"all",sseLive:false,allInbox:false,
   views:[],viewId:null,screener:[],screenerCount:0,replylaterCount:0,
   asking:false,askQuery:"",askAnswer:null,askSeq:0,
-  doSeq:0,_doPlan:null,_doCmd:"",_doArmed:false,_cleanupPlan:null,
-  briefView:"focus",focusIntro:true};
+  doSeq:0,_doPlan:null,_doCmd:"",_doArmed:false,_cleanupPlan:null};
 const nameOf=a=>(state.aliases&&state.aliases[a])||short(a);  // alias-aware display label
 
 const esc=s=>(s==null?"":""+s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1421,7 +1228,7 @@ async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o
   if(!r.ok){ let m="HTTP "+r.status; try{ const j=await r.json(); if(j&&j.error)m=j.error; }catch(e){} throw new Error(m); }
   return r.json();}
 
-/* ---------- load + filter ---------- */
+/* ---------- the digest: AI-scored mail behind the brief, commitments and tidy ---------- */
 async function loadDigest(silent){
   let d; try{ d=await api("/api/digest?min=1&account="); }
   catch(e){ if(!silent&&!state.account){ $("#rows").innerHTML='<div class="nores">Couldn’t reach the server. <button class="ai-rerun" id="dgRetry">Retry</button></div>'; const b=$("#dgRetry"); if(b)b.onclick=()=>loadDigest(false); setTimeout(()=>loadDigest(true),5000); } return; }
@@ -1433,7 +1240,7 @@ async function loadDigest(silent){
       ...(state.searchItems||[]).map(x=>x.pk),
       ...((state.thread&&state.thread.items)||[]).map(x=>x.pk)]);
     if(state.thread&&state.thread.reply_pk!=null)live.add(state.thread.reply_pk);
-    if(state.csel!=null)live.add(state.csel); if(state.sel!=null)live.add(state.sel);
+    if(state.csel!=null)live.add(state.csel);
     [..._draftReady.keys()].forEach(k=>{ if(!live.has(k))_draftReady.delete(k); });
     [..._draftingPks].forEach(k=>{ if(!live.has(k))_draftingPks.delete(k); }); }
   state.aliases=d.aliases||{};
@@ -1442,13 +1249,10 @@ async function loadDigest(silent){
   // sendable identities come from the configured-account list (works even before sync / under NOSYNC)
   state.sendAccounts=(d.send_accounts&&d.send_accounts.length)?d.send_accounts:(d.accounts||[]);
   state.myAddrs=new Set([...(d.send_accounts||[]),...(d.accounts||[])].map(e=>(e||"").toLowerCase()));
-  renderCats(); renderMonos(); renderLive();
+  renderMonos(); renderLive();
   renderAccountAlert();
-  if(state.mode!=="client"){   // Mailbox shares #rows and #reader: the digest only paints them in Briefing (setMode repaints on the way back)
-    applyFilters(silent);
-    loadTodayCard(false);      // fire-and-forget; never blocks the list
-  } else if(!state.account) openMailbox();   // boot, or the first account just arrived
-  else renderBrief();          // the brief's needs-you list reads the digest
+  if(!state.account) openMailbox();   // boot, or the first account just arrived
+  else renderBrief();                 // the brief's needs-you list reads the digest
 }
 let _alertDismissed=new Set();
 function renderAccountAlert(){
@@ -1461,29 +1265,6 @@ function renderAccountAlert(){
   $("#aaFix").onclick=()=>settingsOpen(true);
   $("#aaX").onclick=()=>{ bad.forEach(e=>_alertDismissed.add(e)); renderAccountAlert(); };
 }
-function applyFilters(keepSel){
-  const q=state.q.toLowerCase();
-  let v=state.all.filter(it=>{
-    if(it.importance<state.min) return false;
-    if(state.account && it.account!==state.account) return false;
-    if(state.cat && (it.category||"other")!==state.cat) return false;
-    if(state.todo && !(it.action || it.category==="action-needed" || it.importance>=4)) return false;
-    if(q){ const hay=(it.from_name+" "+it.from_addr+" "+it.subject+" "+it.summary).toLowerCase(); if(!hay.includes(q)) return false; }
-    return true;
-  });
-  if(state.sort==="date") v=v.slice().sort((a,b)=>(b.pk)-(a.pk));
-  state.view=v;
-  renderList();
-  if(focusOn()){                              // the brief drives the focus stage, not the list/reader
-    if(state.focusIntro){ renderFocus(); return; }                  // stay on the intro — just refresh its count/chips
-    if(!v.some(it=>it.pk===state.sel)) state.sel=v.length?v[0].pk:null;   // current card filtered out → advance (or empty → zero)
-    select(state.sel,false);                  // always re-render the card so the rail + up-next match the new view
-    return;
-  }
-  // keep current selection if still visible, else pick the first
-  if(!keepSel || !v.some(it=>it.pk===state.sel)) select(v.length?v[0].pk:null,false);
-  else markSel();
-}
 function greetWord(){ const h=new Date().getHours(); return h<5?"Good night":h<12?"Good morning":h<17?"Good afternoon":h<22?"Good evening":"Good night"; }
 function renderLive(){
   const s=state.stats||{}, live=state.live!=null?state.live.toLocaleString():"—";
@@ -1494,115 +1275,26 @@ function renderLive(){
     : greetWord();
   $("#live").innerHTML=`${greet} · <b>${live}</b> live · <b>${(s.summarized||0).toLocaleString()}</b> summarized ${txt?"· "+txt:""}`;
 }
-function renderCats(){
-  const counts={}; state.all.forEach(it=>{const c=it.category||"other";counts[c]=(counts[c]||0)+1;});
-  $("#cats").innerHTML=CATS.map(([v,l])=>{
-    const n=v?counts[v]:state.all.length; if(v && !n) return "";
-    return `<button class="chip${state.cat===v?" on":""}" data-cat="${v}">${l}${v?` <span style="color:var(--faint)">${n}</span>`:""}</button>`;
-  }).join("");
-}
 function renderMonos(){
-  const allDot=state.mode==="client"
-    ? `<div class="mono-dot all-dot${state.allInbox?" on":""}" data-acct="__all__" title="All inboxes">✉</div>` : "";
+  const allDot=`<div class="mono-dot all-dot${state.allInbox?" on":""}" data-acct="__all__" title="All inboxes">✉</div>`;
   $("#monos").innerHTML=allDot+state.accountsList.map(a=>{
     const st=(state.statusMap&&state.statusMap[a])?state.statusMap[a].health:"";
     const label=nameOf(a), tip=(state.aliases&&state.aliases[a])?label+" — "+a:a;
     const on=state.account===a&&!state.allInbox;
     return `<div class="mono-dot ${st}${on?" on":""}" data-acct="${esc(a)}" title="${esc(tip)}" style="color:hsl(${hue(a)} var(--mono-s) var(--mono-l))">${esc((label[0]||"?").toUpperCase())}<span class="led"></span></div>`;
   }).join("");
-  document.body.classList.toggle("anysync", state.accountsList.some(a=>((state.statusMap||{})[a]||{}).health==="syncing"));   /* shimmer the progress rail while any account syncs */
 }
 
 /* ---------- list ---------- */
-function renderList(){
-  const rows=$("#rows");
-  $("#count").textContent=`${state.view.length} message${state.view.length===1?"":"s"}`;
-  if(!state.view.length){
-    if((state.accountsList||[]).length===0){   // first run — no accounts connected yet
-      rows.innerHTML=`<div class="nores firstrun"><div class="fr-h">Welcome to MailMind</div>
-        <div class="fr-b">No email accounts connected yet.</div>
-        <button class="abtn prim" id="frConnect">+ Connect your first account</button></div>`;
-      const b=$("#frConnect"); if(b)b.addEventListener("click",()=>settingsOpen(true)); return;
-    }
-    const syncing=state.lastSync&&state.lastSync.running;
-    if(syncing)
-      rows.innerHTML='<div class="nores"><span class="spin">↻</span> Reading your inbox for the first time… this can take a minute.</div>';
-    else if(state.all.length)   // there IS mail loaded — a filter/search is just hiding it
-      rows.innerHTML='<div class="nores">Nothing matches.<br><b>Clear a filter or search.</b></div>';
-    else if(state.stats.needs)
-      rows.innerHTML='<div class="nores"><span class="spin">↻</span> Summarizing '+state.stats.needs+' more…</div>';
-    else                        // genuinely nothing important demands attention → celebrate it
-      rows.innerHTML='<div class="nores allclear"><div class="ac-h">✦ You’re all caught up</div><div class="ac-b">Nothing needs you right now. Switch to Mailbox to browse everything, or enjoy the quiet.</div></div>';
-    return;
-  }
-  rows.innerHTML=state.view.map(it=>{
-    const lvl=Math.max(1,Math.min(5,it.importance||1));
-    return `<div class="row i${lvl}${it.pk===state.sel?" sel":""}" data-pk="${it.pk}">
-      <div class="r1"><span class="from">${esc(it.from_name)}</span><span class="acct">${esc(nameOf(it.account))}</span>
-        ${it.action||it.category==="action-needed"?'<span class="fl">⚡</span>':""}<span class="when">${esc(it.when)}</span></div>
-      <div class="r2sub"><span class="sj">${esc(it.subject)}</span> <span class="sn">— ${esc(it.summary)}</span></div></div>`;
-  }).join("");
-}
-function markSel(){ $$(".row").forEach(r=>r.classList.toggle("sel",+r.dataset.pk===state.sel)); }
 
 /* ---------- reader ---------- */
-function select(pk,scroll){
-  state.sel=pk; markSel();
-  if(focusOn()){ if(pk!=null) state.focusIntro=false; renderFocus(); return; }   // brief drives #focusStage, not #reader
-  const it=state.all.find(x=>x.pk===pk);
-  const rd=$("#reader");
-  if(!it){ rd.className="reader empty-pane"; rd.textContent="Select a message to read its summary."; return; }
-  document.body.classList.add("reading");
-  const lvl=Math.max(1,Math.min(5,it.importance||1));
-  const bv=BVAR[it.bucket]||"--mute";
-  const verified=it.verified?`<span class="vf">✓ verified live</span>`:(it.last_seen?`<span class="uv">last seen ${esc(it.last_seen)}</span>`:`<span class="uv">unverified</span>`);
-  rd.className="reader";
-  rd.innerHTML=`
-    <div class="rd-top"><span class="rd-imp i${lvl}">${lvl}</span><span class="rd-tag">${esc(CATLABEL[it.category]||it.category||"—")}</span>
-      <span class="rd-when">${esc(it.when)}</span></div>
-    <div class="rd-subj">${esc(it.subject)}</div>
-    <div class="rd-from"><span class="bk" style="background:var(${bv})"></span><span class="nm">${esc(it.from_name)}</span>
-      <span class="ad">${esc(it.from_addr)}</span>·<span>${esc(nameOf(it.account))}</span>·${verified}</div>
-    <div class="rd-summary">${esc(it.summary)}</div>
-    ${it.action?`<div class="rd-action"><span class="lab">To&nbsp;do</span><span>${esc(it.action)}</span></div>`:""}
-    <div class="rd-bar">
-      ${(typeof it.link==="string"&&/^https:\/\//.test(it.link))?`<button class="abtn prim" data-a="open">Open original ↗</button>`:""}
-      <button class="abtn keep" data-a="keep">Keep</button>
-      <button class="abtn block" data-a="block">Block sender</button>
-      <button class="abtn trash" data-a="trash">Trash</button>
-    </div>
-    <div class="rd-meta"><span class="dotb" style="background:var(${bv})"></span>${esc(it.bucket||"—")}${it.confidence?` · ${esc(it.confidence)} confidence`:""}${it.reason?` · ${esc(it.reason)}`:""}
-      <div class="kbdhint">j/k to move · e trash · y keep · b block · o open</div></div>`;
-  rd.scrollTop=0;
-  if(scroll){const r=$(`.row[data-pk="${pk}"]`); if(r)r.scrollIntoView({block:"nearest"});}
-}
-function move(dir){
-  if(!state.view.length)return;
-  let i=state.view.findIndex(x=>x.pk===state.sel);
-  i=i<0?0:Math.max(0,Math.min(state.view.length-1,i+dir));
-  select(state.view[i].pk,true);
-}
 
 /* ---------- actions ---------- */
-function curItem(){ return state.all.find(x=>x.pk===state.sel); }
 function afterRemove(pk){
   state.all=state.all.filter(x=>x.pk!==pk);
   _draftReady.delete(pk); _draftingPks.delete(pk);   // acted on → drop any pre-draft state (no stale chip / grow)
-  if(state.mode==="client"){ if(cfindAny(pk))cRemove(pk); renderBrief(); return; }   // Mailbox shares #rows/#reader: heal its lists, never paint Briefing's
-  const idx=state.view.findIndex(x=>x.pk===pk);
-  state.view=state.view.filter(x=>x.pk!==pk);
-  renderList(); renderCats();
-  const nxt=state.view[Math.min(idx,state.view.length-1)];
-  select(nxt?nxt.pk:null,true);
+  if(cfindAny(pk))cRemove(pk); renderBrief();
 }
-async function trash(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)return;
-  try{ const r=await api("/api/trash",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pk})});
-    if(r.ok){ afterRemove(pk); toast("Trashed · recoverable in the mailbox"); if(r.undoable)showUndoFloat("Trashed"); refreshStats(); } else toast("Couldn’t trash: "+r.msg);
-  }catch(e){ toast("Trash failed"); } }
-async function keepIt(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)return; const dom=(it.from_addr||"").split("@")[1]; if(!dom)return toast("No domain");
-  await postRule(dom,"keep",pk); toast("Always keep "+dom); }
-async function blockIt(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)return; const dom=(it.from_addr||"").split("@")[1]; if(!dom)return toast("No sender");
-  const r=await postRule(dom,"block",pk); afterRemove(pk); toast("Blocked "+dom+(r&&r.trashed?" · trashed":"")); }
 // Brief/summary ARCHIVE — the everyday "I'm done, file it" verb (reversible). `e` means archive in BOTH
 // the Brief and the Mailbox now (was: e=trash in the Brief — a dangerous mode-dependent meaning).
 async function archiveSel(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)return;
@@ -1611,7 +1303,6 @@ async function archiveSel(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)ret
     else toast("Couldn’t archive: "+(r.msg||r.error||"")); }
   catch(e){ toast("Archive failed"); } }
 // importance filter (1-5) — keeps aria-checked in sync (the keyboard path used to desync it from the radios)
-function setImpMin(k){ state.min=+k; $$("#impseg button").forEach(x=>{const on=+x.dataset.min===state.min; x.classList.toggle("on",on); x.setAttribute("aria-checked",on);}); applyFilters(true); }
 function openIt(pk){ const it=state.all.find(x=>x.pk===pk); if(it&&typeof it.link==="string"&&/^https:\/\//.test(it.link)) window.open(it.link,"_blank","noopener"); }
 async function postRule(token,verdict,pk){ try{ const d=await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,verdict,pk})}); loadRules(); refreshStats(); return d; }catch(e){ toast("Rule failed"); } }
 
@@ -1729,7 +1420,7 @@ async function cleanupConfirm(){
   toast(`Blocked · swept ${d.swept}${extra?" · "+extra:""}`);
   showUndoFloat(`Cleaned up ${p.from_addr} — Undo (z)`);
   loadFloodSenders(); loadStats(); loadRules(); loadAudit();
-  if(state.mode==="client"&&!state.searching)loadCMessages();
+  if(!state.searching)loadCMessages();
 }
 
 /* ---------- reconcile ---------- */
@@ -1773,7 +1464,7 @@ function firstRun(){   // nothing connected yet: say so, and offer the way in (l
   const r=$("#reader"); r.className="reader empty-pane"; r.textContent="Your mail shows up here once an account is connected.";
 }
 async function loadFolders(refreshOnly){
-  if(!state.account)return;   // no account selected (e.g. snooze/mute fired from Briefing) → /api/folders?account= would 500
+  if(!state.account)return;   // no account yet (first run) → /api/folders?account= would 500
   // refreshOnly = update rail counts + re-render WITHOUT reloading the message list (used by
   // background SSE ticks so they never yank the reader / clear a selection / disrupt a search).
   const seq=++state.cseq, acct=state.account;
@@ -2121,7 +1812,6 @@ function setTheme(light){
   if(!localStorage.getItem("mm_mailtheme")){
     if(state.thread) openThread(state.thread.thread_id, state.thread.reply_pk||state.csel, false, state.thread.account);
     else if(state.csel!=null && document.body.classList.contains("reading")) openClientMsg(state.csel,false);
-    else if(focusOn() && !state.focusIntro) renderFocus();
   }
 }
 function toggleTheme(){ const light=!themeIsLight(); setTheme(light); toast(light?"☀ Paper theme":"☾ Night theme"); }
@@ -2761,12 +2451,12 @@ function clearReader(){ if(briefHere()){ showBrief(false); return; }
 /* ═══════════ Today's brief, in the Mailbox reading pane ═══════════
    The Inbox (and All inboxes) opens on the brief instead of its first message, which would also
    start that message's read timer. A pinned row heads the list to come back to it, and k from the
-   first message does too. Built from what Briefing already has: the digest (state.all) for what
-   needs you, and the /api/briefing narrative, fetched once and cached the way Briefing does. */
+   first message does too. Built from the digest (state.all) for what needs you, and the
+   /api/briefing narrative, which the server computes once and caches. */
 let _briefErr=null, _briefAsked=false;
-function briefHere(){ return state.mode==="client" && !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
+function briefHere(){ return !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
 function briefOpen(){ return $("#reader").classList.contains("brief-pane"); }
-function needsYou(){   // Briefing's to-do test: a next step, an action-needed category, or importance 4+
+function needsYou(){   // the to-do test: a next step, an action-needed category, or importance 4+
   return (state.all||[]).filter(it=>String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4)
     .sort((a,b)=>(b.importance||0)-(a.importance||0)||b.pk-a.pk);
 }
@@ -2780,7 +2470,7 @@ function showBrief(open){   // open: asked for (the row, k, ⌘K), so a phone mo
   state.csel=null; state.thread=null; clearTimeout(_seenTimer);
   $$(".row.cmsg.sel").forEach(r=>r.classList.remove("sel"));
   document.body.classList.toggle("reading", !!open);
-  if(!_briefData && !_todayInflight && !_briefAsked){ _briefAsked=true; loadTodayCard(false); }
+  if(!_briefData && !_todayInflight && !_briefAsked){ _briefAsked=true; loadBrief(false); }
   renderBrief(true);
   const b=$("#rows .brief-row"); if(b)b.classList.add("sel");
 }
@@ -2832,7 +2522,7 @@ function briefAct(a){
   else if(a==="tidy") doTidy();
   else if(a==="commits") openCommitments();
   else if(a==="week") openReview();
-  else if(a==="refresh"||a==="retry"){ loadTodayCard(a==="refresh"); renderBrief(); }
+  else if(a==="refresh"||a==="retry"){ loadBrief(a==="refresh"); renderBrief(); }
   else if(a.startsWith("__")) selectFolder(a);
 }
 /* Lists the digest answers rather than a folder holds: Needs you, a topic from the brief, mail that
@@ -3106,10 +2796,10 @@ async function composeSend(sendAfter){
     if(scheduled){ showSendFloat("sent","🕐 Scheduled · "+fmtWhen(sendAfter)); setTimeout(hideSendFloat,2600); }
     else startUndoCountdown(r.outbox_id, snap, r.recipients);   // grace window with Undo
     if(replyPk){ const it=cfind(replyPk); if(it)it.answered=1; _draftReady.delete(replyPk); _draftingPks.delete(replyPk);
-      renderDraftChip(replyPk);   // repaint the on-screen chip to plain Reply — the sent draft must not be re-offered
+      updateReaderDraftChip(replyPk);   // repaint the on-screen chip to plain Reply — the sent draft must not be re-offered
       renderClientList(); }
     loadOutbox();
-    if(state.mode==="client"&&state.account===payload.account&&/sent/i.test(state.folder)) loadCMessages();
+    if(state.account===payload.account&&/sent/i.test(state.folder)) loadCMessages();
   }catch(e){
     state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
       body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments};
@@ -3215,12 +2905,10 @@ async function undo(){
   hideUndoFloat();
   if(!d||!d.ok){ toast((d&&d.error)||"Couldn’t undo"); announce&&announce("Undo failed"); }
   else { toast((d.label||"Action")+" undone"); announce&&announce((d.label||"Action")+" undone"); }
-  if(state.mode==="client"){            // refresh whichever client view shows the restored item
-    if(state.allInbox)loadAllInboxes();
-    else if(state.searching)runSearch();
-    else loadCMessages();
-    loadFolders&&loadFolders();
-  } else { loadDigest&&loadDigest(true); }
+  if(state.allInbox)loadAllInboxes();   // refresh whichever view shows the restored item
+  else if(state.searching)runSearch();
+  else loadCMessages();
+  loadFolders&&loadFolders();
 }
 let _undoIv=null;
 function startUndoCountdown(oid, snap, rcpts){
@@ -3333,87 +3021,17 @@ function renderAiCard(d){
     <div class="ai-foot">${d.message_count||1} msg · ${esc(d.model||"")} <button class="ai-rerun" data-airerun>↻ re-run</button></div>`;
 }
 
-/* ---------- the synthesized "Today" briefing card ---------- */
-let _todayInflight=false, _todayGroups=[];
-async function loadTodayCard(force){
-  const el=$("#todayCard"); if(!el)return;
+/* ---------- today's brief: the AI narrative and topic groups, computed once and cached server-side ---------- */
+let _todayInflight=false, _briefData=null;
+async function loadBrief(force){   // force: write it again from the mail as it is now (runs the AI)
   if(_todayInflight && !force)return;            // re-entry guard: never fork two claude calls
   _todayInflight=true;
-  if(force||el.hidden){ el.hidden=false; el.innerHTML='<div class="ai-load"><span class="spin">✦</span> Reading your inbox…</div>'; }
   try{
-    let d;
-    if(force) d=await cpost("/api/briefing/refresh",{});   // CSRF+Origin via cpost
-    else d=await api("/api/briefing");
-    if(!d||!d.ok){ _briefErr=(d&&d.error)||"no answer"; el.innerHTML=`<div class="ai-err">Briefing unavailable${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-todayrerun>Try again</button></div>`; return; }
-    _briefErr=null;
-    if(!d.narrative && !(d.groups||[]).length){ el.hidden=true; return; }   // nothing to show
-    renderTodayCard(d);
-  }catch(e){ _briefErr="couldn’t reach the server"; el.innerHTML=`<div class="ai-err">Couldn’t load today’s briefing. <button class="ai-rerun" data-todayrerun>Retry</button></div>`; }
+    const d=force ? await cpost("/api/briefing/refresh",{}) : await api("/api/briefing");   // CSRF+Origin via cpost
+    if(!d||!d.ok){ _briefErr=(d&&d.error)||"no answer"; return; }
+    _briefErr=null; _briefData=d;
+  }catch(e){ _briefErr="couldn’t reach the server"; }
   finally{ _todayInflight=false; renderBrief(); }
-}
-function renderTodayCard(d){
-  _briefData=d;
-  if(focusOn() && state.focusIntro) renderFocus();   // the brief just arrived — paint the intro narrative
-  const el=$("#todayCard"); if(!el)return; el.hidden=false;
-  _todayGroups=d.groups||[];
-  const chips=_todayGroups.map((g,i)=>`<button class="today-chip" data-grp="${i}">${esc(g.label)} <span style="color:var(--faint)">${g.count}</span></button>`).join("");
-  el.innerHTML=`<div class="ai-hd">✦ Today${d.cached?' <span class="ai-cached">cached</span>':""}${d.stale?' <span class="ai-stale">mail changed — <button class="ai-rerun" data-todayrerun>refresh</button></span>':""}</div>
-    <div class="ai-tldr">${esc(d.narrative||"")}</div>
-    ${chips?`<div class="today-chips">${chips}</div>`:""}${commitLineHTML()}${reviewLineHTML()}${tidyLineHTML()}
-    <div class="ai-foot">${esc(d.model||"")} <button class="ai-rerun" data-todayrerun>↻ refresh</button></div>`;
-}
-function applyGroupFilter(i){
-  const g=_todayGroups[i]; if(!g||!g.pks)return;
-  // Render EXACTLY this group's items as a transient view — honest count, handles every label.
-  // It touches no sticky filter (min/cat/todo/q), so the next manual filter rebuilds via applyFilters.
-  const set=new Set(g.pks);
-  state.view=state.all.filter(it=>set.has(it.pk));
-  renderList();
-  $("#count").textContent=`${g.label} · ${state.view.length}`;
-  state.focusIntro=false;   // a chip dives into the stream
-  select(state.view.length?state.view[0].pk:null,false);
-  announce&&announce(g.label+" — "+state.view.length+" item"+(state.view.length===1?"":"s"));
-}
-
-/* ═══════════ Focus Flow — the calm single-stream daily brief ═══════════
-   Reuses the real digest (state.view), the real briefing (_briefData/_todayGroups),
-   and the real actions (trash/keepIt/blockIt/openIt/replyTo/snooze) — just a different skin.
-   Gated by body.focus-on, only meaningful in briefing mode. Mailbox is untouched. */
-let _briefData=null, _fsBodyTok=0;
-function focusOn(){ return state.mode!=="client" && state.briefView==="focus"; }
-function applyBriefView(v,fromInit){
-  state.briefView=(v==="list")?"list":"focus";
-  try{ localStorage.setItem("mm_brief_view",state.briefView); }catch(e){}
-  $$("#briefView button").forEach(b=>{ const on=b.dataset.bv===state.briefView; b.classList.toggle("on",on); b.setAttribute("aria-checked",on); });
-  document.body.classList.toggle("focus-on", focusOn());
-  if(focusOn()){
-    // entering the brief lands on the intro (the AI narrative); a real selection drops it
-    if(state.focusIntro===undefined || state.sel==null) state.focusIntro=true;
-    renderFocus();
-  } else { closeFsAsk(); if(!fromInit) select(state.sel,true); }   // hand control back to the list/reader
-}
-function renderFocus(){
-  if(!focusOn())return;
-  const card=$("#fsCard"), zero=$("#fsZero"); if(!card)return;
-  _fsBodyTok++;            // any state change invalidates an in-flight body fetch (intro/zero have no #fsBody to catch it)
-  if(state.focusIntro){ zero.classList.remove("show"); renderFocusIntro(); return; }
-  const it=curItem();
-  if(!it){ card.innerHTML=""; zero.classList.add("show"); $("#fsActs").innerHTML=""; setFsFill(1); return; }
-  zero.classList.remove("show"); renderFocusCard(it);
-}
-function renderFocusIntro(){
-  const card=$("#fsCard"); const n=state.view.length;
-  const narr = _briefData&&_briefData.narrative ? esc(_briefData.narrative)
-             : (_todayInflight ? '<span class="fs-bodyload">✦ Reading your inbox…</span>' : "Here's what's waiting for you today.");
-  const chips=(_briefData&&(_briefData.groups||[]).length)
-    ? `<div class="fs-chips">${_briefData.groups.map((g,i)=>`<button class="fs-chip" data-grp="${i}">${esc(g.label)}<b>${g.count|0}</b></button>`).join("")}</div>` : "";
-  card.className="fs-card fs-intro"; card.scrollTop=0;
-  card.innerHTML=`<div class="eyebrow">✦ Your brief</div>
-    <p class="narr">${narr}</p>${chips}${commitLineHTML()}${reviewLineHTML()}${tidyLineHTML()}
-    <button class="fs-begin" data-fsbegin>${n?`Begin · ${n} need${n===1?"s":""} you ↓`:"Nothing needs you — you're clear ✦"}</button>`;
-  setFsFill(0);
-  $("#fsActs").innerHTML = n?`<button class="fs-act prim" data-fsact="begin">Begin <span class="ky">j</span></button>
-    <span class="fs-upnext"><b>${n}</b> in today's brief</span>`:"";
 }
 /* ── Tidy: close the AI→action loop. The AI already scored every message; let it do triage work.
    Conservative + reversible: only low-importance INFO/OTHER noise (no to-do, never newsletters — those
@@ -3422,61 +3040,19 @@ function tidyCandidates(){
   return (state.all||[]).filter(it=> (it.importance||1)<=2 && !it.action
     && it.category!=="action-needed" && (it.category==="info" || it.category==="other"));
 }
-function tidyLineHTML(){
-  const n=tidyCandidates().length; if(!n)return "";
-  return `<div class="tidy-line"><span>✦ <b>${n}</b> low-priority message${n>1?"s":""} the AI flags as filable</span>
-    <button class="tidy-btn" data-tidy="review">Review</button>
-    <button class="tidy-btn go" data-tidy="go">Tidy to Archive →</button></div>`;
-}
-function tidyReview(){
-  const set=new Set(tidyCandidates().map(c=>c.pk)); if(!set.size)return;
-  state.view=(state.all||[]).filter(it=>set.has(it.pk)); renderList();
-  const c=$("#count"); if(c)c.textContent=`tidy · ${state.view.length}`;
-  state.focusIntro=false; select(state.view.length?state.view[0].pk:null,false);
-  announce&&announce(`Reviewing ${state.view.length} filable message${state.view.length===1?"":"s"}`);
-}
 async function doTidy(){
   const cands=tidyCandidates(); if(!cands.length)return;
   if(!confirm(`File ${cands.length} low-priority message${cands.length>1?"s":""} to Archive?\nThey stay searchable and you can undo with z.`)) return;
   const grp=(typeof undoGroup==="function")?undoGroup():undefined;
   const pkset=new Set(cands.map(c=>c.pk));
   state.all=(state.all||[]).filter(x=>!pkset.has(x.pk));        // optimistic remove + re-render
-  if(state.mode==="client"){
-    state.cmsgs=state.cmsgs.filter(x=>!pkset.has(x.pk)); state.searchItems=(state.searchItems||[]).filter(x=>!pkset.has(x.pk));
-    if(pkset.has(state.csel))clearReader();
-    renderClientList(); renderBrief();
-  } else {
-    state.view=(state.view||[]).filter(x=>!pkset.has(x.pk));
-    renderList(); renderCats&&renderCats();
-    if(focusOn()){ state.focusIntro=true; renderFocus(); } else select(state.view[0]?state.view[0].pk:null,true);
-  }
+  state.cmsgs=state.cmsgs.filter(x=>!pkset.has(x.pk)); state.searchItems=(state.searchItems||[]).filter(x=>!pkset.has(x.pk));
+  if(pkset.has(state.csel))clearReader();
+  renderClientList(); renderBrief();
   let ok=0;
   for(const c of cands){ try{ const r=await cpost("/api/archive",grp?{pk:c.pk,undo_group:grp}:{pk:c.pk}); if(r&&r.ok)ok++; }catch(e){} }
   toast(`Filed ${ok} to Archive`); if(ok)showUndoFloat(`Filed ${ok}`);
   refreshStats&&refreshStats(); loadFolders&&loadFolders();
-}
-function renderFocusCard(it){
-  const card=$("#fsCard");
-  const lvl=Math.max(1,Math.min(5,it.importance||1));
-  const verified=it.verified?`<span class="vf">✓ live</span>`:(it.last_seen?`<span class="uv">seen ${esc(it.last_seen)}</span>`:`<span class="uv">unverified</span>`);
-  const lane=esc(CATLABEL[it.category]||it.category||"—");
-  card.className="fs-card"; card.scrollTop=0;
-  card.innerHTML=`
-    <div class="fs-kicker"><span class="who">${esc(it.from_name||it.from_addr||"—")}</span>
-      <span class="sep">·</span><span>${esc(nameOf(it.account))}</span>
-      <span class="sep">·</span><span>${esc(it.when||"")}</span>
-      <span class="sep">·</span>${verified}
-      <span class="lane">${lane} · p${lvl}</span></div>
-    <h1 class="fs-subj">${esc(it.subject||"(no subject)")}</h1>
-    <div class="fs-brief"><div class="lbl">✦ Brief</div><p>${esc(it.summary||"—")}</p>
-      ${it.action?`<div class="fs-todo">⚡ ${esc(it.action)}</div>`:""}</div>
-    <div class="fs-body-wrap" id="fsBody"><div class="fs-bodyload">Loading the message…</div></div>`;
-  const i=state.view.findIndex(x=>x.pk===it.pk);
-  setFsFill(state.view.length?(i+1)/state.view.length:1);
-  renderFocusTriage(it);
-  fsLoadBody(it.pk);
-  maybeDraftAhead(it);   // important action mail → pre-draft a reply while the user reads
-  const nxt=state.view[i+1]; if(nxt)prefetchBody(nxt.pk);
 }
 /* ── Draft-ahead v2: the server keeps pre-written replies warm (dwell kick + background top-K tick +
    durable cache that survives restarts) and pushes "draft-ready" over SSE. The client only tracks
@@ -3486,32 +3062,24 @@ let _draftReady=new Set(), _draftingPks=new Set(), _draftDwellT=0;
 function _draftEligibleClient(it){ return it && (it.action || it.category==="action-needed" || (it.importance||0)>=4); }
 function _viewingPk(){                 // pk whose draft chip is currently on screen, else null
   if(state.compose) return null;       // composing (any surface): never kick, poll, or announce
-  if(focusOn()) return state.sel;
-  if(state.mode==="client" && state.csel!=null) return state.csel;
-  return null;
-}
-function renderDraftChip(pk){          // repaint whichever surface owns the chip — never the mail iframe
-  if(focusOn()){ const it=state.view.find(x=>x.pk===pk)||state.all.find(x=>x.pk===pk);   // the card can show an item outside the filtered view
-    if(it&&state.sel===pk)renderFocusTriage(it); return; }
-  updateReaderDraftChip(pk);
+  return state.csel!=null ? state.csel : null;
 }
 async function draftPeek(pk){          // read-only (&peek=1): NEVER causes generation on the server
   let d; try{ d=await api(`/api/ai/draft-ahead?pk=${pk}&peek=1`); }catch(e){ return; }
   if(!d||!d.ok)return;
   if(d.status==="ready"){ _draftReady.add(pk); _draftingPks.delete(pk); }
   else if(d.status==="generating" && !_draftingPks.has(pk)){ _draftingPks.add(pk); checkDraftAhead(pk,0); }   // dedupe: one poll chain per pk
-  renderDraftChip(pk);
+  updateReaderDraftChip(pk);
 }
 function armDraftAhead(pk, kickOk){
   clearTimeout(_draftDwellT);                          // cancels the previous message's dwell on j/k skims
-  if(_draftReady.has(pk)){ renderDraftChip(pk); return; }
+  if(_draftReady.has(pk)){ updateReaderDraftChip(pk); return; }
   draftPeek(pk);                                       // instant: surfaces tick/pre-restart drafts on open
   if(kickOk) _draftDwellT=setTimeout(()=>{ if(_viewingPk()===pk && !_draftingPks.has(pk))checkDraftAhead(pk,0); }, 1200);   // dwell guard: don't draft on a fast skim; skip if a chain already runs
 }
-function maybeDraftAhead(it){ if(!it)return; armDraftAhead(it.pk, _draftEligibleClient(it)); }
 async function checkDraftAhead(pk, tries){
   if(_viewingPk()!==pk)return;                   // moved off the message → stop (don't leak poll chains)
-  if(_draftReady.has(pk)){ renderDraftChip(pk); return; }   // SSE won the race — no duplicate fetch
+  if(_draftReady.has(pk)){ updateReaderDraftChip(pk); return; }   // SSE won the race — no duplicate fetch
   let d; try{ d=await api(`/api/ai/draft-ahead?pk=${pk}`); }catch(e){ return; }
   if(!d||!d.ok)return;
   if(d.status==="ready" && d.body){ const first=!_draftReady.has(pk);   // two racing chains: only the first announces
@@ -3522,7 +3090,7 @@ async function checkDraftAhead(pk, tries){
     if((tries||0)<maxTries && _viewingPk()===pk) setTimeout(()=>checkDraftAhead(pk,(tries||0)+1),delay);
     else _draftingPks.delete(pk); }              // gave up / moved off → revert the chip, never strand "Drafting…"
   else _draftingPks.delete(pk);                  // "none"
-  if(_viewingPk()===pk)renderDraftChip(pk);      // flip the chip if still on this message
+  if(_viewingPk()===pk)updateReaderDraftChip(pk);      // flip the chip if still on this message
 }
 function onDraftReady(d){                        // SSE "draft-ready": ids only; always re-fetch, never trust payloads
   if(!d || d.pk==null || document.hidden)return; // hidden tab: no echo fetches — they'd hold the tick's vacation gate open
@@ -3561,49 +3129,11 @@ function updateReaderDraftChip(pk){    // swap ONLY the button — a full reader
   const tb=$('#reader .cab[data-tca="reply"], #reader .cab[data-tca="draftready"]');
   if(tb && state.thread && state.thread.reply_pk===pk)tb.outerHTML=threadReplyChipHtml(pk);
 }
-function renderFocusTriage(it){
-  const i=state.view.findIndex(x=>x.pk===it.pk), nxt=state.view[i+1];
-  const open=(typeof it.link==="string"&&/^https:\/\//.test(it.link))?`<button class="fs-act" data-fsact="open">↗ Open <span class="ky">o</span></button>`:"";
-  const replyBtn = _draftReady.has(it.pk)
-    ? `<button class="fs-act prim" data-fsact="draftready" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do">✦ Draft ready <span class="ky">r</span></button>`
-    : _draftingPks.has(it.pk)
-    ? `<button class="fs-act" data-fsact="reply" title="✦ AI is drafting a reply…">✦ Drafting a reply…</button>`
-    : `<button class="fs-act prim" data-fsact="reply">↩ Reply <span class="ky">r</span></button>`;
-  $("#fsActs").innerHTML=`
-    ${replyBtn}
-    <button class="fs-act" data-fsact="later">⏰ Later <span class="ky">l</span></button>
-    <button class="fs-act keep" data-fsact="keep">✓ Keep <span class="ky">y</span></button>
-    <button class="fs-act" data-fsact="archive">🗄 Archive <span class="ky">e</span></button>
-    <button class="fs-act block" data-fsact="block">⊘ Block <span class="ky">b</span></button>
-    ${open}
-    <span class="fs-upnext">${nxt?`next · <b>${esc((nxt.from_name||nxt.from_addr||"").slice(0,28))}</b>`:`<b>last</b> in brief`}</span>`;
-}
-function setFsFill(frac){ const f=$("#fsFill"); if(f)f.style.width=Math.max(0,Math.min(1,frac||0))*100+"%"; }   /* rail is horizontal now (top edge) */
-async function fsLoadBody(pk){
-  const tok=++_fsBodyTok;
-  const mount=(d)=>{
-    if(tok!==_fsBodyTok)return;                    // user moved on — drop this body
-    const wrap=$("#fsBody"); if(!wrap)return;
-    if(!d||!d.ok){ wrap.innerHTML='<div class="fs-bodyload">Couldn’t load the message body.</div>'; return; }
-    const doc=mailDoc(d);
-    wrap.innerHTML=`${extBar(d)}<iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>`;
-    const fr=wrap.querySelector("iframe");
-    fr&&fr.addEventListener("load",()=>{ try{ fr.style.height=Math.min((fr.contentWindow.document.body.scrollHeight||300)+24,5000)+"px"; }catch(e){} wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
-  };
-  const it=state.all.find(x=>x.pk===pk);
-  if(it&&it._body){ mount(it._body); return; }
-  let d; try{ d=await api(`/api/message/${pk}/body`); }catch(e){ d=null; }
-  if(it&&d&&d.ok) it._body=d;                       // cache so re-visits are instant
-  mount(d);
-}
 /* ── Commitments: the AI extracts a next-step `action` per message — surface them all as one
    checkable agenda (read-only over state.all; reuses the verified archive/snooze/open actions). ── */
 function commitments(){ return (state.all||[]).filter(it=>it.action && String(it.action).trim()
     && ((it.importance||0)>=3 || it.category==="action-needed"))   // meaningful next-steps only — not every low-priority nudge
   .sort((a,b)=>(b.importance||0)-(a.importance||0)); }
-function commitLineHTML(){ const n=commitments().length; if(!n)return "";
-  return `<button class="tidy-btn" data-commits="1" style="margin-top:10px">⚡ ${n} commitment${n>1?"s":""} →</button>`; }
-function reviewLineHTML(){ return `<button class="tidy-btn" data-review="1" style="margin-top:10px;margin-left:8px">📅 Your week →</button>`; }
 function openCommitments(){ renderCommitList(); $("#commitPanel").classList.add("show"); }
 function closeCommitments(){ const o=$("#commitPanel"); if(o)o.classList.remove("show"); }
 
@@ -3691,61 +3221,6 @@ function renderCommitList(){
 }
 function _commitAfter(row){ row.remove();   // optimistic; the archive/snooze updates state.all async
   if(!$$("#commitList .commit-row").length) setTimeout(renderCommitList,350); }   // batch cleared → pull the next slice once settled
-function focusMove(dir){
-  // resolve the move first so we never animate a no-op (e.g. j past the last card)
-  let action=null;                        // "begin" | "toIntro" | "move"
-  if(state.focusIntro){ action=(dir>0 && state.view.length)?"begin":null; }
-  else {
-    const i=state.view.findIndex(x=>x.pk===state.sel);
-    if(dir<0 && i<=0) action="toIntro";                                  // back up to the intro
-    else { const ni=Math.max(0,Math.min(state.view.length-1,i+dir)); action=(ni!==i)?"move":null; }
-  }
-  if(!action)return;
-  const step=()=>{
-    if(action==="begin") select(state.view[0].pk,false);                 // begin the stream
-    else if(action==="toIntro"){ state.focusIntro=true; renderFocus(); }
-    else move(dir);
-  };
-  const card=$("#fsCard");
-  if(!card || _reduceMotion()){ step(); return; }
-  // authored .leave-up / .leave-down send the outgoing card off; then replay the fsIn enter
-  card.classList.remove("leave-up","leave-down");
-  card.classList.add(dir>0?"leave-up":"leave-down");
-  let done=false;
-  const fin=()=>{ if(done)return; done=true; step();
-    const nc=$("#fsCard"); if(nc){ nc.style.animation="none"; void nc.offsetWidth; nc.style.animation=""; } };
-  card.addEventListener("animationend",fin,{once:true});
-  setTimeout(fin,320);                    // safety net if animationend never fires
-}
-/* triage bar — delegate once; reuses the exact same actions as the mailbox */
-function fsAct(a){
-  const pk=state.sel;
-  if(a==="begin"){ focusMove(1); return; }
-  if(pk==null)return;
-  if(a==="reply") replyTo(pk,false);
-  else if(a==="draftready"){ _draftReady.has(pk)?openDraftAhead(pk):replyTo(pk,false); }
-  else if(a==="later") openSnoozeMenu($("#fsActs"),{pk});
-  else if(a==="keep"){ keepIt(pk); focusMove(1); }     // keep = always-keep rule, move on (item stays in inbox)
-  else if(a==="archive") archiveSel(pk);                // primary "done" — afterRemove() advances the stream
-  else if(a==="block") blockIt(pk);
-  else if(a==="open") openIt(pk);
-}
-/* ── focus ask overlay (reuses /api/ai/ask) ── */
-let _fsAskSeq=0;
-function openFsAsk(){ const o=$("#fsAsk"); o.classList.add("show"); const i=$("#fsAskIn"); i.value=""; $("#fsAskQ").textContent=""; $("#fsAskA").textContent=""; $("#fsAskSrc").innerHTML=""; setTimeout(()=>i.focus(),0); }
-function closeFsAsk(){ const o=$("#fsAsk"); if(o)o.classList.remove("show"); }
-async function runFsAsk(){
-  const q=$("#fsAskIn").value.trim(); if(!q)return; const seq=++_fsAskSeq;
-  $("#fsAskQ").textContent="✦ "+q; $("#fsAskA").innerHTML='<span class="fs-bodyload">Reading your inbox…</span>'; $("#fsAskSrc").innerHTML="";
-  let d; try{ d=await cpost("/api/ai/ask",{account:"all",question:q}); }catch(e){ if(seq===_fsAskSeq)$("#fsAskA").textContent="Couldn’t answer right now."; return; }
-  if(seq!==_fsAskSeq)return;
-  if(!d||!d.ok){ $("#fsAskA").textContent="Couldn’t answer: "+esc((d&&d.error)||"error"); return; }
-  $("#fsAskA").textContent=d.answer||"";
-  const srcs=(d.sources||[]);
-  $("#fsAskSrc").innerHTML=srcs.length
-    ? `<div class="lbl">${srcs.length} cited source${srcs.length===1?"":"s"}</div>`+srcs.map(s=>`<div class="card" data-fssrc="${s.pk}"><div class="f">${esc(s.from||"")}</div><div class="s">${esc(s.subject||"(no subject)")}</div></div>`).join("")
-    : `<div class="lbl">no specific message cited</div>`;
-}
 
 /* ---------- snooze (⏰) ---------- */
 const SNOOZE_PRESETS=[["later_today","Later today"],["tomorrow","Tomorrow 8am"],["weekend","This weekend"],["next_week","Next week"]];
@@ -3836,7 +3311,7 @@ async function doReplyLater(t){
     toast("📌 Saved to Reply later"); loadFolders(true);
     // deferred → keep triaging: advance the reader to the next message (the row STAYS — reply-later
     // pins the thread in a visible stack, it does not remove it from the inbox like snooze does).
-    if(cur!=null && state.mode==="client" && !state.thread){
+    if(cur!=null && !state.thread){
       const list=state.searching?state.searchItems:state.cmsgs, i=list.findIndex(x=>x.pk===cur), nx=list[i+1]||list[i-1];
       if(nx&&nx.pk!==cur)openConversation(nx,true);
     }
@@ -3969,7 +3444,7 @@ function connectEvents(){
   es.addEventListener("snooze-wake", e=>onSnoozeWake(JSON.parse(e.data)));
   es.addEventListener("mute", e=>onMute(JSON.parse(e.data)));
   es.addEventListener("reconcile", e=>onReconcile(JSON.parse(e.data)));   // ghosts pruned server-side → refresh the open list
-  es.addEventListener("followup", ()=>{ if(state.mode==="client")loadFolders(true);   // badge only — never disrupt the reader
+  es.addEventListener("followup", ()=>{ loadFolders(true);   // badge only — never disrupt the reader
     if(state.folder==="__waiting__"&&!state.compose&&!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages(); });
   es.addEventListener("outbox", ()=>loadOutbox());
   es.addEventListener("draft-ready", e=>onDraftReady(JSON.parse(e.data)));   // ids only; client re-fetches via the revalidating GET
@@ -3987,11 +3462,11 @@ function onNewMail(d){
   clearTimeout(_digestDeb); _digestDeb=setTimeout(()=>{ if(!document.hidden)loadDigest(true); }, 400);
   if(document.hidden){ _bgNew+=(d.count||1); bumpTitle(); notify(d); }   // backgrounded → badge + desktop notify
   const idle = !state.compose && !state.searching && !state.asking && state.cmarked.size===0 && !document.hidden;
-  const sameView = state.mode==="client" && state.account===d.account && !state.allInbox
+  const sameView = state.account===d.account && !state.allInbox
     && state.folder.toUpperCase()===(d.folder||"INBOX").toUpperCase();
   if(state.allInbox && idle){ loadAllInboxes(); }
   else if(sameView && idle){ loadCMessages(); }        // safe to refresh; nothing in-flight
-  else if(state.mode==="client"){ if(!_pendingSince) _pendingSince=_deltaSince(); _newPending+=(d.count||1); showNewPill(); }
+  else { if(!_pendingSince) _pendingSince=_deltaSince(); _newPending+=(d.count||1); showNewPill(); }
   if(!document.hidden){ const n=d.count||1; announce(`${n} new message${n===1?"":"s"} arrived${d.account?" in "+nameOf(d.account):""}`); }   // realtime → screen readers too
 }
 function onReconcile(d){
@@ -3999,7 +3474,6 @@ function onReconcile(d){
   // and if an open INBOX list for that account is showing them, re-pull it — but only
   // when idle, so nothing in-flight (compose/search/selection) is disrupted.
   loadFolders && loadFolders(true);
-  if(state.mode!=="client") return;
   const idle = !state.compose && !state.searching && !state.asking && state.cmarked.size===0 && !document.hidden;
   if(!idle) return;
   if(state.allInbox){ loadAllInboxes(); }
@@ -4014,12 +3488,12 @@ $("#notifyBtn")&&$("#notifyBtn").addEventListener("click",()=>{
   if(window.Notification) Notification.requestPermission().then(()=>{ refreshNotifyBtn(); toast(Notification.permission==="granted"?"Notifications on":"Notifications blocked"); });
 });
 function onSnoozeWake(d){
-  if(state.mode==="client" && d.accounts && d.accounts.includes(state.account)
+  if(d.accounts && d.accounts.includes(state.account)
      && !state.compose && !state.searching && !state.asking && state.cmarked.size===0){ loadCMessages(); }
   else toast((d.count||1)+" snoozed message"+((d.count||1)>1?"s":"")+" back");
 }
 function onMute(d){   // a mute from another tab/refresh: drop the rows live (mirror snooze-wake)
-  if(state.mode==="client" && !state.compose && !state.searching && !state.asking && state.cmarked.size===0) loadCMessages();
+  if(!state.compose && !state.searching && !state.asking && state.cmarked.size===0) loadCMessages();
   loadFolders(true);  // badge refresh only — don't reload the list under the user
 }
 /* ── "since you last looked": a per-account watermark in localStorage. We advance it only at real
@@ -4259,12 +3733,7 @@ async function doRemove(email){
 }
 
 /* ---------- events ---------- */
-$("#search").addEventListener("input",e=>{state.q=e.target.value; if(state.mode==="client")onClientSearch(); else applyFilters(true);});
-$("#briefView").addEventListener("click",e=>{const b=e.target.closest("button");if(b)applyBriefView(b.dataset.bv);});
-$("#fsActs").addEventListener("click",e=>{const b=e.target.closest("[data-fsact]");if(b)fsAct(b.dataset.fsact);});
-/* ── mobile: prev/next tap on the Focus card ── */
-$("#fsPrev")&&$("#fsPrev").addEventListener("click",()=>{ if(focusOn())focusMove(-1); });
-$("#fsNext")&&$("#fsNext").addEventListener("click",()=>{ if(focusOn())focusMove(1); });
+$("#search").addEventListener("input",e=>{state.q=e.target.value; onClientSearch();});
 /* ── mobile: swipe a mailbox row — left = archive, right = snooze to tomorrow (both reversible via z) ── */
 let _sw=null;
 function _swStart(e){
@@ -4298,21 +3767,6 @@ $("#rows").addEventListener("touchstart",_swStart,{passive:true});
 $("#rows").addEventListener("touchmove",_swMove,{passive:false});
 $("#rows").addEventListener("touchend",_swEnd);
 $("#rows").addEventListener("touchcancel",_swEnd);
-$("#fsCard").addEventListener("click",e=>{
-  if(e.target.closest("[data-review]")){ openReview(); return; }
-  if(e.target.closest("[data-commits]")){ openCommitments(); return; }
-  const t=e.target.closest("[data-tidy]"); if(t){ t.dataset.tidy==="go"?doTidy():tidyReview(); return; }
-  const c=e.target.closest("[data-grp]"); if(c){ applyGroupFilter(+c.dataset.grp); return; }
-  if(e.target.closest("[data-fsbegin]")){ focusMove(1); return; }
-});
-$("#fsAsk").addEventListener("click",e=>{
-  if(e.target===$("#fsAsk")){ closeFsAsk(); return; }                 // click the backdrop to dismiss
-  const s=e.target.closest("[data-fssrc]");
-  if(s){ const pk=+s.dataset.fssrc;          // the AI answers across ALL mail — a cited source may be outside today's brief
-    if(state.all.some(x=>x.pk===pk)){ closeFsAsk(); state.focusIntro=false; select(pk,false); }
-    else toast("That message isn’t in today’s brief — find it in the Mailbox (m)"); }
-});
-$("#fsAskIn").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); runFsAsk(); } else if(e.key==="Escape"){ e.preventDefault(); closeFsAsk(); } });
 $("#doPanel").addEventListener("click",e=>{
   if(e.target===$("#doPanel")){ doDismiss(); return; }                 // backdrop dismiss
   if(e.target.closest("[data-do-retry]")){ renderDoUI("loading",{cmd:state._doCmd||""}); runDo(state._doCmd||"", ++state.doSeq); return; }
@@ -4353,8 +3807,7 @@ $("#commitPanel").addEventListener("click",e=>{
   else if(cm==="later"){ _snoozeOverride={pk}; doSnooze("tomorrow"); _commitAfter(row); }
   else if(cm==="openmsg"){ openIt(pk); }
   else { closeCommitments();
-    if(state.mode==="client") openFromBrief(pk);   // in the Mailbox reader, where every verb is
-    else if(state.all.some(x=>x.pk===pk)){ state.focusIntro=false; select(pk,false); } }   // open in the brief stream
+    openFromBrief(pk); }   // in the reader, where every verb is
 });
 $("#folderrail").addEventListener("click",e=>{
   const del=e.target.closest("[data-vdel]"); if(del){ e.stopPropagation(); deleteView(del.dataset.vdel); return; }
@@ -4376,26 +3829,12 @@ $("#splitter").addEventListener("keydown",e=>{
   if(w!=null){ e.preventDefault(); applyListW(w,true); }
 });
 $("#splitter").addEventListener("dblclick",()=>applyListW(LIST_W0,true));
-$("#rows").addEventListener("dblclick",e=>{ if(state.mode==="client" && e.target.closest(".row.cmsg") && !e.target.closest("[data-mark],[data-racts]")) setReadFocus(true); });
+$("#rows").addEventListener("dblclick",e=>{ if(e.target.closest(".row.cmsg") && !e.target.closest("[data-mark],[data-racts]")) setReadFocus(true); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); else if(e.target.closest("[data-dg-back]"))leaveDigestList(); });
-$("#impseg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
-  $$("#impseg button").forEach(x=>{const on=x===b;x.classList.toggle("on",on);x.setAttribute("aria-checked",on);}); state.min=+b.dataset.min; applyFilters(true);});
-$("#cats").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;state.cat=b.dataset.cat;renderCats();applyFilters(true);});
-$("#todayCard").addEventListener("click",e=>{
-  if(e.target.closest("[data-review]")){ openReview(); return; }
-  if(e.target.closest("[data-commits]")){ openCommitments(); return; }
-  const t=e.target.closest("[data-tidy]"); if(t){ t.dataset.tidy==="go"?doTidy():tidyReview(); return; }
-  const c=e.target.closest("[data-grp]"); if(c){ applyGroupFilter(+c.dataset.grp); return; }
-  if(e.target.closest("[data-todayrerun]")){ loadTodayCard(true); return; }
-});
-$("#todoBtn").addEventListener("click",()=>{state.todo=!state.todo;$("#todoBtn").classList.toggle("on",state.todo);applyFilters(true);});
 $("#monos").addEventListener("click",e=>{const d=e.target.closest(".mono-dot");if(!d)return;
-  if(state.mode==="client"){
-    clearSearch(false);
-    if(d.dataset.acct==="__all__"){ enterAllInbox(); return; }
-    state.allInbox=false; state.account=d.dataset.acct; renderMonos(); loadFolders(); }
-  else { state.account=state.account===d.dataset.acct?"":d.dataset.acct; renderMonos(); applyFilters(true); }});
-$("#sort").addEventListener("change",e=>{state.sort=e.target.value;applyFilters(true);});
+  clearSearch(false);
+  if(d.dataset.acct==="__all__"){ enterAllInbox(); return; }
+  state.allInbox=false; state.account=d.dataset.acct; renderMonos(); loadFolders(); });
 $("#rows").addEventListener("click",e=>{
   if(e.target.closest("[data-brief-row]")){ showBrief(true); return; }
   if(e.target.closest("[data-firstrun]")){ settingsOpen(true); return; }
@@ -4416,8 +3855,7 @@ $("#rows").addEventListener("click",e=>{
     else if(it)openSnoozeMenu(ra, (it.count||1)>1&&it.thread_id?{thread_id:it.thread_id, account:it.account||state.account}:{pk});
     return; }
   const r=e.target.closest(".row");if(!r)return;
-  if(state.mode==="client"){ const it=(state.searching?state.searchItems:state.cmsgs).find(x=>x.pk===+r.dataset.pk); if(it)openConversation(it,false); }
-  else select(+r.dataset.pk,false);});
+  const it=(state.searching?state.searchItems:state.cmsgs).find(x=>x.pk===+r.dataset.pk); if(it)openConversation(it,false); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.closest("#scopeTog"))toggleSearchScope(); });
 $("#threadToggle").addEventListener("click",()=>setThreadView(!state.threadView));
 $("#bulkbar").addEventListener("click",e=>{const b=e.target.closest("[data-bulk]");if(b)cbulk(b.dataset.bulk,b);});
@@ -4523,8 +3961,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
     else if(a==="dismiss")doDismissFollowup(muteTarget());
     else if(a==="replylater")doReplyLater(muteTarget()); else if(a==="rldone")doReplyLaterDone(muteTarget());
     else if(a==="edit")editDraft(pk); return; }
-  const b=e.target.closest(".abtn");if(!b||state.sel==null)return;
-  const a=b.dataset.a; if(a==="trash")trash(state.sel); else if(a==="keep")keepIt(state.sel); else if(a==="block")blockIt(state.sel); else if(a==="open")openIt(state.sel);});
+});
 $("#curateBtn").addEventListener("click",()=>openDrawer(!$("#drawer").classList.contains("open")));
 $("#drawerX").addEventListener("click",()=>openDrawer(false));
 $("#scrim").addEventListener("click",()=>{ if(settingsIsOpen())settingsOpen(false); openDrawer(false); closeRail(); });
@@ -4554,7 +3991,7 @@ function _focusables(root){
 }
 function _activeModal(){                 // topmost open full-screen overlay, ordered by real z-index
   const q=[["palette","show"],["legend","show"],["composeModal","show"],["settingsModal","show"],
-           ["doPanel","show"],["commitPanel","show"],["reviewPanel","show"],["docsPanel","show"],["fsAsk","show"],["drawer","open"]];
+           ["doPanel","show"],["commitPanel","show"],["reviewPanel","show"],["docsPanel","show"],["drawer","open"]];
   for(const [id,cls] of q){ const el=document.getElementById(id); if(el&&el.classList.contains(cls))return el; }
   return null;
 }
@@ -4590,7 +4027,6 @@ function _dismissTop(){   // close the single topmost dismissible layer; true if
     else if(m.id==="commitPanel")closeCommitments();
     else if(m.id==="reviewPanel")closeReview();
     else if(m.id==="docsPanel")closeDocs();
-    else if(m.id==="fsAsk")closeFsAsk();
     else if(m.id==="legend")$("#legend").classList.remove("show");
     else if(m.id==="drawer")openDrawer(false);
     return true;
@@ -4617,13 +4053,13 @@ window.addEventListener("popstate",()=>{
 function _overlaySync(){ try{_syncTrap();}catch(e){} try{_syncBack();}catch(e){} }
 (function _bootOverlaySync(){
   const obs=new MutationObserver(_overlaySync);
-  ["composeModal","settingsModal","palette","legend","doPanel","commitPanel","reviewPanel","docsPanel","fsAsk","drawer"]
+  ["composeModal","settingsModal","palette","legend","doPanel","commitPanel","reviewPanel","docsPanel","drawer"]
     .forEach(id=>{ const el=document.getElementById(id); if(el)obs.observe(el,{attributes:true,attributeFilter:["class"]}); });
   obs.observe(document.body,{attributes:true,attributeFilter:["class"]});   // reading / rail-open
 })();
 
 document.addEventListener("keydown",e=>{
-  // Command palette: ⌘/Ctrl-K toggles it (both modes; suppressed while composing so it never
+  // Command palette: ⌘/Ctrl-K toggles it (suppressed while composing so it never
   // fights the compose chords / recipient autocomplete). Placed first so it beats every guard below.
   if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey&&(e.key==="k"||e.key==="K")){ e.preventDefault(); if(!composeIsOpen())togglePalette(); return; }
   if(paletteIsOpen()){ paletteKey(e); return; }
@@ -4659,7 +4095,7 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape" && $("#drawer").classList.contains("open") && !$("#legend").classList.contains("show")){ openDrawer(false); e.preventDefault(); return; }   // Curate drawer (an armed sweep, or help above it, takes Esc first)
   if(state.noKeys && e.key!=="Escape" && e.key!=="?")return;   // WCAG 2.1.4 opt-out (set in the help overlay)
   const k=e.key.length===1?e.key.toLowerCase():e.key;          // Shift+E etc. still match
-  // global (both modes)
+  // global
   if(k===","){ settingsOpen(true); e.preventDefault(); return; }
   if(k==="?"){ toggleLegend(); e.preventDefault(); return; }
   // go-to-folder chord (Mailbox): g then i/s/a/t/k/d/z
@@ -4670,78 +4106,39 @@ document.addEventListener("keydown",e=>{
     else if(k==="l"){ selectFolder("__replylater__"); }
     else if(role){ const f=(state.folders||[]).find(x=>x.role===role); if(f)selectFolder(f.name); else toast("No "+role+" folder on this account"); }
     e.preventDefault(); return; }
-  if(state.mode==="client"){
-    const sel=state.csel;
-    const marked=state.cmarked.size>0;   // with a selection set, the verb keys act on the whole set
-    if(k==="j")cmove(1); else if(k==="k")cmove(-1);
-    else if(k==="n")cmoveUnread(1); else if(k==="p")cmoveUnread(-1);
-    else if(k==="e"){ marked?cbulk("archive"):(sel!=null&&carchive(sel)); }
-    else if((k==="#"||k==="d"||k==="Delete"||k==="Backspace")){ marked?cbulk("trash"):(sel!=null&&ctrash(sel)); }
-    else if(k==="s"){ marked?cbulk("star"):(sel!=null&&cstar(sel)); }
-    else if(k==="u"){ marked?cbulk("unread"):(sel!=null&&cunread(sel)); }
-    else if(k==="x"&&sel!=null)cmarkToggle(sel);
-    else if(k==="b"){ marked?cbulk("junk"):(sel!=null&&cjunk(sel)); }
-    else if(k==="r"&&sel!=null){ _draftReady.has(sel)?openDraftAhead(sel):replyTo(sel,false); }
-    else if(k==="a"&&sel!=null)replyTo(sel,true);
-    else if(k==="f"&&sel!=null)forwardMsg(sel);
-    else if(k==="c")composeOpen({mode:"new"});
-    else if(k==="i"&&sel!=null)summarize(false);
-    else if(k==="h"&&sel!=null){ const btn=$('#reader [data-ca="snooze"],#reader [data-tca="snooze"]'); openSnoozeMenu(btn||$("#reader")); }
-    else if(k==="w"){ if(marked)cbulk("mute"); else if(sel!=null){ if(state.folder==="__muted__")doUnmute(muteTarget()); else doMute(muteTarget()); } }
-    else if(k==="l"&&sel!=null){ if(state.folder==="__replylater__")doReplyLaterDone(muteTarget()); else doReplyLater(muteTarget()); }
-    else if(k==="Enter"&&e.target.closest("button,a[href],[role=separator]"))return;   // ↵ on a focused control activates that control, nothing more
-    else if(k==="Enter"&&sel!=null&&!isMobile())setReadFocus(!readFocusOn());   // desktop: the open message is already in the pane → ↵ toggles focus reading
-    else if((k==="Enter"||k==="o")&&sel!=null){ const it=cfindAny(sel); if(it)openConversation(it,true); document.body.classList.add("reading"); }
-    else if(k==="[")toggleRail();
-    else if(k==="g"){ state.gotoArmed=true; toast("Go to folder:  i·s·a·t·k·d·z·w·l"); state.gotoT=setTimeout(()=>state.gotoArmed=false,1800); }
-    else if(k==="z")undo();
-    else if(k==="v"&&state.searching&&!state.viewId)saveCurrentSearch();
-    else if(k==="/"){$("#search").focus();}
-    else if(k==="Escape"){ if($("#legend").classList.contains("show"))$("#legend").classList.remove("show");
-      else if(readFocusOn())setReadFocus(false);
-      else if(state.cmarked.size)cmarkClear();
-      else if(isMobile()&&document.body.classList.contains("reading"))document.body.classList.remove("reading");   // phone: reader → back to the (possibly search) list; a second Esc then clears
-      else if(state.searching){ if((state.viewId||"").startsWith("__dg_"))leaveDigestList(); else { clearSearch(false); loadCMessages(); } }
-      else document.body.classList.remove("reading"); } else return;
-    if(["j","k","n","p","e","#","d","Delete","Backspace","s","u","x","b","r","a","f","c","i","h","w","o","g","z","v","/","["].includes(k))e.preventDefault(); return;
-  }
-  // ── Focus Flow brief: a calm single-stream keyboard (j/k walk, r reply, l later, y keep, e trash, b block, o open, a ask) ──
-  if(focusOn()){
-    if($("#fsAsk").classList.contains("show")){ if(k==="Escape"){closeFsAsk();e.preventDefault();} return; }
-    const onCard=state.sel!=null && !state.focusIntro;
-    if(k==="j")focusMove(1); else if(k==="k")focusMove(-1);
-    else if(k==="e"&&onCard)archiveSel(state.sel);                                   // e = archive (matches Mailbox)
-    else if((k==="#"||k==="Delete"||k==="Backspace")&&onCard)trash(state.sel);       // delete = trash
-    else if(k==="y"&&onCard){ keepIt(state.sel); focusMove(1); }
-    else if(k==="b"&&onCard)blockIt(state.sel);
-    else if(k==="r"&&onCard){ _draftReady.has(state.sel)?openDraftAhead(state.sel):replyTo(state.sel,false); }
-    else if(k==="l"&&onCard)openSnoozeMenu($("#fsActs"),{pk:state.sel});
-    else if((k==="o"||k==="Enter")&&onCard)openIt(state.sel);
-    else if(k==="a")openFsAsk();
-    else if(k==="t"){$("#todoBtn").click();}
-    else if(k==="/"){$("#search").focus();}
-    else if(k>="1"&&k<="5")setImpMin(k);
-    else if(k==="z")undo();
-    else if(k==="Escape"){$("#legend").classList.remove("show");}
-    else return;
-    if(["j","k","e","#","Delete","Backspace","y","b","r","l","o","a","t","z","1","2","3","4","5","/"].includes(k))e.preventDefault();
-    return;
-  }
-  if(k==="j")move(1); else if(k==="k")move(-1);
-  else if(k==="e"&&state.sel!=null)archiveSel(state.sel);                            // e = archive (matches Mailbox)
-  else if((k==="#"||k==="Delete"||k==="Backspace")&&state.sel!=null)trash(state.sel); // delete = trash
-  else if(k==="y"&&state.sel!=null)keepIt(state.sel);
-  else if(k==="b"&&state.sel!=null)blockIt(state.sel);
-  else if((k==="o"||k==="Enter")&&state.sel!=null)openIt(state.sel);
+  const sel=state.csel;
+  const marked=state.cmarked.size>0;   // with a selection set, the verb keys act on the whole set
+  if(k==="j")cmove(1); else if(k==="k")cmove(-1);
+  else if(k==="n")cmoveUnread(1); else if(k==="p")cmoveUnread(-1);
+  else if(k==="e"){ marked?cbulk("archive"):(sel!=null&&carchive(sel)); }
+  else if((k==="#"||k==="d"||k==="Delete"||k==="Backspace")){ marked?cbulk("trash"):(sel!=null&&ctrash(sel)); }
+  else if(k==="s"){ marked?cbulk("star"):(sel!=null&&cstar(sel)); }
+  else if(k==="u"){ marked?cbulk("unread"):(sel!=null&&cunread(sel)); }
+  else if(k==="x"&&sel!=null)cmarkToggle(sel);
+  else if(k==="b"){ marked?cbulk("junk"):(sel!=null&&cjunk(sel)); }
+  else if(k==="r"&&sel!=null){ _draftReady.has(sel)?openDraftAhead(sel):replyTo(sel,false); }
+  else if(k==="a"&&sel!=null)replyTo(sel,true);
+  else if(k==="f"&&sel!=null)forwardMsg(sel);
+  else if(k==="c")composeOpen({mode:"new"});
+  else if(k==="i"&&sel!=null)summarize(false);
+  else if(k==="h"&&sel!=null){ const btn=$('#reader [data-ca="snooze"],#reader [data-tca="snooze"]'); openSnoozeMenu(btn||$("#reader")); }
+  else if(k==="w"){ if(marked)cbulk("mute"); else if(sel!=null){ if(state.folder==="__muted__")doUnmute(muteTarget()); else doMute(muteTarget()); } }
+  else if(k==="l"&&sel!=null){ if(state.folder==="__replylater__")doReplyLaterDone(muteTarget()); else doReplyLater(muteTarget()); }
+  else if(k==="Enter"&&e.target.closest("button,a[href],[role=separator]"))return;   // ↵ on a focused control activates that control, nothing more
+  else if(k==="Enter"&&sel!=null&&!isMobile())setReadFocus(!readFocusOn());   // desktop: the open message is already in the pane → ↵ toggles focus reading
+  else if((k==="Enter"||k==="o")&&sel!=null){ const it=cfindAny(sel); if(it)openConversation(it,true); document.body.classList.add("reading"); }
+  else if(k==="[")toggleRail();
+  else if(k==="g"){ state.gotoArmed=true; toast("Go to folder:  i·s·a·t·k·d·z·w·l"); state.gotoT=setTimeout(()=>state.gotoArmed=false,1800); }
+  else if(k==="z")undo();
+  else if(k==="v"&&state.searching&&!state.viewId)saveCurrentSearch();
   else if(k==="/"){$("#search").focus();}
-  else if(k>="1"&&k<="5")setImpMin(k);
-  else if(k==="t"){$("#todoBtn").click();}
-  else if(k==="c"){openDrawer(!$("#drawer").classList.contains("open"));}
-  else if(k==="r"){reconcile();}
-  else if(k==="z"){undo();}
-  else if(k==="Escape"){$("#legend").classList.remove("show");openDrawer(false);document.body.classList.remove("reading");}
-  else return;
-  if(["j","k","e","#","Delete","Backspace","y","b","o","t","c","r","z","1","2","3","4","5","/"].includes(k))e.preventDefault();
+  else if(k==="Escape"){ if($("#legend").classList.contains("show"))$("#legend").classList.remove("show");
+    else if(readFocusOn())setReadFocus(false);
+    else if(state.cmarked.size)cmarkClear();
+    else if(isMobile()&&document.body.classList.contains("reading"))document.body.classList.remove("reading");   // phone: reader → back to the (possibly search) list; a second Esc then clears
+    else if(state.searching){ if((state.viewId||"").startsWith("__dg_"))leaveDigestList(); else { clearSearch(false); loadCMessages(); } }
+    else document.body.classList.remove("reading"); } else return;
+  if(["j","k","n","p","e","#","d","Delete","Backspace","s","u","x","b","r","a","f","c","i","h","w","o","g","z","v","/","["].includes(k))e.preventDefault();
 });
 let _legendOpener=null;
 /* ---------- command palette (⌘K) ---------- */
@@ -4752,7 +4149,7 @@ function selectAccountThenFolder(a, name){
   else selectFolder(name);
 }
 function buildPaletteEntries(){
-  const E=[]; const sel=()=>state.mode==="client"&&(state.csel!=null||state.thread);
+  const E=[]; const sel=()=>state.csel!=null||state.thread;
   // NAVIGATION
   E.push({group:"Navigation", label:"All inboxes", fn:()=>{ clearSearch(false); enterAllInbox(); }});
   E.push({group:"Navigation", label:"⚡ Commitments — your to-dos", fn:()=>openCommitments()});
@@ -4789,17 +4186,17 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Compose new message", key:"c", fn:()=>composeOpen({mode:"new"})});
   E.push({group:"Commands", label:"Undo last action", key:"z", fn:()=>undo()});
   E.push({group:"Commands", label:"Sync now", fn:()=>sync()});
-  E.push({group:"Commands", label:"Toggle conversations / messages", modes:["client"], fn:()=>setThreadView(!state.threadView)});
-  E.push({group:"Commands", label:readFocusOn()?"Leave focus reading":"Focus reading — hide folders and list", key:"↵", modes:["client"], enabled:()=>!isMobile(), fn:()=>setReadFocus(!readFocusOn())});
-  E.push({group:"Commands", label:"Today’s brief", modes:["client"], fn:()=>{ if(briefHere())showBrief(true); else if(state.allInbox)loadAllInboxes(); else selectFolder("INBOX"); }});
-  E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", modes:["client"], fn:()=>toggleRail()});
-  E.push({group:"Commands", label:"Reading settings — width, text, mail colors", modes:["client"], enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
+  E.push({group:"Commands", label:"Toggle conversations / messages", fn:()=>setThreadView(!state.threadView)});
+  E.push({group:"Commands", label:readFocusOn()?"Leave focus reading":"Focus reading — hide folders and list", key:"↵", enabled:()=>!isMobile(), fn:()=>setReadFocus(!readFocusOn())});
+  E.push({group:"Commands", label:"Today’s brief", fn:()=>{ if(briefHere())showBrief(true); else if(state.allInbox)loadAllInboxes(); else selectFolder("INBOX"); }});
+  E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", fn:()=>toggleRail()});
+  E.push({group:"Commands", label:"Reading settings — width, text, mail colors", enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", fn:()=>reconcile()});
   E.push({group:"Commands", label:"✦ Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
   E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
   E.push({group:"Commands", label:"Settings", key:",", fn:()=>settingsOpen(true)});
   E.push({group:"Commands", label:"Keyboard help", key:"?", fn:()=>toggleLegend(true)});
-  return E.filter(e=>(!e.modes||e.modes.includes(state.mode)) && (e.enabled?e.enabled():true));
+  return E.filter(e=>e.enabled?e.enabled():true);
 }
 function fuzzyScore(needle, hay){
   needle=(needle||"").toLowerCase(); hay=(hay||"").toLowerCase();
