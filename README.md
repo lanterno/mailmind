@@ -93,8 +93,11 @@ and the `claude` CLI on your own machine.
   frame, and per-link risk checks against the sender's domain.
 - **Quoted reply chains fold** behind a `···` toggle in both HTML and plain text, so
   you see the new message, not the thread's whole history.
-- **Every message renders in a warm dark surface** that matches the app, with a
-  one-click **Original colors** toggle for HTML mail that remembers your choice.
+- **Reading settings, under Aa.** Set the column width (narrow, medium, wide) and a
+  face (sans, serif or mono) and size for plain-text mail; rich mail keeps the sender's
+  own type. Mail colors are **Auto** (rich mail in its own colors, plain text in the
+  app's), **Dark** or **Original**. A change applies to the open message at once,
+  without reloading it, and is remembered.
 - **Calendar invites become a card.** A `.ics` attachment renders above the message
   as title, local time with timezone, human-readable recurrence, location, organizer
   and attendees, with `＋ Add to calendar` for your OS — and **Accept / Maybe /

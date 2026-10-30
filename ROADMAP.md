@@ -262,13 +262,20 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   click-through popover; the key facts should appear inline in `.rd-from`. And there is no spoof
   warning at all: `replyTo()` reads `d.reply_to` to pick the recipient but nothing ever compares it
   to `from_addr` — the only "spoof" matches in the file are CSS comments about iframe chrome.
-- **Serif plain-text bodies, and a cached image reload** · medium value · effort M — `bodyDoc()`'s
-  plain-text branch emits `pre{white-space:pre-wrap;font:15px/1.6 ui-monospace}` — pre-wrap landed,
-  monospace stayed, and `--font-reading` (now an alias of the Nunito Sans UI face) is never used
-  inside the iframe; a size and serif choice for plain-text mail belongs here too. Separately, `loadImagesFor(pk)` unconditionally refetches the body with `images=1` and
-  re-renders the whole reader; memoize the payload per pk and swap only the srcdoc so toggling twice
-  neither refetches nor loses scroll position. The iframe has a `min-height` and height transition
-  but its true height is still applied only in the `load` handler, so opening still jumps.
+- **A cached image reload, and no jump on open** · medium value · effort M — `loadImagesFor(pk)`
+  unconditionally refetches the body with `images=1` and re-renders the whole reader; memoize the
+  payload per pk and swap only the srcdoc, as `rerenderMail` already does for reading settings, so
+  toggling twice neither refetches nor loses scroll position. The iframe has a `min-height` and
+  height transition but its true height is still applied only in the `load` handler
+  (`sizeMailFrame`), so opening still jumps.
+- **Dark mail colors under the Day theme** · low value · effort S — `bodyDoc()` themes dark mail
+  from the live tokens (`tk("--bg")`, `tk("--ink")`), which are the light ones under
+  `body.theme-light`. Choosing Dark under Aa there leaves plain text on light paper and inverts rich
+  mail onto a light page. Dark needs its own night palette that doesn't follow the app theme.
+- **A phone reading toolbar** · medium value · effort S — the reader's pinned action bar and its
+  `@container pane` tiers sit inside `@media (min-width:821px)`, so at phone widths every labelled
+  button wraps, four rows deep, above the message. Give ≤820px one icon row with the rarer verbs
+  behind a ⋯ menu.
 - **Replace emoji with an inline-SVG monoline icon set** · medium value · effort L — Now the largest
   craft gap, since the type system and the Meadow palette with its Day theme have landed.
   Emoji are still the entire icon vocabulary (✦×46, ⚡×15, ⏰×10, ☰×7, 📎×7 …), including the literal
