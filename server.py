@@ -3592,5 +3592,6 @@ if __name__ == "__main__":
         threading.Thread(target=reconcile_loop, daemon=True).start()      # periodic ghost prune (MAILMIND_RECONCILE_SECS)
         threading.Thread(target=expire_loop, daemon=True).start()         # age-out expiry rules (MAILMIND_EXPIRE_SECS)
         realtime.start()                 # per-account IMAP IDLE workers + SSE dispatch
+    print(f"[ai] {summarize.describe_engine()}", flush=True)
     print(f"MailMind → http://127.0.0.1:{PORT}  (serving now)", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

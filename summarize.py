@@ -1,5 +1,8 @@
-"""Summarize + importance-score non-junk mail via the local `claude` CLI
-(uses the user's subscription, no API key). Runs a few calls in parallel.
+"""Summarize + importance-score non-junk mail with Claude. Runs a few calls in parallel.
+
+Every AI call in the app goes through call_claude_json / call_claude here. They use the Claude
+API (claude_api.py) when ANTHROPIC_API_KEY is set, and otherwise the local `claude` CLI on the
+user's subscription. MAILMIND_AI=api or =cli picks one explicitly.
 Usage: python3 summarize.py [limit] [workers]
 """
 import sys
@@ -13,9 +16,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
+import claude_api
 
 WORKERS = 4
-MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-4-5
+MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-5-5
+TRIAGE_EFFORT = "low"      # API only. Triage runs on every new message and is a short classify-and-summarize
 NEUTRAL_CWD = tempfile.gettempdir()        # run claude away from project context
 
 PROMPT = """You are triaging ONE email for a personal dashboard. Reply with ONLY a JSON object (no prose, no code fence) with these keys:
@@ -67,13 +72,33 @@ def _supports_schema():
     return _SCHEMA_OK
 
 
+def engine():
+    """Which engine AI calls use, "api" or "cli": MAILMIND_AI when it names one, else the API
+    whenever a key is set."""
+    forced = os.environ.get("MAILMIND_AI", "").strip().lower()
+    if forced in ("api", "cli"):
+        return forced
+    return "api" if claude_api.key() else "cli"
+
+
+def describe_engine():
+    """One line for the startup log."""
+    if engine() == "api":
+        return "Claude API · " + model_label()
+    return "claude CLI" + (" · " + MODEL if MODEL else "")
+
+
 def model_label():
     """The model name stored beside each AI result and shown under it in the UI."""
+    if engine() == "api":
+        return MODEL or claude_api.MODEL
     return MODEL or "claude-cli"
 
 
 def call_claude(prompt):
     """Plain text result (used by summarize_thread). Unchanged signature."""
+    if engine() == "api":
+        return claude_api.message(prompt, model=MODEL)
     cmd = ["claude", "-p", prompt, "--output-format", "text"]
     if MODEL:
         cmd += ["--model", MODEL]
@@ -88,12 +113,25 @@ def _loose_json(out):
     return json.loads(m.group(0)) if m else {}
 
 
-def call_claude_json(prompt, schema):
-    """Run claude expecting a JSON object matching `schema`. Returns the validated dict
-    from the top-level `structured_output` field when the CLI supports --json-schema,
-    else best-effort regex-parsed JSON from the text path. Raises RuntimeError ONLY on a
-    transport failure (non-zero exit) so the caller can distinguish retry from fallback;
-    a successful-but-unparseable reply yields {}."""
+def call_claude_json(prompt, schema, effort=None):
+    """Ask Claude for a JSON object matching `schema`. Returns the validated dict from
+    structured output (the API's output_config.format, or the CLI's --json-schema), else
+    best-effort regex-parsed JSON from the text. Raises RuntimeError ONLY on a transport
+    failure (API error, or a non-zero CLI exit) so the caller can distinguish retry from
+    fallback; a successful-but-unparseable reply yields {}. `effort` applies to the API only."""
+    if engine() == "api":
+        out = claude_api.message(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
+                                 model=MODEL, effort=effort)
+        try:
+            obj = json.loads(out)
+        except ValueError:
+            obj = None
+        if isinstance(obj, dict):
+            return obj
+        try:
+            return _loose_json(out)
+        except Exception:
+            return {}
     use = _supports_schema()
     cmd = ["claude", "-p", prompt]
     cmd += (["--output-format", "json", "--json-schema", json.dumps(schema)] if use
@@ -133,7 +171,7 @@ def summarize_one(row):
     prompt = PROMPT.format(frm=frm, subject=row["subject"] or "(no subject)",
                            date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
     try:
-        obj = call_claude_json(prompt, TRIAGE_SCHEMA)
+        obj = call_claude_json(prompt, TRIAGE_SCHEMA, effort=TRIAGE_EFFORT)
     except Exception:
         return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
     if obj.get("summary"):

@@ -1,5 +1,5 @@
-"""The synthesized 'Today' briefing card via the local `claude` CLI. Gathers the top
-already-summarized digest rows from SQLite (cheap columns only — NO body/IMAP fetch),
+"""The synthesized 'Today' briefing card via Claude (summarize's API-or-CLI engine). Gathers
+the top already-summarized digest rows from SQLite (cheap columns only — NO body/IMAP fetch),
 makes ONE schema-constrained call returning {narrative, groups:[{label,count,pks}]}, and
 caches it keyed on (sorted enabled-account set + local date) so the daily cost is paid once
 and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap. The row

@@ -1,5 +1,5 @@
-"""AI 'Draft a reply' via the local `claude` CLI. Reuses summarize_thread's context
-gather/trim + the global concurrency cap, and summarize's schema-constrained call so the
+"""AI 'Draft a reply' via Claude (summarize's API-or-CLI engine). Reuses summarize_thread's
+context gather/trim + the global concurrency cap, and summarize's schema-constrained call so the
 model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft — never sends.
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """

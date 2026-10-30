@@ -2,9 +2,9 @@
 
 Retrieve-then-read RAG, no embeddings: FTS5 surfaces the most relevant messages, a
 bounded slice of their text (real body → cached triage summary → snippet) is handed to
-the local `claude` CLI under a strict schema, and the model returns a prose answer plus
-the pks it actually used. Citations are intersected with what was retrieved+shown, so the
-model can never cite (or leak) a message outside the account-scoped candidate set.
+Claude (summarize's API-or-CLI engine) under a strict schema, and the model returns a prose
+answer plus the pks it actually used. Citations are intersected with what was retrieved+shown,
+so the model can never cite (or leak) a message outside the account-scoped candidate set.
 
   result, code = ask.ask(account, question)   # account="all" → across every enabled mailbox
 

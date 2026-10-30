@@ -1,7 +1,7 @@
-"""On-demand AI summary of an email thread (or single message) via the local `claude`
-CLI — reuses summarize.call_claude. Cached in thread_summaries (content-fingerprinted, so
-a new reply invalidates it). Single-flight per (account,thread_id,scope) + a global
-concurrency cap so double-clicks never fork-bomb claude. Untrusted email is bounded and
+"""On-demand AI summary of an email thread (or single message) via Claude — reuses
+summarize.call_claude (the API, or the local `claude` CLI). Cached in thread_summaries
+(content-fingerprinted, so a new reply invalidates it). Single-flight per
+(account,thread_id,scope) + a global concurrency cap so double-clicks never fork-bomb claude. Untrusted email is bounded and
 the prompt tells the model to treat it as data, not instructions.
 """
 import re
@@ -18,7 +18,7 @@ import summarize as _sz
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
 CAP_TOTAL = 14000
-_AI_SEM = threading.Semaphore(2)          # max concurrent claude procs from the bridge
+_AI_SEM = threading.Semaphore(2)          # max concurrent Claude calls from the bridge
 _inflight = {}
 _inflight_lock = threading.Lock()
 _ops_lock = contextlib.nullcontext()
