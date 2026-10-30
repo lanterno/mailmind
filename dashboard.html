@@ -1834,10 +1834,13 @@ function setThreadView(on){ state.threadView=on; state.csel=null;
   try{localStorage.setItem("mm_threadview",on?"1":"0");}catch(e){}
   const b=$("#threadToggle"); if(b){b.classList.toggle("on",on); b.innerHTML=on?ico("chat")+" Conversations":ico("list")+" Messages";}
   loadCMessages(); }
+function convoRow(it){   // a list row that stands for a whole conversation (it opens in the thread reader)
+  return !!(it && !state.searching && state.threadView && (it.count||1)>1 && it.thread_id);
+}
 function openConversation(it,scroll){
   if(it){ announce(`${it.seen?"":"unread, "}${it.from_name||it.from_addr||""}: ${it.subject||""}`); }
   if(state.searching) return openSearchHit(it.pk);
-  if(state.threadView && (it.count||1)>1 && it.thread_id) return openThread(it.thread_id, it.pk, scroll, it.account||state.account);
+  if(convoRow(it)) return openThread(it.thread_id, it.pk, scroll, it.account||state.account);
   openClientMsg(it.pk,scroll);
 }
 /* ---- unified All inboxes (cross-account INBOX merge) ---- */
