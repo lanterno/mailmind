@@ -3290,7 +3290,7 @@ async function doTidy(){
    pk markers — never draft bodies (a browser-held body would be an unrevalidatable stale copy);
    every open re-fetches through the revalidating GET. NEVER auto-sends. ── */
 let _draftReady=new Set(), _draftingPks=new Set(), _draftDwellT=0;
-function _draftEligibleClient(it){ return it && (it.action || it.category==="action-needed" || (it.importance||0)>=4); }
+function _draftEligibleClient(it){ return it && (it.category==="action-needed" || (it.importance||0)>=4); }   // important mail only (server: _reply_worthy); a next step alone doesn't spend an AI call
 function _viewingPk(){                 // pk whose draft chip is currently on screen, else null
   if(state.compose) return null;       // composing (any surface): never kick, poll, or announce
   return state.csel!=null ? state.csel : null;
