@@ -1157,6 +1157,21 @@ def do_write(path, body):
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
 
+def do_trash(body):
+    """Move one message to the account's Trash. Falls back to the durable offline queue if IMAP
+    is unreachable, like the move-type ops in do_write."""
+    pk = int(body.get("pk"))
+    try:
+        ok, msg, undo = mailops.trash_message(pk)
+    except mailops._UNREACHABLE:       # IMAP down → durable offline queue
+        return _readmut_enqueue("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
+    if ok:
+        undo_push(undo, body.get("undo_group"))
+        invalidate_stats()
+        _invalidate_folders()   # trash removed a message from INBOX → refresh rail badges
+    return {"ok": ok, "msg": msg, "undoable": bool(undo)}
+
+
 # --------------------------------------------------------------------- undo
 def undo_push(desc, group=None):
     """Push a reverse descriptor. With a group id, coalesce consecutive pushes into one
@@ -3340,17 +3355,7 @@ class H(BaseHTTPRequestHandler):
                 ok = outbox.send_now(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
             elif u.path == "/api/trash":
-                _pk = int(b.get("pk"))
-                try:
-                    ok, msg, undo = mailops.trash_message(_pk)
-                except mailops._UNREACHABLE:       # IMAP down → durable offline queue
-                    self._json(_readmut_enqueue("trash", _pk, None, b.get("undo_group"), b.get("mutation_id")))
-                else:
-                    if ok:
-                        undo_push(undo, b.get("undo_group"))
-                        invalidate_stats()
-                        _invalidate_folders()   # trash removed a message from INBOX → refresh rail badges
-                    self._json({"ok": ok, "msg": msg, "undoable": bool(undo)})
+                self._json(do_trash(b))
             elif u.path == "/api/undo":
                 res, code = do_undo()
                 self._json(res, code)
