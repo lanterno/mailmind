@@ -606,8 +606,14 @@
   .bf-subj:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
   .bf-gist{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--soft)}
   .bf-need .rchip{margin-top:9px}
-  .bf-calm,.bf-more{margin:0;color:var(--mute);font-size:14.5px}
-  .bf-more{margin-top:10px}
+  .bf-calm{margin:0;color:var(--mute);font-size:14.5px}
+  .bf-topics{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .bf-topic{border:none;border-radius:var(--r-pill);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;padding:5px 11px;cursor:pointer}
+  .bf-topic b{margin-left:6px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .bf-topic:hover{background:var(--hover)}
+  .bf-needs+.bf-tally{margin-top:12px}
+  .bf-tidy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:26px;padding:14px 16px;border-radius:var(--r-md);background:var(--bg2);font-size:14px;line-height:1.45;color:var(--soft)}
+  .bf-tidy>span{flex:1 1 240px}
   .brief-row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:11px;align-items:center;width:100%;
     padding:10px;border-radius:var(--r-md);cursor:pointer}
   .brief-row:hover{background:var(--hover)}
@@ -2641,6 +2647,13 @@ async function runSearch(){
 function renderSearchList(){
   const v=state.searchItems;
   const isFeed=state.viewId==="__lane_feed__", isTrail=state.viewId==="__lane_papertrail__";
+  if((state.viewId||"").startsWith("__dg_")){   // a list from the digest (openDigestList)
+    $("#count").textContent=`${v.length} message${v.length===1?"":"s"}`;
+    $("#clientCtx").innerHTML=`✦ <b>${esc(state.digestTitle||"")}</b> · from today’s brief · <button class="ctx-save" data-dg-back>‹ Inbox</button>`;
+    renderBulk();
+    $("#rows").innerHTML=v.length?v.map(it=>rowMarkup(it, it.alias||short(it.account))).join(""):'<div class="nores">Nothing left here.</div>';
+    return;
+  }
   $("#count").textContent=isFeed
     ? `${v.length}${state.searchHasMore?"+":""} newsletter${v.length===1&&!state.searchHasMore?"":"s"}`
     : isTrail
@@ -2793,11 +2806,13 @@ function briefHtml(){
     :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(_briefErr)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
     :'<p class="bf-wait">Nothing to brief yet.</p>';
   const nc=commitments().length, t=[];
-  if(needs.length) t.push(`<button class="bf-tally sun" data-brief="needs"><b>${needs.length}</b> need${needs.length===1?"s":""} you</button>`);
+  if(needs.length) t.push(`<button class="bf-tally sun" data-brief="needs" title="List them"><b>${needs.length}</b> need${needs.length===1?"s":""} you</button>`);
   if(state.waitingCount) t.push(`<button class="bf-tally" data-brief="__waiting__"><b>${state.waitingCount}</b> waiting on others</button>`);
   if(state.replylaterCount) t.push(`<button class="bf-tally" data-brief="__replylater__"><b>${state.replylaterCount}</b> to reply later</button>`);
   if(nc) t.push(`<button class="bf-tally" data-brief="commits"><span aria-hidden="true">⚡</span><b>${nc}</b> commitment${nc>1?"s":""}</button>`);
   t.push('<button class="bf-tally" data-brief="week"><span aria-hidden="true">📅</span>Your week</button>');
+  const topics=briefTopics().map((g,i)=>g.items.length?`<button class="bf-topic" data-brief-topic="${i}">${esc(g.label)}<b>${g.items.length}</b></button>`:"").join("");
+  const nt=tidyCandidates().length;
   const multi=(state.accountsList||[]).length>1, CAP=12;
   const card=it=>`<article class="bf-need"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
     <div style="min-width:0"><div class="bf-n1"><b>${esc(it.from_name||it.from_addr||"—")}</b>${multi?`<span class="acctchip">${esc(nameOf(it.account))}</span>`:""}<time>${esc(it.when||"")}</time></div>
@@ -2807,18 +2822,38 @@ function briefHtml(){
   return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button><span class="rd-sp" aria-hidden="true"></span>
       <button class="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)"${_todayInflight?" disabled":""}><span>↻</span> Refresh brief</button></div>
     <header class="bf-hero"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></header>
-    <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd">✦ Your brief</div>${narr}<div class="bf-tallies">${t.join("")}</div></section>
+    <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd">✦ Your brief</div>${narr}
+      ${topics?`<div class="bf-topics" aria-label="Topics in today’s mail">${topics}</div>`:""}<div class="bf-tallies">${t.join("")}</div></section>
     <h2 class="bf-h" id="bfNeeds">Needs you</h2>
-    ${needs.length?`<div class="bf-needs">${needs.slice(0,CAP).map(card).join("")}</div>${needs.length>CAP?`<p class="bf-more">and ${needs.length-CAP} more</p>`:""}`
-      :'<p class="bf-calm">Nothing needs you right now.</p>'}`;
+    ${needs.length?`<div class="bf-needs">${needs.slice(0,CAP).map(card).join("")}</div>${needs.length>CAP?`<button class="bf-tally" data-brief="needs">Show all ${needs.length}</button>`:""}`
+      :'<p class="bf-calm">Nothing needs you right now.</p>'}
+    ${nt?`<div class="bf-tidy"><span>✦ <b>${nt}</b> low-priority message${nt>1?"s":""} the AI rates as safe to file: no next step, nothing asked of you.</span>
+      <button class="bf-tally" data-brief="tidyreview">Review</button><button class="bf-tally" data-brief="tidy">File to Archive</button></div>`:""}`;
+}
+function briefTopics(){   // the brief's topic groups, resolved against the digest (a group can name mail the digest no longer holds)
+  const by=new Map((state.all||[]).map(x=>[x.pk,x]));
+  return ((_briefData&&_briefData.groups)||[]).map(g=>({label:g.label, items:(g.pks||[]).map(pk=>by.get(pk)).filter(Boolean)}));
 }
 function briefAct(a){
-  if(a==="needs"){ const f=$("#reader .bf-subj"); if(f){ f.focus(); f.scrollIntoView({block:"center"}); } }
+  if(a==="needs") openDigestList("__dg_needs__","Needs you",needsYou());
+  else if(a==="tidyreview") openDigestList("__dg_tidy__","Safe to file",tidyCandidates());
+  else if(a==="tidy") doTidy();
   else if(a==="commits") openCommitments();
   else if(a==="week") openReview();
   else if(a==="refresh"||a==="retry"){ loadTodayCard(a==="refresh"); renderBrief(); }
   else if(a.startsWith("__")) selectFolder(a);
 }
+/* Lists the digest answers rather than a folder holds: Needs you, a topic from the brief, mail that
+   is safe to file. They ride the search list (state.searching + searchItems, viewId "__dg_*"), so
+   j/k, the reader, healing on archive and Esc back to the folder work as they do for results. */
+function openDigestList(id,title,items){
+  state.searching=true; state.asking=false; state.askAnswer=null; state.viewId=id; state.digestTitle=title;
+  state.q=""; $("#search").value=""; state.searchItems=items.slice(); state.searchHasMore=false; state.cmarked.clear();
+  renderSearchList(); renderFolders();
+  if(isMobile()) document.body.classList.remove("reading");   // a phone shows the list it just opened
+  else if(items.length) openSearchHit(items[0].pk); else clearReader();
+}
+function leaveDigestList(){ clearSearch(false); if(state.allInbox)loadAllInboxes(); else loadCMessages(); }
 function openFromBrief(pk){   // a conversation in this list opens as one; anything else as the message
   const it=state.cmsgs.find(x=>x.pk===pk);
   if(it) openConversation(it,true); else openClientMsg(pk,false);
@@ -3414,9 +3449,15 @@ async function doTidy(){
   const grp=(typeof undoGroup==="function")?undoGroup():undefined;
   const pkset=new Set(cands.map(c=>c.pk));
   state.all=(state.all||[]).filter(x=>!pkset.has(x.pk));        // optimistic remove + re-render
-  state.view=(state.view||[]).filter(x=>!pkset.has(x.pk));
-  renderList(); renderCats&&renderCats();
-  if(focusOn()){ state.focusIntro=true; renderFocus(); } else select(state.view[0]?state.view[0].pk:null,true);
+  if(state.mode==="client"){
+    state.cmsgs=state.cmsgs.filter(x=>!pkset.has(x.pk)); state.searchItems=(state.searchItems||[]).filter(x=>!pkset.has(x.pk));
+    if(pkset.has(state.csel))clearReader();
+    renderClientList(); renderBrief();
+  } else {
+    state.view=(state.view||[]).filter(x=>!pkset.has(x.pk));
+    renderList(); renderCats&&renderCats();
+    if(focusOn()){ state.focusIntro=true; renderFocus(); } else select(state.view[0]?state.view[0].pk:null,true);
+  }
   let ok=0;
   for(const c of cands){ try{ const r=await cpost("/api/archive",grp?{pk:c.pk,undo_group:grp}:{pk:c.pk}); if(r&&r.ok)ok++; }catch(e){} }
   toast(`Filed ${ok} to Archive`); if(ok)showUndoFloat(`Filed ${ok}`);
@@ -4348,7 +4389,7 @@ $("#splitter").addEventListener("keydown",e=>{
 });
 $("#splitter").addEventListener("dblclick",()=>applyListW(LIST_W0,true));
 $("#rows").addEventListener("dblclick",e=>{ if(state.mode==="client" && e.target.closest(".row.cmsg") && !e.target.closest("[data-mark],[data-racts]")) setReadFocus(true); });
-$("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); });
+$("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); else if(e.target.closest("[data-dg-back]"))leaveDigestList(); });
 $("#impseg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
   $$("#impseg button").forEach(x=>{const on=x===b;x.classList.toggle("on",on);x.setAttribute("aria-checked",on);}); state.min=+b.dataset.min; applyFilters(true);});
 $("#cats").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;state.cat=b.dataset.cat;renderCats();applyFilters(true);});
@@ -4463,6 +4504,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   const nv=e.target.closest("[data-nav]"); if(nv){ cmove(+nv.dataset.nav); return; }
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
   const bf=e.target.closest("[data-brief]"); if(bf){ briefAct(bf.dataset.brief); return; }
+  const tp=e.target.closest("[data-brief-topic]"); if(tp){ const g=briefTopics()[+tp.dataset.briefTopic]; if(g)openDigestList("__dg_topic__",g.label,g.items); return; }
   const bo=e.target.closest("[data-bopen]"); if(bo){ openFromBrief(+bo.dataset.bopen); return; }
   const mo=e.target.closest("[data-more]"); if(mo){ e.stopPropagation(); if($("#moreMenu"))closeMoreMenu(); else openMoreMenu(mo); return; }
   const rs=e.target.closest("[data-readset]"); if(rs){ e.stopPropagation(); if($("#readMenu"))closeReadMenu(); else openReadMenu(rs); return; }
@@ -4668,7 +4710,7 @@ document.addEventListener("keydown",e=>{
       else if(readFocusOn())setReadFocus(false);
       else if(state.cmarked.size)cmarkClear();
       else if(isMobile()&&document.body.classList.contains("reading"))document.body.classList.remove("reading");   // phone: reader → back to the (possibly search) list; a second Esc then clears
-      else if(state.searching){ clearSearch(false); loadCMessages(); }
+      else if(state.searching){ if((state.viewId||"").startsWith("__dg_"))leaveDigestList(); else { clearSearch(false); loadCMessages(); } }
       else document.body.classList.remove("reading"); } else return;
     if(["j","k","n","p","e","#","d","Delete","Backspace","s","u","x","b","r","a","f","c","i","h","w","o","g","z","v","/","["].includes(k))e.preventDefault(); return;
   }
