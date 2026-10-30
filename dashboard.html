@@ -580,6 +580,43 @@
   /* the summary sits on a moss wash at the head of the message; "Up next" closes the page */
   body.mode-client .reader .ai-card{background:var(--ai-wash);border-left:none;box-shadow:none;padding:14px 18px;margin-bottom:20px}
   body.mode-client .reader .ai-card .ai-tldr{font-size:15.5px}
+  /* Today's brief: the Inbox's reading pane while no message is open (showBrief), and its pinned row */
+  .bf-hero{padding:30px 0 18px}
+  .bf-date{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+  .bf-hero h1{margin:8px 0 0;font-family:var(--font-display);font-weight:600;font-size:34px;line-height:1.15;letter-spacing:-.02em;color:var(--ink)}
+  body.mode-client .reader .ai-card.bf-card{padding:18px 20px}
+  .bf-card .bf-narr{font-size:17px;line-height:1.65;text-wrap:pretty}
+  .bf-card .bf-wait{color:var(--mute);font-size:15px}
+  .bf-tallies{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .bf-tally{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 13px;border-radius:var(--r-pill);border:1px solid var(--line-hi);
+    background:var(--panel);color:var(--soft);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .bf-tally:hover{color:var(--ink);border-color:var(--mute)}
+  .bf-tally b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .bf-tally.sun{background:var(--gold-wash);border-color:transparent;color:var(--gold)}
+  .bf-tally.sun b{color:var(--gold)}
+  .bf-h{margin:30px 0 12px;font-family:var(--font-display);font-weight:600;font-size:20px;color:var(--ink)}
+  .bf-needs{display:grid;gap:10px}
+  .bf-need{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-md)}
+  .bf-need:hover{border-color:var(--line-hi)}
+  .bf-n1{display:flex;align-items:center;gap:8px;min-width:0;font-size:13.5px}
+  .bf-n1 b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .bf-n1 time{margin-left:auto;flex:none;font-size:12.5px;color:var(--mute)}
+  .bf-subj{all:unset;display:block;margin-top:3px;font-size:15.5px;font-weight:700;line-height:1.35;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+  .bf-subj:hover{text-decoration:underline;text-underline-offset:3px}
+  .bf-subj:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .bf-gist{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--soft)}
+  .bf-need .rchip{margin-top:9px}
+  .bf-calm,.bf-more{margin:0;color:var(--mute);font-size:14.5px}
+  .bf-more{margin-top:10px}
+  .brief-row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:11px;align-items:center;width:100%;
+    padding:10px;border-radius:var(--r-md);cursor:pointer}
+  .brief-row:hover{background:var(--hover)}
+  .brief-row.sel{background:var(--sel)}
+  .brief-row:focus-visible{box-shadow:inset 0 0 0 2px var(--focus)}
+  .brief-row .bf-sun{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--ai-wash);color:var(--ai);font-size:15px}
+  .brief-row b{display:block;font-size:14px;color:var(--ink)}
+  .brief-row small{display:block;margin-top:1px;font-size:13px;color:var(--mute)}
+  .brief-row small.sun{color:var(--gold)}
   .rd-next{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:28px;padding:12px 12px 12px 16px;
     border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-hi)}
   .rd-next.end{display:block;font-size:13px;color:var(--faint);text-align:center}
@@ -1416,7 +1453,7 @@ async function loadDigest(silent){
   if(state.mode!=="client"){   // Mailbox shares #rows and #reader: the digest only paints them in Briefing (setMode repaints on the way back)
     applyFilters(silent);
     loadTodayCard(false);      // fire-and-forget; never blocks the list
-  }
+  } else renderBrief();        // the brief's needs-you list reads the digest
 }
 let _alertDismissed=new Set();
 function renderAccountAlert(){
@@ -1754,7 +1791,7 @@ async function loadFolders(refreshOnly){
   state.foldersByAcct[acct]=d.folders||[]; state.snoozedCount=d.snoozed||0; state.mutedCount=d.muted||0; state.waitingCount=d.waiting||0; state.replylaterCount=d.replylater||0;
   state.folders=d.folders||[];
   if(!state.folders.some(f=>f.name===state.folder)) state.folder=(state.folders[0]||{}).name||"INBOX";
-  renderFolders();
+  renderFolders(); renderBrief();   // its tallies count waiting / reply later
   if(!state.views.length) loadViews();          // app-global saved views/lanes (once)
   if(!refreshOnly) loadScreener();              // undecided first-contact senders (rail badge + tray)
   if(!cached && !refreshOnly) loadCMessages();  // when cached we already kicked the list load above
@@ -1829,7 +1866,8 @@ async function loadCMessages(){
   // Only touch the reader when nothing is already selected — a deep-link (docOpen / contact-card) sets
   // state.csel synchronously before this async load resolves; clobbering it would show the wrong email.
   if(state.csel==null){
-    if(state.cmsgs.length && !isMobile()) openConversation(state.cmsgs[0],false);
+    if(briefHere()) showBrief(false);   // the Inbox opens on today's brief, not its first message
+    else if(state.cmsgs.length && !isMobile()) openConversation(state.cmsgs[0],false);
     else if(state.cmsgs.length){ document.body.classList.remove("reading"); }
     else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
   }
@@ -1874,11 +1912,12 @@ function renderClientList(){
   const more=(state.cHasMore&&!q)?"+":"";   // server has more than the loaded page
   $("#count").textContent=`${v.length}${more} ${noun}${v.length===1&&!more?"":"s"}`;
   renderBulk();
-  if(!v.length){ $("#rows").innerHTML='<div class="nores">Nothing here.</div>'; return; }
+  const br=briefHere()&&!q?briefRowHtml():"";
+  if(!v.length){ $("#rows").innerHTML=br+'<div class="nores">Nothing here.</div>'; return; }
   // day sections only for real folders listed newest-first (virtual folders sort by their own clock)
   const byDay=!(state.folder||"").startsWith("__") && v.every((it,i)=>it.ts && (i===0||v[i-1].ts>=it.ts));
   let grp="";
-  $("#rows").innerHTML=v.map(it=>{
+  $("#rows").innerHTML=br+v.map(it=>{
     let h=""; if(byDay){ const g=_dayGroup(it.ts); if(g!==grp){ grp=g; h=`<div class="rgrp" role="presentation">${g}</div>`; } }
     return h+rowMarkup(it, state.allInbox?(it.alias||short(it.account)):""); }).join("")
     +((state.cHasMore&&!q)?'<button class="load-more" data-loadmore="list">Load 200 more</button>':"");
@@ -1927,8 +1966,7 @@ async function loadAllInboxes(){
   state.cmsgs=merged; state.cHasMore=false; state.cmarked.clear();
   renderClientList();
   touchLastLook(); clearNewPill();   // viewing all inboxes → reset every account's watermark + drop the stale pill
-  if(merged.length) openConversation(merged[0],false);
-  else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No mail across your inboxes."; }
+  if(state.csel==null) showBrief(false);   // a reload under an open message (undo) leaves it open
 }
 /* ---- multi-select + bulk actions ---- */
 function cmarkToggle(pk){ if(state.cmarked.has(pk))state.cmarked.delete(pk); else state.cmarked.add(pk); refreshRow(pk); renderBulk(); }
@@ -1992,6 +2030,7 @@ async function cbulk(action, anchor){
 function cmove(dir){
   const list=state.searching?state.searchItems:state.cmsgs; if(!list.length)return;
   let i=list.findIndex(x=>x.pk===state.csel);
+  if(i===0&&dir<0&&briefHere()){ showBrief(true); const b=$("#rows .brief-row"); if(b)b.scrollIntoView({block:"nearest"}); return; }   // above the first message: the brief
   i=i<0?0:Math.max(0,Math.min(list.length-1,i+dir)); openConversation(list[i],true);
 }
 function cmoveUnread(dir){   // jump to the next/prev UNREAD conversation
@@ -2039,7 +2078,7 @@ function prefetchAround(pk){
 }
 async function openClientMsg(pk,scroll){
   state.csel=pk; state.thread=null;   // a single message owns the reader now — thread-level actions must not hit the last conversation
-  $$(".row.cmsg").forEach(r=>r.classList.toggle("sel",+r.dataset.pk===pk));
+  $$(".row.cmsg,#rows .brief-row").forEach(r=>r.classList.toggle("sel",+r.dataset.pk===pk));
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   rd.innerHTML=readerSkeleton(cfindAny(pk));   // paint known subject/from + skeleton instantly
   const slowT=setTimeout(()=>{ const h=$("#rdSkelHint"); if(h)h.innerHTML='<span class="spin">↻</span> Still fetching from the server — the first open of an older message can take up to a minute.'; },4000);
@@ -2385,7 +2424,7 @@ function attChip(pk,a){
 async function openThread(tid, latestPk, scroll, acct){
   acct=acct||state.account;
   state.csel=latestPk; state.thread=null;   // set again once this conversation loads; until then actions target latestPk, never the previous thread
-  $$(".row.cmsg").forEach(r=>r.classList.toggle("sel", r.dataset.tid===tid));
+  $$(".row.cmsg,#rows .brief-row").forEach(r=>r.classList.toggle("sel", r.dataset.tid===tid));
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   setLoading(rd, "Loading conversation…", "Still fetching — the first open can be slow.");
   rd.insertAdjacentHTML("afterbegin", readerBarSkel());
@@ -2711,7 +2750,78 @@ function cfindAny(pk){ return cfind(pk) || (state.searchItems||[]).find(x=>x.pk=
 /* ---------- client-mode message actions (optimistic + rollback) ---------- */
 function cpost(path,obj){ return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)}); }
 function cfind(pk){ return state.cmsgs.find(x=>x.pk===pk); }
-function clearReader(){ state.csel=null; state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No message selected."; document.body.classList.remove("reading"); }
+function clearReader(){ if(briefHere()){ showBrief(false); return; }
+  state.csel=null; state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No message selected."; document.body.classList.remove("reading"); }
+/* ═══════════ Today's brief, in the Mailbox reading pane ═══════════
+   The Inbox (and All inboxes) opens on the brief instead of its first message, which would also
+   start that message's read timer. A pinned row heads the list to come back to it, and k from the
+   first message does too. Built from what Briefing already has: the digest (state.all) for what
+   needs you, and the /api/briefing narrative, fetched once and cached the way Briefing does. */
+let _briefErr=null, _briefAsked=false;
+function briefHere(){ return state.mode==="client" && !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
+function briefOpen(){ return $("#reader").classList.contains("brief-pane"); }
+function needsYou(){   // Briefing's to-do test: a next step, an action-needed category, or importance 4+
+  return (state.all||[]).filter(it=>String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4)
+    .sort((a,b)=>(b.importance||0)-(a.importance||0)||b.pk-a.pk);
+}
+function briefRowNote(n){ return n?`${n} need${n===1?"s":""} you`:"Nothing needs you"; }
+function briefRowHtml(){
+  const n=needsYou().length;
+  return `<button class="brief-row${briefOpen()&&state.csel==null?" sel":""}" data-brief-row><span class="bf-sun" aria-hidden="true">✦</span>
+    <span><b>Today’s brief</b><small${n?' class="sun"':""}>${briefRowNote(n)}</small></span></button>`;
+}
+function showBrief(open){   // open: asked for (the row, k, ⌘K), so a phone moves to the pane
+  state.csel=null; state.thread=null; clearTimeout(_seenTimer);
+  $$(".row.cmsg.sel").forEach(r=>r.classList.remove("sel"));
+  document.body.classList.toggle("reading", !!open);
+  if(!_briefData && !_todayInflight && !_briefAsked){ _briefAsked=true; loadTodayCard(false); }
+  renderBrief(true);
+  const b=$("#rows .brief-row"); if(b)b.classList.add("sel");
+}
+function renderBrief(force){   // force: (re)open it; otherwise refresh in place, and only when something changed
+  const r=$("#reader"); if(!force&&!briefOpen())return;
+  const html=briefHtml(); if(!force&&r._briefHtml===html)return;
+  r.className="reader brief-pane"; r._briefHtml=html; r.innerHTML=html; if(force)r.scrollTop=0;
+  const sm=$("#rows .brief-row small"); if(sm){ const n=needsYou().length; sm.className=n?"sun":""; sm.textContent=briefRowNote(n); }   // in place: the row may hold focus
+}
+function briefHtml(){
+  const now=new Date(), h=now.getHours(), b=_briefData, needs=needsYou();
+  const greet=h<5?"Working late":h<12?"Good morning":h<18?"Good afternoon":"Good evening";
+  const narr=_todayInflight?'<p class="bf-wait"><span class="spin">✦</span> Reading your inbox…</p>'
+    :b&&b.narrative?`<p class="ai-tldr bf-narr">${esc(b.narrative)}</p>`
+    :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(_briefErr)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
+    :'<p class="bf-wait">Nothing to brief yet.</p>';
+  const nc=commitments().length, t=[];
+  if(needs.length) t.push(`<button class="bf-tally sun" data-brief="needs"><b>${needs.length}</b> need${needs.length===1?"s":""} you</button>`);
+  if(state.waitingCount) t.push(`<button class="bf-tally" data-brief="__waiting__"><b>${state.waitingCount}</b> waiting on others</button>`);
+  if(state.replylaterCount) t.push(`<button class="bf-tally" data-brief="__replylater__"><b>${state.replylaterCount}</b> to reply later</button>`);
+  if(nc) t.push(`<button class="bf-tally" data-brief="commits"><span aria-hidden="true">⚡</span><b>${nc}</b> commitment${nc>1?"s":""}</button>`);
+  t.push('<button class="bf-tally" data-brief="week"><span aria-hidden="true">📅</span>Your week</button>');
+  const multi=(state.accountsList||[]).length>1, CAP=12;
+  const card=it=>`<article class="bf-need"><span class="av" style="--h:${avHue(it.from_addr||it.from_name)}" aria-hidden="true">${esc(initialsOf(it.from_name,it.from_addr))}</span>
+    <div style="min-width:0"><div class="bf-n1"><b>${esc(it.from_name||it.from_addr||"—")}</b>${multi?`<span class="acctchip">${esc(nameOf(it.account))}</span>`:""}<time>${esc(it.when||"")}</time></div>
+      <button class="bf-subj" data-bopen="${it.pk}">${esc(it.subject||"(no subject)")}</button>
+      ${it.summary?`<p class="bf-gist">${esc(it.summary)}</p>`:""}
+      ${String(it.action||"").trim()?`<span class="rchip need">${esc(it.action)}</span>`:""}</div></article>`;
+  return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button><span class="rd-sp" aria-hidden="true"></span>
+      <button class="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)"${_todayInflight?" disabled":""}><span>↻</span> Refresh brief</button></div>
+    <header class="bf-hero"><div class="bf-date">${esc(now.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))}</div><h1>${greet}.</h1></header>
+    <section class="ai-card bf-card" aria-label="Today’s brief"><div class="ai-hd">✦ Your brief</div>${narr}<div class="bf-tallies">${t.join("")}</div></section>
+    <h2 class="bf-h" id="bfNeeds">Needs you</h2>
+    ${needs.length?`<div class="bf-needs">${needs.slice(0,CAP).map(card).join("")}</div>${needs.length>CAP?`<p class="bf-more">and ${needs.length-CAP} more</p>`:""}`
+      :'<p class="bf-calm">Nothing needs you right now.</p>'}`;
+}
+function briefAct(a){
+  if(a==="needs"){ const f=$("#reader .bf-subj"); if(f){ f.focus(); f.scrollIntoView({block:"center"}); } }
+  else if(a==="commits") openCommitments();
+  else if(a==="week") openReview();
+  else if(a==="refresh"||a==="retry"){ loadTodayCard(a==="refresh"); renderBrief(); }
+  else if(a.startsWith("__")) selectFolder(a);
+}
+function openFromBrief(pk){   // a conversation in this list opens as one; anything else as the message
+  const it=state.cmsgs.find(x=>x.pk===pk);
+  if(it) openConversation(it,true); else openClientMsg(pk,false);
+}
 function refreshRow(pk){   // update ONE row in place (no full-list rebuild -> no flicker)
   if(state.asking)return;   // ask-your-inbox owns #rows; a dwell-seen refresh must not clobber the answer
   if(state.searching&&state.viewId==="__lane_feed__"){   // the Feed river uses .fr-card, not .row
@@ -3205,11 +3315,12 @@ async function loadTodayCard(force){
     let d;
     if(force) d=await cpost("/api/briefing/refresh",{});   // CSRF+Origin via cpost
     else d=await api("/api/briefing");
-    if(!d||!d.ok){ el.innerHTML=`<div class="ai-err">Briefing unavailable${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-todayrerun>Try again</button></div>`; return; }
+    if(!d||!d.ok){ _briefErr=(d&&d.error)||"no answer"; el.innerHTML=`<div class="ai-err">Briefing unavailable${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-todayrerun>Try again</button></div>`; return; }
+    _briefErr=null;
     if(!d.narrative && !(d.groups||[]).length){ el.hidden=true; return; }   // nothing to show
     renderTodayCard(d);
-  }catch(e){ el.innerHTML=`<div class="ai-err">Couldn’t load today’s briefing. <button class="ai-rerun" data-todayrerun>Retry</button></div>`; }
-  finally{ _todayInflight=false; }
+  }catch(e){ _briefErr="couldn’t reach the server"; el.innerHTML=`<div class="ai-err">Couldn’t load today’s briefing. <button class="ai-rerun" data-todayrerun>Retry</button></div>`; }
+  finally{ _todayInflight=false; renderBrief(); }
 }
 function renderTodayCard(d){
   _briefData=d;
@@ -4253,6 +4364,7 @@ $("#monos").addEventListener("click",e=>{const d=e.target.closest(".mono-dot");i
   else { state.account=state.account===d.dataset.acct?"":d.dataset.acct; renderMonos(); applyFilters(true); }});
 $("#sort").addEventListener("change",e=>{state.sort=e.target.value;applyFilters(true);});
 $("#rows").addEventListener("click",e=>{
+  if(e.target.closest("[data-brief-row]")){ showBrief(true); return; }
   const al=e.target.closest("[data-scr-allow]"); if(al){ screenerDecide(al.dataset.scrAllow,"keep"); return; }
   const bl=e.target.closest("[data-scr-block]"); if(bl){ screenerDecide(bl.dataset.scrBlock,"block"); return; }
   const fa=e.target.closest("[data-fr-arch]"); if(fa){ e.stopPropagation(); feedArchive(+fa.dataset.frArch); return; }
@@ -4346,6 +4458,8 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   if(e.target.closest("[data-back]")){ backToList(); return; }
   const nv=e.target.closest("[data-nav]"); if(nv){ cmove(+nv.dataset.nav); return; }
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
+  const bf=e.target.closest("[data-brief]"); if(bf){ briefAct(bf.dataset.brief); return; }
+  const bo=e.target.closest("[data-bopen]"); if(bo){ openFromBrief(+bo.dataset.bopen); return; }
   const mo=e.target.closest("[data-more]"); if(mo){ e.stopPropagation(); if($("#moreMenu"))closeMoreMenu(); else openMoreMenu(mo); return; }
   const rs=e.target.closest("[data-readset]"); if(rs){ e.stopPropagation(); if($("#readMenu"))closeReadMenu(); else openReadMenu(rs); return; }
   if(e.target.closest("[data-airerun]")){ summarize(true); return; }
@@ -4642,6 +4756,7 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Sync now", fn:()=>sync()});
   E.push({group:"Commands", label:"Toggle conversations / messages", modes:["client"], fn:()=>setThreadView(!state.threadView)});
   E.push({group:"Commands", label:readFocusOn()?"Leave focus reading":"Focus reading — hide folders and list", key:"↵", modes:["client"], enabled:()=>!isMobile(), fn:()=>setReadFocus(!readFocusOn())});
+  E.push({group:"Commands", label:"Today’s brief", modes:["client"], fn:()=>{ if(briefHere())showBrief(true); else if(state.allInbox)loadAllInboxes(); else selectFolder("INBOX"); }});
   E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", modes:["client"], fn:()=>toggleRail()});
   E.push({group:"Commands", label:"Reading settings — width, text, mail colors", modes:["client"], enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", modes:["summary"], fn:()=>reconcile()});
