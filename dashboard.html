@@ -1413,8 +1413,10 @@ async function loadDigest(silent){
   state.myAddrs=new Set([...(d.send_accounts||[]),...(d.accounts||[])].map(e=>(e||"").toLowerCase()));
   renderCats(); renderMonos(); renderLive();
   renderAccountAlert();
-  applyFilters(silent);
-  if(state.mode!=="client") loadTodayCard(false);   // fire-and-forget; never blocks the list
+  if(state.mode!=="client"){   // Mailbox shares #rows and #reader: the digest only paints them in Briefing (setMode repaints on the way back)
+    applyFilters(silent);
+    loadTodayCard(false);      // fire-and-forget; never blocks the list
+  }
 }
 let _alertDismissed=new Set();
 function renderAccountAlert(){
