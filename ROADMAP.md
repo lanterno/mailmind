@@ -70,11 +70,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - *The durable-task half needs a new table*, and per the original design constraint it must key on
     `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
   The AI `action` string in the Commitments panel is read-only and parses no dates.
-- **Read-only agenda peek and a "happening soon" nudge** · medium value · effort M — Invites are
-  parsed per-message-open in `_invite_for()` and discarded; the schema has no events table, so
-  there is no queryable set of upcoming meetings. Needs VEVENT persistence at ingest (or a scan
-  over messages with a text/calendar part) plus a rail entry or a line in today's brief. Clean follow-on to the
-  shipped invite parser.
+- **Invites from unopened mail, and a "happening soon" nudge** · medium value · effort M — The
+  brief's Today & next (`server.upcoming`) scans the text/calendar parts of bodies already fetched,
+  so an invite in mail you haven't opened, and that wasn't prefetched, isn't listed. Fetching
+  calendar parts at ingest, or persisting VEVENTs there, would close that. Nothing tells you an
+  event is about to start either; `upcoming()` is the query a nudge on the 60s tick would use.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
   "auto-triage the ambiguous residual": the Screener already is a learning Imbox that writes
   `mailmind_rules.json` one sender at a time, so do not rebuild it. What is missing is a

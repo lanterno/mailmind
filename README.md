@@ -79,8 +79,17 @@ and Claude (the Claude API, or the `claude` CLI on your own machine).
   shows the day's AI brief on a painted landscape (sun by day, moon and stars by
   night), tallies for what needs you, what's waiting and your
   commitments, and the messages that need you, each with its summary and next step.
+  Every card has its verbs on it: **Use draft** when a reply is already pre-written
+  (else **Reply**), **Read**, and snooze, archive and delete without opening it.
+  Beside them on a wide pane (below them on a narrow one), **Today & next** lists the
+  coming events from the calendar invites in mail already opened (or prefetched), and
+  **Waiting on others** the threads you sent that are still owed a reply.
   A pinned row at the top of the Inbox (or `k` from the first message) brings it back,
   so opening the Inbox marks nothing read.
+- **The Inbox in three tabs.** The list is headed by the folder's name, and on the
+  Inbox by **Needs you** (the default, the brief's to-do test), **Everything** and
+  **Unread**, each with its count; `j`/`k` walk the tab you're on, and the choice is
+  remembered.
 - **Messages open instantly.** The reader paints subject, sender and folder from the
   list immediately behind a shimmer skeleton, and escalates to an honest "first open
   of an older message can take a minute" hint if the server is slow.
@@ -139,7 +148,9 @@ and Claude (the Claude API, or the `claude` CLI on your own machine).
   auto-label lanes — Feed, Paper trail, Notifications, Action needed, Finance —
   which are just saved queries over the existing classifier buckets.
 - **One "All inboxes" view** merges every connected account's INBOX by date with
-  per-row account chips, replacing the eight-click morning ritual.
+  per-row account chips, replacing the eight-click morning ritual. The switcher at the
+  top of the rail shows each account as a colored dot (stacked for All inboxes) and
+  says in words when one can't connect.
 - **Document Hub.** Every real attachment across every account in one searchable
   overlay — type facets, live filename/sender/subject search, direct download and
   click-through to the source email, with the same file synced to two accounts merged.
@@ -282,10 +293,11 @@ automatically.
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
   account, saved views, the actions available on the selected message, and app commands.
-- **Two full themes in the Meadow palette** — a cream **Day** (the default) and a
-  deep-blue **Night**, switched by the sun/moon button, with the panels laid on a sky
-  that follows the theme. Indigo marks actions and selection, gold means only "needs you",
-  moss means only "the AI said this", and rust is for delete.
+- **Three themes in the Meadow palette** — a cream **Day** (the default), a warm
+  **Dusk** and a deep-blue **Night**, cycled by the sun button in the top bar (or
+  chosen in the `?` legend and ⌘K), with the panels laid on a sky that follows the theme.
+  Indigo marks actions and selection, gold means only "needs you", moss means only "the
+  AI said this", and rust is for delete.
   Applied before first paint, so there's no flash, and the mail body follows the app.
 - **One drawn icon set** — toolbars, folders and menus share one set of monoline icons,
   inline SVG in the page itself (no emoji, no icon font, no extra request), so they look
@@ -296,7 +308,7 @@ automatically.
   the app.
 - **Accessibility is wired in** — modal focus traps with focus restore and the rest of
   the page inert, accessible names on every mail frame, an aria-live region announcing
-  new mail and AI results, WCAG AA contrast for secondary text in both themes, a
+  new mail and AI results, WCAG AA contrast for secondary text in every theme, a
   reduced-motion mode, and a "disable single-key shortcuts" toggle for voice and
   switch users.
 
@@ -449,10 +461,11 @@ python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
 python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
 python3 test_claude_api.py     # Claude API engine against a local stub: requests, refusals, retries
+python3 test_upcoming.py       # Today & next: invites from fetched mail, updates, cancellations
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all six and `just verify` adds lint, byte-compile and a
+`just test` runs all seven and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it

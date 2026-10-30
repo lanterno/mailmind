@@ -31,11 +31,12 @@ python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
 python3 test_claude_api.py        # Claude API engine against a local stub server (18)
+python3 test_upcoming.py          # Today & next invites + the Waiting view's recipient (10)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
-`test_thread_file.py` and `test_claude_api.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
+`test_thread_file.py`, `test_claude_api.py` and `test_upcoming.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
 by renaming.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
@@ -74,7 +75,8 @@ Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbo
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
-(`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative).
+(`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative; its
+side column, `briefSideHtml`, from `/api/upcoming` and the `__waiting__` view).
 A separate Briefing view existed until it was folded into this one; `body.mode-client`
 survives as a CSS specificity hook, not a mode.
 
