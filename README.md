@@ -51,7 +51,7 @@ the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 The app runs in two modes over the same data: a **Briefing** — a dense priority
 list plus reader, or a single-stream daily brief — and a **Mailbox** — a real
-folder-and-account client. Curation tools (sweep junk, keep/block rules,
+folder-and-account client whose Inbox opens on the same brief. Curation tools (sweep junk, keep/block rules,
 reconcile, audit) live in a slide-in drawer.
 
 ## Features
@@ -76,6 +76,11 @@ and the `claude` CLI on your own machine.
   the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
   opening the message shows the same summary at the top, with no extra AI call, and
   `i` asks for the full one. Rows are grouped by day.
+- **Today's brief opens the Inbox.** With no message open, the Mailbox reading pane
+  shows the day's AI brief, tallies for what needs you, what's waiting and your
+  commitments, and the messages that need you, each with its summary and next step.
+  A pinned row at the top of the Inbox (or `k` from the first message) brings it back,
+  so opening the Inbox marks nothing read.
 - **The daily brief as a single stream.** Read one message-card at a time with an
   AI narrative intro, clickable topic chips, `j`/`k` navigation and a progress rail
   across the top — or flip to the classic two-pane **List** at any moment. The choice
