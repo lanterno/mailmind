@@ -272,10 +272,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   from the live tokens (`tk("--bg")`, `tk("--ink")`), which are the light ones under
   `body.theme-light`. Choosing Dark under Aa there leaves plain text on light paper and inverts rich
   mail onto a light page. Dark needs its own night palette that doesn't follow the app theme.
-- **A phone reading toolbar** · medium value · effort S — the reader's pinned action bar and its
-  `@container pane` tiers sit inside `@media (min-width:821px)`, so at phone widths every labelled
-  button wraps, four rows deep, above the message. Give ≤820px one icon row with the rarer verbs
-  behind a ⋯ menu.
 - **Replace emoji with an inline-SVG monoline icon set** · medium value · effort L — Now the largest
   craft gap, since the type system and the Meadow palette with its Day theme have landed.
   Emoji are still the entire icon vocabulary (✦×46, ⚡×15, ⏰×10, ☰×7, 📎×7 …), including the literal

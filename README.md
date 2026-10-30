@@ -70,7 +70,8 @@ and the `claude` CLI on your own machine.
   column with the action bar pinned above it — previous/next, your place in the list
   ("3 of 48") and every verb — and an **Up next** box at the end names the next
   message, with **Archive & next** one click away. `↵` switches to focus reading,
-  which hides folders and list; `Esc` brings them back.
+  which hides folders and list; `Esc` brings them back. As the pane narrows, down to
+  a phone, the bar stays one row: rarer verbs turn to icons, then move under **⋯**.
 - **Summaries before you open anything.** List rows show the stored AI summary under
   the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
   opening the message shows the same summary at the top, with no extra AI call, and
