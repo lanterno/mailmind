@@ -1459,7 +1459,8 @@ async function loadDigest(silent){
   if(state.mode!=="client"){   // Mailbox shares #rows and #reader: the digest only paints them in Briefing (setMode repaints on the way back)
     applyFilters(silent);
     loadTodayCard(false);      // fire-and-forget; never blocks the list
-  } else renderBrief();        // the brief's needs-you list reads the digest
+  } else if(!state.account && state.accountsList.length){ state.account=state.accountsList[0]; renderMonos(); openClient(); }   // the first account just arrived
+  else renderBrief();          // the brief's needs-you list reads the digest
 }
 let _alertDismissed=new Set();
 function renderAccountAlert(){
@@ -1777,8 +1778,17 @@ function setMode(m){
   else { $("#clientCtx").textContent=""; document.body.classList.remove("reading"); state.sel=null; state.focusIntro=true; applyFilters(false); loadTodayCard(false); applyBriefView(state.briefView); }
 }
 async function openClient(){
-  if(!state.account){ $("#rows").innerHTML='<div class="nores">No account selected.</div>'; return; }
+  if(!state.account){
+    if(!(state.accountsList||[]).length){ firstRun(); return; }
+    $("#rows").innerHTML='<div class="nores">No account selected.</div>'; return; }
   await loadFolders();
+}
+function firstRun(){   // nothing connected yet: say so, and offer the way in (loadDigest opens the mailbox once one is)
+  $("#rows").innerHTML=`<div class="nores firstrun"><div class="fr-h">Welcome to MailMind</div>
+    <div class="fr-b">No email accounts connected yet.</div>
+    <button class="abtn prim" data-firstrun>+ Connect your first account</button></div>`;
+  $("#count").textContent=""; $("#folderrail").innerHTML=""; $("#clientCtx").textContent="";
+  const r=$("#reader"); r.className="reader empty-pane"; r.textContent="Your mail shows up here once an account is connected.";
 }
 async function loadFolders(refreshOnly){
   if(!state.account)return;   // no account selected (e.g. snooze/mute fired from Briefing) → /api/folders?account= would 500
@@ -4410,6 +4420,7 @@ $("#monos").addEventListener("click",e=>{const d=e.target.closest(".mono-dot");i
 $("#sort").addEventListener("change",e=>{state.sort=e.target.value;applyFilters(true);});
 $("#rows").addEventListener("click",e=>{
   if(e.target.closest("[data-brief-row]")){ showBrief(true); return; }
+  if(e.target.closest("[data-firstrun]")){ settingsOpen(true); return; }
   const al=e.target.closest("[data-scr-allow]"); if(al){ screenerDecide(al.dataset.scrAllow,"keep"); return; }
   const bl=e.target.closest("[data-scr-block]"); if(bl){ screenerDecide(bl.dataset.scrBlock,"block"); return; }
   const fa=e.target.closest("[data-fr-arch]"); if(fa){ e.stopPropagation(); feedArchive(+fa.dataset.frArch); return; }
