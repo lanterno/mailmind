@@ -1804,7 +1804,7 @@ async function loadCMessages(){
   if(state.csel==null){
     if(state.cmsgs.length && !isMobile()) openConversation(state.cmsgs[0],false);
     else if(state.cmsgs.length){ document.body.classList.remove("reading"); }
-    else { const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
+    else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
   }
 }
 const avHue=a=>{let h=0;for(const c of(a||""))h=(h*31+c.charCodeAt(0))%360;return h;};   // full wheel at low saturation — amber stays the needs-you signal
@@ -1901,7 +1901,7 @@ async function loadAllInboxes(){
   renderClientList();
   touchLastLook(); clearNewPill();   // viewing all inboxes → reset every account's watermark + drop the stale pill
   if(merged.length) openConversation(merged[0],false);
-  else { const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No mail across your inboxes."; }
+  else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No mail across your inboxes."; }
 }
 /* ---- multi-select + bulk actions ---- */
 function cmarkToggle(pk){ if(state.cmarked.has(pk))state.cmarked.delete(pk); else state.cmarked.add(pk); refreshRow(pk); renderBulk(); }
@@ -2011,7 +2011,8 @@ function prefetchAround(pk){
   [list[i+1],list[i+2]].forEach(x=>x&&prefetchBody(x.pk));
 }
 async function openClientMsg(pk,scroll){
-  state.csel=pk; $$(".row.cmsg").forEach(r=>r.classList.toggle("sel",+r.dataset.pk===pk));
+  state.csel=pk; state.thread=null;   // a single message owns the reader now — thread-level actions must not hit the last conversation
+  $$(".row.cmsg").forEach(r=>r.classList.toggle("sel",+r.dataset.pk===pk));
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   rd.innerHTML=readerSkeleton(cfindAny(pk));   // paint known subject/from + skeleton instantly
   const slowT=setTimeout(()=>{ const h=$("#rdSkelHint"); if(h)h.innerHTML='<span class="spin">↻</span> Still fetching from the server — the first open of an older message can take up to a minute.'; },4000);
@@ -2281,14 +2282,16 @@ function attChip(pk,a){
 /* ---------- conversation (thread) reader ---------- */
 async function openThread(tid, latestPk, scroll, acct){
   acct=acct||state.account;
-  state.csel=latestPk; $$(".row.cmsg").forEach(r=>r.classList.toggle("sel", r.dataset.tid===tid));
+  state.csel=latestPk; state.thread=null;   // set again once this conversation loads; until then actions target latestPk, never the previous thread
+  $$(".row.cmsg").forEach(r=>r.classList.toggle("sel", r.dataset.tid===tid));
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   setLoading(rd, "Loading conversation…", "Still fetching — the first open can be slow.");
   rd.insertAdjacentHTML("afterbegin", readerBarSkel());
   const seq=++state.cseq;
   let d; try{ d=await api(`/api/thread?account=${encodeURIComponent(acct)}&thread_id=${encodeURIComponent(tid)}`); }
-  catch(e){ rd.innerHTML='<div class="nores">Couldn’t load.</div>'; return; }
-  if(seq!==state.cseq||!d.ok){ if(!d||!d.ok)rd.innerHTML='<div class="nores">'+esc((d&&d.error)||"error")+'</div>'; return; }
+  catch(e){ if(seq===state.cseq&&state.csel===latestPk)rd.innerHTML='<div class="nores">Couldn’t load.</div>'; return; }
+  if(seq!==state.cseq||state.csel!==latestPk)return;   // superseded — another conversation or a single message opened meanwhile
+  if(!d.ok){ rd.innerHTML='<div class="nores">'+esc(d.error||"error")+'</div>'; return; }
   state.thread=d;
   mailThemeDark=effMailDark(true);   // threads are usually HTML → original by default (per-member bodyDoc still decides)
   const subj=(d.items[0]||{}).subject||"(no subject)";
@@ -2606,7 +2609,7 @@ function cfindAny(pk){ return cfind(pk) || (state.searchItems||[]).find(x=>x.pk=
 /* ---------- client-mode message actions (optimistic + rollback) ---------- */
 function cpost(path,obj){ return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)}); }
 function cfind(pk){ return state.cmsgs.find(x=>x.pk===pk); }
-function clearReader(){ state.csel=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No message selected."; document.body.classList.remove("reading"); }
+function clearReader(){ state.csel=null; state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No message selected."; document.body.classList.remove("reading"); }
 function refreshRow(pk){   // update ONE row in place (no full-list rebuild -> no flicker)
   if(state.asking)return;   // ask-your-inbox owns #rows; a dwell-seen refresh must not clobber the answer
   if(state.searching&&state.viewId==="__lane_feed__"){   // the Feed river uses .fr-card, not .row
