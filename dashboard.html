@@ -2174,6 +2174,18 @@ function toggleMailTheme(){
   } else if(state.lastBody){ renderClientReader(state.lastBody); }
 }
 function fmtSize(n){ if(!n)return""; if(n<1024)return n+" B"; if(n<1048576)return (n/1024).toFixed(0)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
+/* A mail frame is sized to its content on load; a narrower or wider column reflows that content
+   (splitter drag, window resize, column width), so refit whenever the frame's width changes. */
+const _frameRO=window.ResizeObserver?new ResizeObserver(es=>{ for(const en of es){
+  const fr=en.target, w=Math.round(en.contentRect.width); if(fr._fitW!==w){ fr._fitW=w; fitMailFrame(fr); } } }):null;
+const _fitFrames=new Set();
+function fitMailFrame(fr){ try{ fr.style.height=Math.min((fr.contentWindow.document.body.scrollHeight||fr._fitMin)+fr._fitPad,5000)+"px"; }catch(e){} }
+function sizeMailFrame(fr,min,pad){   // call from the frame's load handler
+  fr._fitMin=min; fr._fitPad=pad; fitMailFrame(fr);
+  if(!_frameRO)return;
+  for(const f of _fitFrames) if(!f.isConnected){ _frameRO.unobserve(f); _fitFrames.delete(f); }   // frames from re-rendered readers
+  fr._fitW=Math.round(fr.getBoundingClientRect().width); _fitFrames.add(fr); _frameRO.observe(fr);
+}
 function renderClientReader(d){
   state.lastBody=d;            // keep the full payload for reply/forward recipient math
   mailThemeDark=effMailDark(d.has_html);   // content-aware: rich HTML → original, plain → dark
@@ -2221,7 +2233,7 @@ function renderClientReader(d){
     ${upNextHtml(!isDraft)}`;
   storedSummaryCard(it);
   const fr=rd.querySelector("iframe");
-  fr.addEventListener("load",()=>{ try{ fr.style.height=Math.min((fr.contentWindow.document.body.scrollHeight||400)+30,5000)+"px"; }catch(e){} wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
+  fr.addEventListener("load",()=>{ sizeMailFrame(fr,400,30); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
   if(!isDraft && state.folder!=="__muted__") armDraftAhead(d.pk, _draftEligibleClient(it));   // instant peek + dwell kick — "Reply" may already be "✦ Draft ready"
 }
 async function loadImagesFor(pk){
@@ -2333,7 +2345,7 @@ async function expandMember(pk){
   const doc=d.has_html?bodyDoc(d.html||"",true):bodyDoc(esc(d.text||"(no content)"),false);
   el.innerHTML=`${extBar(d)}${inviteCard(d)}${imgbar}${attbar}<iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>`;
   const fr=el.querySelector("iframe");
-  if(fr)fr.addEventListener("load",()=>{ try{ fr.style.height=Math.min((fr.contentWindow.document.body.scrollHeight||300)+24,5000)+"px"; }catch(e){} wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
+  if(fr)fr.addEventListener("load",()=>{ sizeMailFrame(fr,300,24); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
   cmarkseen(pk);
 }
 
