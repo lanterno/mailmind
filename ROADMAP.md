@@ -209,8 +209,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   and the recipient autocomplete — both correctly `role="listbox"` — but not the actual message
   list. Biggest remaining a11y gap.
 - **Finish the row hover cluster, and hover-to-prefetch** · medium value · effort S — `rowMarkup()`'s
-  `.racts` cluster offers Archive, Delete and Snooze (Snooze only on multi-message conversation
-  rows); Star and Mark-read are still key- or toolbar-only. Separately, a debounced `mouseover` on
+  `.racts` cluster offers Archive, Delete and Snooze; Star and Mark-read are still key- or
+  toolbar-only. Separately, a debounced `mouseover` on
   `#rows` calling the existing `prefetchBody` would make the first open of a hovered row instant
   (today prefetch fires only on open and on thread expansion).
 - **Live regions on the toast, send float and undo float** · medium value · effort S — `#srLive`

@@ -115,7 +115,10 @@ and the `claude` CLI on your own machine.
   destructive verbs live on `#`/Delete/Backspace, and `z` — or a floating Undo
   button — reverses archive, delete, junk, move, snooze and mute, server-side.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
-  without opening it (conversations offer Snooze, which covers the whole thread).
+  without opening it.
+- **Conversations file whole.** On a conversation — its row, the thread reader, `e`/`d`
+  or a bulk selection — Archive and Delete take every message of it in that folder (your
+  replies in Sent stay put), and one Undo brings them all back.
 - **Bulk triage on demand.** Mark rows with `x` or the checkbox on each avatar, then archive,
   delete, read, unread, star, junk, snooze or mute the whole set as **one** undo group.
 - **Snooze, mute, reply-later and Waiting.** A numbered snooze preset popover (plus a
@@ -183,8 +186,9 @@ UI. Nothing is ever sent automatically.
   is still waiting on you, who you're waiting on, and three concrete things to start
   next week with. Every item is clickable into the thread.
 - **✦ Draft.** One click writes an editable reply into the composer from the whole
-  thread. A background pre-drafter can have it ready *before* you press Reply — the
-  Reply button reads **✦ Draft ready** — and pre-drafts survive restarts.
+  thread. For mail the AI rates important or action-needed, a background pre-drafter can
+  have it ready *before* you press Reply — the Reply button reads **✦ Draft ready** — and
+  pre-drafts survive restarts.
 - **✦ Rewrite toolbar** over the composer: Shorten, Elaborate, Formal, Friendly, Fix
   grammar, Translate — acting on your selection or the whole draft, with one-step Undo.
 - **Ask your inbox.** Prefix a search with `?` and get a grounded plain-English answer
@@ -425,10 +429,11 @@ python3 tests.py               # behavioral classifier suite
 python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
+python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all four and `just verify` adds lint, byte-compile and a
+`just test` runs all five and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it

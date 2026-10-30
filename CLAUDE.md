@@ -29,11 +29,12 @@ python3 tests.py                  # classifier behaviour (27 assertions)
 python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
+python3 test_thread_file.py       # whole-conversation archive/trash (10)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
-comment out cases or copy one into a REPL. `test_css_sanitizer.py` and `test_expire.py`
-collect callables from `globals()` whose names start with `test_`, so you can gate them
+comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
+`test_thread_file.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
 by renaming.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
@@ -116,6 +117,9 @@ work with them unset.
   op, so it runs under `_ops_lock`.
 - Undo is an in-memory LIFO `_undo_stack` — **lost on restart**, by design. Bulk actions
   push one grouped entry with children.
+- Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
+  the members server-side — the anchor's `thread_id` within the anchor's folder — and files
+  each through the per-message op (`do_write` / `do_trash`) under one undo group.
 - **`pk` is not stable.** Reconcile can renumber rows, so anything durable keys on
   `(account, message_id)` — see `store.get_message_by_msgid`.
 
