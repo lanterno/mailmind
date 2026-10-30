@@ -498,7 +498,8 @@
      The rail is icons (64px) or icons + names (224px): ☰ or [ switches, persisted as
      mm_rail. At <=1100px it becomes a drawer. The splitter sets the list width
      (drag, ←/→, double-click resets; mm_list_w). Focus reading (↵, Esc leaves)
-     hides rail and list. Briefing never gets .mode-client, so none of this reaches it. */
+     hides rail and list. The reading measure is set from Aa (mm_read, applyReadWidth).
+     Briefing never gets .mode-client, so none of this reaches it. */
   body.mode-client{--gap:8px;--rail-w:64px;--list-w:372px;--measure:760px}
   body.mode-client.rail-wide{--rail-w:224px}
   body.mode-client .split{position:relative;gap:var(--gap);padding:var(--gap);background:var(--bg2)}
@@ -927,6 +928,19 @@
   .snooze-menu .snz-n{display:inline-block;width:15px;color:var(--faint);font-size:11px;font-family:var(--font-mono)}
   .snooze-menu .snz-custom{display:flex;flex-direction:column;gap:4px;color:var(--soft);font:inherit;font-size:11.5px;padding:8px 13px}
   .snooze-menu .snz-custom input{background:var(--bg);border:1px solid transparent;border-radius:var(--r-xs);color:var(--ink);font:inherit;font-size:12.5px;padding:5px 7px;color-scheme:dark}
+  /* Aa — reading settings: column width, plain-text face and size, mail colors */
+  .read-menu{position:fixed;z-index:95;width:300px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line-hi);
+    border-radius:var(--r-md);box-shadow:var(--sh-3);padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .read-menu h3{margin:0;font-size:13.5px;font-weight:700;color:var(--ink)}
+  .read-menu .rs-row{display:flex;flex-direction:column;gap:6px}
+  .read-menu .rs-lab{font-size:12px;color:var(--mute)}
+  .read-menu .seg{display:flex}
+  .read-menu .seg button{flex:1;padding:6px 4px;font-size:12.5px;line-height:1.2}
+  .read-menu .seg button.on{background:var(--sel);color:var(--primary-ink);box-shadow:none}
+  .read-menu .rs-sz-s{font-size:11px!important} .read-menu .rs-sz-m{font-size:13px!important}
+  .read-menu .rs-sz-l{font-size:15px!important} .read-menu .rs-sz-xl{font-size:17px!important}
+  .read-menu .rs-note{margin:0;font-size:12px;line-height:1.45;color:var(--mute)}
+  .cab .rs-aa{font-weight:700;letter-spacing:-.02em}
   .all-dot{color:var(--primary-ink)!important;border-style:dashed}
   .load-more{display:block;width:calc(100% - 26px);margin:10px 13px;background:var(--sel);
     border:none;border-radius:var(--r-sm);color:var(--soft);font:inherit;font-size:12.5px;font-weight:500;padding:9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
@@ -2028,13 +2042,23 @@ async function openClientMsg(pk,scroll){
   prefetchAround(pk);          // warm the next 1-2 bodies in the background
 }
 let _seenTimer=null;
-let mailThemeDark = true;   // effective dark/original for the message on screen (recomputed per render)
 // content-aware default: rich HTML → original sender palette; plain text → dark reading mode.
-// An explicit user toggle (mm_mailtheme) wins for all mail thereafter.
+// A choice under Aa → Mail colors (mm_mailtheme: dark | original; absent = auto) wins for all mail.
 function effMailDark(isHtml){ const p=localStorage.getItem("mm_mailtheme");
   if(p) return p!=="original";
   if(document.body.classList.contains("theme-light")) return false;   // paper app → paper mail by default
   return !isHtml; }
+/* Reading settings (Aa). Width is the Mailbox reading measure; face and size typeset plain-text
+   mail only — rich mail keeps the sender's own type. System stacks: the mail iframe's CSP
+   (font-src data:) can't load the app's web fonts. Kept in mm_read; colors stay in mm_mailtheme. */
+const READ_W={narrow:640,medium:760,wide:920}, READ_SIZE={s:15,m:16.5,l:18,xl:20};
+const READ_FONT={sans:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+  serif:'"Iowan Old Style",Charter,"Source Serif 4",Georgia,serif', mono:'ui-monospace,"SF Mono",Menlo,Consolas,monospace'};
+function readPrefs(){ let p={}, c=null;
+  try{ p=JSON.parse(localStorage.getItem("mm_read")||"{}")||{}; c=localStorage.getItem("mm_mailtheme"); }catch(e){}
+  return { width:READ_W[p.width]?p.width:"medium", size:READ_SIZE[p.size]?p.size:"m",
+           font:READ_FONT[p.font]?p.font:"sans", colors:c==="dark"||c==="original"?c:"auto" }; }
+function applyReadWidth(){ document.body.style.setProperty("--measure",READ_W[readPrefs().width]+"px"); }
 function themeIsLight(){ return document.body.classList.contains("theme-light"); }
 // a theme token's current value, for documents (the mail iframe) that can't see our CSS
 function tk(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
@@ -2090,9 +2114,9 @@ function bodyDoc(content,isHtml){
     }
   } else {   // plain text is fully controlled — always typeset cleanly, dark or light
     // themed from the live tokens, so plain text always sits on the app's own paper
-    const ink=dark?tk("--ink"):"#24221E", bg=dark?tk("--bg"):"#FFFDF8", lk=dark?tk("--primary-ink"):"#2D4B70";
+    const ink=dark?tk("--ink"):"#24221E", bg=dark?tk("--bg"):"#FFFDF8", lk=dark?tk("--primary-ink"):"#2D4B70", rp=readPrefs();
     style="<style>body{margin:14px;color:"+ink+";background:"+bg+";overflow-wrap:break-word}a{color:"+lk+"}"
-      +"pre{white-space:pre-wrap;font:15px/1.6 ui-monospace,monospace;margin:0}"
+      +"pre{white-space:pre-wrap;font:"+READ_SIZE[rp.size]+"px/"+(rp.font==="mono"?1.55:1.62)+" "+READ_FONT[rp.font]+";margin:0}"
       +"blockquote{border-left:3px solid "+(dark?tk("--line-hi"):"#D5C9B1")+";margin:0 0 0 4px;padding-left:12px;color:"+(dark?tk("--mute"):"#625B4D")+"}"+qcss+"</style>";
     const f=_foldPlainQuote(content);
     inner = f ? '<pre>'+f.head+'</pre><details class="mm-quote"><summary>··· quoted text</summary><pre>'+f.quoted+'</pre></details>'
@@ -2167,13 +2191,50 @@ function wireMailLinks(fr, senderDom){
       fr.setAttribute("sandbox","allow-same-origin"); console.error("SECURITY: stripped allow-scripts from a reader iframe"); } } })
     .observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["sandbox"]});
 }catch(e){} })();
-function toggleMailTheme(){
-  mailThemeDark=!mailThemeDark;
-  localStorage.setItem("mm_mailtheme", mailThemeDark?"dark":"original");
-  toast(mailThemeDark?"Mail: dark":"Mail: original colors");
-  if(state.thread){   // re-render every expanded thread member
-    $$(".tmsg.open").forEach(s=>{ const b=s.querySelector(".tmsg-body"); if(b&&b.dataset.loaded){ const pk=+s.dataset.pk; b.dataset.loaded=""; b.innerHTML=""; s.classList.remove("open"); expandMember(pk); } });
-  } else if(state.lastBody){ renderClientReader(state.lastBody); }
+// re-typeset the open mail from the payloads its frames keep (fr._mail): no refetch, and the
+// rest of the reader — an AI summary, an expanded conversation — stays as it is
+function rerenderMail(plainOnly){
+  $$("#reader iframe.rd-iframe").forEach(fr=>{ const d=fr._mail; if(d&&!(plainOnly&&d.has_html))fr.srcdoc=mailDoc(d); });
+}
+function setReadPref(k,v){
+  const p=readPrefs(); if(p[k]===v)return; p[k]=v;
+  try{ if(k==="colors"){ if(v==="auto")localStorage.removeItem("mm_mailtheme"); else localStorage.setItem("mm_mailtheme",v); }
+       else localStorage.setItem("mm_read",JSON.stringify({width:p.width,size:p.size,font:p.font})); }catch(e){}
+  if(k==="width")applyReadWidth(); else rerenderMail(k!=="colors");
+  $$(`#readMenu [data-rs="${k}"]`).forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle("on",on); b.setAttribute("aria-pressed",on); });
+}
+const READ_ROWS=[["width","Column width",[["narrow","Narrow"],["medium","Medium"],["wide","Wide"]]],
+  ["font","Plain-text face",[["sans","Sans"],["serif","Serif"],["mono","Mono"]]],
+  ["size","Plain-text size",[["s","A","Small"],["m","A","Medium"],["l","A","Large"],["xl","A","Extra large"]]],
+  ["colors","Mail colors",[["auto","Auto"],["dark","Dark"],["original","Original"]]]];
+function openReadMenu(anchor){
+  closeReadMenu(); closeSnoozeMenu();
+  const p=readPrefs(), m=document.createElement("div");
+  m.className="read-menu"; m.id="readMenu"; m.setAttribute("role","dialog"); m.setAttribute("aria-labelledby","readMenuH");
+  m.innerHTML='<h3 id="readMenuH">Reading settings</h3>'
+    +READ_ROWS.map(([k,lab,opts])=>`<div class="rs-row"><span class="rs-lab" id="rs-${k}">${lab}</span><div class="seg" role="group" aria-labelledby="rs-${k}">`
+      +opts.map(([v,t,al])=>`<button type="button" data-rs="${k}" data-v="${v}" class="${p[k]===v?"on":""}${k==="size"?" rs-sz-"+v:""}" aria-pressed="${p[k]===v}"${al?` aria-label="${al}"`:""}>${t}</button>`).join("")
+      +"</div></div>").join("")
+    +'<p class="rs-note">Face and size apply to plain-text mail; rich mail keeps the sender\u2019s own type. Auto shows rich mail in its own colors and plain text in the app\u2019s.</p>';
+  m.querySelectorAll('[data-rs="font"]').forEach(b=>{ b.style.fontFamily=READ_FONT[b.dataset.v]; });
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=(r.bottom+6)+"px"; m.style.left=Math.max(10,Math.min(r.right-m.offsetWidth,window.innerWidth-m.offsetWidth-10))+"px";
+  anchor.setAttribute("aria-expanded","true");
+  (m.querySelector("button.on")||m.querySelector("button")).focus();
+  m.addEventListener("click",e=>{ e.stopPropagation(); const b=e.target.closest("[data-rs]"); if(b)setReadPref(b.dataset.rs,b.dataset.v); });
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_readOutside); },0);   // after the opening click finishes
+  window.addEventListener("blur",_readBlur);
+}
+function _readOutside(e){ if(!e.target.closest("#readMenu"))closeReadMenu(); }
+// a click in a mail body never reaches this document: the frame takes focus and the window blurs.
+// Other blurs (another app, a native picker) leave activeElement where it was, and the menu open.
+function frameTookFocus(){ const a=document.activeElement; return !!a&&a.tagName==="IFRAME"; }
+function _readBlur(){ setTimeout(()=>{ if(frameTookFocus())closeReadMenu(); },0); }
+function closeReadMenu(refocus){
+  const m=$("#readMenu"); if(!m)return;
+  m.remove(); document.removeEventListener("click",_readOutside); window.removeEventListener("blur",_readBlur);
+  const b=$("#reader [data-readset]"); if(b){ b.setAttribute("aria-expanded","false"); if(refocus)b.focus(); }
 }
 function fmtSize(n){ if(!n)return""; if(n<1024)return n+" B"; if(n<1048576)return (n/1024).toFixed(0)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
 /* A mail frame is sized to its content on load; a narrower or wider column reflows that content
@@ -2190,7 +2251,6 @@ function sizeMailFrame(fr,min,pad){   // call from the frame's load handler
 }
 function renderClientReader(d){
   state.lastBody=d;            // keep the full payload for reply/forward recipient math
-  mailThemeDark=effMailDark(d.has_html);   // content-aware: rich HTML → original, plain → dark
   const rd=$("#reader");
   const _nblk=(d.blocked_images||0)+(d.blocked_css_urls||0);
   const imgbar=_nblk?`<div class="rd-imgbar">🛡 ${_nblk} remote image${_nblk>1?"s":""} hidden — loading one can let the sender know you opened this email <button data-loadimg="${d.pk}">Load images</button></div>`:"";
@@ -2222,7 +2282,7 @@ function renderClientReader(d){
     <button class="cab" data-ca="junk" title="Mark junk (b)"><span>⊘</span> Junk</button>
     <button class="cab${it.flagged?" on":""}" data-ca="star" title="Star (s)">${it.flagged?"<span>★</span> Starred":"<span>☆</span> Star"}</button>
     <button class="cab" data-ca="unread" title="Mark unread (u)"><span>✉</span> Unread</button>
-    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors" aria-label="Toggle mail appearance"><span>${mailThemeDark?"◐":"◑"}</span></button>
+    <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
     ${readerNavHtml()}</div>`;
   rd.innerHTML=`
     ${actions}
@@ -2234,7 +2294,7 @@ function renderClientReader(d){
     <iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>
     ${upNextHtml(!isDraft)}`;
   storedSummaryCard(it);
-  const fr=rd.querySelector("iframe");
+  const fr=rd.querySelector("iframe"); fr._mail=d;
   fr.addEventListener("load",()=>{ sizeMailFrame(fr,400,30); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
   if(!isDraft && state.folder!=="__muted__") armDraftAhead(d.pk, _draftEligibleClient(it));   // instant peek + dwell kick — "Reply" may already be "✦ Draft ready"
 }
@@ -2294,7 +2354,6 @@ async function openThread(tid, latestPk, scroll, acct){
   if(seq!==state.cseq||state.csel!==latestPk)return;   // superseded — another conversation or a single message opened meanwhile
   if(!d.ok){ rd.innerHTML='<div class="nores">'+esc(d.error||"error")+'</div>'; return; }
   state.thread=d;
-  mailThemeDark=effMailDark(true);   // threads are usually HTML → original by default (per-member bodyDoc still decides)
   const subj=(d.items[0]||{}).subject||"(no subject)";
   const actions=`<div class="rd-actions">
     <button class="cab rd-back" data-back title="Back to list">‹ List</button>
@@ -2309,7 +2368,7 @@ async function openThread(tid, latestPk, scroll, acct){
     <button class="cab" data-tca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>🔕</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-tca="dismiss" title="Dismiss follow-up"><span>✓</span> Done</button>':''}
     <span class="rd-sp" aria-hidden="true"></span>
-    <button class="cab" data-bodytheme title="Toggle mail appearance — dark / original colors" aria-label="Toggle mail appearance"><span>${mailThemeDark?"◐":"◑"}</span></button>
+    <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
     ${readerNavHtml()}</div>`;
   rd.innerHTML=`${actions}
     <div class="rd-subj">${esc(subj)} <span class="thr-n">${d.count} messages</span></div>
@@ -2349,7 +2408,7 @@ async function expandMember(pk){
   const doc=mailDoc(d);
   el.innerHTML=`${extBar(d)}${inviteCard(d)}${imgbar}${attbar}<iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>`;
   const fr=el.querySelector("iframe");
-  if(fr)fr.addEventListener("load",()=>{ sizeMailFrame(fr,300,24); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
+  if(fr){ fr._mail=d; fr.addEventListener("load",()=>{ sizeMailFrame(fr,300,24); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); }); }
   cmarkseen(pk);
 }
 
@@ -4243,7 +4302,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   if(e.target.closest("[data-back]")){ backToList(); return; }
   const nv=e.target.closest("[data-nav]"); if(nv){ cmove(+nv.dataset.nav); return; }
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
-  if(e.target.closest("[data-bodytheme]")){ toggleMailTheme(); return; }
+  const rs=e.target.closest("[data-readset]"); if(rs){ e.stopPropagation(); if($("#readMenu"))closeReadMenu(); else openReadMenu(rs); return; }
   if(e.target.closest("[data-airerun]")){ summarize(true); return; }
   if(e.target.closest("[data-aifull]")){ summarize(false); return; }
   const texp=e.target.closest("[data-texp]"); if(texp){ expandMember(+texp.dataset.texp); return; }
@@ -4389,6 +4448,8 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape" && $("#commitPanel").classList.contains("show")){ closeCommitments(); e.preventDefault(); return; }
   // folder drawer (<=1100px): Esc closes it before anything else
   if(e.key==="Escape" && document.body.classList.contains("rail-open")){ closeRail(); e.preventDefault(); return; }
+  // reading settings open: Esc closes back to Aa; Tab/Enter/Space/arrows work its buttons; swallow the rest
+  if($("#readMenu")){ if(e.key==="Escape")closeReadMenu(true); if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" "&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
   // snooze popover open: digits 1-4 pick a preset, Esc closes; swallow everything else
   if($("#snoozeMenu")){ if(/^[1-4]$/.test(e.key)){ doSnooze(SNOOZE_PRESETS[+e.key-1][0]); e.preventDefault(); } else if(e.key==="Escape")closeSnoozeMenu(); else if(e.key!=="Tab"&&e.key!=="Enter"&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
   // settings modal: ? shows help, , / Esc close; nothing else
@@ -4533,6 +4594,7 @@ function buildPaletteEntries(){
   E.push({group:"Commands", label:"Toggle conversations / messages", modes:["client"], fn:()=>setThreadView(!state.threadView)});
   E.push({group:"Commands", label:readFocusOn()?"Leave focus reading":"Focus reading — hide folders and list", key:"↵", modes:["client"], enabled:()=>!isMobile(), fn:()=>setReadFocus(!readFocusOn())});
   E.push({group:"Commands", label:"Folders: icons ⇄ names", key:"[", modes:["client"], fn:()=>toggleRail()});
+  E.push({group:"Commands", label:"Reading settings — width, text, mail colors", modes:["client"], enabled:()=>!!$("#reader [data-readset]"), fn:()=>setTimeout(()=>openReadMenu($("#reader [data-readset]")),0)});
   E.push({group:"Commands", label:"Reconcile (prune ghosts)", modes:["summary"], fn:()=>reconcile()});
   E.push({group:"Commands", label:"✦ Clean up senders (unsubscribe)", fn:()=>{ openDrawer(true); }});
   E.push({group:"Commands", label:themeIsLight()?"Toggle theme → Night":"Toggle theme → Day", fn:()=>toggleTheme()});
@@ -4622,6 +4684,7 @@ $("#legTheme").addEventListener("change",e=>setTheme(e.target.checked));
     if(r==null){ r=localStorage.getItem("mm_mb_view")==="classic"?"wide":"narrow"; localStorage.removeItem("mm_mb_view"); }   // the retired Classic view showed folder names
     applyRailWide(r==="wide"); }catch(e){}
   try{ applyListW(+localStorage.getItem("mm_list_w")||LIST_W0); }catch(e){}
+  applyReadWidth();
   try{ if(localStorage.getItem("mm_mode")==="client") setMode("client"); }catch(e){}
   if(state.mode!=="client"){ state.focusIntro=true; applyBriefView(state.briefView,true); }   // brief opens on the narrative
   loadViews();   // app-global saved views/lanes — load immediately, not gated on a slow folder list
