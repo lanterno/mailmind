@@ -475,6 +475,9 @@ def digest_json(qs):
         "reason": (r["reason"] if "reason" in keys else None),
         "verified": (bool(r["verified"]) if "verified" in keys else False),
         "last_seen": rel_time(r["last_seen"]) if "last_seen" in keys and r["last_seen"] else None,
+        # what a Mailbox row needs to draw a digest item like a folder item (Needs you, briefing topics)
+        "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
+        "thread_id": r["thread_id"], "folder": r["folder"], "ts": r["ts"],
     } for r in rows]
     accts = [row[0] for row in c.execute("SELECT DISTINCT account FROM messages ORDER BY account").fetchall()]
     st = store.stats(c)
