@@ -4305,7 +4305,7 @@ document.addEventListener("keydown",e=>{
   // snooze popover open: digits 1-4 pick a preset, Esc closes; swallow everything else
   if($("#snoozeMenu")){ if(/^[1-4]$/.test(e.key)){ doSnooze(SNOOZE_PRESETS[+e.key-1][0]); e.preventDefault(); } else if(e.key==="Escape")closeSnoozeMenu(); else if(e.key!=="Tab"&&e.key!=="Enter"&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
   // settings modal: ? shows help, , / Esc close; nothing else
-  if(settingsIsOpen()){ if(e.key==="Escape"){ if(pendingRemove){pendingRemove=null;renderSettings();} else if($("#setList").querySelector(".set-form")){renderSettings();} else settingsOpen(false); e.preventDefault(); } else if(e.key===","||e.key==="g"){ settingsOpen(false); e.preventDefault(); } else if(e.key==="?"){ $("#legend").classList.toggle("show"); e.preventDefault(); } return; }
+  if(settingsIsOpen()){ if(e.key==="Escape"){ if(pendingRemove){pendingRemove=null;renderSettings();} else if($("#setList").querySelector(".set-form[data-edit]")){renderSettings();} else settingsOpen(false); e.preventDefault(); } else if(e.key===","||e.key==="g"){ settingsOpen(false); e.preventDefault(); } else if(e.key==="?"){ $("#legend").classList.toggle("show"); e.preventDefault(); } return; }
   if(e.metaKey||e.ctrlKey||e.altKey)return;        // never hijack browser/OS chords (Cmd+R, Cmd+S, …)
   if(state.armed){ if(e.key==="Enter")confirmSweep(); else if(e.key==="Escape")abortSweep(); e.preventDefault(); return; }
   if(e.key==="Escape" && $("#drawer").classList.contains("open") && !$("#legend").classList.contains("show")){ openDrawer(false); e.preventDefault(); return; }   // Curate drawer (an armed sweep, or help above it, takes Esc first)
