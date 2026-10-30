@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api
+test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming
 
 # Classifier behaviour
 test-classifier:
@@ -48,6 +48,10 @@ test-thread-file:
 # Claude API engine against a local stub: request shape, refusals, retries, engine choice
 test-claude-api:
     {{py}} test_claude_api.py
+
+# Today & next: which invites in fetched mail are listed, updates, cancellations, local times
+test-upcoming:
+    {{py}} test_upcoming.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
