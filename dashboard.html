@@ -190,6 +190,8 @@
   .cab span{font-size:13px;line-height:1}
   .cab:hover{background:var(--panel-hi);color:var(--ink)}
   .cab.on{background:var(--sel);color:var(--primary-ink)}
+  .rd-more{display:none}
+  .snooze-menu .mi-ic{display:inline-block;width:22px;text-align:center}
   .cab-del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
   .cab-draft{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent);transition:background var(--t-fast),color var(--t-fast)}   /* ✦ pre-drafted reply waiting */
   .cab-draft:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 18%,transparent)}
@@ -544,30 +546,36 @@
     /* focus reading: the pane takes the whole width */
     body.mode-client.read-focus .split{grid-template-columns:minmax(0,1fr)}
     body.mode-client.read-focus .folderrail,body.mode-client.read-focus .list,body.mode-client.read-focus .splitter{display:none}
-    /* wide pane, centred reading measure, the action bar pinned to the top of the pane */
-    body.mode-client .reader{max-width:none;padding:0 0 72px;container:pane / inline-size}
-    body.mode-client .reader>:not(.rd-actions){width:min(var(--measure),calc(100% - 64px));margin-inline:auto}
-    body.mode-client .reader>.rd-iframe{display:block}   /* an inline iframe ignores auto margins */
-    body.mode-client .rd-actions{position:sticky;top:0;z-index:3;height:52px;margin:0 0 24px;padding:0 10px;gap:2px;
-      flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--panel);border-bottom:1px solid var(--line)}
-    body.mode-client .rd-actions .cab{flex:none;padding:8px 10px}
-    body.mode-client .rd-actions .cab:disabled{opacity:.4;cursor:default;background:none}
-    body.mode-client .rd-sp{display:block;flex:1 1 0;min-width:8px}
-    body.mode-client .rd-extbar{top:52px}   /* the 'External' frame pins just under the action bar */
-    /* narrower panes: secondary verbs drop to icons, then leave the bar (keys + ⌘K still reach them) */
-    @container pane (max-width:1180px){
-      .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=star],[data-ca=unread]){font-size:0;gap:0}
-      .rd-pos{display:none}
-    }
-    @container pane (max-width:840px){
-      .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash]){font-size:0;gap:0}
-      .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=unread]){display:none}
-    }
-    @container pane (max-width:620px){
-      .rd-actions .cab{font-size:0;gap:0}
-      .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk]){display:none}
-    }
   }
+  /* the reading pane at every width, phones included: one row of verbs pinned to the top, a centred measure below */
+  body.mode-client .reader{max-width:none;padding:0 0 72px;container:pane / inline-size}
+  body.mode-client .reader>:not(.rd-actions){width:min(var(--measure),calc(100% - 64px));margin-inline:auto}
+  body.mode-client .reader>.rd-iframe{display:block}   /* an inline iframe ignores auto margins */
+  body.mode-client .rd-actions{position:sticky;top:0;z-index:3;height:52px;margin:0 0 24px;padding:0 10px;gap:2px;
+    flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--panel);border-bottom:1px solid var(--line)}
+  body.mode-client .rd-actions .cab{flex:none;padding:8px 10px}
+  body.mode-client .rd-actions .cab:disabled{opacity:.4;cursor:default;background:none}
+  body.mode-client .rd-sp{display:block;flex:1 1 0;min-width:8px}
+  body.mode-client .rd-extbar{top:52px}   /* the 'External' frame pins just under the action bar */
+  /* narrower panes: secondary verbs drop to icons, then leave the bar for ⋯ More (openMoreMenu) */
+  @container pane (max-width:1180px){
+    .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=star],[data-ca=unread]){font-size:0;gap:0}
+    .rd-pos{display:none}
+  }
+  @container pane (max-width:840px){
+    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash],.rd-back){font-size:0;gap:0}
+    .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=unread]){display:none}
+    .rd-actions .rd-more{display:inline-flex}
+  }
+  @container pane (max-width:620px){
+    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready]){font-size:0;gap:0}
+    .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk]){display:none}
+  }
+  @container pane (max-width:460px){
+    body.mode-client .rd-actions{padding:0 6px}
+    .rd-actions .cab:is([data-ca=summarize],[data-tca=summarize],[data-ca=star],[data-readset]){display:none}
+  }
+  @container pane (max-width:350px){ .rd-actions .cab{font-size:0;gap:0} }   /* Reply keeps its word down to here */
   @media (min-width:821px) and (max-width:1100px){ body.mode-client .splitter{left:calc(var(--gap) + var(--list-w))} }   /* the rail is a drawer here */
   /* the summary sits on a moss wash at the head of the message; "Up next" closes the page */
   body.mode-client .reader .ai-card{background:var(--ai-wash);border-left:none;box-shadow:none;padding:14px 18px;margin-bottom:20px}
@@ -641,6 +649,9 @@
     .top .r2{overflow-x:auto;-webkit-overflow-scrolling:touch}
     .list{border-right:none}
     .rd-back{display:inline-flex}            /* Back button (only while the swap is active) */
+    body.mode-client .rd-focus{display:none}
+    body.mode-client .rd-back span{font-size:18px}   /* the way back, on a phone */
+    body.mode-client .reader>:not(.rd-actions){width:calc(100% - 28px)}
     body.mode-client .railtoggle{width:38px;height:38px;font-size:15px}
     /* one pane at a time: the panels go edge to edge */
     body.mode-client .split{padding:0;gap:0}
@@ -2001,7 +2012,7 @@ function readerSkeleton(it){
     <div class="rd-skelhint" id="rdSkelHint"></div>`;
 }
 function readerBarSkel(){   // the action bar while a body loads: navigation only — verbs wait for the loaded message
-  return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list">‹ List</button><span class="rd-sp" aria-hidden="true"></span>${readerNavHtml()}</div>`;
+  return `<div class="rd-actions"><button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button><span class="rd-sp" aria-hidden="true"></span>${readerNavHtml()}</div>`;
 }
 function readerNavHtml(){   // right end of the reading pane's action bar: focus reading, position, previous / next
   const list=state.searching?state.searchItems:state.cmsgs, n=list.length, i=list.findIndex(x=>x.pk===state.csel);
@@ -2208,7 +2219,7 @@ const READ_ROWS=[["width","Column width",[["narrow","Narrow"],["medium","Medium"
   ["size","Plain-text size",[["s","A","Small"],["m","A","Medium"],["l","A","Large"],["xl","A","Extra large"]]],
   ["colors","Mail colors",[["auto","Auto"],["dark","Dark"],["original","Original"]]]];
 function openReadMenu(anchor){
-  closeReadMenu(); closeSnoozeMenu();
+  closeReadMenu(); closeSnoozeMenu(); anchor=visibleAnchor(anchor);
   const p=readPrefs(), m=document.createElement("div");
   m.className="read-menu"; m.id="readMenu"; m.setAttribute("role","dialog"); m.setAttribute("aria-labelledby","readMenuH");
   m.innerHTML='<h3 id="readMenuH">Reading settings</h3>'
@@ -2234,7 +2245,34 @@ function _readBlur(){ setTimeout(()=>{ if(frameTookFocus())closeReadMenu(); },0)
 function closeReadMenu(refocus){
   const m=$("#readMenu"); if(!m)return;
   m.remove(); document.removeEventListener("click",_readOutside); window.removeEventListener("blur",_readBlur);
-  const b=$("#reader [data-readset]"); if(b){ b.setAttribute("aria-expanded","false"); if(refocus)b.focus(); }
+  const b=$("#reader [data-readset]"); if(b){ b.setAttribute("aria-expanded","false"); if(refocus)visibleAnchor(b).focus(); }
+}
+/* ⋯ More: the verbs this width's @container pane tier hid, in bar order. Picking one clicks the
+   hidden button itself, so each verb keeps a single code path. */
+function visibleAnchor(el){ return el&&el.getClientRects().length?el:($("#reader [data-more]")||el); }   // a hidden verb's menu opens under ⋯
+function openMoreMenu(anchor){
+  closeMoreMenu(); closeReadMenu(); closeSnoozeMenu();
+  const hidden=[...anchor.closest(".rd-actions").querySelectorAll(".cab[data-ca],.cab[data-tca],.cab[data-readset]")].filter(b=>!b.getClientRects().length);
+  if(!hidden.length)return;
+  const m=document.createElement("div"); m.className="snooze-menu"; m.id="moreMenu"; m.setAttribute("role","menu"); m.setAttribute("aria-label","More actions");
+  m.innerHTML=hidden.map((b,i)=>{ const ic=b.querySelector("span"), icon=ic?ic.textContent:"";
+    const name=(b.getAttribute("aria-label")||b.textContent.replace(icon,"")).replace(/\s+/g," ").trim();
+    return `<button role="menuitem" data-mi="${i}"><span class="mi-ic" aria-hidden="true">${esc(icon)}</span> ${esc(name)}</button>`; }).join("");
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=(r.bottom+4)+"px"; m.style.left=Math.max(10,Math.min(r.right-m.offsetWidth,window.innerWidth-m.offsetWidth-10))+"px";
+  anchor.setAttribute("aria-expanded","true");
+  m.querySelector("button").focus();
+  m.addEventListener("click",e=>{ e.stopPropagation(); const it=e.target.closest("[data-mi]"); if(!it)return; closeMoreMenu(); hidden[+it.dataset.mi].click(); });
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_moreOutside); },0);   // after the opening click finishes
+  window.addEventListener("blur",_moreBlur);
+}
+function _moreOutside(e){ if(!e.target.closest("#moreMenu"))closeMoreMenu(); }
+function _moreBlur(){ setTimeout(()=>{ if(frameTookFocus())closeMoreMenu(); },0); }
+function closeMoreMenu(refocus){
+  const m=$("#moreMenu"); if(!m)return;
+  m.remove(); document.removeEventListener("click",_moreOutside); window.removeEventListener("blur",_moreBlur);
+  const b=$("#reader [data-more]"); if(b){ b.setAttribute("aria-expanded","false"); if(refocus)b.focus(); }
 }
 function fmtSize(n){ if(!n)return""; if(n<1024)return n+" B"; if(n<1048576)return (n/1024).toFixed(0)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
 /* A mail frame is sized to its content on load; a narrower or wider column reflows that content
@@ -2260,20 +2298,20 @@ function renderClientReader(d){
   const it=cfind(d.pk)||{};
   const isDraft=d.is_draft;
   const actions=isDraft?`<div class="rd-actions">
-    <button class="cab rd-back" data-back title="Back to list">‹ List</button>
+    <button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button>
     <button class="cab" data-ca="edit" title="Edit draft"><span>✎</span> Edit</button>
     <button class="cab cab-del" data-ca="trash" title="Delete (d / ⌫ / #)"><span>🗑</span> Delete</button>
     <span class="rd-sp" aria-hidden="true"></span>${readerNavHtml()}</div>`
    :`<div class="rd-actions">
-    <button class="cab rd-back" data-back title="Back to list">‹ List</button>
+    <button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button>
     ${replyChipHtml(d.pk)}
-    <button class="cab" data-ca="replyall" title="Reply all (a)"><span>↩</span> All</button>
+    <button class="cab" data-ca="replyall" title="Reply all (a)" aria-label="Reply all"><span>↩</span> All</button>
     <button class="cab" data-ca="forward" title="Forward (f)"><span>↪</span> Forward</button>
     <button class="cab" data-ca="summarize" title="AI summary (i)"><span>✦</span> Summarize</button>
     <button class="cab" data-ca="snooze" title="Snooze (h)"><span>⏰</span> Snooze</button>
     ${state.folder==='__replylater__'
       ?'<button class="cab" data-ca="rldone" title="Done — remove from Reply later"><span>✓</span> Done</button>'
-      :'<button class="cab" data-ca="replylater" title="Reply later (l)"><span>📌</span> Later</button>'}
+      :'<button class="cab" data-ca="replylater" title="Reply later (l)" aria-label="Reply later"><span>📌</span> Later</button>'}
     <button class="cab" data-ca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>🔕</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-ca="dismiss" title="Dismiss follow-up"><span>✓</span> Done</button>':''}
     <span class="rd-sp" aria-hidden="true"></span>
@@ -2281,8 +2319,9 @@ function renderClientReader(d){
     <button class="cab cab-del" data-ca="trash" title="Delete (d / ⌫ / #)"><span>🗑</span> Delete</button>
     <button class="cab" data-ca="junk" title="Mark junk (b)"><span>⊘</span> Junk</button>
     <button class="cab${it.flagged?" on":""}" data-ca="star" title="Star (s)">${it.flagged?"<span>★</span> Starred":"<span>☆</span> Star"}</button>
-    <button class="cab" data-ca="unread" title="Mark unread (u)"><span>✉</span> Unread</button>
+    <button class="cab" data-ca="unread" title="Mark unread (u)" aria-label="Mark unread"><span>✉</span> Unread</button>
     <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
+    <button class="cab rd-more" data-more title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><span>⋯</span></button>
     ${readerNavHtml()}</div>`;
   rd.innerHTML=`
     ${actions}
@@ -2356,19 +2395,20 @@ async function openThread(tid, latestPk, scroll, acct){
   state.thread=d;
   const subj=(d.items[0]||{}).subject||"(no subject)";
   const actions=`<div class="rd-actions">
-    <button class="cab rd-back" data-back title="Back to list">‹ List</button>
+    <button class="cab rd-back" data-back title="Back to list"><span>‹</span> List</button>
     <button class="cab" data-tca="reply"><span>↩</span> Reply</button>
-    <button class="cab" data-tca="replyall"><span>↩</span> All</button>
+    <button class="cab" data-tca="replyall" title="Reply all" aria-label="Reply all"><span>↩</span> All</button>
     <button class="cab" data-tca="forward"><span>↪</span> Forward</button>
     <button class="cab" data-tca="summarize"><span>✦</span> Summarize</button>
     <button class="cab" data-tca="snooze"><span>⏰</span> Snooze</button>
     ${state.folder==='__replylater__'
       ?'<button class="cab" data-tca="rldone" title="Done — remove from Reply later"><span>✓</span> Done</button>'
-      :'<button class="cab" data-tca="replylater" title="Reply later (l)"><span>📌</span> Later</button>'}
+      :'<button class="cab" data-tca="replylater" title="Reply later (l)" aria-label="Reply later"><span>📌</span> Later</button>'}
     <button class="cab" data-tca="${state.folder==='__muted__'?'unmute':'mute'}" title="Mute thread (w)"><span>🔕</span> ${state.folder==='__muted__'?'Unmute':'Mute'}</button>
     ${state.folder==='__waiting__'?'<button class="cab" data-tca="dismiss" title="Dismiss follow-up"><span>✓</span> Done</button>':''}
     <span class="rd-sp" aria-hidden="true"></span>
     <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
+    <button class="cab rd-more" data-more title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><span>⋯</span></button>
     ${readerNavHtml()}</div>`;
   rd.innerHTML=`${actions}
     <div class="rd-subj">${esc(subj)} <span class="thr-n">${d.count} messages</span></div>
@@ -3580,7 +3620,7 @@ function openSnoozeMenu(anchor, override){
     +`<label class="snz-custom">Custom… <input type="datetime-local" id="snzWhen"></label>`
     +(inSnoozed?`<button role="menuitem" data-snz="un">Unsnooze</button>`:"");
   document.body.appendChild(m);
-  const r=anchor.getBoundingClientRect();
+  const r=visibleAnchor(anchor).getBoundingClientRect();
   m.style.top=(r.bottom+4)+"px"; m.style.left=Math.min(r.left,window.innerWidth-210)+"px";
   const f=m.querySelector("button"); if(f)f.focus();   // move focus in for keyboard/AT
   $("#snzWhen").addEventListener("change",e=>{ if(e.target.value)doSnoozeAt(e.target.value); });
@@ -4304,6 +4344,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   if(e.target.closest("[data-back]")){ backToList(); return; }
   const nv=e.target.closest("[data-nav]"); if(nv){ cmove(+nv.dataset.nav); return; }
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
+  const mo=e.target.closest("[data-more]"); if(mo){ e.stopPropagation(); if($("#moreMenu"))closeMoreMenu(); else openMoreMenu(mo); return; }
   const rs=e.target.closest("[data-readset]"); if(rs){ e.stopPropagation(); if($("#readMenu"))closeReadMenu(); else openReadMenu(rs); return; }
   if(e.target.closest("[data-airerun]")){ summarize(true); return; }
   if(e.target.closest("[data-aifull]")){ summarize(false); return; }
@@ -4450,6 +4491,10 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape" && $("#commitPanel").classList.contains("show")){ closeCommitments(); e.preventDefault(); return; }
   // folder drawer (<=1100px): Esc closes it before anything else
   if(e.key==="Escape" && document.body.classList.contains("rail-open")){ closeRail(); e.preventDefault(); return; }
+  // ⋯ More open: ↑/↓ move, Esc closes back to ⋯; swallow the rest
+  if($("#moreMenu")){ if(e.key==="Escape")closeMoreMenu(true);
+    else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ const bs=$$("#moreMenu button"), i=bs.indexOf(document.activeElement); bs[(i+(e.key==="ArrowDown"?1:bs.length-1))%bs.length].focus(); }
+    if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" ")e.preventDefault(); return; }
   // reading settings open: Esc closes back to Aa; Tab/Enter/Space/arrows work its buttons; swallow the rest
   if($("#readMenu")){ if(e.key==="Escape")closeReadMenu(true); if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" "&&!e.key.startsWith("Arrow"))e.preventDefault(); return; }
   // snooze popover open: digits 1-4 pick a preset, Esc closes; swallow everything else
