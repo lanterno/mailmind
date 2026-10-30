@@ -4537,7 +4537,9 @@ $("#railAccounts").addEventListener("click",e=>{const b=e.target.closest(".sweep
 $("#floodList").addEventListener("click",e=>{const r=e.target.closest("[data-flood],[data-flood-go]");if(r)openCleanupPreview(r.dataset.floodGo||r.dataset.flood);});
 $("#keepList").addEventListener("click",rmChip); $("#blockList").addEventListener("click",rmChip);
 function rmChip(e){const c=e.target.closest(".rchip");if(c)postRule(c.dataset.token,"remove").then(()=>toast("Removed "+c.dataset.token));}
-$("#console").addEventListener("click",e=>{const l=e.target.closest(".ln");if(l&&l.dataset.acct){state.account=l.dataset.acct;renderMonos();applyFilters(true);openDrawer(false);}});
+$("#console").addEventListener("click",e=>{const l=e.target.closest(".ln"), a=l&&l.dataset.acct;   // an audit line opens its account's mailbox
+  if(!a||!(state.accountsList||[]).includes(a))return;   // a removed account has no folders to open
+  clearSearch(false); state.allInbox=false; state.account=a; renderMonos(); loadFolders(); openDrawer(false);});
 $("#ruleInput").addEventListener("keydown",e=>{if(e.key!=="Enter")return;const t=e.target.value.trim();if(!t)return;postRule(t,e.shiftKey?"block":"keep").then(()=>{toast((e.shiftKey?"Blocked ":"Keeping ")+t);e.target.value="";});});
 
 /* ═══════ Overlay navigation + focus trap (shared) ═══════
