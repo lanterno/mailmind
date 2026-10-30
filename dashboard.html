@@ -2100,6 +2100,7 @@ function bodyDoc(content,isHtml){
   }
   return '<!doctype html><html lang="en"><head><meta charset=utf-8><base target="_blank">'+csp+style+'</head><body>'+inner+'</body></html>';
 }
+function mailDoc(d){ return d.has_html?bodyDoc(d.html||"",true):bodyDoc(esc(d.text||"(no content)"),false); }   // a body payload → its iframe document
 // A persistent, parent-rendered "external email" strip + protection shield. Because it lives in the
 // app DOM (not the sandboxed iframe), a malicious body can neither overlay nor erase it — the
 // red-team's mitigation for in-body chrome-spoofing (now that we allow rich CSS).
@@ -2195,7 +2196,7 @@ function renderClientReader(d){
   const imgbar=_nblk?`<div class="rd-imgbar">🛡 ${_nblk} remote image${_nblk>1?"s":""} hidden — loading one can let the sender know you opened this email <button data-loadimg="${d.pk}">Load images</button></div>`:"";
   const atts=(d.attachments||[]).filter(a=>!(a.is_inline&&a.content_id));
   const attbar=atts.length?'<div class="rd-attach">'+atts.map(a=>attChip(d.pk,a)).join("")+'</div>':"";
-  const doc=d.has_html?bodyDoc(d.html||"",true):bodyDoc(esc(d.text||"(no content)"),false);
+  const doc=mailDoc(d);
   const it=cfind(d.pk)||{};
   const isDraft=d.is_draft;
   const actions=isDraft?`<div class="rd-actions">
@@ -2345,7 +2346,7 @@ async function expandMember(pk){
   const attbar=atts.length?'<div class="rd-attach">'+atts.map(a=>attChip(d.pk,a)).join("")+'</div>':"";
   const _nblk=(d.blocked_images||0)+(d.blocked_css_urls||0);
   const imgbar=_nblk?`<div class="rd-imgbar">🛡 ${_nblk} remote image${_nblk>1?"s":""} hidden — loading one can let the sender know you opened this email <button data-loadimg="${d.pk}">Load images</button></div>`:"";
-  const doc=d.has_html?bodyDoc(d.html||"",true):bodyDoc(esc(d.text||"(no content)"),false);
+  const doc=mailDoc(d);
   el.innerHTML=`${extBar(d)}${inviteCard(d)}${imgbar}${attbar}<iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>`;
   const fr=el.querySelector("iframe");
   if(fr)fr.addEventListener("load",()=>{ sizeMailFrame(fr,300,24); wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
@@ -3337,7 +3338,7 @@ async function fsLoadBody(pk){
     if(tok!==_fsBodyTok)return;                    // user moved on — drop this body
     const wrap=$("#fsBody"); if(!wrap)return;
     if(!d||!d.ok){ wrap.innerHTML='<div class="fs-bodyload">Couldn’t load the message body.</div>'; return; }
-    const doc=d.has_html?bodyDoc(d.html||"",true):bodyDoc(esc(d.text||"(no content)"),false);
+    const doc=mailDoc(d);
     wrap.innerHTML=`${extBar(d)}<iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>`;
     const fr=wrap.querySelector("iframe");
     fr&&fr.addEventListener("load",()=>{ try{ fr.style.height=Math.min((fr.contentWindow.document.body.scrollHeight||300)+24,5000)+"px"; }catch(e){} wireMailLinks(fr,(d.from_addr||"").split("@")[1]); });
