@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file
+test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api
 
 # Classifier behaviour
 test-classifier:
@@ -44,6 +44,10 @@ test-expire:
 # Whole-conversation archive/trash: membership, one undo group, partial failure, offline queue
 test-thread-file:
     {{py}} test_thread_file.py
+
+# Claude API engine against a local stub: request shape, refusals, retries, engine choice
+test-claude-api:
+    {{py}} test_claude_api.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
