@@ -21,7 +21,7 @@ See [Features](#features) for what ships today and
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need Claude. Set `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries.
+> **Heads-up:** summaries and the other AI features need Claude. Put a Claude API key in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries.
 
 ---
 
@@ -176,11 +176,16 @@ Everything here runs through Claude and returns **schema-validated** structured
 output, so malformed-response errors don't reach the UI. Nothing is ever sent
 automatically.
 
-- **Claude API or CLI.** With `ANTHROPIC_API_KEY` set, MailMind calls the Messages API
+- **Claude API or CLI.** With an API key set, MailMind calls the Messages API
   directly (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
   runs at low effort, everything else at medium). Without a key it uses the local
   `claude` CLI on your subscription. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
+  The key goes in `mailmind.config.json` as `"anthropic_api_key"` (inline, or
+  `{"op": …}` / `{"env": …}` like an account password), and that wins over
+  `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
+  accident. The server's startup line names the engine, the model and where the key
+  came from.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
@@ -295,10 +300,11 @@ automatically.
 ## Prerequisites
 
 - **Python 3.10+** (developed/tested on 3.14). No third-party packages.
-- **Claude**, for summaries — either a Claude API key in `ANTHROPIC_API_KEY`
-  (MailMind calls the Messages API itself, no SDK), or the `claude` CLI on your
-  `PATH`, installed and authenticated (it shells out to `claude -p …` and uses
-  your Claude subscription). Set `MAILMIND_MODEL` to pick a cheaper/faster model.
+- **Claude**, for summaries — either a Claude API key, as `"anthropic_api_key"` in
+  `mailmind.config.json` or in `ANTHROPIC_API_KEY` (MailMind calls the Messages API
+  itself, no SDK), or the `claude` CLI on your `PATH`, installed and authenticated
+  (it shells out to `claude -p …` and uses your Claude subscription). Set
+  `MAILMIND_MODEL` to pick a cheaper/faster model.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
@@ -313,7 +319,7 @@ git clone https://github.com/<you>/mailmind.git && cd mailmind
 cp mailmind.config.example.json mailmind.config.json
 $EDITOR mailmind.config.json
 
-# 2. Verify the credentials resolve (prints ok/fail per account, no secrets)
+# 2. Verify the credentials resolve (prints ok/fail per account and for the API key, no secrets)
 python3 config.py check
 
 # 3. Pull recent mail, then summarize it
@@ -401,7 +407,7 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | Variable | Effect |
 |---|---|
 | `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync) |
-| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. Unset: use the `claude` CLI. |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: use the `claude` CLI. |
 | `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5` on the API, the CLI's own default otherwise), e.g. `claude-haiku-5-5` |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |

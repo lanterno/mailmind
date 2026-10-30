@@ -30,7 +30,7 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
-python3 test_claude_api.py        # Claude API engine against a local stub server (16)
+python3 test_claude_api.py        # Claude API engine against a local stub server (18)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
@@ -145,8 +145,11 @@ alone cannot execute script. Preserve that ordering when touching either.
 
 Everything routes through `summarize.call_claude_json(prompt, schema)` (or
 `call_claude` for plain text). `summarize.engine()` picks the backend: the Messages API
-via `claude_api.py` when `ANTHROPIC_API_KEY` is set, else the local `claude` CLI with
-`--output-format json --json-schema`. `MAILMIND_AI=api|cli` overrides it.
+via `claude_api.py` when a key is set, else the local `claude` CLI with
+`--output-format json --json-schema`. `MAILMIND_AI=api|cli` overrides it. The key is
+`config.anthropic_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
+credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
+means no key, never a fall-through to the environment's.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text on either engine. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
 

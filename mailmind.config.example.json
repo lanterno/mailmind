@@ -20,8 +20,12 @@
     "  imap=:993 TLS (set host/port; port 143 + \"starttls\":true for STARTTLS);",
     "  proton=127.0.0.1:1143 STARTTLS via the local Bridge app.",
     "Optional per-account keys: alias (friendly display name), host, port, starttls, trash, strip_spaces, disabled.",
-    "Tip: you can manage all of this from the dashboard's ⚙ Settings instead of editing this file by hand."
+    "Tip: you can manage all of this from the dashboard's ⚙ Settings instead of editing this file by hand.",
+    "",
+    "CLAUDE API KEY (optional): \"anthropic_api_key\" takes the key from console.anthropic.com, in any",
+    "  credential style above. It wins over ANTHROPIC_API_KEY; with neither, the claude CLI is used."
   ],
+  "anthropic_api_key": "",
   "accounts": [
     {"email": "you@gmail.com", "type": "gmail", "alias": "Personal",
      "_note": "OPTION A, self-contained. Gmail/Workspace needs an App Password (myaccount.google.com/apppasswords).",

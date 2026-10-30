@@ -106,7 +106,7 @@ check-config:
 ingest target="all" days="90":
     {{py}} ingest.py {{target}} {{days}}
 
-# Summarize pending messages with Claude (the API if ANTHROPIC_API_KEY is set, else the claude CLI)
+# Summarize pending messages with Claude (the API if a key is set, else the claude CLI)
 summarize limit="2000" workers="3":
     {{py}} summarize.py {{limit}} {{workers}}
 
