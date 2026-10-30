@@ -28,11 +28,13 @@ Tests — plain scripts, no runner, each exits non-zero on failure:
 python3 tests.py                  # classifier behaviour (27 assertions)
 python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
+python3 test_expire.py            # expiry rules (15)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
-comment out cases or copy one into a REPL. `test_css_sanitizer.py` collects callables
-from `globals()` whose names start with `test_`, so you can gate it by renaming.
+comment out cases or copy one into a REPL. `test_css_sanitizer.py` and `test_expire.py`
+collect callables from `globals()` whose names start with `test_`, so you can gate them
+by renaming.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
 de-facto lint. `just lint` runs it against a one-entry baseline — a known warning in
@@ -148,7 +150,10 @@ that property.
 `mailclass.py` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
 `RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops.
 `rules.py` layers a learned per-sender/domain keep/block list on top, persisted to
-`mailmind_rules.json` — that file is personal data and stays gitignored.
+`mailmind_rules.json` — that file is personal data and stays gitignored. The same file
+holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
+`manage.expire_account` from the CLI and by `server.expire_loop` hourly (not under NOSYNC).
+`rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 
 ## Conventions
 

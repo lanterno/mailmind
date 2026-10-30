@@ -126,6 +126,10 @@ and the `claude` CLI on your own machine.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe.
+- **Expiry rules.** Give a sender or domain a shelf life — `python3 rules.py expire
+  github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
+  server checks hourly; `manage.py expire --dry` previews. Expiry is independent of
+  keep/block, so a kept sender can still age out.
 - **Lists that heal.** Rows collapse and fade as you triage, folder lists and search
   results paginate with **Load 200 more**, capped counts read honestly as `N+`, and
   switching accounts renders the folder rail from cache instead of blanking on a
@@ -353,9 +357,11 @@ python3 manage.py sweep you@x.com         # move junk → Trash (verified)
 python3 manage.py keep example.com        # learned rule: always keep this sender/domain
 python3 manage.py block spammer.com       # always trash (writes a rule)
 python3 manage.py rules                    # show the learned lists
+python3 rules.py expire github.com 72      # trash this domain's INBOX mail after 72h (0 clears)
+python3 manage.py expire all --dry         # preview what the expiry rules would trash now
 ```
 
-> ⚠️ **`sweep` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
+> ⚠️ **`sweep`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
 > Always `--dry` first. Every sweep/reconcile is logged to `sweep_audit.jsonl` /
 > `reconcile_audit.jsonl`. Moves go to Trash and are recoverable; Gmail purges
 > its Trash after 30 days.
@@ -369,6 +375,7 @@ python3 manage.py rules                    # show the learned lists
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
+| `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs under `MAILMIND_NOSYNC`. |
 | `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by `MAILMIND_NOSYNC`). |
 | `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for older `claude` CLI builds. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
@@ -384,7 +391,7 @@ launcher script if you want them on.
 ## Where your data lives (all local, all git-ignored)
 
 - `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
-- `mailmind_rules.json` — your learned keep/block lists.
+- `mailmind_rules.json` — your learned keep/block lists and expiry rules.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.
 - `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
 - `mailmind.config.json` — your accounts + credentials.
@@ -397,10 +404,11 @@ All of the above are in `.gitignore`. **Nothing personal is committed.**
 python3 tests.py               # behavioral classifier suite
 python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
+python3 test_expire.py         # expiry rules: storage, matching, age selection
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all three and `just verify` adds lint, byte-compile and a
+`just test` runs all four and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
