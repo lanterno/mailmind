@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire
+test: test-classifier test-sanitize test-css test-expire test-thread-file
 
 # Classifier behaviour
 test-classifier:
@@ -40,6 +40,10 @@ test-css:
 # Expiry rules: storage, sender/domain matching, age selection
 test-expire:
     {{py}} test_expire.py
+
+# Whole-conversation archive/trash: membership, one undo group, partial failure, offline queue
+test-thread-file:
+    {{py}} test_thread_file.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
