@@ -1158,13 +1158,14 @@ def do_write(path, body):
 
 
 def do_trash(body):
-    """Move one message to the account's Trash. Falls back to the durable offline queue if IMAP
-    is unreachable, like the move-type ops in do_write."""
+    """Move one message to the account's Trash, serialized with every other live-IMAP op. Falls
+    back to the durable offline queue if IMAP is unreachable, like the move-type ops in do_write."""
     pk = int(body.get("pk"))
-    try:
-        ok, msg, undo = mailops.trash_message(pk)
-    except mailops._UNREACHABLE:       # IMAP down → durable offline queue
-        return _readmut_enqueue("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
+    with _ops_lock:
+        try:
+            ok, msg, undo = mailops.trash_message(pk)
+        except mailops._UNREACHABLE:       # IMAP down → durable offline queue (still under _ops_lock; no IMAP here)
+            return _readmut_enqueue("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
     if ok:
         undo_push(undo, body.get("undo_group"))
         invalidate_stats()
