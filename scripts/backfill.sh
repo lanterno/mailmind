@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Resilient summarization backfill: keeps calling summarize.py until every
-# non-junk message has a summary, backing off when the Claude CLI rate-limits.
+# non-junk message has a summary, backing off when Claude rate-limits.
 # Run from anywhere: scripts/backfill.sh   (optionally wrap with `caffeinate -i`)
 set -euo pipefail
 cd "$(dirname "$0")/.."

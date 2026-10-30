@@ -56,10 +56,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 - **Make AI presence and setup state visible** · high value · effort S — `digest_json()` returns
   items/stats/accounts/aliases/status/sync and nothing about the model; grepping every module for
-  `ai_available`, `ai_model` or a `claude --version` probe returns zero hits. A user with no claude
-  CLI installed today gets a silently degraded brief and one per-request error string. Needs a
-  startup probe cached in server state, two keys on `/api/digest`, a calm empty-state card, and a
-  one-line "nothing leaves 127.0.0.1" explainer.
+  `ai_available` or `ai_model` returns zero hits, and `summarize.describe_engine()` only reaches the
+  startup log. A user with neither an API key nor the claude CLI today gets a silently degraded
+  brief and one per-request error string. Needs a startup probe cached in server state, two keys
+  on `/api/digest`, a calm empty-state card, and a one-line explainer of what text leaves the
+  machine and where it goes.
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
   into a calendar entry or a dated task. Two distinct halves, and the seam matters:
   - *The .ics half is cheap.* `ics.py` already has `_fold`, `_ics_esc`, `_ics_dt` and emits
@@ -326,7 +327,7 @@ implementation.
 1. **Reply variants and one-tap micro-replies** (high / S) — the backend already accepts `tone` and
    `instruction`; this is a picker and a chip row against a working endpoint.
 2. **Make AI presence and setup state visible** (high / S) — a probe, two digest keys and one card;
-   without it a machine with no claude CLI degrades silently.
+   without it a machine with neither an API key nor the claude CLI degrades silently.
 3. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
    field rather than N calls to `/api/contact`.
 4. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix

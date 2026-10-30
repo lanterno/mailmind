@@ -30,11 +30,12 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
+python3 test_claude_api.py        # Claude API engine against a local stub server (16)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
-`test_thread_file.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
+`test_thread_file.py` and `test_claude_api.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
 by renaming.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
@@ -64,7 +65,7 @@ Pipeline, roughly in data-flow order:
 ```
 mailmind.config.json → config.py/accounts.py → ingest.py → mailclass.py → store.py (SQLite)
                                                                 ↓
-                                              summarize.py (claude CLI) → server.py + dashboard.html
+                                              summarize.py (Claude API / CLI) → server.py + dashboard.html
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
@@ -142,14 +143,23 @@ alone cannot execute script. Preserve that ordering when touching either.
 
 ### AI calls
 
-Everything routes through `summarize.call_claude_json(prompt, schema)`, which shells out
-to the local `claude` CLI with `--output-format json --json-schema` and validates the
-result. `MAILMIND_NO_SCHEMA=1` falls back to free-form text for older CLI builds. AI
-actions never fire on their own — drafts wait, bulk commands require a preview and
-confirm.
+Everything routes through `summarize.call_claude_json(prompt, schema)` (or
+`call_claude` for plain text). `summarize.engine()` picks the backend: the Messages API
+via `claude_api.py` when `ANTHROPIC_API_KEY` is set, else the local `claude` CLI with
+`--output-format json --json-schema`. `MAILMIND_AI=api|cli` overrides it.
+`MAILMIND_NO_SCHEMA=1` falls back to free-form text on either engine. AI actions never
+fire on their own — drafts wait, bulk commands require a preview and confirm.
 
-Absent or unauthenticated `claude` degrades to no summaries rather than failing; keep
-that property.
+`claude_api.py` is urllib, not the SDK (stdlib-only rule). `api_schema` drops the
+keywords structured output rejects (`minimum`, `maximum`, `maxLength`) and closes every
+object, so callers must keep clamping what they read. It sends `fallbacks: "default"` on
+the models that accept it, reads a refusal as an empty reply, and retries
+408/409/429/5xx twice.
+
+Both engines keep one contract: a failed call raises `RuntimeError` (the caller retries
+later, nothing is cached); a successful but unusable reply returns `{}` (the caller
+stores its fallback). No key and no `claude` degrades to no summaries rather than
+failing; keep that property.
 
 ### Classification
 

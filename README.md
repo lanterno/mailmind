@@ -14,14 +14,14 @@ See [Features](#features) for what ships today and
 
 - **No `pip install`.** Pure Python standard library + one HTML file.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
-  thing that leaves your machine is the text you send to the `claude` CLI for
-  summarization.
+  thing that leaves your machine is the text of the mail Claude works on, sent to
+  Anthropic through the Claude API or the `claude` CLI.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries are produced by the local [`claude`](https://docs.claude.com/en/docs/claude-code) CLI on **your** subscription. Without it installed and authenticated, MailMind still ingests and curates mail — it just shows no AI summaries.
+> **Heads-up:** summaries and the other AI features need Claude. Set `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries.
 
 ---
 
@@ -38,7 +38,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │                      notifications / receipts / personal / protected)
    store.py  →  SQLite (mailmind.db)
         │
-   summarize.py                summarize + score importance 1–5 via `claude -p`
+   summarize.py                summarize + score importance 1–5 with Claude (API or CLI)
         │
    server.py  +  dashboard.html        the app on http://127.0.0.1:8721
 ```
@@ -57,7 +57,7 @@ live in a slide-in drawer.
 
 MailMind started as a summarizer with a reading pane. It is now a full local-first
 mail client — everything below ships today and runs against your local SQLite store
-and the `claude` CLI on your own machine.
+and Claude (the Claude API, or the `claude` CLI on your own machine).
 
 ### Reading
 
@@ -172,9 +172,15 @@ and the `claude` CLI on your own machine.
 
 ### AI intelligence
 
-Everything here runs through the local `claude` CLI on your subscription and returns
-**schema-validated** structured output, so malformed-response errors don't reach the
-UI. Nothing is ever sent automatically.
+Everything here runs through Claude and returns **schema-validated** structured
+output, so malformed-response errors don't reach the UI. Nothing is ever sent
+automatically.
+
+- **Claude API or CLI.** With `ANTHROPIC_API_KEY` set, MailMind calls the Messages API
+  directly (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
+  runs at low effort, everything else at medium). Without a key it uses the local
+  `claude` CLI on your subscription. A safety-classifier decline on a mail body is
+  re-run on another model server-side, and rate limits and overloads are retried.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
@@ -259,9 +265,8 @@ UI. Nothing is ever sent automatically.
 - **Nothing is ever sent or deleted behind your back.** AI drafts wait for you, bulk
   actions require a preview and a confirm, and every destructive action is reversible.
 - **You always know what's happening** — a first-run welcome with a Connect-account
-  button, an explicit "the
-  `claude` CLI isn't reachable" message rather than an endless spinner, and an inline
-  Retry on every error panel.
+  button, an explicit "Claude isn't reachable" message rather than an endless spinner,
+  and an inline Retry on every error panel.
 
 ### Keyboard, theming & accessibility
 
@@ -290,8 +295,9 @@ UI. Nothing is ever sent automatically.
 ## Prerequisites
 
 - **Python 3.10+** (developed/tested on 3.14). No third-party packages.
-- **The `claude` CLI** on your `PATH`, installed and authenticated — required
-  for summaries (it shells out to `claude -p … --output-format text` and uses
+- **Claude**, for summaries — either a Claude API key in `ANTHROPIC_API_KEY`
+  (MailMind calls the Messages API itself, no SDK), or the `claude` CLI on your
+  `PATH`, installed and authenticated (it shells out to `claude -p …` and uses
   your Claude subscription). Set `MAILMIND_MODEL` to pick a cheaper/faster model.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
@@ -395,13 +401,16 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | Variable | Effect |
 |---|---|
 | `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync) |
-| `MAILMIND_MODEL` | Override the Claude model for summaries (e.g. `claude-haiku-4-5`) |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. Unset: use the `claude` CLI. |
+| `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
+| `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5` on the API, the CLI's own default otherwise), e.g. `claude-haiku-5-5` |
+| `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
 | `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs under `MAILMIND_NOSYNC`. |
 | `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by `MAILMIND_NOSYNC`). |
-| `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for older `claude` CLI builds. |
+| `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for older `claude` CLI builds and models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
 
@@ -430,15 +439,16 @@ python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 le
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
 python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
+python3 test_claude_api.py     # Claude API engine against a local stub: requests, refusals, retries
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all five and `just verify` adds lint, byte-compile and a
+`just test` runs all six and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
 re-runs `summarize.py` until every non-junk message has a summary, backing off
-when the `claude` CLI rate-limits.
+when Claude rate-limits.
 
 ## Privacy & contributing
 
