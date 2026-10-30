@@ -40,7 +40,7 @@
     --ok:#7CC79A; --err:#F0957A; --on-err:#2A0F08; --syncing:#F2B65A;
     /* interaction */
     --sel:#24375C; --hover:#1C2944;
-    --top:92px;
+    --top:56px;
     /* type roles. Mail and summaries read in the UI face; mono is garnish (keycaps, code) */
     --font-ui:"Nunito Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif;
@@ -90,10 +90,10 @@
   button,input,select,textarea{font-family:inherit}
   ::selection{background:color-mix(in srgb,var(--sun) 32%,transparent)}
 
-  /* ---------- top bar: 52px command row + 40px context strip ---------- */
+  /* ---------- top bar: one row — rail toggle and name, search, sync status, help, settings, Compose ---------- */
   .top{position:sticky;top:0;z-index:20;height:var(--top);background:var(--bg2);
-    border-bottom:1px solid var(--line);padding:10px 20px 0;display:flex;flex-direction:column;gap:6px}
-  .top .r1{display:flex;align-items:center;gap:12px}
+    border-bottom:1px solid var(--line);padding:0 16px 0 12px;display:flex;align-items:center}
+  .top .r1{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
   .brand{font-family:var(--font-display);font-weight:600;font-size:16.5px;color:var(--ink);letter-spacing:-.02em;white-space:nowrap}
   .brand b{color:var(--primary-ink);font-weight:600}
   /* sync status: one quiet pill; Sync now, Reconcile and Curate live in its popover */
@@ -120,27 +120,42 @@
   #composeBtn:hover{background:var(--primary-hi);color:var(--on-primary)}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  .top .r2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-bottom:8px}
   .seg{display:inline-flex;border:none;border-radius:var(--r-sm);overflow:hidden;background:var(--bg);padding:2px;gap:2px}
   .seg button{background:none;border:none;border-radius:var(--r-xs);color:var(--mute);font-size:12px;font-weight:500;padding:5px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .seg button:hover{color:var(--soft)}
   .seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:var(--sh-1)}
-  .monos{display:flex;margin-left:auto;padding-left:6px}
-  .mono-dot{position:relative;width:24px;height:24px;border-radius:50%;border:2px solid var(--bg2);background:var(--sel);
-    display:grid;place-items:center;font-size:10.5px;font-weight:600;color:var(--soft);cursor:pointer;
-    transition:margin var(--t-fast),box-shadow var(--t-fast);user-select:none;margin-left:-6px}
-  .monos:hover .mono-dot{margin-left:1px}
-  .mono-dot:hover{color:var(--ink);z-index:1}
-  .mono-dot.on{box-shadow:0 0 0 2px var(--primary);margin-left:1px;z-index:1}
-  .mono-dot .led{position:absolute;bottom:-2px;right:-2px;width:7px;height:7px;border-radius:50%;border:2px solid var(--bg2);background:var(--mute)}
+  .mono-dot{position:relative;width:30px;height:30px;flex:none;border-radius:50%;border:2px solid var(--panel);background:var(--sel);
+    display:grid;place-items:center;font-size:12.5px;font-weight:600;color:var(--soft);user-select:none}
+  .mono-dot .led{position:absolute;bottom:-2px;right:-2px;width:8px;height:8px;border-radius:50%;border:2px solid var(--panel);background:var(--mute)}
   .mono-dot.ok .led{background:var(--ok)} .mono-dot.error .led{background:var(--err)} .mono-dot.syncing .led{background:var(--syncing)}
 
   /* ---------- split ---------- */
   .split{display:grid;grid-template-columns:minmax(330px,38%) 1fr;height:calc(100vh - var(--top))}
   .folderrail{display:none}
   /* ---- Mailbox mode ---- */
-  .client-ctx{font-size:12px;color:var(--soft)}
-  .client-ctx b{color:var(--ink);font-weight:600}
+  /* the account switcher heading the rail, and its menu */
+  #monos:empty{display:none}
+  #monos{padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .frail-list{display:flex;flex-direction:column;gap:1px}
+  .acct-sw{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:6px 8px;border:none;border-radius:var(--r-md);
+    background:none;color:var(--soft);font:inherit;text-align:left;cursor:pointer;transition:background var(--t-fast)}
+  .acct-sw:hover,.acct-sw[aria-expanded="true"]{background:var(--hover)}
+  .acct-sw .as-txt,.acct-menu .am-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+  .acct-sw b,.acct-menu b{font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct-sw small,.acct-menu small{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct-menu small.err{color:var(--err)}
+  .acct-sw .as-chev{flex:none;color:var(--faint);font-size:11px}
+  .acct-menu{position:fixed;z-index:95;width:290px;max-width:calc(100vw - 20px);max-height:min(70vh,560px);overflow-y:auto;
+    background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);box-shadow:var(--sh-3);padding:6px;
+    display:flex;flex-direction:column;gap:1px}
+  .acct-menu button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:none;border-radius:var(--r-sm);
+    background:none;color:var(--soft);font:inherit;text-align:left;cursor:pointer}
+  .acct-menu button:hover,.acct-menu button:focus-visible,.acct-menu button[aria-checked="true"]{background:var(--sel)}
+  .acct-menu .mono-dot .led,.acct-sw .mono-dot .led{border-color:var(--panel)}
+  /* where you are: heads the list */
+  .client-ctx{font-size:13px;color:var(--soft);line-height:1.4}
+  .client-ctx:empty{display:none}
+  .client-ctx b{color:var(--ink);font-weight:700}
   body.mode-client .folderrail{display:flex;flex-direction:column;gap:1px;overflow-y:auto;padding:10px 8px}
   .frow{display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:var(--r-sm);cursor:pointer;
     font-size:13px;color:var(--mute);transition:background var(--t-fast),color var(--t-fast)}
@@ -212,7 +227,8 @@
   .list::-webkit-scrollbar-thumb:hover,.reader::-webkit-scrollbar-thumb:hover,.drawer::-webkit-scrollbar-thumb:hover{background:var(--scroll-hi);border:2px solid transparent;background-clip:padding-box}
   .reader,.drawer,.feed-river,.paper-trail,.ask-wrap,.plist,.folderrail{scrollbar-color:var(--line-hi) transparent}
   .listhead{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
-    padding:8px 16px;font-size:11.5px;font-weight:500;color:var(--faint);display:flex;justify-content:space-between;z-index:2;font-variant-numeric:tabular-nums}
+    padding:10px 16px 8px;font-size:11.5px;font-weight:500;color:var(--faint);display:flex;flex-direction:column;gap:4px;z-index:2;font-variant-numeric:tabular-nums}
+  .listhead .lh-row{display:flex;justify-content:space-between;align-items:center}
   .listhead select{background:none;border:none;color:var(--mute);font:inherit;font-size:11.5px;cursor:pointer}
 
   /* rows: the importance SPINE — a 3px heat-ramp tick down the left edge,
@@ -492,7 +508,8 @@
       overflow:hidden;font-size:0;background:var(--primary);box-shadow:0 0 0 2px var(--panel)}
     body.mode-client:not(.rail-wide) .frow.on .unread{box-shadow:0 0 0 2px var(--sel)}
     body.mode-client:not(.rail-wide) .frail-acct{height:1px;padding:0;margin:8px 8px;overflow:hidden;font-size:0;background:var(--line)}
-    body.mode-client:not(.rail-wide) .frail-acct:first-child{display:none}
+    body.mode-client:not(.rail-wide) .acct-sw{justify-content:center;padding:6px 0}
+    body.mode-client:not(.rail-wide) .acct-sw .as-txt,body.mode-client:not(.rail-wide) .acct-sw .as-chev{display:none}   /* its aria-label names the account */
   }
   /* <=1100: two panels; the rail leaves the flow and becomes a drawer (☰ / [ / g / ⌘K).
      visibility:hidden when closed drops it from the tab order and the accessibility tree. */
@@ -656,7 +673,6 @@
     .reader{display:none}
     body.reading .list{display:none}
     body.reading .reader{display:block;max-width:none}
-    .top .r2{overflow-x:auto;-webkit-overflow-scrolling:touch}
     .list{border-right:none}
     .rd-back{display:inline-flex}            /* Back button (only while the swap is active) */
     body.mode-client .rd-focus{display:none}
@@ -673,19 +689,17 @@
   @media (max-width:600px){
     body{height:100dvh}
     .split{height:calc(100dvh - var(--top))}
-    .top{padding:8px 12px 0;gap:6px}
-    .top .r1{gap:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}   /* toolbar swipes instead of clipping */
+    .top{padding:0 8px}
+    .top .r1{gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}   /* toolbar swipes instead of clipping */
     .brand{font-size:15px}
     .search{flex:1;min-width:140px;font-size:16px}            /* 16px → no iOS focus-zoom */
     .tools{gap:2px} .tbtn{padding:9px 10px;min-height:40px;flex:none}
     .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
-    .top .r2{flex-wrap:nowrap;padding-bottom:6px}
-    .monos{flex-wrap:nowrap}
     .reader{padding:16px 14px calc(var(--dock-h) + 28px)}
     .rd-iframe{min-height:100px}
     .feed-river{padding:10px 12px calc(var(--dock-h) + 16px)} .paper-trail{padding:8px 12px calc(var(--dock-h) + 16px)} .ask-wrap{padding:12px 12px calc(var(--dock-h) + 16px)}
     .rd-actions{gap:4px} .cab{min-height:40px;padding:8px 11px}
-    .seg button{min-height:40px;padding:9px 12px} .mono-dot{width:28px;height:28px}
+    .seg button{min-height:40px;padding:9px 12px}
     .cmp-row{flex-direction:column;align-items:stretch;gap:5px} .cmp-row>label{width:auto;text-align:left}
     .cmp-textarea,.cmp-subj,.ci{font-size:16px}
     .snooze-menu{max-width:calc(100vw - 20px)}
@@ -1061,7 +1075,7 @@
 <script>try{if(localStorage.getItem("mm_theme")==="light")document.body.classList.add("theme-light");}catch(e){}</script>
 <header class="top">
   <div class="r1">
-    <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="folderrail" aria-expanded="false">☰</button>
+    <button class="railtoggle" id="railToggle" title="Folders — icons ⇄ names ([)" aria-label="Show folder names" aria-controls="rail" aria-expanded="false">☰</button>
     <div class="brand">✉ Mail<b>Mind</b></div>
     <input class="search" id="search" placeholder="Ask a question (start with ?) or search — is:unread, from:amazon" aria-label="search">
     <div class="tools">
@@ -1072,22 +1086,23 @@
       <button class="tbtn" id="composeBtn" title="Compose (c)">✏ Compose</button>
     </div>
   </div>
-  <div class="r2">
-    <span class="client-ctx" id="clientCtx"></span>
-    <div class="monos" id="monos"></div>
-  </div>
 </header>
 <div class="acct-alert" id="acctAlert" hidden></div>
 <div id="srLive" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 
 <main class="split">
-  <aside class="folderrail" id="folderrail"></aside>
+  <aside class="folderrail" id="rail" aria-label="Accounts and folders">
+    <div id="monos"></div>
+    <div class="frail-list" id="folderrail"></div>
+  </aside>
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-controls="list"
     aria-label="Message list width" aria-valuemin="300" aria-valuemax="560" aria-valuenow="372" tabindex="0"
     title="Drag to resize · ←/→ · double-click resets"></div>
   <section class="list" id="list" tabindex="0">
-    <div class="listhead"><span id="count">—</span>
-      <button class="thread-toggle on" id="threadToggle" title="Group into conversations">💬 Conversations</button>
+    <div class="listhead">
+      <div class="client-ctx" id="clientCtx"></div>
+      <div class="lh-row"><span id="count">—</span>
+        <button class="thread-toggle on" id="threadToggle" title="Group into conversations">💬 Conversations</button></div>
     </div>
     <div class="bulkbar" id="bulkbar" hidden></div>
     <div id="rows"></div>
@@ -1319,7 +1334,7 @@ function statusInfoHtml(L){
     ${(state.accountsList||[]).length>1||badAccounts().length?`<div class="sm-accts">${accts}</div>`:""}`;
 }
 function openStatusMenu(){
-  closeStatusMenu(); closeMoreMenu(); closeReadMenu(); closeSnoozeMenu();
+  closeStatusMenu(); closeAcctMenu(); closeMoreMenu(); closeReadMenu(); closeSnoozeMenu();
   const anchor=$("#statusBtn"), L=syncLabel();
   const notify=window.Notification&&Notification.permission==="default";
   const m=document.createElement("div"); m.className="status-menu"; m.id="statusMenu"; m.setAttribute("role","dialog"); m.setAttribute("aria-label","Sync status");
@@ -1355,14 +1370,47 @@ function watchSync(){   // while the server syncs, re-read the digest so the pil
     if(!(state.lastSync&&state.lastSync.running)||n>60){ clearInterval(_statusPoll); _statusPoll=0; renderStatus(); } },5000);
 }
 function onSyncDone(){ clearTimeout(_syncDoneT); _syncDoneT=setTimeout(()=>loadDigest(true),1500); }   // one per account → one refresh
-function renderMonos(){
-  const allDot=`<div class="mono-dot all-dot${state.allInbox?" on":""}" data-acct="__all__" title="All inboxes">✉</div>`;
-  $("#monos").innerHTML=allDot+state.accountsList.map(a=>{
-    const st=(state.statusMap&&state.statusMap[a])?state.statusMap[a].health:"";
-    const label=nameOf(a), tip=(state.aliases&&state.aliases[a])?label+" — "+a:a;
-    const on=state.account===a&&!state.allInbox;
-    return `<div class="mono-dot ${st}${on?" on":""}" data-acct="${esc(a)}" title="${esc(tip)}" style="color:hsl(${hue(a)} var(--mono-s) var(--mono-l))">${esc((label[0]||"?").toUpperCase())}<span class="led"></span></div>`;
-  }).join("");
+function monoFace(a){   // an account's monogram, its sync health on the LED; "__all__" is the merged inbox
+  if(a==="__all__") return '<span class="mono-dot all-dot" aria-hidden="true">✉</span>';
+  const st=((state.statusMap||{})[a]||{}).health||"";
+  return `<span class="mono-dot ${esc(st)}" aria-hidden="true" style="color:hsl(${hue(a)} var(--mono-s) var(--mono-l))">${esc((nameOf(a)[0]||"?").toUpperCase())}<span class="led"></span></span>`;
+}
+function renderMonos(){   // the account switcher heading the rail
+  const list=state.accountsList||[], cur=state.allInbox?"__all__":state.account;
+  if(!list.length||!cur){ $("#monos").innerHTML=""; return; }
+  const name=cur==="__all__"?"All inboxes":nameOf(cur), sub=cur==="__all__"?`${list.length} account${list.length===1?"":"s"}, one inbox`:cur;
+  $("#monos").innerHTML=`<button class="acct-sw" id="acctSw" aria-haspopup="menu" aria-expanded="false" title="${esc(name)} — switch account" aria-label="Account: ${esc(name)}. Switch account">${monoFace(cur)}<span class="as-txt"><b>${esc(name)}</b><small>${esc(sub)}</small></span><span class="as-chev" aria-hidden="true">▾</span></button>`;
+}
+function switchAccount(a){
+  clearSearch(false);
+  if(a==="__all__"){ enterAllInbox(); return; }
+  state.allInbox=false; state.account=a; renderMonos(); loadFolders();
+}
+function openAcctMenu(){
+  closeAcctMenu(); closeStatusMenu();
+  const anchor=$("#acctSw"); if(!anchor)return;
+  const list=state.accountsList||[], cur=state.allInbox?"__all__":state.account;
+  const item=a=>{ const h=a==="__all__"?"":(((state.statusMap||{})[a]||{}).health||"");
+    const sub=a==="__all__"?`${list.length} account${list.length===1?"":"s"}, one inbox`:h==="error"?"can’t connect":a;
+    return `<button role="menuitemradio" aria-checked="${a===cur}" data-acct="${esc(a)}">${monoFace(a)}<span class="am-txt"><b>${esc(a==="__all__"?"All inboxes":nameOf(a))}</b><small${h==="error"?' class="err"':""}>${esc(sub)}</small></span></button>`; };
+  const m=document.createElement("div"); m.className="acct-menu"; m.id="acctMenu"; m.setAttribute("role","menu"); m.setAttribute("aria-label","Switch account");
+  m.innerHTML=item("__all__")+list.map(item).join("");
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=Math.max(10,Math.min(r.bottom+6,window.innerHeight-m.offsetHeight-10))+"px";
+  m.style.left=Math.max(10,Math.min(r.left,window.innerWidth-m.offsetWidth-10))+"px";
+  anchor.setAttribute("aria-expanded","true");
+  (m.querySelector('[aria-checked="true"]')||m.querySelector("button")).focus();
+  m.addEventListener("click",e=>{ e.stopPropagation(); const it=e.target.closest("[data-acct]"); if(!it)return; closeAcctMenu(); switchAccount(it.dataset.acct); });
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_acctOutside); },0);   // after the opening click finishes
+  window.addEventListener("blur",_acctBlur);
+}
+function _acctOutside(e){ if(!e.target.closest("#acctMenu"))closeAcctMenu(); }
+function _acctBlur(){ setTimeout(()=>{ if(frameTookFocus())closeAcctMenu(); },0); }
+function closeAcctMenu(refocus){
+  const m=$("#acctMenu"); if(!m)return;
+  m.remove(); document.removeEventListener("click",_acctOutside); window.removeEventListener("blur",_acctBlur);
+  const b=$("#acctSw"); if(b){ b.setAttribute("aria-expanded","false"); if(refocus)b.focus(); }
 }
 
 /* ---------- list ---------- */
@@ -1594,7 +1642,7 @@ function renderFolders(){
       <span class="ic2">${v.id.startsWith("__lane_")?"🏷":"🔎"}</span><span class="fn">${esc(v.name)}</span>
       ${v.builtin?"":`<button class="vdel" data-vdel="${esc(v.id)}" title="Remove view" aria-label="Remove view">×</button>`}</div>`).join("");
   const vsec=vrows?`<div class="frail-acct">Views</div>${vrows}`:"";
-  $("#folderrail").innerHTML=`<div class="frail-acct">${esc(nameOf(state.account))}</div>`+rows+vsec+scrRow+rlRow+waitRow+snzRow+mutRow;
+  $("#folderrail").innerHTML=rows+vsec+scrRow+rlRow+waitRow+snzRow+mutRow;
 }
 function selectFolder(name){ state.allInbox=false; state.folder=name; state.csel=null; state.viewId=null; clearSearch(false); renderMonos(); renderFolders(); loadCMessages(); }
 /* ---------- saved searches / lanes ("Views") ---------- */
@@ -1718,8 +1766,7 @@ function openConversation(it,scroll){
 /* ---- unified All inboxes (cross-account INBOX merge) ---- */
 function enterAllInbox(){
   state.allInbox=true; state.csel=null; renderMonos();
-  $("#folderrail").innerHTML=`<div class="frail-acct">All inboxes</div>
-    <div class="frow on"><span class="ic2">📥</span><span class="fn">Inbox</span></div>`;
+  $("#folderrail").innerHTML=`<div class="frow on"><span class="ic2">📥</span><span class="fn">Inbox</span></div>`;
   loadAllInboxes();
 }
 async function loadAllInboxes(){
@@ -3903,10 +3950,7 @@ $("#splitter").addEventListener("keydown",e=>{
 $("#splitter").addEventListener("dblclick",()=>applyListW(LIST_W0,true));
 $("#rows").addEventListener("dblclick",e=>{ if(e.target.closest(".row.cmsg") && !e.target.closest("[data-mark],[data-racts]")) setReadFocus(true); });
 $("#clientCtx").addEventListener("click",e=>{ if(e.target.id==="ctxSaveView")saveCurrentSearch(); else if(e.target.closest("[data-dg-back]"))leaveDigestList(); });
-$("#monos").addEventListener("click",e=>{const d=e.target.closest(".mono-dot");if(!d)return;
-  clearSearch(false);
-  if(d.dataset.acct==="__all__"){ enterAllInbox(); return; }
-  state.allInbox=false; state.account=d.dataset.acct; renderMonos(); loadFolders(); });
+$("#monos").addEventListener("click",e=>{ if(!e.target.closest("#acctSw"))return; e.stopPropagation(); if($("#acctMenu"))closeAcctMenu(); else openAcctMenu(); });
 $("#rows").addEventListener("click",e=>{
   if(e.target.closest("[data-brief-row]")){ showBrief(true); return; }
   if(e.target.closest("[data-firstrun]")){ settingsOpen(true); return; }
@@ -4155,6 +4199,10 @@ document.addEventListener("keydown",e=>{
   // ⋯ More open: ↑/↓ move, Esc closes back to ⋯; swallow the rest
   if($("#moreMenu")){ if(e.key==="Escape")closeMoreMenu(true);
     else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ const bs=$$("#moreMenu button"), i=bs.indexOf(document.activeElement); bs[(i+(e.key==="ArrowDown"?1:bs.length-1))%bs.length].focus(); }
+    if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" ")e.preventDefault(); return; }
+  // account menu open: Esc closes back to the switcher; ↑/↓ move; swallow the rest
+  if($("#acctMenu")){ if(e.key==="Escape")closeAcctMenu(true);
+    else if(e.key==="ArrowDown"||e.key==="ArrowUp"){ const bs=$$("#acctMenu button"), i=bs.indexOf(document.activeElement); bs[(i+(e.key==="ArrowDown"?1:bs.length-1))%bs.length].focus(); }
     if(e.key!=="Tab"&&e.key!=="Enter"&&e.key!==" ")e.preventDefault(); return; }
   // sync status open: Esc closes back to the pill; ↑/↓ move between its actions; swallow the rest
   if($("#statusMenu")){ if(e.key==="Escape")closeStatusMenu(true);
