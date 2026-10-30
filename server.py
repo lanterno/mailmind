@@ -2659,11 +2659,11 @@ def _thread_anchor_pk(c, account, thread_id):
 
 def _reply_worthy(c, pk):
     """Server-side kick gate — mirrors the client's _draftEligibleClient exactly
-    (importance>=4 OR action-needed OR a non-empty extracted action). Needed because the
-    reader surface arms on any opened mail; gates KICKS only, never serving."""
+    (importance>=4 OR action-needed: the background tick's bar too, so a next step alone never
+    spends an AI call). Needed because the reader surface arms on any opened mail; gates KICKS
+    only, never serving."""
     r = c.execute("SELECT 1 FROM summaries WHERE message_pk=? AND (importance>=4 "
-                  "OR category='action-needed' OR (action IS NOT NULL AND action<>''))",
-                  (pk,)).fetchone()
+                  "OR category='action-needed')", (pk,)).fetchone()
     return bool(r)
 
 
