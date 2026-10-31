@@ -21,7 +21,7 @@ See [Features](#features) for what ships today and
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need Claude. Put a Claude API key in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries.
+> **Heads-up:** summaries and the other AI features need Claude. Put a Claude API key in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries, and the brief says so and how to turn AI on.
 
 ---
 
@@ -200,7 +200,11 @@ automatically.
   `{"op": …}` / `{"env": …}` like an account password), and that wins over
   `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
   accident. The server's startup line names the engine, the model and where the key
-  came from.
+  came from, and so does the sync menu, in red with the reason ("the API key was
+  rejected", "the claude command isn't signed in") when the last call failed. With no
+  AI at all, the brief says so calmly and the composer drops Draft and Rewrite; both
+  places say that message text goes to Anthropic only when it is summarized, briefed or
+  drafted.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.

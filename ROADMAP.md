@@ -48,13 +48,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## AI that acts, not just describes
 
-- **Make AI presence and setup state visible** · high value · effort S — `digest_json()` returns
-  items/stats/accounts/aliases/status/sync and nothing about the model; grepping every module for
-  `ai_available` or `ai_model` returns zero hits, and `summarize.describe_engine()` only reaches the
-  startup log. A user with neither an API key nor the claude CLI today gets a silently degraded
-  brief and one per-request error string. Needs a startup probe cached in server state, two keys
-  on `/api/digest`, a calm empty-state card, and a one-line explainer of what text leaves the
-  machine and where it goes.
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
   into a calendar entry or a dated task. Two distinct halves, and the seam matters:
   - *The .ics half is cheap.* `ics.py` already has `_fold`, `_ics_esc`, `_ics_dt` and emits
@@ -321,12 +314,10 @@ implementation.
 
 ## Next up
 
-1. **Make AI presence and setup state visible** (high / S) — a probe, two digest keys and one card;
-   without it a machine with neither an API key nor the claude CLI degrades silently.
-2. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
+1. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
    field rather than N calls to `/api/contact`.
-3. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+2. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
    `_ops_lock` per account**, the structural half.
-4. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+3. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.

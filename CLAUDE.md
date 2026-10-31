@@ -30,7 +30,7 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
-python3 test_claude_api.py        # Claude API engine against a local stub server (18)
+python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (22)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 ```
 
@@ -164,7 +164,10 @@ the models that accept it, reads a refusal as an empty reply, and retries
 Both engines keep one contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
 stores its fallback). No key and no `claude` degrades to no summaries rather than
-failing; keep that property.
+failing; keep that property. `call_claude` and `call_claude_json` are wrapped by `_noted`,
+which records each call's outcome for `summarize.status()` — served on `/api/digest` as
+`ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
+entry point that bypasses them won't show up there.
 
 ### Classification
 
