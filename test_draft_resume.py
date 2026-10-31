@@ -366,6 +366,31 @@ def test_copy_in_another_drafts_folder_is_removed_there():
     assert CALLS["append"][-1]["prev_folder"] == "Drafts" and len(CALLS["delete"]) == 1, CALLS
 
 
+def test_received_mail_in_a_drafts_named_folder_is_never_removed():
+    _fresh()
+    c = store.conn()
+    store.set_uidvalidity(c, ACCT, "Bank drafts", 912)
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, draft) "
+              "VALUES (?,?,?,?,?,?,?,?,?,0)", (ACCT, "imap", "Bank drafts", 3, "<stmt@bank.example.test>", "tb3",
+                                                1_800_000_000, "loans@bank.example.test", "Your statement"))
+    c.commit()
+    row = c.execute("SELECT * FROM messages WHERE folder='Bank drafts'").fetchone()
+    c.close()
+    did = server._draft_info(row)["draft_id"]
+    _save(draft_id=did, text="Forwarding this to Bo.")
+    assert CALLS["delete"] == [], CALLS["delete"]                # the statement stays where it is
+    saved = _row(did)
+    _save(account="zed@example.test", draft_id=did, text="From the other account.")
+    assert CALLS["delete"] == [(ACCT, "Drafts", saved["uid"], 777)], CALLS["delete"]   # only MailMind's own copy
+
+
+def test_a_copy_mailmind_saved_is_removed_even_unflagged():
+    _fresh()
+    did = _save()["draft_id"]                                   # no messages row: never synced
+    _save(account="zed@example.test", draft_id=did)
+    assert len(CALLS["delete"]) == 1 and CALLS["delete"][0][0] == ACCT, CALLS["delete"]
+
+
 class _FakeDraftsIMAP:
     def __init__(self):
         self.untagged_responses, self.calls = {"UIDVALIDITY": [b"777"]}, []
