@@ -4441,20 +4441,19 @@ function composePayload(){
     attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})),
     ...resumeFields(cmp.resume) };
 }
-async function composeSaveDraft(silent){   // → true once saved
-  const cmp=state.compose; if(!cmp)return false; const payload=composePayload();
+async function composeSaveDraft(silent){   // → true once saved, false if it wasn't, null when there's nothing to save
+  const cmp=state.compose; if(!cmp)return null; const payload=composePayload();
   // never litter Drafts with an empty / signature-only message (shared by manual save, autosave, close)
   const bodyTrim=(payload.text||"").replace(cmp._sigBlock||"","").trim();
   if(!payload.to.length&&!payload.cc.length&&!payload.bcc.length&&!(payload.subject||"").trim()&&!bodyTrim){
-    if(!silent)toast("Nothing to save yet"); return false;
+    if(!silent)toast("Nothing to save yet"); return null;
   }
+  const mark=t=>{ if(state.compose===cmp)$("#cmpSaved").textContent=t; };   // a save that outlives its composer leaves the next one's footer alone
   try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
     cmp.draftId=r.draft_id; cmp.dirty=false; cmp._lastSaveHash=_draftHash(payload);
-    if(silent){ $("#cmpSaved").textContent="Saved "+new Date().toTimeString().slice(0,5); }
-    else toast("Draft saved");
+    mark("Saved "+new Date().toTimeString().slice(0,5)); if(!silent)toast("Draft saved");
     return true; }
-  catch(e){ if(!silent)toast("Couldn’t save draft: "+(e.message||""));
-    else if(state.compose===cmp)$("#cmpSaved").textContent="Not saved";   // never leave an older "Saved" up
+  catch(e){ mark("Not saved"); if(!silent)toast("Couldn’t save draft: "+(e.message||""));   // never leave an older "Saved" up
     return false; }
 }
 function _cheapHash(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
