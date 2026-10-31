@@ -78,6 +78,15 @@ def _html_to_snippet_text(htmltxt):
 
 
 
+def _has_invite(msg):
+    """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
+    try:
+        return any(p.get_content_type() in ("text/calendar", "application/ics")
+                   or (p.get_filename() or "").lower().endswith(".ics") for p in msg.walk())
+    except Exception:
+        return False
+
+
 def _uid_of(meta_bytes):
     m = re.search(r"UID (\d+)", meta_bytes.decode("utf-8", "replace"))
     return int(m.group(1)) if m else None
@@ -156,14 +165,16 @@ def _process(M, acct, uids, folder="INBOX", with_body=False):
                          "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:2000]})
     c = store.conn()
     for r in rows:
-        snippet = ""
+        snippet, invite = "", None
         if with_body and not r["is_junk"]:
             try:
                 typ, data = M.uid("FETCH", str(r["uid"]), "(BODY.PEEK[])")
                 if typ != "OK":   # flaky-connection fetch failure (vs a genuinely empty body) — surface it
                     print(f"[ingest] body fetch {acct['email']} uid {r['uid']}: {typ}", flush=True)
                 raw = next((p[1] for p in data if isinstance(p, tuple)), b"")
-                snippet = text_body(email.message_from_bytes(raw))
+                msg = email.message_from_bytes(raw)
+                snippet = text_body(msg)
+                invite = raw if _has_invite(msg) else None
             except Exception:
                 snippet = ""
         pk = store.upsert_message(c, {
@@ -178,6 +189,11 @@ def _process(M, acct, uids, folder="INBOX", with_body=False):
         c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
                   (r["in_reply_to"], r["refs"], r["recipients"], pk))
         store.fts_index(c, pk)               # refresh FTS so recipients is searchable immediately
+        if invite:                           # Today & next reads invites from stored bodies only
+            try:
+                _keep_body(c, pk, invite, mailparse.parse(invite))
+            except Exception as e:
+                print(f"[ingest] keep invite {acct['email']} uid {r['uid']}: {e}", flush=True)
         c.commit()
     store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
     c.commit()
