@@ -3394,7 +3394,7 @@ function renderChips(field){
 function chipHtml(field,x,i){ const cmp=state.compose, a=(addrOf(x.v)||x.v||"").toLowerCase(), nw=!x.bad&&knownIsNew(cmp,a);
   return `<span class="cm-chip${x.bad?" bad":""}${nw?" new":""}" data-addr="${esc(a)}"${nw?' title="No earlier mail with this address in MailMind"':""}>${esc(x.v)}`
     +(nw?'<span class="cm-new" aria-hidden="true">new</span><span class="visually-hidden">, new to you</span>':"")
-    +`<button data-rmchip="${field}:${i}" aria-label="Remove ${esc(x.v)}${nw?", new to you":""}">×</button></span>`; }
+    +`<button data-rmchip="${field}:${i}" aria-label="Remove ${esc(x.v)}${x.bad?", not a valid address":nw?", new to you":""}">×</button></span>`; }
 function commitChip(field,raw){
   const cmp=state.compose; if(!cmp)return;
   const added=(raw||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean);
@@ -3667,14 +3667,19 @@ function guardFix(kind,btn){
   if(kind==="subject")$("#cmpSubject").focus();
   else if(kind==="attach"){ $("#cmpAttachBtn").focus(); $("#cmpFile").click(); }
   else if(kind==="review"){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; const i=fieldEl("cc").querySelector(".ci"); if(i)i.focus(); }
-  else if(kind==="time")openSendLaterMenu($("#cmpSchedule")); }
+  else if(kind==="time")openSendLaterMenu($("#cmpSchedule"));
+  else if(kind==="to"){ const i=fieldEl("to").querySelector(".ci"); if(i)i.focus(); }
+  else if(kind==="bad"){ const f=btn.dataset.gf, i=f?cmp[f].findIndex(x=>x.bad):-1; if(i<0)return;
+    const v=cmp[f][i].v; cmp[f].splice(i,1); if(f!=="to"){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
+    renderChips(f); const inp=fieldEl(f).querySelector(".ci"); inp.value=v; inp.focus(); } }   // back in the input to fix
 async function composeSend(sendAfter){
   const cmp=state.compose; if(!cmp||cmp.status==="sending")return;
   const back=_guardFocusDesc(document.activeElement);   // before the chip commit below moves focus
   ["to","cc","bcc"].forEach(f=>{ const inp=fieldEl(f).querySelector(".ci"); if(inp&&inp.value.trim()){ commitChip(f,inp.value); inp.value=""; } });
   cmp.subject=$("#cmpSubject").value; cmp.body=$("#cmpBody").value; cmp.from=$("#cmpFrom").value;
-  if(!cmp.to.length&&!cmp.cc.length&&!cmp.bcc.length){ toast("Add at least one recipient"); return; }
-  if([...cmp.to,...cmp.cc,...cmp.bcc].some(a=>a.bad)){ toast("Fix the highlighted address"); return; }
+  if(!cmp.to.length&&!cmp.cc.length&&!cmp.bcc.length){ showSendGuard([{key:"norcpt",block:"hard"}],sendAfter,back); return; }
+  const bad=["to","cc","bcc"].flatMap(f=>cmp[f].filter(x=>x.bad).map(x=>({f,v:x.v})));
+  if(bad.length){ showSendGuard([{key:"bad",block:"hard",v:bad[0].v,more:bad.length-1,field:bad[0].f}],sendAfter,back); return; }
   const warns=_guardRun(cmp,sendAfter);
   if(guardBlocks(warns)){ showSendGuard(warns,sendAfter,back); return; }
   if(cmp._guard)hideSendGuard();
