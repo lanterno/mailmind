@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known test-send-after
+test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known test-send-after test-send-guard
 
 # Classifier behaviour
 test-classifier:
@@ -60,6 +60,10 @@ test-contacts-known:
 # Send-later times: a passed, far-off or malformed one is refused before anything is built
 test-send-after:
     {{py}} test_send_after.py
+
+# Send-time checks in the composer: attachment wording, typed text, subject, reply-all size (needs node)
+test-send-guard:
+    {{py}} test_send_guard.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
