@@ -3632,14 +3632,16 @@ function showSendGuard(warns,sendAfter,back,lead){
   const spoken=hard?"Press Escape to keep editing.":`Press Command or Control Enter to ${later?"schedule":"send"} anyway, or Escape to keep editing.`;
   guardSay((lead?lead+" ":"")+lines.map(l=>l.text).join(" ")+" "+spoken); }
 function guardReset(){   // DOM only; safe with no composer open
-  clearTimeout(_guardArmT); const g=$("#cmpGuard"); g.hidden=true; $("#cmpGuardList").innerHTML=""; paintSendBtn("plain"); }
+  clearTimeout(_guardArmT); clearTimeout(_gsT);   // a line still queued for the screen reader goes with the strip
+  const g=$("#cmpGuard"); g.hidden=true; $("#cmpGuardList").innerHTML=""; paintSendBtn("plain"); }
 function hideSendGuard(){
   const had=$("#cmpGuard").contains(document.activeElement);
   if(state.compose)state.compose._guard=null;
   guardReset(); if(had)$("#cmpSend").focus(); }
 function dismissSendGuard(){   // Esc, Keep editing, Back: return to where you were
   const g=state.compose&&state.compose._guard; if(!g)return;
-  const t=_guardFocusEl(g.back,g.sendAfter); hideSendGuard(); if(t)t.focus(); }
+  const a=document.activeElement, here=!a||a===document.body||$("#cmpGuard").contains(a);   // moved elsewhere meanwhile? stay there
+  const t=here?_guardFocusEl(g.back,g.sendAfter):null; hideSendGuard(); if(t)t.focus(); }
 function guardStale(){   // any real edit retires the strip; Send checks again from scratch
   const cmp=state.compose, g=cmp&&cmp._guard; if(!g)return;
   if(g.keys.includes("reading")&&cmp._reading.size)return;   // still reading: the strip stays until the file is in
@@ -5260,7 +5262,7 @@ function toggleLegend(force){
   if(on){ _legendOpener=document.activeElement; const box=el.querySelector(".box"); if(box)box.focus(); }
   else { try{ _legendOpener&&_legendOpener.focus(); }catch(e){} }
 }
-function announce(msg){ const r=$("#srLive"); if(r)r.textContent=msg; }
+function announce(msg){ clearTimeout(_gsT); const r=$("#srLive"); if(r)r.textContent=msg; }   // newer news wins over a queued strip line
 $("#legend").addEventListener("click",e=>{if(e.target.id==="legend")toggleLegend(false);});
 $("#pq").addEventListener("input",()=>{ _palSel=0; renderPalette(); });
 $("#plist").addEventListener("click",e=>{ const r=e.target.closest("[data-idx]"); if(r)paletteExec(+r.dataset.idx); });
