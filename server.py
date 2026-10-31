@@ -2501,19 +2501,36 @@ def _draft_live(acct, folder, uid):
             pass
 
 
+def _raw_header(msg, name):
+    """Every value of one header as written, unfolded and unparsed."""
+    return [re.sub(r"\r?\n(?=[ \t])", "", v) for k, v in msg.raw_items() if k.lower() == name.lower()]
+
+
+def _hdr_text(msg, name):
+    """One header of a parsed draft as text, or None. email.policy.default parses a header when
+    it is read, so one it can't parse (an encoded line break, comments nested past the recursion
+    limit) raises there: its raw value stands in."""
+    try:
+        v = msg.get(name)
+    except Exception:
+        raw = _raw_header(msg, name)
+        return raw[0] if raw else None
+    return None if v is None else str(v)
+
+
 def _hdr_chips(msg, name):
-    """One address header of a parsed draft as composer chips, de-duplicated by address."""
+    """One address header of a parsed draft as composer chips, de-duplicated by address. A header
+    that won't parse gives its bare addresses."""
+    try:
+        pairs = [(a.display_name, a.addr_spec) for h in msg.get_all(name) or [] for a in h.addresses]
+    except Exception:
+        pairs = [("", a) for _, a in email.utils.getaddresses(_raw_header(msg, name))]
     out, seen = [], set()
-    for h in msg.get_all(name) or []:
-        try:
-            pairs = [(a.display_name, a.addr_spec) for a in h.addresses]
-        except Exception:
-            pairs = email.utils.getaddresses([str(h)])
-        for n, a in pairs:
-            if "@" not in (a or "") or a.lower() in seen:
-                continue
-            seen.add(a.lower())
-            out.append(compose.addr_chip(n, a))
+    for n, a in pairs:
+        if "@" not in (a or "") or a.lower() in seen:
+            continue
+        seen.add(a.lower())
+        out.append(compose.addr_chip(n, a))
     return out
 
 
@@ -2630,7 +2647,7 @@ def draft_resume(body):
     if size + _RESUME_HEADROOM > MAX_SEND_POST:
         return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
                                       "and the text it quotes." + elsewhere}, 422
-    irt, refs = compose.thread_ids(msg.get("In-Reply-To"), msg.get("References"))
+    irt, refs = compose.thread_ids(_hdr_text(msg, "In-Reply-To"), _hdr_text(msg, "References"))
     mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
     if mode == "new" and irt:                            # MailMind's own new drafts never carry one
         mode = "reply"
