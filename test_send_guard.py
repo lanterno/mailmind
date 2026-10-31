@@ -1,6 +1,6 @@
 """The composer's send-time checks (dashboard.html, the block between /* send-guard:pure:start */
 and /* send-guard:pure:end */): attachment wording in eight languages, what counts as typed text,
-empty subjects, reply-all size, acknowledgements, and the exact wording of every line. The block
+empty subjects, reply-all size, speed on long unbroken text, acknowledgements, and the exact wording of every line. The block
 is pure JavaScript with no DOM, so this runs it once in node, like `just check-frontend` does.
 All addresses are fictional.
 Run: python3 test_send_guard.py"""
@@ -23,21 +23,47 @@ const keys=w=>w.map(x=>x.key);
 const W=(t,weak)=>guardAttachWord(t,weak);
 const ppl=n=>Array.from({length:n},(_,i)=>`p${i}@example.test`);
 const R={};
-for(const [name,fn] of Object.entries(CASES)){ try{ R[name]=fn(); }catch(e){ R[name]="THROW "+e; } }
+for(const [name,fn] of Object.entries(CASES)){ try{ R[name]=fn(); }catch(e){ R[name]="THROW "+e; } if(STOP(R[name]))break; }
 process.stdout.write(JSON.stringify(R));
 """
 
-STRONG = ["Please see attached.", "Enclosed is the form.", "Ci-joint le devis.", "Voici le devis en pièce jointe.",
-          "le devis en piece jointe", "Voici la facture jointe.", "PJ : devis", "Te mando adjunto el informe.",
-          "Segue em anexo o relatório.", "Anbei die Rechnung.", "Die Datei ist im Anhang.",
-          "Das Formular ist beigefügt.", "Ich habe es angehängt.", "Trovi il file in allegato.",
-          "Allego il contratto.", "Zie het bestand in de bijlage.", "Het rapport is bijgevoegd.",
-          "مرفق التقرير", "تجد التقرير بالمرفق", "ومرفقات الملف", "أرفقت الملف", "نرفقها لكم"]
+# Strong wording presents a file of your own, so it warns in every mode.
+STRONG = ["Please see attached.", "Enclosed is the form.", "I'm enclosing the invoice.", "Ci-joint le devis.",
+          "Voici le devis en pièce jointe.", "le devis en piece jointe", "Je vous joins le devis.",
+          "Veuillez trouver la pièce jointe.", "PJ : devis", "Vous trouverez en PJ le devis.", "Voir PJ.",
+          "Te mando adjunto el informe.", "Te adjunto el informe.", "Adjunto el informe.",
+          "Hola Ana, adjunto la factura.", "Va el archivo adjunto.", "Te envío anexa la factura.",
+          "Segue em anexo o relatório.", "Segue anexa a planilha.", "Seguem anexos os documentos.",
+          "Anbei die Rechnung.", "Die Datei ist im Anhang.", "Das Formular ist beigefügt.", "Ich habe es angehängt.",
+          "Beiliegend erhalten Sie die Rechnung.", "Anliegend sende ich Ihnen den Vertrag.",
+          "In der Anlage finden Sie das Angebot.", "Als Anlage sende ich den Vertrag.",
+          "Trovi il file in allegato.", "Trovi il file allegato.", "Ecco la fattura allegata.", "Allego il contratto.",
+          "Zie het bestand in de bijlage.", "Het rapport is bijgevoegd.", "Bijgaand de offerte.",
+          "مرفق التقرير", "تجد التقرير بالمرفق", "وبالمرفق التقرير", "في المرفق التقرير", "الملف المرفق",
+          "ومرفقات الملف", "أرفقت الملف", "نرفقها لكم", "تم إرفاق الملف"]
+# Weak wording names a file without presenting it: in a reply it's usually the other person's.
 WEAK = ["The attachment is big.", "Attachments below.", "My CV, as promised.", "See report.pdf for numbers.",
-        "Bijlage volgt.", "Anhang folgt.", "Mando el anexo."]
+        "See Q3-report_v2.pdf", "Voici la facture jointe.", "Voir la PJ.", "Les pièces jointes sont lourdes.",
+        "Reenvío el adjunto.", "Mando el anexo.", "Anhang folgt.", "In der Anlage ist ein Fehler.",
+        "Vedi l'allegato.", "Bijlage volgt.", "المرفقات كبيرة"]
 NEVER = ["We joined forces.", "A joint venture.", "The attaché said hello.", "My resume is online.",
          "cv and pj in lower case", "Unattached luggage.", "اكتب برفق", "مرافق الفندق",
-         "Bug tracker: https://x.example.test/attachment.cgi?id=4", "Write to attachments@example.test."]
+         "Bug tracker: https://x.example.test/attachment.cgi?id=4", "(see https://x.example.test/attached)",
+         "Write to attachments@example.test.", "Thanks PJ, see you Monday.", "O contrato PJ está pronto?",
+         "Hablé con la directora adjunta.", "Falei com o diretor adjunto.",
+         "Hablé con el director adjunto la semana pasada.", "Gold als Anlage ist sicher.",
+         "Das Kleid ist eng anliegend."]
+# Replies about the file they sent: weak at most, so a reply never warns.
+REPLY_NEVER = ["Thanks, I can't open the attachment.", "Merci pour la pièce jointe, c'est parfait.",
+               "Merci pour la PJ.", "La PJ a ouvert une enquête.", "Je l'ai jointe ce matin au téléphone.",
+               "No puedo abrir el adjunto.", "Non riesco ad aprire l'allegato.", "Grazie, ho ricevuto gli allegati.",
+               "Grazie per i tuoi allegati.", "شكرا على المرفقات"]
+# Long runs with no spaces: a pasted base64 blob, minified JSON, a line of dashes. They run in a
+# node process of their own, which stops at the first that takes SLOW_MS or more.
+SLOW_MS = 250
+SLOW = ["'QUJD'.repeat(12500)", "'-'.repeat(50000)", "'_'.repeat(50000)", "'a-'.repeat(25000)", "'.'.repeat(50000)",
+        "'@'.repeat(50000)", "'ال'.repeat(25000)", "', '.repeat(25000)", "'a'+' '.repeat(49998)+'b'",
+        "JSON.stringify(Array.from({length:4000},(_,i)=>({k:i,v:'x'+i}))).slice(0,50000)"]
 
 
 def _cases():
@@ -48,6 +74,9 @@ def _cases():
         c[f"weak{i}"] = f"()=>[W({json.dumps(t)},false), W({json.dumps(t)},true)]"
     for i, t in enumerate(NEVER):
         c[f"never{i}"] = f"()=>W({json.dumps(t)},true)"
+    for i, t in enumerate(REPLY_NEVER):
+        c[f"reply_never{i}"] = (f"()=>[W({json.dumps(t)},false), keys(guardCheck(S({{mode:'reply',subject:'Re: x',"
+                                f"subject0:'Re: x',body:{json.dumps(t)}}})))]")
     c.update({
         "echo": "()=>W('Voici le devis en pièce jointe.',false)",
         "typed_sig": r"""()=>guardTypedText('see attached\n\n-- \nAda','\n\n-- \nAda')""",
@@ -58,6 +87,11 @@ def _cases():
         "typed_outlook": r"""()=>guardTypedText('Noted\n-----Original Message-----\nsee attached','')""",
         "typed_quoted": r"""()=>guardTypedText('> see attached\nok, thanks','')""",
         "typed_keeps_above_sig": r"""()=>guardTypedText('see attached\n\n-- \nAda','\n\n-- \nAda')""",
+        "typed_ps": r"""()=>guardTypedText('Hi Bo,\nnotes below.\n\n-- \nAda Lovelace\n\nP.S. I attached the deck.','\n\n-- \nAda Lovelace')""",
+        "typed_below_sig": r"""()=>guardTypedText('\n\n-- \nAda Lovelace\nHi Bo, the deck is attached.','\n\n-- \nAda Lovelace')""",
+        "typed_sig_mid_line": r"""()=>guardTypedText('See x-- \nAda Lovelace','\n\n-- \nAda Lovelace')""",
+        "ps_check": r"""()=>keys(guardCheck(S({mode:'reply',subject:'Re: x',subject0:'Re: x',sigBlock:'\n\n-- \nAda',
+            body:'Thanks.\n\n-- \nAda\n\nP.S. The deck is attached.'})))""",
         "disclaimer": r"""()=>keys(guardCheck(S({body:'Hello\n-- \nAda\nAttachments may contain viruses.'})))""",
         "subj_empty_reply": "()=>guardSubjectEmpty('','reply')",
         "subj_blank_new": "()=>guardSubjectEmpty('  ','new')",
@@ -102,29 +136,42 @@ def _cases():
     return c
 
 
-_RESULTS = None
+def _slow_cases():
+    return {f"slow{i}": (f"()=>{{ const b={t}, t0=performance.now(); for(const mode of ['new','reply']){{ "
+                         f"guardCheck(S({{mode,body:b}})); guardCheck(S({{mode,subject:b}})); }} "
+                         f"return performance.now()-t0; }}") for i, t in enumerate(SLOW)}
 
 
-def _run():
-    global _RESULTS
-    if _RESULTS is not None:
-        return _RESULTS
-    with open(os.path.join(HERE, "dashboard.html"), encoding="utf-8") as f:
-        html = f.read()
-    a, b = html.index(START), html.index(END)
-    block = html[a + len(START):b]
-    cases = "const CASES={" + ",".join(f"{json.dumps(k)}:{v}" for k, v in _cases().items()) + "};"
-    d = tempfile.mkdtemp()
-    path = os.path.join(d, "guard_test.js")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(block + "\n" + cases + "\n" + HARNESS)
+_RESULTS = {}   # group → results, or the error that run raised (so a broken block fails fast, once)
+_GROUPS = {"main": (_cases, "()=>false"), "slow": (_slow_cases, f"ms=>ms>={SLOW_MS}")}
+
+
+def _run(group="main"):
+    if group in _RESULTS:
+        if isinstance(_RESULTS[group], Exception):
+            raise _RESULTS[group]
+        return _RESULTS[group]
+    make, stop = _GROUPS[group]
     try:
-        out = subprocess.run(["node", path], capture_output=True, text=True, timeout=30)
-    finally:
-        shutil.rmtree(d, ignore_errors=True)
-    assert out.returncode == 0, out.stderr
-    _RESULTS = json.loads(out.stdout)
-    return _RESULTS
+        with open(os.path.join(HERE, "dashboard.html"), encoding="utf-8") as f:
+            html = f.read()
+        a, b = html.index(START), html.index(END)
+        block = html[a + len(START):b]
+        cases = "const CASES={" + ",".join(f"{json.dumps(k)}:{v}" for k, v in make().items()) + "};"
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "guard_test.js")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(block + "\n" + cases + "\nconst STOP=" + stop + ";\n" + HARNESS)
+        try:
+            out = subprocess.run(["node", path], capture_output=True, text=True, timeout=30)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        assert out.returncode == 0, out.stderr
+        _RESULTS[group] = json.loads(out.stdout)
+    except Exception as e:
+        _RESULTS[group] = e
+        raise
+    return _RESULTS[group]
 
 
 def _r(name):
@@ -150,6 +197,19 @@ def test_lookalikes_links_and_addresses_never_fire():
         assert _r(f"never{i}") == "", (t, _r(f"never{i}"))
 
 
+def test_a_reply_about_their_file_never_warns():
+    for i, t in enumerate(REPLY_NEVER):
+        word, keys = _r(f"reply_never{i}")
+        assert word == "" and keys == [], (t, word, keys)
+
+
+def test_long_unbroken_text_checks_fast():
+    res = _run("slow")
+    for i, t in enumerate(SLOW):
+        ms = res.get(f"slow{i}")
+        assert isinstance(ms, (int, float)) and ms < SLOW_MS, (t, ms)   # was 2-5 s at the 50k cap
+
+
 def test_the_word_is_echoed_as_typed():
     assert _r("echo") == "en pièce jointe", _r("echo")
 
@@ -164,6 +224,13 @@ def test_typed_text_leaves_out_signature_and_quote():
     assert _r("typed_outlook") == "Noted", _r("typed_outlook")
     assert _r("typed_quoted") == "ok, thanks", _r("typed_quoted")
     assert _r("disclaimer") == [], _r("disclaimer")
+
+
+def test_text_on_either_side_of_your_signature_is_yours():
+    assert _r("typed_ps") == "Hi Bo,\nnotes below.\n\n\n\nP.S. I attached the deck.", _r("typed_ps")
+    assert _r("typed_below_sig").strip() == "Hi Bo, the deck is attached.", _r("typed_below_sig")
+    assert _r("typed_sig_mid_line") == "See x-- \nAda Lovelace", _r("typed_sig_mid_line")
+    assert _r("ps_check") == ["attach"], _r("ps_check")
 
 
 def test_empty_subject():
