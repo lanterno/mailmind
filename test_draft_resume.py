@@ -6,6 +6,7 @@ Run: python3 test_draft_resume.py"""
 import base64
 import hashlib
 import http.client
+import imaplib
 import json
 import os
 import tempfile
@@ -984,6 +985,30 @@ def test_unreachable_server_opens_the_local_copy():
     server._draft_live = lambda acct, folder, uid: None
     r, code = _resume(pk)
     assert code == 200 and r["text"] == "Mine.", r
+
+
+def test_unreadable_draft_is_422_and_only_a_dead_server_502():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Mine.")
+    for exc, want in ((OSError("no route to host"), 502), (imaplib.IMAP4.error("FETCH BAD"), 502),
+                      (ValueError("address parts cannot contain CR or LF"), 422), (RecursionError(), 422)):
+        def fetch(pk, exc=exc):
+            raise exc
+        server.ingest.fetch_body = fetch
+        r, code = _resume(pk)
+        assert code == want, (exc, code, r)
+        assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
+    server.ingest.fetch_body = _real_fetch_body
+    real = mailparse.parse
+
+    def parse(raw):
+        raise ValueError("address parts cannot contain CR or LF")
+    mailparse.parse = parse                                     # a body cached by an older Python
+    try:
+        r, code = _resume(pk)
+    finally:
+        mailparse.parse = real
+    assert code == 422 and "can’t read this draft" in r["error"], (code, r)
 
 
 class _FakeIMAP:
