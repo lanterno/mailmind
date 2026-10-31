@@ -1243,6 +1243,13 @@ def draft_set_resume(c, did, own_text, tail_text, tail_html, bcc, raw_sha):
               (own_text, tail_text, tail_html, bcc, raw_sha, did))
 
 
+def flagged_draft(c, account, folder, uid):
+    """Does the server flag this message \\Draft (as last synced)? A folder whose name merely
+    contains "draft" can hold received mail, which must never be removed as a replaced draft."""
+    r = c.execute("SELECT draft FROM messages WHERE account=? AND folder=? AND uid=?", (account, folder, uid)).fetchone()
+    return bool(r and r["draft"])
+
+
 def draft_repoint(c, did, folder, uid, uidvalidity, forget=False):
     """Track the copy that was opened rather than the one last saved: another app re-saved the
     draft under the same Message-ID, so the next save or send must replace this one. forget: the

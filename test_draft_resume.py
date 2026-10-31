@@ -346,9 +346,9 @@ def _other_folder_draft(uid=5):
     """A draft another app keeps in a second drafts folder, registered the way the reader does."""
     c = store.conn()
     store.set_uidvalidity(c, ACCT, "Old drafts", 777)              # the same number as Drafts
-    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject) "
-              "VALUES (?,?,?,?,?,?,?,?,?)", (ACCT, "imap", "Old drafts", uid, "<old@example.test>", "to5",
-                                              1_800_000_000, ACCT, "From last year"))
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, draft) "
+              "VALUES (?,?,?,?,?,?,?,?,?,1)", (ACCT, "imap", "Old drafts", uid, "<old@example.test>", "to5",
+                                                1_800_000_000, ACCT, "From last year"))
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Old drafts' AND uid=?", (uid,)).fetchone()
     c.close()

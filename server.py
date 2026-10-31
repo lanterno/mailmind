@@ -2427,9 +2427,12 @@ def do_draft(body):
                 prev_folder=(prev["folder"] if same else None))
             # The old copy is in another mailbox (From changed) or another folder (a draft reopened
             # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
-            # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays.
+            # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
+            # does a message that isn't a draft at all (MailMind didn't save it, the server doesn't
+            # flag it \Draft): Edit is offered in any folder whose name holds "draft".
             if (prev and prev["uid"] and prev["uidvalidity"] is not None
-                    and (not same or (prev["folder"] and prev["folder"] != folder))):
+                    and (not same or (prev["folder"] and prev["folder"] != folder))
+                    and (prev["raw_sha"] or _flagged_draft(prev))):
                 try:
                     smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
                                               prev["uidvalidity"])
@@ -2456,6 +2459,14 @@ def do_draft(body):
     c.close()
     invalidate_stats()
     return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
+
+
+def _flagged_draft(d):
+    c = store.conn()
+    try:
+        return store.flagged_draft(c, d["account"], d["folder"], d["uid"])
+    finally:
+        c.close()
 
 
 _RESUME_MODES = ("new", "reply", "replyall", "forward")
