@@ -98,15 +98,16 @@ def _original(uid=7):
 
 
 def _synced(raw, uid, account=ACCT, folder="Drafts"):
-    """A Drafts message as sync would store it once fetched: headers from the bytes, body kept,
-    the folder's UIDVALIDITY known. Returns its pk."""
-    m = message_from_bytes(raw, policy=policy.default)
+    """A Drafts message as sync would store it once fetched: headers read from the bytes the way
+    ingest reads them (compat32, ingest.dec), body kept, the folder's UIDVALIDITY known. Returns
+    its pk."""
+    m = message_from_bytes(raw)
     c = store.conn()
     store.set_uidvalidity(c, account, folder, 777)
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, "
               "in_reply_to, refs) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-              (account, "imap", folder, uid, str(m["Message-ID"] or ""), f"td{uid}", 1_800_000_100, account,
-               str(m["Subject"] or ""), str(m["In-Reply-To"] or "") or None, str(m["References"] or "") or None))
+              (account, "imap", folder, uid, (m["Message-ID"] or "").strip(), f"td{uid}", 1_800_000_100, account,
+               server.ingest.dec(m["Subject"]), m["In-Reply-To"] or None, m["References"] or None))
     pk = c.execute("SELECT pk FROM messages WHERE folder=? AND uid=?", (folder, uid)).fetchone()["pk"]
     store.store_body(c, pk, raw, "2026-10-31T10:00:00")
     c.commit()
@@ -985,6 +986,21 @@ def test_unreachable_server_opens_the_local_copy():
     server._draft_live = lambda acct, folder, uid: None
     r, code = _resume(pk)
     assert code == 200 and r["text"] == "Mine.", r
+
+
+def test_headers_that_wont_parse_fall_back_to_their_raw_values():
+    _fresh()
+    opk = _original()
+    raw = (b"From: Ada <ada@example.test>\r\nTo: Bo Park <bo@example.test>\r\nSubject: Re: Plans\r\n"
+           b"Bcc: =?utf-8?q?Cy=0D=0AX?= <cy@example.test>, dee@example.test\r\n"
+           b"In-Reply-To: " + b"(" * 1200 + b"<orig1@example.test>\r\n"
+           b"References:\r\n <root@example.test>\r\n <orig1@example.test>\r\n"
+           b"Message-ID: <hostile1@example.test>\r\n\r\nOn it.\r\n")
+    r, code = _resume(_synced(raw, 21))
+    assert code == 200, (code, r)
+    assert r["bcc"] == ["cy@example.test", "dee@example.test"], r["bcc"]       # bare addresses, nothing lost
+    assert (r["in_reply_to"], r["references"]) == ("<orig1@example.test>", "<root@example.test> <orig1@example.test>"), r
+    assert (r["mode"], r["orig_pk"], r["to"]) == ("reply", opk, ["Bo Park <bo@example.test>"]), r
 
 
 def test_unreadable_draft_is_422_and_only_a_dead_server_502():
