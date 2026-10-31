@@ -249,6 +249,23 @@ automatically.
   message back before it hits the wire and restores everything you'd written.
 - **Scheduled send** — pick a preset or an exact time; the row shows
   `Scheduled · <time>` with **Send now** and **Cancel**.
+- **Send-time checks.** Send, ⌘/Ctrl+Enter and the Later presets first look the message
+  over. A gold strip holds the send when there's no subject, when you wrote "attached" (or
+  *ci-joint*, *te adjunto*, *em anexo*, *anbei*, *in allegato*, *bijgevoegd*, *مرفق*: eight
+  languages, read from what you typed, not the quote or signature) with nothing attached, or
+  when a reply-all would reach more than five people, with one button that drops everyone
+  copied in from the original. In a reply only wording that presents a file of yours counts:
+  "thanks for the attachment" is about theirs. Each line has a fix button. Esc returns you to
+  where you were. **Send anyway** only works after a short pause, so a double-click can't
+  confirm it. A file still being read, or a scheduled time that has passed, can't be waved
+  through. A Later time the strip held back stays picked: the footer reads **Schedule ▸**
+  until it goes out, and the Later menu offers **Send now instead**. What you waved through
+  stays that way after Undo. RSVP replies, unsubscribe mail and the outbox's Retry / Send now
+  don't go through the composer, so they aren't checked.
+- **"New" recipients.** An address you've never exchanged mail with gets a small **new** tag
+  on its chip. That comes from one batched, local lookup per pause in typing, never one
+  request per chip. People already on the thread you're replying to aren't marked, and
+  neither is anyone while the database is too young to tell.
 - **Recipient autocomplete** drawn entirely from your own mail history, ranked by how
   often and how recently you've corresponded, fully keyboard-driven.
 - **Per-account signatures** with a global default — auto-inserted into new composes
@@ -478,10 +495,13 @@ python3 test_expire.py         # expiry rules: storage, matching, age selection
 python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
 python3 test_claude_api.py     # Claude API engine against a local stub: requests, refusals, retries
 python3 test_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
+python3 test_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
+python3 test_send_after.py     # send-later times: passed or far-off ones are refused
+python3 test_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all seven and `just verify` adds lint, byte-compile and a
+`just test` runs all ten and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it

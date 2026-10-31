@@ -32,12 +32,18 @@ python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
 python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (22)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
+python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
+python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
+python3 test_send_guard.py        # the composer's send-time checks, run in node (19)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
-`test_thread_file.py`, `test_claude_api.py` and `test_upcoming.py` collect callables from `globals()` whose names start with `test_`, so you can gate them
-by renaming.
+`test_thread_file.py`, `test_claude_api.py`, `test_upcoming.py`, `test_contacts_known.py`,
+`test_send_after.py` and `test_send_guard.py` collect callables from `globals()` whose names
+start with `test_`, so you can gate them by renaming. `test_send_guard.py` slices the block
+between `/* send-guard:pure:start */` and `/* send-guard:pure:end */` out of `dashboard.html`
+and runs it in node, so that block must stay free of DOM and `state` references.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
 de-facto lint. `just lint` runs it against a one-entry baseline — a known warning in
@@ -123,6 +129,10 @@ work with them unset.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
+- Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
+  so nothing is awaited before the composer closes and a double submit still can't happen.
+  `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no `_ops_lock`.
+  `do_send` refuses a `send_after` that has passed instead of sending now.
 - **`pk` is not stable.** Reconcile can renumber rows, so anything durable keys on
   `(account, message_id)` — see `store.get_message_by_msgid`.
 

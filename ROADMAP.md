@@ -12,13 +12,21 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Reply, compose and send
 
-- **Send-time guards before an irreversible send** · high value · effort S — `composeSend()`
-  validates exactly two things — at least one recipient, and no malformed addresses — then POSTs
-  `/api/send`. Wanted, nearly all client-side: a first-contact flag on recipients, a confirm strip
-  when a reply-all fans out past ~5 recipients, a body scan for "attached"/"ci-joint" against an
-  empty attachment list, and an empty-subject check. Note on effort: `contact_card(addr)` already
-  returns `known` via `/api/contact?addr=`, but that is **one round trip per address**, so the
-  first-contact flag needs either N calls or a new bulk-`known` field — budget for the latter.
+- **Editing a saved reply draft loses its thread and its files** · high value · effort S —
+  `editDraft()` passes the body route's `in_reply_to` (the original's Message-ID string) as
+  `origPk`, so sending a reopened reply or forward draft fails `_compose_spec`'s `int()` with
+  "missing original message". It also opens with an empty attachment list, so a draft's files
+  are silently dropped. Needs the draft's `in_reply_to_pk` (already stored in `drafts`) on the
+  body response, and its attachments reloaded.
+- **Send-time checks, second pass** · medium value · effort S — the strip (`guardCheck` /
+  `showSendGuard`) covers subject, attachment wording and reply-all size, and chips carry a
+  "new" mark from `contacts_known`. Still missing:
+  - a near-miss line for an address one edit away from someone you write to;
+  - a line when a Reply-To sends the reply somewhere other than the sender;
+  - plus-addresses and unconfigured aliases (`you+tag@`) counted as yours rather than new;
+  - the forward count. `forwardMsg`'s `fwdAttach` counts named inline parts without a
+    Content-ID, and Outlook's synthetic `invite.ics`, but `_extract_attachments` re-attaches
+    neither, so "see attached" on such a forward stays quiet when nothing goes out attached.
 - **Markdown body → clean HTML + text multipart** · high value · effort L — New messages still go
   out text/plain only: `compose.build_message` supports `add_alternative(spec["html"])`, but the
   caller sets `html = None` and fills it only for replies/forwards whose original had HTML. Needs
@@ -314,8 +322,8 @@ implementation.
 
 ## Next up
 
-1. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
-   field rather than N calls to `/api/contact`.
+1. **Editing a saved reply draft** (high / S) — a reopened reply or forward draft can't be sent at
+   all today, and loses its files. Small and contained in `editDraft()` plus the body route.
 2. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
    `_ops_lock` per account**, the structural half.
