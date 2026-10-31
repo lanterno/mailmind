@@ -147,6 +147,17 @@
     border-radius:var(--r-pill);background:color-mix(in srgb,var(--panel) 62%,transparent);backdrop-filter:blur(8px);color:var(--soft);font:inherit;font-size:12.5px;font-weight:600;
     white-space:nowrap;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .status-pill:hover,.status-pill[aria-expanded="true"]{background:var(--panel-hi);color:var(--ink)}
+  /* starting soon: the one timed event 10 minutes out, in sunlight */
+  .soon-pill{display:inline-flex;align-items:center;height:32px;margin-right:4px;border-radius:var(--r-pill);background:var(--gold-wash);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold);font-size:12.5px;font-weight:600;animation:undoIn .16s ease}
+  .soon-pill button{background:none;border:none;color:inherit;font:inherit;cursor:pointer;height:100%;display:inline-flex;align-items:center}
+  .soon-pill .sp-open{gap:7px;padding:0 4px 0 12px;min-width:0}
+  .soon-pill .sp-open .ico{width:15px;height:15px;flex:none}
+  .soon-pill .sp-open b{font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .soon-pill .sp-open span{white-space:nowrap}
+  .soon-pill .sp-x{padding:0 11px 0 6px;font-size:15px;opacity:.7}
+  .soon-pill .sp-x:hover{opacity:1}
+  .soon-pill button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--r-pill)}
   .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mute)}
   .sdot.ok{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
   .sdot.busy{background:var(--syncing);animation:sdotPulse 1.4s ease-in-out infinite}
@@ -184,7 +195,8 @@
     #helpBtn,#themeBtn{display:none}
     #composeBtn .tb-lbl,#composeBtn .tb-kbd{display:none}
     #composeBtn,.tools .tbtn.icon{width:40px;height:40px;padding:0;justify-content:center;flex:none}
-    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}   /* the dot; its label says the rest */
+    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}
+    .soon-pill{height:40px;flex:none} #soonTitle{display:none}   /* the dot; its label says the rest */
     body.search-open .top .r1>:not(.search):not(.search-x){display:none}
     body.search-open .search{display:block;flex:1;min-width:0}
     body.search-open .search-x{display:inline-flex;flex:none}
@@ -1303,6 +1315,7 @@
     <button class="tbtn icon search-tog" id="searchTog" title="Search or ask your inbox (/)" aria-label="Search or ask your inbox"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></button>
     <div class="tools">
       <button class="tbtn icon" id="outboxBtn" title="Outbox" hidden>↑<span id="outboxN" class="obn"></span></button>
+      <span class="soon-pill" id="soonPill" hidden><button class="sp-open" id="soonOpen"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-cal"/></svg><b id="soonTitle"></b><span id="soonIn"></span></button><button class="sp-x" id="soonX" aria-label="Dismiss the reminder">×</button></span>
       <button class="status-pill" id="statusBtn" aria-haspopup="dialog" aria-expanded="false" title="Sync, reconcile and curation"><i class="sdot" aria-hidden="true"></i><span id="statusTxt">Connecting…</span></button>
       <button class="tbtn icon" id="themeBtn" title="Day, Dusk or Night" aria-label="Theme"><svg class="ico tm-sun" aria-hidden="true" focusable="false"><use href="#i-sun"/></svg><svg class="ico tm-moon" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg><svg class="ico tm-dusk" aria-hidden="true" focusable="false"><use href="#i-dusk"/></svg></button>
       <button class="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg></button>
@@ -2981,6 +2994,29 @@ function briefSideHtml(){
   return (up.length?`<section class="bs-card" aria-label="Today and next"><h3>${ico("cal")}Today &amp; next</h3>${up.map(ev).join("")}</section>`:"")
     +(wait.length?`<section class="bs-card" aria-label="Waiting on others"><h3>${ico("hourglass")}Waiting on others</h3>${wait.slice(0,3).map(wt).join("")}
       ${wait.length>3?`<button class="bs-more" data-brief="__waiting__">See all ${wait.length}</button>`:""}</section>`:"");
+}
+/* ---------- starting soon: the next timed event, 10 minutes out (a desktop notification when backgrounded) ---------- */
+const SOON_MS=10*60000, SOON_AFTER=5*60000;
+let _soonUp=[], _soonAt=0;
+const _soonGone=new Set(), _soonTold=new Set(), soonKey=e=>e.pk+"|"+e.start;
+function soonIn(e){ const m=Math.ceil((new Date(e.start)-Date.now())/60000); return m>0?`in ${m} min`:"now"; }
+async function checkSoon(){
+  if(Date.now()-_soonAt>=60000){ _soonAt=Date.now();
+    try{ const d=await api("/api/upcoming"); _soonUp=(d&&d.items)||[]; }catch(err){} }
+  const now=Date.now(), e=_soonUp.find(x=>{ const d=new Date(x.start)-now;
+    return !x.all_day&&!_soonGone.has(soonKey(x))&&d<=SOON_MS&&d>-SOON_AFTER; });
+  const p=$("#soonPill"); if(!p)return;
+  if(!e){ p.hidden=true; return; }
+  const k=soonKey(e), title=e.summary||"(no title)", msg=`${title} starts ${soonIn(e)}`;
+  p.hidden=false; p.dataset.k=k; p.dataset.pk=e.pk;
+  $("#soonTitle").textContent=title; $("#soonIn").textContent=soonIn(e);
+  $("#soonOpen").title=[evWhen(e)[0],e.location,e.organizer].filter(Boolean).join(" · ");
+  $("#soonOpen").setAttribute("aria-label",`${msg}${e.location?", "+e.location:""}. Open the invite`);
+  if(_soonTold.has(k))return; _soonTold.add(k);
+  if(document.hidden&&window.Notification&&Notification.permission==="granted"){
+    try{ const n=new Notification(msg,{body:[evWhen(e)[0],e.location].filter(Boolean).join(" · "),tag:"mailmind-soon-"+k});
+      n.onclick=()=>{ window.focus(); n.close(); openClientMsg(e.pk,false); }; }catch(err){} }
+  else announce(msg);
 }
 const _briefPeeked=new Set();
 async function briefDraftPeek(){   // which Needs-you cards already have a pre-written reply: read-only peeks, once a card
@@ -4860,6 +4896,9 @@ $("#legTheme").addEventListener("click",e=>{ const b=e.target.closest("[data-the
 setInterval(()=>{ if(document.hidden||state.armed||reconciling||state.sseLive)return; loadDigest(true); },45000);   // the brief's counts, when SSE is down
 setInterval(()=>{ if(document.hidden||state.armed)return; loadStats(); },120000);
 setInterval(()=>{ if(document.hidden||state.sseLive)return; loadOutbox(); },20000);
+setInterval(checkSoon,30000); checkSoon();   // runs while hidden too: that's when the desktop notification matters
+$("#soonOpen").addEventListener("click",()=>{ const pk=+$("#soonPill").dataset.pk; if(pk)openClientMsg(pk,false); });
+$("#soonX").addEventListener("click",()=>{ _soonGone.add($("#soonPill").dataset.k); $("#soonPill").hidden=true; $("#statusBtn").focus(); checkSoon(); });
 </script>
 </body>
 </html>
