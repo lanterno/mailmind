@@ -884,9 +884,9 @@ def test_unreachable_server_opens_the_local_copy():
 
 
 class _FakeIMAP:
-    def __init__(self, uids, uidv=777, select="OK", boom=False):
+    def __init__(self, uids, uidv=777, select="OK", boom=False, search="OK"):
         self.uids, self.untagged_responses, self._select, self.boom = uids, {"UIDVALIDITY": [str(uidv).encode()]}, select, boom
-        self.calls = []
+        self.search, self.calls = search, []
 
     def select(self, folder, readonly=False):
         self.calls.append(("select", folder, readonly))
@@ -896,6 +896,8 @@ class _FakeIMAP:
 
     def uid(self, *args):
         self.calls.append(("uid",) + args)
+        if self.search != "OK":                         # a busy server: its words, not UIDs
+            return self.search, [b"[UNAVAILABLE] Mailbox is being synchronized 42"]
         want = args[-1]
         return "OK", [b" ".join(u.encode() for u in self.uids if u == want)]
 
@@ -919,6 +921,7 @@ def test_draft_live_reads_uidvalidity_and_uid():
         assert check(_FakeIMAP(["42"], uidv=888)) is False                      # UIDs rolled
         assert check(_FakeIMAP(["42"], select="NO")) is None
         assert check(_FakeIMAP(["42"], boom=True)) is None
+        assert check(_FakeIMAP(["42"], search="NO"), uid=7) is None             # not "gone"
         assert check(_FakeIMAP(["42"]), uid=None) is None
     finally:
         pool.borrow = real
