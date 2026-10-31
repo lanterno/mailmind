@@ -2548,7 +2548,13 @@ def _hdr_chips(msg, name):
     try:
         pairs = [(a.display_name, a.addr_spec) for h in msg.get_all(name) or [] for a in h.addresses]
     except Exception:
-        pairs = [("", a) for _, a in email.utils.getaddresses(_raw_header(msg, name))]
+        raw = _raw_header(msg, name)
+        try:
+            pairs = [("", a) for _, a in email.utils.getaddresses(raw)]
+        except Exception:                                # its comment parser recurses too
+            pairs = []
+        if not any("@" in a for _, a in pairs):          # or gives up with ('', ''): the addresses as written
+            pairs = [("", a) for v in raw for a in re.findall(r'[^\s<>,;:"()\[\]]+@[^\s<>,;:"()\[\]]+', v)]
     out, seen = [], set()
     for n, a in pairs:
         n, a = _unsurrogate(n or ""), _unsurrogate(a or "")
@@ -2559,14 +2565,65 @@ def _hdr_chips(msg, name):
     return out
 
 
+def _resume_files(msg, parsed, elsewhere):
+    """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
+    many were pictures in the text: every part must come back as the text or a file, or this
+    raises _Http(422). Headers parse as they're read, so a hostile one raises here as well."""
+    import base64
+    import mimetypes
+    lost = "Part of this draft is something MailMind can’t reopen without losing it." + elsewhere
+    if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
+        raise _Http(422, "This draft has an email attached as a file, which MailMind can’t "
+                         "reattach yet." + elsewhere)
+    if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
+           for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
+        raise _Http(422, lost)
+    leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
+    listed = {int(a["part_id"]) for a in parsed["attachments"]}
+    body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
+    covered = set()                                      # HTML that the text parse() read is the alternative to
+    for p in msg.walk():
+        if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
+            covered |= {id(x) for x in p.walk() if x.get_content_type() == "text/html"}
+    bodies = set()
+    for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
+        ct = p.get_content_type()
+        if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
+            raise _Http(422, "This draft is a calendar invite, which MailMind can’t send on as "
+                             "one." + elsewhere)
+        if i in listed or p is body or id(p) in covered:
+            continue                                     # a file, the text, or formatting of that same text
+        if ct == "text/html" and body is None and ct not in bodies:
+            bodies.add(ct)                               # formatted text only: refused below as such
+            continue
+        if not (p.get_payload(decode=True) or b"").strip():
+            continue                                     # nothing in it to lose
+        raise _Http(422, lost)
+    files, total, inline = [], 0, 0
+    for a in parsed["attachments"]:
+        part = leaves[int(a["part_id"]) - 1]
+        data = part.get_payload(decode=True) or b""
+        ct = (part.get_content_type() or "application/octet-stream").lower()
+        total += len(data)
+        if total > MAX_ATTACH_BYTES:
+            raise _Http(422, "This draft’s files add up to more than 25 MB, more than MailMind "
+                             "can send." + elsewhere)
+        name = a["filename"]
+        if a["content_id"] and a["is_inline"]:
+            inline += 1                                  # a picture in the text: it comes back as a file
+            if re.fullmatch(r"inline-\d+", name):
+                name += mimetypes.guess_extension(ct or "") or ""
+        files.append({"filename": name, "content_type": ct,
+                      "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
+    return files, inline
+
+
 def draft_resume(body):
     """Open a saved draft back into the composer from its own stored bytes: your text, the quote
     or forwarded section it already carries (as text), every file as base64, To/Cc/Bcc as chips
     and its own threading headers. The original is looked up by (account, Message-ID) for the
     composer's sake only: sending a reopened draft never needs it. What MailMind recorded at its
     last save (_m20_draft_resume) is trusted only for the very copy it saved. Returns (result, code)."""
-    import base64
-    import mimetypes
     try:
         pk = int(body.get("pk"))
     except (TypeError, ValueError):
@@ -2631,51 +2688,13 @@ def draft_resume(body):
     except Exception as e:
         print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
         return unreadable, 422
-    if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
-        return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
-                                      "reattach yet." + elsewhere}, 422
-    if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
-           for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
-        return {"ok": False, "error": "Part of this draft is something MailMind can’t reopen without "
-                                      "losing it." + elsewhere}, 422
-    leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
-    listed = {int(a["part_id"]) for a in parsed["attachments"]}
-    body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
-    covered = set()                                      # HTML that the text parse() read is the alternative to
-    for p in msg.walk():
-        if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
-            covered |= {id(x) for x in p.walk() if x.get_content_type() == "text/html"}
-    bodies = set()
-    for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
-        ct = p.get_content_type()
-        if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
-            return {"ok": False, "error": "This draft is a calendar invite, which MailMind can’t send on as "
-                                          "one." + elsewhere}, 422
-        if i in listed or p is body or id(p) in covered:
-            continue                                     # a file, the text, or formatting of that same text
-        if ct == "text/html" and body is None and ct not in bodies:
-            bodies.add(ct)                               # formatted text only: refused below as such
-            continue
-        if not (p.get_payload(decode=True) or b"").strip():
-            continue                                     # nothing in it to lose
-        return {"ok": False, "error": "Part of this draft is something MailMind can’t reopen without "
-                                      "losing it." + elsewhere}, 422
-    files, total, inline = [], 0, 0
-    for a in parsed["attachments"]:
-        part = leaves[int(a["part_id"]) - 1]
-        data = part.get_payload(decode=True) or b""
-        ct = (part.get_content_type() or "application/octet-stream").lower()
-        total += len(data)
-        if total > MAX_ATTACH_BYTES:
-            return {"ok": False, "error": "This draft’s files add up to more than 25 MB, more than MailMind "
-                                          "can send." + elsewhere}, 422
-        name = a["filename"]
-        if a["content_id"] and a["is_inline"]:
-            inline += 1                                  # a picture in the text: it comes back as a file
-            if re.fullmatch(r"inline-\d+", name):
-                name += mimetypes.guess_extension(ct or "") or ""
-        files.append({"filename": name, "content_type": ct,
-                      "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
+    try:
+        files, inline = _resume_files(msg, parsed, elsewhere)
+    except _Http as h:
+        return {"ok": False, "error": h.msg}, h.code
+    except Exception as e:
+        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+        return unreadable, 422
     did = _draft_info(row)["draft_id"]                   # registers another app's draft
     c = store.conn()
     d = store.draft_get(c, did)
