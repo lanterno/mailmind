@@ -12,12 +12,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Reply, compose and send
 
-- **Editing a saved reply draft loses its thread and its files** · high value · effort S —
-  `editDraft()` passes the body route's `in_reply_to` (the original's Message-ID string) as
-  `origPk`, so sending a reopened reply or forward draft fails `_compose_spec`'s `int()` with
-  "missing original message". It also opens with an empty attachment list, so a draft's files
-  are silently dropped. Needs the draft's `in_reply_to_pk` (already stored in `drafts`) on the
-  body response, and its attachments reloaded.
 - **Send-time checks, second pass** · medium value · effort S — the strip (`guardCheck` /
   `showSendGuard`) covers subject, attachment wording and reply-all size, and chips carry a
   "new" mark from `contacts_known`. Still missing:
@@ -322,10 +316,8 @@ implementation.
 
 ## Next up
 
-1. **Editing a saved reply draft** (high / S) — a reopened reply or forward draft can't be sent at
-   all today, and loses its files. Small and contained in `editDraft()` plus the body route.
-2. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+1. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
    `_ops_lock` per account**, the structural half.
-3. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+2. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.

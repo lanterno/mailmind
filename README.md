@@ -246,7 +246,9 @@ automatically.
 - **A durable outbox.** Queued mail survives a restart, retries with backoff, and
   surfaces failures with a Retry button that reopens the composer intact.
 - **Undo Send** — a 10-second grace window with a live countdown that pulls the
-  message back before it hits the wire and restores everything you'd written.
+  message back before it hits the wire and restores everything you'd written. If you're
+  writing another message by then, it is saved to Drafts before the undone one takes its
+  place, and if that save fails it stays open while the undone one waits behind Edit.
 - **Scheduled send** — pick a preset or an exact time; the row shows
   `Scheduled · <time>` with **Send now** and **Cancel**.
 - **Send-time checks.** Send, ⌘/Ctrl+Enter and the Later presets first look the message
@@ -273,6 +275,19 @@ automatically.
 - **Drafts that don't litter.** A compose is only "dirty" once you actually edit the
   subject or body, autosave runs every 8 seconds, and a signature-only body is never
   saved to your Drafts folder.
+- **Drafts reopen as you left them.** Edit on a saved reply or forward brings back your text,
+  with the quote or forwarded section folded below it, plus every file, the Bcc and the thread.
+  All of it is read from the draft's own copy on the server, so sending it never needs the
+  original, even once that has been archived or deleted. A draft another app saved opens whole
+  as plain text, with a note in the composer on anything that changed. Edit refuses, and points
+  you back to the app that made it, when a draft has:
+  - an email or a calendar invite inside it;
+  - formatted text only;
+  - a part MailMind can't show;
+  - more than 25 MB of files.
+
+  A copy that was replaced after the list loaded is caught before it can overwrite the newer one,
+  and a draft whose send is still waiting in the outbox stays shut until you cancel that send.
 
 ### Sync, reliability & performance
 
@@ -498,10 +513,12 @@ python3 test_upcoming.py       # Today & next: stored invites, repeats, updates,
 python3 test_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
 python3 test_send_after.py     # send-later times: passed or far-off ones are refused
 python3 test_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
+python3 test_draft_resume.py   # reopened drafts: text and quote, files, Bcc, threading, refusals
+python3 test_draft_resume_ui.py # the composer's side of reopening a draft (needs node)
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all ten and `just verify` adds lint, byte-compile and a
+`just test` runs all twelve and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it

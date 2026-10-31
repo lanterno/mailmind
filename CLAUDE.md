@@ -35,15 +35,19 @@ python3 test_upcoming.py          # Today & next invites, RRULE expansion + the 
 python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
 python3 test_send_guard.py        # the composer's send-time checks, run in node (19)
+python3 test_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
+python3 test_draft_resume_ui.py   # the composer's reopen helpers, run in node (8)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
 `test_thread_file.py`, `test_claude_api.py`, `test_upcoming.py`, `test_contacts_known.py`,
-`test_send_after.py` and `test_send_guard.py` collect callables from `globals()` whose names
-start with `test_`, so you can gate them by renaming. `test_send_guard.py` slices the block
-between `/* send-guard:pure:start */` and `/* send-guard:pure:end */` out of `dashboard.html`
-and runs it in node, so that block must stay free of DOM and `state` references.
+`test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py` and `test_draft_resume_ui.py`
+collect callables from `globals()` whose names start with `test_`, so you can gate them by
+renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
+`/* send-guard:pure:end */` out of `dashboard.html` and runs it in node, so that block must
+stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
+`/* draft-resume:pure:start */` … `/* draft-resume:pure:end */` block.
 
 There is no build step, no linter config and no dependency manifest. `pyflakes` is the
 de-facto lint. `just lint` runs it against a one-entry baseline — a known warning in
@@ -133,6 +137,23 @@ work with them unset.
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no `_ops_lock`.
   `do_send` refuses a `send_after` that has passed instead of sending now.
+- Reopening a draft (`/api/draft/resume` → `draft_resume`) reads the draft's own bytes, never
+  the original. At each save `do_draft` records beside the `drafts` row what the composer held
+  (migration 20: `own_text`, `tail_text`, `tail_html`, `bcc`, `raw_sha`). That record is
+  trusted only for the very copy it describes, the same UID or the same sha256. The composer
+  sends `resume` (threading and the quote's text) on every save and send. `_compose_spec`
+  then builds `own + tail`, with HTML only where the row vouches for that exact tail. The
+  original is looked up by `(account, Message-ID)` for `\Answered` only. `_draft_live`, the
+  "is this copy still there" probe, is a stateless 10-second connection outside `_ops_lock`.
+  Under the lock `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved, so
+  `do_draft` and the outbox's draft cleanup also change that row only under `_ops_lock`. Edit
+  answers 423 while a queued or sending outbox row holds the draft. A copy in another account
+  or folder is removed only after the new APPEND succeeds, and only if MailMind saved it or
+  the server flags it `\Draft`.
+- A composer replaced after an `await` (Undo Send, a failed send's Edit → `makeRoom`) must
+  close and open in the same task. In the gap `_syncBack`'s MutationObserver calls
+  `history.back()`, the new composer's `pushState` lands before that traversal does, and the
+  Back trap ends one entry short, so the next close steps the tab off the app.
 - **`pk` is not stable.** Reconcile can renumber rows, so anything durable keys on
   `(account, message_id)` — see `store.get_message_by_msgid`.
 
