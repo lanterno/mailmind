@@ -294,6 +294,34 @@ def test_ingest_keeps_an_invite_so_it_is_listed_unopened():
     assert [x["pk"] for x in _up()] == [rows[1]["pk"]]
 
 
+def _alt(cal, attach=False):
+    """An invite the way Outlook sends it (an unnamed text/calendar part of the alternative) or,
+    with `attach`, the way Google does (that part plus an invite.ics file)."""
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = "ren@example.test", ACCT, "Invitation"
+    m.set_content("Join us")
+    m.add_alternative(cal, subtype="calendar", params={"method": "REQUEST"}, cte="base64")
+    if attach:
+        m.make_mixed()
+        m.add_attachment(cal.encode(), maintype="application", subtype="ics", filename="invite.ics")
+    return m.as_bytes()
+
+
+def test_an_inline_only_invite_is_recorded_once_and_listed():
+    _fresh()
+    cal = _ics("ol", NOW + timedelta(days=1), summary="Quarterly review")
+    out = mailparse.parse(_alt(cal))["attachments"]
+    assert [(a["filename"], a["content_type"], a["is_inline"]) for a in out] == [("invite.ics", "text/calendar", 1)], out
+    both = mailparse.parse(_alt(cal, attach=True))["attachments"]
+    assert [a["content_type"] for a in both] == ["application/ics"], "no second chip when a file carries it"
+    pk = _msg()
+    c = store.conn()
+    ingest._keep_body(c, pk, _alt(cal), mailparse.parse(_alt(cal)))
+    c.commit()
+    c.close()
+    assert [(x["pk"], x["summary"]) for x in _up()] == [(pk, "Quarterly review")]
+
+
 def test_waiting_names_who_a_sent_thread_waits_on():
     _fresh()
     pk = _msg(thread_id="w1", to="Lio Park <lio@example.test>, Aoi <aoi@example.test>")
