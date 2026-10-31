@@ -82,8 +82,10 @@ and Claude (the Claude API, or the `claude` CLI on your own machine).
   Every card has its verbs on it: **Use draft** when a reply is already pre-written
   (else **Reply**), **Read**, and snooze, archive and delete without opening it.
   Beside them on a wide pane (below them on a narrow one), **Today & next** lists the
-  coming events from the calendar invites in mail already opened (or prefetched), and
-  **Waiting on others** the threads you sent that are still owed a reply.
+  coming events from the calendar invites in your mail — opened or not, since ingest
+  keeps an invite's body — with a repeating meeting at its next occurrence and a moved
+  or cancelled occurrence honoured, and **Waiting on others** the threads you sent that
+  are still owed a reply.
   A pinned row at the top of the Inbox (or `k` from the first message) brings it back,
   so opening the Inbox marks nothing read.
 - **The Inbox in three tabs.** The list is headed by the folder's name, and on the
@@ -109,7 +111,8 @@ and Claude (the Claude API, or the `claude` CLI on your own machine).
   own type. Mail colors are **Auto** (rich mail in its own colors, plain text in the
   app's), **Dark** or **Original**. A change applies to the open message at once,
   without reloading it, and is remembered.
-- **Calendar invites become a card.** A `.ics` attachment renders above the message
+- **Calendar invites become a card.** An invite — an attached `.ics`, or the inline
+  calendar part Outlook sends on its own — renders above the message
   as title, local time with timezone, human-readable recurrence, location, organizer
   and attendees, with `＋ Add to calendar` for your OS — and **Accept / Maybe /
   Decline** mails a standards-compliant iMIP reply to the organizer through the
@@ -251,6 +254,9 @@ automatically.
   yanks the view mid-triage — with polling as an automatic fallback.
 - **Background notifications.** An opt-in 🔔 fires a desktop notification and keeps an
   unread count in the tab title when MailMind isn't focused.
+- **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill
+  beside the sync status reads "Studio sync in 8 min"; it opens the invite or dismisses,
+  and turns into one desktop notification when the tab is in the background.
 - **Triage survives an outage.** Archive, trash, junk and move queue durably with an
   optimistic local update and an undo, then re-apply exactly once when IMAP returns.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
@@ -461,7 +467,7 @@ python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
 python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
 python3 test_claude_api.py     # Claude API engine against a local stub: requests, refusals, retries
-python3 test_upcoming.py       # Today & next: invites from fetched mail, updates, cancellations
+python3 test_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,

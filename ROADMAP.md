@@ -70,11 +70,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - *The durable-task half needs a new table*, and per the original design constraint it must key on
     `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
   The AI `action` string in the Commitments panel is read-only and parses no dates.
-- **Invites from unopened mail, and a "happening soon" nudge** · medium value · effort M — The
-  brief's Today & next (`server.upcoming`) scans the text/calendar parts of bodies already fetched,
-  so an invite in mail you haven't opened, and that wasn't prefetched, isn't listed. Fetching
-  calendar parts at ingest, or persisting VEVENTs there, would close that. Nothing tells you an
-  event is about to start either; `upcoming()` is the query a nudge on the 60s tick would use.
+- **Today & next's remaining blind spots** · low value · effort S — `ics.next_occurrence` reads
+  DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY and BYMONTHDAY; any other part
+  (BYSETPOS, BYMONTH, BYWEEKNO, BYHOUR, HOURLY) makes `_occurrences` return None and
+  `server.upcoming` shows only the series' first date. Ingest keeps an invite's body only for the
+  Inbox (`ingest._process` with `with_body`), so an invite filed elsewhere by a server rule is
+  listed once opened. Bodies stored before `mailparse.parse` recorded inline-only calendar parts
+  keep attachment rows without one; a one-off re-parse of stored bodies containing
+  `text/calendar` would list them.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
   "auto-triage the ambiguous residual": the Screener already is a learning Imbox that writes
   `mailmind_rules.json` one sender at a time, so do not rebuild it. What is missing is a

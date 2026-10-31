@@ -31,7 +31,7 @@ python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
 python3 test_claude_api.py        # Claude API engine against a local stub server (18)
-python3 test_upcoming.py          # Today & next invites + the Waiting view's recipient (10)
+python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
