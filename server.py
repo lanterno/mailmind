@@ -2686,7 +2686,9 @@ def draft_resume(body):
         store.draft_repoint(c, did, row["folder"], row["uid"], cur, forget=not exact)
         c.commit()
         c.close()
-    return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"], "subject": row["subject"] or "",
+    subject = _hdr_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
+    return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"],
+            "subject": subject if subject is not None else (row["subject"] or ""),
             "to": _hdr_chips(msg, "To"), "cc": _hdr_chips(msg, "Cc"), "bcc": bcc,
             "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
             "orig_pk": orig_pk, "participants": participants, "files": files, "split": how,
