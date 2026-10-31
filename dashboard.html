@@ -796,6 +796,12 @@
   .brief-row b{display:block;font-size:14px;color:var(--ink)}
   .brief-row small{display:block;margin-top:1px;font-size:13px;color:var(--mute)}
   .brief-row small.sun{color:var(--gold)}
+  .qr-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:20px}
+  .qr-k{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--faint);margin-right:4px}
+  .qr-k .ico{width:14px;height:14px}
+  .qr{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-pill);color:var(--ink);font:inherit;font-size:13px;
+    padding:6px 14px;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast)}
+  .qr:hover{border-color:var(--primary);color:var(--primary-ink);background:var(--panel-hi)}
   .rd-next{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:28px;padding:12px 12px 12px 16px;
     border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-hi)}
   .rd-next.end{display:block;font-size:13px;color:var(--faint);text-align:center}
@@ -2488,6 +2494,7 @@ function renderClientReader(d){
     <div class="ai-card" id="aiCard" hidden></div>
     ${extBar(d)}${inviteCard(d)}${imgbar}${attbar}
     <iframe class="rd-iframe" title="Email body — from ${esc(d.from_name||d.from_addr||"sender")}: ${esc(d.subject||"(no subject)")}" sandbox="allow-same-origin" srcdoc="${esc(doc)}"></iframe>
+    ${!isDraft&&canQuickReply(d.from_addr,it)?quickRepliesHtml(d.pk):""}
     ${upNextHtml(!isDraft)}`;
   storedSummaryCard(it);
   const fr=rd.querySelector("iframe"); fr._mail=d;
@@ -2569,10 +2576,12 @@ async function openThread(tid, latestPk, scroll, acct){
     <button class="cab" data-readset title="Reading settings — column width, text and mail colors" aria-label="Reading settings" aria-haspopup="dialog" aria-expanded="false"><span class="rs-aa">Aa</span></button>
     <button class="cab rd-more" data-more title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><span>${ico("more")}</span></button>
     ${readerNavHtml()}</div>`;
+  const qrTo=[...d.items].reverse().find(m=>!(state.myAddrs&&state.myAddrs.has((m.from_addr||"").toLowerCase())));
   rd.innerHTML=`${actions}
     <div class="rd-subj">${esc(subj)} <span class="thr-n">${d.count} messages</span></div>
     <div class="ai-card" id="aiCard" hidden></div>
     <div class="thread" id="thread"></div>
+    ${qrTo&&canQuickReply(qrTo.from_addr,{...(cfindAny(latestPk)||{}),is_junk:qrTo.is_junk})?quickRepliesHtml(qrTo.pk):""}
     ${upNextHtml(true)}`;
   storedSummaryCard(cfindAny(latestPk));
   const wrap=$("#thread");
@@ -3452,7 +3461,7 @@ function paintDraftBtn(){
   b.querySelector(".ai-t").textContent=t==="balanced"?"Draft":"Draft · "+DRAFT_TONES[t].toLowerCase();
   b.title=`Draft a reply with AI, ${DRAFT_TONES[t].toLowerCase()} tone`;
 }
-async function aiDraftReply(opts){   // opts: {tone, instruction}; a plain click drafts in the remembered tone
+async function aiDraftReply(opts){   // opts: {tone, instruction, unless, quiet}; a plain click drafts in the remembered tone
   opts=opts||{};
   const cmp=state.compose; if(!cmp)return;
   if(cmp.origPk==null){ toast("Open a reply to draft one"); return; }
@@ -3462,13 +3471,37 @@ async function aiDraftReply(opts){   // opts: {tone, instruction}; a plain click
     const d=await cpost("/api/ai/draft-reply",{pk:cmp.origPk, account:cmp.from, tone:opts.tone||draftTone(), instruction:opts.instruction||""});
     if(state.compose!==cmp)return;   // closed (or replaced by another reply) while drafting: not this composer's text
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"draft failed"));
+    if(opts.unless!=null&&$("#cmpBody").value!==opts.unless)return;   // a quick reply you've started editing: yours wins
     const ta=$("#cmpBody"), had=ta.value.trim()&&ta.value.trim()!==(cmp._sigBlock||"").trim();
     if(had){ cmp._rwUndo={value:ta.value, sel:[ta.selectionStart,ta.selectionEnd]}; $("#cmpRwUndo").hidden=false; }   // what you'd written is one Undo away
     const body=d.body+(cmp._sigBlock||"");   // keep the signature below the AI-written reply
     ta.value=body; cmp.body=body; cmp.dirty=true; ta.focus();
     toast("Draft ready — review and edit before sending");
-  }catch(e){ if(state.compose===cmp)toast("Couldn’t draft: "+(e.message||"")); }
+  }catch(e){ if(state.compose===cmp&&!opts.quiet)toast("Couldn’t draft: "+(e.message||"")); }
   finally{ btn.disabled=$("#cmpAiMore").disabled=false; paintDraftBtn(); }
+}
+/* ---------- quick replies: a one-line answer at once, and an AI version in its place when one comes ---------- */
+const QUICK=[   // [key, chip, the line the reply starts as, what the AI is asked to write instead]
+  ["yes","Yes, that works","Yes, that works for me.","Say yes: agree to or confirm what they asked."],
+  ["no","Can’t, sorry","Sorry, I can’t make that work.","Politely say no to what they asked, without inventing a reason."],
+  ["thanks","Thanks!","Thanks!","Just thank them, briefly and warmly."],
+  ["time","Ask for a time","Could you send me a few times that work for you?","Ask them to suggest a few times that suit them; don’t propose any yourself."]];
+function canQuickReply(addr,it){   // a person you could answer: not you, not a no-reply robot, not junk or a receipt
+  const a=String(addr||"").toLowerCase();
+  if(!a||(state.myAddrs&&state.myAddrs.has(a))||/^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|bounces?)\b/.test(a))return false;
+  return !(it&&(it.is_junk||/^(receipts|automated|newsletters|spam|blocked)/.test(it.bucket||"")));
+}
+function quickRepliesHtml(pk){
+  return `<div class="qr-row" role="group" aria-label="Quick replies"><span class="qr-k">${ico("reply")}Quick reply</span>${QUICK.map(([k,l])=>
+    `<button class="qr" data-qr="${k}" data-qpk="${pk}">${esc(l)}</button>`).join("")}</div>`;
+}
+async function quickReply(pk,kind){
+  const q=QUICK.find(x=>x[0]===kind); if(!q||composeIsOpen())return;
+  await replyTo(pk,false);
+  const cmp=state.compose; if(!cmp||cmp.origPk!==pk)return;
+  const ta=$("#cmpBody"), start=q[2]+(cmp._sigBlock||"");
+  ta.value=start; cmp.body=start; ta.focus(); ta.setSelectionRange(q[2].length,q[2].length);
+  aiDraftReply({tone:"brief", instruction:q[3]+" One or two sentences.", unless:start, quiet:true});   // no AI → the line stays, silently
 }
 function openDraftMenu(anchor){
   closeDraftMenu();
@@ -4583,6 +4616,7 @@ $("#reader").addEventListener("click",e=>{const li=e.target.closest("[data-loadi
   if(e.target.closest("[data-readfocus]")){ setReadFocus(!readFocusOn()); return; }
   const bf=e.target.closest("[data-brief]"); if(bf){ briefAct(bf.dataset.brief); return; }
   const tp=e.target.closest("[data-brief-topic]"); if(tp){ const g=briefTopics()[+tp.dataset.briefTopic]; if(g)openDigestList("__dg_topic__",g.label,g.items); return; }
+  const qr=e.target.closest("[data-qr]"); if(qr){ quickReply(+qr.dataset.qpk, qr.dataset.qr); return; }
   const ba=e.target.closest("[data-bact]"); if(ba){ e.stopPropagation(); briefCardAct(ba.dataset.bact,+ba.closest("[data-pk]").dataset.pk,ba); return; }
   const bo=e.target.closest("[data-bopen]"); if(bo){ openFromBrief(+bo.dataset.bopen); return; }
   const mo=e.target.closest("[data-more]"); if(mo){ e.stopPropagation(); if($("#moreMenu"))closeMoreMenu(); else openMoreMenu(mo); return; }
