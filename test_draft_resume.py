@@ -17,12 +17,49 @@ with open(config.CONFIG, "w") as f:
                             {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}, f)
 import compose
 import mailparse
+import server
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
         "subject": "Plans", "to": ACCT, "cc": "cy@example.test",
         "text": "Shall we meet Saturday?\nThe map is attached.", "html": "<p>Shall we meet <b>Saturday</b>?</p>"}
 OWN = "Saturday works.\n\n-- \nAda"
+_uid = [100]
+CALLS = {}
+
+
+def _fresh(uidv=777):
+    """A new temp database, and recorders in place of every IMAP call a draft save makes."""
+    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    store.init()
+    CALLS.clear()
+    CALLS.update(append=[], delete=[])
+
+    def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None):
+        _uid[0] += 1
+        CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
+                                "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid})
+        return "Drafts", _uid[0], uidv
+
+    def delete(acct, folder, uid, uidvalidity=None):
+        CALLS["delete"].append((acct["email"], folder, uid, uidvalidity))
+    server.smtpsend.append_to_drafts = append
+    server.smtpsend.delete_draft_uid = delete
+
+
+def _save(account=ACCT, draft_id=None, **kw):
+    body = {"mode": "new", "account": account, "to": ["bo@example.test"], "subject": "Plans",
+            "text": "Saturday works.", "draft_id": draft_id, **kw}
+    res, code = server.do_draft(body)
+    assert code == 200 and res["ok"], (code, res)
+    return res
+
+
+def _row(did):
+    c = store.conn()
+    r = store.draft_get(c, did)
+    c.close()
+    return r
 
 
 def _round_trip(text, html=None, attachments=()):
@@ -135,6 +172,60 @@ def test_thread_ids_validate_dedupe_and_cap():
     assert refs[-1] == "<m59@example.test>" and len(set(refs)) == 50
     assert compose.thread_ids(None, None) == (None, [])
     assert compose.thread_ids("<x@example.test>\r\nBcc: evil@example.test", "")[0] == "<x@example.test>"
+
+
+def test_from_change_never_passes_the_old_uid():
+    _fresh()
+    did = _save()["draft_id"]
+    old_uid = _row(did)["uid"]
+    _save(account="zed@example.test", draft_id=did)
+    last = CALLS["append"][-1]
+    assert last["account"] == "zed@example.test" and last["prev_uid"] is None, last
+    assert last["prev_uidvalidity"] is None and last["prev_msgid"] is None, last
+    assert old_uid != _row(did)["uid"]
+
+
+def test_from_change_deletes_the_old_copy_in_its_own_account():
+    _fresh()
+    did = _save()["draft_id"]
+    old_uid = _row(did)["uid"]
+    _save(account="zed@example.test", draft_id=did)
+    assert CALLS["delete"] == [(ACCT, "Drafts", old_uid, 777)], CALLS["delete"]
+
+
+def test_from_change_then_two_saves_keeps_the_row_in_step():
+    _fresh()
+    did = _save()["draft_id"]
+    _save(account="zed@example.test", draft_id=did)
+    row = _row(did)
+    assert row["account"] == "zed@example.test", dict(row)
+    _save(account="zed@example.test", draft_id=did, text="Saturday at ten.")
+    last = CALLS["append"][-1]
+    assert last["account"] == "zed@example.test" and last["prev_uid"] == row["uid"], last
+    assert len(CALLS["delete"]) == 1, CALLS["delete"]          # only the From change removed anything
+
+
+def test_unvouched_old_copy_is_left_alone():
+    _fresh(uidv=None)                                           # the server named no UIDVALIDITY
+    did = _save()["draft_id"]
+    _save(account="zed@example.test", draft_id=did)
+    assert CALLS["delete"] == [], CALLS["delete"]
+    assert CALLS["append"][-1]["prev_uid"] is None
+
+
+def test_other_apps_draft_registers_with_folder_uidvalidity():
+    _fresh()
+    c = store.conn()
+    store.set_uidvalidity(c, ACCT, "Drafts", 4242)
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject) "
+              "VALUES (?,?,?,?,?,?,?,?,?)", (ACCT, "imap", "Drafts", 9, "<other@example.test>", "t9",
+                                              1_800_000_000, ACCT, "From my phone"))
+    c.commit()
+    row = c.execute("SELECT * FROM messages WHERE uid=9").fetchone()
+    c.close()
+    info = server._draft_info(row)
+    d = _row(info["draft_id"])
+    assert (d["uid"], d["uidvalidity"], d["mode"]) == (9, 4242, "new"), dict(d)
 
 
 if __name__ == "__main__":
