@@ -704,6 +704,17 @@
   .bf-card .ai-hd{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
   body.mode-client .reader .bf-card .bf-narr{font-family:var(--font-hand);font-weight:600;font-synthesis:none;font-size:18px;line-height:1.7;color:var(--ai);text-wrap:pretty}
   .bf-card .bf-wait{color:var(--mute);font-size:15px}
+  .bf-card .bf-aioff{font-size:14.5px;line-height:1.55;color:var(--soft)}
+  .bf-card .bf-aioff b{color:var(--ink)}
+  .bf-card .bf-aioff p+p{margin-top:7px}
+  .bf-card .bf-aioff .m{font-size:13px;color:var(--mute)}
+  .bf-card .bf-aioff .pv{display:flex;gap:7px;align-items:flex-start}
+  .bf-card .bf-aioff .pv .ico{width:14px;height:14px;flex:none;margin-top:2px}
+  .bf-aioff code,.sm-ai code{font-family:var(--font-mono);font-size:.9em;background:var(--sel);padding:1px 5px;border-radius:4px}
+  .sm-ai{display:flex;gap:7px;align-items:flex-start}
+  .sm-ai .ico{width:14px;height:14px;flex:none;margin-top:1px}
+  .status-menu .sm-ai.err{color:var(--err)}
+  .status-menu .sm-ai.m{font-size:11.5px;color:var(--faint)}
   .bf-tallies{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
   .bf-tally{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line-hi);
     background:var(--bg);color:var(--soft);font:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
@@ -1530,7 +1541,7 @@ async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o
 async function loadDigest(silent){
   let d; try{ d=await api("/api/digest?min=1&account="); }
   catch(e){ if(!silent&&!state.account){ $("#rows").innerHTML='<div class="nores">Couldn’t reach the server. <button class="ai-rerun" id="dgRetry">Retry</button></div>'; const b=$("#dgRetry"); if(b)b.onclick=()=>loadDigest(false); setTimeout(()=>loadDigest(true),5000); } return; }
-  state.all=d.items||[]; state.stats=d.stats||{}; state.statusMap=d.status||{};
+  state.all=d.items||[]; state.stats=d.stats||{}; state.statusMap=d.status||{}; state.ai=d.ai||null;
   // prune pre-draft state for pks no longer in ANY live surface (bounds memory; drops stale chips for
   // gone messages). The union matters: a digest reload must never clobber chips owned by the reader,
   // search results, an open thread, or the currently-viewed message.
@@ -1593,6 +1604,7 @@ function statusInfoHtml(L){
   return `<div class="sm-hd"><i class="sdot ${L.cls}" aria-hidden="true"></i>${esc(L.txt)}</div>
     ${sy.last&&sy.result?`<div class="sm-sub">Last sync: ${esc(sy.result)}</div>`:""}
     <div class="sm-sub">${live} · <b>${(s.summarized||0).toLocaleString()}</b> summarized</div>
+    ${aiLineHtml()}
     ${(state.accountsList||[]).length>1||badAccounts().length?`<div class="sm-accts">${accts}</div>`:""}`;
 }
 function openStatusMenu(){
@@ -3077,12 +3089,30 @@ function renderBrief(force){   // force: (re)open it; otherwise refresh in place
   const sm=$("#rows .brief-row small"); if(sm){ const n=needsYou().length; sm.className=n?"sun":""; sm.textContent=briefRowNote(n); }   // in place: the row may hold focus
 }
 const BRIEF_CAP=12;   // Needs-you cards shown before "Show all"
+/* ---------- AI presence: /api/digest's "ai" (summarize.status) ---------- */
+function aiOff(){ return !!(state.ai&&state.ai.engine==="none"); }
+function aiFailing(){ return !!(state.ai&&state.ai.engine!=="none"&&state.ai.last_ok===false&&state.ai.last_error); }
+const AI_PRIVACY="With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; nothing else leaves this machine.";
+function aiOffHtml(){
+  return `<div class="bf-aioff"><p><b>AI is off.</b> Summaries, this brief and reply drafts come from Claude, and this machine has neither an Anthropic API key nor the <code>claude</code> command. Your mail works the same without it.</p>
+    <p class="m">To turn it on, put an <code>anthropic_api_key</code> in <code>mailmind.config.json</code>, or install the <code>claude</code> command and sign in, then restart MailMind.</p>
+    <p class="m pv">${ico("lock")}<span>${AI_PRIVACY}</span></p></div>`;
+}
+function aiLineHtml(){   // the sync menu's line about AI
+  const a=state.ai; if(!a)return "";
+  if(a.engine==="none") return `<div class="sm-sub sm-ai">${ico("wind")}<span>AI is off · no API key or <code>claude</code> command</span></div>`;
+  const what=(a.engine==="api"?"Claude API":"claude command")+" · "+a.model;
+  return `<div class="sm-sub sm-ai${aiFailing()?" err":""}">${ico("wind")}<span>${esc(what)}${aiFailing()?` · last call failed: ${esc(a.last_error)}`:""}</span></div>
+    <div class="sm-sub sm-ai m">${ico("lock")}<span>${AI_PRIVACY}</span></div>`;
+}
 function briefHtml(){
   const now=new Date(), h=now.getHours(), b=_briefData, needs=needsYou();
   const greet=h<5?"Working late":h<12?"Good morning":h<18?"Good afternoon":"Good evening";
-  const narr=_todayInflight?`<p class="bf-wait"><span class="spin">${ico("wind")}</span> Reading your inbox…</p>`
+  const why=aiFailing()?state.ai.last_error:_briefErr;
+  const narr=aiOff()&&!(b&&b.narrative)?aiOffHtml()
+    :_todayInflight?`<p class="bf-wait"><span class="spin">${ico("wind")}</span> Reading your inbox…</p>`
     :b&&b.narrative?`<p class="ai-tldr bf-narr">${esc(b.narrative)}</p>`
-    :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(_briefErr)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
+    :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(why)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
     :'<p class="bf-wait">Nothing to brief yet.</p>';
   const nc=commitments().length, t=[];
   if(needs.length) t.push(`<button class="bf-tally sun" data-brief="needs" title="List them"><b>${needs.length}</b> need${needs.length===1?"s":""} you</button>`);
@@ -3267,7 +3297,8 @@ function composeOpen(opts){
   $("#cmpFrom").innerHTML=senders.map(e=>
     `<option value="${esc(e)}"${e===from?" selected":""}>${esc(nameOf(e))} — ${esc(e)}</option>`).join("");
   $("#cmpTitle").textContent={reply:"Reply",replyall:"Reply all",forward:"Forward"}[state.compose.mode]||"New message";
-  $("#cmpAiSplit").hidden=!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null;
+  $("#cmpAiSplit").hidden=aiOff()||!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null;
+  $("#cmpAiRow").hidden=aiOff();
   paintDraftBtn();
   $("#cmpSubject").value=state.compose.subject;
   // insert the From account's signature for FRESH composes only (not editDraft / failed-reopen,
