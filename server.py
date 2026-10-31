@@ -2581,6 +2581,13 @@ def draft_resume(body):
     unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
     elsewhere = " Edit it in the app that made it."
     unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
+    c = store.conn()
+    before = store.draft_by_msgid(c, row["account"], row["message_id"])
+    queued = before is not None and store.outbox_holds_draft(c, before["id"])
+    c.close()
+    if queued:                                           # reopened and sent again, it would go out twice
+        return {"ok": False, "error": "This draft is in the outbox, waiting to be sent. Cancel it there "
+                                      "first to change it."}, 423
     live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
     try:
         with _ops_lock:

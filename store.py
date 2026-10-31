@@ -894,6 +894,12 @@ def outbox_send_now(c, oid, now_ts):
     return cur.rowcount == 1
 
 
+def outbox_holds_draft(c, did):
+    """Is a send of this draft queued or going out now? Its copy stays in Drafts until delivery."""
+    return c.execute("SELECT 1 FROM outbox WHERE draft_id=? AND state IN ('queued','sending') LIMIT 1",
+                     (did,)).fetchone() is not None
+
+
 def outbox_list(c, limit=50):
     return c.execute(
         """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at
