@@ -1447,9 +1447,10 @@ def _decode_attachments(items):
         total += len(data)
         if total > MAX_ATTACH_BYTES:
             raise ValueError("attachments too large")
-        out.append({"filename": a.get("filename") or "attachment",
-                    "content_type": a.get("content_type") or "application/octet-stream",
-                    "data": data})
+        ct = str(a.get("content_type") or "application/octet-stream")
+        if ct.lower().startswith("multipart/"):          # a browser types .mhtml multipart/related: written
+            ct = "application/octet-stream"              # as one, it has no boundary and every reader skips it
+        out.append({"filename": a.get("filename") or "attachment", "content_type": ct, "data": data})
     return out
 
 
