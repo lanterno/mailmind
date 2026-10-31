@@ -192,6 +192,11 @@ def _plain_from_html(html_str):
     return _h.unescape(txt).strip()
 
 
+def own_html(new_text):
+    """The HTML a reply or forward opens with: what you typed, before the quote."""
+    return f"<div>{_html_escape(new_text or '').replace(chr(10), '<br>')}</div><br>"
+
+
 def reply_bodies(new_text, orig):
     """(text, html|None) for a reply. orig: {from_name,from_addr,date,text,html}."""
     attr = _attribution(orig)
@@ -200,8 +205,7 @@ def reply_bodies(new_text, orig):
     if orig.get("html"):
         safe, _ = sanitize_html.sanitize(orig["html"], load_images=False)
         html_body = (
-            f"<div>{_html_escape(new_text or '').replace(chr(10), '<br>')}</div>"
-            f"<br><div>{_html_escape(attr)}</div>"
+            own_html(new_text) + f"<div>{_html_escape(attr)}</div>"
             f'<blockquote type="cite" style="margin:0 0 0 .8ex;'
             f'border-left:2px solid #ccc;padding-left:1ex">{safe}</blockquote>')
         return text, html_body
@@ -223,7 +227,6 @@ def forward_bodies(new_text, orig):
         safe, _ = sanitize_html.sanitize(orig["html"], load_images=False)
         banner_html = "<br>".join(_html_escape(f"{k}: {v}") for k, v in rows if v)
         html_body = (
-            f"<div>{_html_escape(new_text or '').replace(chr(10), '<br>')}</div><br>"
-            f"<div>---------- Forwarded message ----------<br>{banner_html}</div><hr>{safe}")
+            own_html(new_text) + f"<div>---------- Forwarded message ----------<br>{banner_html}</div><hr>{safe}")
         return text, html_body
     return text, None
