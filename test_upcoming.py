@@ -122,6 +122,55 @@ def test_a_cancellation_removes_the_event():
     assert _up() == []
 
 
+def _weekly(uid="s", summary="Standup", extra=""):
+    """A weekly series whose first meeting was two weeks ago, at NOW's time of day."""
+    first = NOW - timedelta(days=14)
+    return _ics(uid, first, first + timedelta(minutes=30), summary=summary).replace(
+        "END:VEVENT", "RRULE:FREQ=WEEKLY\r\n" + extra + "END:VEVENT")
+
+
+def _one(start, rid, **kw):
+    """A message about one occurrence of series "s" (RECURRENCE-ID = its original start)."""
+    return _ics("s", start, start + timedelta(minutes=30), **kw).replace(
+        "END:VEVENT", "RECURRENCE-ID:" + rid.strftime("%Y%m%dT%H%M%S") + "\r\nEND:VEVENT")
+
+
+def test_a_series_is_listed_at_its_next_occurrence():
+    _fresh()
+    pk = _msg(_weekly(), ts=NOW - timedelta(days=20))
+    _msg(_weekly("p", "Yoga", "EXDATE:" + NOW.strftime("%Y%m%dT%H%M%S") + "\r\n"), ts=NOW - timedelta(days=20))
+    items = _up()
+    assert [(x["summary"], x["start"]) for x in items] == [
+        ("Standup", "2026-10-30T12:00"), ("Yoga", "2026-11-06T12:00")], items   # today's in progress
+    assert items[0]["pk"] == pk and items[0]["recurrence"] == "Every week"
+
+
+def test_moving_or_cancelling_one_occurrence_leaves_the_series():
+    _fresh()
+    _msg(_weekly(), ts=NOW - timedelta(days=20))
+    _msg(_one(NOW + timedelta(days=1), NOW, summary="Standup (moved)"), ts=NOW - timedelta(days=2))
+    _msg(_one(NOW + timedelta(days=7), NOW + timedelta(days=7), method="CANCEL", status="CANCELLED"),
+         ts=NOW - timedelta(days=1))
+    assert [(x["summary"], x["start"]) for x in _up()] == [
+        ("Standup (moved)", "2026-10-31T12:00"), ("Standup", "2026-11-13T12:00")]
+
+
+def test_cancelling_the_series_drops_its_moved_occurrences_too():
+    _fresh()
+    _msg(_weekly(), ts=NOW - timedelta(days=20))
+    _msg(_one(NOW + timedelta(days=1), NOW), ts=NOW - timedelta(days=2))
+    _msg(_ics("s", NOW - timedelta(days=14), method="CANCEL", status="CANCELLED"), ts=NOW - timedelta(days=1))
+    assert _up() == []
+
+
+def test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead():
+    _fresh()
+    rule = "RRULE:FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1\r\n"
+    _msg(_ics("a", NOW + timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
+    _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
+    assert [x["start"] for x in _up()] == ["2026-11-02T12:00"]
+
+
 def test_trash_junk_unfetched_and_old_mail_are_not_read():
     _fresh()
     _msg(_ics("t", NOW + timedelta(days=1)), folder="Trash")
