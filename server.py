@@ -2147,6 +2147,15 @@ def _is_sent_folder(folder):
     return "draft" not in seg and (seg == "sent" or seg.startswith("sent "))
 
 
+_JUNK_FOLDER = re.compile(r"^(?:junk|spam|bulk)(?:[ _-]?(?:mail|e-?mail|folder))?$")
+
+
+def _is_junk_folder(folder):
+    """Spam the provider filed: by the last path segment, like _is_sent_folder ("INBOX.Spam")."""
+    seg = re.split(r"[/.]", folder or "")[-1].strip().lower()
+    return bool(_JUNK_FOLDER.match(seg))   # Spam, Junk, Junk E-mail, Bulk Mail — not "Bulk orders"
+
+
 def _own_addrs(c):
     """Your addresses, as the dashboard's state.myAddrs sees them."""
     own = {a["email"].lower() for a in accounts.accounts()}
@@ -2184,17 +2193,18 @@ def contacts_known(addrs, own=None, min_history=KNOWN_MIN_HISTORY):
         hit = set()
         if forms:
             ph = ",".join("?" * len(forms))
-            hit |= {r[0] for r in c.execute(       # junk excluded: one phishing mail can't vouch
-                f"SELECT DISTINCT lower(from_addr) FROM messages WHERE lower(from_addr) IN ({ph}) "
-                "AND is_junk=0", forms)}
+            hit |= {r[0] for r in c.execute(       # junk excluded: one phishing mail can't vouch,
+                f"SELECT DISTINCT lower(from_addr), folder FROM messages WHERE lower(from_addr) IN ({ph}) "
+                "AND is_junk=0", forms) if not _is_junk_folder(r[1])}   # whether we or the provider filed it
             rows = {}
             if own:
                 oph = ",".join("?" * len(own))
                 for r in c.execute(
                         f"SELECT pk, folder, recipients FROM messages WHERE lower(from_addr) IN ({oph}) "
-                        "AND COALESCE(draft,0)=0 AND lower(folder) NOT LIKE '%draft%' "
+                        "AND COALESCE(draft,0)=0 AND is_junk=0 AND lower(folder) NOT LIKE '%draft%' "
                         "AND recipients IS NOT NULL AND recipients != ''", list(own)):
-                    rows[r[0]] = (r[1], r[2])
+                    if not _is_junk_folder(r[1]):  # spam forging your From: vouches for no one
+                        rows[r[0]] = (r[1], r[2])
             for acct, folder in c.execute("SELECT account, folder FROM sync_state").fetchall():
                 if not _is_sent_folder(folder):
                     continue
