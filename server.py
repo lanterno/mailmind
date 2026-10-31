@@ -865,9 +865,10 @@ def _local_naive(d):
 
 def upcoming(account=None, now=None, limit=5, days=60):
     """Today & next: the events in calendar invites from the last `days` of mail that haven't ended
-    yet, soonest first. Pure-local: it reads only bodies already fetched, never IMAP. One row per
-    event UID, from the newest message that carries it (an update replaces the original, a
-    cancellation removes it). Times are local wall-clock ISO strings."""
+    yet, soonest first; a repeating one at its next occurrence. Pure-local: it reads only stored
+    bodies, never IMAP. One row per event UID, from the newest message that carries it (an update
+    replaces the original, a cancellation removes it); a message about one occurrence of a series
+    (RECURRENCE-ID) moves or cancels just that one. Times are local wall-clock ISO strings."""
     now = now or datetime.now()
     c = store.conn()
     rows = c.execute(
@@ -877,7 +878,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
              AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
            ORDER BY m.ts DESC, m.pk DESC""",
         (int(now.timestamp()) - days * 86400, account, account)).fetchall()
-    seen, items = set(), []
+    seen, found = set(), []
     for r in rows:
         if _folder_role(r["folder"], "", "") in ("trash", "junk"):
             continue
@@ -889,20 +890,30 @@ def upcoming(account=None, now=None, limit=5, days=60):
             continue
         if not inv or not inv.get("start_iso"):
             continue
-        key = inv.get("uid") or (inv["summary"], inv["start_iso"])
-        if key in seen:
+        key = (inv.get("uid") or (inv["summary"], inv["start_iso"]), inv.get("recurrence_id", ""))
+        if key not in seen:
+            seen.add(key)
+            found.append((r, inv))
+    c.close()
+    dead = lambda inv: inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED"
+    moved, gone = {}, set()                # per series: its rescheduled or cancelled occurrences
+    for _r, inv in found:
+        if inv.get("uid") and inv.get("recurrence_id"):
+            moved.setdefault(inv["uid"], []).append(inv["recurrence_id"])
+        elif inv.get("uid") and dead(inv):
+            gone.add(inv["uid"])
+    items = []
+    for r, inv in found:
+        if dead(inv) or (inv.get("recurrence_id") and inv.get("uid") in gone):
             continue
-        seen.add(key)
-        if inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED":
+        if inv.get("rrule") and not inv.get("recurrence_id"):
+            inv = dict(inv, exdates=inv["exdates"] + moved.get(inv.get("uid"), []))
+        occ = ics.next_occurrence(inv, now)
+        if occ is None and inv.get("rrule"):                     # a rule ics can't expand: its first date
+            occ = ics.next_occurrence(dict(inv, rrule=""), now)
+        if occ is None:
             continue
-        try:
-            start = _local_naive(datetime.fromisoformat(inv["start_iso"]))
-            end = (_local_naive(datetime.fromisoformat(inv["end_iso"])) if inv.get("end_iso")
-                   else start + timedelta(days=1 if inv["all_day"] else 0))
-        except Exception:
-            continue
-        if max(start, end) <= now:
-            continue
+        start, end = (_local_naive(d) for d in occ)
         org = inv.get("organizer") or {}
         items.append({
             "pk": r["pk"], "account": r["account"], "thread_id": r["thread_id"],
@@ -911,7 +922,6 @@ def upcoming(account=None, now=None, limit=5, days=60):
             "all_day": inv["all_day"], "organizer": org.get("name") or org.get("email") or "",
             "invite": inv.get("method") == "REQUEST", "recurrence": inv.get("recurrence", ""),
         })
-    c.close()
     items.sort(key=lambda x: x["start"])
     return {"ok": True, "items": items[:limit]}
 
