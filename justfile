@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming
+test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known
 
 # Classifier behaviour
 test-classifier:
@@ -52,6 +52,10 @@ test-claude-api:
 # Today & next: which invites in fetched mail are listed, updates, cancellations, local times
 test-upcoming:
     {{py}} test_upcoming.py
+
+# Composer "new to you" lookup: who counts as known, exact matching, drafts never vouch, CSRF
+test-contacts-known:
+    {{py}} test_contacts_known.py
 
 # Undefined names and unused imports. Fails on anything not in the known baseline.
 lint:
