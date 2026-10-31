@@ -3339,7 +3339,7 @@ function composeOpen(opts){
   // which carry their own body already containing a signature). Lands above the server-appended quote.
   let body0="";
   if(!opts.draftId && !opts.noSig){ const sig=sigFor(from); if(sig){ const blk="\n\n-- \n"+sig; body0=blk; state.compose._sigBlock=blk; state.compose._sigFrom=from; } }
-  $("#cmpBody").value=body0;
+  $("#cmpBody").value=body0; $("#cmpBody").setSelectionRange(0,0);   // write above the signature, not after it
   $("#cmpSaved").textContent=""; $("#cmpRwUndo").hidden=true;
   const showCc=state.compose.cc.length>0||state.compose.bcc.length>0;
   $("#cmpCcRow").hidden=!showCc; $("#cmpBccRow").hidden=!showCc;
@@ -4882,10 +4882,12 @@ $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block 
   const newBlk=sigFor(from)?"\n\n-- \n"+sigFor(from):"";
   const ta=$("#cmpBody");
   if(cmp._sigBlock){                                       // a sig is currently inserted
-    if(ta.value.endsWith(cmp._sigBlock)){ ta.value=ta.value.slice(0,ta.value.length-cmp._sigBlock.length)+newBlk; cmp.body=ta.value; }
+    if(ta.value.endsWith(cmp._sigBlock)){ const keep=ta.value.length-cmp._sigBlock.length;   // the caret stays in what you wrote
+      const a=Math.min(ta.selectionStart,keep), b=Math.min(ta.selectionEnd,keep);
+      ta.value=ta.value.slice(0,keep)+newBlk; ta.setSelectionRange(a,b); cmp.body=ta.value; }
     // else: user edited inside the sig region — leave the body untouched
   } else if(newBlk){                                       // none present (e.g. came from a no-sig account) -> append the new one
-    ta.value=ta.value+newBlk; cmp.body=ta.value;
+    const a=ta.selectionStart, b=ta.selectionEnd; ta.value=ta.value+newBlk; ta.setSelectionRange(a,b); cmp.body=ta.value;
   }
   cmp._sigBlock=newBlk; cmp._sigFrom=from; guardStale();
 });
