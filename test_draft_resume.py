@@ -864,6 +864,17 @@ def test_a_file_typed_multipart_is_saved_and_reopened_as_a_file():
     assert base64.b64decode(r["files"][0]["b64"]) == b"MIME page"
 
 
+def test_data_in_a_boundaryless_multipart_part_is_refused_not_dropped():
+    _fresh()
+    raw = (b"From: Ada <ada@example.test>\r\nTo: bo@example.test\r\nSubject: Page\r\nMessage-ID: <mh1@example.test>\r\n"
+           b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"M\"\r\n\r\n"
+           b"--M\r\nContent-Type: text/plain\r\n\r\nThe page.\r\n"
+           b"--M\r\nContent-Type: multipart/related\r\nContent-Disposition: attachment; filename=\"page.mhtml\"\r\n"
+           b"Content-Transfer-Encoding: base64\r\n\r\nTUlNRSBwYWdl\r\n--M--\r\n")
+    r, code = _resume(_synced(raw, 33))
+    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+
+
 def test_files_over_the_cap_are_refused():
     _fresh()
     pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
