@@ -694,7 +694,8 @@ def _draft_info(row):
         now = now_iso()
         did = store.draft_upsert(c, {"id": None, "account": row["account"], "folder": row["folder"],
                                      "uid": row["uid"], "message_id": row["message_id"],
-                                     "uidvalidity": None, "in_reply_to_pk": None, "mode": "new",
+                                     "uidvalidity": store.get_uidvalidity(c, row["account"], row["folder"]),
+                                     "in_reply_to_pk": None, "mode": "new",
                                      "subject": row["subject"], "created_at": now, "updated_at": now})
         c.commit()
         mode = "new"
@@ -2380,13 +2381,20 @@ def do_draft(body):
     c = store.conn()
     prev = store.draft_get(c, int(did)) if did else None
     c.close()
+    same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
     try:
         with _ops_lock:
+            if prev and not same and prev["uid"] and prev["uidvalidity"] is not None:
+                try:   # best-effort: drop the copy saved under the old From; a UID we can't vouch for stays
+                    smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
+                                              prev["uidvalidity"])
+                except Exception as e:
+                    print(f"[draft] old-account copy not removed: {_sanitize_conn_error(e)}", flush=True)
             folder, uid, uidv = smtpsend.append_to_drafts(
                 acct, built["raw"],
-                prev_uid=(prev["uid"] if prev else None),
-                prev_uidvalidity=(prev["uidvalidity"] if prev else None),
-                prev_msgid=(prev["message_id"] if prev else None))
+                prev_uid=(prev["uid"] if same else None),
+                prev_uidvalidity=(prev["uidvalidity"] if same else None),
+                prev_msgid=(prev["message_id"] if same else None))
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     except Exception as e:

@@ -1209,7 +1209,7 @@ def draft_by_msgid(c, account, message_id):
 def draft_upsert(c, row):
     """Insert (row has no id) or update (row has id) a draft tracking record; returns id."""
     if row.get("id"):
-        c.execute("""UPDATE drafts SET folder=:folder, uid=:uid, message_id=:message_id,
+        c.execute("""UPDATE drafts SET account=:account, folder=:folder, uid=:uid, message_id=:message_id,
                        uidvalidity=:uidvalidity, in_reply_to_pk=:in_reply_to_pk, mode=:mode,
                        subject=:subject, updated_at=:updated_at WHERE id=:id""", row)
         return row["id"]
