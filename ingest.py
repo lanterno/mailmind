@@ -300,24 +300,29 @@ def fetch_body(pk):
             raw = next((p[1] for p in d if isinstance(p, tuple)), b"")
         if not raw:
             return mailparse.parse(b"")
-        when = datetime.now(timezone.utc).isoformat()
         parsed = mailparse.parse(raw)
         c = store.conn()
-        store.store_body(c, pk, raw, when)
-        c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
-        for a in parsed["attachments"]:
-            c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
-                         VALUES(?,?,?,?,?,?,?)""",
-                      (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
-                       a["content_id"], a["is_inline"]))
-        if parsed["attachments"]:
-            c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
-        c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))
-        store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
+        _keep_body(c, pk, raw, parsed)
         c.commit()
         c.close()
         return parsed
     return mailparse.parse(raw)
+
+
+def _keep_body(c, pk, raw, parsed):
+    """Store one message's raw RFC822 with what opening it records: attachment metadata, the
+    parsed recipients and the full-text body. The caller commits."""
+    store.store_body(c, pk, raw, datetime.now(timezone.utc).isoformat())
+    c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
+    for a in parsed["attachments"]:
+        c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
+                     VALUES(?,?,?,?,?,?,?)""",
+                  (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
+                   a["content_id"], a["is_inline"]))
+    if parsed["attachments"]:
+        c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
+    c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))
+    store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
 
 
 def reconcile_account(acct, force=False, dry_run=False):
