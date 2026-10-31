@@ -95,6 +95,36 @@ def _references(orig_message_id, orig_refs, orig_in_reply_to):
     return out
 
 
+def thread_ids(in_reply_to, references):
+    """(in_reply_to|None, [references]) taken from a saved draft's own headers: well-formed
+    Message-IDs only, references de-duplicated in order and capped at 50 (the first, which
+    names the thread's root, and the last 49)."""
+    irt = next((t for t in re.findall(r"<[^<>\s]+>", str(in_reply_to or "")) if _MSGID.match(t)), None)
+    refs, seen = [], set()
+    for t in re.findall(r"<[^<>\s]+>", str(references or "")):
+        if _MSGID.match(t) and t not in seen:
+            seen.add(t)
+            refs.append(t)
+    if len(refs) > 50:
+        refs = refs[:1] + refs[-49:]
+    return irt, refs
+
+
+_CHIP_QUOTE = re.compile(r'[()<>\[\]:;@\\,."]')
+
+
+def addr_chip(name, addr):
+    """A recipient the way the composer holds one: the bare address, or Name <address> with
+    the name quoted when it has a character an address list would split on. Round-trips
+    through parse_addr_list."""
+    name = (name or "").strip()
+    if not name or name.lower() == (addr or "").lower():
+        return addr
+    if _CHIP_QUOTE.search(name):
+        name = '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return f"{name} <{addr}>"
+
+
 def build_message(spec, draft=False):
     """spec: {account, account_name, to, cc, bcc (lists of raw tokens or strings),
     subject, text, html|None, attachments [{filename,content_type,data:bytes}],
@@ -165,6 +195,41 @@ def build_message(spec, draft=False):
 
 
 # --------------------------------------------------------- quoted-body assembly
+def lf(s):
+    """Text with LF line ends only."""
+    return (s or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def quote_tail(new_text, text, html):
+    """(tail_text|None, tail_html|None): what reply_bodies or forward_bodies added after what
+    you typed, kept so a reopened draft can send its quote again without quoting twice."""
+    own = new_text or ""
+    tail = text[len(own):] if text is not None and text.startswith(own) else None
+    head = own_html(own)
+    tail_h = html[len(head):] if html and html.startswith(head) else None
+    return (tail or None), (tail_h or None)
+
+
+def resume_split(text, rec, exact):
+    """Split a saved draft's text/plain into (own, tail, how), or None when that can't be done
+    without losing something. rec: {"own_text", "tail_text"} as recorded at MailMind's last
+    save of this draft, or None. exact: this is the very copy MailMind saved, so the record is
+    the truth even when the server rewrote the bytes. how is "exact" (the record), "tail" (the
+    text still ends with the recorded quote, so only that is cut) or "whole" (none of it can be
+    told apart, so all of it is yours to edit). own + tail is the drafted text, give or take
+    trailing newlines."""
+    rec = rec or {}
+    if exact and rec.get("own_text") is not None:
+        return lf(rec["own_text"]), lf(rec.get("tail_text") or ""), "exact"
+    if text is None:
+        return None
+    t, tail = lf(text), lf(rec.get("tail_text") or "")
+    s, b = tail.rstrip("\n"), t.rstrip("\n")
+    if s.startswith("\n\n") and b.endswith(s):
+        return b[:len(b) - len(s)], tail, "tail"
+    return (t[:-1] if t.endswith("\n") else t), "", "whole"   # set_content's own trailing newline
+
+
 def _attribution(orig):
     who = orig.get("from_name") or orig.get("from_addr") or "someone"
     addr = orig.get("from_addr") or ""
