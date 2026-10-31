@@ -1489,6 +1489,8 @@ def _compose_spec(body):
     except KeyError:
         raise _Http(400, "unknown sending account")
     text = body.get("text") or ""
+    own = text                      # what you typed, before any quote is added
+    tail_text = tail_html = None
     html = None
     in_reply_to = references = None
     in_reply_to_pk = None
@@ -1529,11 +1531,13 @@ def _compose_spec(body):
             in_reply_to = orow["message_id"]
             references = compose._references(orow["message_id"], orow["refs"], orow["in_reply_to"])
             in_reply_to_pk = opk
+        tail_text, tail_html = compose.quote_tail(own, text, html)
     spec = {
         "account": acct["email"], "account_name": acct.get("alias") or acct["email"],
         "to": body.get("to") or [], "cc": body.get("cc") or [], "bcc": body.get("bcc") or [],
         "subject": subject, "text": text, "html": html, "attachments": attachments,
         "in_reply_to": in_reply_to, "references": references,
+        "own": own, "tail": {"text": tail_text, "html": tail_html},   # recorded by do_draft; build_message ignores them
     }
     return spec, in_reply_to_pk, acct
 
@@ -2405,8 +2409,13 @@ def do_draft(body):
            "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
            "mode": body.get("mode", "new"), "subject": spec["subject"],
            "created_at": now, "updated_at": now}
+    bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # build_message validated them
     c = store.conn()
     new_id = store.draft_upsert(c, row)
+    store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
+                           compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
+                           spec["tail"]["html"], json.dumps(bcc) if bcc else None,
+                           hashlib.sha256(built["raw"]).hexdigest())
     c.commit()
     c.close()
     invalidate_stats()

@@ -397,6 +397,19 @@ def _m19_unsub(c):
     """)
 
 
+def _m20_draft_resume(c):
+    """Reopening a saved draft (2026-10-31). Bcc never enters a draft's bytes, so blind copies
+    and the text you were editing stay on this machine, beside the draft: your own text, the
+    quote or forwarded section MailMind added after it (text, and HTML, which never goes to the
+    client), the Bcc chips, and the sha256 of the bytes saved, which proves a copy is MailMind's
+    when the server gave no UID. Drafts saved earlier have none of it."""
+    _addcol(c, "drafts", "own_text TEXT")
+    _addcol(c, "drafts", "tail_text TEXT")
+    _addcol(c, "drafts", "tail_html TEXT")
+    _addcol(c, "drafts", "bcc TEXT")          # JSON list of chips; NULL when none
+    _addcol(c, "drafts", "raw_sha TEXT")
+
+
 # ---- unsubscribe / sender-cleanup helpers ----
 def set_list_unsub(c, pk, raw, method):
     c.execute("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?", (raw, method, pk))
@@ -561,6 +574,7 @@ _MIGRATIONS = [
     (17, _m17_draft_ahead),
     (18, _m18_drop_notes),
     (19, _m19_unsub),
+    (20, _m20_draft_resume),
 ]
 
 # Pre-versioning idempotent column adds (for DBs older than the current SCHEMA).
@@ -1221,6 +1235,12 @@ def draft_upsert(c, row):
                        VALUES(:account,:folder,:uid,:message_id,:uidvalidity,:in_reply_to_pk,
                          :mode,:subject,:created_at,:updated_at) RETURNING id""", row)
     return cur.fetchone()["id"]
+
+
+def draft_set_resume(c, did, own_text, tail_text, tail_html, bcc, raw_sha):
+    """Record what the composer held at this save (see _m20_draft_resume)."""
+    c.execute("UPDATE drafts SET own_text=?, tail_text=?, tail_html=?, bcc=?, raw_sha=? WHERE id=?",
+              (own_text, tail_text, tail_html, bcc, raw_sha, did))
 
 
 def draft_delete(c, did):
