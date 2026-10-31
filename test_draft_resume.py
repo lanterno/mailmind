@@ -760,6 +760,39 @@ def test_empty_first_text_cannot_hide_a_second():
     assert code == 422, (code, r)
 
 
+def _apple_rich(tail_html):
+    """Apple Mail's Rich Text draft with a file: the plain part is the alternative to all of it."""
+    return (b"From: Ada <ada@example.test>\r\nTo: Bo Park <bo@example.test>\r\nSubject: Plan\r\n"
+            b"Message-ID: <apple1@example.test>\r\nMIME-Version: 1.0\r\n"
+            b"Content-Type: multipart/alternative; boundary=\"A\"\r\n\r\n"
+            b"--A\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHere is the plan:\r\n\r\nSee you at 5pm\r\n"
+            b"--A\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n"
+            b"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<div>Here is the plan:</div>\r\n"
+            b"--B\r\nContent-Type: application/pdf; name=plan.pdf\r\nContent-Disposition: inline; filename=plan.pdf\r\n"
+            b"Content-Transfer-Encoding: base64\r\n\r\nJVBERi0xLjQ=\r\n"
+            b"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + tail_html + b"\r\n--B--\r\n--A--\r\n")
+
+
+def test_apple_rich_text_draft_with_a_file_reopens_as_plain_text():
+    _fresh()
+    for n, tail in enumerate((b'<div class="">See you at 5pm</div>', b"<html><body></body></html>")):
+        r, code = _resume(_synced(_apple_rich(tail), 30 + n))
+        assert code == 200, (code, r)
+        assert (r["text"], [f["filename"] for f in r["files"]]) == ("Here is the plan:\n\nSee you at 5pm", ["plan.pdf"]), r
+        assert r["notes"]["plain"] is True, r["notes"]
+
+
+def test_html_beside_the_text_with_words_of_its_own_is_refused():
+    _fresh()
+
+    def body(m):
+        m.set_content("Here is the plan:")
+        m.add_attachment(b"%PDF-1.4", maintype="application", subtype="pdf", filename="plan.pdf")
+        m.attach(_part("<div>And bring the badge.</div>", subtype="html"))
+    r, code = _resume(_synced(_foreign([body]), 32))
+    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+
+
 def test_outlook_style_invite_is_refused_a_named_one_is_a_file():
     _fresh()
     ics = "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n"
