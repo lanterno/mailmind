@@ -1057,6 +1057,49 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened():
     assert _resume(pk)[1] == 200                                # cancelled: free to edit
 
 
+def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
+    _fresh()
+    for change in ("sent", "saved"):
+        pk, res = _saved_and_synced(text="Mine.")
+
+        def meanwhile(acct, folder, uid, change=change, did=res["draft_id"]):
+            c = store.conn()                                    # between the probe and the lock
+            if change == "sent":
+                store.draft_delete(c, did)
+            else:
+                c.execute("UPDATE drafts SET uid=uid+1000 WHERE id=?", (did,))
+            c.commit()
+            c.close()
+            return True
+        server._draft_live = meanwhile
+        synced = []
+        real = server.ingest.sync_folder
+        server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append(full)
+        try:
+            r, code = _resume(pk)
+        finally:
+            server.ingest.sync_folder = real
+        assert code == 409 and "changed since the list loaded" in r["error"] and synced == [True], (change, code, r)
+
+
+def test_save_and_send_cleanup_move_the_row_under_the_lock():
+    _fresh()
+    held, real_upsert, real_delete = [], store.draft_upsert, store.draft_delete
+    store.draft_upsert = lambda c, row: (held.append(("upsert", server._ops_lock.locked())), real_upsert(c, row))[1]
+    store.draft_delete = lambda c, did: (held.append(("delete", server._ops_lock.locked())), real_delete(c, did))[1]
+    lock = server.outbox._ops_lock
+    try:
+        did = _save()["draft_id"]
+        server.outbox._ops_lock = server._ops_lock
+        server.outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "answered_set": 1,
+                                        "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
+                                    {"email": ACCT})
+    finally:
+        store.draft_upsert, store.draft_delete, server.outbox._ops_lock = real_upsert, real_delete, lock
+    assert held == [("upsert", True), ("delete", True)], held
+    assert _row(did) is None and len(CALLS["delete"]) == 1, CALLS["delete"]
+
+
 def test_unreachable_server_opens_the_local_copy():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
