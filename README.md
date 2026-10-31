@@ -214,7 +214,13 @@ automatically.
 - **Draft.** One click writes an editable reply into the composer from the whole
   thread. For mail the AI rates important or action-needed, a background pre-drafter can
   have it ready *before* you press Reply — the Reply button reads **Draft ready** — and
-  pre-drafts survive restarts.
+  pre-drafts survive restarts. The ▾ beside Draft picks a tone (Brief, Balanced, Warm or
+  Formal, remembered) and takes a line of what to say ("yes, but not before 3 pm"); a draft
+  over text you'd written leaves it one Undo away.
+- **Quick replies.** Under a message from a person — not a no-reply address, junk or a
+  receipt — **Yes, that works**, **Can't, sorry**, **Thanks!** and **Ask for a time** open
+  the reply with a one-line answer at once, and swap in a short AI version when it comes
+  unless you've started editing. With no AI the line simply stays; nothing sends itself.
 - **Rewrite toolbar** over the composer: Shorten, Elaborate, Formal, Friendly, Fix
   grammar, Translate — acting on your selection or the whole draft, with one-step Undo.
 - **Ask your inbox.** Prefix a search with `?` and get a grounded plain-English answer

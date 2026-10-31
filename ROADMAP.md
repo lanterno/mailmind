@@ -12,12 +12,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Reply, compose and send
 
-- **Reply variants and one-tap micro-replies** · high value · effort S — The single-shot `Draft`
-  works and never auto-sends, but it reaches only one tone: `aiDraftReply()` posts a hardcoded
-  `tone:"balanced"`, even though `draft_reply.py` already implements `_TONES` (brief, balanced,
-  warm, formal) and accepts a free-text `instruction` the UI never sends. Missing: a
-  Brief/Detailed/Warm picker (~10 lines against an endpoint that already supports it), an
-  instruction box, and Yes / No / Thanks / Send-me-a-time chips in the reader.
 - **Send-time guards before an irreversible send** · high value · effort S — `composeSend()`
   validates exactly two things — at least one recipient, and no malformed addresses — then POSTs
   `/api/send`. Wanted, nearly all client-side: a first-contact flag on recipients, a confirm strip
@@ -327,14 +321,12 @@ implementation.
 
 ## Next up
 
-1. **Reply variants and one-tap micro-replies** (high / S) — the backend already accepts `tone` and
-   `instruction`; this is a picker and a chip row against a working endpoint.
-2. **Make AI presence and setup state visible** (high / S) — a probe, two digest keys and one card;
+1. **Make AI presence and setup state visible** (high / S) — a probe, two digest keys and one card;
    without it a machine with neither an API key nor the claude CLI degrades silently.
-3. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
+2. **Send-time guards** (high / S) — the highest safety-per-line item left. Budget for a bulk-`known`
    field rather than N calls to `/api/contact`.
-4. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+3. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
    `_ops_lock` per account**, the structural half.
-5. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+4. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.
