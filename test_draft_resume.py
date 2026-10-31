@@ -707,6 +707,74 @@ def test_attached_email_is_refused():
     assert code == 422 and "email attached as a file" in r["error"], (code, r)
 
 
+def _part(content, **kw):
+    p = EmailMessage()
+    p.set_content(content, **kw)
+    return p
+
+
+def _mixed(*parts):
+    """Another app's draft: text, then the given parts in order."""
+    def body(m):
+        m.set_content("Here is the first photo:")
+        m.make_mixed()
+        for p in parts:
+            m.attach(p)
+    return _foreign([body])
+
+
+def test_text_after_a_file_is_refused_not_dropped():
+    _fresh()
+    raw = _mixed(_part(b"\xff\xd8jpeg", maintype="image", subtype="jpeg", filename="a.jpg", disposition="inline"),
+                 _part("And the important part: meet at 5pm at the north gate."))
+    r, code = _resume(_synced(raw, 12))
+    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+
+
+def test_nameless_file_is_refused_unless_marked_an_attachment():
+    _fresh()
+    r, code = _resume(_synced(_mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf")), 13))
+    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+    raw = _mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf", disposition="attachment"))
+    r, code = _resume(_synced(raw, 14))
+    assert code == 200 and [f["filename"] for f in r["files"]] == ["part-2"], (code, r)
+
+
+def test_empty_extra_text_is_no_loss():
+    _fresh()
+    r, code = _resume(_synced(_mixed(_part(b"%PDF-1.4", maintype="application", subtype="pdf", filename="a.pdf"),
+                                     _part("\n")), 15))
+    assert code == 200 and r["text"] == "Here is the first photo:", (code, r)
+
+
+def test_empty_first_text_cannot_hide_a_second():
+    _fresh()
+
+    def body(m):
+        m.set_content("")
+        m.make_mixed()
+        m.attach(_part("The words are here."))
+    r, code = _resume(_synced(_foreign([body]), 16))
+    assert code == 422, (code, r)
+
+
+def test_outlook_style_invite_is_refused_a_named_one_is_a_file():
+    _fresh()
+    ics = "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n"
+
+    def inline(m):
+        m.set_content("Let’s sync.")
+        m.add_alternative(ics, subtype="calendar", params={"method": "REQUEST"})
+    r, code = _resume(_synced(_foreign([inline]), 17))
+    assert code == 422 and "calendar invite" in r["error"], (code, r)
+
+    def named(m):
+        m.set_content("Let’s sync.")
+        m.add_attachment(ics, subtype="calendar", filename="invite.ics")
+    r, code = _resume(_synced(_foreign([named]), 18))
+    assert code == 200 and [f["filename"] for f in r["files"]] == ["invite.ics"], (code, r)
+
+
 def test_files_over_the_cap_are_refused():
     _fresh()
     pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
