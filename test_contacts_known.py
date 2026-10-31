@@ -111,11 +111,11 @@ def test_exact_tokens_not_substrings():
 def test_truncated_recipients_drop_the_partial_tail():
     _fresh()
     head = "first@example.test, second@example.test, "
-    s = head + "x" * (2000 - len(head) - len("zed@exam") - 1) + " zed@exam"
-    assert len(s) == 2000
+    s = head + "x" * (2000 - len(head) - len("zed@example.te") - 1) + " zed@example.te"
+    assert len(s) == 2000                       # zed@example.test, cut short by ingest
     _msg(ACCT, s, folder="Sent")
-    k = _known(["first@example.test", "second@example.test", "zed@exam"])
-    assert k == {"first@example.test": True, "second@example.test": True, "zed@exam": False}, k
+    k = _known(["first@example.test", "second@example.test", "zed@example.te"])
+    assert k == {"first@example.test": True, "second@example.test": True, "zed@example.te": False}, k
 
 
 def test_drafts_never_vouch():
@@ -197,6 +197,21 @@ def test_thin_history_flag():
     _msg("p2@example.test")
     res, _ = server.contacts_known(["p0@example.test"], min_history=3)
     assert res["thin"] is False, res
+
+
+def test_the_delivered_address_is_judged_not_the_display_name():
+    _fresh()
+    _msg("bob@company.example")
+    _msg("ann@example.test")
+    res, _ = server.contacts_known(['"bob@company.example" <bob@evil.example>',
+                                    "Bob (bob@company.example) <bob@evil.example>",
+                                    "'ann@example.test", ".ann@example.test"])
+    items = {k: v["known"] for k, v in res["items"].items()}
+    assert items == {'"bob@company.example" <bob@evil.example>': False,
+                     "bob (bob@company.example) <bob@evil.example>": False,
+                     "'ann@example.test": False, ".ann@example.test": False}, res
+    res, _ = server.contacts_known(["a@example.test, b@example.test"])
+    assert res["bad"] == ["a@example.test, b@example.test"] and not res["items"], res
 
 
 def test_items_carry_only_known_and_self():
