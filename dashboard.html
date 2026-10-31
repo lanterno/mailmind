@@ -3315,6 +3315,7 @@ function composeOpen(opts){
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
     subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null,
+    resume:opts.resume||null,   // a reopened draft: its own threading and the quote it already carries
     fwdAttach:opts.fwdAttach||0, attachments:[], idk:rid(), status:"idle", dirty:false,
     _reading:new Map(),   // files still being read: id → name
     autoCc:opts.autoCc?opts.autoCc.map(a=>String(a).toLowerCase()):null,   // a reply-all's copied-in people
@@ -3331,7 +3332,8 @@ function composeOpen(opts){
   $("#cmpFrom").innerHTML=senders.map(e=>
     `<option value="${esc(e)}"${e===from?" selected":""}>${esc(nameOf(e))} — ${esc(e)}</option>`).join("");
   $("#cmpTitle").textContent={reply:"Reply",replyall:"Reply all",forward:"Forward"}[state.compose.mode]||"New message";
-  $("#cmpAiSplit").hidden=aiOff()||!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null;
+  $("#cmpAiSplit").hidden=aiOff()||!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null
+    ||resumeHidesAi(state.compose);
   $("#cmpAiRow").hidden=aiOff();
   paintDraftBtn();
   $("#cmpSubject").value=state.compose.subject;
@@ -3722,11 +3724,12 @@ async function composeSend(sendAfter){
   const payload={ account:cmp.from, mode:cmp.mode, idempotency_key:cmp.idk, draft_id:cmp.draftId||null,
     to:cmp.to.map(x=>x.v), cc:cmp.cc.map(x=>x.v), bcc:cmp.bcc.map(x=>x.v),
     subject:cmp.subject, text:cmp.body, in_reply_to_pk:cmp.origPk, send_after:(scheduled?sendAfter:0),
-    attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})) };
+    attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})),
+    ...resumeFields(cmp.resume) };
   const replyPk=(cmp.mode==="reply"||cmp.mode==="replyall")?cmp.origPk:null;
   const snap={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
     body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
-    autoCc:cmp.autoCc,subject0:cmp.subject0,participants:[...cmp.participants],ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
+    resume:cmp.resume,autoCc:cmp.autoCc,subject0:cmp.subject0,participants:[...cmp.participants],ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
   cmp.dirty=false; state.failedSend=null; composeClose(true);
   showSendFloat("sending", scheduled?(ico("clock")+" Scheduling for "+fmtWhen(sendAfter)+"…"):"↑ Sending…");
   try{
@@ -3742,7 +3745,7 @@ async function composeSend(sendAfter){
   }catch(e){
     state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
       body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
-      autoCc:cmp.autoCc,subject0:cmp.subject0,participants:snap.participants,ack:snap.ack};
+      resume:cmp.resume,autoCc:cmp.autoCc,subject0:cmp.subject0,participants:snap.participants,ack:snap.ack};
     showSendFloat("failed",ico("alert")+" Send failed — "+esc(e.message||""),true);
   }
 }
@@ -3887,7 +3890,7 @@ function aiRewriteUndo(){
 function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
-    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, noSig:true,
+    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
     autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
   state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; renderAttach();
   if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
@@ -3934,7 +3937,7 @@ function startUndoCountdown(oid, snap, rcpts){
 }
 function reopenSend(snap){
   composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
-    subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, noSig:true,
+    subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
     autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
   state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; renderAttach();
   if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
@@ -4398,6 +4401,22 @@ function _contactCardClick(e){
      state.viewId=null; state.q="from:"+a; $("#search").value=state.q; runSearch(); return; }
 }
 
+/* ---------- reopening a saved draft (POST /api/draft/resume) ----------
+   The block between the markers touches no DOM and no state; test_draft_resume_ui.py runs it in node. */
+/* draft-resume:pure:start */
+function resumeOpts(d){ const t=d.tail_text||"";   // composeOpen options for a draft the server reopened
+  return {mode:d.mode||"new", from:d.account, to:(d.to||[]).slice(), cc:(d.cc||[]).slice(), bcc:(d.bcc||[]).slice(),
+    subject:d.subject||"", subject0:d.subject||"", origPk:d.orig_pk!=null?d.orig_pk:null, draftId:d.draft_id,
+    participants:(d.participants||[]).slice(), quote:t?{html:null,text:t.replace(/^\n+/,"")}:null, fwdAttach:0, noSig:true,
+    resume:{in_reply_to:d.in_reply_to||"", references:d.references||"", tail_text:t}}; }
+function resumeFields(r){ return r?{resume:{in_reply_to:r.in_reply_to||"", references:r.references||"", tail_text:r.tail_text||""}}:{}; }
+function resumeHidesAi(cmp){ return !!(cmp&&cmp.resume&&!cmp.quote); }   // the quote is in the box: an AI draft would replace it
+function resumeNotice(n){ n=n||{}; const o=[];
+  if(n.inline>0)o.push(n.inline===1?"1 picture in the text is now an attachment.":`${n.inline} pictures in the text are now attachments.`);
+  if(n.bcc_dropped>0)o.push("The Bcc wasn’t restored, because this draft changed since MailMind saved it.");
+  if(n.plain)o.push("This draft opens as plain text, so its formatting won’t be kept when you save or send it.");
+  return o.join(" "); }
+/* draft-resume:pure:end */
 /* ---------- drafts ---------- */
 function composePayload(){
   const cmp=state.compose; if(!cmp)return null;
@@ -4406,7 +4425,8 @@ function composePayload(){
   return { account:cmp.from, mode:cmp.mode, idempotency_key:cmp.idk, draft_id:cmp.draftId||null,
     to:cmp.to.map(x=>x.v), cc:cmp.cc.map(x=>x.v), bcc:cmp.bcc.map(x=>x.v),
     subject:cmp.subject, text:cmp.body, in_reply_to_pk:cmp.origPk,
-    attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})) };
+    attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})),
+    ...resumeFields(cmp.resume) };
 }
 async function composeSaveDraft(silent){   // → true once saved
   const cmp=state.compose; if(!cmp)return false; const payload=composePayload();
@@ -4433,13 +4453,21 @@ function autosaveTick(){
   const key=_draftHash(p); if(key===cmp._lastSaveHash)return;
   composeSaveDraft(true);
 }
-async function editDraft(pk){
-  let d; try{ d=(state.lastBody&&state.lastBody.pk===pk)?state.lastBody:await api(`/api/message/${pk}/body`); }catch(e){ toast("Couldn’t open draft"); return; }
-  if(!d||!d.ok)return;
-  composeOpen({mode:d.draft_mode||"new", from:d.account, to:parseAddrs(d.to), cc:parseAddrs(d.cc),
-    subject:(d.subject||"").replace(/^(re|fwd?|fw)\s*:\s*/i,m=>m), origPk:d.in_reply_to||null, draftId:d.draft_id});
-  $("#cmpBody").value=d.text||"";
-  state.compose.dirty=false;   // freshly loaded; don't re-save unless edited
+let _resumeTok=0;
+async function editDraft(pk){   // your text in the box, the quote folded below, files, Bcc and thread as saved
+  const busy="Close the message you’re writing first";
+  if(state.compose){ toast(busy); return; }
+  const tok=++_resumeTok; let d;
+  try{ d=await cpost("/api/draft/resume",{pk}); if(!d.ok)throw new Error(d.error||"Couldn’t open this draft."); }
+  catch(e){ if(tok!==_resumeTok)return; const m=e.message||"Couldn’t open this draft."; toast(m); announce(m);
+    if(state.allInbox)loadAllInboxes(); else if(state.searching)runSearch(); else loadCMessages();   // a stale row goes
+    return; }
+  if(tok!==_resumeTok)return;
+  if(state.compose){ toast(busy); return; }   // one opened while this loaded is never replaced
+  composeOpen(resumeOpts(d)); const cmp=state.compose; if(!cmp)return;
+  cmp.attachments=(d.files||[]).slice(); renderAttach();
+  const ta=$("#cmpBody"); ta.value=d.text||""; ta.setSelectionRange(0,0); cmp.dirty=false;   // nothing saves until an edit
+  const n=resumeNotice(d.notes); if(n){ toast(n); announce(n); }
 }
 
 /* ---------- realtime (SSE) ---------- */
