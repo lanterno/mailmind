@@ -2501,9 +2501,18 @@ def _draft_live(acct, folder, uid):
             pass
 
 
+def _unsurrogate(s):
+    """A header written in raw UTF-8 (RFC 6532) as text: policy.default keeps its 8-bit bytes as
+    lone surrogates, which would show as replacement marks and go out as "unknown-8bit"."""
+    try:
+        return s.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    except UnicodeError:
+        return s.encode("utf-8", "replace").decode("utf-8")
+
+
 def _raw_header(msg, name):
     """Every value of one header as written, unfolded and unparsed."""
-    return [re.sub(r"\r?\n(?=[ \t])", "", v) for k, v in msg.raw_items() if k.lower() == name.lower()]
+    return [_unsurrogate(re.sub(r"\r?\n(?=[ \t])", "", v)) for k, v in msg.raw_items() if k.lower() == name.lower()]
 
 
 def _hdr_text(msg, name):
@@ -2515,7 +2524,7 @@ def _hdr_text(msg, name):
     except Exception:
         raw = _raw_header(msg, name)
         return raw[0] if raw else None
-    return None if v is None else str(v)
+    return None if v is None else _unsurrogate(str(v))
 
 
 def _hdr_chips(msg, name):
@@ -2527,7 +2536,8 @@ def _hdr_chips(msg, name):
         pairs = [("", a) for _, a in email.utils.getaddresses(_raw_header(msg, name))]
     out, seen = [], set()
     for n, a in pairs:
-        if "@" not in (a or "") or a.lower() in seen:
+        n, a = _unsurrogate(n or ""), _unsurrogate(a or "")
+        if "@" not in a or a.lower() in seen:
             continue
         seen.add(a.lower())
         out.append(compose.addr_chip(n, a))
