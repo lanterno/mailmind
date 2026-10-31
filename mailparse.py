@@ -45,7 +45,7 @@ def parse(raw_bytes):
         msg = email.message_from_bytes(raw_bytes, policy=policy.default)
     except Exception:
         msg = email.message_from_bytes(raw_bytes or b"")
-    text, html = None, None
+    text, html, cal = None, None, None
     attachments = []
     idx = 0
     for part in msg.walk():
@@ -77,6 +77,16 @@ def parse(raw_bytes):
             text = _decode(part)
         elif ctype == "text/html" and html is None:
             html = _decode(part)
+        elif ctype == "text/calendar" and cal is None:
+            cal = (idx, part)
+    # Outlook sends an invite only as an unnamed inline text/calendar part; record it like the
+    # invite.ics file other clients attach (and only when no such file carries the invite already)
+    if cal and not any("calendar" in a["content_type"] or a["content_type"] == "application/ics"
+                       or a["filename"].lower().endswith(".ics") for a in attachments):
+        attachments.append({
+            "part_id": str(cal[0]), "filename": "invite.ics", "content_type": "text/calendar",
+            "size": len(cal[1].get_payload(decode=True) or b""), "content_id": None, "is_inline": 1,
+        })
     return {
         "text": text, "html": html, "attachments": attachments,
         "to": _hdr(msg, "To"), "cc": _hdr(msg, "Cc"),
