@@ -3354,6 +3354,9 @@ function composeOpen(opts){
   knownQueue([...state.compose.to,...state.compose.cc,...state.compose.bcc].map(x=>x.v),false);   // prefilled chips are marked silently
 }
 function sigFor(email){ return (state.signatures&&state.signatures[email])||state.signatureDefault||""; }
+function adoptSig(text, acct){   // a composer reopened with its own text tracks the signature it ends with
+  const cmp=state.compose, blk=resumeSig(text, sigFor(acct));
+  if(cmp&&blk){ cmp._sigBlock=blk; cmp._sigFrom=acct; } }
 let _closeSave=null;   // the save composeClose started, until it settles: Edit waits for it
 function composeClose(force){
   const cmp=state.compose;
@@ -3895,7 +3898,7 @@ function reopenFailed(){
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
     subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
     autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
-  state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; renderAttach();
+  state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; adoptSig(f.body, f.from); renderAttach();
   if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
 function showSendFloat(cls,text,retry){ const el=$("#sendFloat"); el.hidden=false; el.className="send-float "+cls;
@@ -3942,7 +3945,7 @@ function reopenSend(snap){
   composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
     subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
     autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
-  state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; renderAttach();
+  state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; adoptSig(snap.body, snap.from); renderAttach();
   if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
 async function loadOutbox(){
@@ -4414,6 +4417,8 @@ function resumeOpts(d){ const t=d.tail_text||"";   // composeOpen options for a 
     resume:{in_reply_to:d.in_reply_to||"", references:d.references||"", tail_text:t}}; }
 function resumeFields(r){ return r?{resume:{in_reply_to:r.in_reply_to||"", references:r.references||"", tail_text:r.tail_text||""}}:{}; }
 function resumeHidesAi(cmp){ return !!(cmp&&cmp.resume&&!cmp.quote); }   // the quote is in the box: an AI draft would replace it
+function resumeSig(text, sig){ const blk=sig?"\n\n-- \n"+sig:"";   // the signature block a reopened text still ends with, or ""
+  return blk&&String(text||"").endsWith(blk)?blk:""; }
 function resumeNotice(n){ n=n||{}; const o=[];
   if(n.inline>0)o.push(n.inline===1?"1 picture in the text is now an attachment.":`${n.inline} pictures in the text are now attachments.`);
   if(n.bcc_dropped>0)o.push("The Bcc wasn’t restored, because this draft changed since MailMind saved it.");
@@ -4471,6 +4476,7 @@ async function editDraft(pk){   // your text in the box, the quote folded below,
   composeOpen(resumeOpts(d)); const cmp=state.compose; if(!cmp)return;
   cmp.attachments=(d.files||[]).slice(); renderAttach();
   const ta=$("#cmpBody"); ta.value=d.text||""; ta.setSelectionRange(0,0); cmp.dirty=false;   // nothing saves until an edit
+  adoptSig(ta.value, d.account);   // the signature it was saved with, even if that From is gone
   const n=resumeNotice(d.notes); if(n){ toast(n); announce(n); }
 }
 
