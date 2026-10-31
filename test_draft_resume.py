@@ -3,9 +3,11 @@ quote or forwarded section, so it must come back split into your text and that t
 again with each part once. Hermetic — temp database and config, and every IMAP or SMTP call is
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
+import hashlib
 import json
 import os
 import tempfile
+from email.message import EmailMessage
 
 import store
 import config
@@ -53,6 +55,28 @@ def _save(account=ACCT, draft_id=None, **kw):
     res, code = server.do_draft(body)
     assert code == 200 and res["ok"], (code, res)
     return res
+
+
+def _original(uid=7):
+    """An INBOX message from Bo, its body (text, HTML and a PDF) stored as if already opened, so
+    replying and forwarding never reach for IMAP. Returns its pk."""
+    m = EmailMessage()
+    m["From"], m["To"], m["Cc"] = "Bo Park <bo@example.test>", ACCT, "cy@example.test"
+    m["Subject"], m["Date"] = "Plans", "Mon, 2 Feb 2026 09:00:00 +0000"
+    m["Message-ID"], m["References"] = "<orig1@example.test>", "<root@example.test>"
+    m.set_content("Shall we meet Saturday?\nThe map is attached.\n")
+    m.add_alternative("<p>Shall we meet <b>Saturday</b>?</p>", subtype="html")
+    m.add_attachment(b"%PDF-1.4 map", maintype="application", subtype="pdf", filename="map.pdf")
+    c = store.conn()
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, from_name, "
+              "subject, refs, recipients) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              (ACCT, "imap", "INBOX", uid, "<orig1@example.test>", "t-orig", 1_800_000_000, "bo@example.test",
+               "Bo Park", "Plans", "<root@example.test>", "ada@example.test, cy@example.test"))
+    pk = c.execute("SELECT pk FROM messages WHERE uid=? AND folder='INBOX'", (uid,)).fetchone()["pk"]
+    store.store_body(c, pk, m.as_bytes(), "2026-10-31T09:00:00")
+    c.commit()
+    c.close()
+    return pk
 
 
 def _row(did):
@@ -240,6 +264,84 @@ def test_vanished_draft_row_is_tracked_again():
     assert CALLS["append"][-1]["prev_uid"] is None
     again = _save(draft_id=res["draft_id"], text="Saturday at eleven.")
     assert again["draft_id"] == res["draft_id"] and CALLS["append"][-1]["prev_uid"] == res["uid"], again
+
+
+def _cols():
+    c = store.conn()
+    cols = {r[1] for r in c.execute("PRAGMA table_info(drafts)")}
+    v = c.execute("PRAGMA user_version").fetchone()[0]
+    c.close()
+    return cols, v
+
+
+SIDECAR = {"own_text", "tail_text", "tail_html", "bcc", "raw_sha"}
+
+
+def test_migration_20_is_idempotent():
+    _fresh()
+    store.init()
+    cols, v = _cols()
+    assert v >= 20 and SIDECAR <= cols, (v, cols)
+
+
+def test_v19_database_gains_the_columns():
+    _fresh()
+    c = store.conn()
+    for col in SIDECAR:
+        c.execute(f"ALTER TABLE drafts DROP COLUMN {col}")
+    c.execute("INSERT INTO drafts (account, folder, uid, mode, subject) VALUES (?,?,?,?,?)",
+              (ACCT, "Drafts", 3, "reply", "Re: Plans"))
+    c.execute("PRAGMA user_version=19")
+    c.commit()
+    c.close()
+    store.init()
+    cols, v = _cols()
+    assert v == 20 and SIDECAR <= cols, (v, cols)
+    row = _row(1)
+    assert (row["uid"], row["mode"], row["own_text"], row["bcc"]) == (3, "reply", None, None), dict(row)
+
+
+def test_new_draft_records_its_text():
+    _fresh()
+    res = _save(text="Saturday works.\r\nSee you.")
+    row = _row(res["draft_id"])
+    assert row["own_text"] == "Saturday works.\nSee you." and row["tail_text"] is None, dict(row)
+    assert row["tail_html"] is None and row["bcc"] is None, dict(row)
+    assert row["raw_sha"] == hashlib.sha256(CALLS["append"][-1]["raw"]).hexdigest()
+
+
+def test_reply_draft_records_text_quote_and_html():
+    _fresh()
+    opk = _original()
+    res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
+    row = _row(res["draft_id"])
+    raw = CALLS["append"][-1]["raw"]
+    assert row["own_text"] == OWN and row["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026"), dict(row)
+    assert row["tail_text"].count("wrote:") == 1 and "> Shall we meet Saturday?" in row["tail_text"]
+    assert row["tail_html"].startswith("<div>On Mon") and "<blockquote" in row["tail_html"], row["tail_html"]
+    assert compose.lf(mailparse.parse(raw)["text"]) == OWN + row["tail_text"]
+
+
+def test_forward_draft_records_the_banner():
+    _fresh()
+    opk = _original()
+    res = _save(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    row = _row(res["draft_id"])
+    assert row["own_text"] == "FYI" and row["tail_text"].startswith("\n\n---------- Forwarded message"), dict(row)
+    assert "From: Bo Park <bo@example.test>" in row["tail_text"], row["tail_text"]
+    files = [a["filename"] for a in mailparse.parse(CALLS["append"][-1]["raw"])["attachments"]]
+    assert files == ["map.pdf"], files
+
+
+def test_bcc_is_kept_beside_the_draft_not_in_it():
+    _fresh()
+    res = _save(bcc=['"Park, Cy" <cy@example.test>', "dee@example.test"])
+    raw = CALLS["append"][-1]["raw"]
+    head = raw.split(b"\r\n\r\n", 1)[0]
+    assert b"\nBcc:" not in b"\n" + head and b"cy@example.test" not in raw, head
+    row = _row(res["draft_id"])
+    assert json.loads(row["bcc"]) == ['"Park, Cy" <cy@example.test>', "dee@example.test"], row["bcc"]
+    assert row["raw_sha"] == hashlib.sha256(raw).hexdigest()
 
 
 if __name__ == "__main__":
