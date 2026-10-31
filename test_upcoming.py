@@ -9,6 +9,7 @@ from email.message import EmailMessage
 
 import store
 store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")   # before anything opens a connection
+import ingest
 import mailparse
 import server
 
@@ -141,6 +142,40 @@ def test_a_broken_calendar_part_is_skipped():
     _msg("not a calendar at all")
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
     assert [x["pk"] for x in _up()] == [ok]
+
+
+class _FakeImap:
+    """Answers ingest._process's two FETCHes (headers, then the whole message) from `raws`."""
+    def __init__(self, raws):
+        self.raws = raws
+
+    def uid(self, cmd, uids, spec):
+        out = []
+        for u in uids.split(","):
+            raw = self.raws[int(u)]
+            part = raw.split(b"\n\n")[0] + b"\n\n" if "HEADER" in spec else raw
+            out.append((f"{u} (UID {u} FLAGS ())".encode(), part))
+        return "OK", out
+
+
+def test_ingest_keeps_an_invite_so_it_is_listed_unopened():
+    _fresh()
+    def raw(n, cal=None):
+        m = EmailMessage()
+        m["From"], m["To"], m["Subject"] = "Ren <ren@example.test>", ACCT, "Invitation"
+        m["Date"], m["Message-ID"] = "Fri, 30 Oct 2026 09:00:00 +0000", f"<in{n}@example.test>"
+        m.set_content("You're invited.")
+        if cal:
+            m.add_attachment(cal.encode(), maintype="text", subtype="calendar", filename="invite.ics")
+        return m.as_bytes()
+    ingest._process(_FakeImap({1: raw(1, _ics("in", NOW + timedelta(days=1))), 2: raw(2)}),
+                    {"email": ACCT, "kind": "imap"}, ["1", "2"], "INBOX", with_body=True)
+    c = store.conn()
+    rows = {r["uid"]: r for r in c.execute("SELECT pk, uid, body_fetched, seen FROM messages")}
+    c.close()
+    assert rows[1]["body_fetched"] == 1 and rows[1]["seen"] == 0, dict(rows[1])
+    assert rows[2]["body_fetched"] == 0, "mail without an invite is stored as before"
+    assert [x["pk"] for x in _up()] == [rows[1]["pk"]]
 
 
 def test_waiting_names_who_a_sent_thread_waits_on():
