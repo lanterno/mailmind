@@ -1,8 +1,9 @@
 """Reopening a saved draft in the composer (dashboard.html, the block between
 /* draft-resume:pure:start */ and /* draft-resume:pure:end */): the composer options built from
 /api/draft/resume's answer, the `resume` fields every save and send carries, when AI Draft is
-hidden, and the wording of the notes. The block is pure JavaScript with no DOM, so this runs it
-once in node, like test_send_guard.py. All addresses are fictional.
+hidden, the signature a reopened text still ends with, and the wording of the notes. The block
+is pure JavaScript with no DOM, so this runs it once in node, like test_send_guard.py. All
+addresses are fictional.
 Run: python3 test_draft_resume_ui.py"""
 import json
 import os
@@ -31,6 +32,9 @@ CASES = {
     "fields": "()=>resumeFields({in_reply_to:'<x@example.test>', references:null, tail_text:'q', extra:1})",
     "hides_ai": "()=>[resumeHidesAi(null), resumeHidesAi({resume:null, quote:null}),"
                 " resumeHidesAi({resume:{}, quote:{text:'q'}}), resumeHidesAi({resume:{}, quote:null})]",
+    "sig": """()=>[resumeSig("Saturday works.\\n\\n-- \\nAda", "Ada"), resumeSig("Saturday works.\\n\\n-- \\nAda L.", "Ada"),
+                resumeSig("Hi\\n\\n-- \\nAda\\nP.S. later", "Ada"), resumeSig("Hi", ""), resumeSig("", "Ada"),
+                resumeSig(null, "Ada"), resumeSig("Hi\\n-- \\nAda", "Ada")]""",
     "notes": """()=>[resumeNotice(null), resumeNotice({inline:0, bcc_dropped:0, plain:false}),
                 resumeNotice({inline:1}), resumeNotice({inline:3}), resumeNotice({bcc_dropped:2}),
                 resumeNotice({plain:true}), resumeNotice({inline:2, bcc_dropped:1, plain:true})]""",
@@ -108,6 +112,10 @@ def test_resume_fields_on_every_save_and_send():
 
 def test_ai_draft_hidden_only_when_the_quote_is_in_the_box():
     assert _r("hides_ai") == [False, False, False, True], _r("hides_ai")
+
+
+def test_the_signature_a_reopened_text_ends_with():
+    assert _r("sig") == ["\n\n-- \nAda", "", "", "", "", "", ""], _r("sig")
 
 
 def test_notes_wording():
