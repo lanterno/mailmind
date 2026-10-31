@@ -2569,6 +2569,21 @@ def draft_resume(body):
         return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
                                       "reattach yet." + elsewhere}, 422
     leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
+    listed, bodies = {int(a["part_id"]) for a in parsed["attachments"]}, set()
+    for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
+        ct = p.get_content_type()
+        if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
+            return {"ok": False, "error": "This draft is a calendar invite, which MailMind can’t send on as "
+                                          "one." + elsewhere}, 422
+        if i in listed:
+            continue
+        if ct in ("text/plain", "text/html") and ct not in bodies:
+            bodies.add(ct)                               # the text parse() read, or its formatted twin
+            continue
+        if not (p.get_payload(decode=True) or b"").strip():
+            continue                                     # nothing in it to lose
+        return {"ok": False, "error": "Part of this draft is something MailMind can’t reopen without "
+                                      "losing it." + elsewhere}, 422
     files, total, inline = [], 0, 0
     for a in parsed["attachments"]:
         part = leaves[int(a["part_id"]) - 1]
