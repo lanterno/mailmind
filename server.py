@@ -2418,17 +2418,22 @@ def do_draft(body):
     same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
     try:
         with _ops_lock:
-            if prev and not same and prev["uid"] and prev["uidvalidity"] is not None:
-                try:   # best-effort: drop the copy saved under the old From; a UID we can't vouch for stays
-                    smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
-                                              prev["uidvalidity"])
-                except Exception as e:
-                    print(f"[draft] old-account copy not removed: {_sanitize_conn_error(e)}", flush=True)
             folder, uid, uidv = smtpsend.append_to_drafts(
                 acct, built["raw"],
                 prev_uid=(prev["uid"] if same else None),
                 prev_uidvalidity=(prev["uidvalidity"] if same else None),
-                prev_msgid=(prev["message_id"] if same else None))
+                prev_msgid=(prev["message_id"] if same else None),
+                prev_folder=(prev["folder"] if same else None))
+            # The old copy is in another mailbox (From changed) or another folder (a draft reopened
+            # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
+            # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays.
+            if (prev and prev["uid"] and prev["uidvalidity"] is not None
+                    and (not same or (prev["folder"] and prev["folder"] != folder))):
+                try:
+                    smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
+                                              prev["uidvalidity"])
+                except Exception as e:
+                    print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     except Exception as e:

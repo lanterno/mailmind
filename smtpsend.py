@@ -92,15 +92,19 @@ def append_to_sent(acct, raw):
 _APPENDUID = re.compile(rb"APPENDUID\s+(\d+)\s+(\d+)")
 
 
-def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None):
+def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
     """APPEND a draft (flagged \\Draft) to the account's Drafts folder, after deleting the
     previous copy (single-UID expunge — NEVER a bulk expunge). Returns
-    (folder, new_uid|None, uidvalidity|None). Delete-then-append so a crash leaves 0 drafts."""
+    (folder, new_uid|None, uidvalidity|None). Delete-then-append so a crash leaves 0 drafts.
+    prev_folder: where the previous copy is; when that isn't this Drafts folder, nothing is
+    deleted here (its UID means nothing in this one), and the caller removes it there."""
     M = accounts.connect(acct)
     try:
         drafts = mailops._find_folder(M, ("\\drafts", "drafts", "draft")) or "Drafts"
         if '"' in drafts or "\r" in drafts or "\n" in drafts:
             raise ValueError("unsafe Drafts folder name")
+        if prev_folder is not None and prev_folder != drafts:
+            prev_uid = prev_msgid = None
         typ, d = M.select(f'"{drafts}"', readonly=False)
         uidv = None
         try:

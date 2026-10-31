@@ -44,10 +44,11 @@ def _fresh(uidv=777, appenduid=True):
     CALLS.clear()
     CALLS.update(append=[], delete=[], sent=[])
 
-    def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None):
+    def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
         _uid[0] += 1
         CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
-                                "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid})
+                                "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
+                                "prev_folder": prev_folder})
         return "Drafts", (_uid[0] if appenduid else None), uidv
 
     def delete(acct, folder, uid, uidvalidity=None):
