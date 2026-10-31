@@ -1498,7 +1498,35 @@ def _compose_spec(body):
     in_reply_to_pk = None
     subject = body.get("subject") or ""
     attachments = _decode_attachments(body.get("attachments"))
-    if mode in ("reply", "replyall", "forward"):
+    resume = body.get("resume")
+    if resume is not None:
+        # A reopened draft (draft_resume) goes out as drafted: your text plus the quote or forwarded
+        # section it already carried, its own threading headers, and only the files in the payload.
+        # The original is never fetched, re-quoted or re-attached.
+        if not isinstance(resume, dict):
+            raise _Http(400, "bad draft data")
+        own = compose.lf(text)
+        tail = compose.lf(str(resume.get("tail_text") or ""))
+        text = own + tail
+        if tail:   # the quote's HTML only when this draft's record vouches for that exact quote
+            try:
+                did = int(body.get("draft_id"))
+            except (TypeError, ValueError):
+                did = None
+            c = store.conn()
+            dr = store.draft_get(c, did) if did else None
+            c.close()
+            if dr and dr["tail_html"] and compose.lf(dr["tail_text"] or "") == tail:
+                tail_html = dr["tail_html"]           # built and sanitized by us at that save; never re-sanitized
+                html = compose.own_html(own) + tail_html
+        tail_text = tail or None
+        in_reply_to, references = compose.thread_ids(resume.get("in_reply_to"), resume.get("references"))
+        if mode in ("reply", "replyall") and in_reply_to:   # by Message-ID: a pk may have been renumbered
+            c = store.conn()
+            orow = store.get_message_by_msgid(c, acct["email"], in_reply_to)
+            c.close()
+            in_reply_to_pk = orow["pk"] if orow else None
+    elif mode in ("reply", "replyall", "forward"):
         try:
             opk = int(body.get("in_reply_to_pk"))
         except (TypeError, ValueError):
