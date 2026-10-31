@@ -3435,11 +3435,12 @@ async function aiDraftReply(){
   const t=btn.querySelector(".ai-t"), prev=t.textContent; btn.disabled=true; t.textContent="Drafting…";
   try{
     const d=await cpost("/api/ai/draft-reply",{pk:cmp.origPk, account:cmp.from, tone:"balanced"});
+    if(state.compose!==cmp)return;   // closed (or replaced by another reply) while drafting: not this composer's text
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"draft failed"));
     const body=d.body+(cmp._sigBlock||"");   // keep the signature below the AI-written reply
     $("#cmpBody").value=body; cmp.body=body; cmp.dirty=true; $("#cmpBody").focus();
     toast("Draft ready — review and edit before sending");
-  }catch(e){ toast("Couldn’t draft: "+(e.message||"")); }
+  }catch(e){ if(state.compose===cmp)toast("Couldn’t draft: "+(e.message||"")); }
   finally{ btn.disabled=false; t.textContent=prev; }
 }
 async function aiRewrite(op){
@@ -3453,6 +3454,7 @@ async function aiRewrite(op){
   const row=$("#cmpAiRow"); const lbl=$("#cmpAiRow .air-t"); const prev=lbl.textContent; lbl.textContent="Rewriting…";
   try{
     const d=await cpost("/api/ai/rewrite",{text,op,lang});
+    if(state.compose!==cmp)return;   // closed while rewriting: the textarea now belongs to another composer (or none)
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"rewrite failed"));
     cmp._rwUndo={value:full, sel:[s,e]};                       // one-step undo of the prior text
     const nv=hasSel?(full.slice(0,s)+d.text+full.slice(e)):d.text;
@@ -3460,7 +3462,7 @@ async function aiRewrite(op){
     if(hasSel){ ta.selectionStart=s; ta.selectionEnd=s+d.text.length; }
     $("#cmpRwUndo").hidden=false; ta.focus();
     toast((hasSel?"Selection":"Message")+" rewritten");
-  }catch(err){ toast("Couldn’t rewrite: "+(err.message||"")); }
+  }catch(err){ if(state.compose===cmp)toast("Couldn’t rewrite: "+(err.message||"")); }
   finally{ btns.forEach(b=>b.disabled=false); lbl.textContent=prev; }
 }
 function aiRewriteUndo(){
