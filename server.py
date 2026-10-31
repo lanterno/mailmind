@@ -2106,13 +2106,16 @@ _QUOTED_NAME = re.compile(r'"[^"]*"')
 
 
 def _norm_addr(raw):
-    s = str(raw or "").strip()[:320]
-    m = _ADDR_TOKEN.search(s)
-    a = (m.group(0) if m else s).strip().strip(".'").lower()
-    if a.count("@") != 1 or len(a) > 254 or any(ch.isspace() for ch in a):
+    """The address mail to `raw` would actually go to, by compose's own parser, so a display
+    name holding someone else's address can't stand in for it. None unless exactly one."""
+    try:
+        pairs = compose.parse_addr_list([str(raw or "")[:320]])
+    except ValueError:
         return None
-    local, dom = a.split("@")
-    return a if local and dom else None
+    if len(pairs) != 1:
+        return None
+    a = pairs[0][1].lower()
+    return a if len(a) <= 254 else None
 
 
 def _addr_forms(a):
