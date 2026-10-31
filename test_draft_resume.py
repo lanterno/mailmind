@@ -228,6 +228,20 @@ def test_other_apps_draft_registers_with_folder_uidvalidity():
     assert (d["uid"], d["uidvalidity"], d["mode"]) == (9, 4242, "new"), dict(d)
 
 
+def test_vanished_draft_row_is_tracked_again():
+    _fresh()
+    did = _save()["draft_id"]
+    c = store.conn()
+    store.draft_delete(c, did)                                  # sent or discarded in another tab
+    c.commit()
+    c.close()
+    res = _save(draft_id=did, text="Saturday at ten.")
+    assert res["draft_id"] != did and _row(res["draft_id"]) is not None, res
+    assert CALLS["append"][-1]["prev_uid"] is None
+    again = _save(draft_id=res["draft_id"], text="Saturday at eleven.")
+    assert again["draft_id"] == res["draft_id"] and CALLS["append"][-1]["prev_uid"] == res["uid"], again
+
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
