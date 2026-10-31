@@ -3315,6 +3315,7 @@ function composeOpen(opts){
   const senders=(state.sendAccounts&&state.sendAccounts.length)?state.sendAccounts:(state.accountsList||[]);
   if(!senders.length){ toast("No sending account configured — add one in Settings"); return; }
   const from=(opts.from&&senders.includes(opts.from))?opts.from:(senders.includes(state.account)?state.account:senders[0]);
+  if(state.compose)clearInterval(state.compose._autosaveIv);   // a composer replaced in place: its autosave stops with it
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
     subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null,
@@ -3351,7 +3352,6 @@ function composeOpen(opts){
   renderChips("to"); renderChips("cc"); renderChips("bcc"); renderAttach(); renderQuote(); setComposePill();
   $("#composeModal").classList.add("show"); $("#scrim").classList.add("on");
   setReturnFocus=document.activeElement;
-  clearInterval(state.compose._autosaveIv);
   state.compose._autosaveIv=setInterval(autosaveTick, 8000);   // continuous draft autosave
   setTimeout(()=>{ if(!state.compose)return; const f=state.compose.mode==="new"?fieldEl("to").querySelector(".ci"):$("#cmpBody"); if(f)f.focus(); },40);
   knownQueue([...state.compose.to,...state.compose.cc,...state.compose.bcc].map(x=>x.v),false);   // prefilled chips are marked silently
@@ -3898,6 +3898,7 @@ function aiRewriteUndo(){
 }
 function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
+  if(state.compose)composeClose();   // the message open now is saved, not replaced
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
     subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
     autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
@@ -3945,6 +3946,7 @@ function startUndoCountdown(oid, snap, rcpts){
     else paint(); },1000);
 }
 function reopenSend(snap){
+  if(state.compose)composeClose();   // the message open now is saved, not replaced
   composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
     subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
     autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
