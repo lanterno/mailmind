@@ -3354,12 +3354,15 @@ function composeOpen(opts){
   knownQueue([...state.compose.to,...state.compose.cc,...state.compose.bcc].map(x=>x.v),false);   // prefilled chips are marked silently
 }
 function sigFor(email){ return (state.signatures&&state.signatures[email])||state.signatureDefault||""; }
+let _closeSave=null;   // the save composeClose started, until it settles: Edit waits for it
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
   closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
-  if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); }); }  // auto-save on close
+  if(cmp&&cmp.dirty&&!force){   // auto-save on close
+    const p=_closeSave=composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); });
+    p.finally(()=>{ if(_closeSave===p)_closeSave=null; }); }
   state.compose=null;
   $("#composeModal").classList.remove("show");
   _syncScrim();
@@ -4458,6 +4461,7 @@ async function editDraft(pk){   // your text in the box, the quote folded below,
   const busy="Close the message you’re writing first";
   if(state.compose){ toast(busy); return; }
   const tok=++_resumeTok; let d;
+  if(_closeSave){ await _closeSave; if(tok!==_resumeTok)return; }   // the copy it saves replaces the one this row shows
   try{ d=await cpost("/api/draft/resume",{pk}); if(!d.ok)throw new Error(d.error||"Couldn’t open this draft."); }
   catch(e){ if(tok!==_resumeTok)return; const m=e.message||"Couldn’t open this draft."; toast(m); announce(m);
     if(state.allInbox)loadAllInboxes(); else if(state.searching)runSearch(); else loadCMessages();   // a stale row goes
