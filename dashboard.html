@@ -1558,7 +1558,8 @@ function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");cl
 const CSRF=(document.querySelector('meta[name=csrf]')||{}).content||"";
 async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o.headers||{});   // on GETs too: cost-bearing reads (draft-ahead kick) verify it
   const r=await fetch(p,o);
-  if(!r.ok){ let m="HTTP "+r.status; try{ const j=await r.json(); if(j&&j.error)m=j.error; }catch(e){} throw new Error(m); }
+  if(!r.ok){ let m="HTTP "+r.status; try{ const j=await r.json(); if(j&&j.error)m=j.error; }catch(e){}
+    throw Object.assign(new Error(m),{status:r.status}); }
   return r.json();}
 
 /* ---------- the digest: AI-scored mail behind the brief, commitments and tidy ---------- */
@@ -4471,6 +4472,7 @@ async function editDraft(pk){   // your text in the box, the quote folded below,
   if(_closeSave){ await _closeSave; if(tok!==_resumeTok)return; }   // the copy it saves replaces the one this row shows
   try{ d=await cpost("/api/draft/resume",{pk}); if(!d.ok)throw new Error(d.error||"Couldn’t open this draft."); }
   catch(e){ if(tok!==_resumeTok)return; const m=e.message||"Couldn’t open this draft."; toast(m); announce(m);
+    if((e.status===404||e.status===409)&&state.csel===pk)clearReader();   // that copy is gone: don't keep showing it
     if(state.allInbox)loadAllInboxes(); else if(state.searching)runSearch(); else loadCMessages();   // a stale row goes
     return; }
   if(tok!==_resumeTok)return;
