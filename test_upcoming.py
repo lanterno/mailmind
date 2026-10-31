@@ -1,14 +1,17 @@
-"""Today & next (server.upcoming): which calendar invites in fetched mail make the brief's list, and
-the recipient the Waiting view names (server.waiting_in). Hermetic — the database is a temp file and
+"""Today & next (server.upcoming): which calendar invites in fetched mail make the brief's list, when
+a repeating one next happens (ics.next_occurrence), and the recipient the Waiting view names
+(server.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
 Run: python3 test_upcoming.py"""
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from zoneinfo import ZoneInfo
 
 import store
 store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")   # before anything opens a connection
+import ics
 import ingest
 import mailparse
 import server
@@ -142,6 +145,70 @@ def test_a_broken_calendar_part_is_skipped():
     _msg("not a calendar at all")
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
     assert [x["pk"] for x in _up()] == [ok]
+
+
+BERLIN = ZoneInfo("Europe/Berlin")
+SUN = datetime(2026, 11, 1, 12, 0, tzinfo=BERLIN)   # the Sunday after Berlin leaves summer time
+
+
+def _next(rule, extra="", start="20261005T100000", end="20261005T103000", after=SUN):
+    """Next occurrence of a Monday 10:00–10:30 Berlin event that first ran on Oct 5, as ISO strings."""
+    tz = ";TZID=Europe/Berlin:" if "T" in start else ";VALUE=DATE:"
+    inv = ics.parse("\r\n".join(["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:r", "SUMMARY:Standup",
+                                  "DTSTART" + tz + start, "DTEND" + tz + end] + ([f"RRULE:{rule}"] if rule else [])
+                                 + ([extra] if extra else []) + ["END:VEVENT", "END:VCALENDAR", ""]))
+    got = ics.next_occurrence(inv, after)
+    return got and (got[0].isoformat(timespec="minutes"), got[1].isoformat(timespec="minutes"))
+
+
+def test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving():
+    assert _next("FREQ=WEEKLY") == ("2026-11-02T10:00+01:00", "2026-11-02T10:30+01:00")
+    assert _next("FREQ=WEEKLY;INTERVAL=2")[0] == "2026-11-02T10:00+01:00"     # Oct 5, 19, Nov 2
+    assert _next("FREQ=WEEKLY;INTERVAL=3")[0] == "2026-11-16T10:00+01:00"     # Oct 5, 26, Nov 16
+    assert _next("FREQ=WEEKLY;BYDAY=WE,MO")[0] == "2026-11-02T10:00+01:00"
+
+
+def test_count_until_and_exdate_end_or_skip_occurrences():
+    assert _next("FREQ=WEEKLY;COUNT=4") is None                              # Oct 5 – Oct 26
+    assert _next("FREQ=WEEKLY;COUNT=5")[0] == "2026-11-02T10:00+01:00"
+    assert _next("FREQ=WEEKLY;UNTIL=20261102T090000Z")[0] == "2026-11-02T10:00+01:00"   # inclusive
+    assert _next("FREQ=WEEKLY;UNTIL=20261102T085959Z") is None
+    assert _next("FREQ=WEEKLY", "EXDATE;TZID=Europe/Berlin:20261102T100000")[0] == "2026-11-09T10:00+01:00"
+
+
+def test_daily_monthly_and_yearly_rules():
+    sat = datetime(2026, 10, 31, 12, 0, tzinfo=BERLIN)
+    assert _next("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", after=sat)[0] == "2026-11-02T10:00+01:00"
+    assert _next("FREQ=MONTHLY")[0] == "2026-11-05T10:00+01:00"
+    assert _next("FREQ=MONTHLY;BYDAY=1TU")[0] == "2026-11-03T10:00+01:00"
+    assert _next("FREQ=MONTHLY;BYDAY=-1FR")[0] == "2026-11-27T10:00+01:00"
+    assert _next("FREQ=MONTHLY;BYMONTHDAY=31")[0] == "2026-12-31T10:00+01:00"   # November has no 31st
+    assert _next("FREQ=YEARLY")[0] == "2027-10-05T10:00+02:00"
+
+
+def test_an_occurrence_in_progress_is_still_next():
+    during = datetime(2026, 11, 2, 10, 15, tzinfo=BERLIN)
+    assert _next("FREQ=DAILY", after=during)[0] == "2026-11-02T10:00+01:00"
+
+
+def test_an_all_day_series_and_a_floating_one():
+    assert _next("FREQ=WEEKLY", start="20261005", end="20261006",
+                 after=datetime(2026, 11, 2, 18, 0)) == ("2026-11-02T00:00", "2026-11-03T00:00")
+    inv = ics.parse("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:f\r\nDTSTART:20261005T100000\r\n"
+                    "RRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+    assert ics.next_occurrence(inv, datetime(2026, 11, 1, 12, 0))[0] == datetime(2026, 11, 2, 10, 0)
+
+
+def test_a_rule_it_cannot_read_gives_none_not_a_wrong_date():
+    assert _next("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1") is None
+    assert _next("FREQ=WEEKLY;BYDAY=XX") is None
+    assert _next("FREQ=HOURLY") is None
+    assert _next("FREQ=YEARLY;INTERVAL=9000") is None                        # past year 9999
+
+
+def test_a_one_off_event_is_its_own_only_occurrence():
+    assert _next("") is None                                                 # Oct 5 is over
+    assert _next("", start="20261102T100000", end="20261102T103000")[0] == "2026-11-02T10:00+01:00"
 
 
 class _FakeImap:
