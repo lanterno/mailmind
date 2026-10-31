@@ -3741,7 +3741,7 @@ async function composeSend(sendAfter){
     if(state.account===payload.account&&/sent/i.test(state.folder)) loadCMessages();
   }catch(e){
     state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
-      body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,
+      body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
       autoCc:cmp.autoCc,subject0:cmp.subject0,participants:snap.participants,ack:snap.ack};
     showSendFloat("failed",ico("alert")+" Send failed — "+esc(e.message||""),true);
   }
@@ -3887,7 +3887,7 @@ function aiRewriteUndo(){
 function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
-    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, noSig:true,
+    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, noSig:true,
     autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
   state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; renderAttach();
   if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
