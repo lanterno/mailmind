@@ -976,6 +976,19 @@
   .sendpill.sending{background:color-mix(in srgb,var(--syncing) 14%,transparent);color:var(--syncing)}
   .sendpill.sent{background:color-mix(in srgb,var(--keep) 14%,transparent);color:var(--ok)}
   .sendpill.failed{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+  /* send-time check: sun gold = needs you, never --err (that stays the bad-address chip) */
+  .cmp-guard{flex:none;max-height:40vh;overflow:auto;margin:0 22px 12px;padding:10px 14px;border-radius:var(--r-sm);
+    background:var(--gold-wash);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold);
+    font-size:12.5px;animation:undoIn .16s ease}
+  .cmp-guard:focus{outline:none} .cmp-guard:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+  .cg-hd{margin:0 0 6px;font-weight:600}
+  .cg-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .cg-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .cg-line.cg-soft{color:var(--soft)}
+  .cg-fix{background:none;border:1px solid currentColor;border-radius:var(--r-xs);color:inherit;font:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;cursor:pointer}
+  .cg-foot{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .cg-hint{margin-right:auto;font-size:11.5px;color:var(--mute)}
+  .abtn.cg-arming{opacity:.55;cursor:default}
   .obn{font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;margin-left:1px}
   .tbtn.has-fail{color:var(--err)}
   .send-float{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:center;gap:10px;
@@ -1495,6 +1508,13 @@
     <div class="cmp-quote" id="cmpQuote" hidden></div>
     <div class="cmp-attach" id="cmpAttach" aria-live="polite"></div>
   </div>
+  <div class="cmp-guard" id="cmpGuard" role="group" aria-labelledby="cmpGuardHd" tabindex="-1" hidden>
+    <p class="cg-hd" id="cmpGuardHd">Not sent yet</p>
+    <ul class="cg-list" id="cmpGuardList"></ul>
+    <div class="cg-foot"><span class="cg-hint" id="cmpGuardHint"></span>
+      <button type="button" class="abtn" id="cmpGuardBack">Keep editing</button>
+      <button type="button" class="abtn prim" id="cmpGuardGo" aria-keyshortcuts="Meta+Enter Control+Enter">Send anyway</button></div>
+  </div>
   <div class="set-foot cmp-foot">
     <span class="sendpill" id="cmpPill" aria-live="polite"></span>
     <input type="file" id="cmpFile" multiple hidden>
@@ -1504,7 +1524,7 @@
     <button class="abtn" id="cmpDiscard" style="margin-left:auto">Discard</button>
     <button class="abtn" id="cmpSaveDraft" title="Save draft (⌘/Ctrl+S)">Save draft</button>
     <button class="abtn" id="cmpSchedule" title="Send later"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clock"/></svg> Later ▾</button>
-    <button class="abtn prim" id="cmpSend" title="Send (⌘/Ctrl+Enter)">Send ▸</button>
+    <button class="abtn prim" id="cmpSend" title="Send (⌘/Ctrl+Enter)" aria-keyshortcuts="Meta+Enter Control+Enter">Send ▸</button>
   </div>
 </div></div>
 
@@ -3287,12 +3307,18 @@ function composeOpen(opts){
   clearTimeout(_draftDwellT);   // composing: a pending dwell kick would draft the very message being answered by hand
   const senders=(state.sendAccounts&&state.sendAccounts.length)?state.sendAccounts:(state.accountsList||[]);
   if(!senders.length){ toast("No sending account configured — add one in Settings"); return; }
+  guardReset();
   const from=(opts.from&&senders.includes(opts.from))?opts.from:(senders.includes(state.account)?state.account:senders[0]);
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
     subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null,
     fwdAttach:opts.fwdAttach||0, attachments:[], idk:rid(), status:"idle", dirty:false,
-    _reading:new Map() };   // files still being read: id → name
+    _reading:new Map(),   // files still being read: id → name
+    autoCc:opts.autoCc?opts.autoCc.map(a=>String(a).toLowerCase()):null,   // a reply-all's copied-in people
+    subject0:opts.subject0!=null?opts.subject0:(opts.subject||""),         // the subject as it opened
+    _ack:{subject:!!(opts.ack&&opts.ack.subject),attach:!!(opts.ack&&opts.ack.attach),   // send-time checks already waved through
+      fanout:(opts.ack&&+opts.ack.fanout)||0,unchecked:false},
+    _guard:null };
   // dirty flips true only on an actual subject/body edit (input listeners) — so opening a
   // prefilled reply and pressing Esc never silently litters Drafts.
   $("#cmpFrom").innerHTML=senders.map(e=>
@@ -3321,7 +3347,7 @@ function sigFor(email){ return (state.signatures&&state.signatures[email])||stat
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
-  closeDraftMenu(); closeSendLaterMenu();
+  closeDraftMenu(); closeSendLaterMenu(); guardReset();
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(()=>toast("Saved to Drafts")); }  // auto-save on close
   state.compose=null;
@@ -3343,7 +3369,7 @@ async function replyTo(pk,all){
   if(all){ const seen=new Set([(toAddr||"").toLowerCase(),...state.myAddrs]);
     for(const a of [...parseAddrs(d.to),...parseAddrs(d.cc)]){ const k=a.toLowerCase();
       if(!seen.has(k)){ seen.add(k); cc.push(a); } } }
-  composeOpen({mode:all?"replyall":"reply", from:d.account, to, cc,
+  composeOpen({mode:all?"replyall":"reply", from:d.account, to, cc, autoCc:cc.slice(),
     subject:rePrefix(d.subject,"Re:"), origPk:pk,
     quote:{html:d.has_html?d.html:null, text:d.text, from:d.from_name||d.from_addr, date:d.date}});
 }
@@ -3365,8 +3391,9 @@ function commitChip(field,raw){
   (raw||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean).forEach(v=>{
     cmp[field].push({v,bad:!looksLikeAddr(v)}); cmp.dirty=true; });
   renderChips(field); const inp=fieldEl(field).querySelector(".ci"); if(inp)inp.focus();
+  guardStale();
 }
-function removeChip(field,i){ state.compose[field].splice(i,1); renderChips(field); fieldEl(field).querySelector(".ci").focus(); }
+function removeChip(field,i){ state.compose[field].splice(i,1); renderChips(field); fieldEl(field).querySelector(".ci").focus(); guardStale(); }
 /* ---------- recipient autocomplete (from your own mail history; all local) ---------- */
 let _acItems=[], _acIdx=-1, _acField=null, _acTimer=null;
 function acClose(){ const m=$("#acMenu"); if(m)m.remove(); _acItems=[]; _acIdx=-1; _acField=null; }
@@ -3392,13 +3419,13 @@ function addAttachments(files){
     if(total+f.size>25*1024*1024){ toast("Attachments too large (25 MB max)"); return; }
     total+=f.size; const r=new FileReader(), id=rid(); cmp._reading.set(id,f.name);
     r.onload=()=>{ cmp._reading.delete(id); cmp.attachments.push({filename:f.name, content_type:f.type||"application/octet-stream",
-      size:f.size, b64:(r.result+"").split(",")[1]||""}); cmp.dirty=true; if(state.compose===cmp)renderAttach(); };
+      size:f.size, b64:(r.result+"").split(",")[1]||""}); cmp.dirty=true; if(state.compose===cmp){ renderAttach(); guardStale(); } };
     r.onerror=r.onabort=()=>{ cmp._reading.delete(id);
-      if(state.compose===cmp){ toast(`Couldn’t add ${f.name}`); announce(`Couldn’t add ${f.name}.`); } };
+      if(state.compose===cmp){ toast(`Couldn’t add ${f.name}`); announce(`Couldn’t add ${f.name}.`); guardStale(); } };
     r.readAsDataURL(f);
   });
 }
-function removeAttachment(i){ state.compose.attachments.splice(i,1); renderAttach(); }
+function removeAttachment(i){ state.compose.attachments.splice(i,1); renderAttach(); guardStale(); }
 function renderAttach(){
   const cmp=state.compose, el=$("#cmpAttach"); if(!cmp){el.innerHTML="";return;}
   el.innerHTML=cmp.attachments.map((a,i)=>
@@ -3424,12 +3451,190 @@ function toggleQuote(){
 function setComposePill(){ const p=$("#cmpPill"); const cmp=state.compose;
   if(!cmp||cmp.status==="idle"){ p.className="sendpill"; p.textContent=""; return; }
   p.className="sendpill show "+cmp.status; p.textContent={sending:"↑ Sending…"}[cmp.status]||""; }
+/* ---------- send-time checks: one synchronous look before an irreversible send ----------
+   The pure block below (between the markers) touches no DOM and no state; test_send_guard.py runs
+   it in node. Lines are "confirm" (Send anyway after a short arm delay), "hard" (no way past it),
+   or "soft" (shown only alongside the others, never stops a send). */
+/* send-guard:pure:start */
+const GUARD_FANOUT=5, GUARD_ARM_MS=700, GUARD_SCAN_MAX=50000;
+// Sources are in folded form (NFD, marks removed, lowercase). Strong words fire in every mode;
+// weak ones only in a new message or a forward, where they're less likely to be about the thread.
+const _GW_STRONG=["attached","attaching","enclosed",
+  "(?:en )?pieces? jointes?","ci[-\\s]?jointe?s?","jointes?","en annexe",
+  "adjunt(?:o|a|os|as|ado|ada|ados|adas|e|amos)",
+  "(?:segue )?em anexo","segue anexo","anexad[oa]s?","anexei","anexamos",
+  "anbei","im anhang","beigefugt","angehangt","angefugt",
+  "in allegato","allegat[oaie]","allego","alleghiamo",
+  "bijgevoegd","bijgesloten","in de bijlage","als bijlage",
+  "[وفبلك]?(?:ال|ل)?(?:مرفق|ارفق|نرفق)[\\u0621-\\u064A]{0,3}"];
+const _GW_WEAK=["attach","attachments?","enclosures?","cover letter","lettres? de motivation",
+  "carta de presentacion","anexos?","anexar","carta de apresentacao","anhange?","begleitschreiben",
+  "lettera di accompagnamento","bijlagen?","sollicitatiebrief",
+  "[\\p{L}\\p{N}_-]+\\.(?:pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv|zip)"];
+const _gwRe=a=>new RegExp("(^|[^\\p{L}\\p{N}])("+a.join("|")+")(?![\\p{L}\\p{N}])","u");
+const _GW_S=_gwRe(_GW_STRONG), _GW_W=_gwRe(_GW_WEAK);
+const _GW_PJ=/(^|[^\p{L}\p{N}])(PJ)(?![\p{L}\p{N}])/u, _GW_CV=/(^|[^\p{L}\p{N}])(CV)(?![\p{L}\p{N}])/u;   // case-sensitive, on unfolded text
+const _RE_PFX=/^\s*(?:(?:re|fwd?|fw)\s*:\s*)+/i;
+function guardFold(s){ let t="", i=0; const map=[];   // map[k] = index in s of folded char k, so a match echoes as typed
+  for(const ch of String(s)){ const f=ch.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase();
+    for(let k=0;k<f.length;k++)map.push(i); t+=f; i+=ch.length; }
+  map.push(i); return {t,map}; }
+function guardTypedText(body,sigBlock){   // what you wrote: not the signature, not a quote
+  let s=String(body||"").replace(/\r\n?/g,"\n");
+  if(sigBlock&&s.endsWith(sigBlock)) s=s.slice(0,s.length-sigBlock.length);
+  const out=[];
+  for(const ln of s.split("\n")){
+    if(/^-- ?$/.test(ln)) break;                                   // signature separator
+    if(/^On .{0,300}wrote:\s*$/.test(ln)) break;                   // compose._attribution
+    if(/^-{5,} ?Forwarded message ?-{5,}\s*$/i.test(ln)) break;    // compose.forward_bodies banner
+    if(/^-{3,} ?Original Message ?-{3,}\s*$/i.test(ln)) break;     // a pasted Outlook quote
+    if(/^\s*>/.test(ln)) continue;
+    out.push(ln); }
+  return out.join("\n").slice(0,GUARD_SCAN_MAX); }
+function guardAttachWord(text,allowWeak){   // the attachment word as typed, or ""
+  const clean=String(text||"").replace(/(?:https?|ftp):\/\/\S+|www\.\S+|\S+@\S+/gi," ");   // attachment.cgi, attachments@…
+  const {t,map}=guardFold(clean);
+  const hit=(re,src,folded)=>{ const m=re.exec(src); if(!m)return ""; const a=m.index+m[1].length, b=a+m[2].length;
+    return folded?clean.slice(map[a],map[b]):clean.slice(a,b); };
+  return hit(_GW_S,t,true)||hit(_GW_PJ,clean,false)||(allowWeak?(hit(_GW_W,t,true)||hit(_GW_CV,clean,false)):""); }
+function guardSubjectEmpty(subject,mode){ const s=String(subject||"").trim();
+  return !s||(mode==="new"&&!s.replace(_RE_PFX,"").trim()); }   // a reply's inherited bare "Re:" is not empty
+function guardSubjectAuthored(subject,subject0,mode){ const f=x=>guardFold(String(x||"").replace(_RE_PFX,"")).t.trim();
+  return mode==="new"||f(subject)!==f(subject0); }               // "Re: Contract attached" is the other sender's
+function guardFanout(to,cc,mine){ const m=new Set(mine); return new Set([...to,...cc].filter(a=>a&&!m.has(a))).size; }
+function guardList(a){ if(a.length<=1)return a[0]||""; if(a.length===2)return a[0]+" and "+a[1];
+  if(a.length===3)return a[0]+", "+a[1]+" and "+a[2]; return a[0]+", "+a[1]+" and "+(a.length-2)+" more"; }
+// s: {mode, subject, subject0, body, sigBlock, nAttach, fwdAttach, reading:[name], sendAfter, now,
+//     to:[addr], cc:[addr], mine:[addr], autoCc:null|[addr], fresh:[addr], ack:{subject,attach,fanout}}
+// Addresses are lowercased bare addresses. Bcc is left out: it's hidden from the others and typed on purpose.
+function guardCheck(s){
+  if(s.reading.length) return [{key:"reading",block:"hard",name:s.reading[0],more:s.reading.length-1}];
+  const w=[];
+  if(s.sendAfter>0&&s.sendAfter<=s.now+5) w.push({key:"late",block:"hard",when:s.sendAfter});
+  if(!s.ack.subject&&guardSubjectEmpty(s.subject,s.mode)) w.push({key:"subject",block:"confirm"});
+  const has=s.nAttach>0||(s.mode==="forward"&&s.fwdAttach>0);   // the server re-attaches a forward's files
+  if(!has&&!s.ack.attach){ const weak=s.mode==="new"||s.mode==="forward";
+    const word=guardAttachWord(guardTypedText(s.body,s.sigBlock),weak)
+      ||(guardSubjectAuthored(s.subject,s.subject0,s.mode)?guardAttachWord(s.subject,weak):"");
+    if(word) w.push({key:"attach",block:"confirm",word}); }
+  if(s.mode==="replyall"){ const n=guardFanout(s.to,s.cc,s.mine);
+    if(n>GUARD_FANOUT&&n>(s.ack.fanout||0)){ const mine=new Set(s.mine);
+      const removable=s.autoCc?new Set(s.cc.filter(a=>s.autoCc.includes(a)&&!mine.has(a))).size:0;
+      w.push({key:"fanout",block:"confirm",n,removable}); } }
+  if(s.fresh.length) w.push({key:"new",block:"soft",addrs:s.fresh});
+  return w; }
+function guardBlocks(w){ return w.some(x=>x.block!=="soft"); }
+function guardHard(w){ return w.some(x=>x.block==="hard"); }
+function guardLine(w){   // → {text, fix:{kind,label}|null}; whenText for "late" is filled in by the caller
+  switch(w.key){
+    case "reading": return {text:`Still adding ${w.name}${w.more?` and ${w.more} more`:""}. Send again once ${w.more?"they’re":"it’s"} added.`, fix:null};
+    case "late": return {text:`The time you picked, ${w.whenText}, has passed.`, fix:{kind:"time",label:"Pick a new time"}};
+    case "subject": return {text:"There’s no subject.", fix:{kind:"subject",label:"Add a subject"}};
+    case "attach": return {text:`You wrote “${w.word}”, but nothing is attached.`, fix:{kind:"attach",label:"Attach a file"}};
+    case "fanout": return {text:`This reply goes to ${w.n} people.`,
+      fix:w.removable>0?{kind:"trim",label:`Remove the ${w.removable} copied from the original`}:{kind:"review",label:"Review recipients"}};
+    case "new": return {text:`New to you: ${guardList(w.addrs)}.`, fix:null};
+    case "unchecked": return {text:"The checks before sending couldn’t run.", fix:null};
+    case "norcpt": return {text:"Add at least one recipient.", fix:{kind:"to",label:"Add one"}};
+    case "bad": return {text:`“${w.v}” isn’t a valid address.${w.more?` ${w.more} more ${w.more===1?"needs":"need"} fixing too.`:""}`,
+      fix:{kind:"bad",label:"Edit it"}};
+  }
+  return {text:"",fix:null}; }
+/* send-guard:pure:end */
+let _guardArmT=null, _gsT=null;
+function guardOpen(){ return !!(state.compose&&state.compose._guard); }
+function guardSnapshot(cmp,sendAfter){
+  const n=x=>(addrOf(x.v)||x.v||"").toLowerCase();
+  return {mode:cmp.mode, subject:$("#cmpSubject").value, subject0:cmp.subject0, body:$("#cmpBody").value,
+    sigBlock:cmp._sigBlock||"", nAttach:cmp.attachments.length, fwdAttach:cmp.fwdAttach||0,
+    reading:[...cmp._reading.values()], sendAfter:sendAfter||0, now:Date.now()/1000,
+    to:cmp.to.map(n), cc:cmp.cc.map(n), mine:[...state.myAddrs], autoCc:cmp.autoCc, ack:cmp._ack, fresh:[]}; }
+function _guardFocusDesc(el){   // where to put focus back after Keep editing (chip inputs are re-rendered, so by field)
+  if(!el||!$("#composeModal").contains(el)||$("#cmpGuard").contains(el))return null;
+  return el.classList.contains("ci")?{field:el.dataset.cf}:{el}; }
+function _guardFocusEl(d,sendAfter){
+  if(d&&d.field)return fieldEl(d.field).querySelector(".ci");
+  if(d&&d.el&&d.el.isConnected&&!d.el.closest("[hidden]"))return d.el;
+  return sendAfter>0?$("#cmpSchedule"):$("#cmpBody"); }
+function guardSay(msg){   // clear, then set: an identical repeat is read again
+  const r=$("#srLive"); clearTimeout(_gsT); r.textContent=""; _gsT=setTimeout(()=>{r.textContent=msg;},150); }
+function paintSendBtn(mode){
+  const b=$("#cmpSend"), g=state.compose&&state.compose._guard, later=!!(g&&g.sendAfter);
+  if(mode==="plain"){ b.textContent="Send ▸"; b.title="Send (⌘/Ctrl+Enter)";
+    for(const x of [b,$("#cmpGuardGo")]){ x.removeAttribute("aria-disabled"); x.classList.remove("cg-arming"); } return; }
+  b.textContent=later?"Schedule anyway ▸":"Send anyway ▸";
+  b.title=later?`Schedule for ${fmtWhen(g.sendAfter)} anyway (⌘/Ctrl+Enter)`:"Send anyway (⌘/Ctrl+Enter)";
+  for(const x of [b,$("#cmpGuardGo")]){
+    if(mode==="arming"){ x.setAttribute("aria-disabled","true"); x.classList.add("cg-arming"); }
+    else { x.removeAttribute("aria-disabled"); x.classList.remove("cg-arming"); } } }
+function showSendGuard(warns,sendAfter,back,lead){
+  const cmp=state.compose; if(!cmp)return;
+  warns.forEach(w=>{ if(w.key==="late")w.whenText=fmtWhen(w.when); });
+  const hard=guardHard(warns), later=sendAfter>0;
+  cmp._guard={keys:warns.filter(x=>x.block!=="soft").map(x=>x.key), fanN:(warns.find(x=>x.key==="fanout")||{}).n||0,
+    sendAfter:sendAfter||0, back, hard, shownAt:performance.now()};
+  $("#cmpGuardHd").textContent=later?"Not scheduled yet":"Not sent yet";
+  const lines=warns.map(w=>({w,...guardLine(w)}));
+  $("#cmpGuardList").innerHTML=lines.map(({w,text,fix})=>`<li class="cg-line${w.block==="soft"?" cg-soft":""}"><span>${esc(text)}</span>`
+    +(fix?`<button type="button" class="cg-fix" data-gfix="${fix.kind}"${w.field?` data-gf="${w.field}"`:""}>${esc(fix.label)}</button>`:"")+`</li>`).join("");
+  const go=$("#cmpGuardGo"); go.hidden=hard; go.textContent=later?"Schedule anyway":"Send anyway";
+  $("#cmpGuardHint").textContent=hard?"Esc keeps editing":`⌘/Ctrl+Enter ${later?"schedules":"sends"} anyway · Esc keeps editing`;
+  $("#cmpGuard").hidden=false;
+  paintSendBtn(hard?"plain":"arming"); clearTimeout(_guardArmT);
+  if(!hard)_guardArmT=setTimeout(()=>{ if(guardOpen())paintSendBtn("armed"); },GUARD_ARM_MS);
+  $("#cmpGuard").focus();
+  const spoken=hard?"Press Escape to keep editing.":`Press Command or Control Enter to ${later?"schedule":"send"} anyway, or Escape to keep editing.`;
+  guardSay((lead?lead+" ":"")+lines.map(l=>l.text).join(" ")+" "+spoken); }
+function guardReset(){   // DOM only; safe with no composer open
+  clearTimeout(_guardArmT); const g=$("#cmpGuard"); g.hidden=true; $("#cmpGuardList").innerHTML=""; paintSendBtn("plain"); }
+function hideSendGuard(){
+  const had=$("#cmpGuard").contains(document.activeElement);
+  if(state.compose)state.compose._guard=null;
+  guardReset(); if(had)$("#cmpSend").focus(); }
+function dismissSendGuard(){   // Esc, Keep editing, Back: return to where you were
+  const g=state.compose&&state.compose._guard; if(!g)return;
+  const t=_guardFocusEl(g.back,g.sendAfter); hideSendGuard(); if(t)t.focus(); }
+function guardStale(){   // any real edit retires the strip; Send checks again from scratch
+  const cmp=state.compose, g=cmp&&cmp._guard; if(!g)return;
+  if(g.keys.includes("reading")&&cmp._reading.size)return;   // still reading: the strip stays until the file is in
+  hideSendGuard(); }
+function _guardRun(cmp,sendAfter){
+  try{ return guardCheck(guardSnapshot(cmp,sendAfter)); }
+  catch(err){ console.error("[guard]",err); return cmp._ack.unchecked?[]:[{key:"unchecked",block:"confirm"}]; } }
+function confirmSendGuard(src,e){
+  const cmp=state.compose, g=cmp&&cmp._guard; if(!g||g.hard)return;
+  if((e&&e.repeat)||performance.now()-g.shownAt<GUARD_ARM_MS)return;   // a double-click (the strip shifts the layout under it) or held keys never confirm
+  const now=_guardRun(cmp,g.sendAfter), conf=now.filter(x=>x.block==="confirm"), fan=now.find(x=>x.key==="fanout");
+  if(guardHard(now)||conf.some(x=>!g.keys.includes(x.key))||(fan&&fan.n>g.fanN)){   // the time passed, or an AI edit changed things
+    showSendGuard(now,g.sendAfter,g.back,"Something changed."); return; }
+  g.keys.forEach(k=>{ if(k==="fanout")cmp._ack.fanout=Math.max(cmp._ack.fanout,g.fanN); else if(k in cmp._ack)cmp._ack[k]=true; });
+  const after=g.sendAfter; hideSendGuard(); composeSend(after); }
+function guardTrimCc(){   // keep only the Cc you added yourself; it's a plain reply after that
+  const cmp=state.compose; if(!cmp||!cmp.autoCc)return;
+  const n=x=>(addrOf(x.v)||x.v||"").toLowerCase(), before=cmp.cc.length;
+  cmp.cc=cmp.cc.filter(x=>!cmp.autoCc.includes(n(x))); const k=before-cmp.cc.length;
+  renderChips("cc"); cmp.mode="reply"; $("#cmpTitle").textContent="Reply"; cmp.dirty=true;
+  hideSendGuard(); $("#cmpSend").focus();
+  const m=guardFanout(cmp.to.map(n),cmp.cc.map(n),[...state.myAddrs]);
+  guardSay(`Removed ${k} ${k===1?"person":"people"}. This reply goes to ${m} ${m===1?"person":"people"}.`); }
+function guardFix(kind,btn){
+  const cmp=state.compose; if(!cmp)return;
+  if(kind==="trim"){ guardTrimCc(); return; }
+  hideSendGuard();
+  if(kind==="subject")$("#cmpSubject").focus();
+  else if(kind==="attach"){ $("#cmpAttachBtn").focus(); $("#cmpFile").click(); }
+  else if(kind==="review"){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; const i=fieldEl("cc").querySelector(".ci"); if(i)i.focus(); }
+  else if(kind==="time")openSendLaterMenu($("#cmpSchedule")); }
 async function composeSend(sendAfter){
   const cmp=state.compose; if(!cmp||cmp.status==="sending")return;
+  const back=_guardFocusDesc(document.activeElement);   // before the chip commit below moves focus
   ["to","cc","bcc"].forEach(f=>{ const inp=fieldEl(f).querySelector(".ci"); if(inp&&inp.value.trim()){ commitChip(f,inp.value); inp.value=""; } });
   cmp.subject=$("#cmpSubject").value; cmp.body=$("#cmpBody").value; cmp.from=$("#cmpFrom").value;
   if(!cmp.to.length&&!cmp.cc.length&&!cmp.bcc.length){ toast("Add at least one recipient"); return; }
   if([...cmp.to,...cmp.cc,...cmp.bcc].some(a=>a.bad)){ toast("Fix the highlighted address"); return; }
+  const warns=_guardRun(cmp,sendAfter);
+  if(guardBlocks(warns)){ showSendGuard(warns,sendAfter,back); return; }
+  if(cmp._guard)hideSendGuard();
   const scheduled=typeof sendAfter==="number"&&sendAfter>0;
   const payload={ account:cmp.from, mode:cmp.mode, idempotency_key:cmp.idk, draft_id:cmp.draftId||null,
     to:cmp.to.map(x=>x.v), cc:cmp.cc.map(x=>x.v), bcc:cmp.bcc.map(x=>x.v),
@@ -3437,7 +3642,8 @@ async function composeSend(sendAfter){
     attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})) };
   const replyPk=(cmp.mode==="reply"||cmp.mode==="replyall")?cmp.origPk:null;
   const snap={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
-    body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId};
+    body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
+    autoCc:cmp.autoCc,subject0:cmp.subject0,ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
   cmp.dirty=false; state.failedSend=null; composeClose(true);
   showSendFloat("sending", scheduled?(ico("clock")+" Scheduling for "+fmtWhen(sendAfter)+"…"):"↑ Sending…");
   try{
@@ -3452,7 +3658,8 @@ async function composeSend(sendAfter){
     if(state.account===payload.account&&/sent/i.test(state.folder)) loadCMessages();
   }catch(e){
     state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
-      body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments};
+      body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,
+      autoCc:cmp.autoCc,subject0:cmp.subject0,ack:snap.ack};
     showSendFloat("failed",ico("alert")+" Send failed — "+esc(e.message||""),true);
   }
 }
@@ -3596,7 +3803,8 @@ function aiRewriteUndo(){
 function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
-    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, noSig:true});
+    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, noSig:true,
+    autoCc:f.autoCc, subject0:f.subject0, ack:f.ack});
   state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; renderAttach();
   if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
@@ -3642,7 +3850,8 @@ function startUndoCountdown(oid, snap, rcpts){
 }
 function reopenSend(snap){
   composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
-    subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, noSig:true});
+    subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, noSig:true,
+    autoCc:snap.autoCc, subject0:snap.subject0, ack:snap.ack});
   state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; renderAttach();
   if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
@@ -4582,7 +4791,7 @@ $("#composeBtn").addEventListener("click",()=>composeOpen({mode:"new"}));
 $("#cmpClose").addEventListener("click",()=>composeClose());
 $("#cmpDiscard").addEventListener("click",composeDiscard);
 $("#cmpSaveDraft").addEventListener("click",composeSaveDraft);
-$("#cmpSend").addEventListener("click",()=>composeSend());
+$("#cmpSend").addEventListener("click",e=>guardOpen()?confirmSendGuard("footer",e):composeSend());
 $("#cmpSchedule").addEventListener("click",e=>{ e.stopPropagation(); openSendLaterMenu(e.currentTarget); });
 $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block when the From account changes
   const cmp=state.compose; if(!cmp)return; const from=e.target.value; cmp.from=from;
@@ -4594,7 +4803,7 @@ $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block 
   } else if(newBlk){                                       // none present (e.g. came from a no-sig account) -> append the new one
     ta.value=ta.value+newBlk; cmp.body=ta.value;
   }
-  cmp._sigBlock=newBlk; cmp._sigFrom=from;
+  cmp._sigBlock=newBlk; cmp._sigFrom=from; guardStale();
 });
 $("#cmpAiDraft").addEventListener("click",()=>aiDraftReply());
 $("#cmpAiMore").addEventListener("click",e=>{ e.stopPropagation(); if($("#draftMenu"))closeDraftMenu(true); else openDraftMenu(e.currentTarget); });
@@ -4603,6 +4812,9 @@ $("#cmpCcToggle").addEventListener("click",()=>{ $("#cmpCcRow").hidden=false; $(
 $("#cmpAttachBtn").addEventListener("click",()=>$("#cmpFile").click());
 $("#cmpFile").addEventListener("change",e=>{ addAttachments(e.target.files); e.target.value=""; });
 $("#composeModal").addEventListener("click",e=>{
+  const gf=e.target.closest("[data-gfix]"); if(gf){ guardFix(gf.dataset.gfix,gf); return; }
+  if(e.target.closest("#cmpGuardBack")){ dismissSendGuard(); return; }
+  if(e.target.closest("#cmpGuardGo")){ confirmSendGuard("strip",e); return; }
   const rm=e.target.closest("[data-rmchip]"); if(rm){ const [f,i]=rm.dataset.rmchip.split(":"); removeChip(f,+i); return; }
   const ra=e.target.closest("[data-rmatt]"); if(ra){ removeAttachment(+ra.dataset.rmatt); return; }
   if(e.target.closest("#cmpQToggle")){ toggleQuote(); return; }
@@ -4634,6 +4846,7 @@ $("#composeModal").addEventListener("input",e=>{
   },140);
 });
 $("#cmpBody").addEventListener("input",()=>{ if(state.compose)state.compose.dirty=true; });
+$("#composeModal").addEventListener("input",guardStale);   // any real edit retires an open send-time check
 $("#cmpSubject").addEventListener("input",()=>{ if(state.compose)state.compose.dirty=true; });
 $("#outboxBtn").addEventListener("click",toggleOutbox);
 $("#outboxFly").addEventListener("click",e=>{
@@ -4741,7 +4954,7 @@ function _hasDismissable(){ return !!_activeModal()||document.body.classList.con
 function _dismissTop(){   // close the single topmost dismissible layer; true if one closed
   const m=_activeModal();
   if(m){
-    if(m.id==="composeModal"){ if(composeIsOpen()){ if($("#draftMenu"))closeDraftMenu(true); else if($("#sendLaterMenu"))closeSendLaterMenu(); else composeClose(); } }
+    if(m.id==="composeModal"){ if(composeIsOpen()){ if($("#draftMenu"))closeDraftMenu(true); else if($("#sendLaterMenu"))closeSendLaterMenu(); else if(guardOpen())dismissSendGuard(); else composeClose(); } }
     else if(m.id==="palette")closePalette();
     else if(m.id==="settingsModal")settingsOpen(false);
     else if(m.id==="doPanel")doDismiss();
@@ -4791,7 +5004,9 @@ document.addEventListener("keydown",e=>{
       e.preventDefault(); if(e.key==="Escape")closeDraftMenu(true); return; }
     if($("#sendLaterMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // same for the Later menu
       e.preventDefault(); if(e.key==="Escape"){ closeSendLaterMenu(); $("#cmpSchedule").focus(); } return; }
-    if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); if(e.repeat)return; composeSend(); return; }   // a held chord sends once
+    if(guardOpen()&&e.key==="Escape"){ e.preventDefault(); dismissSendGuard(); return; }   // Esc keeps editing; a second Esc closes
+    if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); if(e.repeat)return;   // a held chord acts once
+      if(guardOpen())confirmSendGuard("key",e); else composeSend(); return; }
     if((e.metaKey||e.ctrlKey)&&(e.key==="s"||e.key==="S")){ e.preventDefault(); composeSaveDraft(); return; }
     if(e.key==="Escape"){ e.preventDefault(); composeClose(); return; }
     return;
