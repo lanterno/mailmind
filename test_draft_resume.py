@@ -40,7 +40,7 @@ def _fresh(uidv=777, appenduid=True):
     store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
     store.init()
     CALLS.clear()
-    CALLS.update(append=[], delete=[])
+    CALLS.update(append=[], delete=[], sent=[])
 
     def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None):
         _uid[0] += 1
@@ -50,8 +50,16 @@ def _fresh(uidv=777, appenduid=True):
 
     def delete(acct, folder, uid, uidvalidity=None):
         CALLS["delete"].append((acct["email"], folder, uid, uidvalidity))
+    def enqueue(built, meta):
+        CALLS["sent"].append((built, meta))
+        return len(CALLS["sent"]), True
     server.smtpsend.append_to_drafts = append
     server.smtpsend.delete_draft_uid = delete
+    server.outbox.enqueue = enqueue
+    server.ingest.fetch_body = _real_fetch_body
+
+
+_real_fetch_body = server.ingest.fetch_body
 
 
 def _save(account=ACCT, draft_id=None, **kw):
@@ -121,6 +129,37 @@ def _foreign(parts, headers=()):
     for p in parts:
         p(m)
     return m.as_bytes()
+
+
+def _payload(r, **over):
+    """What the composer sends for a draft it reopened from r (draft_resume's answer)."""
+    return {"mode": r["mode"], "account": r["account"], "to": r["to"], "cc": r["cc"], "bcc": r["bcc"],
+            "subject": r["subject"], "text": r["text"], "draft_id": r["draft_id"], "in_reply_to_pk": 99999,
+            "attachments": [{"filename": f["filename"], "content_type": f["content_type"], "b64": f["b64"]}
+                            for f in r["files"]],
+            "resume": {"in_reply_to": r["in_reply_to"], "references": r["references"], "tail_text": r["tail_text"]},
+            **over}
+
+
+def _sent(i=-1):
+    """(parsed message, meta, built) of a send the outbox recorder caught."""
+    built, meta = CALLS["sent"][i]
+    return message_from_bytes(built["raw"], policy=policy.default), meta, built
+
+
+def _parts(m):
+    text = m.get_body(preferencelist=("plain",))
+    html = m.get_body(preferencelist=("html",))
+    return (compose.lf(text.get_content()) if text else None), (html.get_content() if html else None)
+
+
+def _reply_resumed(**kw):
+    opk = _original()
+    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
+                              to=["Bo Park <bo@example.test>"], **kw)
+    r, code = _resume(pk)
+    assert code == 200, r
+    return opk, r
 
 
 def _row(did):
@@ -551,6 +590,123 @@ def test_resume_route_requires_csrf():
         srv.shutdown()
         srv.server_close()
         server.PORT = old_port
+
+
+def test_resumed_reply_sends_one_quote():
+    _fresh()
+    opk, r = _reply_resumed(bcc=["dee@example.test"])
+    res, code = server.do_send(_payload(r))
+    assert code == 200 and res["ok"], res
+    m, meta, built = _sent()
+    text, html = _parts(m)
+    assert text.count("wrote:") == 1 and text.startswith(OWN + "\n\nOn Mon, 02 Feb 2026"), text
+    assert html.count("<blockquote") == 1 and html.startswith(compose.own_html(OWN)), html
+    assert str(m["In-Reply-To"]) == "<orig1@example.test>", m["In-Reply-To"]
+    assert str(m["References"]) == "<root@example.test> <orig1@example.test>", m["References"]
+    assert m["Bcc"] is None and "dee@example.test" in built["envelope"], built["envelope"]
+    assert meta["in_reply_to_pk"] == opk and meta["draft_id"] == r["draft_id"], meta
+
+
+def test_resumed_forward_sends_each_file_once():
+    _fresh()
+    opk = _original()
+    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    r, _ = _resume(pk)
+    res, code = server.do_send(_payload(r, to=["dee@example.test"]))
+    assert code == 200, res
+    m, meta, _ = _sent()
+    files = [p.get_filename() for p in m.iter_attachments()]
+    text, _ = _parts(m)
+    assert files == ["map.pdf"], files
+    assert text.count("---------- Forwarded message ----------") == 1, text
+    assert m["In-Reply-To"] is None and meta["in_reply_to_pk"] is None, meta
+
+
+def test_send_never_fetches_the_original():
+    _fresh()
+    _, r = _reply_resumed()
+
+    def refuse(pk):
+        raise AssertionError(f"fetched pk {pk}")
+    server.ingest.fetch_body = refuse
+    res, code = server.do_send(_payload(r))
+    assert code == 200 and res["ok"], res
+
+
+def test_renumbered_original_still_gets_answered():
+    _fresh()
+    opk, r = _reply_resumed()
+    c = store.conn()
+    store.delete_message(c, opk)
+    c.commit()
+    c.close()
+    npk = _original(uid=8)
+    server.do_send(_payload(r))
+    assert _sent()[1]["in_reply_to_pk"] == npk
+
+
+def test_deleted_original_sends_threaded_without_answered():
+    _fresh()
+    opk, r = _reply_resumed()
+    c = store.conn()
+    store.delete_message(c, opk)
+    c.commit()
+    c.close()
+    res, code = server.do_send(_payload(r))
+    assert code == 200, res
+    m, meta, _ = _sent()
+    assert str(m["In-Reply-To"]) == "<orig1@example.test>" and meta["in_reply_to_pk"] is None, meta
+
+
+def test_changed_tail_sends_plain_text():
+    _fresh()
+    _, r = _reply_resumed()
+    p = _payload(r)
+    p["resume"]["tail_text"] = r["tail_text"].replace("Saturday", "Sunday")
+    server.do_send(p)
+    text, html = _parts(_sent()[0])
+    assert html is None and text == OWN + p["resume"]["tail_text"], (text, html)
+
+
+def test_whole_resume_sends_as_typed():
+    _fresh()
+    raw = _foreign([lambda m: m.set_content("On my way.\n\n> Shall we meet?\n")],
+                   [("In-Reply-To", "<orig1@example.test>")])
+    r, _ = _resume(_synced(raw, 12))
+    assert r["split"] == "whole", r
+    server.do_send(_payload(r, text=r["text"] + "\nSee you."))
+    m, _, _ = _sent()
+    text, html = _parts(m)
+    assert html is None and text == "On my way.\n\n> Shall we meet?\nSee you.\n", repr(text)
+    assert str(m["In-Reply-To"]) == "<orig1@example.test>"
+
+
+def test_resave_three_times_keeps_one_quote_and_the_bcc():
+    _fresh()
+    _, r = _reply_resumed(bcc=["dee@example.test"])
+    for i in range(3):
+        res, code = server.do_draft(_payload(r, text=r["text"] + f"\nEdit {i}."))
+        assert code == 200 and res["ok"], res
+        r, code = _resume(_synced(CALLS["append"][-1]["raw"], res["uid"]))
+        assert code == 200 and r["split"] == "exact", r
+    assert r["text"] == OWN + "\nEdit 0.\nEdit 1.\nEdit 2." and r["bcc"] == ["dee@example.test"], r
+    text, html = _parts(message_from_bytes(CALLS["append"][-1]["raw"], policy=policy.default))
+    assert text.count("wrote:") == 1 and html.count("<blockquote") == 1, (text, html)
+
+
+def test_bad_resume_shape_is_400():
+    _fresh()
+    _, r = _reply_resumed()
+    res, code = server.do_send(_payload(r, resume="x"))
+    assert (code, res["error"]) == (400, "bad draft data"), res
+    assert CALLS["sent"] == []
+
+
+def test_unflagged_reply_still_needs_its_original():
+    _fresh()
+    res, code = server.do_send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
+                                "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
+    assert (code, res["error"]) == (400, "missing original message"), res
 
 
 if __name__ == "__main__":
