@@ -1003,6 +1003,21 @@ def test_headers_that_wont_parse_fall_back_to_their_raw_values():
     assert (r["mode"], r["orig_pk"], r["to"]) == ("reply", opk, ["Bo Park <bo@example.test>"]), r
 
 
+def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
+    _fresh()
+    raw = ("From: Ada <ada@example.test>\r\nTo: José Ñúñez <jose@bücher.example>, Bo <bo@example.test>\r\n"
+           "Cc: =?utf-8?q?Zo=C3=AB?= <zoe@example.test>\r\nSubject: Re: Plans\r\n"
+           "Message-ID: <utf1@example.test>\r\n\r\nOn it.\r\n").encode()
+    r, code = _resume(_synced(raw, 22))
+    assert code == 200 and r["to"] == ["José Ñúñez <jose@bücher.example>", "Bo <bo@example.test>"], r
+    assert r["cc"] == ["Zoë <zoe@example.test>"], r["cc"]
+    res, code = server.do_send(_payload(r, in_reply_to_pk=None))
+    assert code == 200, res
+    m, _, built = _sent()
+    assert b"unknown-8bit" not in built["raw"] and b"xn--bcher-kva.example" in built["raw"], built["raw"][:400]
+    assert m["To"].addresses[0].display_name == "José Ñúñez", str(m["To"])
+
+
 def test_unreadable_draft_is_422_and_only_a_dead_server_502():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
