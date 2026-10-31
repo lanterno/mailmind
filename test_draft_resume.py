@@ -65,6 +65,7 @@ def _fresh(uidv=777, appenduid=True):
 
 _real_fetch_body = server.ingest.fetch_body
 _real_draft_live = server._draft_live
+_real_append = server.smtpsend.append_to_drafts
 
 
 def _save(account=ACCT, draft_id=None, **kw):
@@ -315,6 +316,95 @@ def test_from_change_then_two_saves_keeps_the_row_in_step():
     last = CALLS["append"][-1]
     assert last["account"] == "zed@example.test" and last["prev_uid"] == row["uid"], last
     assert len(CALLS["delete"]) == 1, CALLS["delete"]          # only the From change removed anything
+
+
+def test_from_change_removes_the_old_copy_only_after_the_new_one_is_saved():
+    _fresh()
+    did = _save()["draft_id"]
+    seen, record = [], server.smtpsend.delete_draft_uid
+    server.smtpsend.delete_draft_uid = lambda *a, **k: (seen.append(len(CALLS["append"])), record(*a, **k))
+    _save(account="zed@example.test", draft_id=did)
+    assert seen == [2], seen                                    # both appends had run
+
+
+def test_failed_save_under_a_new_from_keeps_the_old_copy():
+    _fresh()
+    did = _save()["draft_id"]
+    old = dict(_row(did))
+
+    def unreachable(acct, raw, **kw):
+        raise OSError("connection refused")
+    server.smtpsend.append_to_drafts = unreachable
+    res, code = server.do_draft({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
+                                 "subject": "Plans", "text": "Saturday works.", "draft_id": did})
+    assert code == 502 and not res["ok"], (code, res)
+    assert CALLS["delete"] == [], CALLS["delete"]
+    assert dict(_row(did)) == old
+
+
+def _other_folder_draft(uid=5):
+    """A draft another app keeps in a second drafts folder, registered the way the reader does."""
+    c = store.conn()
+    store.set_uidvalidity(c, ACCT, "Old drafts", 777)              # the same number as Drafts
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject) "
+              "VALUES (?,?,?,?,?,?,?,?,?)", (ACCT, "imap", "Old drafts", uid, "<old@example.test>", "to5",
+                                              1_800_000_000, ACCT, "From last year"))
+    c.commit()
+    row = c.execute("SELECT * FROM messages WHERE folder='Old drafts' AND uid=?", (uid,)).fetchone()
+    c.close()
+    return server._draft_info(row)["draft_id"]
+
+
+def test_copy_in_another_drafts_folder_is_removed_there():
+    _fresh()
+    did = _other_folder_draft()
+    _save(draft_id=did, text="Rewritten.")
+    last = CALLS["append"][-1]
+    assert (last["prev_uid"], last["prev_folder"]) == (5, "Old drafts"), last
+    assert CALLS["delete"] == [(ACCT, "Old drafts", 5, 777)], CALLS["delete"]
+    _save(draft_id=did, text="Rewritten again.")                # now tracked in Drafts: replaced in place
+    assert CALLS["append"][-1]["prev_folder"] == "Drafts" and len(CALLS["delete"]) == 1, CALLS
+
+
+class _FakeDraftsIMAP:
+    def __init__(self):
+        self.untagged_responses, self.calls = {"UIDVALIDITY": [b"777"]}, []
+
+    def select(self, folder, readonly=False):
+        self.calls.append(("select", folder))
+        return "OK", [b"1"]
+
+    def uid(self, *args):
+        self.calls.append(("uid",) + args)
+        return "OK", [b"5"]
+
+    def expunge(self):
+        self.calls.append(("expunge",))
+
+    def append(self, folder, flags, when, raw):
+        self.calls.append(("append", folder))
+        return "OK", [b"[APPENDUID 777 9] done"]
+
+    def logout(self):
+        pass
+
+
+def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
+    connect, find = server.smtpsend.accounts.connect, server.smtpsend.mailops._find_folder
+    try:
+        server.smtpsend.mailops._find_folder = lambda M, names: "Drafts"
+        for prev_folder, touched in (("Old drafts", False), ("Drafts", True), (None, True)):
+            fake = _FakeDraftsIMAP()
+            server.smtpsend.accounts.connect = lambda acct, **kw: fake
+            got = _real_append({"email": ACCT}, b"Subject: x\r\n\r\nhi\r\n", prev_uid=5, prev_uidvalidity=777,
+                               prev_msgid="<old@example.test>", prev_folder=prev_folder)
+            assert got == ("Drafts", 9, 777), got
+            uids = [c for c in fake.calls if c[0] == "uid"]
+            assert bool(uids) is touched, (prev_folder, fake.calls)
+            if prev_folder == "Old drafts":                     # not even searched for by Message-ID
+                assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
+    finally:
+        server.smtpsend.accounts.connect, server.smtpsend.mailops._find_folder = connect, find
 
 
 def test_unvouched_old_copy_is_left_alone():
