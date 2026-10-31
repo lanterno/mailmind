@@ -47,6 +47,85 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (prefilled recipients no longer dirty the compose, signature-only bodies are never saved), but
   `composeClose` still silently auto-saves and toasts. The specified Keep editing / Save draft /
   Discard prompt was never built.
+- **Draft saves that lose or duplicate text** · high value · effort S — Three gaps around
+  `composeSaveDraft`, all in the composer's own saves:
+  - A close-save that fails loses the message. `composeClose` tears the composer down before its
+    save resolves, and a failure leaves only a 2.6-second toast that isn't a live region.
+    Everything since the last good save is gone, and the whole message is lost if none ever
+    landed: closed within the first autosave tick, IMAP down the whole time (`do_draft` has no
+    offline queue), or a red chip that makes every save fail "invalid domain". The fix is to
+    snapshot the closed-over composer into `state.failedSend` and `showSendFloat("failed", …)`,
+    so the existing Edit (`reopenFailed` → `makeRoom`) brings it back, and to `announce` it.
+    This is the safety half of the three-way Esc prompt above.
+  - Typing during a save is dropped. The save clears `cmp.dirty` when it resolves, even if keys,
+    or a file's `FileReader` onload, landed while it was in flight. `autosaveTick`,
+    `composeClose` and `makeRoom` all skip a composer that isn't dirty, so an Esc right after
+    closes it unsaved while the footer still says "Saved". `removeChip`, removing a file and
+    changing From never set `dirty` at all. The fix is an edit counter bumped wherever `dirty` is
+    set, with the save clearing `dirty` only if the counter hasn't moved.
+  - Overlapping saves orphan or duplicate a copy. Nothing serializes saves: an autosave tick
+    during a slow manual or closing save, a double Cmd-S, two tabs. `do_draft` reads `prev`
+    before taking `_ops_lock`, so the second save expunges the UID the first already replaced
+    and the first save's copy is left in Drafts untracked, surviving the eventual Send (repro:
+    UIDs 2 and 3 kept, the row on 3). Two first saves both carry `draft_id: null` and make two
+    rows and two copies. A Send during a first save leaves that save's copy behind. The fix is a
+    per-composer `cmp._saving` promise that later saves, `autosaveTick` and `composeSend` wait
+    on. On the server, read `prev` (and `same`) inside the lock, and dedupe first saves on the
+    composer's `idempotency_key`, which `do_draft` ignores today.
+- **Drafts are recognised by folder name** · high value · effort M — `_draft_info` and
+  `draft_resume` treat any folder with "draft" anywhere in its name as Drafts ("Contract drafts",
+  "Clients/Draft agreements", every subfolder of one), and never check `\Draft`. Viewing a message
+  there registers a `drafts` row for it and swaps Reply for Edit and Delete. Edit opens a received
+  message that has a text/plain body as a draft. Discard (`do_draft`'s delete branch) or a Send
+  (the outbox cleanup) then STOREs `\Deleted` and UID EXPUNGEs it, with no Undo. That is
+  permanent on Dovecot-style servers; on Gmail it only drops the label. The registered row also
+  adds the folder to the "new to you" lookup's draft folders, so sent mail filed there stops
+  vouching for its recipients. A localized Drafts folder ("Entwürfe", "Brouillons") gets no Edit
+  at all. The fix: resolve the account's Drafts folder by the `\Drafts` special-use attribute
+  first and an exact name second (`mailops._find_folder` prefers name hints today), or go by the
+  message's own `\Draft` flag. Give Discard and the outbox cleanup the guard `do_draft` uses for a
+  copy elsewhere, `raw_sha` or `_flagged_draft`. Keep both checks, because a MailMind save that
+  never synced has no `messages` row to be flagged.
+- **The Drafts list never updates** · high value · effort M — `messages_in` syncs a folder only
+  when it has no `sync_state` row, i.e. the first time it is ever opened against this database.
+  `do_draft`, Discard and the outbox's draft cleanup change IMAP and `drafts` but never
+  `messages`. So after a save, a re-save, a Send or a Discard the old copy stays listed and the
+  new one never appears; a brand-new message's draft doesn't show at all. `MAILMIND_WARM_FOLDERS`
+  makes it worse: `sync_folder(full=False)` only adds, so one draft piles up as several rows. No
+  sync prunes Drafts, because `reconcile_account` is INBOX-only. A ghost row goes only when Edit
+  gets its 409, or the user trashes or moves it. The fix, under `_ops_lock`:
+  - delete each replaced row by `(account, folder, uid)`, including the copy `append_to_drafts`
+    finds by Message-ID and removes without returning it;
+  - pick up the new copy from APPENDUID, or an incremental sync when there is none;
+  - prune Drafts on open with a folder-parameterised reconcile that keeps its UIDVALIDITY and
+    empty-SEARCH guards.
+
+  Then reload a Drafts list that is on screen, since `composeDiscard` refreshes only the rail.
+- **Fresh replies name their original by pk** · medium value · effort M — A reply or forward that
+  wasn't reopened from Drafts sends `in_reply_to_pk` on every save and send, and `_compose_spec`
+  resolves it with `store.get_message`. pks are AUTOINCREMENT and never reused, so it can't hit
+  the wrong message. But once that row is deleted (another client moved it and reconcile pruned
+  it, a UIDVALIDITY reset, expiry, a queued archive draining), every save and send fails "original
+  message not found". The failed send's Edit reopens with the same pk, and closing loses whatever
+  wasn't saved. The outbox has the same gap: `_side_effects` looks the original up by pk after the
+  10-second grace window. Archiving the thread right after replying (`mailops.archive_message`
+  deletes the row) therefore silently skips `\Answered` and the follow-up record. Reopened drafts
+  already avoid this through the `resume` contract. The fix: after the first save, have the
+  server hand back the threading headers and quote so the composer switches to `resume`. Store the
+  original's Message-ID and `thread_id` on the outbox row (append-only migration), and set
+  `\Answered` by Message-ID in whatever folder it moved to (the `mailops._uid_by_msgid` pattern
+  `apply_queued_mutation` uses).
+- **Outgoing replies carry the reader's quote fold** · medium value · effort S —
+  `compose.reply_bodies` and `forward_bodies` run the original's HTML through
+  `sanitize_html.sanitize`. That function wraps the first top-level blockquote that follows text
+  in the reader-only `<details class="mm-quote"><summary>··· quoted text</summary>`, so it goes
+  out in the HTML part of replies to Gmail, Apple Mail and Thunderbird threads. Recipients see
+  either an unstyled collapsed toggle or a stray "··· quoted text" line, and with Gmail's
+  `gmail_quote` wrapper the element is mis-nested. `_plain_from_html` leaks the same words into
+  the plain part when the original was HTML-only. Saved drafts keep it in `drafts.tail_html`,
+  which the `resume` branch re-sends without sanitizing. The fix is a `fold=False` switch on
+  `sanitize` for the three compose callers, a strip of the wrapper from stored `tail_html`, and a
+  compose test that neither MIME part contains `<details`.
 
 ## AI that acts, not just describes
 
@@ -260,6 +339,46 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **High-contrast toggle** · low value · effort S — Unbuilt: no `body.hc`, no preference. Lower
   priority now that the base palette passes AA, but the light theme proved the pattern — one
   body-class override of the `:root` token block is the whole feature.
+- **An email attached to an email** · medium value · effort M — To the `email` package a
+  message/rfc822 part is a container, so `mailparse.extract_part`'s `get_payload(decode=True) or
+  b""` gives 0 bytes. The chip shows no size and the download is an empty .eml. `export_eml`
+  skips it. Forwarding with files (`server._extract_attachments`) sends it as an empty base64
+  message/rfc822 part, which RFC 2046 forbids, and a .eml attached in the composer goes out the
+  same way. `parse()` also walks into it. The inner email's files are listed and forwarded as the
+  outer's own. When the outer message has no text/plain, the inner email's text becomes the
+  stored text: search, the snippet, a reply's plain quote, and the reader body too if there is no
+  HTML either. `_resume_files` refuses drafts holding one until this is fixed. The fix: serve the
+  inner message's bytes (a compat32 generator with CRLF, to stay close to the original) for size,
+  download and forward. Attach message/rfc822 in `build_message` as a parsed message, which goes
+  out 8bit, for forwards and uploads alike. Stop listing inner files while keeping the walk's part
+  indexes stable. Then lift the refusal.
+- **Folded subjects and senders** · medium value · effort S — `ingest._process` reads headers with
+  compat32 and `ingest.dec` turns a fold's CR/LF into spaces. "…items⏎ for next week" is stored
+  with three spaces. HTML hides the run, but Reply and Forward put it into the subject box and the
+  reply goes out with it. A fold next to an encoded-word loses its whitespace in `decode_header`
+  instead ("Re:مرحبا", "Café menufor next week"), and that shows everywhere: the list, the
+  reader, search tokens and AI prompts. A fold inside a quoted From display name makes
+  `parseaddr` return `('', 'Bo')`, losing the sender's address. `manage.py` carries its own copy
+  of `dec`. The fix is to unfold `\r?\n[ \t]+` to a single space before decoding, in both copies of
+  `dec` and before `parseaddr`, not merely drop the CRLF: a kept tab is later deleted by
+  `compose._clean`, gluing the words. Existing rows heal on a full resync.
+- **An encoded CR or LF in To, Cc or Reply-To** · medium value · effort S — Under
+  `policy.default` an encoded-word that decodes to CR or LF in an address header makes
+  `headerregistry` raise, and `mailparse._hdr` doesn't guard `msg.get`. So `parse()` raises for
+  the whole message. `ingest.fetch_body` never stores the body, `message_body` returns 500, and
+  the reader's Retry fails the same way. Reply and Forward can't load it and its body is never
+  indexed. `body_backfill_tick` re-downloads it every cycle under `_ops_lock`, and twelve such
+  messages among the newest unfetched bodies starve everything older. From is safe, since ingest
+  reads it with compat32. The fix: fall back in `_hdr` to the raw value from `raw_items()`,
+  unfolded, decoded and with CR/LF turned to spaces, the idea `server._hdr_text` already uses.
+- **format=flowed is read as hard breaks** · low value · effort S — Nothing reads the `format` or
+  `DelSp` parameters. A text-only flowed message shows in the reader's `<pre>` hard-wrapped at
+  about 72 columns, with a stray space on each space-stuffed line, and DelSp=yes splits words.
+  Search and summaries are barely touched. Another app's flowed draft reopens whole with its soft
+  breaks fixed in, then goes out without `format=flowed`. The fix is an RFC 3676 decoder in
+  `mailparse._decode` and `ingest.text_body`. Per line: count the quote depth, then drop one
+  stuffing space, then join a line ending in a space to the next one at the same depth (deleting
+  the space when `delsp=yes`). Never join the `-- ` signature line.
 
 ## Setup, first run and housekeeping
 
@@ -316,8 +435,13 @@ implementation.
 
 ## Next up
 
-1. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+1. **Draft saves that lose or duplicate text** (high / S) — closing during a failed save, or
+   typing while one is in flight, silently loses what was written. These are the last ways the
+   composer drops a user's words.
+2. **Drafts are recognised by folder name** (high / M) — Discard on a message opened from any folder
+   named like "Contract drafts" expunges it with no Undo.
+3. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
    `_ops_lock` per account**, the structural half.
-2. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+4. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.
