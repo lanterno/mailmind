@@ -1256,14 +1256,18 @@ def flagged_draft(c, account, folder, uid):
     return bool(r and r["draft"])
 
 
-def draft_repoint(c, did, folder, uid, uidvalidity, forget=False):
+def draft_repoint(c, seen, folder, uid, uidvalidity, forget=False):
     """Track the copy that was opened rather than the one last saved: another app re-saved the
-    draft under the same Message-ID, so the next save or send must replace this one. forget: the
+    draft under the same Message-ID, so the next save or send must replace this one. seen: the
+    drafts row as read; a save that has moved it on since wins, and nothing changes. forget: the
     copy isn't byte-for-byte what MailMind saved, so the recorded text and Bcc no longer describe
-    it. The recorded quote stays; it is only ever trusted where the text still ends with it."""
-    c.execute("UPDATE drafts SET folder=?, uid=?, uidvalidity=? WHERE id=?", (folder, uid, uidvalidity, did))
-    if forget:
-        c.execute("UPDATE drafts SET own_text=NULL, bcc=NULL, raw_sha=NULL WHERE id=?", (did,))
+    it. The recorded quote stays; it is only ever trusted where the text still ends with it.
+    Returns whether the row was re-pointed."""
+    cur = c.execute("UPDATE drafts SET folder=?, uid=?, uidvalidity=? WHERE id=? AND uid IS ? AND message_id IS ?",
+                    (folder, uid, uidvalidity, seen["id"], seen["uid"], seen["message_id"]))
+    if cur.rowcount and forget:
+        c.execute("UPDATE drafts SET own_text=NULL, bcc=NULL, raw_sha=NULL WHERE id=?", (seen["id"],))
+    return bool(cur.rowcount)
 
 
 def draft_delete(c, did):

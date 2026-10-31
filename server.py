@@ -2717,7 +2717,7 @@ def draft_resume(body):
     bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
     if not same_copy:                                    # the next save or send replaces the copy opened
         c = store.conn()
-        store.draft_repoint(c, did, row["folder"], row["uid"], cur, forget=not exact)
+        store.draft_repoint(c, d, row["folder"], row["uid"], cur, forget=not exact)
         c.commit()
         c.close()
     subject = _hdr_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
