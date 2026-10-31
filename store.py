@@ -1243,6 +1243,16 @@ def draft_set_resume(c, did, own_text, tail_text, tail_html, bcc, raw_sha):
               (own_text, tail_text, tail_html, bcc, raw_sha, did))
 
 
+def draft_repoint(c, did, folder, uid, uidvalidity, forget=False):
+    """Track the copy that was opened rather than the one last saved: another app re-saved the
+    draft under the same Message-ID, so the next save or send must replace this one. forget: the
+    copy isn't byte-for-byte what MailMind saved, so the recorded text and Bcc no longer describe
+    it. The recorded quote stays; it is only ever trusted where the text still ends with it."""
+    c.execute("UPDATE drafts SET folder=?, uid=?, uidvalidity=? WHERE id=?", (folder, uid, uidvalidity, did))
+    if forget:
+        c.execute("UPDATE drafts SET own_text=NULL, bcc=NULL, raw_sha=NULL WHERE id=?", (did,))
+
+
 def draft_delete(c, did):
     c.execute("DELETE FROM drafts WHERE id=?", (did,))
 

@@ -2574,9 +2574,9 @@ def draft_resume(body):
     d = store.draft_get(c, did)
     cur = store.get_uidvalidity(c, row["account"], row["folder"])
     c.close()
-    exact = bool((d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
-                  and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
-                 or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
+    same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
+                 and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
+    exact = bool(same_copy or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
     split = compose.resume_split(parsed["text"], {"own_text": d["own_text"], "tail_text": d["tail_text"]}, exact)
     if split is None:
         return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
@@ -2606,6 +2606,11 @@ def draft_resume(body):
     had = {key(x) for x in hdr}
     missing = [x for x in (json.loads(d["bcc"]) if d["bcc"] else []) if key(x) and key(x) not in had]
     bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
+    if not same_copy:                                    # the next save or send replaces the copy opened
+        c = store.conn()
+        store.draft_repoint(c, did, row["folder"], row["uid"], cur, forget=not exact)
+        c.commit()
+        c.close()
     return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"], "subject": row["subject"] or "",
             "to": _hdr_chips(msg, "To"), "cc": _hdr_chips(msg, "Cc"), "bcc": bcc,
             "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
