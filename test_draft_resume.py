@@ -1038,6 +1038,25 @@ def test_replaced_copy_is_refused_and_drafts_resynced():
     assert gone and synced == [(ACCT, "Drafts", True)], synced
 
 
+def test_a_draft_waiting_in_the_outbox_is_not_reopened():
+    _fresh()
+    pk, res = _saved_and_synced(text="Send this tomorrow.")
+    c = store.conn()
+    oid, _ = store.outbox_insert(c, {"account": ACCT, "idempotency_key": "k-later", "message_id": "<later@example.test>",
+                                     "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Plans",
+                                     "raw": b"x", "next_attempt_at": 4_000_000_000, "draft_id": res["draft_id"],
+                                     "created_at": "2026-11-01T10:00:00"})
+    c.commit()
+    c.close()
+    r, code = _resume(pk)
+    assert code == 423 and "in the outbox" in r["error"], (code, r)
+    c = store.conn()
+    store.outbox_cancel(c, oid)
+    c.commit()
+    c.close()
+    assert _resume(pk)[1] == 200                                # cancelled: free to edit
+
+
 def test_unreachable_server_opens_the_local_copy():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
