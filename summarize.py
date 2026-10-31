@@ -9,8 +9,10 @@ import sys
 import os
 import re
 import json
+import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -95,6 +97,51 @@ def model_label():
     return MODEL or "claude-cli"
 
 
+_last = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for status()
+
+
+def _plain(e):
+    """A failed call's reason in words the setup card can show (never the prompt)."""
+    s = str(e)
+    if isinstance(e, FileNotFoundError):
+        return "the claude command isn't installed"
+    if " 401" in s or "authentication" in s.lower() or "invalid x-api-key" in s.lower():
+        return "the API key was rejected"
+    if "login" in s.lower() or "logged in" in s.lower():
+        return "the claude command isn't signed in"
+    if " 429" in s or "rate" in s.lower():
+        return "rate-limited for now"
+    if isinstance(e, subprocess.TimeoutExpired) or "timed out" in s.lower():
+        return "it timed out"
+    return s[:140] or type(e).__name__
+
+
+def _noted(fn):
+    """Record each call's outcome in _last, passing its result or exception through unchanged."""
+    def run(*a, **kw):
+        try:
+            out = fn(*a, **kw)
+        except Exception as e:
+            _last.update(ok=False, ts=int(time.time()), error=_plain(e))
+            raise
+        _last.update(ok=True, ts=int(time.time()), error="")
+        return out
+    run.__name__, run.__doc__ = fn.__name__, fn.__doc__
+    return run
+
+
+def status():
+    """What the UI says about AI, with no call made: the engine ("api", "cli" or "none" when
+    neither a key nor the claude command is there), its model, where the key came from, and how
+    the most recent call went (last_ok None until one has run)."""
+    eng = engine()
+    ready = bool(claude_api.key()) if eng == "api" else bool(shutil.which("claude"))
+    return {"engine": eng if ready else "none", "model": model_label() if ready else "",
+            "key_from": claude_api.key_source() if ready and eng == "api" else "",
+            "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"]}
+
+
+@_noted
 def call_claude(prompt):
     """Plain text result (used by summarize_thread). Unchanged signature."""
     if engine() == "api":
@@ -113,6 +160,7 @@ def _loose_json(out):
     return json.loads(m.group(0)) if m else {}
 
 
+@_noted
 def call_claude_json(prompt, schema, effort=None):
     """Ask Claude for a JSON object matching `schema`. Returns the validated dict from
     structured output (the API's output_config.format, or the CLI's --json-schema), else
