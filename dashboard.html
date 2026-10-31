@@ -3357,7 +3357,7 @@ function composeClose(force){
   if(typeof acClose==="function")acClose();
   closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
-  if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(()=>toast("Saved to Drafts")); }  // auto-save on close
+  if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); }); }  // auto-save on close
   state.compose=null;
   $("#composeModal").classList.remove("show");
   _syncScrim();
@@ -4408,18 +4408,19 @@ function composePayload(){
     subject:cmp.subject, text:cmp.body, in_reply_to_pk:cmp.origPk,
     attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})) };
 }
-async function composeSaveDraft(silent){
-  const cmp=state.compose; if(!cmp)return; const payload=composePayload();
+async function composeSaveDraft(silent){   // → true once saved
+  const cmp=state.compose; if(!cmp)return false; const payload=composePayload();
   // never litter Drafts with an empty / signature-only message (shared by manual save, autosave, close)
   const bodyTrim=(payload.text||"").replace(cmp._sigBlock||"","").trim();
   if(!payload.to.length&&!payload.cc.length&&!payload.bcc.length&&!(payload.subject||"").trim()&&!bodyTrim){
-    if(!silent)toast("Nothing to save yet"); return;
+    if(!silent)toast("Nothing to save yet"); return false;
   }
   try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
     cmp.draftId=r.draft_id; cmp.dirty=false; cmp._lastSaveHash=_draftHash(payload);
     if(silent){ $("#cmpSaved").textContent="Saved "+new Date().toTimeString().slice(0,5); }
-    else toast("Draft saved"); }
-  catch(e){ if(!silent)toast("Couldn’t save draft: "+(e.message||"")); }
+    else toast("Draft saved");
+    return true; }
+  catch(e){ if(!silent)toast("Couldn’t save draft: "+(e.message||"")); return false; }
 }
 function _cheapHash(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
 function _draftHash(p){ return _cheapHash(JSON.stringify([p.to,p.cc,p.bcc,p.subject,p.text,p.account,(p.attachments||[]).map(a=>a.filename)])); }
