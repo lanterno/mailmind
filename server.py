@@ -15,6 +15,8 @@ import zlib
 import shlex
 import math
 import email.message
+import email.policy
+import email.utils
 import secrets
 import hmac
 import hashlib
@@ -2422,6 +2424,126 @@ def do_draft(body):
     return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
 
 
+_RESUME_MODES = ("new", "reply", "replyall", "forward")
+_RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
+
+
+def _hdr_chips(msg, name):
+    """One address header of a parsed draft as composer chips, de-duplicated by address."""
+    out, seen = [], set()
+    for h in msg.get_all(name) or []:
+        try:
+            pairs = [(a.display_name, a.addr_spec) for a in h.addresses]
+        except Exception:
+            pairs = email.utils.getaddresses([str(h)])
+        for n, a in pairs:
+            if "@" not in (a or "") or a.lower() in seen:
+                continue
+            seen.add(a.lower())
+            out.append(compose.addr_chip(n, a))
+    return out
+
+
+def draft_resume(body):
+    """Open a saved draft back into the composer from its own stored bytes: your text, the quote
+    or forwarded section it already carries (as text), every file as base64, To/Cc/Bcc as chips
+    and its own threading headers. The original is looked up by (account, Message-ID) for the
+    composer's sake only: sending a reopened draft never needs it. What MailMind recorded at its
+    last save (_m20_draft_resume) is trusted only for the very copy it saved. Returns (result, code)."""
+    import base64
+    import mimetypes
+    try:
+        pk = int(body.get("pk"))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "Missing draft."}, 400
+    c = store.conn()
+    row = store.get_message(c, pk)
+    c.close()
+    if not row:
+        return {"ok": False, "error": "That draft is no longer in Drafts."}, 404
+    if "draft" not in (row["folder"] or "").lower():
+        return {"ok": False, "error": "That message isn’t a draft."}, 400
+    try:
+        accounts.get(row["account"])
+    except KeyError:
+        return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
+    unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
+    try:
+        with _ops_lock:
+            ingest.fetch_body(pk)
+    except Exception as e:
+        print(f"[resume] fetch failed: {_sanitize_conn_error(e)}", flush=True)
+        return unreachable, 502
+    c = store.conn()
+    raw = store.get_body(c, pk)
+    c.close()
+    if not raw:
+        return unreachable, 502
+    msg = email.message_from_bytes(raw, policy=email.policy.default)
+    parsed = mailparse.parse(raw)
+    elsewhere = " Edit it in the app that made it."
+    if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
+        return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
+                                      "reattach yet." + elsewhere}, 422
+    files, total, inline = [], 0, 0
+    for a in parsed["attachments"]:
+        data, ct = mailparse.extract_part(raw, a["part_id"])
+        data = data or b""
+        total += len(data)
+        if total > MAX_ATTACH_BYTES:
+            return {"ok": False, "error": "This draft’s files add up to more than 25 MB, more than MailMind "
+                                          "can send." + elsewhere}, 422
+        name = a["filename"]
+        if a["content_id"] and a["is_inline"]:
+            inline += 1                                  # a picture in the text: it comes back as a file
+            if re.fullmatch(r"inline-\d+", name):
+                name += mimetypes.guess_extension(ct or "") or ""
+        files.append({"filename": name, "content_type": ct or a["content_type"] or "application/octet-stream",
+                      "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
+    did = _draft_info(row)["draft_id"]                   # registers another app's draft
+    c = store.conn()
+    d = store.draft_get(c, did)
+    cur = store.get_uidvalidity(c, row["account"], row["folder"])
+    c.close()
+    exact = bool((d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
+                  and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
+                 or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
+    split = compose.resume_split(parsed["text"], {"own_text": d["own_text"], "tail_text": d["tail_text"]}, exact)
+    if split is None:
+        return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
+                                      "so its links and formatting aren’t lost."}, 422
+    own, tail, how = split
+    irt, refs = compose.thread_ids(msg.get("In-Reply-To"), msg.get("References"))
+    mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
+    if mode == "new" and irt:                            # MailMind's own new drafts never carry one
+        mode = "reply"
+    orig_pk, participants = None, []
+    if mode in ("reply", "replyall") and irt:
+        c = store.conn()
+        orow = store.get_message_by_msgid(c, row["account"], irt)
+        c.close()
+        if orow:
+            orig_pk = orow["pk"]
+            for a in [orow["from_addr"] or ""] + _RESUME_ADDR.findall(orow["recipients"] or ""):
+                a = a.strip().lower()
+                if a and a not in participants:
+                    participants.append(a)
+    def key(chip):
+        try:
+            return compose.parse_addr_list([chip])[0][1].lower()
+        except (ValueError, IndexError):
+            return ""
+    hdr = _hdr_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
+    had = {key(x) for x in hdr}
+    missing = [x for x in (json.loads(d["bcc"]) if d["bcc"] else []) if key(x) and key(x) not in had]
+    bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
+    return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"], "subject": row["subject"] or "",
+            "to": _hdr_chips(msg, "To"), "cc": _hdr_chips(msg, "Cc"), "bcc": bcc,
+            "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
+            "orig_pk": orig_pk, "participants": participants, "files": files, "split": how,
+            "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200
+
+
 # --------------------------------------------------------------------- snooze
 def _snooze_until(body):
     """Resolve a wake time (unix secs) from {preset} or {until}, in the server's LOCAL tz
@@ -3716,6 +3838,13 @@ class H(BaseHTTPRequestHandler):
                 except Exception as ex:
                     print(f"[ai] do-plan error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "plan failed"}, 500
+                self._json(res, code)
+            elif u.path == "/api/draft/resume":      # read-only: a saved draft, back into the composer
+                try:
+                    res, code = draft_resume(b if isinstance(b, dict) else {})
+                except Exception as ex:
+                    print(f"[resume] error: {type(ex).__name__}", flush=True)
+                    res, code = {"ok": False, "error": "Couldn’t open this draft."}, 500
                 self._json(res, code)
             elif u.path == "/api/contacts/known":   # read-only: which recipients you've exchanged mail with
                 try:
