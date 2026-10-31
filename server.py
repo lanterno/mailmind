@@ -2461,31 +2461,42 @@ _RESUME_MODES = ("new", "reply", "replyall", "forward")
 _RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
 
 
+_LIVE_TIMEOUT = 10
+
+
 def _draft_live(acct, folder, uid):
     """Is this exact draft copy still on the server? True, False, or None when that can't be told
     (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
-    replaced, and reopening it would put an older text over the newer one. The caller holds
-    _ops_lock."""
-    import pool
+    replaced, and reopening it would put an older text over the newer one. A stateless, read-only
+    probe with a short timeout, like the account test, so it needs no _ops_lock: a black-holed
+    host costs Edit seconds, not a minute of every other mail operation."""
     if uid is None:
         return None
     try:
-        with pool.borrow(acct) as M:
-            typ, _ = M.select(f'"{folder}"', readonly=True)
-            if typ != "OK":
-                return None
-            cur = ingest._uidvalidity(M)
-            c = store.conn()
-            known = store.get_uidvalidity(c, acct["email"], folder)
-            c.close()
-            if cur is not None and known is not None and cur != known:
-                return False                             # every UID we hold for this folder is void
-            typ, d = M.uid("SEARCH", None, "UID", str(int(uid)))
-            if typ != "OK":
-                return None                              # a busy server's NO says nothing about the copy
-            return str(int(uid)).encode() in (d[0].split() if d and d[0] else [])
+        M = accounts.connect(acct, timeout=_LIVE_TIMEOUT)
     except Exception:
         return None
+    try:
+        typ, _ = M.select(f'"{folder}"', readonly=True)
+        if typ != "OK":
+            return None
+        cur = ingest._uidvalidity(M)
+        c = store.conn()
+        known = store.get_uidvalidity(c, acct["email"], folder)
+        c.close()
+        if cur is not None and known is not None and cur != known:
+            return False                                 # every UID we hold for this folder is void
+        typ, d = M.uid("SEARCH", None, "UID", str(int(uid)))
+        if typ != "OK":
+            return None                                  # a busy server's NO says nothing about the copy
+        return str(int(uid)).encode() in (d[0].split() if d and d[0] else [])
+    except Exception:
+        return None
+    finally:
+        try:
+            M.logout()
+        except Exception:
+            pass
 
 
 def _hdr_chips(msg, name):
@@ -2528,9 +2539,10 @@ def draft_resume(body):
     except KeyError:
         return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
     unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
+    live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
     try:
         with _ops_lock:
-            if _draft_live(acct, row["folder"], row["uid"]) is False:   # unreachable (None) → the local copy
+            if live is False:
                 c = store.conn()
                 store.delete_message(c, pk)
                 c.commit()

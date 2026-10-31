@@ -4,7 +4,6 @@ again with each part once. Hermetic — temp database and config, and every IMAP
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
 import base64
-import contextlib
 import hashlib
 import http.client
 import json
@@ -24,7 +23,6 @@ with open(config.CONFIG, "w") as f:
                             {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}, f)
 import compose
 import mailparse
-import pool
 import server
 
 ACCT = "ada@example.test"
@@ -901,6 +899,9 @@ class _FakeIMAP:
         want = args[-1]
         return "OK", [b" ".join(u.encode() for u in self.uids if u == want)]
 
+    def logout(self):
+        self.calls.append(("logout",))
+
 
 def test_draft_live_reads_uidvalidity_and_uid():
     _fresh()
@@ -909,10 +910,10 @@ def test_draft_live_reads_uidvalidity_and_uid():
     c.commit()
     c.close()
     acct = {"email": ACCT}
-    real = pool.borrow
+    real = server.accounts.connect
     try:
         def check(fake, uid=42):
-            pool.borrow = contextlib.contextmanager(lambda a: (yield fake))
+            server.accounts.connect = lambda a, timeout=60: fake
             return _real_draft_live(acct, "Drafts", uid)
         fake = _FakeIMAP(["42"])
         assert check(fake) is True
@@ -924,7 +925,7 @@ def test_draft_live_reads_uidvalidity_and_uid():
         assert check(_FakeIMAP(["42"], search="NO"), uid=7) is None             # not "gone"
         assert check(_FakeIMAP(["42"]), uid=None) is None
     finally:
-        pool.borrow = real
+        server.accounts.connect = real
 
 
 if __name__ == "__main__":
