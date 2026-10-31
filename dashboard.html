@@ -959,6 +959,7 @@
   .airw:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 16%,transparent)}
   .airw:disabled{opacity:.5;cursor:default}
   .airw.air-undo{margin-left:auto;background:var(--sel);color:var(--mute)}
+  .cmp-note{margin:0 0 10px;padding:8px 12px;border-radius:var(--r-sm);background:var(--gold-wash);color:var(--gold);font-size:12.5px}
   .cmp-quote{border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
   .cmp-qtoggle{width:100%;text-align:left;background:var(--bg2);border:none;color:var(--soft);
     font:inherit;font-size:12px;padding:9px 13px;cursor:pointer}
@@ -1491,6 +1492,7 @@
     <button class="x" id="cmpClose" aria-label="Close">✕</button>
   </div>
   <div class="set-body cmp-body">
+    <p class="cmp-note" id="cmpNote" hidden></p>
     <div class="cmp-row"><label>From</label><select id="cmpFrom" class="cmp-from" aria-label="from account"></select></div>
     <div class="cmp-row"><label>To</label><div class="chipfield" id="cmpTo" data-cf="to"></div>
       <button class="cmp-cclink" id="cmpCcToggle" type="button">Cc/Bcc</button></div>
@@ -3342,7 +3344,7 @@ function composeOpen(opts){
   let body0="";
   if(!opts.draftId && !opts.noSig){ const sig=sigFor(from); if(sig){ const blk="\n\n-- \n"+sig; body0=blk; state.compose._sigBlock=blk; state.compose._sigFrom=from; } }
   $("#cmpBody").value=body0; $("#cmpBody").setSelectionRange(0,0);   // write above the signature, not after it
-  $("#cmpSaved").textContent=""; $("#cmpRwUndo").hidden=true;
+  $("#cmpSaved").textContent=""; $("#cmpRwUndo").hidden=true; $("#cmpNote").hidden=true; $("#cmpNote").textContent="";
   const showCc=state.compose.cc.length>0||state.compose.bcc.length>0;
   $("#cmpCcRow").hidden=!showCc; $("#cmpBccRow").hidden=!showCc;
   renderChips("to"); renderChips("cc"); renderChips("bcc"); renderAttach(); renderQuote(); setComposePill();
@@ -4477,7 +4479,8 @@ async function editDraft(pk){   // your text in the box, the quote folded below,
   cmp.attachments=(d.files||[]).slice(); renderAttach();
   const ta=$("#cmpBody"); ta.value=d.text||""; ta.setSelectionRange(0,0); cmp.dirty=false;   // nothing saves until an edit
   adoptSig(ta.value, d.account);   // the signature it was saved with, even if that From is gone
-  const n=resumeNotice(d.notes); if(n){ toast(n); announce(n); }
+  const n=resumeNotice(d.notes);   // in the composer, not a toast under its backdrop: it stays until it closes
+  if(n){ const el=$("#cmpNote"); el.textContent=n; el.hidden=false; announce(n); }
 }
 
 /* ---------- realtime (SSE) ---------- */
