@@ -3320,7 +3320,7 @@ function sigFor(email){ return (state.signatures&&state.signatures[email])||stat
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
-  closeDraftMenu();
+  closeDraftMenu(); closeSendLaterMenu();
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(()=>toast("Saved to Drafts")); }  // auto-save on close
   state.compose=null;
@@ -3483,7 +3483,7 @@ function openSendLaterMenu(anchor){
   $("#slWhen").addEventListener("change",e=>{ const v=e.target.value; if(v){ const ep=Math.floor(new Date(v).getTime()/1000); if(ep>Date.now()/1000){ closeSendLaterMenu(); composeSend(ep); } else toast("Pick a future time"); } });
   setTimeout(()=>document.addEventListener("click",closeSendLaterMenu,{once:true}),0);
 }
-function closeSendLaterMenu(){ const m=$("#sendLaterMenu"); if(m)m.remove(); }
+function closeSendLaterMenu(){ const m=$("#sendLaterMenu"); if(m)m.remove(); document.removeEventListener("click",closeSendLaterMenu); }   // a stale outside-click must not shut the next one
 /* ---------- AI draft: a remembered tone, and an optional "what to say" ---------- */
 const DRAFT_TONES={brief:"Brief", balanced:"Balanced", warm:"Warm", formal:"Formal"};   // draft_reply._TONES
 function draftTone(){ const t=localStorage.getItem("mm_draft_tone"); return DRAFT_TONES[t]?t:"balanced"; }
@@ -4738,7 +4738,7 @@ function _hasDismissable(){ return !!_activeModal()||document.body.classList.con
 function _dismissTop(){   // close the single topmost dismissible layer; true if one closed
   const m=_activeModal();
   if(m){
-    if(m.id==="composeModal"){ if(composeIsOpen())composeClose(); }
+    if(m.id==="composeModal"){ if(composeIsOpen()){ if($("#draftMenu"))closeDraftMenu(true); else if($("#sendLaterMenu"))closeSendLaterMenu(); else composeClose(); } }
     else if(m.id==="palette")closePalette();
     else if(m.id==="settingsModal")settingsOpen(false);
     else if(m.id==="doPanel")doDismiss();
@@ -4783,9 +4783,12 @@ document.addEventListener("keydown",e=>{
   if(paletteIsOpen()){ paletteKey(e); return; }
   // compose modal: send with ⌘/Ctrl+Enter (even from the textarea), Esc closes; otherwise type freely
   if(composeIsOpen()){
+    if(e.key==="Escape"&&e.defaultPrevented)return;   // the recipient autocomplete already took this Esc
     if($("#draftMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // Esc closes the draft options first; ⌘Enter never sends from them
       e.preventDefault(); if(e.key==="Escape")closeDraftMenu(true); return; }
-    if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); composeSend(); return; }
+    if($("#sendLaterMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // same for the Later menu
+      e.preventDefault(); if(e.key==="Escape"){ closeSendLaterMenu(); $("#cmpSchedule").focus(); } return; }
+    if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); if(e.repeat)return; composeSend(); return; }   // a held chord sends once
     if((e.metaKey||e.ctrlKey)&&(e.key==="s"||e.key==="S")){ e.preventDefault(); composeSaveDraft(); return; }
     if(e.key==="Escape"){ e.preventDefault(); composeClose(); return; }
     return;
