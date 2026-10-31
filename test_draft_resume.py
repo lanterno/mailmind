@@ -664,6 +664,25 @@ def test_reply_resaved_elsewhere_keeps_its_recorded_quote():
     assert (r2["split"], r2["text"], r2["tail_text"]) == ("tail", r["text"], r["tail_text"]), r2
 
 
+def test_a_save_that_moved_the_row_meanwhile_is_not_re_pointed_over():
+    _fresh()
+    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+    did = res["draft_id"]
+    seen = _row(did)
+    _save(draft_id=did, text="Newer, from another tab.", bcc=["dee@example.test"])   # lands after the read
+    newest = dict(_row(did))
+    c = store.conn()
+    moved = store.draft_repoint(c, seen, "Drafts", 555, 777, forget=True)
+    c.commit()
+    c.close()
+    assert moved is False and dict(_row(did)) == newest, dict(_row(did))
+    c = store.conn()
+    assert store.draft_repoint(c, _row(did), "Drafts", 556, 777, forget=True) is True
+    c.commit()
+    c.close()
+    assert (_row(did)["uid"], _row(did)["own_text"]) == (556, None)
+
+
 def test_same_bytes_without_a_uid_are_tracked_at_the_uid_they_got():
     _fresh(appenduid=False)
     pk, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
