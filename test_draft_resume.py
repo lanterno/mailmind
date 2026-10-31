@@ -1003,6 +1003,19 @@ def test_headers_that_wont_parse_fall_back_to_their_raw_values():
     assert (r["mode"], r["orig_pk"], r["to"]) == ("reply", opk, ["Bo Park <bo@example.test>"]), r
 
 
+def test_long_subject_reopens_as_drafted_however_often_it_is_saved():
+    _fresh()
+    subj = "Re: Notes from the quarterly planning meeting about the north gate renovation and the budget review"
+    pk, res = _saved_and_synced(subject=subj, text="Notes.")
+    for uid in (701, 702, 703):
+        r, code = _resume(pk)
+        assert code == 200 and r["subject"] == subj, (code, r["subject"])
+        _save(draft_id=res["draft_id"], subject=r["subject"], text=r["text"])
+        pk = _synced(CALLS["append"][-1]["raw"], uid)
+    res, code = server.do_send(_payload(_resume(pk)[0], in_reply_to_pk=None))
+    assert code == 200 and str(_sent()[0]["Subject"]) == subj, str(_sent()[0]["Subject"])
+
+
 def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
     _fresh()
     raw = ("From: Ada <ada@example.test>\r\nTo: José Ñúñez <jose@bücher.example>, Bo <bo@example.test>\r\n"
