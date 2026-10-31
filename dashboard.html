@@ -3778,7 +3778,7 @@ async function aiDraftReply(opts){   // opts: {tone, instruction, unless, quiet}
     const ta=$("#cmpBody"), had=ta.value.trim()&&ta.value.trim()!==(cmp._sigBlock||"").trim();
     if(had){ cmp._rwUndo={value:ta.value, sel:[ta.selectionStart,ta.selectionEnd]}; $("#cmpRwUndo").hidden=false; }   // what you'd written is one Undo away
     const body=d.body+(cmp._sigBlock||"");   // keep the signature below the AI-written reply
-    ta.value=body; cmp.body=body; cmp.dirty=true; ta.focus();
+    ta.value=body; cmp.body=body; cmp.dirty=true; ta.focus(); guardStale();   // a scripted write fires no input event
     toast("Draft ready — review and edit before sending");
   }catch(e){ if(state.compose===cmp&&!opts.quiet)toast("Couldn’t draft: "+(e.message||"")); }
   finally{ btn.disabled=$("#cmpAiMore").disabled=false; paintDraftBtn(); }
@@ -3849,7 +3849,7 @@ async function aiRewrite(op){
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"rewrite failed"));
     cmp._rwUndo={value:full, sel:[s,e]};                       // one-step undo of the prior text
     const nv=hasSel?(full.slice(0,s)+d.text+full.slice(e)):d.text;
-    ta.value=nv; cmp.body=nv; cmp.dirty=true;
+    ta.value=nv; cmp.body=nv; cmp.dirty=true; guardStale();
     if(hasSel){ ta.selectionStart=s; ta.selectionEnd=s+d.text.length; }
     $("#cmpRwUndo").hidden=false; ta.focus();
     toast((hasSel?"Selection":"Message")+" rewritten");
@@ -3858,7 +3858,7 @@ async function aiRewrite(op){
 }
 function aiRewriteUndo(){
   const cmp=state.compose; if(!cmp||!cmp._rwUndo)return;
-  const ta=$("#cmpBody"); ta.value=cmp._rwUndo.value; cmp.body=ta.value;
+  const ta=$("#cmpBody"); ta.value=cmp._rwUndo.value; cmp.body=ta.value; guardStale();
   ta.selectionStart=cmp._rwUndo.sel[0]; ta.selectionEnd=cmp._rwUndo.sel[1];
   cmp._rwUndo=null; $("#cmpRwUndo").hidden=true; ta.focus(); toast("Back to what you had");
 }
@@ -4095,7 +4095,7 @@ async function openDraftAhead(pk){
     const cmp=state.compose; if(!cmp)return;
     let body=null;                                 // ALWAYS revalidate (server re-checks fingerprint + TTL + anchor) so a
     try{ const d=await api(`/api/ai/draft-ahead?pk=${pk}&peek=1`); if(d&&d.status==="ready"&&d.body)body=d.body; }catch(e){}  // stale draft is never injected after the thread moved on; peek → no double generation
-    if(body){ const full=body+(cmp._sigBlock||""); $("#cmpBody").value=full; cmp.body=full; cmp.dirty=true; $("#cmpBody").focus();
+    if(body){ const full=body+(cmp._sigBlock||""); $("#cmpBody").value=full; guardStale(); cmp.body=full; cmp.dirty=true; $("#cmpBody").focus();
       toast("Draft ready — review and edit before sending"); }
     else { _draftReady.delete(pk); toast("Thread moved on — drafting a fresh reply…"); aiDraftReply(); }   // not fresh → on-demand path, and the chip explains itself
   }finally{ _openingDraft=null; }
