@@ -3481,7 +3481,7 @@ function renderQuote(){
   const q=$("#cmpQuote"), cmp=state.compose;
   if(!cmp||!cmp.quote||(!cmp.quote.html&&!cmp.quote.text)){ q.hidden=true; q.innerHTML=""; return; }
   q.hidden=false; const lbl=qLabel(false);
-  q.innerHTML=`<button class="cmp-qtoggle" id="cmpQToggle">▸ ${lbl}</button><div class="cmp-qbody" id="cmpQBody" hidden></div>`;
+  q.innerHTML=`<button class="cmp-qtoggle" id="cmpQToggle">${lbl}</button><div class="cmp-qbody" id="cmpQBody" hidden></div>`;
 }
 function qLabel(open){ const cmp=state.compose;
   return (open?"▾ ":"▸ ")+(cmp.mode==="forward"?"forwarded message":"quoted message")
