@@ -4451,7 +4451,9 @@ async function composeSaveDraft(silent){   // → true once saved
     if(silent){ $("#cmpSaved").textContent="Saved "+new Date().toTimeString().slice(0,5); }
     else toast("Draft saved");
     return true; }
-  catch(e){ if(!silent)toast("Couldn’t save draft: "+(e.message||"")); return false; }
+  catch(e){ if(!silent)toast("Couldn’t save draft: "+(e.message||""));
+    else if(state.compose===cmp)$("#cmpSaved").textContent="Not saved";   // never leave an older "Saved" up
+    return false; }
 }
 function _cheapHash(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
 function _draftHash(p){ return _cheapHash(JSON.stringify([p.to,p.cc,p.bcc,p.subject,p.text,p.account,(p.attachments||[]).map(a=>a.filename)])); }
@@ -4918,7 +4920,7 @@ $("#bulkbar").addEventListener("click",e=>{const b=e.target.closest("[data-bulk]
 $("#composeBtn").addEventListener("click",()=>composeOpen({mode:"new"}));
 $("#cmpClose").addEventListener("click",()=>composeClose());
 $("#cmpDiscard").addEventListener("click",composeDiscard);
-$("#cmpSaveDraft").addEventListener("click",composeSaveDraft);
+$("#cmpSaveDraft").addEventListener("click",()=>composeSaveDraft());   // not silent: the click event isn't a flag
 $("#cmpSend").addEventListener("click",e=>guardOpen()?confirmSendGuard("footer",e):composeSend(state.compose&&state.compose._pendingAfter));
 $("#cmpSchedule").addEventListener("click",e=>{ e.stopPropagation(); openSendLaterMenu(e.currentTarget); });
 $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block when the From account changes
