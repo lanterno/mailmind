@@ -2481,6 +2481,8 @@ def _draft_live(acct, folder, uid):
             if cur is not None and known is not None and cur != known:
                 return False                             # every UID we hold for this folder is void
             typ, d = M.uid("SEARCH", None, "UID", str(int(uid)))
+            if typ != "OK":
+                return None                              # a busy server's NO says nothing about the copy
             return str(int(uid)).encode() in (d[0].split() if d and d[0] else [])
     except Exception:
         return None
