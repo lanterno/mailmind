@@ -23,7 +23,7 @@ run-fast port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known test-send-after test-send-guard test-draft-resume
+test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known test-send-after test-send-guard test-draft-resume test-draft-resume-ui
 
 # Classifier behaviour
 test-classifier:
@@ -64,6 +64,10 @@ test-send-after:
 # Reopening a saved draft: split into your text and its quote, sent with each part once
 test-draft-resume:
     {{py}} test_draft_resume.py
+
+# Reopening a saved draft in the composer: options, payload fields, notes (needs node)
+test-draft-resume-ui:
+    {{py}} test_draft_resume_ui.py
 
 # Send-time checks in the composer: attachment wording, typed text, subject, reply-all size (needs node)
 test-send-guard:
