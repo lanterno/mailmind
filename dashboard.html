@@ -3291,7 +3291,8 @@ function composeOpen(opts){
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
     subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null,
-    fwdAttach:opts.fwdAttach||0, attachments:[], idk:rid(), status:"idle", dirty:false };
+    fwdAttach:opts.fwdAttach||0, attachments:[], idk:rid(), status:"idle", dirty:false,
+    _reading:new Map() };   // files still being read: id → name
   // dirty flips true only on an actual subject/body edit (input listeners) — so opening a
   // prefilled reply and pressing Esc never silently litters Drafts.
   $("#cmpFrom").innerHTML=senders.map(e=>
@@ -3389,9 +3390,11 @@ function addAttachments(files){
   let total=cmp.attachments.reduce((s,a)=>s+a.size,0);
   [...files].forEach(f=>{
     if(total+f.size>25*1024*1024){ toast("Attachments too large (25 MB max)"); return; }
-    total+=f.size; const r=new FileReader();
-    r.onload=()=>{ cmp.attachments.push({filename:f.name, content_type:f.type||"application/octet-stream",
-      size:f.size, b64:(r.result+"").split(",")[1]||""}); cmp.dirty=true; renderAttach(); };
+    total+=f.size; const r=new FileReader(), id=rid(); cmp._reading.set(id,f.name);
+    r.onload=()=>{ cmp._reading.delete(id); cmp.attachments.push({filename:f.name, content_type:f.type||"application/octet-stream",
+      size:f.size, b64:(r.result+"").split(",")[1]||""}); cmp.dirty=true; if(state.compose===cmp)renderAttach(); };
+    r.onerror=r.onabort=()=>{ cmp._reading.delete(id);
+      if(state.compose===cmp){ toast(`Couldn’t add ${f.name}`); announce(`Couldn’t add ${f.name}.`); } };
     r.readAsDataURL(f);
   });
 }
