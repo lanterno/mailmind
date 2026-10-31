@@ -2458,6 +2458,7 @@ def do_draft(body):
 
 
 _RESUME_MODES = ("new", "reply", "replyall", "forward")
+_RESUME_HEADROOM = 64 << 10                              # the rest of a save: chips, subject, keys
 _RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
 
 
@@ -2613,6 +2614,13 @@ def draft_resume(body):
         return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
                                       "so its links and formatting aren’t lost."}, 422
     own, tail, how = split
+    # every save and send of it carries the files as base64 and the text and quote as JSON: past
+    # MAX_SEND_POST each one would be refused, and edits made in the composer lost on close
+    size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode())
+                                                   for t in (own, tail))
+    if size + _RESUME_HEADROOM > MAX_SEND_POST:
+        return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
+                                      "and the text it quotes." + elsewhere}, 422
     irt, refs = compose.thread_ids(msg.get("In-Reply-To"), msg.get("References"))
     mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
     if mode == "new" and irt:                            # MailMind's own new drafts never carry one
