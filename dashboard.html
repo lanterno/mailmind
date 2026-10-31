@@ -3896,14 +3896,26 @@ function aiRewriteUndo(){
   ta.selectionStart=cmp._rwUndo.sel[0]; ta.selectionEnd=cmp._rwUndo.sel[1];
   cmp._rwUndo=null; $("#cmpRwUndo").hidden=true; ta.focus(); toast("Back to what you had");
 }
-function reopenFailed(){
-  const f=state.failedSend; if(!f)return; hideSendFloat();
-  if(state.compose)composeClose();   // the message open now is saved, not replaced
-  composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
-    subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
-    autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
-  state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; adoptSig(f.body, f.from); renderAttach();
-  if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
+let _roomBusy=false;
+async function makeRoom(open){   // open() replaces the open composer once its save lands → false if it stays
+  const cmp=state.compose; if(cmp&&_roomBusy)return false;
+  if(cmp&&cmp.dirty){ _roomBusy=true; let ok;
+    try{ ok=await composeSaveDraft(true); } finally{ _roomBusy=false; }
+    if(state.compose&&state.compose!==cmp)return false;   // another opened meanwhile (one closed meanwhile saved itself)
+    if(ok===false&&state.compose){ const m="The message you’re writing isn’t saved, so it stays open";
+      toast(m); announce(m); return false; } }
+  if(state.compose)composeClose(true);   // saved, or nothing worth saving
+  open(); return true;   // in the same task as the close: the Back trap never sees the gap
+}
+async function reopenFailed(){
+  const f=state.failedSend; if(!f)return;
+  await makeRoom(()=>{   // if the open message can't be saved, the float and its Edit stay for a second try
+    if(state.failedSend===f)hideSendFloat();   // a send that failed during the save keeps its float
+    composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
+      subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
+      autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
+    state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; adoptSig(f.body, f.from); renderAttach();
+    if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; } });
 }
 function showSendFloat(cls,text,retry){ const el=$("#sendFloat"); el.hidden=false; el.className="send-float "+cls;
   el.innerHTML=`<span>${text}</span>`+(retry?`<button id="sfEdit">Edit</button><button id="sfDismiss">Dismiss</button>`:""); }
@@ -3945,13 +3957,14 @@ function startUndoCountdown(oid, snap, rcpts){
       showSendFloat("sent","✓ Sent"+(rcpts?` · ${rcpts} recipient${rcpts>1?"s":""}`:"")); setTimeout(hideSendFloat,2400); loadOutbox(); }
     else paint(); },1000);
 }
-function reopenSend(snap){
-  if(state.compose)composeClose();   // the message open now is saved, not replaced
-  composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
-    subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
-    autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
-  state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; adoptSig(snap.body, snap.from); renderAttach();
-  if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
+async function reopenSend(snap){
+  const ok=await makeRoom(()=>{
+    composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
+      subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
+      autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
+    state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; adoptSig(snap.body, snap.from); renderAttach();
+    if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; } });
+  if(!ok){ state.failedSend=snap; showSendFloat("failed",ico("alert")+" Send undone — not reopened yet",true); }   // the open message couldn't be saved: keep it, and this one a click away
 }
 async function loadOutbox(){
   let d; try{ d=await api("/api/outbox?limit=50"); }catch(e){ return; }
