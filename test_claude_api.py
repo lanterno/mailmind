@@ -242,6 +242,64 @@ def test_a_config_key_that_cannot_be_read_is_no_key():
     assert claude_api.key() == "" and summarize.engine() == "cli"   # not the environment's key
 
 
+
+# ── what the UI is told (summarize.status) ───────────────────────────────────
+def _path_with(claude=False):
+    """A PATH holding a claude command that exits non-zero as a signed-out one does, or none at all."""
+    d = tempfile.mkdtemp()
+    if claude:
+        with open(os.path.join(d, "claude"), "w") as f:
+            f.write("#!/bin/sh\necho 'Invalid API key - Please run /login' >&2\nexit 1\n")
+        os.chmod(os.path.join(d, "claude"), 0o755)
+    return d
+
+def test_status_names_the_engine_model_and_key_source():
+    _fresh()
+    st = summarize.status()
+    assert (st["engine"], st["model"], st["key_from"]) == ("api", "claude-opus-5-5", "ANTHROPIC_API_KEY"), st
+
+def test_status_records_a_rejected_key_then_a_good_call():
+    _fresh((401, {}, _error("authentication_error", "invalid x-api-key")))
+    try:
+        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+    except RuntimeError:
+        pass
+    st = summarize.status()
+    assert st["last_ok"] is False and st["last_error"] == "the API key was rejected" and st["last_ts"], st
+    assert summarize.call_claude("Say hi.") == '{"summary": "ok"}'
+    st = summarize.status()
+    assert st["last_ok"] is True and st["last_error"] == "", st
+
+def test_status_without_a_key_follows_the_claude_command():
+    _fresh()
+    os.environ["ANTHROPIC_API_KEY"] = ""
+    path = os.environ["PATH"]
+    try:
+        os.environ["PATH"] = _path_with(claude=False)
+        assert summarize.status()["engine"] == "none" and summarize.status()["model"] == ""
+        os.environ["PATH"] = _path_with(claude=True)
+        assert (summarize.status()["engine"], summarize.status()["model"]) == ("cli", "claude-cli")
+        try:
+            summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+        except RuntimeError:
+            pass
+        assert summarize.status()["last_error"] == "the claude command isn't signed in"
+        os.environ["PATH"] = _path_with(claude=False)
+        try:
+            summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+        except FileNotFoundError:
+            pass
+        assert summarize.status()["last_error"] == "the claude command isn't installed"
+    finally:
+        os.environ["PATH"] = path
+
+def test_a_forced_api_engine_without_a_key_is_none():
+    _fresh()
+    os.environ["ANTHROPIC_API_KEY"] = ""
+    os.environ["MAILMIND_AI"] = "api"
+    assert summarize.status()["engine"] == "none"
+
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
