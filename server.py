@@ -24,6 +24,7 @@ import socket
 import ssl
 import ipaddress
 import http.client
+import imaplib
 import sqlite3
 import threading
 import urllib.parse
@@ -2540,6 +2541,8 @@ def draft_resume(body):
     except KeyError:
         return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
     unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
+    elsewhere = " Edit it in the app that made it."
+    unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
     live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
     try:
         with _ops_lock:
@@ -2555,17 +2558,23 @@ def draft_resume(body):
                 return {"ok": False, "error": "This draft changed since the list loaded. "
                                               "Open it again from the refreshed list."}, 409
             ingest.fetch_body(pk)
-    except Exception as e:
+    except mailops._UNREACHABLE + (imaplib.IMAP4.error,) as e:
         print(f"[resume] fetch failed: {_sanitize_conn_error(e)}", flush=True)
         return unreachable, 502
+    except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
+        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+        return unreadable, 422
     c = store.conn()
     raw = store.get_body(c, pk)
     c.close()
     if not raw:
         return unreachable, 502
-    msg = email.message_from_bytes(raw, policy=email.policy.default)
-    parsed = mailparse.parse(raw)
-    elsewhere = " Edit it in the app that made it."
+    try:
+        msg = email.message_from_bytes(raw, policy=email.policy.default)
+        parsed = mailparse.parse(raw)
+    except Exception as e:
+        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+        return unreadable, 422
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
         return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
                                       "reattach yet." + elsewhere}, 422
