@@ -2237,6 +2237,18 @@ def contacts_known(addrs, own=None, min_history=KNOWN_MIN_HISTORY):
 def do_send(body):
     """Validate a compose/reply/forward request, build the message, enqueue it."""
     import uuid
+    send_after = 0
+    try:                                  # send-later: epoch secs; 0/absent = now (after the grace window)
+        sa = int(body.get("send_after") or 0)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "bad send time"}, 400
+    if sa:                                # refused before _compose_spec, so no original-body fetch
+        now = time.time()
+        if sa <= now:                     # never quietly turn a missed schedule into "send now"
+            return {"ok": False, "error": "that send time has passed"}, 400
+        if sa >= now + 366 * 86400:
+            return {"ok": False, "error": "pick a send time within a year"}, 400
+        send_after = sa
     try:
         spec, in_reply_to_pk, acct = _compose_spec(body)
         built = compose.build_message(spec)       # validates addresses/headers; raises ValueError
@@ -2244,13 +2256,6 @@ def do_send(body):
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
-    send_after = 0
-    try:                                  # send-later: epoch secs, accepted only if sanely future (<1yr)
-        sa = int(body.get("send_after") or 0)
-        if sa > time.time() and sa < time.time() + 366 * 86400:
-            send_after = sa
-    except (TypeError, ValueError):
-        send_after = 0
     meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
             "in_reply_to_pk": in_reply_to_pk, "subject": spec["subject"], "draft_id": body.get("draft_id"),
             "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
