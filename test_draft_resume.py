@@ -597,6 +597,59 @@ def test_changed_copy_uses_the_recorded_tail_and_drops_bcc():
     assert r["bcc"] == [] and r["notes"]["bcc_dropped"] == 1, r
 
 
+def _resaved_elsewhere(old_text, new_text, uid=555):
+    """Another app re-saved MailMind's last copy under the same Message-ID, at a new UID."""
+    raw = CALLS["append"][-1]["raw"].replace(old_text.encode(), new_text.encode())
+    return _synced(raw, uid)
+
+
+def test_copy_resaved_elsewhere_is_the_one_the_next_save_replaces():
+    _fresh()
+    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+    pk = _resaved_elsewhere("Mine.", "Mine, from my phone.")
+    r, code = _resume(pk)
+    assert code == 200 and (r["draft_id"], r["split"], r["text"]) == (res["draft_id"], "whole", "Mine, from my phone."), r
+    assert r["notes"]["bcc_dropped"] == 1, r
+    row = _row(res["draft_id"])
+    assert (row["folder"], row["uid"], row["uidvalidity"]) == ("Drafts", 555, 777), dict(row)   # what a send deletes
+    _save(draft_id=res["draft_id"], text="Mine, from my phone. Edited.")
+    assert CALLS["append"][-1]["prev_uid"] == 555, CALLS["append"][-1]
+
+
+def test_record_of_a_replaced_copy_is_never_taken_for_the_new_one():
+    _fresh()
+    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+    pk = _resaved_elsewhere("Mine.", "Mine, from my phone.")
+    _resume(pk)
+    row = _row(res["draft_id"])
+    assert (row["own_text"], row["bcc"], row["raw_sha"]) == (None, None, None), dict(row)
+    r, _ = _resume(pk)                                          # same UID now, but not MailMind's bytes
+    assert (r["split"], r["text"], r["bcc"]) == ("whole", "Mine, from my phone.", []), r
+
+
+def test_reply_resaved_elsewhere_keeps_its_recorded_quote():
+    _fresh()
+    opk = _original()
+    res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN, to=["Bo Park <bo@example.test>"])
+    pk = _resaved_elsewhere("Saturday works.", "Sunday works.")
+    r, _ = _resume(pk)
+    assert (r["split"], r["text"]) == ("tail", OWN.replace("Saturday", "Sunday")), r
+    assert _row(res["draft_id"])["tail_html"], "the quote's HTML is still vouched for"
+    r2, _ = _resume(pk)
+    assert (r2["split"], r2["text"], r2["tail_text"]) == ("tail", r["text"], r["tail_text"]), r2
+
+
+def test_same_bytes_without_a_uid_are_tracked_at_the_uid_they_got():
+    _fresh(appenduid=False)
+    pk, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+    r, _ = _resume(pk)
+    assert (r["split"], r["bcc"]) == ("exact", ["dee@example.test"]), r
+    row = _row(res["draft_id"])
+    assert (row["uid"], row["own_text"], row["bcc"]) == (555, "Mine.", '["dee@example.test"]'), dict(row)
+    _save(draft_id=res["draft_id"], text="Mine, edited.")
+    assert CALLS["append"][-1]["prev_uid"] == 555, CALLS["append"][-1]
+
+
 def test_other_apps_draft_opens_whole_as_plain_text():
     _fresh()
     opk = _original()
