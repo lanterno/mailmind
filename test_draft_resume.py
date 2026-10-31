@@ -787,6 +787,25 @@ def test_files_over_the_cap_are_refused():
     assert code == 422 and "more than 25 MB" in r["error"], (code, r)
 
 
+def test_draft_whose_saves_would_be_too_large_is_refused():
+    _fresh()
+    opk = _original()
+    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    r, code = _resume(pk)
+    assert code == 200, r
+    need = (sum(len(f["b64"]) for f in r["files"]) + len(json.dumps(r["text"])) + len(json.dumps(r["tail_text"]))
+            + server._RESUME_HEADROOM)
+    cap = server.MAX_SEND_POST
+    try:
+        server.MAX_SEND_POST = need
+        assert _resume(pk)[1] == 200
+        server.MAX_SEND_POST = need - len(r["tail_text"]) // 2      # the files alone would still fit
+        r, code = _resume(pk)
+    finally:
+        server.MAX_SEND_POST = cap
+    assert code == 422 and "too large for MailMind to save or send" in r["error"], (code, r)
+
+
 def test_bad_pk_unknown_and_not_a_draft():
     _fresh()
     opk = _original()
