@@ -3311,7 +3311,6 @@ function composeOpen(opts){
   clearTimeout(_draftDwellT);   // composing: a pending dwell kick would draft the very message being answered by hand
   const senders=(state.sendAccounts&&state.sendAccounts.length)?state.sendAccounts:(state.accountsList||[]);
   if(!senders.length){ toast("No sending account configured — add one in Settings"); return; }
-  guardReset();
   const from=(opts.from&&senders.includes(opts.from))?opts.from:(senders.includes(state.account)?state.account:senders[0]);
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
@@ -3324,7 +3323,9 @@ function composeOpen(opts){
       fanout:(opts.ack&&+opts.ack.fanout)||0,unchecked:false},
     _guard:null,
     participants:new Set((opts.participants||[]).map(a=>String(a).toLowerCase())),   // the thread's people: never "new"
-    _people:new Map(), _thin:false, _knownQ:new Set(), _newSay:new Set() };   // "new to you" lookups: addr → {known,self}
+    _people:new Map(), _thin:false, _knownQ:new Set(), _newSay:new Set(),   // "new to you" lookups: addr → {known,self}
+    _pendingAfter:0 };   // a Later time the check strip held back: the next Send schedules for it
+  guardReset();
   // dirty flips true only on an actual subject/body edit (input listeners) — so opening a
   // prefilled reply and pressing Esc never silently litters Drafts.
   $("#cmpFrom").innerHTML=senders.map(e=>
@@ -3604,8 +3605,8 @@ function _guardFocusEl(d,sendAfter){
 function guardSay(msg){   // clear, then set: an identical repeat is read again
   const r=$("#srLive"); clearTimeout(_gsT); r.textContent=""; _gsT=setTimeout(()=>{r.textContent=msg;},150); }
 function paintSendBtn(mode){
-  const b=$("#cmpSend"), g=state.compose&&state.compose._guard, later=!!(g&&g.sendAfter);
-  if(mode==="plain"){ b.textContent="Send ▸"; b.title="Send (⌘/Ctrl+Enter)";
+  const b=$("#cmpSend"), g=state.compose&&state.compose._guard, later=!!(g&&g.sendAfter), pa=state.compose&&state.compose._pendingAfter;
+  if(mode==="plain"){ b.textContent=pa?"Schedule ▸":"Send ▸"; b.title=pa?`Schedule for ${fmtWhen(pa)} (⌘/Ctrl+Enter)`:"Send (⌘/Ctrl+Enter)";
     for(const x of [b,$("#cmpGuardGo")]){ x.removeAttribute("aria-disabled"); x.classList.remove("cg-arming"); } return; }
   b.textContent=later?"Schedule anyway ▸":"Send anyway ▸";
   b.title=later?`Schedule for ${fmtWhen(g.sendAfter)} anyway (⌘/Ctrl+Enter)`:"Send anyway (⌘/Ctrl+Enter)";
@@ -3677,6 +3678,7 @@ function guardFix(kind,btn){
 async function composeSend(sendAfter){
   const cmp=state.compose; if(!cmp||cmp.status==="sending")return;
   const back=_guardFocusDesc(document.activeElement);   // before the chip commit below moves focus
+  cmp._pendingAfter=(typeof sendAfter==="number"&&sendAfter>0)?sendAfter:0;   // kept if a check holds this attempt
   ["to","cc","bcc"].forEach(f=>{ const inp=fieldEl(f).querySelector(".ci"); if(inp&&inp.value.trim()){ commitChip(f,inp.value); inp.value=""; } });
   cmp.subject=$("#cmpSubject").value; cmp.body=$("#cmpBody").value; cmp.from=$("#cmpFrom").value;
   if(!cmp.to.length&&!cmp.cc.length&&!cmp.bcc.length){ showSendGuard([{key:"norcpt",block:"hard"}],sendAfter,back); return; }
@@ -3732,7 +3734,8 @@ function sendLaterPresets(){
 function openSendLaterMenu(anchor){
   closeSendLaterMenu();
   const m=document.createElement("div"); m.className="snooze-menu"; m.id="sendLaterMenu"; m.setAttribute("role","menu");
-  m.innerHTML=sendLaterPresets().map(([l,ep],i)=>`<button role="menuitem" data-sl="${ep}"><span class="snz-n">${i+1}</span> ${l}</button>`).join("")
+  m.innerHTML=(state.compose&&state.compose._pendingAfter?`<button role="menuitem" data-sl="0"><span class="snz-n">·</span> Send now instead</button>`:"")
+    +sendLaterPresets().map(([l,ep],i)=>`<button role="menuitem" data-sl="${ep}"><span class="snz-n">${i+1}</span> ${l}</button>`).join("")
     +`<label class="snz-custom">Custom… <input type="datetime-local" id="slWhen"></label>`;
   document.body.appendChild(m);
   const r=anchor.getBoundingClientRect();
@@ -4841,7 +4844,7 @@ $("#composeBtn").addEventListener("click",()=>composeOpen({mode:"new"}));
 $("#cmpClose").addEventListener("click",()=>composeClose());
 $("#cmpDiscard").addEventListener("click",composeDiscard);
 $("#cmpSaveDraft").addEventListener("click",composeSaveDraft);
-$("#cmpSend").addEventListener("click",e=>guardOpen()?confirmSendGuard("footer",e):composeSend());
+$("#cmpSend").addEventListener("click",e=>guardOpen()?confirmSendGuard("footer",e):composeSend(state.compose&&state.compose._pendingAfter));
 $("#cmpSchedule").addEventListener("click",e=>{ e.stopPropagation(); openSendLaterMenu(e.currentTarget); });
 $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block when the From account changes
   const cmp=state.compose; if(!cmp)return; const from=e.target.value; cmp.from=from;
@@ -5056,7 +5059,7 @@ document.addEventListener("keydown",e=>{
       e.preventDefault(); if(e.key==="Escape"){ closeSendLaterMenu(); $("#cmpSchedule").focus(); } return; }
     if(guardOpen()&&e.key==="Escape"){ e.preventDefault(); dismissSendGuard(); return; }   // Esc keeps editing; a second Esc closes
     if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); if(e.repeat)return;   // a held chord acts once
-      if(guardOpen())confirmSendGuard("key",e); else composeSend(); return; }
+      if(guardOpen())confirmSendGuard("key",e); else composeSend(state.compose._pendingAfter); return; }
     if((e.metaKey||e.ctrlKey)&&(e.key==="s"||e.key==="S")){ e.preventDefault(); composeSaveDraft(); return; }
     if(e.key==="Escape"){ e.preventDefault(); composeClose(); return; }
     return;
