@@ -989,6 +989,8 @@
   .cg-foot{display:flex;align-items:center;gap:8px;margin-top:10px}
   .cg-hint{margin-right:auto;font-size:11.5px;color:var(--mute)}
   .abtn.cg-arming{opacity:.55;cursor:default}
+  .cm-chip.new{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sun) 55%,transparent)}
+  .cm-new{font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--gold);background:var(--gold-wash);border-radius:var(--r-pill);padding:1px 6px}
   .obn{font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;margin-left:1px}
   .tbtn.has-fail{color:var(--err)}
   .send-float{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:center;gap:10px;
@@ -3318,7 +3320,9 @@ function composeOpen(opts){
     subject0:opts.subject0!=null?opts.subject0:(opts.subject||""),         // the subject as it opened
     _ack:{subject:!!(opts.ack&&opts.ack.subject),attach:!!(opts.ack&&opts.ack.attach),   // send-time checks already waved through
       fanout:(opts.ack&&+opts.ack.fanout)||0,unchecked:false},
-    _guard:null };
+    _guard:null,
+    participants:new Set((opts.participants||[]).map(a=>String(a).toLowerCase())),   // the thread's people: never "new"
+    _people:new Map(), _thin:false, _knownQ:new Set(), _newSay:new Set() };   // "new to you" lookups: addr → {known,self}
   // dirty flips true only on an actual subject/body edit (input listeners) — so opening a
   // prefilled reply and pressing Esc never silently litters Drafts.
   $("#cmpFrom").innerHTML=senders.map(e=>
@@ -3342,12 +3346,13 @@ function composeOpen(opts){
   clearInterval(state.compose._autosaveIv);
   state.compose._autosaveIv=setInterval(autosaveTick, 8000);   // continuous draft autosave
   setTimeout(()=>{ if(!state.compose)return; const f=state.compose.mode==="new"?fieldEl("to").querySelector(".ci"):$("#cmpBody"); if(f)f.focus(); },40);
+  knownQueue([...state.compose.to,...state.compose.cc,...state.compose.bcc].map(x=>x.v),false);   // prefilled chips are marked silently
 }
 function sigFor(email){ return (state.signatures&&state.signatures[email])||state.signatureDefault||""; }
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
-  closeDraftMenu(); closeSendLaterMenu(); guardReset();
+  closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(()=>toast("Saved to Drafts")); }  // auto-save on close
   state.compose=null;
@@ -3370,6 +3375,7 @@ async function replyTo(pk,all){
     for(const a of [...parseAddrs(d.to),...parseAddrs(d.cc)]){ const k=a.toLowerCase();
       if(!seen.has(k)){ seen.add(k); cc.push(a); } } }
   composeOpen({mode:all?"replyall":"reply", from:d.account, to, cc, autoCc:cc.slice(),
+    participants:[d.from_addr,...parseAddrs(d.to),...parseAddrs(d.cc)],   // not Reply-To: a redirect to a stranger gets marked
     subject:rePrefix(d.subject,"Re:"), origPk:pk,
     quote:{html:d.has_html?d.html:null, text:d.text, from:d.from_name||d.from_addr, date:d.date}});
 }
@@ -3382,17 +3388,52 @@ async function forwardMsg(pk){
 }
 function renderChips(field){
   const cmp=state.compose; if(!cmp)return;
-  fieldEl(field).innerHTML=cmp[field].map((a,i)=>
-    `<span class="cm-chip${a.bad?" bad":""}">${esc(a.v)}<button data-rmchip="${field}:${i}" aria-label="Remove ${esc(a.v)}">×</button></span>`).join("")
+  fieldEl(field).innerHTML=cmp[field].map((a,i)=>chipHtml(field,a,i)).join("")
     +`<input class="ci" data-cf="${field}" placeholder="${field==="to"&&!cmp[field].length?"name@example.com":""}">`;
 }
+function chipHtml(field,x,i){ const cmp=state.compose, a=(addrOf(x.v)||x.v||"").toLowerCase(), nw=!x.bad&&knownIsNew(cmp,a);
+  return `<span class="cm-chip${x.bad?" bad":""}${nw?" new":""}" data-addr="${esc(a)}"${nw?' title="No earlier mail with this address in MailMind"':""}>${esc(x.v)}`
+    +(nw?'<span class="cm-new" aria-hidden="true">new</span><span class="visually-hidden">, new to you</span>':"")
+    +`<button data-rmchip="${field}:${i}" aria-label="Remove ${esc(x.v)}${nw?", new to you":""}">×</button></span>`; }
 function commitChip(field,raw){
   const cmp=state.compose; if(!cmp)return;
-  (raw||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean).forEach(v=>{
-    cmp[field].push({v,bad:!looksLikeAddr(v)}); cmp.dirty=true; });
+  const added=(raw||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+  added.forEach(v=>{ cmp[field].push({v,bad:!looksLikeAddr(v)}); cmp.dirty=true; });
   renderChips(field); const inp=fieldEl(field).querySelector(".ci"); if(inp)inp.focus();
+  knownQueue(added,true); knownQueue([...cmp.to,...cmp.cc,...cmp.bcc].map(x=>x.v),false);   // a lookup that failed is asked again
   guardStale();
 }
+/* ---------- "new to you": recipients with no earlier mail either way (a soft mark, never a block) ---------- */
+let _knownT=null; const _knownCache=new Map();   // page lifetime, known/self answers only
+function knownIsNew(cmp,a){ const p=cmp&&cmp._people.get(a);
+  return !!p&&!p.known&&!p.self&&!cmp._thin&&!state.myAddrs.has(a)&&!cmp.participants.has(a); }
+function knownQueue(values,say){
+  const cmp=state.compose; if(!cmp)return;
+  for(const v of values){ const a=(addrOf(v)||"").toLowerCase();
+    if(!a||!looksLikeAddr(a)||state.myAddrs.has(a)||cmp.participants.has(a))continue;
+    if(_knownCache.has(a)){ cmp._people.set(a,_knownCache.get(a)); continue; }
+    if(cmp._people.has(a))continue;
+    cmp._knownQ.add(a); if(say)cmp._newSay.add(a); }
+  if(cmp._knownQ.size){ clearTimeout(_knownT); _knownT=setTimeout(()=>knownFlush(cmp),150); } }
+async function knownFlush(cmp){   // one request for every queued address, never one per chip
+  if(state.compose!==cmp)return;
+  const addrs=[...cmp._knownQ].slice(0,100); addrs.forEach(a=>cmp._knownQ.delete(a));
+  let d; try{ d=await cpost("/api/contacts/known",{addrs}); }catch(e){ return; }   // pending or failed: no mark at all
+  if(state.compose!==cmp||!d||!d.ok)return;
+  cmp._thin=!!d.thin;
+  for(const [a,p] of Object.entries(d.items||{})){ const v={known:!!p.known,self:!!p.self};
+    cmp._people.set(a,v); if(v.known||v.self)_knownCache.set(a,v); }
+  knownPaint(cmp);
+  const hits=[...cmp._newSay].filter(a=>knownIsNew(cmp,a)); cmp._newSay.clear();
+  if(hits.length&&!guardOpen())guardSay(`New to you: ${guardList(hits)}.`);
+  if(cmp._knownQ.size)knownFlush(cmp); }
+function knownPaint(cmp){   // swap only the chips whose mark changed, so half-typed text and focus survive
+  if(state.compose!==cmp)return;
+  for(const el of $$("#composeModal .cm-chip[data-addr]")){
+    const b=el.querySelector("[data-rmchip]"); if(!b||el.contains(document.activeElement))continue;
+    const [f,i]=b.dataset.rmchip.split(":"), x=cmp[f]&&cmp[f][+i]; if(!x)continue;
+    const nw=!x.bad&&knownIsNew(cmp,el.dataset.addr);
+    if(nw!==el.classList.contains("new"))el.outerHTML=chipHtml(f,x,+i); } }
 function removeChip(field,i){ state.compose[field].splice(i,1); renderChips(field); fieldEl(field).querySelector(".ci").focus(); guardStale(); }
 /* ---------- recipient autocomplete (from your own mail history; all local) ---------- */
 let _acItems=[], _acIdx=-1, _acField=null, _acTimer=null;
@@ -3548,7 +3589,9 @@ function guardSnapshot(cmp,sendAfter){
   return {mode:cmp.mode, subject:$("#cmpSubject").value, subject0:cmp.subject0, body:$("#cmpBody").value,
     sigBlock:cmp._sigBlock||"", nAttach:cmp.attachments.length, fwdAttach:cmp.fwdAttach||0,
     reading:[...cmp._reading.values()], sendAfter:sendAfter||0, now:Date.now()/1000,
-    to:cmp.to.map(n), cc:cmp.cc.map(n), mine:[...state.myAddrs], autoCc:cmp.autoCc, ack:cmp._ack, fresh:[]}; }
+    to:cmp.to.map(n), cc:cmp.cc.map(n), mine:[...state.myAddrs,...[...cmp._people].filter(([,p])=>p.self).map(([a])=>a)],
+    autoCc:cmp.autoCc, ack:cmp._ack,
+    fresh:[...new Set([...cmp.to,...cmp.cc,...cmp.bcc].filter(x=>!x.bad).map(n))].filter(a=>knownIsNew(cmp,a))}; }
 function _guardFocusDesc(el){   // where to put focus back after Keep editing (chip inputs are re-rendered, so by field)
   if(!el||!$("#composeModal").contains(el)||$("#cmpGuard").contains(el))return null;
   return el.classList.contains("ci")?{field:el.dataset.cf}:{el}; }
@@ -3643,7 +3686,7 @@ async function composeSend(sendAfter){
   const replyPk=(cmp.mode==="reply"||cmp.mode==="replyall")?cmp.origPk:null;
   const snap={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
     body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
-    autoCc:cmp.autoCc,subject0:cmp.subject0,ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
+    autoCc:cmp.autoCc,subject0:cmp.subject0,participants:[...cmp.participants],ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
   cmp.dirty=false; state.failedSend=null; composeClose(true);
   showSendFloat("sending", scheduled?(ico("clock")+" Scheduling for "+fmtWhen(sendAfter)+"…"):"↑ Sending…");
   try{
@@ -3659,7 +3702,7 @@ async function composeSend(sendAfter){
   }catch(e){
     state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
       body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,
-      autoCc:cmp.autoCc,subject0:cmp.subject0,ack:snap.ack};
+      autoCc:cmp.autoCc,subject0:cmp.subject0,participants:snap.participants,ack:snap.ack};
     showSendFloat("failed",ico("alert")+" Send failed — "+esc(e.message||""),true);
   }
 }
@@ -3804,7 +3847,7 @@ function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
   composeOpen({mode:f.mode, from:f.from, to:f.to.map(x=>x.v), cc:f.cc.map(x=>x.v), bcc:f.bcc.map(x=>x.v),
     subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, noSig:true,
-    autoCc:f.autoCc, subject0:f.subject0, ack:f.ack});
+    autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
   state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; renderAttach();
   if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
@@ -3851,7 +3894,7 @@ function startUndoCountdown(oid, snap, rcpts){
 function reopenSend(snap){
   composeOpen({mode:snap.mode, from:snap.from, to:snap.to.map(x=>x.v), cc:snap.cc.map(x=>x.v), bcc:snap.bcc.map(x=>x.v),
     subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, noSig:true,
-    autoCc:snap.autoCc, subject0:snap.subject0, ack:snap.ack});
+    autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
   state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; renderAttach();
   if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; }
 }
