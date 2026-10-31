@@ -1207,12 +1207,15 @@ def draft_by_msgid(c, account, message_id):
 
 
 def draft_upsert(c, row):
-    """Insert (row has no id) or update (row has id) a draft tracking record; returns id."""
+    """Insert (row has no id) or update (row has id) a draft tracking record; returns id. A row
+    that has gone (the draft was sent or discarded elsewhere) is inserted afresh under a new id,
+    so the copy just saved is tracked rather than left behind by every later save."""
     if row.get("id"):
-        c.execute("""UPDATE drafts SET account=:account, folder=:folder, uid=:uid, message_id=:message_id,
+        cur = c.execute("""UPDATE drafts SET account=:account, folder=:folder, uid=:uid, message_id=:message_id,
                        uidvalidity=:uidvalidity, in_reply_to_pk=:in_reply_to_pk, mode=:mode,
                        subject=:subject, updated_at=:updated_at WHERE id=:id""", row)
-        return row["id"]
+        if cur.rowcount:
+            return row["id"]
     cur = c.execute("""INSERT INTO drafts(account,folder,uid,message_id,uidvalidity,
                          in_reply_to_pk,mode,subject,created_at,updated_at)
                        VALUES(:account,:folder,:uid,:message_id,:uidvalidity,:in_reply_to_pk,
