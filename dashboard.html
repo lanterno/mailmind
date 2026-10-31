@@ -3298,6 +3298,8 @@ function composeIsOpen(){ return state.compose!==null; }
 function rid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
 function parseAddrs(s){ return (String(s||"").match(/[^\s<>,;"]+@[^\s<>,;"]+/g)||[]); }
 function addrOf(s){ return parseAddrs(s)[0]||""; }
+function rcptAddr(v){ const m=String(v||"").match(/<([^<>]+)>\s*$/);   // where a chip's mail goes: the <…> part, not an address in its name
+  return ((m?m[1]:addrOf(v))||String(v||"")).trim().toLowerCase(); }
 function rePrefix(subj,pre){ const s=(subj||"").trim();
   return /^(re|fwd?|fw)\s*:/i.test(s)?pre+" "+s.replace(/^(re|fwd?|fw)\s*:\s*/i,""):(s?pre+" "+s:pre); }
 function looksLikeAddr(v){ const m=v.match(/<([^>]+)>/); const a=(m?m[1]:v).trim();
@@ -3391,7 +3393,7 @@ function renderChips(field){
   fieldEl(field).innerHTML=cmp[field].map((a,i)=>chipHtml(field,a,i)).join("")
     +`<input class="ci" data-cf="${field}" placeholder="${field==="to"&&!cmp[field].length?"name@example.com":""}">`;
 }
-function chipHtml(field,x,i){ const cmp=state.compose, a=(addrOf(x.v)||x.v||"").toLowerCase(), nw=!x.bad&&knownIsNew(cmp,a);
+function chipHtml(field,x,i){ const cmp=state.compose, a=rcptAddr(x.v), nw=!x.bad&&knownIsNew(cmp,a);
   return `<span class="cm-chip${x.bad?" bad":""}${nw?" new":""}" data-addr="${esc(a)}"${nw?' title="No earlier mail with this address in MailMind"':""}>${esc(x.v)}`
     +(nw?'<span class="cm-new" aria-hidden="true">new</span><span class="visually-hidden">, new to you</span>':"")
     +`<button data-rmchip="${field}:${i}" aria-label="Remove ${esc(x.v)}${x.bad?", not a valid address":nw?", new to you":""}">×</button></span>`; }
@@ -3409,7 +3411,7 @@ function knownIsNew(cmp,a){ const p=cmp&&cmp._people.get(a);
   return !!p&&!p.known&&!p.self&&!cmp._thin&&!state.myAddrs.has(a)&&!cmp.participants.has(a); }
 function knownQueue(values,say){
   const cmp=state.compose; if(!cmp)return;
-  for(const v of values){ const a=(addrOf(v)||"").toLowerCase();
+  for(const v of values){ const a=rcptAddr(v);
     if(!a||!looksLikeAddr(a)||state.myAddrs.has(a)||cmp.participants.has(a))continue;
     if(_knownCache.has(a)){ cmp._people.set(a,_knownCache.get(a)); continue; }
     if(cmp._people.has(a))continue;
@@ -3585,7 +3587,7 @@ function guardLine(w){   // → {text, fix:{kind,label}|null}; whenText for "lat
 let _guardArmT=null, _gsT=null;
 function guardOpen(){ return !!(state.compose&&state.compose._guard); }
 function guardSnapshot(cmp,sendAfter){
-  const n=x=>(addrOf(x.v)||x.v||"").toLowerCase();
+  const n=x=>rcptAddr(x.v);
   return {mode:cmp.mode, subject:$("#cmpSubject").value, subject0:cmp.subject0, body:$("#cmpBody").value,
     sigBlock:cmp._sigBlock||"", nAttach:cmp.attachments.length, fwdAttach:cmp.fwdAttach||0,
     reading:[...cmp._reading.values()], sendAfter:sendAfter||0, now:Date.now()/1000,
@@ -3654,7 +3656,7 @@ function confirmSendGuard(src,e){
   const after=g.sendAfter; hideSendGuard(); composeSend(after); }
 function guardTrimCc(){   // keep only the Cc you added yourself; it's a plain reply after that
   const cmp=state.compose; if(!cmp||!cmp.autoCc)return;
-  const n=x=>(addrOf(x.v)||x.v||"").toLowerCase(), before=cmp.cc.length;
+  const n=x=>rcptAddr(x.v), before=cmp.cc.length;
   cmp.cc=cmp.cc.filter(x=>!cmp.autoCc.includes(n(x))); const k=before-cmp.cc.length;
   renderChips("cc"); cmp.mode="reply"; $("#cmpTitle").textContent="Reply"; cmp.dirty=true;
   hideSendGuard(); $("#cmpSend").focus();
