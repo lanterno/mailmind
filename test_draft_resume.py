@@ -668,6 +668,24 @@ def test_other_apps_draft_opens_whole_as_plain_text():
     assert r["notes"] == {"inline": 1, "bcc_dropped": 0, "plain": True}, r["notes"]
 
 
+def test_many_files_come_back_in_order_from_one_parse():
+    _fresh()
+    files = [{"filename": f"f{i}.bin", "content_type": "application/octet-stream",
+              "b64": base64.b64encode(bytes([i]) * 3000).decode()} for i in range(40)]
+    pk, _ = _saved_and_synced(text="Many.", attachments=files)
+    real = mailparse.extract_part
+
+    def per_part(raw, part_id):
+        raise AssertionError("re-parsed the whole draft for one file")
+    mailparse.extract_part = per_part
+    try:
+        r, code = _resume(pk)
+    finally:
+        mailparse.extract_part = real
+    assert code == 200 and [f["filename"] for f in r["files"]] == [f"f{i}.bin" for i in range(40)], r
+    assert all(base64.b64decode(f["b64"]) == bytes([i]) * 3000 for i, f in enumerate(r["files"]))
+
+
 def test_html_only_draft_is_refused():
     _fresh()
     raw = _foreign([lambda m: m.set_content("<p>Only <a href='https://x.example.test'>formatted</a></p>",
