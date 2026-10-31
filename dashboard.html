@@ -393,6 +393,20 @@
   .abtn.prim:hover{background:var(--primary-hi);color:var(--on-primary)}
   .abtn.ai{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent)}
   .abtn.ai:hover{background:color-mix(in srgb,var(--ai) 18%,transparent);color:var(--ai)}
+  .ai-split{display:inline-flex;gap:1px}
+  .ai-split>.abtn:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+  .ai-split>.ai-more{border-top-left-radius:0;border-bottom-left-radius:0;padding-left:8px;padding-right:9px}
+  .snooze-menu.draft-menu{width:290px;padding:12px 13px;gap:7px}
+  .draft-menu .dm-k{font-size:11.5px;font-weight:600;color:var(--faint)}
+  .draft-menu .dm-k small{font-weight:400}
+  .draft-menu .dm-tones{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
+  .snooze-menu.draft-menu .dm-tones button{padding:5px 11px;border-radius:var(--r-pill);font-size:12.5px;background:var(--sel)}
+  .snooze-menu.draft-menu .dm-tones button[aria-pressed="true"]{background:color-mix(in srgb,var(--ai) 16%,transparent);color:var(--ai);font-weight:600}
+  .draft-menu input{background:var(--bg);border:1px solid var(--line-hi);border-radius:var(--r-sm);color:var(--ink);font:inherit;font-size:13px;padding:7px 9px}
+  .draft-menu input:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 22%,transparent)}
+  .snooze-menu.draft-menu .dm-go{align-self:flex-end;display:inline-flex;align-items:center;gap:6px;margin-top:3px;padding:7px 13px;font-weight:600;
+    color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent)}
+  .snooze-menu.draft-menu .dm-go:hover{background:color-mix(in srgb,var(--ai) 18%,transparent);color:var(--ai)}
   .cmp-saved{font-size:11.5px;color:var(--faint);align-self:center;margin-left:8px}
   .set-sig{width:100%;background:var(--bg);border:1px solid transparent;border-radius:var(--r-sm);color:var(--ink);
     font:inherit;font-size:13px;padding:9px 11px;resize:vertical;min-height:56px}
@@ -1468,7 +1482,7 @@
     <span class="sendpill" id="cmpPill" aria-live="polite"></span>
     <input type="file" id="cmpFile" multiple hidden>
     <button class="abtn" id="cmpAttachBtn" title="Attach files"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clip"/></svg> Attach</button>
-    <button class="abtn ai" id="cmpAiDraft" title="Draft a reply with AI" hidden><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg><span class="ai-t">Draft</span></button>
+    <span class="ai-split" id="cmpAiSplit" hidden><button class="abtn ai" id="cmpAiDraft" title="Draft a reply with AI"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-wind"/></svg><span class="ai-t">Draft</span></button><button class="abtn ai ai-more" id="cmpAiMore" aria-label="Draft options: tone, and what to say" aria-haspopup="dialog" aria-expanded="false">▾</button></span>
     <span class="cmp-saved" id="cmpSaved" aria-live="polite"></span>
     <button class="abtn" id="cmpDiscard" style="margin-left:auto">Discard</button>
     <button class="abtn" id="cmpSaveDraft" title="Save draft (⌘/Ctrl+S)">Save draft</button>
@@ -3244,7 +3258,8 @@ function composeOpen(opts){
   $("#cmpFrom").innerHTML=senders.map(e=>
     `<option value="${esc(e)}"${e===from?" selected":""}>${esc(nameOf(e))} — ${esc(e)}</option>`).join("");
   $("#cmpTitle").textContent={reply:"Reply",replyall:"Reply all",forward:"Forward"}[state.compose.mode]||"New message";
-  $("#cmpAiDraft").hidden=!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null;
+  $("#cmpAiSplit").hidden=!(state.compose.mode==="reply"||state.compose.mode==="replyall")||state.compose.origPk==null;
+  paintDraftBtn();
   $("#cmpSubject").value=state.compose.subject;
   // insert the From account's signature for FRESH composes only (not editDraft / failed-reopen,
   // which carry their own body already containing a signature). Lands above the server-appended quote.
@@ -3265,6 +3280,7 @@ function sigFor(email){ return (state.signatures&&state.signatures[email])||stat
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
+  closeDraftMenu();
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){ composeSaveDraft().then(()=>toast("Saved to Drafts")); }  // auto-save on close
   state.compose=null;
@@ -3428,20 +3444,59 @@ function openSendLaterMenu(anchor){
   setTimeout(()=>document.addEventListener("click",closeSendLaterMenu,{once:true}),0);
 }
 function closeSendLaterMenu(){ const m=$("#sendLaterMenu"); if(m)m.remove(); }
-async function aiDraftReply(){
+/* ---------- AI draft: a remembered tone, and an optional "what to say" ---------- */
+const DRAFT_TONES={brief:"Brief", balanced:"Balanced", warm:"Warm", formal:"Formal"};   // draft_reply._TONES
+function draftTone(){ const t=localStorage.getItem("mm_draft_tone"); return DRAFT_TONES[t]?t:"balanced"; }
+function paintDraftBtn(){
+  const t=draftTone(), b=$("#cmpAiDraft"); if(!b||b.disabled)return;
+  b.querySelector(".ai-t").textContent=t==="balanced"?"Draft":"Draft · "+DRAFT_TONES[t].toLowerCase();
+  b.title=`Draft a reply with AI, ${DRAFT_TONES[t].toLowerCase()} tone`;
+}
+async function aiDraftReply(opts){   // opts: {tone, instruction}; a plain click drafts in the remembered tone
+  opts=opts||{};
   const cmp=state.compose; if(!cmp)return;
   if(cmp.origPk==null){ toast("Open a reply to draft one"); return; }
   const btn=$("#cmpAiDraft"); if(!btn||btn.disabled)return;   // a generation is already in flight for this composer
-  const t=btn.querySelector(".ai-t"), prev=t.textContent; btn.disabled=true; t.textContent="Drafting…";
+  const t=btn.querySelector(".ai-t"); btn.disabled=$("#cmpAiMore").disabled=true; t.textContent="Drafting…";
   try{
-    const d=await cpost("/api/ai/draft-reply",{pk:cmp.origPk, account:cmp.from, tone:"balanced"});
+    const d=await cpost("/api/ai/draft-reply",{pk:cmp.origPk, account:cmp.from, tone:opts.tone||draftTone(), instruction:opts.instruction||""});
     if(state.compose!==cmp)return;   // closed (or replaced by another reply) while drafting: not this composer's text
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"draft failed"));
+    const ta=$("#cmpBody"), had=ta.value.trim()&&ta.value.trim()!==(cmp._sigBlock||"").trim();
+    if(had){ cmp._rwUndo={value:ta.value, sel:[ta.selectionStart,ta.selectionEnd]}; $("#cmpRwUndo").hidden=false; }   // what you'd written is one Undo away
     const body=d.body+(cmp._sigBlock||"");   // keep the signature below the AI-written reply
-    $("#cmpBody").value=body; cmp.body=body; cmp.dirty=true; $("#cmpBody").focus();
+    ta.value=body; cmp.body=body; cmp.dirty=true; ta.focus();
     toast("Draft ready — review and edit before sending");
   }catch(e){ if(state.compose===cmp)toast("Couldn’t draft: "+(e.message||"")); }
-  finally{ btn.disabled=false; t.textContent=prev; }
+  finally{ btn.disabled=$("#cmpAiMore").disabled=false; paintDraftBtn(); }
+}
+function openDraftMenu(anchor){
+  closeDraftMenu();
+  const t=draftTone(), m=document.createElement("div");
+  m.className="snooze-menu draft-menu"; m.id="draftMenu"; m.setAttribute("role","dialog"); m.setAttribute("aria-label","Draft options");
+  m.innerHTML=`<div class="dm-k" id="dmToneK">Tone</div>
+    <div class="dm-tones" role="group" aria-labelledby="dmToneK">${Object.entries(DRAFT_TONES).map(([k,l])=>
+      `<button data-tone="${k}" aria-pressed="${k===t}">${l}</button>`).join("")}</div>
+    <label class="dm-k" for="dmSay">What should it say? <small>optional</small></label>
+    <input id="dmSay" maxlength="400" autocomplete="off" placeholder="e.g. yes, but not before 3 pm">
+    <button class="dm-go" id="dmGo">${ico("wind")}Draft</button>`;
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=Math.max(8,r.top-8-m.offsetHeight)+"px"; m.style.left=Math.max(8,Math.min(r.left,window.innerWidth-m.offsetWidth-8))+"px";
+  anchor.setAttribute("aria-expanded","true");
+  const go=()=>{ const instruction=$("#dmSay").value.trim(); closeDraftMenu(); aiDraftReply({instruction}); };
+  m.addEventListener("click",e=>{ e.stopPropagation(); const b=e.target.closest("[data-tone]");
+    if(b){ localStorage.setItem("mm_draft_tone",b.dataset.tone); m.querySelectorAll("[data-tone]").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); paintDraftBtn(); return; }
+    if(e.target.closest("#dmGo"))go(); });
+  $("#dmSay").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); go(); } });   // ⌘Enter too: it drafts here, never reaching the composer's send
+  $("#dmSay").focus();
+  setTimeout(()=>{ if(m.isConnected)document.addEventListener("click",_draftMenuOutside); },0);
+}
+function _draftMenuOutside(e){ if(!e.target.closest("#draftMenu"))closeDraftMenu(); }
+function closeDraftMenu(refocus){
+  const m=$("#draftMenu"); if(!m)return;
+  m.remove(); document.removeEventListener("click",_draftMenuOutside);
+  const b=$("#cmpAiMore"); b.setAttribute("aria-expanded","false"); if(refocus)b.focus();
 }
 async function aiRewrite(op){
   const cmp=state.compose; if(!cmp)return;
@@ -3469,7 +3524,7 @@ function aiRewriteUndo(){
   const cmp=state.compose; if(!cmp||!cmp._rwUndo)return;
   const ta=$("#cmpBody"); ta.value=cmp._rwUndo.value; cmp.body=ta.value;
   ta.selectionStart=cmp._rwUndo.sel[0]; ta.selectionEnd=cmp._rwUndo.sel[1];
-  cmp._rwUndo=null; $("#cmpRwUndo").hidden=true; ta.focus(); toast("Rewrite undone");
+  cmp._rwUndo=null; $("#cmpRwUndo").hidden=true; ta.focus(); toast("Back to what you had");
 }
 function reopenFailed(){
   const f=state.failedSend; if(!f)return; hideSendFloat();
@@ -4474,7 +4529,8 @@ $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block 
   }
   cmp._sigBlock=newBlk; cmp._sigFrom=from;
 });
-$("#cmpAiDraft").addEventListener("click",aiDraftReply);
+$("#cmpAiDraft").addEventListener("click",()=>aiDraftReply());
+$("#cmpAiMore").addEventListener("click",e=>{ e.stopPropagation(); if($("#draftMenu"))closeDraftMenu(true); else openDraftMenu(e.currentTarget); });
 $("#cmpAiRow").addEventListener("click",e=>{ const b=e.target.closest("[data-rw]"); if(b){ aiRewrite(b.dataset.rw); return; } if(e.target.closest("#cmpRwUndo"))aiRewriteUndo(); });
 $("#cmpCcToggle").addEventListener("click",()=>{ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; const i=fieldEl("cc").querySelector(".ci"); if(i)i.focus(); });
 $("#cmpAttachBtn").addEventListener("click",()=>$("#cmpFile").click());
@@ -4662,6 +4718,8 @@ document.addEventListener("keydown",e=>{
   if(paletteIsOpen()){ paletteKey(e); return; }
   // compose modal: send with ⌘/Ctrl+Enter (even from the textarea), Esc closes; otherwise type freely
   if(composeIsOpen()){
+    if($("#draftMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // Esc closes the draft options first; ⌘Enter never sends from them
+      e.preventDefault(); if(e.key==="Escape")closeDraftMenu(true); return; }
     if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); composeSend(); return; }
     if((e.metaKey||e.ctrlKey)&&(e.key==="s"||e.key==="S")){ e.preventDefault(); composeSaveDraft(); return; }
     if(e.key==="Escape"){ e.preventDefault(); composeClose(); return; }
