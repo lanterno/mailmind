@@ -854,6 +854,16 @@ def test_outlook_style_invite_is_refused_a_named_one_is_a_file():
     assert code == 200 and [f["filename"] for f in r["files"]] == ["invite.ics"], (code, r)
 
 
+def test_a_file_typed_multipart_is_saved_and_reopened_as_a_file():
+    _fresh()
+    page = {"filename": "page.mhtml", "content_type": "multipart/related", "b64": base64.b64encode(b"MIME page").decode()}
+    pk, _ = _saved_and_synced(text="The page.", attachments=[page])
+    r, code = _resume(pk)
+    assert code == 200 and [(f["filename"], f["content_type"]) for f in r["files"]] == [
+        ("page.mhtml", "application/octet-stream")], (code, r)
+    assert base64.b64decode(r["files"][0]["b64"]) == b"MIME page"
+
+
 def test_files_over_the_cap_are_refused():
     _fresh()
     pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
