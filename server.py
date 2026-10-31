@@ -2456,6 +2456,31 @@ _RESUME_MODES = ("new", "reply", "replyall", "forward")
 _RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
 
 
+def _draft_live(acct, folder, uid):
+    """Is this exact draft copy still on the server? True, False, or None when that can't be told
+    (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
+    replaced, and reopening it would put an older text over the newer one. The caller holds
+    _ops_lock."""
+    import pool
+    if uid is None:
+        return None
+    try:
+        with pool.borrow(acct) as M:
+            typ, _ = M.select(f'"{folder}"', readonly=True)
+            if typ != "OK":
+                return None
+            cur = ingest._uidvalidity(M)
+            c = store.conn()
+            known = store.get_uidvalidity(c, acct["email"], folder)
+            c.close()
+            if cur is not None and known is not None and cur != known:
+                return False                             # every UID we hold for this folder is void
+            typ, d = M.uid("SEARCH", None, "UID", str(int(uid)))
+            return str(int(uid)).encode() in (d[0].split() if d and d[0] else [])
+    except Exception:
+        return None
+
+
 def _hdr_chips(msg, name):
     """One address header of a parsed draft as composer chips, de-duplicated by address."""
     out, seen = [], set()
@@ -2492,12 +2517,23 @@ def draft_resume(body):
     if "draft" not in (row["folder"] or "").lower():
         return {"ok": False, "error": "That message isn’t a draft."}, 400
     try:
-        accounts.get(row["account"])
+        acct = accounts.get(row["account"])
     except KeyError:
         return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
     unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
     try:
         with _ops_lock:
+            if _draft_live(acct, row["folder"], row["uid"]) is False:   # unreachable (None) → the local copy
+                c = store.conn()
+                store.delete_message(c, pk)
+                c.commit()
+                c.close()
+                try:                                         # full: only a full scan brings back older UIDs
+                    ingest.sync_folder(acct, row["folder"], full=True)
+                except Exception as e:
+                    print(f"[resume] drafts resync failed: {_sanitize_conn_error(e)}", flush=True)
+                return {"ok": False, "error": "This draft changed since the list loaded. "
+                                              "Open it again from the refreshed list."}, 409
             ingest.fetch_body(pk)
     except Exception as e:
         print(f"[resume] fetch failed: {_sanitize_conn_error(e)}", flush=True)
