@@ -928,6 +928,34 @@ def test_draft_live_reads_uidvalidity_and_uid():
         server.accounts.connect = real
 
 
+def test_draft_live_is_a_short_stateless_probe():
+    _fresh()
+    timeouts, real = [], server.accounts.connect
+    try:
+        fake = _FakeIMAP(["42"])
+        server.accounts.connect = lambda a, timeout=60: (timeouts.append(timeout), fake)[1]
+        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is True
+        assert timeouts and timeouts[0] <= 15 and fake.calls[-1] == ("logout",), (timeouts, fake.calls)
+        fake = _FakeIMAP(["42"], boom=True)
+        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is None and fake.calls[-1] == ("logout",)
+
+        def refused(a, timeout=60):
+            raise OSError("no route to host")
+        server.accounts.connect = refused
+        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is None
+    finally:
+        server.accounts.connect = real
+
+
+def test_edit_probes_the_server_without_holding_the_ops_lock():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Mine.")
+    held = []
+    server._draft_live = lambda acct, folder, uid: (held.append(server._ops_lock.locked()), True)[1]
+    r, code = _resume(pk)
+    assert code == 200 and held == [False], (code, held)
+
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
