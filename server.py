@@ -2634,6 +2634,10 @@ def draft_resume(body):
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
         return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
                                       "reattach yet." + elsewhere}, 422
+    if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
+           for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
+        return {"ok": False, "error": "Part of this draft is something MailMind can’t reopen without "
+                                      "losing it." + elsewhere}, 422
     leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
     listed = {int(a["part_id"]) for a in parsed["attachments"]}
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
