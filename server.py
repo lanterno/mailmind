@@ -2438,25 +2438,28 @@ def do_draft(body):
                                               prev["uidvalidity"])
                 except Exception as e:
                     print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
+            # the row moves with the copy, under the same lock: Edit re-checks it under this lock
+            now = now_iso()
+            row = {"id": int(did) if did else None, "account": acct["email"], "folder": folder, "uid": uid,
+                   "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
+                   "mode": body.get("mode", "new"), "subject": spec["subject"],
+                   "created_at": now, "updated_at": now}
+            bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
+            c = store.conn()
+            try:
+                new_id = store.draft_upsert(c, row)
+                store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
+                                       compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
+                                       spec["tail"]["html"], json.dumps(bcc) if bcc else None,
+                                       hashlib.sha256(built["raw"]).hexdigest())
+                c.commit()
+            finally:
+                c.close()
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     except Exception as e:
         print(f"[draft] save failed: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "could not save draft"}, 502
-    now = now_iso()
-    row = {"id": int(did) if did else None, "account": acct["email"], "folder": folder, "uid": uid,
-           "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
-           "mode": body.get("mode", "new"), "subject": spec["subject"],
-           "created_at": now, "updated_at": now}
-    bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # build_message validated them
-    c = store.conn()
-    new_id = store.draft_upsert(c, row)
-    store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
-                           compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
-                           spec["tail"]["html"], json.dumps(bcc) if bcc else None,
-                           hashlib.sha256(built["raw"]).hexdigest())
-    c.commit()
-    c.close()
     invalidate_stats()
     return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
 
@@ -2591,7 +2594,14 @@ def draft_resume(body):
     live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
     try:
         with _ops_lock:
-            if live is False:
+            # the probe ran before the lock: a save or a send that held it meanwhile may have replaced
+            # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
+            c = store.conn()
+            now = store.draft_get(c, before["id"]) if before is not None else None
+            c.close()
+            moved = before is not None and (now is None or (now["uid"], now["message_id"])
+                                            != (before["uid"], before["message_id"]))
+            if live is False or moved:
                 c = store.conn()
                 store.delete_message(c, pk)
                 c.commit()

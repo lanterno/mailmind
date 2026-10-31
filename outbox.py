@@ -189,10 +189,10 @@ def _side_effects(oid, row, acct):
             # them as function-locals and break every earlier reference with UnboundLocalError
             c = store.conn(); dr = store.draft_get(c, row["draft_id"]); c.close()
             if dr:
-                with _ops_lock:
+                with _ops_lock:          # the row goes with its copy: Edit re-checks it under this lock
                     smtpsend.delete_draft_uid(accounts.get(dr["account"]), dr["folder"],
                                               dr["uid"], dr["uidvalidity"])
-                _commit(lambda c: store.draft_delete(c, row["draft_id"]))
+                    _commit(lambda c: store.draft_delete(c, row["draft_id"]))
             _commit(lambda c: store.outbox_set(c, oid, draft_deleted=1))
         except Exception as e:
             print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
