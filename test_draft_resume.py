@@ -3,10 +3,14 @@ quote or forwarded section, so it must come back split into your text and that t
 again with each part once. Hermetic — temp database and config, and every IMAP or SMTP call is
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
+import base64
 import hashlib
+import http.client
 import json
 import os
 import tempfile
+import threading
+from email import message_from_bytes, policy
 from email.message import EmailMessage
 
 import store
@@ -30,8 +34,9 @@ _uid = [100]
 CALLS = {}
 
 
-def _fresh(uidv=777):
-    """A new temp database, and recorders in place of every IMAP call a draft save makes."""
+def _fresh(uidv=777, appenduid=True):
+    """A new temp database, and recorders in place of every IMAP call a draft save makes.
+    appenduid=False is a server that names no UID for what was appended."""
     store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
     store.init()
     CALLS.clear()
@@ -41,7 +46,7 @@ def _fresh(uidv=777):
         _uid[0] += 1
         CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
                                 "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid})
-        return "Drafts", _uid[0], uidv
+        return "Drafts", (_uid[0] if appenduid else None), uidv
 
     def delete(acct, folder, uid, uidvalidity=None):
         CALLS["delete"].append((acct["email"], folder, uid, uidvalidity))
@@ -77,6 +82,45 @@ def _original(uid=7):
     c.commit()
     c.close()
     return pk
+
+
+def _synced(raw, uid, account=ACCT, folder="Drafts"):
+    """A Drafts message as sync would store it once fetched: headers from the bytes, body kept,
+    the folder's UIDVALIDITY known. Returns its pk."""
+    m = message_from_bytes(raw, policy=policy.default)
+    c = store.conn()
+    store.set_uidvalidity(c, account, folder, 777)
+    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, "
+              "in_reply_to, refs) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              (account, "imap", folder, uid, str(m["Message-ID"] or ""), f"td{uid}", 1_800_000_100, account,
+               str(m["Subject"] or ""), str(m["In-Reply-To"] or "") or None, str(m["References"] or "") or None))
+    pk = c.execute("SELECT pk FROM messages WHERE folder=? AND uid=?", (folder, uid)).fetchone()["pk"]
+    store.store_body(c, pk, raw, "2026-10-31T10:00:00")
+    c.commit()
+    c.close()
+    return pk
+
+
+def _saved_and_synced(**kw):
+    """Save a draft through do_draft, then sync back exactly the bytes appended. (pk, save result)"""
+    res = _save(**kw)
+    return _synced(CALLS["append"][-1]["raw"], res["uid"] if res["uid"] is not None else 555), res
+
+
+def _resume(pk):
+    return server.draft_resume({"pk": pk})
+
+
+def _foreign(parts, headers=()):
+    """A draft another app made: a multipart message from the given parts."""
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = f"Ada <{ACCT}>", "Bo Park <bo@example.test>", "Re: Plans"
+    m["Message-ID"] = "<phone1@example.test>"
+    for k, v in headers:
+        m[k] = v
+    for p in parts:
+        p(m)
+    return m.as_bytes()
 
 
 def _row(did):
@@ -342,6 +386,171 @@ def test_bcc_is_kept_beside_the_draft_not_in_it():
     row = _row(res["draft_id"])
     assert json.loads(row["bcc"]) == ['"Park, Cy" <cy@example.test>', "dee@example.test"], row["bcc"]
     assert row["raw_sha"] == hashlib.sha256(raw).hexdigest()
+
+
+def test_reply_draft_reopens_with_quote_files_bcc_and_thread():
+    _fresh()
+    opk = _original()
+    pk, res = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
+                                to=["Bo Park <bo@example.test>"], cc=["cy@example.test"], bcc=["Dee <dee@example.test>"],
+                                attachments=[{"filename": "notes.txt", "content_type": "text/plain",
+                                              "b64": base64.b64encode(b"bring water").decode()}])
+    r, code = _resume(pk)
+    assert code == 200 and r["split"] == "exact", (code, r)
+    assert (r["mode"], r["draft_id"], r["text"]) == ("reply", res["draft_id"], OWN), r
+    assert r["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026") and r["tail_text"].count("wrote:") == 1, r["tail_text"]
+    assert (r["to"], r["cc"], r["bcc"]) == (["Bo Park <bo@example.test>"], ["cy@example.test"],
+                                            ["Dee <dee@example.test>"]), r
+    assert (r["in_reply_to"], r["references"]) == ("<orig1@example.test>", "<root@example.test> <orig1@example.test>"), r
+    assert r["orig_pk"] == opk and r["participants"] == ["bo@example.test", ACCT, "cy@example.test"], r
+    assert [(f["filename"], base64.b64decode(f["b64"])) for f in r["files"]] == [("notes.txt", b"bring water")], r["files"]
+    assert r["notes"] == {"inline": 0, "bcc_dropped": 0, "plain": False}, r["notes"]
+
+
+def test_forward_draft_reopens_with_its_files_as_chips():
+    _fresh()
+    opk = _original()
+    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    r, code = _resume(pk)
+    assert code == 200 and (r["mode"], r["text"], r["split"]) == ("forward", "FYI", "exact"), r
+    assert r["tail_text"].startswith("\n\n---------- Forwarded message ----------"), r["tail_text"]
+    assert [(f["filename"], f["content_type"], f["size"]) for f in r["files"]] == [("map.pdf", "application/pdf", 12)], r
+    assert (r["orig_pk"], r["in_reply_to"]) == (None, ""), r
+
+
+def test_original_deleted_still_reopens():
+    _fresh()
+    opk = _original()
+    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
+    c = store.conn()
+    store.delete_message(c, opk)                                # archived: the local row is gone
+    c.commit()
+    c.close()
+    r, code = _resume(pk)
+    assert code == 200 and (r["mode"], r["orig_pk"], r["participants"]) == ("reply", None, []), r
+    assert r["in_reply_to"] == "<orig1@example.test>" and r["text"] == OWN, r
+
+
+def test_original_renumbered_found_by_message_id():
+    _fresh()
+    opk = _original(uid=7)
+    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
+    c = store.conn()
+    store.delete_message(c, opk)
+    c.commit()
+    c.close()
+    npk = _original(uid=8)                                      # reconcile gave it a new row
+    assert npk != opk
+    assert _resume(pk)[0]["orig_pk"] == npk
+
+
+def test_raw_sha_proves_the_version_without_a_uid():
+    _fresh(appenduid=False)
+    pk, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+    assert res["uid"] is None
+    r, _ = _resume(pk)
+    assert (r["split"], r["text"], r["bcc"]) == ("exact", "Mine.", ["dee@example.test"]), r
+
+
+def test_changed_copy_uses_the_recorded_tail_and_drops_bcc():
+    _fresh(appenduid=False)
+    opk = _original()
+    res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN, bcc=["dee@example.test"])
+    raw = b"X-Rewritten-By: bridge\r\n" + CALLS["append"][-1]["raw"]   # the server's copy isn't byte-for-byte ours
+    r, code = _resume(_synced(raw, 601))
+    assert code == 200 and (r["split"], r["text"], r["draft_id"]) == ("tail", OWN, res["draft_id"]), r
+    assert r["tail_text"].count("wrote:") == 1, r["tail_text"]
+    assert r["bcc"] == [] and r["notes"]["bcc_dropped"] == 1, r
+
+
+def test_other_apps_draft_opens_whole_as_plain_text():
+    _fresh()
+    opk = _original()
+
+    def body(m):
+        m.set_content("On my way.\n\nOn Mon, Bo wrote:\n> Shall we meet Saturday?\n")
+        m.add_alternative("<p>On my way. <img src='cid:logo1@example.test'></p>", subtype="html")
+        m.get_payload()[1].add_related(b"\x89PNG fake", maintype="image", subtype="png", cid="<logo1@example.test>")
+        m.add_attachment(b"%PDF-1.4 plan", maintype="application", subtype="pdf", filename="plan.pdf")
+    raw = _foreign([body], [("Bcc", "Cy Lee <cy@example.test>"), ("In-Reply-To", "<orig1@example.test>")])
+    r, code = _resume(_synced(raw, 9))
+    assert code == 200 and (r["mode"], r["split"]) == ("reply", "whole"), r
+    assert r["text"] == "On my way.\n\nOn Mon, Bo wrote:\n> Shall we meet Saturday?" and r["tail_text"] == "", r
+    assert r["bcc"] == ["Cy Lee <cy@example.test>"] and r["orig_pk"] == opk, r
+    names = sorted(f["filename"] for f in r["files"])
+    assert len(names) == 2 and "plan.pdf" in names and any(n.startswith("inline-") and n.endswith(".png")
+                                                            for n in names), names
+    assert r["notes"] == {"inline": 1, "bcc_dropped": 0, "plain": True}, r["notes"]
+
+
+def test_html_only_draft_is_refused():
+    _fresh()
+    raw = _foreign([lambda m: m.set_content("<p>Only <a href='https://x.example.test'>formatted</a></p>",
+                                            subtype="html")])
+    r, code = _resume(_synced(raw, 10))
+    assert code == 422 and "only has formatted text" in r["error"], (code, r)
+
+
+def test_attached_email_is_refused():
+    _fresh()
+    inner = EmailMessage()
+    inner["Subject"] = "Old thread"
+    inner.set_content("hello")
+
+    def body(m):
+        m.set_content("See the thread below.")
+        m.add_attachment(inner)
+    r, code = _resume(_synced(_foreign([body]), 11))
+    assert code == 422 and "email attached as a file" in r["error"], (code, r)
+
+
+def test_files_over_the_cap_are_refused():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
+                                                        "b64": base64.b64encode(b"x" * 64).decode()}])
+    cap, server.MAX_ATTACH_BYTES = server.MAX_ATTACH_BYTES, 32
+    try:
+        r, code = _resume(pk)
+    finally:
+        server.MAX_ATTACH_BYTES = cap
+    assert code == 422 and "more than 25 MB" in r["error"], (code, r)
+
+
+def test_bad_pk_unknown_and_not_a_draft():
+    _fresh()
+    opk = _original()
+    assert server.draft_resume({"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
+    assert server.draft_resume({})[1] == 400
+    assert server.draft_resume({"pk": 99999})[1] == 404
+    r, code = server.draft_resume({"pk": opk})
+    assert code == 400 and r["error"] == "That message isn’t a draft.", r
+
+
+def test_resume_route_requires_csrf():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Mine.")
+    srv = server._Server(("127.0.0.1", 0), server.H)
+    port = srv.server_address[1]
+    old_port, server.PORT = server.PORT, port
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        def post(headers):
+            h = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            h.request("POST", "/api/draft/resume", json.dumps({"pk": pk}),
+                      {"Content-Type": "application/json", **headers})
+            resp = h.getresponse()
+            out = resp.status, json.loads(resp.read() or b"{}")
+            h.close()
+            return out
+        origin = {"Origin": f"http://127.0.0.1:{port}"}
+        assert post(origin)[0] == 403
+        code, body = post({**origin, "X-CSRF-Token": server.CSRF})
+        assert code == 200 and body["text"] == "Mine.", (code, body)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        server.PORT = old_port
 
 
 if __name__ == "__main__":
