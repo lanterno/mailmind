@@ -78,6 +78,20 @@ def test_received_non_junk_only():
     assert k == {"lio@example.test": True, "spoof@example.test": False}, k
 
 
+def test_provider_spam_folders_never_vouch():
+    _fresh()
+    _msg("jordan@lookalike.example", folder="Spam")              # classifier said personal
+    _msg("bulk@lookalike.example", folder="INBOX.Bulk Mail")
+    _msg(ACCT, "victim@other.example", folder="[Gmail]/Spam")     # spam forging your From:
+    _msg(ACCT, "mark@other.example", folder="Sent", is_junk=1)
+    _msg("ok@example.test", folder="Spammers club")              # a folder merely named like it
+    k = _known(["jordan@lookalike.example", "bulk@lookalike.example", "victim@other.example",
+                "mark@other.example", "ok@example.test"])
+    assert k == {"jordan@lookalike.example": False, "bulk@lookalike.example": False,
+                 "victim@other.example": False, "mark@other.example": False,
+                 "ok@example.test": True}, k
+
+
 def test_own_sent_rows_count_every_recipient():
     _fresh()
     _msg(ACCT, 'Lio Park <lio@example.test>, "Smith, Cy" <cy@example.test> kim@example.test '
