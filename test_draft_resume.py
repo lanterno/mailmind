@@ -4,6 +4,7 @@ again with each part once. Hermetic — temp database and config, and every IMAP
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
 import base64
+import contextlib
 import hashlib
 import http.client
 import json
@@ -23,6 +24,7 @@ with open(config.CONFIG, "w") as f:
                             {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}, f)
 import compose
 import mailparse
+import pool
 import server
 
 ACCT = "ada@example.test"
@@ -57,9 +59,11 @@ def _fresh(uidv=777, appenduid=True):
     server.smtpsend.delete_draft_uid = delete
     server.outbox.enqueue = enqueue
     server.ingest.fetch_body = _real_fetch_body
+    server._draft_live = lambda acct, folder, uid: True           # the server still holds the copy
 
 
 _real_fetch_body = server.ingest.fetch_body
+_real_draft_live = server._draft_live
 
 
 def _save(account=ACCT, draft_id=None, **kw):
@@ -707,6 +711,73 @@ def test_unflagged_reply_still_needs_its_original():
     res, code = server.do_send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
     assert (code, res["error"]) == (400, "missing original message"), res
+
+
+def test_replaced_copy_is_refused_and_drafts_resynced():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Old words.")
+    synced = []
+    real = server.ingest.sync_folder
+    server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full))
+    server._draft_live = lambda acct, folder, uid: False
+    try:
+        r, code = _resume(pk)
+    finally:
+        server.ingest.sync_folder = real
+    assert code == 409 and "changed since the list loaded" in r["error"], (code, r)
+    c = store.conn()
+    gone = store.get_message(c, pk) is None
+    c.close()
+    assert gone and synced == [(ACCT, "Drafts", True)], synced
+
+
+def test_unreachable_server_opens_the_local_copy():
+    _fresh()
+    pk, _ = _saved_and_synced(text="Mine.")
+    server._draft_live = lambda acct, folder, uid: None
+    r, code = _resume(pk)
+    assert code == 200 and r["text"] == "Mine.", r
+
+
+class _FakeIMAP:
+    def __init__(self, uids, uidv=777, select="OK", boom=False):
+        self.uids, self.untagged_responses, self._select, self.boom = uids, {"UIDVALIDITY": [str(uidv).encode()]}, select, boom
+        self.calls = []
+
+    def select(self, folder, readonly=False):
+        self.calls.append(("select", folder, readonly))
+        if self.boom:
+            raise OSError("connection reset")
+        return self._select, [b"3"]
+
+    def uid(self, *args):
+        self.calls.append(("uid",) + args)
+        want = args[-1]
+        return "OK", [b" ".join(u.encode() for u in self.uids if u == want)]
+
+
+def test_draft_live_reads_uidvalidity_and_uid():
+    _fresh()
+    c = store.conn()
+    store.set_uidvalidity(c, ACCT, "Drafts", 777)
+    c.commit()
+    c.close()
+    acct = {"email": ACCT}
+    real = pool.borrow
+    try:
+        def check(fake, uid=42):
+            pool.borrow = contextlib.contextmanager(lambda a: (yield fake))
+            return _real_draft_live(acct, "Drafts", uid)
+        fake = _FakeIMAP(["42"])
+        assert check(fake) is True
+        assert fake.calls[0] == ("select", '"Drafts"', True) and fake.calls[1] == ("uid", "SEARCH", None, "UID", "42")
+        assert check(_FakeIMAP(["41"])) is False
+        assert check(_FakeIMAP(["42"], uidv=888)) is False                      # UIDs rolled
+        assert check(_FakeIMAP(["42"], select="NO")) is None
+        assert check(_FakeIMAP(["42"], boom=True)) is None
+        assert check(_FakeIMAP(["42"]), uid=None) is None
+    finally:
+        pool.borrow = real
 
 
 if __name__ == "__main__":
