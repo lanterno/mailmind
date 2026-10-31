@@ -5065,7 +5065,10 @@ document.addEventListener("keydown",e=>{
     if($("#draftMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // Esc closes the draft options first; ⌘Enter never sends from them
       e.preventDefault(); if(e.key==="Escape")closeDraftMenu(true); return; }
     if($("#sendLaterMenu")&&(e.key==="Escape"||((e.metaKey||e.ctrlKey)&&e.key==="Enter"))){   // same for the Later menu
-      e.preventDefault(); if(e.key==="Escape"){ closeSendLaterMenu(); $("#cmpSchedule").focus(); } return; }
+      const inside=$("#sendLaterMenu").contains(document.activeElement);
+      if(e.key==="Escape"){ e.preventDefault(); closeSendLaterMenu(); if(inside)$("#cmpSchedule").focus(); return; }
+      if(inside){ e.preventDefault(); return; }
+      closeSendLaterMenu(); }   // ⌘Enter from the composer with the menu left open behind: drop it and go on
     if(guardOpen()&&e.key==="Escape"){ e.preventDefault(); dismissSendGuard(); return; }   // Esc keeps editing; a second Esc closes
     if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){ e.preventDefault(); if(e.repeat)return;   // a held chord acts once
       if(guardOpen())confirmSendGuard("key",e); else composeSend(state.compose._pendingAfter); return; }
