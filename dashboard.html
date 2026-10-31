@@ -3360,15 +3360,15 @@ function sigFor(email){ return (state.signatures&&state.signatures[email])||stat
 function adoptSig(text, acct){   // a composer reopened with its own text tracks the signature it ends with
   const cmp=state.compose, blk=resumeSig(text, sigFor(acct));
   if(cmp&&blk){ cmp._sigBlock=blk; cmp._sigFrom=acct; } }
-let _closeSave=null;   // the save composeClose started, until it settles: Edit waits for it
+let _closeSave=null;   // the saves composeClose started, until all settle: Edit waits for them
 function composeClose(force){
   const cmp=state.compose;
   if(typeof acClose==="function")acClose();
   closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){   // auto-save on close
-    const p=_closeSave=composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); });
-    p.finally(()=>{ if(_closeSave===p)_closeSave=null; }); }
+    const p=_closeSave=Promise.all([_closeSave, composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); })]);
+    p.finally(()=>{ if(_closeSave===p)_closeSave=null; }); }   // one still in flight from an earlier close counts too
   state.compose=null;
   $("#composeModal").classList.remove("show");
   _syncScrim();
