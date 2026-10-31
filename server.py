@@ -2568,10 +2568,12 @@ def draft_resume(body):
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
         return {"ok": False, "error": "This draft has an email attached as a file, which MailMind can’t "
                                       "reattach yet." + elsewhere}, 422
+    leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
     files, total, inline = [], 0, 0
     for a in parsed["attachments"]:
-        data, ct = mailparse.extract_part(raw, a["part_id"])
-        data = data or b""
+        part = leaves[int(a["part_id"]) - 1]
+        data = part.get_payload(decode=True) or b""
+        ct = (part.get_content_type() or "application/octet-stream").lower()
         total += len(data)
         if total > MAX_ATTACH_BYTES:
             return {"ok": False, "error": "This draft’s files add up to more than 25 MB, more than MailMind "
@@ -2581,7 +2583,7 @@ def draft_resume(body):
             inline += 1                                  # a picture in the text: it comes back as a file
             if re.fullmatch(r"inline-\d+", name):
                 name += mimetypes.guess_extension(ct or "") or ""
-        files.append({"filename": name, "content_type": ct or a["content_type"] or "application/octet-stream",
+        files.append({"filename": name, "content_type": ct,
                       "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
     did = _draft_info(row)["draft_id"]                   # registers another app's draft
     c = store.conn()
