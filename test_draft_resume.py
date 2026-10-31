@@ -1176,6 +1176,24 @@ def test_long_subject_reopens_as_drafted_however_often_it_is_saved():
     assert code == 200 and str(_sent()[0]["Subject"]) == subj, str(_sent()[0]["Subject"])
 
 
+def test_comments_nested_past_any_parser_still_give_bare_addresses():
+    _fresh()
+    raw = (b"From: Ada <ada@example.test>\r\nTo: Bo <bo@example.test>\r\nSubject: x\r\n"
+           b"Bcc: " + b"(" * 3000 + b"cy@example.test, dee@example.test\r\nMessage-ID: <deep1@example.test>\r\n\r\nhi\r\n")
+    r, code = _resume(_synced(raw, 40))
+    assert code == 200 and r["bcc"] == ["cy@example.test", "dee@example.test"], (code, r)
+
+
+def test_a_part_header_that_wont_parse_is_unreadable_not_a_500():
+    _fresh()
+    raw = (b"From: Ada <ada@example.test>\r\nTo: bo@example.test\r\nSubject: y\r\nMessage-ID: <deep2@example.test>\r\n"
+           b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"M\"\r\n\r\n"
+           b"--M\r\nContent-Type: text/plain\r\n\r\nHi\r\n--M\r\nContent-Type: text/plain\r\n"
+           b"Content-Transfer-Encoding: " + b"(" * 3000 + b"base64\r\n\r\nSGk=\r\n--M--\r\n")
+    r, code = _resume(_synced(raw, 41))
+    assert code == 422 and "can’t read this draft" in r["error"], (code, r)
+
+
 def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
     _fresh()
     raw = ("From: Ada <ada@example.test>\r\nTo: José Ñúñez <jose@bücher.example>, Bo <bo@example.test>\r\n"
