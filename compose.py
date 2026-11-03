@@ -125,6 +125,9 @@ def addr_chip(name, addr):
     return f"{name} <{addr}>"
 
 
+_BCC_HEADER = re.compile(rb"(?im)^bcc[ \t]*:")
+
+
 def build_message(spec, draft=False):
     """spec: {account, account_name, to, cc, bcc (lists of raw tokens or strings),
     subject, text, html|None, attachments [{filename,content_type,data:bytes}],
@@ -184,8 +187,9 @@ def build_message(spec, draft=False):
                          filename=_clean(att.get("filename") or "attachment"), **extra)
 
     raw = m.as_bytes(policy=email.policy.SMTP)
-    assert b"\nBcc:" not in b"\n" + raw.split(b"\r\n\r\n", 1)[0].replace(b"\r\n", b"\n"), \
-        "Bcc must never appear in the transmitted/stored bytes"
+    # A raise, not an assert: python -O strips asserts. Header names are case-insensitive.
+    if _BCC_HEADER.search(raw.split(b"\r\n\r\n", 1)[0]):
+        raise ValueError("Bcc must never appear in the transmitted/stored bytes")
     return {
         "raw": raw, "message_id": mid,
         "envelope": [a for _, a in to] + [a for _, a in cc] + [a for _, a in bcc],

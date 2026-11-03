@@ -242,7 +242,8 @@ def masked_rows():
 def save(raw):
     """Atomically persist the whole config. Validates, fsyncs, chmod 600 before
     an atomic rename so a crash can never leave a partial/world-readable file."""
-    assert isinstance(raw, dict) and isinstance(raw.get("accounts"), list), "bad config shape"
+    if not (isinstance(raw, dict) and isinstance(raw.get("accounts"), list)):   # not an assert: -O strips those
+        raise ValueError("bad config shape")
     blob = json.dumps(raw, indent=2, ensure_ascii=False)
     json.loads(blob)  # round-trip validation
     fd, tmp = tempfile.mkstemp(dir=HERE, prefix=".cfg-", suffix=".tmp")
