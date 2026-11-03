@@ -18,7 +18,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import gate
 from fixtures import world as w
+from mailmind.platform.workers import gates
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -56,13 +58,12 @@ def summary(pk, importance, category, action=""):
 
 
 def lock_spy(world, command, user=None):
-    """Whether the app held server._ops_lock each time the fake IMAP server received `command`.
-    The predicate never matches, so the command runs as usual."""
-    import server
+    """Whether the app held the account's IMAP gate each time the fake IMAP server received
+    `command`. The predicate never matches, so the command runs as usual."""
     held = []
 
     def look(args):
-        held.append(server._ops_lock.locked())
+        held.append(gates.held(user or gates.EVERY_ACCOUNT))
         return False
     world.server.fail(command, when=look, times=None, user=user)
     return held
@@ -82,8 +83,7 @@ def test_hwf_trash_moves_and_queues_under_the_imap_lock(app, world, monkeypatch)
     queued, insert = [], store.read_mut_insert
 
     def spy(c, row):
-        import server
-        queued.append(server._ops_lock.locked())
+        queued.append(gates.held(w.ADA))
         return insert(c, row)
     monkeypatch.setattr(store, "read_mut_insert", spy)
     world.server.drop("SELECT", user=w.ADA)
@@ -104,7 +104,7 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
     rules.set_expiry("nobody.example.test", 72)              # so expiry has work that needs IMAP
     ada = accounts.get(w.ADA)
     since = len(world.server.commands)
-    with server._ops_lock:                                   # a user op holds the lock
+    with gate.held_elsewhere():                              # a user op holds the lock
         server._auto_reconcile_one(ada)
         server._auto_expire_one(ada)
     assert world.server.commands[since:] == []               # both skipped this cycle
@@ -114,25 +114,23 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
 
 
 def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):
-    import server
     pk = world.pk("bea-inbox-01-client.eml")
     fetches = len(world.server.commands_for(w.BEA, "UID FETCH"))
-    with server._ops_lock:
+    with gate.held_elsewhere():
         r = app.get(f"/api/message/{pk}/body?prefetch=1").json
     assert r == {"ok": False, "busy": True}
     assert len(world.server.commands_for(w.BEA, "UID FETCH")) == fetches
     assert app.get(f"/api/message/{pk}/body?prefetch=1").json == {"ok": True, "prefetched": True}
-    with server._ops_lock:                                   # already warm: no lock needed
+    with gate.held_elsewhere():                              # already warm: no lock needed
         assert app.get(f"/api/message/{pk}/body?prefetch=1").json == {"ok": True, "prefetched": True}
 
 
 def test_hwf_smtp_delivery_holds_no_imap_lock(app, world):
     import outbox
-    import server
     held, filed = [], world.smtp.on_message
 
     def look(delivery):
-        held.append(server._ops_lock.locked())
+        held.append(gates.held(w.ADA))
         if filed:
             filed(delivery)
     world.smtp.on_message = look
@@ -305,11 +303,10 @@ def test_hwf_background_ai_starts_only_with_both_slots_free():
 
 def test_hwf_a_burst_of_folder_requests_lists_the_folders_once(app, world):
     import threading
-    import server
     answers = []
     clients = [threading.Thread(target=lambda: answers.append(app.get(f"/api/folders?account={w.ADA}").status))
                for _ in range(4)]
-    with server._ops_lock:                                   # every request queues on the cold cache
+    with gate.held_elsewhere():                              # every request queues on the cold cache
         for t in clients:
             t.start()
         time.sleep(0.3)

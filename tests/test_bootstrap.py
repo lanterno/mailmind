@@ -9,22 +9,20 @@ def unwired(monkeypatch):
     import outbox
     import readmutq
     import realtime
-    import summarize_thread
-    for mod, attrs in ((outbox, ("_ops_lock", "_after_send")), (readmutq, ("_ops_lock", "_after_apply")),
-                       (summarize_thread, ("_ops_lock",)), (realtime, ("_sync_handler",))):
+    for mod, attrs in ((outbox, ("_after_send",)), (readmutq, ("_after_apply",)), (realtime, ("_sync_handler",))):
         for attr in attrs:
             monkeypatch.setattr(mod, attr, getattr(mod, attr))
 
 
-def test_the_workers_share_the_servers_lock_and_report_back_to_it(unwired):
+def test_the_workers_report_back_to_the_server(unwired):
+    """That they hold the IMAP lock for their mail commands, test_hwf_http checks at the fake
+    server."""
     import outbox
     import readmutq
     import realtime
     import server
-    import summarize_thread
     from mailmind.bootstrap import legacy
     legacy.wire(server)
-    assert outbox._ops_lock is readmutq._ops_lock is summarize_thread._ops_lock is server._ops_lock
     assert outbox._after_send is server._after_send
     assert readmutq._after_apply is server._after_readmut
     assert realtime._sync_handler is server.sync_guarded
@@ -55,7 +53,6 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp
         finally:
             c.close()
     assert version == migrations.MIGRATIONS[-1][0]
-    assert outbox._ops_lock is readmutq._ops_lock is server._ops_lock
     always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
     syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
                server.reconcile_loop, server.expire_loop, realtime.start]

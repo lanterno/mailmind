@@ -11,6 +11,7 @@ import threading
 
 import store
 from mailmind.platform import settings
+from mailmind.platform.workers import gates
 
 _CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"}]}
 
@@ -255,12 +256,19 @@ def test_route_requires_csrf():
 
 def test_never_waits_on_the_imap_lock():
     _fresh()
-    done = []
-    with server._ops_lock:
+    done, holding, release = [], threading.Event(), threading.Event()
+    holder = threading.Thread(target=lambda: gates.run(gates.EVERY_ACCOUNT, lambda: (holding.set(), release.wait(10)),
+                                                       priority=gates.Priority.INTERACTIVE), daemon=True)
+    holder.start()                                       # a long mail operation holds the gate
+    assert holding.wait(5)
+    try:
         t = threading.Thread(target=lambda: done.append(server.contacts_known(["lio@example.test"])),
                              daemon=True)
         t.start()
         t.join(5)
+    finally:
+        release.set()
+        holder.join(5)
     assert done and done[0][1] == 200, done
 
 

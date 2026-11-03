@@ -193,7 +193,7 @@ def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch)
     real = store.reconcile
 
     def sync_lands_first(c, account, folder, live, when):
-        world.deliver(w.ADA, "INBOX", late())       # the 300 s sync runs without _ops_lock
+        world.deliver(w.ADA, "INBOX", late())       # the 300 s sync passes no IMAP gate
         return real(c, account, folder, live, when)
 
     monkeypatch.setattr(store, "reconcile", sync_lands_first)

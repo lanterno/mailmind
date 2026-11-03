@@ -18,6 +18,7 @@ import urllib.parse
 
 import store
 from mailmind.platform import settings
+from mailmind.platform.workers import gates
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 with open(settings.current().config, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
@@ -557,11 +558,11 @@ def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync():
 
 @contextlib.contextmanager
 def _trash_probe():
-    """Replaces trash_message; yields the list of whether _ops_lock was held at each call."""
+    """Replaces trash_message; yields the list of whether the IMAP gate was held at each call."""
     held, real = [], mailops.trash_message
 
     def probe(pk):
-        held.append(server._ops_lock.locked())
+        held.append(gates.held())
         return True, "trashed", None
     mailops.trash_message = probe
     try:
@@ -582,7 +583,7 @@ def test_cleanup_and_block_trash_mail_under_the_imap_lock():
         res = server.H._rules_post(None, {"token": "spam@example.test", "verdict": "block", "pk": pk})
     assert res["trashed"] is True, res
     assert held == [True], held
-    assert not server._ops_lock.locked()
+    assert not gates.held()
 
 
 def test_nosync_reads_one_way_and_fails_toward_read_only():

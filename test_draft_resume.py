@@ -16,6 +16,7 @@ from email.message import EmailMessage
 
 import store
 from mailmind.platform import settings
+from mailmind.platform.workers import gates
 
 _CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
                         {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}
@@ -1133,8 +1134,8 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
 def test_save_and_send_cleanup_move_the_row_under_the_lock():
     _fresh()
     held, real_upsert, real_delete = [], store.draft_upsert, store.draft_delete
-    store.draft_upsert = lambda c, row: (held.append(("upsert", server._ops_lock.locked())), real_upsert(c, row))[1]
-    store.draft_delete = lambda c, did: (held.append(("delete", server._ops_lock.locked())), real_delete(c, did))[1]
+    store.draft_upsert = lambda c, row: (held.append(("upsert", gates.held(ACCT))), real_upsert(c, row))[1]
+    store.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
     lock = server.outbox._ops_lock
     try:
         did = _save()["draft_id"]
@@ -1311,7 +1312,7 @@ def test_edit_probes_the_server_without_holding_the_ops_lock():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
     held = []
-    server._draft_live = lambda acct, folder, uid: (held.append(server._ops_lock.locked()), True)[1]
+    server._draft_live = lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1]
     r, code = _resume(pk)
     assert code == 200 and held == [False], (code, held)
 

@@ -17,6 +17,7 @@ from datetime import timedelta
 
 import pytest
 
+import gate
 from fixtures import world as w
 
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -295,18 +296,18 @@ def test_hwf_the_queue_finds_its_message_by_message_id_not_its_old_uid(app, worl
 
 def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ships(app, world, monkeypatch):
     import readmutq
-    import server
+    import store
     queue(app, world)
-    since, undone = world.mark(), []
+    since, undone, read = world.mark(), [], store.read_mut_get
 
-    class UndoGetsTheLockFirst:
-        def __enter__(self):
+    def then_the_undo_gets_the_lock_first(c, mid):
+        """The worker reads the row once it has claimed it, then again under the lock: the undo
+        lands between the two."""
+        row = read(c, mid)
+        if not undone:
             undone.append(app.post("/api/undo", {}).json["ok"])
-            server._ops_lock.acquire()
-
-        def __exit__(self, *exc):
-            server._ops_lock.release()
-    monkeypatch.setattr(readmutq, "_ops_lock", UndoGetsTheLockFirst())
+        return row
+    monkeypatch.setattr(store, "read_mut_get", then_the_undo_gets_the_lock_first)
     readmutq.drain()                                            # claimed, then cancelled before it got the lock
     assert undone == [True]
     assert world.writes(since) == []
@@ -492,11 +493,11 @@ def test_hwf_the_folder_rail_lists_the_server_once_per_ttl_and_serves_stale_on_f
 # -- never stall the user --------------------------------------------------
 
 def while_locked(fn):
-    """Run fn in another thread while this one holds _ops_lock, as a long mail operation would.
-    Returns (finished within 5 s, its result). One that waited for the lock finishes only after."""
-    import server
+    """Run fn in another thread while the IMAP gate is held, as a long mail operation would hold
+    it. Returns (finished within 5 s, its result). One that waited for the lock finishes only
+    after."""
     out = []
-    with server._ops_lock:
+    with gate.held_elsewhere():
         t = threading.Thread(target=lambda: out.append(fn()), name="while-locked", daemon=True)
         t.start()
         t.join(5)
