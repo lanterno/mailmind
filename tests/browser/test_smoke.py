@@ -174,6 +174,27 @@ def test_the_rail_counts_a_message_just_snoozed(page, world):
     expect(folder(page, "__snoozed__").locator(".unread")).to_have_text("1", timeout=3000)
 
 
+def test_a_notification_shows_the_summary_it_has(page, world):
+    # Triage skips junk, notifications included, so one has a summary only from before it was
+    # reclassified. A stored summary shows whatever the bucket.
+    import store
+    ci = "ada-inbox-04-ci.eml"
+    assert world.row(ci)["bucket"] == "automated-notifications"
+    c = store.conn()
+    try:
+        store.save_summary(c, world.pk(ci), "Quilt's build 412 passed.", 2, "info", "", "test",
+                           "2026-11-02T12:00:00+00:00")
+        c.commit()
+    finally:
+        c.close()
+    opened(page)
+    notification = row(page, world, ci)
+    expect(notification.locator(".gist")).to_contain_text("Quilt's build 412 passed.")
+    notification.click()
+    expect(page.locator("#aiCard")).to_contain_text("Quilt's build 412 passed.")
+    clean(page)
+
+
 def test_search_finds_one_senders_mail(page, world):
     opened(page)
     page.keyboard.press("/")
