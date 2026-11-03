@@ -527,10 +527,13 @@ python3 test_hardening.py      # security and data-loss fixes: TLS, other sites,
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) and
-[uv](https://docs.astral.sh/uv/) installed, `just test` runs all thirteen under pytest
-and `just verify` adds lint (ruff), byte-compile and a frontend syntax check — `just`
-on its own lists every recipe. uv installs those dev tools from `pyproject.toml` on
-first use; running the app still needs nothing installed.
+[uv](https://docs.astral.sh/uv/) installed, `just test` runs all thirteen under pytest,
+together with the pytest suite in `tests/`. That suite drives the app against fake IMAP,
+SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
+`tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
+`just test-full` also runs the browser tests, which click through the dashboard in
+Chromium. `just` on its own lists every recipe. uv installs those dev tools from
+`pyproject.toml` on first use; running the app still needs nothing installed.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
 re-runs `summarize.py` until every non-junk message has a summary, backing off

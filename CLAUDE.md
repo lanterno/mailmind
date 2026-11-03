@@ -10,6 +10,7 @@ work identically if `just` isn't installed. `just lint` and `just test` need
 
 ```bash
 just verify                       # lint + compile + all tests + frontend check — run before committing
+just test-full                    # every test, plus the browser tests in Chromium (Playwright)
 just dev                          # read-only server, no background sync (safest for local work)
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
 ```
@@ -53,6 +54,48 @@ renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:star
 `/* send-guard:pure:end */` out of `dashboard.html` and runs it in node, so that block must
 stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
 `/* draft-resume:pure:start */` … `/* draft-resume:pure:end */` block.
+
+### The pytest suite in `tests/`
+
+The rest of `tests/` pins today's behaviour ahead of the refactor. Each test sees only fictional
+data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
+MailMind module loads:
+
+- It removes any Claude key from the environment, pins `MAILMIND_AI=api` and sets `TZ=UTC`.
+- It installs the tripwire in `tests/guard.py`. The tripwire refuses the real data files, any
+  non-loopback host, and the `claude`, `op` and `security` programs. A test that trips it fails.
+
+The fixtures, from the bottom up:
+
+- `data_dir` points every module's data path at a fresh temp directory and creates the schema.
+- `world` is a fictional 25-message corpus (`tests/fixtures/corpus/`, three accounts) served by
+  `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
+  `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
+  renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
+- `app` runs `server.py` in-process. Its CSRF token is fixed, and the clock is frozen at
+  `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves it.
+- `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
+  each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
+  Without `ai` there is no key, and AI calls get a 401.
+- `golden` records exchanges in `tests/golden/<suite>/<test>.json`, after it normalizes ports,
+  paths and random ids. `uv run pytest --update-golden` rewrites the files; review the diff like
+  code. `tests/golden/schema_v<N>.sql` is the schema snapshot: rename it in the commit that adds
+  migration N.
+
+A known bug is a `xfail(strict=True)` test that states the right behaviour, so fixing the bug
+fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
+`test_hwf_*.py` hold the hard-won fixes, one file per layer.
+
+`tests/browser/` drives `dashboard.html` in Chromium (Playwright) on the `app` fixture:
+
+- The page may reach only the app's origin.
+- Its clock starts at the server's frozen time.
+- Console errors fail the test.
+- axe's findings are compared with `tests/golden/browser/axe_baseline.json`, which may only go down.
+
+These tests are marked `browser` and skipped unless pytest runs with `--browser`.
+`just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
+to stay fast.
 
 There is no build step. `pyproject.toml` declares dev tools only (pytest, ruff), locked with
 hashes in `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is
