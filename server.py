@@ -58,7 +58,7 @@ import summarize_thread
 import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
-from mailmind.platform import perimeter, settings
+from mailmind.platform import perimeter, profile, settings
 from mailmind.platform.workers import gates
 
 HERE = os.path.dirname(__file__)
@@ -343,7 +343,7 @@ def followups_tick():
 
 
 def snooze_tick():
-    """Always-on 60s wake loop so snooze + follow-up nudges work even under MAILMIND_NOSYNC
+    """Always-on 60s wake loop so snooze + follow-up nudges work even read-only
     (where sync_loop is not running)."""
     while True:
         time.sleep(60)
@@ -358,10 +358,9 @@ def snooze_tick():
 
 
 def nosync():
-    """MAILMIND_NOSYNC: serve read-only, with no background sync, reconcile or expiry. Every check
-    reads it here. Any value but an explicit off (empty, 0, false, no, off) turns it on, so a value
-    like "true" or a typo fails toward read-only rather than starting sync."""
-    return os.environ.get("MAILMIND_NOSYNC", "").strip().lower() not in ("", "0", "false", "no", "off")
+    """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
+    older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
+    return profile.current() is not profile.Profile.FULL
 
 
 def body_backfill_tick():

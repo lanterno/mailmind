@@ -6,6 +6,8 @@ package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 """
 import threading
 
+from mailmind.platform import profile
+
 import outbox
 import readmutq
 import realtime
@@ -37,18 +39,19 @@ def _daemon(target):
 
 
 def start(server, spawn=_daemon):
-    """Everything a front door does before it serves: create or migrate the schema, wire the
-    workers, and start them. The outbox, the offline queue and snooze wake run even under
-    MAILMIND_NOSYNC, so queued sends still go out; the syncs, IDLE and the periodic jobs don't.
+    """Everything a front door does before it serves: check the profile, create or migrate the
+    schema, wire the workers, and start them. The outbox, the offline queue and snooze wake run
+    even read-only, so queued sends still go out; the syncs, IDLE and the periodic jobs don't.
 
     `spawn(target)` runs each worker loop; by default on a daemon thread of its own."""
+    profile.check()                      # a MAILMIND_PROFILE that names no profile stops the start
     store.init()
     wire(server)
     spawn(outbox.worker_loop)
     spawn(readmutq.worker_loop)
     spawn(server.snooze_tick)
     if server.nosync():
-        print("(auto-sync disabled via MAILMIND_NOSYNC — serving read-only; outbox+snooze still run)", flush=True)
+        print("(auto-sync disabled: the read-only profile; outbox+snooze still run)", flush=True)
     else:
         spawn(server.startup)
         spawn(server.sync_loop)
