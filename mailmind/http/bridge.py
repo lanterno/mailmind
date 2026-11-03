@@ -34,13 +34,16 @@ _FAILED = (500, [(b"content-type", b"text/plain; charset=utf-8")], b"request fai
 class HandlerBridge:
     """An ASGI app that answers every HTTP request with `handler_class`.
 
-    The request body is read in full before the handler runs, and only up to `max_body` bytes. A
-    request that declares a longer body reaches the handler without it, so the handler's own
-    length check answers; one that sends a longer body without declaring it is refused here."""
+    The request body is read in full before the handler runs, and only up to
+    `body_cap(method, path)` bytes, the most the handler would read for that request (0 if it
+    reads none), with `path` as sent, still percent-encoded. A request that declares a longer body
+    reaches the handler without it, so the handler's own length check answers at once, without
+    waiting for a body it won't read. One that sends a longer body without declaring it is refused
+    here."""
 
-    def __init__(self, handler_class, *, max_body):
+    def __init__(self, handler_class, *, body_cap):
         self.handler_class = handler_class
-        self.max_body = max_body
+        self.body_cap = body_cap
         self._live = set()
 
     async def close(self):
@@ -75,15 +78,18 @@ class HandlerBridge:
             self._live.discard(x)
 
     async def _read_body(self, scope, receive):
-        """The request body, b"" when the declared length is over the cap, or None when the body
-        runs past the cap without declaring a length."""
+        """The request body: b"" when the handler won't read it (over the cap, or a body the
+        handler never reads), or None when it runs past the cap without declaring a length."""
+        cap = self.body_cap(scope["method"], _raw_path(scope).decode("latin-1"))
         declared = _header(scope, b"content-length")
         if declared is not None:
             try:
-                if int(declared) > self.max_body:
+                if not 0 <= int(declared) <= cap:
                     return b""
             except ValueError:
                 return b""                      # the handler answers a malformed length
+        elif cap == 0:
+            return b""
         chunks, size = [], 0
         while True:
             message = await receive()
@@ -91,7 +97,7 @@ class HandlerBridge:
                 raise _ClientGone
             chunk = message.get("body", b"")
             size += len(chunk)
-            if size > self.max_body:
+            if size > cap:
                 return None
             chunks.append(chunk)
             if not message.get("more_body", False):
@@ -264,10 +270,15 @@ def _header(scope, name):
     return None
 
 
+def _raw_path(scope):
+    """The path as the client sent it, still percent-encoded, as http.server hands it on."""
+    return scope.get("raw_path") or urllib.parse.quote(scope["path"]).encode()
+
+
 def _request_bytes(scope, body):
     """The request as it arrived on the wire, with its body read in full and no Expect header:
     the ASGI server has already answered any 100-continue."""
-    target = scope.get("raw_path") or urllib.parse.quote(scope["path"]).encode()
+    target = _raw_path(scope)
     if scope.get("query_string"):
         target += b"?" + scope["query_string"]
     lines = [b"%s %s HTTP/%s" % (scope["method"].encode(), target, scope["http_version"].encode())]
