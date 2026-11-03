@@ -113,9 +113,7 @@ to stay fast.
 There is no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
 the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
 `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
-then `lint-imports` (import-linter) on the `mailmind` package's layers. Ruff's one accepted
-finding carries a `# noqa: F821` in `readmutq.py`: a lambda closing over an `except ... as e`
-name, safe because `_commit` invokes it synchronously. New pytest-native tests go in `tests/`;
+then `lint-imports` (import-linter) on the `mailmind` package's layers. New pytest-native tests go in `tests/`;
 pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
 `just check-frontend` parses every inline `<script>` with `node --check`, checks CSS
@@ -186,6 +184,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   (`HandlerBridge.close`), so Ctrl-C stops at once.
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
   Concurrency).
+- `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
+  move queue share (see Writes, undo, and offline). It is standard library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
   `python3 server.py` uses it.
@@ -273,8 +273,12 @@ for the next socket opened.
   `mailops._UNREACHABLE`, which the route catches and turns into a durable queue row via
   `store.read_mut_insert`.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
-  exactly-once gate. It mirrors `outbox.py` 1:1, except the primary op is itself an IMAP
-  op, so it runs as a job on the account's IMAP gate.
+  exactly-once gate. It and `outbox.py` each run a `DurableQueue`, `QUEUE`, over their table:
+  one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
+  goes to `error`. The gate column (`applied`, `delivered`) is set the instant the one
+  irreversible step returns, so the boot-time reset of running rows never repeats it. A row's
+  state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
+  as a job on the account's IMAP gate; the outbox's SMTP send holds none.
 - A server NO or BAD means the message didn't move. `_imap_mutate` returns `(False, None)`, and
   trash, archive, junk and move answer `ok: false` and keep the local row. imaplib returns a NO
   rather than raising it, so check `typ` on COPY, STORE and APPEND. Never send a bulk `EXPUNGE`:
