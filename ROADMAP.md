@@ -65,8 +65,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     set, with the save clearing `dirty` only if the counter hasn't moved.
   - Overlapping saves orphan or duplicate a copy. Nothing serializes saves: an autosave tick
     during a slow manual or closing save, a double Cmd-S, two tabs. `do_draft` reads `prev`
-    before taking `_ops_lock`, so the second save expunges the UID the first already replaced
-    and the first save's copy is left in Drafts untracked, surviving the eventual Send (repro:
+    before its save job takes the IMAP gate, so the second save expunges the UID the first
+    already replaced and the first save's copy is left in Drafts untracked, surviving the
+    eventual Send (repro:
     UIDs 2 and 3 kept, the row on 3). Two first saves both carry `draft_id: null` and make two
     rows and two copies. A Send during a first save leaves that save's copy behind. The fix is a
     per-composer `cmp._saving` promise that later saves, `autosaveTick` and `composeSend` wait
@@ -94,7 +95,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   new one never appears; a brand-new message's draft doesn't show at all. `MAILMIND_WARM_FOLDERS`
   makes it worse: `sync_folder(full=False)` only adds, so one draft piles up as several rows. No
   sync prunes Drafts, because `reconcile_account` is INBOX-only. A ghost row goes only when Edit
-  gets its 409, or the user trashes or moves it. The fix, under `_ops_lock`:
+  gets its 409, or the user trashes or moves it. The fix, under the IMAP gate:
   - delete each replaced row by `(account, folder, uid)`, including the copy `append_to_drafts`
     finds by Message-ID and removes without returning it;
   - pick up the new copy from APPENDUID, or an incremental sync when there is none;
@@ -250,12 +251,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (a bridge branch exists in `pool._take` with its own max-age/max-uses, but `_is_bridge()` excludes
   it from the `MAILMIND_POOL=1` catch-all), extend borrowing to mutations (only reads borrow today),
   and default it on.
-- **Shard `_ops_lock` per account** · high value · effort M — Still one process-wide
-  `threading.Lock()`, taken at ~15 sites including `message_body`, first-folder sync, the mutation
-  queue, undo, `live_stats`, reconcile and the outbox worker — so a slow Proton fetch still blocks
-  archive/send/open on every other account. The pool's per-account slot lock is taken *inside* it, so
-  the pool cuts per-op latency without buying any cross-account concurrency. This is the structural
-  half of the cold-open fix.
+- **Give each account its own IMAP gate** · high value · effort M — Every live-IMAP job now passes
+  `gates.run(account, ...)`, naming its account and priority, but one process-wide lock is still
+  every account's gate — so a slow Proton fetch still blocks archive/send/open on every other
+  account. The pool's per-account slot lock is taken *inside* it, so the pool cuts per-op latency
+  without buying any cross-account concurrency. The jobs that pass `gates.EVERY_ACCOUNT` (reconcile
+  or sweep of all accounts, a draft save whose old copy is in another account, an undo with no
+  account) need splitting first. This is the structural half of the cold-open fix.
 - **Persist and document `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a
@@ -278,7 +280,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   in the response path and worth real time on a 340KB HTML file plus the large JSON digests.
 - **Pool the reconcile read** · low value · effort S — Half done: `reconcile_account` now connects
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
-  `_ops_lock` instead of using `pool.borrow` the way the three read call sites do.
+  the IMAP gate instead of using `pool.borrow` the way the three read call sites do.
 
 ## Keyboard, screen readers and reversibility
 
@@ -380,7 +382,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `headerregistry` raise, and `mailparse._hdr` doesn't guard `msg.get`. So `parse()` raises for
   the whole message. `ingest.fetch_body` never stores the body, `message_body` returns 500, and
   the reader's Retry fails the same way. Reply and Forward can't load it and its body is never
-  indexed. `body_backfill_tick` re-downloads it every cycle under `_ops_lock`, and twelve such
+  indexed. `body_backfill_tick` re-downloads it every cycle under the IMAP gate, and twelve such
   messages among the newest unfetched bodies starve everything older. From is safe, since ingest
   reads it with compat32. The fix: fall back in `_hdr` to the raw value from `raw_items()`,
   unfolded, decoded and with CR/LF turned to spaces, the idea `server._hdr_text` already uses.
@@ -475,7 +477,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
 - **Don't let reconcile prune mail a sync just stored** · high value · effort S —
-  `ingest.reconcile_account` runs under `_ops_lock`, but `sync_accounts` (the 300 s loop and the
+  `ingest.reconcile_account` runs under the IMAP gate, but `sync_accounts` (the 300 s loop and the
   IDLE dispatcher) does not take it. Mail a sync stores between reconcile's `UID SEARCH` and
   `store.reconcile` isn't in the live set, so it is pruned. The watermark has already passed it,
   so incremental sync never brings it back. Prune only UIDs at or below the highest UID the SEARCH
@@ -670,7 +672,7 @@ implementation.
 2. **Drafts are recognised by folder name** (high / M) — Discard on a message opened from any folder
    named like "Contract drafts" expunges it with no Undo.
 3. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
-   is written, reviewed and dormant behind an unset env var. Follow it immediately with **shard
-   `_ops_lock` per account**, the structural half.
+   is written, reviewed and dormant behind an unset env var. Follow it immediately with **give
+   each account its own IMAP gate**, the structural half.
 4. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.

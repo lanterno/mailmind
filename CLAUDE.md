@@ -184,6 +184,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
   and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
   (`HandlerBridge.close`), so Ctrl-C stops at once.
+- `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
+  Concurrency).
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
   `python3 server.py` uses it.
@@ -235,9 +237,24 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 
 ### Concurrency
 
-One process-wide `_ops_lock` in `server.py` serializes all live-IMAP work — reads,
-mutations, undo, reconcile, the outbox worker. It is coarse and a known bottleneck
-(see ROADMAP.md); the connection pool's per-account lock is taken *inside* it.
+Every job that talks to an account's IMAP server runs through
+`gates.run(account, fn, priority=..., wait=...)` (`mailmind.platform.workers.gates`): the
+requests that open and file mail, undo, reconcile, expiry, the body backfill, the outbox, the
+offline queue and the thread summarizer. For now one process-wide lock is every account's gate,
+so all live-IMAP work is serialized. It is coarse and a known bottleneck (see ROADMAP.md); a
+later phase gives each account a worker of its own behind the same call. The connection pool's
+per-account lock is taken *inside* it. The 300 s sync and IDLE's syncs don't take it yet.
+
+- A job is a function, not a block, since it may later run on another thread: it returns what
+  its caller needs instead of setting the caller's variables.
+- Each names its account (a message's through `mailops.account_of`), or `gates.EVERY_ACCOUNT`
+  for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
+  MAINTENANCE.
+- Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
+  the user. A job that waits on a gate from inside a job raises `RuntimeError` instead of
+  hanging.
+- Tests ask `gates.held(account)`, and hold the gate with `held_elsewhere()` from
+  `tests/gate.py`, which runs a job like any caller.
 
 `pool.py` (persistent per-account IMAP connections) and `warm.py` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
@@ -257,7 +274,7 @@ for the next socket opened.
   `store.read_mut_insert`.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It mirrors `outbox.py` 1:1, except the primary op is itself an IMAP
-  op, so it runs under `_ops_lock`.
+  op, so it runs as a job on the account's IMAP gate.
 - A server NO or BAD means the message didn't move. `_imap_mutate` returns `(False, None)`, and
   trash, archive, junk and move answer `ok: false` and keep the local row. imaplib returns a NO
   rather than raising it, so check `typ` on COPY, STORE and APPEND. Never send a bulk `EXPUNGE`:
@@ -274,7 +291,7 @@ for the next socket opened.
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
 - Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
   so nothing is awaited before the composer closes and a double submit still can't happen.
-  `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no `_ops_lock`.
+  `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.
   `do_send` refuses a `send_after` that has passed instead of sending now.
 - Reopening a draft (`/api/draft/resume` → `draft_resume`) reads the draft's own bytes, never
   the original. At each save `do_draft` records beside the `drafts` row what the composer held
@@ -283,9 +300,9 @@ for the next socket opened.
   sends `resume` (threading and the quote's text) on every save and send. `_compose_spec`
   then builds `own + tail`, with HTML only where the row vouches for that exact tail. The
   original is looked up by `(account, Message-ID)` for `\Answered` only. `_draft_live`, the
-  "is this copy still there" probe, is a stateless 10-second connection outside `_ops_lock`.
-  Under the lock `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved, so
-  `do_draft` and the outbox's draft cleanup also change that row only under `_ops_lock`. Edit
+  "is this copy still there" probe, is a stateless 10-second connection outside the IMAP gate.
+  Under the gate `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
+  so `do_draft` and the outbox's draft cleanup also change that row only under the gate. Edit
   answers 423 while a queued or sending outbox row holds the draft. A copy in another account
   or folder is removed only after the new APPEND succeeds, and only if MailMind saved it or
   the server flags it `\Draft`.
