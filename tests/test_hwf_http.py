@@ -429,21 +429,6 @@ def test_hwf_a_browser_dropping_its_connection_prints_no_traceback(capsys):
     assert "RuntimeError: a real fault" in capsys.readouterr().err
 
 
-class _Slept(Exception):
-    pass
-
-
-def test_hwf_background_ticks_stay_off_under_any_nosync_value(monkeypatch):
-    import server
-
-    def no_sleep(_s):
-        raise _Slept("the tick started instead of returning")
-    monkeypatch.setenv("MAILMIND_NOSYNC", "true")
-    monkeypatch.setattr(time, "sleep", no_sleep)
-    assert server.body_backfill_tick() is None
-    assert server.draft_ahead_tick() is None
-
-
 # -- known bugs -----------------------------------------------------------
 
 @pytest.mark.xfail(strict=True, reason="known bug: a LIST the server refuses empties the folder rail")

@@ -512,8 +512,6 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
     import rules
     import server
     rules.set_expiry("loom.example.test", 1)
-    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
-    monkeypatch.setattr(server, "time", _Sleeps(stop_at=1))
     pk = world.pk("bea-inbox-01-client.eml")                    # its body was never fetched
     n = len(world.server.commands)
 
@@ -521,13 +519,10 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
         got = {"prefetch": server.message_body(pk, False, prefetch=True)}
         server._auto_reconcile_one(acct())
         server._auto_expire_one(acct())
-        try:
-            server.body_backfill_tick()
-        except _Stop:
-            got["backfill"] = "ended its cycle"
+        got["backfill"] = server.backfill_round()               # yielded, its backlog left for the next round
         return got
     finished, got = while_locked(background)
-    assert finished and got == {"prefetch": {"ok": False, "busy": True}, "backfill": "ended its cycle"}
+    assert finished and got == {"prefetch": {"ok": False, "busy": True}, "backfill": 8}
     assert world.server.commands[n:] == []                       # none of them touched the server
 
 
@@ -708,15 +703,14 @@ def test_hwf_junk_goes_to_the_special_use_junk_folder(app, world):
 @pytest.mark.xfail(strict=True, reason="known bug: backfill retries the same 12 bodies forever and never reaches older mail")
 def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
     import server
-    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
-    monkeypatch.setattr(server, "time", _Sleeps(stop_at=2))     # two backfill cycles, no real waiting
+    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))   # no real pacing between fetches
     waiting = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL ORDER BY ts DESC, pk DESC")
     stuck, older = waiting[:12], [r["pk"] for r in waiting[12:]]
     with world.server.lock:                                      # deleted elsewhere, not yet pruned here
         for r in stuck:
             world.server.mailbox(r["account"], r["folder"]).messages.pop(r["uid"])
-    with pytest.raises(_Stop):
-        server.body_backfill_tick()
+    for _ in range(2):                                           # two backfill rounds
+        server.backfill_round()
     fetched = q("SELECT pk FROM messages WHERE body_text IS NOT NULL")
     assert {r["pk"] for r in fetched} & set(older)
 

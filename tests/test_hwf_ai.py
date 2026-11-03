@@ -8,8 +8,8 @@ Strict xfails at the end assert the correct behaviour where the code still has a
 is marked raises=AssertionError, so it can only xfail at its own assertion, never at setup.
 
 Everything runs against the fake Claude API (tests/fakes/anthropic_api.py) and the fictional
-world. The draft-ahead tick runs in the test's own thread: each of its sleeps moves the frozen
-clock instead of waiting (see run_tick).
+world. The draft-ahead rounds run in the test's own thread, the frozen clock moved on before each
+as the background wait between them would (see run_tick).
 """
 import json
 import os
@@ -117,37 +117,16 @@ def renumber_inbox(world, account):
     ingest.sync_new(accounts.get(account))
 
 
-class _TickDone(Exception):
-    pass
-
-
 def run_tick(app, monkeypatch, cycles, step=None):
-    """Run server.draft_ahead_tick in this thread for `cycles` cycles. Each of its sleeps moves the
-    frozen clock on by the sleep's length, or by `step` seconds, and returns at once."""
+    """Run `cycles` rounds of a fresh pre-drafter in this thread, as the background job would: the
+    frozen clock moves on before each, by the startup delay and then the interval, or by `step`
+    seconds each time."""
     import server
-    real, me, slept = server.time, threading.current_thread(), [0]
-
-    class Clock:
-        def __getattr__(self, name):
-            return getattr(real, name)
-
-        def sleep(self, seconds):
-            if threading.current_thread() is not me:
-                return real.sleep(seconds)
-            slept[0] += 1
-            if slept[0] > cycles:
-                raise _TickDone
-            app.clock.shift(timedelta(seconds=seconds if step is None else step))
-
-    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
-    monkeypatch.delenv("MAILMIND_NO_DRAFT_TICK", raising=False)
-    monkeypatch.setattr(server, "time", Clock())
-    try:
-        server.draft_ahead_tick()
-    except _TickDone:
-        pass
-    finally:
-        monkeypatch.setattr(server, "time", real)
+    draft_ahead_round = server.draft_ahead_rounds()
+    for i in range(cycles):
+        wait = server.DRAFT_TICK_STARTUP_DELAY if i == 0 else server.DRAFT_TICK_INTERVAL
+        app.clock.shift(timedelta(seconds=wait if step is None else step))
+        draft_ahead_round()
 
 
 @pytest.fixture

@@ -29,14 +29,13 @@ def test_the_workers_report_back_to_the_server(unwired):
 
 
 
-@pytest.mark.parametrize("env", [{"MAILMIND_PROFILE": "read-only"}, {"MAILMIND_NOSYNC": "1"}, {}],
-                         ids=["read-only", "nosync", "full"])
+@pytest.mark.parametrize("env", [{"MAILMIND_PROFILE": "read-only"}, {"MAILMIND_NOSYNC": "1"},
+                                 {"MAILMIND_NOSYNC": "true"}, {}],
+                         ids=["read-only", "nosync", "nosync-true", "full"])
 def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_path, unwired, monkeypatch,
                                                                      capsys):
     """What both front doors run before they serve. Read-only, only snooze wake starts, since it
     needs no mail server: the outbox and the offline queue wait, and nothing syncs."""
-    import outbox
-    import readmutq
     import realtime
     import server
     import store
@@ -58,10 +57,16 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
         finally:
             c.close()
     assert version == migrations.MIGRATIONS[-1][0]
-    always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
-    syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
-               server.reconcile_loop, server.expire_loop, realtime.start]
-    assert spawned == ([server.snooze_tick] if read_only else always + syncing)
+    names = [getattr(t, "__name__", "?") for t in spawned]
+
+    def started(word):
+        return any(word in n for n in names)
+    background = ("sync", "backfill", "draft", "reconcile", "expire")
+    if read_only:
+        assert started("snooze") and not started("worker_loop") and not any(map(started, background)), names
+    else:
+        assert all(map(started, background + ("snooze",))), names
+        assert names.count("worker_loop") == 2 and realtime.start in spawned, names
     out = capsys.readouterr().out
     assert ("auto-sync disabled" in out) == read_only
     assert "[ai] Claude API" in out
