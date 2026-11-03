@@ -41,6 +41,9 @@ class Toy(BaseHTTPRequestHandler):
             return
         if self.path == "/stream":
             return self._stream()
+        if self.path == "/slow":
+            Toy.proceed.wait(10)
+            return self._reply(200, {"answered": True})
         if self.path == "/thread":
             t = threading.current_thread()
             Toy.outcome.append((t.name, t.daemon, t is threading.main_thread()))
@@ -199,3 +202,50 @@ def test_each_request_runs_on_a_daemon_thread_of_its_own(served):
     call(served, "GET", "/thread")
     call(served, "GET", "/thread")
     assert Toy.outcome == [("bridge-request", True, False)] * 2
+
+
+@pytest.fixture
+def closing():
+    """The bridge on a server that calls its close() as soon as shutdown begins, with a grace
+    period long enough to notice if anything waits it out."""
+    Toy.seen, Toy.outcome = [], []
+    Toy.proceed = threading.Event()
+    bridge = HandlerBridge(Toy, max_body=CAP)
+    srv = Uvicorn(bridge, name="bridge-http", grace=5, before_shutdown=bridge.close).start()
+    yield srv
+    Toy.proceed.set()
+    if srv.thread.is_alive():
+        srv.stop()
+
+
+def test_shutting_down_ends_an_open_stream_at_once(closing):
+    conn = http.client.HTTPConnection("127.0.0.1", closing.port, timeout=10)
+    try:
+        conn.request("GET", "/stream", headers={"Host": f"127.0.0.1:{closing.port}"})
+        r = conn.getresponse()
+        assert r.readline() == b"first\n"                   # the handler now waits, as between heartbeats
+        began = time.monotonic()
+        closing.stop()
+        assert time.monotonic() - began < 2
+        assert r.read() == b""                              # ended cleanly, not cut off
+    finally:
+        conn.close()
+    Toy.proceed.set()
+    deadline = time.monotonic() + 3
+    while not Toy.outcome and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert Toy.outcome == ["client gone"]
+
+
+def test_shutting_down_lets_a_request_still_being_answered_finish(closing):
+    got = []
+    t = threading.Thread(target=lambda: got.append(call(closing, "GET", "/slow")))
+    t.start()
+    deadline = time.monotonic() + 3
+    while not Toy.seen and time.monotonic() < deadline:     # the handler is waiting to answer
+        time.sleep(0.01)
+    threading.Timer(0.3, Toy.proceed.set).start()
+    closing.stop()
+    t.join(5)
+    status, _, body = got[0]
+    assert (status, json.loads(body)) == (200, {"answered": True})
