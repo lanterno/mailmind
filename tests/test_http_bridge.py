@@ -12,6 +12,16 @@ from asgi_server import Uvicorn
 from mailmind.http.bridge import HandlerBridge
 
 CAP = 1000
+SMALL = 10                          # the cap on /small, a route that takes less than the rest
+
+
+asked = []                          # what the bridge asked body_cap about
+
+
+def body_cap(method, path):
+    """Toy reads a POST's body up to its route's cap, and no other body."""
+    asked.append((method, path))
+    return 0 if method != "POST" else SMALL if path == "/small" else CAP
 
 
 class Toy(BaseHTTPRequestHandler):
@@ -51,7 +61,7 @@ class Toy(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0) or 0)
-        if length > CAP:
+        if length > (SMALL if self.path == "/small" else CAP):
             return self._reply(413, {"error": "payload too large"})
         body = self.rfile.read(length)
         Toy.seen.append({"path": self.path, "body": body.decode()})
@@ -75,8 +85,9 @@ class Toy(BaseHTTPRequestHandler):
 @pytest.fixture
 def served():
     Toy.seen, Toy.outcome = [], []
+    asked.clear()
     Toy.proceed = threading.Event()
-    srv = Uvicorn(HandlerBridge(Toy, max_body=CAP), name="bridge-http").start()
+    srv = Uvicorn(HandlerBridge(Toy, body_cap=body_cap), name="bridge-http").start()
     try:
         yield srv
     finally:
@@ -129,6 +140,41 @@ def test_a_body_declared_over_the_cap_is_left_unread_for_the_handler_to_refuse(s
     assert Toy.seen == []
 
 
+def test_a_body_declared_over_its_routes_cap_is_refused_without_waiting_for_it(served):
+    """The handler refuses on the declared length alone, so the bridge mustn't wait for bytes that
+    may never come, even where another route would take that many."""
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=5)
+    try:
+        conn.putrequest("POST", "/small", skip_host=True)
+        conn.putheader("Host", f"127.0.0.1:{served.port}")
+        conn.putheader("Content-Length", str(SMALL + 1))
+        conn.endheaders()
+        conn.send(b"{}")
+        r = conn.getresponse()
+        assert (r.status, json.loads(r.read())) == (413, {"error": "payload too large"})
+    finally:
+        conn.close()
+
+
+def test_the_cap_is_asked_per_request_with_the_path_as_sent(served):
+    call(served, "POST", "/a%2Fb?x=1", body=b"{}")
+    call(served, "GET", "/c%20d")
+    assert asked == [("POST", "/a%2Fb"), ("GET", "/c%20d")]
+
+
+def test_a_body_the_handler_never_reads_is_not_waited_for(served):
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=5)
+    try:
+        conn.putrequest("GET", "/", skip_host=True)
+        conn.putheader("Host", f"127.0.0.1:{served.port}")
+        conn.putheader("Content-Length", "5")
+        conn.endheaders()
+        r = conn.getresponse()
+        assert r.status == 200
+    finally:
+        conn.close()
+
+
 def test_an_undeclared_body_over_the_cap_is_refused_before_the_handler_runs(served):
     chunks = iter([b"x" * 600, b"x" * 600])
     status, _, body = call(served, "POST", "/p", body=chunks, encode_chunked=True,
@@ -178,7 +224,7 @@ def test_a_stream_ends_when_the_server_shuts_down_under_it():
     alive."""
     Toy.seen, Toy.outcome = [], []
     Toy.proceed = threading.Event()
-    srv = Uvicorn(HandlerBridge(Toy, max_body=CAP), name="bridge-http", grace=0.2).start()
+    srv = Uvicorn(HandlerBridge(Toy, body_cap=body_cap), name="bridge-http", grace=0.2).start()
     conn = http.client.HTTPConnection("127.0.0.1", srv.port, timeout=10)
     try:
         conn.request("GET", "/stream", headers={"Host": f"127.0.0.1:{srv.port}"})
@@ -210,7 +256,7 @@ def closing():
     period long enough to notice if anything waits it out."""
     Toy.seen, Toy.outcome = [], []
     Toy.proceed = threading.Event()
-    bridge = HandlerBridge(Toy, max_body=CAP)
+    bridge = HandlerBridge(Toy, body_cap=body_cap)
     srv = Uvicorn(bridge, name="bridge-http", grace=5, before_shutdown=bridge.close).start()
     yield srv
     Toy.proceed.set()
