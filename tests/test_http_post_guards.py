@@ -3,6 +3,9 @@ CSRF token, and on the send routes a matching Origin. Malformed input gets a cle
 golden file is in tests/golden/http_post_guards/.
 """
 import http.client
+import json
+
+import pytest
 
 import app_client
 from fixtures import world as w
@@ -47,9 +50,7 @@ def test_the_guards(app, golden, world):
 
 def test_the_size_cap_and_malformed_bodies(app, golden):
     for label, path, length in (("a control route over 1 MB", "/api/seen", (1 << 20) + 1),
-                                ("the send route over 38 MB", "/api/send", (38 << 20) + 1),
-                                ("a negative length", "/api/seen", -1),
-                                ("a length that isn't a number", "/api/seen", "lots")):
+                                ("the send route over 38 MB", "/api/send", (38 << 20) + 1)):
         status, text = raw_post(app, path, headers={"Content-Length": str(length)})
         golden.note(f"{label}: {path}", {"status": status, "body": text})
     status, text = raw_post(app, "/api/seen", b"not json")
@@ -58,6 +59,18 @@ def test_the_size_cap_and_malformed_bodies(app, golden):
     golden.note("a JSON body that isn't an object", {"status": status, "body": text})
     golden.record("an id that isn't a number", app.post("/api/outbox/retry", {"id": "x"}))
     golden.record("a missing id", app.post("/api/outbox/cancel", {}))
+
+
+@pytest.mark.parametrize("length", ["-1", "lots"])
+def test_a_length_that_isnt_one_is_refused_before_any_route_runs(app, world, length):
+    """A Content-Length that isn't a length is broken HTTP, so each front door refuses it in its
+    own words: the old one answers 413 itself, and uvicorn answers 400 before the app sees the
+    request. Either way the route never runs."""
+    since = world.mark()
+    seen = json.dumps({"pk": world.pk("ada-inbox-02-lunch-confirm.eml"), "seen": True}).encode()
+    status, _ = raw_post(app, "/api/seen", seen, headers={"Content-Length": length})
+    assert status in (400, 413)
+    assert world.writes(since) == []
 
 
 def test_a_guarded_post_changes_nothing_on_the_server(app, world):
