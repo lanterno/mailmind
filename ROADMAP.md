@@ -436,6 +436,34 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
   holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but
   a forged line could pass for a real one. Print request-supplied values with `!r`.
+- **Don't send mail to the API without a key** · high value · effort S — with
+  `MAILMIND_AI=api` and no key, `summarize.call_claude` and `call_claude_json` still call
+  `claude_api.message`, and `claude_api._post` sends an empty `x-api-key` with the prompt (mail
+  text) to api.anthropic.com. `/api/review` and `/api/briefing/since` do this on every open, and
+  the 401 then shows as "the API key was rejected" while `summarize.status` reports the engine as
+  `none`. Once the CLI goes (D8) this is the default path. Raise before the request when `key()` is
+  empty. Pinned by `test_without_a_key_no_mail_leaves_for_the_api`.
+- **Undo a Proton trash without marking the mail read** · medium value · effort S — Bridge marks a
+  message read on its way to Trash, and `mailops._mk_move_undo` keeps no `\Seen` state, so Undo
+  brings unread mail back read. Record `seen` in the descriptor and clear `\Seen` after the move
+  back when it was unset. Pinned by `test_undoing_a_proton_trash_brings_unread_mail_back_unread`.
+- **Let a received nudge expire** · medium value · effort S — `followups_tick` runs
+  `store.expire_followups` (older than `FOLLOWUP_EXPIRE_DAYS`, 14) and then
+  `store.followup_detect_received`, whose floor is 30 days and which only skips threads that
+  already have a row. The expired row is gone, so the same tick inserts it again with a fresh
+  `due_ts`, and the nudge keeps nagging until day 30. Keep expired rows (state `expired`) or bound
+  detection by the expiry window. Pinned by `test_a_received_nudge_stops_after_the_expiry_window`.
+- **Store a time, not a pk, in Reply Later's `last_msg_ts`** · low value · effort S —
+  `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
+  `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
+  see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
+- **Parse the messages the corpus shows going wrong** · medium value · effort M — four strict
+  xfails in `tests/test_world.py`, each on a fictional message:
+  - a raw UTF-8 display name in From empties `from_name` and `from_addr`;
+  - snippets keep the wire's carriage returns;
+  - a multipart with no boundary loses its text, in the snippet and when opened;
+  - a forwarded `message/rfc822` attachment downloads empty with size 0
+    (`mailparse.extract_part` uses `get_payload(decode=True)`, which is None for that type).
 
 ## Open decisions
 
