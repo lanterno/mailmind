@@ -187,6 +187,10 @@ expire target="all":
 
 # ── data ──────────────────────────────────────────────────────────────────────
 
+# Try the next start's migrations on a copy of the database: counts and checks only, never contents
+db-check-upgrade *args:
+    {{py}} -m mailmind db check-upgrade {{args}}
+
 # What an export would contain, without writing anything
 export-plan:
     {{py}} export.py --format plan
