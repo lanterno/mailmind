@@ -17,6 +17,7 @@ import imaplib
 import accounts
 import config
 import mailops
+from mailmind.platform import profile
 
 def provider_saves_sent(acct):
     """Gmail auto-files SMTP-sent mail in [Gmail]/Sent — an explicit APPEND would double it."""
@@ -24,6 +25,7 @@ def provider_saves_sent(acct):
 
 
 def smtp_connect(acct):
+    profile.refuse_writes("SMTP")          # a read-only process sends nothing
     host, port = acct["smtp_host"], int(acct["smtp_port"])
     if acct.get("smtp_starttls", True):
         s = smtplib.SMTP(host, port, timeout=60)

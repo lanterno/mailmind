@@ -9,6 +9,7 @@ import re
 import ssl
 
 import config
+from mailmind.platform import profile
 
 
 def accounts():
@@ -90,4 +91,33 @@ def connect(acct, timeout=60):
         M.login(acct["email"], config.resolve_credential(acct))
     except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one
         raise LoginUnreachable(str(e)) from e
-    return M
+    return M if profile.writes_allowed() else ReadOnlyIMAP(M)
+
+
+class ReadOnlyIMAP:
+    """A read-only process's IMAP connection. Every mailbox opens with EXAMINE, so the server
+    changes no flag of its own accord either, and any command not known to only read raises
+    profile.ReadOnlyError before it is sent. Everything else is the connection's own."""
+
+    _UID_READS = frozenset({"FETCH", "SEARCH", "SORT", "THREAD"})
+    _READS = frozenset({"capability", "check", "close", "enable", "examine", "fetch", "getacl",
+                        "getannotation", "getquota", "getquotaroot", "idle", "list", "logout", "lsub",
+                        "myrights", "namespace", "noop", "response", "search", "select", "shutdown",
+                        "socket", "sort", "status", "thread", "uid", "unselect"})
+
+    def __init__(self, M):
+        self._M = M
+
+    def select(self, mailbox="INBOX", readonly=False):
+        return self._M.select(mailbox, readonly=True)
+
+    def uid(self, command, *args):
+        if str(command).upper() not in self._UID_READS:
+            raise profile.ReadOnlyError(f"IMAP UID {str(command).upper()}")
+        return self._M.uid(command, *args)
+
+    def __getattr__(self, name):
+        value = getattr(self._M, name)
+        if callable(value) and name not in self._READS:
+            raise profile.ReadOnlyError(f"IMAP {name}")
+        return value

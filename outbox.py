@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import store
 import accounts
 import smtpsend
+from mailmind.platform import profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
@@ -226,6 +227,8 @@ def send_one(oid):
 
 
 def drain():
+    if not profile.writes_allowed():     # read-only: sends wait here for a full run (D4)
+        return
     QUEUE.drain(send_one, _now())        # one bad row is logged and never aborts the rest
 
 

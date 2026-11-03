@@ -40,19 +40,21 @@ def _daemon(target):
 
 def start(server, spawn=_daemon):
     """Everything a front door does before it serves: check the profile, create or migrate the
-    schema, wire the workers, and start them. The outbox, the offline queue and snooze wake run
-    even read-only, so queued sends still go out; the syncs, IDLE and the periodic jobs don't.
+    schema, wire the workers, and start them. Read-only, only snooze wake starts, since it needs
+    no mail server: sends and moves wait in their queues, and nothing syncs.
 
     `spawn(target)` runs each worker loop; by default on a daemon thread of its own."""
     profile.check()                      # a MAILMIND_PROFILE that names no profile stops the start
     store.init()
     wire(server)
-    spawn(outbox.worker_loop)
-    spawn(readmutq.worker_loop)
-    spawn(server.snooze_tick)
     if server.nosync():
-        print("(auto-sync disabled: the read-only profile; outbox+snooze still run)", flush=True)
+        spawn(server.snooze_tick)
+        print("(auto-sync disabled: the read-only profile writes nothing, so sends and moves wait "
+              "in their queues; snooze still runs)", flush=True)
     else:
+        spawn(outbox.worker_loop)
+        spawn(readmutq.worker_loop)
+        spawn(server.snooze_tick)
         spawn(server.startup)
         spawn(server.sync_loop)
         spawn(server.body_backfill_tick)     # make old mail full-text searchable

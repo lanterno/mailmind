@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 import store
 import mailops
+from mailmind.platform import profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
@@ -114,6 +115,8 @@ def apply_one(mid):
 
 
 def drain():
+    if not profile.writes_allowed():     # read-only: moves wait here for a full run (D4)
+        return
     QUEUE.drain(apply_one, _now())       # one bad row is logged and never aborts the rest
 
 

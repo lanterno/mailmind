@@ -11,11 +11,14 @@ import imaplib
 sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import store
+from mailmind.platform import profile
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
 # imaplib.IMAP4.abort subclasses IMAP4.error; socket.timeout subclasses OSError. A NON-abort
 # IMAP4.error is a command-level "NO/BAD" (folder gone, UID invalid, auth) = LOGICAL, not queued.
-_UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort)
+# A read-only process (profile.ReadOnlyError) queues its changes too, for a full run to apply.
+_UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort,
+                profile.ReadOnlyError)
 
 
 def account_of(pk):
@@ -58,6 +61,7 @@ def _imap_mutate(acct, fn):
     (NO/BAD: no such folder, over quota, no permission) returns (False, None). The server still
     holds the message where it was, so the caller keeps its local row and reports the failure.
     Returns (ran_ok, fn_result)."""
+    profile.refuse_writes("an IMAP change")    # read-only: raised before any connection, so it queues
     try:
         return True, _do_imap(acct, fn)
     except imaplib.IMAP4.abort:
@@ -165,6 +169,7 @@ def set_flags(pk, flags):
     c.close()
     if not row:
         return False, "not found"
+    profile.refuse_writes("a flag change")
     acct = accounts.get(row["account"])
     M = accounts.connect(acct)
     try:

@@ -560,6 +560,8 @@ def do_reconcile(account, dry_run):
 
 
 def do_sweep(account, dry_run):
+    if not dry_run:
+        profile.refuse_writes("a sweep")     # it moves mail, and its moves can't wait in a queue
     accounts.preload_creds()
     every = not account or account == "all"
 
@@ -1787,6 +1789,7 @@ def _unsub_oneclick_post(url, _redirects=1):
     vetted IP with SNI/Host pinned to the hostname (defeats DNS-rebind between check and connect);
     <=1 re-vetted redirect; hard timeout; read cap; no cookies/creds/ambient auth. Returns
     (ok, http_status, reason). Runs OUTSIDE the IMAP gate so a hanging remote can't stall IMAP."""
+    profile.refuse_writes("an unsubscribe request")
     p = urllib.parse.urlparse(url or "")
     if p.scheme != "https" or not p.hostname:
         return False, 0, "bad_scheme"
@@ -2087,7 +2090,9 @@ def cleanup_execute(body):
     #    TERMINAL outcomes only (a transient failure/no-method is never latched, so it stays retryable).
     _UNSUB_TERMINAL = ("unsubscribed_oneclick", "mailto_sent", "needs_browser")
     status, http_status, browser_url, method = "skipped", None, None, "none"
-    if do_unsub and token_ok:
+    if do_unsub and token_ok and not profile.writes_allowed():
+        status = "read_only"                         # sends nothing outside; not latched, so retryable
+    elif do_unsub and token_ok:
         key = "unsub:" + from_addr
         c = store.conn()
         prior = store.unsub_log_get(c, key)
@@ -2435,6 +2440,7 @@ def do_invite_rsvp(body):
 
 def do_draft(body):
     """Save (APPEND, dedup-on-resave) or delete a draft. Returns (result, code)."""
+    profile.refuse_writes("a draft save")    # a draft lives on the server; nothing queues it yet
     if body.get("delete") and body.get("draft_id"):
         c = store.conn()
         row = store.draft_get(c, int(body["draft_id"]))
@@ -4137,6 +4143,9 @@ class H(BaseHTTPRequestHandler):
                 self._send(404, b"not found", "text/plain")
         except (TypeError, ValueError):       # malformed request input (bad/missing int id/pk) → clean 400
             self._json({"ok": False, "error": "bad request"}, 400)
+        except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
+            print(f"[post] {self.path}: read-only, refused {e}", flush=True)
+            self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[post] {self.path}: {type(e).__name__}: {e}", flush=True)
             self._json({"ok": False, "error": "request failed"}, 500)
