@@ -14,9 +14,9 @@ _default:
 run port="":
     uv run python -m mailmind serve {{port}}
 
-# Run read-only: no background sync, no IMAP writes, no AI pre-drafting
+# Run read-only: nothing written to a mail server (sends and moves wait), no background sync or AI
 dev port="":
-    MAILMIND_NOSYNC=1 uv run python -m mailmind serve {{port}}
+    MAILMIND_PROFILE=read-only uv run python -m mailmind serve {{port}}
 
 # Run with persistent IMAP connections + multi-folder sync (both default-off)
 run-fast port="":
