@@ -2025,17 +2025,17 @@ def cleanup_execute(body):
     swept = fail = queued = 0
     for t in targets[:_CLEANUP_SWEEP_CAP]:
         try:
-            ok, _msg, undo = mailops.trash_message(t["pk"])
+            with _ops_lock:                             # one message at a time, like /api/trash
+                try:
+                    ok, _msg, undo = mailops.trash_message(t["pk"])
+                except mailops._UNREACHABLE:            # IMAP down → durable offline queue (no IMAP here)
+                    _readmut_enqueue("trash", t["pk"], None, grp, None)
+                    queued += 1
+                    continue
             if ok:
                 swept += 1
                 undo_push(undo, grp)
             else:
-                fail += 1
-        except mailops._UNREACHABLE:                    # IMAP down → durable offline queue (same as /api/trash)
-            try:
-                _readmut_enqueue("trash", t["pk"], None, grp, None)
-                queued += 1
-            except Exception:
                 fail += 1
         except Exception:
             fail += 1
@@ -4133,7 +4133,8 @@ class H(BaseHTTPRequestHandler):
         trashed = False
         if verdict == "block" and pk is not None:  # close the loop: block also trashes now
             try:
-                trashed, _, _ = mailops.trash_message(int(pk))   # block-sender is NOT undoable (rule + move)
+                with _ops_lock:                    # serialized with every other live-IMAP op
+                    trashed, _, _ = mailops.trash_message(int(pk))   # block-sender is NOT undoable (rule + move)
             except Exception:
                 trashed = False
         invalidate_stats()
