@@ -7,6 +7,7 @@ addresses, or bodies; the browser re-fetches through the existing authenticated 
 Bounded (1 IDLE conn/account, capped subscribers), reconnect-safe, daemon-thread clean exit.
 """
 import queue
+import socket
 import threading
 
 import accounts
@@ -125,11 +126,14 @@ def _worker(acct):
                 _conns.remove(M)
             except ValueError:
                 pass
-            try:
-                if M:
-                    M.logout()
-            except Exception:
-                pass
+            if M:
+                try:
+                    M.logout()               # closes the connection once the server answers
+                except Exception:
+                    try:
+                        M.shutdown()         # it didn't answer (stop() shut the socket down): close here
+                    except Exception:
+                        pass
 
 
 def start():
@@ -147,8 +151,12 @@ def start():
 def stop():
     _stop.set()
     _kick.set()
-    for M in list(_conns):       # force-close so a blocked idler iterator unblocks
+    for M in list(_conns):
+        # Wake a worker blocked reading its connection by shutting the socket down. Never close it
+        # from here: the worker may be about to wait on that descriptor, and once closed its number
+        # can go to the next socket opened, which the worker would then wait on (and read from).
+        # The worker closes its own connection on the way out.
         try:
-            M.shutdown()
+            M.sock.shutdown(socket.SHUT_RDWR)
         except Exception:
             pass
