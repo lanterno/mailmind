@@ -52,8 +52,8 @@ FOLDERS = {
 ALL_MAIL = "[Gmail]/All Mail"
 SYSTEM_FLAGS = ("\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft")
 
-_uidvalidity = itertools.count(1_700_000_001)
-_gm_id = itertools.count(1_800_000_000_000_000_001)
+UIDVALIDITY_BASE = 1_700_000_001
+GM_ID_BASE = 1_800_000_000_000_000_001
 
 
 # ── the mail store ──────────────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ class Message:
 class Mailbox:
     name: str
     special: str = ""
-    uidvalidity: int = field(default_factory=lambda: next(_uidvalidity))
+    uidvalidity: int = UIDVALIDITY_BASE
     uidnext: int = 1
     messages: dict = field(default_factory=dict)    # uid -> Message, in UID order
     former: dict = field(default_factory=dict)      # Gmail INBOX: gm_msgid -> the UID it had
@@ -763,6 +763,10 @@ class FakeIMAPServer:
         if "UIDPLUS" in self.without:
             self.without.add("UID EXPUNGE")
         self.accounts = {}
+        # Per server, so the same accounts and deliveries in a new server get the same UIDVALIDITY
+        # and Gmail ids: a database built against one server stays valid against the next.
+        self._uidv = itertools.count(UIDVALIDITY_BASE)
+        self._gm = itertools.count(GM_ID_BASE)
         self.commands = []
         self.connections = 0
         self.lock = threading.RLock()
@@ -808,7 +812,7 @@ class FakeIMAPServer:
         kind = kind or self.default_kind
         acct = Account(user, password, kind)
         for name, special in FOLDERS[kind] + [(f, "") for f in folders]:
-            acct.mailboxes[name] = Mailbox(name, special)
+            acct.mailboxes[name] = Mailbox(name, special, uidvalidity=next(self._uidv))
         with self.lock:
             self.accounts[user] = acct
         return self.config_entry(user)
@@ -854,7 +858,7 @@ class FakeIMAPServer:
         with self.lock:
             box = self.accounts[user].box(name)
             msgs = list(box.messages.values())
-            box.uidvalidity = uidvalidity or next(_uidvalidity)
+            box.uidvalidity = uidvalidity or next(self._uidv)
             box.messages, box.uidnext, box.former = {}, 1, {}
             for m in msgs:
                 box.add(m)
@@ -933,7 +937,7 @@ class FakeIMAPServer:
     def _store_new(self, acct, box, raw, flags, when=None, thread_of=None):
         msg = Message(raw=raw, flags=set(flags), internaldate=when or datetime.now(timezone.utc))
         if acct.kind == "gmail":
-            msg.gm_msgid = next(_gm_id)
+            msg.gm_msgid = next(self._gm)
             msg.gm_thrid = self._thread_id(acct, thread_of) or msg.gm_msgid
             if box.name != ALL_MAIL:
                 acct.mailboxes[ALL_MAIL].add(msg)          # the same message object: one identity
