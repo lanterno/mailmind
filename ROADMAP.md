@@ -457,6 +457,18 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
+- **Give up at once on a refusal that won't change** · medium value · effort S —
+  `outbox.send_one` backs off and retries every failure up to `MAX_ATTEMPTS`. A 550 for a
+  recipient or a 554 for the message is sent four more times over about half an hour. A 535 logs in
+  with a refused password five times, which some providers count toward a lockout. Make a 5xx reply
+  (`smtplib.SMTPResponseException.smtp_code >= 500`, and each code in an `SMTPRecipientsRefused`)
+  terminal on the first try. Keep backing off on 4xx and on connection errors. Today's behaviour
+  is pinned in `tests/golden/http_send/a_refused_login_and_a_rejected_message.json`.
+- **Let a resubmitted RSVP dedupe** · low value · effort S — `do_invite_rsvp` keys the outbox row
+  `rsvp:<account>:<uid>:<partstat>:` plus a random suffix, so the same POST sent twice (a retry, a
+  second click before the row redraws) queues two replies to the organizer. The suffix lets a
+  changed mind send again. Take the key from the request instead, as `do_send` does, and have
+  `inviteRsvp()` in the frontend draw one per click. Pinned by `test_a_double_submitted_rsvp_queues_once`.
 - **Parse the messages the corpus shows going wrong** · medium value · effort M — four strict
   xfails in `tests/test_world.py`, each on a fictional message:
   - a raw UTF-8 display name in From empties `from_name` and `from_addr`;
