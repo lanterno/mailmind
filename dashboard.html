@@ -1998,7 +1998,7 @@ function initialsOf(name,addr){
   return (w.length?w.slice(0,2).map(x=>x[0]).join(""):(String(addr||name||"?").match(/\p{L}|\d/u)||["?"])[0]).toUpperCase();
 }
 function rowMarkup(it,sub){const m=state.cmarked.has(it.pk),n=it.count||1;
-  const needs=!!String(it.action||"").trim(), gist=it.bucket==="NOTIF"?"":(it.summary||"");
+  const needs=!!String(it.action||"").trim(), gist=it.summary||"";
   const what=convoRow(it)?" conversation":"";   // a conversation row archives/deletes every message in it, server-side
   const acts=`<button data-racts="archive" tabindex="-1" title="Archive${what} (e)" aria-label="Archive${what}">${ico("archive")}</button><button class="del" data-racts="trash" tabindex="-1" title="Delete${what} (d)" aria-label="Delete${what}">${ico("trash")}</button>`
     +`<button data-racts="snooze" tabindex="-1" title="Snooze (h)" aria-label="Snooze">${ico("clock")}</button>`;
@@ -4030,7 +4030,7 @@ function showAiCard(kind,d){
   else el.innerHTML=`<div class="ai-err">Couldn’t summarize${d&&d.error?" — "+esc(d.error):""}. <button class="ai-rerun" data-airerun>Retry</button></div>`;
 }
 function storedSummaryCard(it){   // the summary ingest already wrote — shown at once, no AI call; "Full summary" asks for the deeper one
-  const el=$("#aiCard"); if(!el||!it||it.bucket==="NOTIF")return;
+  const el=$("#aiCard"); if(!el||!it)return;
   const sum=String(it.summary||"").trim(), act=String(it.action||"").trim(); if(!sum&&!act)return;
   el.hidden=false; el.classList.add("stored");
   el.innerHTML=`<div class="ai-hd"><span class="ai-mark">${ico("wind")}Summary</span></div>
