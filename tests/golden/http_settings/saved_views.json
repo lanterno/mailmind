@@ -1,0 +1,564 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view From Lin>",
+     "name": "From Lin",
+     "q": "from:lin"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "create a view",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view From Lin>",
+     "name": "From Lin",
+     "q": "from:lin"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "create another",
+  "status": 200
+ },
+ {
+  "body": {
+   "msg": "need a name and a query",
+   "ok": false,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view From Lin>",
+     "name": "From Lin",
+     "q": "from:lin"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "create one with no query",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": false,
+     "id": "<view From Lin>",
+     "name": "From Lin",
+     "q": "from:lin"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reorder",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "delete the first",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "delete a builtin",
+  "status": 200
+ },
+ {
+  "body": {
+   "msg": "verb must be create|delete|reorder",
+   "ok": false,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    },
+    {
+     "builtin": false,
+     "id": "<view Receipts>",
+     "name": "Receipts",
+     "q": "is:receipt"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "an unknown verb",
+  "status": 200
+ },
+ {
+  "note": "mailmind_views.json",
+  "value": [
+   {
+    "id": "<view Receipts>",
+    "name": "Receipts",
+    "q": "is:receipt"
+   }
+  ]
+ }
+]

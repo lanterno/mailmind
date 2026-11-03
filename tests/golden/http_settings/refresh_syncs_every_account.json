@@ -1,0 +1,132 @@
+[
+ {
+  "body": {
+   "msg": "sync started",
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "refresh",
+  "status": 200
+ },
+ {
+  "note": "Ada's INBOX subjects",
+  "value": [
+   "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+   "The finished quilt",
+   "Menu d’août — nouveautés ☕",
+   "Projet d’atelier — planning de novembre",
+   "Monthly statement",
+   "Fwd: Fabric samples",
+   "Design review",
+   "Your receipt for order 1042",
+   "[quilt] Build #412 passed",
+   "This week: five new patterns",
+   "Re: Lunch, one more thing",
+   "Re: Lunch on Thursday?",
+   "Lunch on Thursday?"
+  ]
+ },
+ {
+  "body": {
+   "accounts": [
+    {
+     "alias": "Ada",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "ada@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "imap"
+    },
+    {
+     "alias": "Bea",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "bea@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "proton"
+    },
+    {
+     "alias": "Cy",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "cy@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "[Gmail]/Trash",
+     "type": "gmail"
+    }
+   ],
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "signature_default": ""
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the digest's sync status",
+  "status": 200
+ }
+]

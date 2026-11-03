@@ -1,0 +1,39 @@
+[
+ {
+  "body": {
+   "account": "cy@example.test",
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "retry Cy",
+  "status": 200
+ },
+ {
+  "note": "Cy's INBOX in the database",
+  "value": [
+   "Your parcel was delivered",
+   "Your parcel is out for delivery",
+   "Re: Guild meetup venue",
+   "Guild meetup venue"
+  ]
+ },
+ {
+  "body": {
+   "error": "unknown account",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "retry an unknown account",
+  "status": 400
+ }
+]

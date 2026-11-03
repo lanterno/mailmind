@@ -1,0 +1,74 @@
+[
+ {
+  "body": {
+   "bad": [
+    "not an address",
+    ""
+   ],
+   "items": {
+    "ada@example.test": {
+     "known": true,
+     "self": true
+    },
+    "lin mori <lin@example.test>": {
+     "known": true,
+     "self": false
+    },
+    "lin@example.test": {
+     "known": true,
+     "self": false
+    },
+    "noor@studio.example.test": {
+     "known": true,
+     "self": false
+    },
+    "stranger@example.test": {
+     "known": false,
+     "self": false
+    },
+    "winner@prizes.example.test": {
+     "known": false,
+     "self": false
+    }
+   },
+   "ok": true,
+   "thin": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "who is known",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "addrs must be a list",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "addrs that isn't a list",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "too many addresses",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "too many addrs",
+  "status": 400
+ }
+]

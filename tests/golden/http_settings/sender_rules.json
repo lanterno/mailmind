@@ -1,0 +1,172 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "placed_in": "keep_senders",
+   "rules": {
+    "block_domains": [],
+    "block_senders": [],
+    "expire_hours": {},
+    "keep_domains": [],
+    "keep_senders": [
+     "lin@example.test"
+    ]
+   },
+   "token": "lin@example.test",
+   "trashed": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "keep a sender",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "placed_in": "block_domains",
+   "rules": {
+    "block_domains": [
+     "prizes.example.test"
+    ],
+    "block_senders": [],
+    "expire_hours": {},
+    "keep_domains": [],
+    "keep_senders": [
+     "lin@example.test"
+    ]
+   },
+   "token": "prizes.example.test",
+   "trashed": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "block a domain",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "placed_in": "block_senders",
+   "rules": {
+    "block_domains": [
+     "prizes.example.test"
+    ],
+    "block_senders": [
+     "news@loom.example.test"
+    ],
+    "expire_hours": {},
+    "keep_domains": [],
+    "keep_senders": [
+     "lin@example.test"
+    ]
+   },
+   "token": "news@loom.example.test",
+   "trashed": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "block a sender and trash the message",
+  "status": 200
+ },
+ {
+  "note": "server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 3 \"Trash\""
+  ]
+ },
+ {
+  "note": "where the newsletter is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Trash",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "ok": true,
+   "placed_in": null,
+   "rules": {
+    "block_domains": [],
+    "block_senders": [
+     "news@loom.example.test"
+    ],
+    "expire_hours": {},
+    "keep_domains": [],
+    "keep_senders": [
+     "lin@example.test"
+    ]
+   },
+   "token": "prizes.example.test",
+   "trashed": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "remove a rule",
+  "status": 200
+ },
+ {
+  "body": {
+   "msg": "invalid token (need a domain or an address)",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "a token that is neither address nor domain",
+  "status": 200
+ },
+ {
+  "body": {
+   "msg": "verdict must be keep|block|remove",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "an unknown verdict",
+  "status": 200
+ },
+ {
+  "note": "mailmind_rules.json",
+  "value": {
+   "block_domains": [],
+   "block_senders": [
+    "news@loom.example.test"
+   ],
+   "expire_hours": {},
+   "keep_domains": [],
+   "keep_senders": [
+    "lin@example.test"
+   ]
+  }
+ }
+]

@@ -1,0 +1,338 @@
+[
+ {
+  "body": {
+   "account": {
+    "alias": "Dee",
+    "credential": {
+     "set": true,
+     "style": "plain"
+    },
+    "defaults_applied": {
+     "host": false,
+     "port": false,
+     "smtp_host": true,
+     "smtp_port": true,
+     "smtp_starttls": true,
+     "starttls": false,
+     "trash": true
+    },
+    "disabled": false,
+    "email": "dee@example.test",
+    "host": "127.0.0.1",
+    "port": "<imap>",
+    "signature": "",
+    "smtp_host": "127.0.0.1",
+    "smtp_port": 587,
+    "smtp_starttls": true,
+    "starttls": true,
+    "trash": "Trash",
+    "type": "imap"
+   },
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "add Dee",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "dee@example.test already exists",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "add Dee again",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "a credential is required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "add one with no credential",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "a host is required for a generic IMAP account",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "add one with no host",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "a valid email is required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "add one that isn't an address",
+  "status": 400
+ },
+ {
+  "body": {
+   "connect": true,
+   "detail": "login ok",
+   "email": "dee@example.test",
+   "ms": 0,
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "test Dee",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "account not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "test an unknown account",
+  "status": 200
+ },
+ {
+  "body": {
+   "connect": false,
+   "email": "dee@example.test",
+   "error": "AUTHENTICATIONFAILED",
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "test a draft with the wrong password",
+  "status": 200
+ },
+ {
+  "body": {
+   "connect": false,
+   "email": "dee@example.test",
+   "error": "connection refused",
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "test a draft whose server is down",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "a host is required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "test a draft with no host",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": {
+    "alias": "Dee Q.",
+    "credential": {
+     "set": true,
+     "style": "plain"
+    },
+    "defaults_applied": {
+     "host": false,
+     "port": false,
+     "smtp_host": true,
+     "smtp_port": true,
+     "smtp_starttls": true,
+     "starttls": false,
+     "trash": true
+    },
+    "disabled": false,
+    "email": "dee@example.test",
+    "host": "127.0.0.1",
+    "port": "<imap>",
+    "signature": "Dee\n-- sent from a test",
+    "smtp_host": "127.0.0.1",
+    "smtp_port": 587,
+    "smtp_starttls": true,
+    "starttls": true,
+    "trash": "Trash",
+    "type": "imap"
+   },
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "rename and sign Dee",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "edit an unknown account",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "signature_default": "Cheers"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "set the default signature",
+  "status": 200
+ },
+ {
+  "note": "mailmind.config.json",
+  "value": {
+   "accounts": [
+    {
+     "alias": "Ada",
+     "credential": {
+      "plain": "app-password"
+     },
+     "email": "ada@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "starttls": true,
+     "type": "imap"
+    },
+    {
+     "alias": "Bea",
+     "credential": {
+      "plain": "app-password"
+     },
+     "email": "bea@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "starttls": true,
+     "type": "proton"
+    },
+    {
+     "alias": "Cy",
+     "credential": {
+      "plain": "app-password"
+     },
+     "email": "cy@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "starttls": true,
+     "type": "gmail"
+    },
+    {
+     "alias": "Dee Q.",
+     "credential": {
+      "plain": "dee-password"
+     },
+     "email": "dee@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "Dee\n-- sent from a test",
+     "starttls": true,
+     "type": "imap"
+    }
+   ],
+   "signature_default": "Cheers"
+  }
+ },
+ {
+  "body": {
+   "ok": true,
+   "removed": "dee@example.test"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "delete Dee",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "delete Dee again",
+  "status": 200
+ },
+ {
+  "note": "accounts left",
+  "value": [
+   "ada@example.test",
+   "bea@example.test",
+   "cy@example.test"
+  ]
+ }
+]

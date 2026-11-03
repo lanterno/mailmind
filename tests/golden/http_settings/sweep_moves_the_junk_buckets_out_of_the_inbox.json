@@ -1,0 +1,135 @@
+[
+ {
+  "body": {
+   "dry_run": true,
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "results": [
+    {
+     "account": "ada@example.test",
+     "by_bucket": {
+      "automated-notifications": 1,
+      "newsletters/marketing": 1,
+      "other/personal-ish": 8,
+      "receipts/transactional": 1,
+      "spam/scam": 1
+     },
+     "error": null,
+     "moved": 0,
+     "planned": 3,
+     "senders": 3,
+     "stragglers": []
+    }
+   ],
+   "total_moved": 0,
+   "total_planned": 3
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "sweep Ada, dry run",
+  "status": 200
+ },
+ {
+  "body": {
+   "dry_run": false,
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "results": [
+    {
+     "account": "ada@example.test",
+     "by_bucket": {
+      "automated-notifications": 1,
+      "newsletters/marketing": 1,
+      "other/personal-ish": 8,
+      "receipts/transactional": 1,
+      "spam/scam": 1
+     },
+     "error": null,
+     "moved": 3,
+     "planned": 3,
+     "senders": 3,
+     "stragglers": []
+    }
+   ],
+   "total_moved": 3,
+   "total_planned": 3
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "sweep Ada",
+  "status": 200
+ },
+ {
+  "note": "server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 3,4,12 \"Trash\""
+  ]
+ },
+ {
+  "note": "Ada's INBOX on the server",
+  "value": [
+   "<DB9P250MB0001.review@studio.example.test>",
+   "<atelier-nov@atelier.example.test>",
+   "<fwd-samples@studio.example.test>",
+   "<lunch-1@lin.example.test>",
+   "<lunch-3@lin.example.test>",
+   "<menu-aout@cafe.example.test>",
+   "<order-1042@thimble.example.test>",
+   "<quilt-photo@lin.example.test>",
+   "<statement-10@mailer.example.test>"
+  ]
+ },
+ {
+  "body": {
+   "events": [
+    {
+     "account": "ada@example.test",
+     "bucket": "newsletters/marketing",
+     "from": "news@loom.example.test",
+     "kind": "sweep",
+     "reason": "List-Unsubscribe header",
+     "subject": "This week: five new patterns",
+     "ts": "2026-11-02T12:00:00+00:00",
+     "uid": "3"
+    },
+    {
+     "account": "ada@example.test",
+     "bucket": "automated-notifications",
+     "from": "noreply@ci.example.test",
+     "kind": "sweep",
+     "reason": "no-reply / notification address",
+     "subject": "[quilt] Build #412 passed",
+     "ts": "2026-11-02T12:00:00+00:00",
+     "uid": "4"
+    },
+    {
+     "account": "ada@example.test",
+     "bucket": "spam/scam",
+     "from": "winner@prizes.example.test",
+     "kind": "sweep",
+     "reason": "fraud/MLM pattern",
+     "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "ts": "2026-11-02T12:00:00+00:00",
+     "uid": "12"
+    }
+   ],
+   "has_more": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the audit trail",
+  "status": 200
+ }
+]
