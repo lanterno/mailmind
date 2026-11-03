@@ -1,0 +1,239 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute the lunch thread by pk",
+  "status": 200
+ },
+ {
+  "note": "the thread's rows",
+  "value": [
+   {
+    "folder": "INBOX",
+    "seen": 1,
+    "subject": "Lunch on Thursday?"
+   },
+   {
+    "folder": "INBOX",
+    "seen": 1,
+    "subject": "Re: Lunch on Thursday?"
+   },
+   {
+    "folder": "Sent",
+    "seen": 1,
+    "subject": "Re: Lunch on Thursday?"
+   }
+  ]
+ },
+ {
+  "body": {
+   "ok": true,
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute it again",
+  "status": 200
+ },
+ {
+  "note": "Ada's INBOX",
+  "value": {
+   "rows": [
+    [
+     "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     false
+    ],
+    [
+     "The finished quilt",
+     false
+    ],
+    [
+     "Menu d’août — nouveautés ☕",
+     false
+    ],
+    [
+     "Projet d’atelier — planning de novembre",
+     false
+    ],
+    [
+     "Monthly statement",
+     false
+    ],
+    [
+     "Fwd: Fabric samples",
+     false
+    ],
+    [
+     "Design review",
+     false
+    ],
+    [
+     "Your receipt for order 1042",
+     false
+    ],
+    [
+     "[quilt] Build #412 passed",
+     true
+    ],
+    [
+     "This week: five new patterns",
+     false
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "note": "Ada's Muted",
+  "value": {
+   "rows": [
+    [
+     "Re: Lunch on Thursday?",
+     true
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folder": null,
+   "label": "Muted",
+   "ok": true,
+   "remaining": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo the mute",
+  "status": 200
+ },
+ {
+  "note": "the thread's rows after undo",
+  "value": [
+   {
+    "folder": "INBOX",
+    "seen": 1,
+    "subject": "Lunch on Thursday?"
+   },
+   {
+    "folder": "INBOX",
+    "seen": 0,
+    "subject": "Re: Lunch on Thursday?"
+   },
+   {
+    "folder": "Sent",
+    "seen": 1,
+    "subject": "Re: Lunch on Thursday?"
+   }
+  ]
+ },
+ {
+  "note": "muted",
+  "value": []
+ },
+ {
+  "body": {
+   "ok": true,
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute, then unmute",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "unmute",
+  "status": 200
+ },
+ {
+  "note": "muted after unmute",
+  "value": []
+ },
+ {
+  "body": {
+   "error": "bad mute target",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute: an account that isn't configured",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad mute target",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute: no thread",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad mute target",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute: a missing message",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad mute target",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mute: nothing",
+  "status": 400
+ }
+]

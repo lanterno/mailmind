@@ -1,0 +1,142 @@
+[
+ {
+  "body": {
+   "count": 1,
+   "ok": true,
+   "until": 1793642400
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze one until 18:00",
+  "status": 200
+ },
+ {
+  "body": {
+   "count": 1,
+   "ok": true,
+   "until": 1793698200
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze one until an ISO time",
+  "status": 200
+ },
+ {
+  "note": "Ada's INBOX while both sleep",
+  "value": {
+   "rows": [
+    [
+     "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     false
+    ],
+    [
+     "The finished quilt",
+     false
+    ],
+    [
+     "Menu d’août — nouveautés ☕",
+     false
+    ],
+    [
+     "Monthly statement",
+     false
+    ],
+    [
+     "Fwd: Fabric samples",
+     false
+    ],
+    [
+     "Design review",
+     false
+    ],
+    [
+     "[quilt] Build #412 passed",
+     true
+    ],
+    [
+     "This week: five new patterns",
+     false
+    ],
+    [
+     "Re: Lunch on Thursday?",
+     false
+    ],
+    [
+     "Lunch on Thursday?",
+     true
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "note": "Ada's Snoozed",
+  "value": {
+   "rows": [
+    [
+     "Your receipt for order 1042",
+     false
+    ],
+    [
+     "Projet d’atelier — planning de novembre",
+     false
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "body": {
+   "account": null,
+   "folder": null,
+   "label": "Snoozed",
+   "ok": true,
+   "remaining": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo the ISO snooze",
+  "status": 200
+ },
+ {
+  "note": "Ada's Snoozed after undo",
+  "value": {
+   "rows": [
+    [
+     "Your receipt for order 1042",
+     false
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "note": "after 18:00 the receipt wakes unread",
+  "value": [
+   {
+    "seen": 0,
+    "snoozed_until": null,
+    "subject": "Your receipt for order 1042"
+   }
+  ]
+ },
+ {
+  "note": "Ada's Snoozed after the wake",
+  "value": {
+   "rows": [],
+   "status": 200
+  }
+ }
+]

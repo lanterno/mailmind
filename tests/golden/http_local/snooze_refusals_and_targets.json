@@ -1,0 +1,217 @@
+[
+ {
+  "body": {
+   "error": "bad snooze time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: an unknown preset",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad snooze time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a time in the past",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad snooze time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a time over a year away",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad snooze time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a time that isn't one",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad snooze time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: no time at all",
+  "status": 400
+ },
+ {
+  "body": {
+   "count": 0,
+   "ok": true,
+   "until": 1793692800
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: no target",
+  "status": 200
+ },
+ {
+  "body": {
+   "count": 1,
+   "ok": true,
+   "until": 1793692800
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a missing message",
+  "status": 200
+ },
+ {
+  "body": {
+   "count": 3,
+   "ok": true,
+   "until": 1793692800
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a whole thread",
+  "status": 200
+ },
+ {
+  "body": {
+   "count": 2,
+   "ok": true,
+   "until": 1793692800
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a list of pks",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "bad request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "snooze: a pk that isn't a number",
+  "status": 400
+ },
+ {
+  "note": "snoozed rows",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "snoozed_until": 1793692800,
+    "subject": "Lunch on Thursday?"
+   },
+   {
+    "account": "ada@example.test",
+    "snoozed_until": 1793692800,
+    "subject": "Re: Lunch on Thursday?"
+   },
+   {
+    "account": "ada@example.test",
+    "snoozed_until": 1793692800,
+    "subject": "Re: Lunch on Thursday?"
+   },
+   {
+    "account": "bea@example.test",
+    "snoozed_until": 1793692800,
+    "subject": "Contract draft v2"
+   },
+   {
+    "account": "cy@example.test",
+    "snoozed_until": 1793692800,
+    "subject": "Your parcel is out for delivery"
+   }
+  ]
+ },
+ {
+  "body": {
+   "count": 3,
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "unsnooze the lunch thread",
+  "status": 200
+ },
+ {
+  "body": {
+   "count": 0,
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "unsnooze nothing",
+  "status": 200
+ },
+ {
+  "note": "snoozed rows after",
+  "value": [
+   {
+    "account": "bea@example.test",
+    "subject": "Contract draft v2"
+   },
+   {
+    "account": "cy@example.test",
+    "subject": "Your parcel is out for delivery"
+   }
+  ]
+ }
+]

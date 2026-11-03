@@ -1,0 +1,137 @@
+[
+ {
+  "note": "messages summarized",
+  "value": 21
+ },
+ {
+  "note": "follow-ups at Monday noon",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "due_ts": 1793620800,
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:ada@example.test:c5862e0831764395"
+   },
+   {
+    "account": "bea@example.test",
+    "due_ts": 1793620800,
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
+   }
+  ]
+ },
+ {
+  "note": "follow-ups four days later",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "due_ts": 1793966400,
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:ada@example.test:c5862e0831764395"
+   },
+   {
+    "account": "bea@example.test",
+    "due_ts": 1793966400,
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:bea@example.test:b3330a7a33c000ec"
+   },
+   {
+    "account": "bea@example.test",
+    "due_ts": 1793966400,
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
+   }
+  ]
+ },
+ {
+  "note": "ada@example.test's Waiting",
+  "value": {
+   "rows": [
+    [
+     "Quilt pattern ideas",
+     true
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "note": "bea@example.test's Waiting",
+  "value": {
+   "rows": [
+    [
+     "Kickoff notes",
+     true
+    ],
+    [
+     "New sign-in to your account",
+     true
+    ]
+   ],
+   "status": 200
+  }
+ },
+ {
+  "note": "cy@example.test's Waiting",
+  "value": {
+   "rows": [],
+   "status": 200
+  }
+ },
+ {
+  "body": {
+   "ok": true,
+   "thread_id": "rf:ada@example.test:c5862e0831764395"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "dismiss the first",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "bad target",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "dismiss nothing",
+  "status": 400
+ },
+ {
+  "note": "follow-ups after dismissal",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "kind": "received",
+    "state": "dismissed",
+    "thread_id": "rf:ada@example.test:c5862e0831764395"
+   },
+   {
+    "account": "bea@example.test",
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:bea@example.test:b3330a7a33c000ec"
+   },
+   {
+    "account": "bea@example.test",
+    "kind": "received",
+    "state": "due",
+    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
+   }
+  ]
+ }
+]
