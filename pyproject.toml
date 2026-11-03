@@ -45,6 +45,6 @@ markers = ["browser: drives dashboard.html in Chromium; skipped unless pytest ru
 root_packages = ["mailmind"]
 
 [[tool.importlinter.contracts]]
-name = "bootstrap, then platform, then kernel: each imports only the layers below it"
+name = "bootstrap, then http, then platform, then kernel: each imports only the layers below it"
 type = "layers"
-layers = ["mailmind.bootstrap", "mailmind.platform", "mailmind.kernel"]
+layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.platform", "mailmind.kernel"]
