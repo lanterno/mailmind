@@ -7,8 +7,8 @@ as it writes it: the status line and headers as the response start, every later 
 of the body. A response that never ends (the live event stream) or is too big to hold in memory
 (the database export) streams as it did over the socket.
 
-When the client goes away, the handler's next write raises BrokenPipeError, as a closed socket's
-would.
+When the client goes away, or the server cancels the request as it shuts down, the handler's next
+write raises BrokenPipeError, as a closed socket's would.
 """
 import io
 import logging
@@ -52,8 +52,12 @@ class HandlerBridge:
         gone = threading.Event()
         async with anyio.create_task_group() as tg:
             tg.start_soon(_watch_for_disconnect, receive, gone)
-            await anyio.to_thread.run_sync(self._handle, _request_bytes(scope, body), scope, send, gone)
-            tg.cancel_scope.cancel()
+            try:
+                await anyio.to_thread.run_sync(self._handle, _request_bytes(scope, body), scope, send, gone,
+                                               abandon_on_cancel=True)
+            finally:
+                gone.set()              # if the request was cancelled, the handler's next write ends it
+                tg.cancel_scope.cancel()
 
     async def _read_body(self, scope, receive):
         """The request body, b"" when the declared length is over the cap, or None when the body
