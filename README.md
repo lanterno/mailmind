@@ -12,7 +12,9 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **No `pip install`.** Pure Python standard library + one HTML file.
+- **Next to nothing to install.** Python, two packages (FastAPI and uvicorn) that
+  [uv](https://docs.astral.sh/uv/) fetches on first run, and one HTML file. `python3 server.py`
+  still runs the app on Python alone.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
   Anthropic through the Claude API or the `claude` CLI.
@@ -40,7 +42,8 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    summarize.py                summarize + score importance 1–5 with Claude (API or CLI)
         │
-   server.py  +  dashboard.html        the app on http://127.0.0.1:8721
+   server.py  +  dashboard.html        the app on http://127.0.0.1:8721, served by
+                                       `python -m mailmind serve` (FastAPI on uvicorn)
 ```
 
 Around that spine sit the client modules: `mailops.py` (IMAP writes),
@@ -328,8 +331,11 @@ automatically.
   `mbox` archives (`python3 export.py --format eml --out DIR`). Read-only — it never
   touches IMAP.
 - **Only your own MailMind page can talk to the local server.** It answers just its
-  own host name, refuses requests other websites start, can't be framed by another
-  page, and checks every folder name before it reaches the mail server.
+  own host name, refuses requests other websites start and any change that lacks the page's
+  token and origin, can't be framed by another page, and checks every folder name before it
+  reaches the mail server. Its answers tell the browser to keep them from other sites and out
+  of caches, and the page carries a content security policy, report-only for now, that lets
+  only its own scripts run.
 - **Bodies render in a locked sandbox** with an explicit deny-all CSP, remote images
   blocked by default, and a runtime guard that strips scripting permission from any
   reader frame.
@@ -368,7 +374,10 @@ automatically.
 
 ## Prerequisites
 
-- **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14. No third-party packages.
+- **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's two packages,
+  FastAPI and uvicorn, from `pyproject.toml` on first run. Without it, `python3 server.py` runs
+  the same app on the standard library alone.
 - **Claude**, for summaries — either a Claude API key, as `"anthropic_api_key"` in
   `mailmind.config.json` or in `ANTHROPIC_API_KEY` (MailMind calls the Messages API
   itself, no SDK), or the `claude` CLI on your `PATH`, installed and authenticated
@@ -396,7 +405,8 @@ python3 ingest.py all 90       # last 90 days (use a big number like 3650 for al
 python3 summarize.py 2000 3    # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
-python3 server.py              # http://127.0.0.1:8721   (custom port: python3 server.py 9000)
+uv run python -m mailmind serve   # http://127.0.0.1:8721   (custom port: ... serve 9000)
+#    or, with nothing installed:   python3 server.py [port]
 ```
 
 ## Configuring accounts
@@ -449,9 +459,10 @@ Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://
 
 ## Two ways to use it
 
-**Web dashboard / daemon** — `python3 server.py [port]`. Auto-syncs (incremental
-ingest + summarize) every 5 minutes. `MAILMIND_NOSYNC=1 python3 server.py` serves
-read-only (no background sync).
+**Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`), or
+`python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs (incremental
+ingest + summarize) every 5 minutes. With `MAILMIND_NOSYNC=1` either one serves read-only (no
+background sync); `just dev` does that.
 
 **CLI curation** (`manage.py`) — works across every account:
 
@@ -492,10 +503,10 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
 
-Server port is the first CLI arg to `server.py` (default `8721`).
+The server's port is the first argument to `serve` or to `server.py` (default `8721`).
 
 `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default** and
-nothing in the repo sets them, so a plain `python3 server.py` connects fresh for
+nothing in the repo sets them, so a plain run connects fresh for
 every operation and syncs INBOX only. Export them from your shell profile or a
 launcher script if you want them on.
 
@@ -537,7 +548,7 @@ SMTP and Claude servers and a made-up mailbox, and compares the answers with rec
 `tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
 `just test-full` also runs the browser tests, which click through the dashboard in
 Chromium. `just` on its own lists every recipe. uv installs those dev tools from
-`pyproject.toml` on first use; running the app still needs nothing installed.
+`pyproject.toml` on first use, as it does the app's own packages.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
 re-runs `summarize.py` until every non-junk message has a summary, backing off
