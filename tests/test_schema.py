@@ -15,8 +15,8 @@ HERE = os.path.dirname(__file__)
 
 
 def version():
-    import store
-    return store._MIGRATIONS[-1][0]
+    from mailmind.platform.db import migrations
+    return migrations.MIGRATIONS[-1][0]
 
 
 def snapshot_path():
@@ -65,14 +65,13 @@ def test_a_fresh_database_has_the_checked_in_schema(fresh_db, request):
         assert got == f.read(), f"schema differs from {os.path.relpath(snapshot_path())}"
 
 
-def test_an_upgrade_from_the_previous_version_matches_a_fresh_database(fresh_db, monkeypatch):
+def test_an_upgrade_from_the_previous_version_matches_a_fresh_database(fresh_db):
     import store
+    from mailmind.platform.db import migrate, migrations
     fresh = fresh_db()
     store.init()
     old = fresh_db()
-    with monkeypatch.context() as m:
-        m.setattr(store, "_MIGRATIONS", store._MIGRATIONS[:-1])
-        store.init()
+    migrate.init(old, migrations.MIGRATIONS[:-1])
     assert dump(old).endswith(f"PRAGMA user_version={version() - 1};\n")
     store.init()
     assert dump(old) == dump(fresh)
@@ -98,12 +97,13 @@ def test_init_again_keeps_the_schema_and_the_data(fresh_db):
 
 def test_every_migration_can_run_twice(fresh_db):
     import store
+    from mailmind.platform.db import migrations
     path = fresh_db()
     store.init()
     before = dump(path)
     c = store.conn()
     try:
-        for _, fn in store._MIGRATIONS:
+        for _, fn in migrations.MIGRATIONS:
             fn(c)
             c.commit()
     finally:
@@ -112,5 +112,5 @@ def test_every_migration_can_run_twice(fresh_db):
 
 
 def test_migration_versions_only_go_up_by_one():
-    import store
-    assert [t for t, _ in store._MIGRATIONS] == list(range(1, version() + 1))
+    from mailmind.platform.db import migrations
+    assert [t for t, _ in migrations.MIGRATIONS] == list(range(1, version() + 1))

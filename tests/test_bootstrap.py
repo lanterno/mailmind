@@ -43,6 +43,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp
     import store
     from mailmind.bootstrap import legacy
     from mailmind.platform import settings
+    from mailmind.platform.db import migrations
     monkeypatch.setenv("MAILMIND_NOSYNC", nosync)
     monkeypatch.setattr(realtime, "start", lambda: spawned.append(realtime.start))
     spawned = []
@@ -53,7 +54,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp
             version = c.execute("PRAGMA user_version").fetchone()[0]
         finally:
             c.close()
-    assert version == store._MIGRATIONS[-1][0]
+    assert version == migrations.MIGRATIONS[-1][0]
     assert outbox._ops_lock is readmutq._ops_lock is server._ops_lock
     always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
     syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
