@@ -1,15 +1,11 @@
 """The perimeter as ASGI middleware: the checks in mailmind.platform.perimeter, run on every
-request before any route, so no route can forget one, and before a body is read."""
+request before any route, so no route can forget one, and before a body is read; and the headers
+every answer carries, added to any answer that didn't set them."""
 import json
 
 from starlette.datastructures import Headers
 
 from mailmind.platform import perimeter, settings
-
-# What the old server's handler sends with every answer (server.H._send), so a refusal reads the
-# same from either front door.
-_ANSWER_HEADERS = [(b"x-content-type-options", b"nosniff"), (b"referrer-policy", b"no-referrer"),
-                   (b"x-frame-options", b"DENY")]
 
 
 class Perimeter:
@@ -28,6 +24,7 @@ class Perimeter:
         headers = Headers(scope=scope)
         method = scope["method"]
         path = (scope.get("raw_path") or scope["path"].encode()).decode("latin-1")
+        send = _adding(send, perimeter.answer_headers(path))
         port = settings.current().port
         if method in ("GET", "HEAD"):
             refusal = perimeter.refuse_get(path, headers, port=port)
@@ -39,5 +36,18 @@ class Perimeter:
         body = json.dumps(refusal.answer()).encode()
         await send({"type": "http.response.start", "status": refusal.status,
                     "headers": [(b"content-type", b"application/json"),
-                                (b"content-length", str(len(body)).encode()), *_ANSWER_HEADERS]})
+                                (b"content-length", str(len(body)).encode())]})
         await send({"type": "http.response.body", "body": body})
+
+
+def _adding(send, headers):
+    """`send`, with each of `headers` added to the answer's start unless the answer set it."""
+    extra = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers]
+
+    async def send_adding(message):
+        if message["type"] == "http.response.start":
+            have = {k.lower() for k, _ in message.get("headers", ())}
+            message = {**message, "headers": [*message.get("headers", ()),
+                                              *(h for h in extra if h[0] not in have)]}
+        await send(message)
+    return send_adding

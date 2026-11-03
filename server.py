@@ -3701,13 +3701,27 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def send_response_only(self, code, message=None):
+        self._status, self._named = code, set()
+        super().send_response_only(code, message)
+
+    def send_header(self, keyword, value):
+        self._named.add(keyword.lower())
+        super().send_header(keyword, value)
+
+    def end_headers(self):
+        """Every answer, an error http.server writes itself included, carries the perimeter's
+        headers; the ones a route set itself stand."""
+        if self._status >= 200:
+            for k, v in perimeter.answer_headers(urllib.parse.urlsplit(getattr(self, "path", "")).path):
+                if k.lower() not in self._named:
+                    self.send_header(k, v)
+        super().end_headers()
+
     def _send(self, code, body, ctype):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Frame-Options", "DENY")   # no other page may frame the app and steer clicks
         self.end_headers()
         self.wfile.write(body)
 
@@ -3718,8 +3732,6 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
         # belt-and-braces: even if a browser ignores Content-Disposition, sandbox neuters it
         self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
         for k, v in (extra or {}).items():
@@ -3739,8 +3751,6 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(b"retry: 3000\n: connected\n\n")
             self.wfile.flush()

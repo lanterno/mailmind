@@ -11,9 +11,17 @@ Every request reaches 127.0.0.1, so the danger is another page in the browser:
   (`refuse_cross_site`);
 - another site's POST, which can't carry the page's CSRF token or its Origin (`refuse_mutation`).
 The API answers only the page's own requests, which browsers mark Sec-Fetch-Site: same-origin.
+Every answer, a refusal included, carries the headers `answer_headers` names.
 """
 import secrets
 from dataclasses import dataclass
+
+# What every answer carries, unless its route set the header itself.
+_ANSWER_HEADERS = (
+    ("X-Content-Type-Options", "nosniff"),      # a body is only ever what its Content-Type says
+    ("Referrer-Policy", "no-referrer"),         # a link out of the app names no page of it
+    ("X-Frame-Options", "DENY"),                # no other page may frame the app and steer clicks
+)
 
 @dataclass(frozen=True)
 class Refusal:
@@ -100,6 +108,12 @@ def refuse_mutation(path, headers, *, port, token):
     if (headers.get("Origin") or "").lower() not in _own_origins(port):
         return Refusal(403, "origin required")
     return None
+
+
+def answer_headers(path):
+    """The headers every answer to `path` carries, as (name, value) pairs. A front door adds each
+    one the route didn't set itself."""
+    return _ANSWER_HEADERS
 
 
 def refuse_get(path, headers, *, port):
