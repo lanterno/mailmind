@@ -59,9 +59,7 @@ def append_to_sent(acct, raw):
     M = accounts.connect(acct)
     try:
         sent = mailops._find_folder(M, ("\\sent", "sent")) or "Sent"
-        if '"' in sent or "\r" in sent or "\n" in sent:
-            raise ValueError("unsafe Sent folder name")
-        typ, d = M.append(f'"{sent}"', "(\\Seen)",
+        typ, d = M.append(accounts.mailbox_arg(sent), "(\\Seen)",
                           imaplib.Time2Internaldate(time.time()), raw)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"APPEND failed: {d}")
@@ -85,11 +83,9 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
     M = accounts.connect(acct)
     try:
         drafts = mailops._find_folder(M, ("\\drafts", "drafts", "draft")) or "Drafts"
-        if '"' in drafts or "\r" in drafts or "\n" in drafts:
-            raise ValueError("unsafe Drafts folder name")
         if prev_folder is not None and prev_folder != drafts:
             prev_uid = prev_msgid = None
-        typ, d = M.select(f'"{drafts}"', readonly=False)
+        typ, d = M.select(accounts.mailbox_arg(drafts), readonly=False)
         uidv = None
         try:
             uidv = int((M.untagged_responses.get("UIDVALIDITY") or [b"0"])[0])
@@ -112,7 +108,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
                 mailops.expunge_uid(M, del_uid)
             except Exception:
                 pass
-        typ, d = M.append(f'"{drafts}"', "(\\Draft)", imaplib.Time2Internaldate(time.time()), raw)
+        typ, d = M.append(accounts.mailbox_arg(drafts), "(\\Draft)", imaplib.Time2Internaldate(time.time()), raw)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"APPEND failed: {d}")
         new_uid = None
@@ -135,7 +131,7 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
         return
     M = accounts.connect(acct)
     try:
-        M.select(f'"{folder or "Drafts"}"', readonly=False)
+        M.select(accounts.mailbox_arg(folder or "Drafts"), readonly=False)
         try:
             cur = int((M.untagged_responses.get("UIDVALIDITY") or [b"0"])[0])
         except Exception:

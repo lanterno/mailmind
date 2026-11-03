@@ -165,11 +165,11 @@ def move_verified(M, uids, dest):
     for i in range(0, len(uids), MOVE_BATCH):
         chunk = uids[i:i + MOVE_BATCH]
         try:
-            M.uid("MOVE", ",".join(chunk), f'"{dest}"')
+            M.uid("MOVE", ",".join(chunk), accounts.mailbox_arg(dest))
         except Exception:
             for u in chunk:  # fall back to per-message so one bad UID can't sink a batch
                 try:
-                    M.uid("MOVE", u, f'"{dest}"')
+                    M.uid("MOVE", u, accounts.mailbox_arg(dest))
                 except Exception:
                     pass
         time.sleep(0.2)
@@ -184,7 +184,7 @@ def move_verified(M, uids, dest):
         M.select('"INBOX"', readonly=False)
         for u in remaining:
             try:
-                M.uid("MOVE", u, f'"{dest}"')
+                M.uid("MOVE", u, accounts.mailbox_arg(dest))
             except Exception:
                 pass
         M.select('"INBOX"', readonly=True)
@@ -195,7 +195,7 @@ def move_verified(M, uids, dest):
 
 
 def _count(M, folder):
-    typ, d = M.select(f'"{folder}"', readonly=True)
+    typ, d = M.select(accounts.mailbox_arg(folder), readonly=True)
     return int(d[0].decode()) if typ == "OK" else 0
 
 
@@ -231,7 +231,7 @@ def cmd_inventory(accts):
             if not name:
                 continue
             try:
-                t, d = M.status(f'"{name}"', "(MESSAGES UNSEEN)")
+                t, d = M.status(accounts.mailbox_arg(name), "(MESSAGES UNSEEN)")
                 s = d[0].decode()
                 msgs = (re.search(r"MESSAGES (\d+)", s) or [None, "?"])[1]
                 uns = (re.search(r"UNSEEN (\d+)", s) or [None, "?"])[1]
@@ -503,7 +503,7 @@ def cmd_empty_trash(accts):
         try:
             M = accounts.connect(a)
             tf = accounts.trash_folder(a)          # [Gmail]/Trash for gmail, "Trash" for plain IMAP
-            M.select(f'"{tf}"', readonly=False)
+            M.select(accounts.mailbox_arg(tf), readonly=False)
             typ, d = M.uid("SEARCH", None, "ALL")
             uids = d[0].split()
             if not uids:

@@ -739,7 +739,7 @@ def _live_folder_list(acct):
             role = _folder_role(name, flags, acct["kind"])
             unseen = 0
             try:
-                t, d = M.status(f'"{name}"', "(UNSEEN MESSAGES)")
+                t, d = M.status(accounts.mailbox_arg(name), "(UNSEEN MESSAGES)")
                 sd = d[0].decode()
                 unseen = int((manage.re.search(r"UNSEEN (\d+)", sd) or [0, 0])[1])
                 total = int((manage.re.search(r"MESSAGES (\d+)", sd) or [0, 0])[1])
@@ -2494,7 +2494,7 @@ def _draft_live(acct, folder, uid):
     except Exception:
         return None
     try:
-        typ, _ = M.select(f'"{folder}"', readonly=True)
+        typ, _ = M.select(accounts.mailbox_arg(folder), readonly=True)
         if typ != "OK":
             return None
         cur = ingest._uidvalidity(M)

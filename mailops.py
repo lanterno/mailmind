@@ -80,7 +80,7 @@ def apply_queued_mutation(row):
     payload = json.loads(row["payload"] or "{}")
 
     def run(M):
-        M.select(f'"{src}"', readonly=False)
+        M.select(accounts.mailbox_arg(src), readonly=False)
         uid = _uid_by_msgid(M, mid) or (str(payload["uid"]) if payload.get("uid") else None)
         if not uid:
             return (True, None)                       # already gone → exactly-once done
@@ -132,7 +132,7 @@ def trash_message(pk):
     dest = accounts.trash_folder(acct)
     # _UNREACHABLE (IMAP down) propagates → the route queues this offline; a command error is
     # swallowed (unchanged behavior). Local delete + undo happen on return, as before.
-    _imap_mutate(acct, lambda M: (M.select(f'"{row["folder"]}"', readonly=False),
+    _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
                                   _move_uid(M, str(row["uid"]), dest)))
     c = store.conn()
     store.delete_message(c, pk)
@@ -155,7 +155,7 @@ def set_flags(pk, flags):
     acct = accounts.get(row["account"])
     M = accounts.connect(acct)
     try:
-        M.select(f'"{row["folder"]}"', readonly=False)
+        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         for k, v in flags.items():
             if k in _FLAG:
                 M.uid("STORE", str(row["uid"]), "+FLAGS" if v else "-FLAGS", f"({_FLAG[k]})")
@@ -202,11 +202,11 @@ def expunge_uid(M, uid):
 
 def _move_uid(M, uid, dest):
     try:
-        typ, d = M.uid("MOVE", uid, f'"{dest}"')
+        typ, d = M.uid("MOVE", uid, accounts.mailbox_arg(dest))
         if typ != "OK":
             raise imaplib.IMAP4.error(str(d))
     except imaplib.IMAP4.error:  # no MOVE: copy this one message, then remove only its UID
-        typ, d = M.uid("COPY", uid, f'"{dest}"')
+        typ, d = M.uid("COPY", uid, accounts.mailbox_arg(dest))
         if typ != "OK":          # nothing landed in dest, so the original stays untouched
             raise imaplib.IMAP4.error(f"COPY failed: {d}")
         M.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
@@ -224,7 +224,7 @@ def archive_message(pk):
     acct = accounts.get(row["account"])
 
     def op(M):
-        M.select(f'"{row["folder"]}"', readonly=False)
+        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         uid = str(row["uid"])
         if acct["kind"] == "gmail":
             M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")
@@ -264,7 +264,7 @@ def junk_message(pk):
     acct = accounts.get(row["account"])
 
     def op(M):
-        M.select(f'"{row["folder"]}"', readonly=False)
+        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         junk = _find_folder(M, ("\\junk", "junk", "\\spam", "spam", "bulk"))
         if not junk and acct["kind"] == "gmail":
             junk = "[Gmail]/Spam"
@@ -291,7 +291,7 @@ def move_message(pk, dest):
     if not row or not dest:
         return False, "not found", None
     acct = accounts.get(row["account"])
-    _imap_mutate(acct, lambda M: (M.select(f'"{row["folder"]}"', readonly=False),
+    _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
                                   _move_uid(M, str(row["uid"]), dest)))
     c = store.conn()
     store.delete_message(c, pk)
@@ -307,7 +307,7 @@ def move_by_msgid(account, search_folder, dest_folder, message_id):
     acct = accounts.get(account)
     M = accounts.connect(acct)
     try:
-        M.select(f'"{search_folder}"', readonly=False)
+        M.select(accounts.mailbox_arg(search_folder), readonly=False)
         typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
         uids = (d[0].split() if (typ == "OK" and d and d[0]) else [])
         if not uids:
@@ -327,7 +327,7 @@ def relabel_by_msgid(account, search_folder, message_id, label="\\Inbox"):
     acct = accounts.get(account)
     M = accounts.connect(acct)
     try:
-        M.select(f'"{search_folder}"', readonly=False)
+        M.select(accounts.mailbox_arg(search_folder), readonly=False)
         typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
         uids = (d[0].split() if (typ == "OK" and d and d[0]) else [])
         if not uids:

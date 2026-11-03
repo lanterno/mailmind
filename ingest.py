@@ -209,7 +209,7 @@ def sync_folder(acct, folder, full=False, recent=None):
     are already watermark-bounded and ignore it."""
     M = accounts.connect(acct)
     try:
-        M.select(f'"{folder}"', readonly=True)
+        M.select(accounts.mailbox_arg(folder), readonly=True)
         uidv = _uidvalidity(M)
         c = store.conn()
         stored = store.get_uidvalidity(c, acct["email"], folder)
@@ -253,7 +253,7 @@ def ingest_message(acct, folder, message_id):
         return 0
     M = accounts.connect(acct)
     try:
-        M.select(f'"{folder}"', readonly=True)
+        M.select(accounts.mailbox_arg(folder), readonly=True)
         typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
         uids = [x.decode() for x in (d[0].split() if (typ == "OK" and d and d[0]) else [])]
         if not uids:
@@ -311,7 +311,7 @@ def fetch_body(pk):
         # READ-ONLY borrow: pooled when MAILMIND_POOL enables this account, else a fresh connect+
         # logout (byte-identical to before). Mutations never use the pool.
         with pool.borrow(acct) as M:
-            M.select(f'"{row["folder"]}"', readonly=True)
+            M.select(accounts.mailbox_arg(row["folder"]), readonly=True)
             typ, d = M.uid("FETCH", str(row["uid"]), "(BODY.PEEK[])")
             raw = next((p[1] for p in d if isinstance(p, tuple)), b"")
         if not raw:
