@@ -2,23 +2,35 @@
 database and config, fake IMAP and SMTP connections, and fictional addresses, so nothing here
 can reach a real server.
 Run: python3 test_hardening.py"""
+import contextlib
+import http.client
 import imaplib
 import json
 import os
 import ssl
 import tempfile
+import threading
 
 import store
 import config
+import mailclass
+import rules
+import views
 _TMP = tempfile.mkdtemp()
 store.DB = os.path.join(_TMP, "mailmind.db")        # before anything opens a connection
 config.CONFIG = os.path.join(_TMP, "mailmind.config.json")
+rules.FILE = mailclass.RULES_FILE = os.path.join(_TMP, "mailmind_rules.json")
+views.FILE = os.path.join(_TMP, "mailmind_views.json")
 with open(config.CONFIG, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
 import accounts
 import mailops
+import server
 import smtpsend
+server.RECON_AUDIT = os.path.join(_TMP, "reconcile_audit.jsonl")
+server.SWEEP_AUDIT = os.path.join(_TMP, "sweep_audit.jsonl")
+store.init()
 
 
 class _FakeIMAP:
@@ -200,6 +212,64 @@ def test_replacing_a_draft_copy_never_bulk_expunges():
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert "EXPUNGE-ALL" not in M.cmds()
 
+
+
+@contextlib.contextmanager
+def _live_server():
+    """The real handler on an ephemeral 127.0.0.1 port; yields get(path, headers) -> (status, body)."""
+    srv = server._Server(("127.0.0.1", 0), server.H)
+    port = srv.server_address[1]
+    old_port, server.PORT = server.PORT, port
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    def get(path, headers):
+        h = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        h.request("GET", path, headers={k: v.replace("PORT", str(port)) for k, v in headers.items()})
+        r = h.getresponse()
+        out = r.status, r.read()
+        h.close()
+        return out
+    try:
+        yield get
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        server.PORT = old_port
+
+
+_READS = ["/", "/api/digest", "/api/contacts?q=a", "/api/search?q=a", "/api/accounts", "/api/rules",
+          "/api/no-such-route"]
+
+
+def test_the_app_still_loads_on_its_own_host():
+    with _live_server() as get:
+        for host in ("127.0.0.1:PORT", "localhost:PORT"):
+            code, body = get("/", {"Host": host})
+            assert code == 200 and server.CSRF.encode() in body, (host, code)
+        code, _ = get("/api/digest", {"Host": "127.0.0.1:PORT", "Origin": "http://127.0.0.1:PORT"})
+        assert code == 200, code
+
+
+def test_a_rebound_name_reads_nothing():
+    with _live_server() as get:
+        for path in _READS:
+            code, body = get(path, {"Host": "rebound.example.test:PORT"})
+            assert code == 403, (path, code)
+            assert server.CSRF.encode() not in body, path
+
+
+def test_a_foreign_origin_reads_nothing():
+    with _live_server() as get:
+        for path in _READS:
+            code, _ = get(path, {"Host": "127.0.0.1:PORT", "Origin": "http://rebound.example.test:PORT"})
+            assert code == 403, (path, code)
+
+
+def test_a_refused_read_is_not_counted_as_someone_at_the_screen():
+    with _live_server() as get:
+        server._LAST_UI_TS = 0
+        get("/api/digest", {"Host": "rebound.example.test:PORT"})
+        assert server._LAST_UI_TS == 0, server._LAST_UI_TS
 
 if __name__ == "__main__":
     import sys
