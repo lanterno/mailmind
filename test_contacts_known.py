@@ -5,20 +5,23 @@ config and rules are temp files. All addresses are fictional.
 Run: python3 test_contacts_known.py"""
 import http.client
 import json
-import os
 import tempfile
 import threading
 
 import store
-import config
-import rules
-_TMP = tempfile.mkdtemp()
-store.DB = os.path.join(_TMP, "mailmind.db")        # before anything opens a connection
-config.CONFIG = os.path.join(_TMP, "mailmind.config.json")
-rules.FILE = os.path.join(_TMP, "mailmind_rules.json")
-with open(config.CONFIG, "w") as f:
-    json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
-                             "host": "imap.example.test"}]}, f)
+from mailmind.platform import settings
+
+_CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"}]}
+
+
+def _home():
+    """A new temp data directory holding only the config, made the app's for every module."""
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
+    with open(settings.current().config, "w") as f:
+        json.dump(_CONFIG, f)
+
+
+_home()                                               # before anything opens a file
 import server
 
 ACCT = "ada@example.test"
@@ -26,10 +29,8 @@ _uid = [0]
 
 
 def _fresh():
-    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    _home()
     store.init()
-    if os.path.exists(rules.FILE):
-        os.remove(rules.FILE)
 
 
 def _msg(from_addr, recipients="", folder="INBOX", is_junk=0, draft=0, account=ACCT):
@@ -156,7 +157,7 @@ def test_idna_forms_match_both_ways():
 
 def test_keep_senders_count_keep_domains_do_not():
     _fresh()
-    with open(rules.FILE, "w") as f:
+    with open(settings.current().rules, "w") as f:
         json.dump({"keep_senders": ["vip@example.test"], "keep_domains": ["friends.example"]}, f)
     k = _known(["vip@example.test", "someone@friends.example"])
     assert k == {"vip@example.test": True, "someone@friends.example": False}, k

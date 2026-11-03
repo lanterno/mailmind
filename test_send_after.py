@@ -4,18 +4,23 @@ temp database and config, and the outbox is replaced with a recorder, so nothing
 All addresses are fictional.
 Run: python3 test_send_after.py"""
 import json
-import os
 import tempfile
 import time
 
 import store
-import config
-_TMP = tempfile.mkdtemp()
-store.DB = os.path.join(_TMP, "mailmind.db")        # before anything opens a connection
-config.CONFIG = os.path.join(_TMP, "mailmind.config.json")
-with open(config.CONFIG, "w") as f:
-    json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
-                             "host": "imap.example.test"}]}, f)
+from mailmind.platform import settings
+
+_CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"}]}
+
+
+def _home():
+    """A new temp data directory holding only the config, made the app's for every module."""
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
+    with open(settings.current().config, "w") as f:
+        json.dump(_CONFIG, f)
+
+
+_home()                                               # before anything opens a file
 import server
 
 ACCT = "ada@example.test"
@@ -23,7 +28,7 @@ _real_spec = server._compose_spec
 
 
 def _fresh():
-    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    _home()
     store.init()
     calls = []
 

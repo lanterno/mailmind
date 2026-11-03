@@ -122,24 +122,44 @@ def test_what_tests_need_is_allowed(tmp_path):
     assert not guard.violations
 
 
-def test_data_dir_points_every_module_path_at_the_temp_directory(data_dir):
-    import importlib
-    from conftest import DATA_PATHS
-    for mod, attr, _ in DATA_PATHS:
-        path = getattr(importlib.import_module(mod), attr)
-        assert os.path.realpath(path).startswith(os.path.realpath(data_dir)), (mod, attr)
-    assert (data_dir / "mailmind.db").exists()
+def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
+    import json
+    import config
+    import manage
+    import mailclass
+    import rules
+    import server
+    import store
+    import views
+    from mailmind.platform import settings
+    assert settings.current().home == str(data_dir)
+    c = store.conn()
+    try:
+        db = c.execute("PRAGMA database_list").fetchone()["file"]
+    finally:
+        c.close()
+    assert os.path.realpath(db) == os.path.realpath(data_dir / "mailmind.db")
+    config.save({"accounts": []})
+    rules.add("lin@example.test", "keep")
+    views.add("From Lin", "from:lin")
+    manage.audit("ada@example.test", [])
+    server._cleanup_audit("lin@example.test", "lin@example.test", 0, "ok")
+    (data_dir / "reconcile_audit.jsonl").write_text(json.dumps({"kind": "reconcile", "ts": "t"}) + "\n")
+    assert mailclass.classify("lin@example.test", "hi")[0] == "personal/protected"     # the rules just written
+    assert json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
+    assert sorted(e["kind"] for e in server.read_audit()["events"]) == ["reconcile", "sender_cleanup"]
+    assert sorted(p.name for p in data_dir.iterdir() if not p.name.startswith("mailmind.db")) == [
+        "mailmind.config.json", "mailmind_rules.json", "mailmind_views.json", "reconcile_audit.jsonl",
+        "sweep_audit.jsonl"]
 
 
-def test_data_dir_covers_every_path_a_module_builds_beside_its_source():
-    """A new module-level data path must be added to conftest.DATA_PATHS."""
+def test_no_module_builds_a_data_path_beside_its_source():
+    """Data paths come from mailmind.platform.settings, so moving the data directory moves them all."""
     import re
-    from conftest import DATA_PATHS
-    known = {(m, a) for m, a, _ in DATA_PATHS}
     found = set()
     for fn in sorted(os.listdir(ROOT)):
         if fn.endswith(".py") and not fn.startswith("test"):
             src = open(os.path.join(ROOT, fn), encoding="utf-8").read()
             for attr in re.findall(r"^([A-Z_][A-Z_0-9]*) = os\.path\.join\(", src, re.M):
                 found.add((fn[:-3], attr))
-    assert found <= known, sorted(found - known)
+    assert not found, sorted(found)

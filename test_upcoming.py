@@ -3,14 +3,14 @@ a repeating one next happens (ics.next_occurrence), and the recipient the Waitin
 (server.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
 Run: python3 test_upcoming.py"""
-import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
 import store
-store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")   # before anything opens a connection
+from mailmind.platform import settings
+settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 import ics
 import ingest
 import mailparse
@@ -22,7 +22,7 @@ _uid = [0]
 
 
 def _fresh():
-    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
     store.init()
 
 

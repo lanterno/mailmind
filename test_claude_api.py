@@ -13,11 +13,11 @@ for var in ("MAILMIND_AI", "MAILMIND_MODEL", "MAILMIND_NO_SCHEMA"):
     os.environ.pop(var, None)
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"     # never the real one, even by accident
 
-import config
 import claude_api
 import summarize
+from mailmind.platform import settings
 
-config.CONFIG = os.path.join(tempfile.mkdtemp(), "mailmind.config.json")   # the real one may hold a key
+settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # the real config may hold a key
 
 _seen = []        # (headers, body) per request, oldest first
 _replies = []     # (status, headers, body) queued per test; the default is a plain JSON answer
@@ -60,15 +60,15 @@ def _fresh(*replies):
     os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"
     for var in ("MAILMIND_AI", "MAILMIND_NO_SCHEMA"):
         os.environ.pop(var, None)
-    if os.path.exists(config.CONFIG):
-        os.remove(config.CONFIG)
+    if os.path.exists(settings.current().config):
+        os.remove(settings.current().config)
     summarize.MODEL = None
     _seen.clear()
     _replies[:] = list(replies)
 
 
 def _config(**top):
-    with open(config.CONFIG, "w") as f:
+    with open(settings.current().config, "w") as f:
         json.dump({"accounts": [], **top}, f)
 
 

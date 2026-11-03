@@ -529,10 +529,10 @@ PRECEDENCE = [
 
 @pytest.fixture
 def rules_file(data_dir):
-    import mailclass
-    with open(mailclass.RULES_FILE, "w") as f:
+    path = data_dir / "mailmind_rules.json"
+    with open(path, "w") as f:
         json.dump(RULES, f)
-    return mailclass.RULES_FILE
+    return path
 
 
 @pytest.mark.parametrize("addr,subject,listed,bucket,conf", PRECEDENCE, ids=[f"{a} {s}" for a, s, *_ in PRECEDENCE])
@@ -553,9 +553,10 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
     import rules
 
     def write(data, stamp):
-        with open(mailclass.RULES_FILE, "w") as f:
+        path = data_dir / "mailmind_rules.json"
+        with open(path, "w") as f:
             json.dump(data, f)
-        os.utime(mailclass.RULES_FILE, (stamp, stamp))   # the classifier caches the file by mtime
+        os.utime(path, (stamp, stamp))                   # the classifier caches the file by mtime
     write({"keep_senders": ["Lin@Studio.Example.Test"]}, NOW_TS)
     assert mailclass.classify("lin@studio.example.test", "hi")[0] == "personal/protected"
     assert rules.load()["keep_senders"] == ["lin@studio.example.test"]
@@ -567,8 +568,7 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
 def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
     import accounts
     import ingest
-    import mailclass
-    with open(mailclass.RULES_FILE, "w") as f:
+    with open(world.dir / "mailmind_rules.json", "w") as f:
         f.write('{"keep_senders": ["lin@example.test",]')
     world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<late@example.test>"))
     assert ingest.sync_new(accounts.get(w.ADA))[0] == 1
@@ -616,7 +616,7 @@ def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):
 
 def test_hwf_views_load_skips_malformed_entries_and_builtin_ids(data_dir):
     import views
-    with open(views.FILE, "w") as f:
+    with open(data_dir / "mailmind_views.json", "w") as f:
         json.dump([{"id": "v1", "name": "From Lin", "q": "from:lin"}, {"id": "__unread__", "name": "Spoof", "q": "x"},
                    {"id": "v2", "name": " ", "q": "x"}, "junk", {"id": "v3", "name": "N" * 80, "q": "q" * 600}], f)
     assert views.load() == [{"id": "v1", "name": "From Lin", "q": "from:lin"},
@@ -629,8 +629,8 @@ def test_hwf_views_load_skips_malformed_entries_and_builtin_ids(data_dir):
 def test_hwf_saved_views_are_written_owner_only_and_without_builtins(data_dir):
     import views
     views.add("From Lin", "from:lin")
-    assert os.stat(views.FILE).st_mode & 0o777 == 0o600
-    with open(views.FILE) as f:
+    assert os.stat(data_dir / "mailmind_views.json").st_mode & 0o777 == 0o600
+    with open(data_dir / "mailmind_views.json") as f:
         assert [v["name"] for v in json.load(f)] == ["From Lin"]
 
 
@@ -642,7 +642,7 @@ def test_hwf_the_rules_file_is_written_owner_only(data_dir):
         rules.add("lin@example.test", "keep")
     finally:
         os.umask(old)
-    assert os.stat(rules.FILE).st_mode & 0o777 == 0o600
+    assert os.stat(data_dir / "mailmind_rules.json").st_mode & 0o777 == 0o600
 
 
 # -- parsing a message --------------------------------------------------------

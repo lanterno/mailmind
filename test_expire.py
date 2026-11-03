@@ -1,19 +1,19 @@
 """Expiry rules: rule storage, sender/domain matching, and age selection. Hermetic — the
 rules file is redirected to a temp path and nothing touches IMAP. All addresses are fictional.
 Run: python3 test_expire.py"""
-import os
 import email
 import tempfile
 
 import rules
 import manage
+from mailmind.platform import settings
 
 HOUR = 3600
 NOW = 1_800_000_000
 
 
 def _fresh_rules_file():
-    rules.FILE = os.path.join(tempfile.mkdtemp(), "rules.json")
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
 
 
 # ── matching ──────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ def test_zero_hours_clears():
 
 def test_legacy_file_without_expiry_loads():
     _fresh_rules_file()
-    with open(rules.FILE, "w") as f:
+    with open(settings.current().rules, "w") as f:
         f.write('{"keep_domains": ["work.test"], "block_domains": [], '
                 '"keep_senders": [], "block_senders": []}')
     r = rules.load()

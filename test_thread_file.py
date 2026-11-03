@@ -2,11 +2,11 @@
 the single undo group, partial failure, and the offline queue. Hermetic — the database is a temp
 file and the IMAP ops are replaced with local fakes. All addresses are fictional.
 Run: python3 test_thread_file.py"""
-import os
 import tempfile
 
 import store
-store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")   # before anything opens a connection
+from mailmind.platform import settings
+settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 import server
 
 ACCT = "ada@example.test"
@@ -16,7 +16,7 @@ _uid = [0]
 def _fresh():
     """A new empty database, a clear undo stack, and fake IMAP ops that act like the real ones
     locally (drop the row, hand back an undo descriptor) and record what they were asked to file."""
-    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
     store.init()
     server._undo_stack.clear()
     calls = []

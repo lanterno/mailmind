@@ -8,20 +8,26 @@ import hashlib
 import http.client
 import imaplib
 import json
-import os
 import tempfile
 import threading
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 
 import store
-import config
-_TMP = tempfile.mkdtemp()
-store.DB = os.path.join(_TMP, "mailmind.db")        # before anything opens a connection
-config.CONFIG = os.path.join(_TMP, "mailmind.config.json")
-with open(config.CONFIG, "w") as f:
-    json.dump({"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
-                            {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}, f)
+from mailmind.platform import settings
+
+_CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
+                        {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}
+
+
+def _home():
+    """A new temp data directory holding only the config, made the app's for every module."""
+    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
+    with open(settings.current().config, "w") as f:
+        json.dump(_CONFIG, f)
+
+
+_home()                                               # before anything opens a file
 import compose
 import mailparse
 import server
@@ -38,7 +44,7 @@ CALLS = {}
 def _fresh(uidv=777, appenduid=True):
     """A new temp database, and recorders in place of every IMAP call a draft save makes.
     appenduid=False is a server that names no UID for what was appended."""
-    store.DB = os.path.join(tempfile.mkdtemp(), "mailmind.db")
+    _home()
     store.init()
     CALLS.clear()
     CALLS.update(append=[], delete=[], sent=[])

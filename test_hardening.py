@@ -16,16 +16,9 @@ import threading
 import urllib.parse
 
 import store
-import config
-import mailclass
-import rules
-import views
-_TMP = tempfile.mkdtemp()
-store.DB = os.path.join(_TMP, "mailmind.db")        # before anything opens a connection
-config.CONFIG = os.path.join(_TMP, "mailmind.config.json")
-rules.FILE = mailclass.RULES_FILE = os.path.join(_TMP, "mailmind_rules.json")
-views.FILE = os.path.join(_TMP, "mailmind_views.json")
-with open(config.CONFIG, "w") as f:
+from mailmind.platform import settings
+settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
+with open(settings.current().config, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
 import accounts
@@ -33,8 +26,6 @@ import ingest
 import mailops
 import server
 import smtpsend
-server.RECON_AUDIT = os.path.join(_TMP, "reconcile_audit.jsonl")
-server.SWEEP_AUDIT = os.path.join(_TMP, "sweep_audit.jsonl")
 store.init()
 
 
@@ -491,14 +482,15 @@ except ValueError:
 def test_a_malformed_config_is_never_written_even_under_python_O():
     got = _optimized("""
 import os, tempfile, config
-config.HERE = tempfile.mkdtemp()
-config.CONFIG = os.path.join(config.HERE, "mailmind.config.json")
-open(config.CONFIG, "w").write('{"accounts": []}')
+from mailmind.platform import settings
+home = tempfile.mkdtemp()
+settings.configure(settings.Settings(home=home))
+open(settings.current().config, "w").write('{"accounts": []}')
 try:
     config.save({"accounts": "wiped"})
     print("WRITTEN")
 except ValueError:
-    print("REFUSED", open(config.CONFIG).read(), sorted(os.listdir(config.HERE)))
+    print("REFUSED", open(settings.current().config).read(), sorted(os.listdir(home)))
 """)
     assert got == "REFUSED {\"accounts\": []} ['mailmind.config.json']", got
 

@@ -6,8 +6,9 @@ then fails if the tripwire refused anything during it. The API itself is a local
 (fakes/anthropic_api.py) for the whole session; it refuses every call that lacks its key, and
 the `ai` fixture supplies that key.
 
-`data_dir` points every module's data path at a fresh temp directory and creates the schema
-there. Tests that touch the store, config, rules, views or audit trails must use it.
+`data_dir` makes a fresh temp directory the app's data directory (mailmind.platform.settings)
+and creates the schema there. Tests that touch the store, config, rules, views or audit trails
+must use it.
 """
 import os
 import time
@@ -90,40 +91,14 @@ def _tripwire():
         pytest.fail("the test tripwire refused: " + "; ".join(found), pytrace=False)
 
 
-# (module, attribute, file name) for every path a module builds next to its own source.
-DATA_PATHS = (
-    ("store", "DB", "mailmind.db"),
-    ("config", "CONFIG", "mailmind.config.json"),
-    ("config", "HERE", ""),                      # config.save's temp file goes here
-    ("rules", "FILE", "mailmind_rules.json"),
-    ("mailclass", "RULES_FILE", "mailmind_rules.json"),
-    ("views", "FILE", "mailmind_views.json"),
-    ("views", "HERE", ""),                       # views.save's temp file goes here
-    ("manage", "AUDIT_FILE", "sweep_audit.jsonl"),
-    ("server", "RECON_AUDIT", "reconcile_audit.jsonl"),
-    ("server", "SWEEP_AUDIT", "sweep_audit.jsonl"),
-)
-
-
 @pytest.fixture
-def data_dir(tmp_path, monkeypatch):
+def data_dir(tmp_path):
     """A temp directory holding this test's database, config, rules, views and audit trails."""
-    import importlib
-    for mod, attr, name in DATA_PATHS:
-        monkeypatch.setattr(importlib.import_module(mod), attr, str(tmp_path / name) if name else str(tmp_path))
-    import mailclass
-    monkeypatch.setattr(mailclass, "_rules_cache", {})
+    from mailmind.platform import settings
     import store
-    store.init()
-    return tmp_path
-
-
-def _redirect(mp, directory):
-    import importlib
-    for mod, attr, name in DATA_PATHS:
-        mp.setattr(importlib.import_module(mod), attr, os.path.join(directory, name) if name else str(directory))
-    import mailclass
-    mp.setattr(mailclass, "_rules_cache", {})
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        store.init()
+        yield tmp_path
 
 
 @pytest.fixture(scope="session")
@@ -131,12 +106,13 @@ def world_template(tmp_path_factory):
     """The world's database, built once by the app's own ingest. Tests get a copy via `world`."""
     from fakes.imap_server import FakeIMAPServer
     from fixtures import world
+    from mailmind.platform import settings
     import sqlite3
     import store
     d = tmp_path_factory.mktemp("world-template")
     import time_machine
-    with pytest.MonkeyPatch.context() as mp, FakeIMAPServer() as srv, time_machine.travel(NOW, tick=False):
-        _redirect(mp, str(d))
+    with settings.use(settings.Settings(home=str(d))), FakeIMAPServer() as srv, \
+            time_machine.travel(NOW, tick=False):
         placed = world.populate(srv)
         world.write_config(srv, str(d))
         store.init()
