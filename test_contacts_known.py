@@ -3,6 +3,7 @@ counts as known, exact address matching, drafts never vouching, the thin-history
 limits, the CSRF guard, and that it never waits on the IMAP lock. Hermetic — the database,
 config and rules are temp files. All addresses are fictional.
 Run: python3 test_contacts_known.py"""
+import dataclasses
 import http.client
 import json
 import tempfile
@@ -228,7 +229,8 @@ def test_route_requires_csrf():
     _msg("lio@example.test")
     srv = server._Server(("127.0.0.1", 0), server.H)
     port = srv.server_address[1]
-    old_port, server.PORT = server.PORT, port
+    before = settings.current()
+    settings.configure(dataclasses.replace(before, port=port))
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
     try:
@@ -248,7 +250,7 @@ def test_route_requires_csrf():
     finally:
         srv.shutdown()
         srv.server_close()
-        server.PORT = old_port
+        settings.configure(before)
 
 
 def test_never_waits_on_the_imap_lock():

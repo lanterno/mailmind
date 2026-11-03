@@ -4,6 +4,7 @@ again with each part once. Hermetic — temp database and config, and every IMAP
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
 import base64
+import dataclasses
 import hashlib
 import http.client
 import imaplib
@@ -927,7 +928,8 @@ def test_resume_route_requires_csrf():
     pk, _ = _saved_and_synced(text="Mine.")
     srv = server._Server(("127.0.0.1", 0), server.H)
     port = srv.server_address[1]
-    old_port, server.PORT = server.PORT, port
+    before = settings.current()
+    settings.configure(dataclasses.replace(before, port=port))
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
     try:
@@ -946,7 +948,7 @@ def test_resume_route_requires_csrf():
     finally:
         srv.shutdown()
         srv.server_close()
-        server.PORT = old_port
+        settings.configure(before)
 
 
 def test_resumed_reply_sends_one_quote():

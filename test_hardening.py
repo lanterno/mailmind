@@ -3,6 +3,7 @@ database and config, fake IMAP and SMTP connections, and fictional addresses, so
 can reach a real server.
 Run: python3 test_hardening.py"""
 import contextlib
+import dataclasses
 import http.client
 import imaplib
 import json
@@ -215,7 +216,8 @@ def _live_server():
     """The real handler on an ephemeral 127.0.0.1 port; yields get(path, headers) -> (status, body)."""
     srv = server._Server(("127.0.0.1", 0), server.H)
     port = srv.server_address[1]
-    old_port, server.PORT = server.PORT, port
+    before = settings.current()
+    settings.configure(dataclasses.replace(before, port=port))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
     def get(path, headers, with_headers=False):
@@ -230,7 +232,7 @@ def _live_server():
     finally:
         srv.shutdown()
         srv.server_close()
-        server.PORT = old_port
+        settings.configure(before)
 
 
 _READS = ["/", "/api/digest", "/api/contacts?q=a", "/api/search?q=a", "/api/accounts", "/api/rules",

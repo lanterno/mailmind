@@ -150,6 +150,7 @@ def app(world, monkeypatch):
     """The app's HTTP server over this test's world, with the clock frozen at NOW and every
     module's process state reset. Yields an AppClient; its .clock moves the frozen time
     (clock.shift(timedelta(...)), clock.move_to(datetime))."""
+    import dataclasses
     import time_machine
     import app_client
     import outbox
@@ -164,14 +165,15 @@ def app(world, monkeypatch):
     readmutq.configure(ops_lock=server._ops_lock, after_apply=server._after_readmut)
     summarize_thread.configure(ops_lock=server._ops_lock)
     realtime.configure(sync_handler=server.sync_guarded)
+    from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
         running = app_client.RunningApp().start()
-        monkeypatch.setattr(server, "PORT", running.port)
         try:
-            client = app_client.AppClient(running.port)
-            client.clock = clock
-            yield client
-            client.settle()
+            with settings.use(dataclasses.replace(settings.current(), port=running.port)):
+                client = app_client.AppClient(running.port)
+                client.clock = clock
+                yield client
+                client.settle()
         finally:
             running.stop()
             app_client.reset_state()
