@@ -1,6 +1,7 @@
 # MailMind — common commands.  `just` with no argument lists everything.
-# The app is standard library only: `python3 server.py` needs nothing installed.
-# Lint and tests use the dev tools in pyproject.toml, which `uv run` installs on first use.
+# The app runs through its front door, `python -m mailmind serve` (FastAPI on uvicorn); `uv run`
+# installs its packages on first use, and the dev tools that lint and tests use. `run-old` runs the
+# old front door, `python3 server.py`, which needs nothing installed: the kill switch.
 
 py := "python3"
 
@@ -11,15 +12,19 @@ _default:
 
 # Run the dashboard (default http://127.0.0.1:8721)
 run port="":
-    {{py}} server.py {{port}}
+    uv run python -m mailmind serve {{port}}
 
 # Run read-only: no background sync, no IMAP writes, no AI pre-drafting
 dev port="":
-    MAILMIND_NOSYNC=1 {{py}} server.py {{port}}
+    MAILMIND_NOSYNC=1 uv run python -m mailmind serve {{port}}
 
 # Run with persistent IMAP connections + multi-folder sync (both default-off)
 run-fast port="":
-    MAILMIND_POOL=1 MAILMIND_WARM_FOLDERS=1 {{py}} server.py {{port}}
+    MAILMIND_POOL=1 MAILMIND_WARM_FOLDERS=1 uv run python -m mailmind serve {{port}}
+
+# Run through the old front door, `python3 server.py`, which needs nothing installed
+run-old port="":
+    {{py}} server.py {{port}}
 
 # ── checks ────────────────────────────────────────────────────────────────────
 
