@@ -662,11 +662,6 @@ implementation.
   unified-inbox-across-accounts and global search both want broader coverage.
 - **Default remote-image policy** — block-by-default with per-message "Load images" (current, and the
   privacy-preserving choice) vs. allowing images for known/personal senders.
-- **Should a notification's row show its AI summary?** — `rowMarkup` and `storedSummaryCard` skip
-  the summary when `it.bucket==="NOTIF"`, but the API sends `"automated-notifications"`, so the
-  checks never match. Background triage skips notifications (they are in `JUNK_BUCKETS`), so only
-  one summarized on request shows a summary. Either compare with the real value, or delete the
-  checks if a summary the user asked for should show.
 
 ## Next up
 
