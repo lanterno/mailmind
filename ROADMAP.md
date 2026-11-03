@@ -270,10 +270,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Self-host the fonts, add gzip and ETag** · high value · effort M — dashboard.html still
   preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Nunito Sans,
   Shippori Mincho and Klee One — the only remote dependency in an app whose README sells local-first and
-  privacy-first, so this is a stated-values violation, not just latency. Server side there is no
-  `Content-Encoding` or `ETag` anywhere (the only zlib use is `crc32` for a cache fingerprint, and
-  the only caching header is one `no-cache`); gzip is ~15 lines in the response path and worth real
-  time on a 340KB HTML file plus the large JSON digests.
+  privacy-first, so this is a stated-values violation, not just latency. Self-hosting them also
+  takes Google Fonts out of `perimeter.page_policy`. Server side there is no `Content-Encoding` or
+  `ETag` anywhere (the only zlib use is `crc32` for a cache fingerprint; the API's answers carry
+  `Cache-Control: no-store`, the event stream `no-cache`, and the page none); gzip is ~15 lines
+  in the response path and worth real time on a 340KB HTML file plus the large JSON digests.
 - **Pool the reconcile read** · low value · effort S — Half done: `reconcile_account` now connects
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   `_ops_lock` instead of using `pool.borrow` the way the three read call sites do.
