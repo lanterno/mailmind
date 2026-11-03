@@ -58,7 +58,7 @@ import summarize_briefing
 import summarize_review
 
 HERE = os.path.dirname(__file__)
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8721
+PORT = 8721                               # `python3 server.py [port]` overrides it in __main__
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
 STATS_TTL = 90                            # seconds to cache the live per-account stats
 RECON_AUDIT = os.path.join(HERE, "reconcile_audit.jsonl")
@@ -4196,6 +4196,8 @@ class _Server(ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        PORT = int(sys.argv[1])
     store.init()
     # The outbox drains on its own worker, serialized with live IMAP ops via _ops_lock;
     # runs even under NOSYNC so queued/retryable sends still go out.
