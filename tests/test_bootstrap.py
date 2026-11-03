@@ -29,3 +29,36 @@ def test_the_workers_share_the_servers_lock_and_report_back_to_it(unwired):
     assert readmutq._after_apply is server._after_readmut
     assert realtime._sync_handler is server.sync_guarded
 
+
+
+@pytest.mark.parametrize("nosync", ["1", ""], ids=["nosync", "sync"])
+def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp_path, unwired, monkeypatch,
+                                                                     capsys):
+    """What both front doors run before they serve. Under MAILMIND_NOSYNC only the outbox, the
+    offline queue and snooze wake start, so queued sends still go out."""
+    import outbox
+    import readmutq
+    import realtime
+    import server
+    import store
+    from mailmind.bootstrap import legacy
+    from mailmind.platform import settings
+    monkeypatch.setenv("MAILMIND_NOSYNC", nosync)
+    monkeypatch.setattr(realtime, "start", lambda: spawned.append(realtime.start))
+    spawned = []
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        legacy.start(server, spawn=spawned.append)
+        c = store.conn()
+        try:
+            version = c.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            c.close()
+    assert version == store._MIGRATIONS[-1][0]
+    assert outbox._ops_lock is readmutq._ops_lock is server._ops_lock
+    always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
+    syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
+               server.reconcile_loop, server.expire_loop, realtime.start]
+    assert spawned == (always if nosync else always + syncing)
+    out = capsys.readouterr().out
+    assert ("auto-sync disabled" in out) == bool(nosync)
+    assert "[ai] Claude API" in out
