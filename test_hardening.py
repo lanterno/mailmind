@@ -500,6 +500,21 @@ except ValueError:
 """)
     assert got == "REFUSED {\"accounts\": []} ['mailmind.config.json']", got
 
+
+def test_a_failed_read_answers_without_the_exception_text():
+    real = server.digest_json
+
+    def boom(q):
+        raise RuntimeError("NO [AUTHENTICATIONFAILED] ada@example.test secret=hunter2 /home/ada/mailmind.db")
+    server.digest_json = boom
+    try:
+        with _live_server() as get:
+            code, body = get("/api/digest", _HOST)
+    finally:
+        server.digest_json = real
+    assert code == 500, code
+    assert json.loads(body) == {"ok": False, "error": "request failed"}, body
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
