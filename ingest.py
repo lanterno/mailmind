@@ -363,7 +363,7 @@ def reconcile_account(acct, force=False, dry_run=False):
     res["stored"] = len(stored_uids)
     try:
         M = accounts.connect(acct, timeout=15)      # background/maintenance path: a hung account must
-        try:                                          # not pin _ops_lock for the interactive 60s
+        try:                                          # not pin the IMAP gate for the interactive 60s
             M.select('"INBOX"', readonly=True)
             uidv = _uidvalidity(M)
             typ, d = M.uid("SEARCH", None, "ALL")

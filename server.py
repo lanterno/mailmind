@@ -74,7 +74,6 @@ MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + hea
 _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
 _sync_lock = threading.Lock()
-_ops_lock = gates._lock                   # the IMAP gate's lock, while callers still take it by hand
 _stats_cache = {"data": None, "exp": 0}
 _undo_stack = []                          # per-process LIFO of reversible actions (in-memory; lost on restart)
 _undo_lock = threading.Lock()
@@ -132,7 +131,7 @@ def sync_accounts(emails=None):
 
 def account_health_json():
     """Per-account durable sync health (last ok/error + coarse kind), merged with the in-flight
-    _status. Pure read; no IMAP, no _ops_lock."""
+    _status. Pure read; no IMAP, no IMAP gate."""
     c = store.conn()
     rows = store.account_health(c)
     c.close()
@@ -514,7 +513,7 @@ def live_stats(account=None, refresh=False):
     accts = accounts.accounts() if is_all else [accounts.get(account)]
     out = []
     for a in accts:
-        p = _strip(manage.plan_account_db(a))    # DB-sourced (no IMAP / no _ops_lock) → instant;
+        p = _strip(manage.plan_account_db(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
         p["alias"] = a.get("alias")              # the Sweep buttons still re-verify live before moving
         out.append(p)
     data = {
@@ -1788,7 +1787,7 @@ def _unsub_oneclick_post(url, _redirects=1):
     """SSRF-hardened RFC 8058 one-click POST. https-only; every resolved A/AAAA vetted; connect to the
     vetted IP with SNI/Host pinned to the hostname (defeats DNS-rebind between check and connect);
     <=1 re-vetted redirect; hard timeout; read cap; no cookies/creds/ambient auth. Returns
-    (ok, http_status, reason). Runs OUTSIDE _ops_lock so a hanging remote can't stall IMAP."""
+    (ok, http_status, reason). Runs OUTSIDE the IMAP gate so a hanging remote can't stall IMAP."""
     p = urllib.parse.urlparse(url or "")
     if p.scheme != "https" or not p.hostname:
         return False, 0, "bad_scheme"
@@ -2255,7 +2254,7 @@ def _own_addrs(c):
 def contacts_known(addrs, own=None, min_history=KNOWN_MIN_HISTORY):
     """Which of these addresses you've exchanged mail with — the composer's "new to you" marks.
     Known: non-junk mail from them, synced non-draft mail you sent them, a delivered outbox
-    envelope (Bcc included), or a keep_senders rule. Pure SQL, no IMAP, no _ops_lock; the answer
+    envelope (Bcc included), or a keep_senders rule. Pure SQL, no IMAP, no IMAP gate; the answer
     carries no subjects, counts or dates. `thin` means too little history to call anyone new.
     (result, code), like contact_card."""
     if not isinstance(addrs, list):
@@ -2540,7 +2539,7 @@ def _draft_live(acct, folder, uid):
     """Is this exact draft copy still on the server? True, False, or None when that can't be told
     (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
     replaced, and reopening it would put an older text over the newer one. A stateless, read-only
-    probe with a short timeout, like the account test, so it needs no _ops_lock: a black-holed
+    probe with a short timeout, like the account test, so it needs no IMAP gate: a black-holed
     host costs Edit seconds, not a minute of every other mail operation."""
     if uid is None:
         return None
@@ -3708,7 +3707,7 @@ def account_test(body):
         else:
             acct = accounts.get(body["email"])
         # stateless probe — shares no IMAP state, selects no folder, uses no pooled conn, so it needs no
-        # _ops_lock (holding it here froze all mail ops for up to 60s on a mistyped/black-holed host);
+        # IMAP gate (holding it here froze all mail ops for up to 60s on a mistyped/black-holed host);
         # a short timeout also gives the user fast feedback on a bad host.
         M = accounts.connect(acct, timeout=15)
         try:

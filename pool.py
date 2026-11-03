@@ -12,8 +12,8 @@ SAFETY (load-bearing):
     transparent. A mid-borrow error discards the slot and propagates exactly as a fresh connection
     would today.
   • One connection per account (slot), guarded by a per-account lock taken INSIDE the caller's
-    global _ops_lock (canonical order → no new deadlock). imaplib is not thread-safe per connection;
-    the lock guarantees a pooled connection is never shared concurrently.
+    IMAP gate (mailmind.platform.workers.gates; canonical order → no new deadlock). imaplib is not
+    thread-safe per connection; the lock guarantees a pooled connection is never shared concurrently.
   • Proton Bridge (loopback/STARTTLS) has a low per-account connection cap; one pooled conn per
     account satisfies it, and we validate every borrow. Enable per-account via the env list.
 
