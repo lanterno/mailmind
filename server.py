@@ -3933,8 +3933,9 @@ class H(BaseHTTPRequestHandler):
                                 "signature_default": config.signature_default(), "generated": now_iso()})
             else:
                 self._send(404, b"not found", "text/plain")
-        except Exception as e:
-            self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
+        except Exception as e:                # scrub: log the detail, never echo it to the client
+            print(f"[get] {u.path}: {type(e).__name__}: {e}", flush=True)
+            self._json({"ok": False, "error": "request failed"}, 500)
 
     def do_POST(self):
         u = urlparse(self.path)
