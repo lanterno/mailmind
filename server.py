@@ -1356,7 +1356,7 @@ def _reverse_held(d):
         c = store.conn()
         q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
         if q is not None and not q["applied"]:
-            cancelled = store.read_mut_cancel_unapplied(c, q["id"])
+            cancelled = readmutq.QUEUE.cancel_unapplied(c, q["id"])
             c.commit(); c.close()
             if cancelled:
                 src = d.get("src_folder") or "INBOX"

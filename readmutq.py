@@ -2,25 +2,28 @@
 mailbox mutations (trash/archive/junk/move/flag). When the route enqueues a mutation (because
 IMAP was unreachable), this worker re-applies it once the server is back, exactly once.
 
-Mirrors the outbox machinery 1:1: a single worker thread, atomic claim (queued→running), the
-`applied` flag as the exactly-once gate (= outbox.delivered), exponential backoff, reset-stuck on
-boot. The ONE difference from the outbox: the primary op here IS an IMAP op, so it runs as a job
-on the account's IMAP gate (the outbox's SMTP send holds none).
+Shares the outbox's machinery, a DurableQueue over the read_mutations table: a single worker
+thread, atomic claim (queued→running), the `applied` flag as the exactly-once gate
+(= outbox.delivered), exponential backoff, reset-stuck on boot. The ONE difference from the
+outbox: the primary op here IS an IMAP op, so it runs as a job on the account's IMAP gate (the
+outbox's SMTP send holds none).
 """
 import time
-import threading
 from datetime import datetime, timezone
 
 import store
 import mailops
 from mailmind.platform.workers import gates
+from mailmind.platform.workers.durable_queue import DurableQueue
 
 MAX_ATTEMPTS = 5
 _BACKOFF_BASE = 20      # secs; doubles per attempt
 _BACKOFF_CAP = 900
 _POLL = 30
 
-_kick = threading.Event()
+QUEUE = DurableQueue("readmutq", "read_mutations", running="running", finished="done", finished_at="done_at",
+                     gate="applied", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
+                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
 _after_apply = None
 
 
@@ -34,13 +37,16 @@ def _now():
 
 
 def kick():
-    _kick.set()
+    QUEUE.kick()
 
 
 def _commit(fn):
+    """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
     c = store.conn()
     try:
-        fn(c); c.commit()
+        out = fn(c)
+        c.commit()
+        return out
     finally:
         c.close()
 
@@ -75,17 +81,9 @@ def _local_mirror(row):
 
 
 def apply_one(mid):
-    c = store.conn()
-    try:
-        claimed = store.read_mut_claim(c, mid)
-        c.commit()
-        if not claimed:
-            return                       # lost the claim (cancelled / another worker) — mirror outbox
-        row = store.read_mut_get(c, mid)
-    finally:
-        c.close()
-    if not row:
-        return
+    row = _commit(lambda c: QUEUE.claim(c, mid))
+    if row is None:
+        return                       # lost the claim (cancelled / another worker) — mirror outbox
     # exactly-once: a recovered row (applied=1, requeued by reset_stuck) skips the IMAP op and only
     # finishes bookkeeping, so a crash after the op can never re-move/re-expunge.
     if not row["applied"]:
@@ -99,19 +97,15 @@ def apply_one(mid):
             if not gates.run(row["account"], apply, priority=gates.Priority.AFTER_USER):
                 return
         except mailops._UNREACHABLE as e:
-            attempts = row["attempts"] + 1
-            terminal = attempts >= MAX_ATTEMPTS
-            delay = min(_BACKOFF_CAP, _BACKOFF_BASE * (2 ** (attempts - 1)))
-            # `e` is unbound when the except block ends, so the lambda would fail if it ran later.
-            # It doesn't: _commit calls it synchronously, inside the block.
-            _commit(lambda c: store.read_mut_release(c, mid, type(e).__name__, attempts, _now() + delay, terminal))  # noqa: F821
-            print(f"[readmutq] #{mid} unreachable ({type(e).__name__}); "
+            err = type(e).__name__
+            terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
+            print(f"[readmutq] #{mid} unreachable ({err}); "
                   f"{'giving up' if terminal else f'retry {delay}s'}", flush=True)
             return
-        _commit(lambda c: store.read_mut_mark_applied(c, mid))   # commit BEFORE the local mirror
+        _commit(lambda c: QUEUE.mark_gate(c, mid))   # applied=1, committed BEFORE the local mirror
     try:
         _local_mirror(row)
-        _commit(lambda c: store.read_mut_mark_done(c, mid, datetime.now(timezone.utc).isoformat()))
+        _commit(lambda c: QUEUE.finish(c, mid, datetime.now(timezone.utc).isoformat()))
         if _after_apply:
             _after_apply()
         print(f"[readmutq] applied #{mid} {row['op']}", flush=True)
@@ -120,24 +114,8 @@ def apply_one(mid):
 
 
 def drain():
-    c = store.conn()
-    try:
-        due = store.read_mut_due(c, _now())
-    finally:
-        c.close()
-    for mid in due:
-        try:
-            apply_one(mid)
-        except Exception as e:           # one bad row never aborts the batch
-            print(f"[readmutq] apply_one #{mid} errored: {type(e).__name__}: {e}", flush=True)
+    QUEUE.drain(apply_one, _now())       # one bad row is logged and never aborts the rest
 
 
 def worker_loop():
-    c = store.conn(); store.read_mut_reset_stuck(c); c.commit(); c.close()   # recover crash-interrupted rows
-    while True:
-        _kick.wait(timeout=_POLL)
-        _kick.clear()
-        try:
-            drain()
-        except Exception as e:
-            print(f"[readmutq] drain error: {type(e).__name__}: {e}", flush=True)
+    QUEUE.run_forever(drain)             # recovers rows a crash left running, then drains
