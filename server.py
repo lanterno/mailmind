@@ -3674,7 +3674,9 @@ def account_mutate(action, body):
 
 
 def _rebind_guard(handler):
-    """Block DNS-rebinding to the localhost server on the sensitive routes."""
+    """Block DNS rebinding: the Host must name this server, and an Origin, when sent, must be its
+    own. Every GET and every POST passes it. A page on a rebound name reaches 127.0.0.1 with its
+    own Host, so without this it could read the mailbox and the page's CSRF token."""
     host = (handler.headers.get("Host") or "").lower()
     if host not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
         return True
@@ -3823,6 +3825,8 @@ class H(BaseHTTPRequestHandler):
             return {}
 
     def do_GET(self):
+        if _rebind_guard(self):
+            return self._json({"ok": False, "error": "bad host/origin"}, 403)
         u = urlparse(self.path)
         q = parse_qs(u.query)
         _ui_touch(u.path)
@@ -3839,12 +3843,9 @@ class H(BaseHTTPRequestHandler):
                 self._json(*ai_review(q, force=False))
             elif u.path == "/api/briefing/since":   # read-only: "since you last looked" delta digest
                 self._json(*ai_delta(q))
-            elif u.path == "/api/ai/draft-ahead":   # serve/peek same-host; the generation KICK needs the CSRF token
-                if _rebind_guard(self):
-                    self._json({"ok": False, "error": "bad host/origin"}, 403)
-                else:
-                    self._json(*ai_draft_ahead_get(
-                        q, kick_ok=secrets.compare_digest(self.headers.get("X-CSRF-Token") or "", CSRF)))
+            elif u.path == "/api/ai/draft-ahead":   # serve/peek; the generation KICK needs the CSRF token
+                self._json(*ai_draft_ahead_get(
+                    q, kick_ok=secrets.compare_digest(self.headers.get("X-CSRF-Token") or "", CSRF)))
             elif u.path == "/api/stats":
                 self._json(live_stats(q.get("account", [None])[0], q.get("refresh", ["0"])[0] == "1"))
             elif u.path == "/api/rules":
@@ -3892,12 +3893,8 @@ class H(BaseHTTPRequestHandler):
                 import export
                 self._json(export.plan(q.get("account", [None])[0]))
             elif u.path == "/api/export":
-                if _rebind_guard(self):        # the snapshot is the entire mailbox — same-host only
-                    return self._json({"ok": False, "error": "bad host"}, 403)
                 return self._serve_db_export()
             elif u.path == "/api/events":
-                if _rebind_guard(self):
-                    return self._json({"ok": False, "error": "bad host"}, 403)
                 return self._serve_events()
             elif u.path.startswith("/api/message/") and "/attachment/" in u.path:
                 parts = u.path.split("/")     # ['', 'api', 'message', '<pk>', 'attachment', '<part_id>']
@@ -3906,8 +3903,6 @@ class H(BaseHTTPRequestHandler):
                 self._json(message_body(int(u.path.split("/")[3]), q.get("images", ["0"])[0] == "1",
                                         prefetch=(q.get("prefetch", ["0"])[0] == "1")))
             elif u.path == "/api/accounts":
-                if _rebind_guard(self):
-                    return self._json({"ok": False, "error": "bad host"}, 403)
                 em = q.get("email", [None])[0]
                 if em:
                     row = next((r for r in config.masked_rows() if r["email"] == em), None)
