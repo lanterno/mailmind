@@ -1,0 +1,120 @@
+[
+ {
+  "body": {
+   "bodies": 1,
+   "groups": [
+    {
+     "account": "ada@example.test",
+     "bodies": 0,
+     "folder": "Archive",
+     "messages": 1
+    },
+    {
+     "account": "ada@example.test",
+     "bodies": 0,
+     "folder": "Drafts",
+     "messages": 2
+    },
+    {
+     "account": "ada@example.test",
+     "bodies": 1,
+     "folder": "INBOX",
+     "messages": 12
+    },
+    {
+     "account": "ada@example.test",
+     "bodies": 0,
+     "folder": "Sent",
+     "messages": 1
+    },
+    {
+     "account": "ada@example.test",
+     "bodies": 0,
+     "folder": "Trash",
+     "messages": 1
+    },
+    {
+     "account": "bea@example.test",
+     "bodies": 0,
+     "folder": "Drafts",
+     "messages": 1
+    },
+    {
+     "account": "bea@example.test",
+     "bodies": 0,
+     "folder": "Folders/Clients",
+     "messages": 1
+    },
+    {
+     "account": "bea@example.test",
+     "bodies": 0,
+     "folder": "INBOX",
+     "messages": 2
+    },
+    {
+     "account": "cy@example.test",
+     "bodies": 0,
+     "folder": "INBOX",
+     "messages": 3
+    },
+    {
+     "account": "cy@example.test",
+     "bodies": 0,
+     "folder": "[Gmail]/Sent Mail",
+     "messages": 1
+    }
+   ],
+   "ok": true,
+   "total": 25
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/export/plan",
+  "status": 200
+ },
+ {
+  "body": {
+   "bodies": 0,
+   "groups": [
+    {
+     "account": "cy@example.test",
+     "bodies": 0,
+     "folder": "INBOX",
+     "messages": 3
+    },
+    {
+     "account": "cy@example.test",
+     "bodies": 0,
+     "folder": "[Gmail]/Sent Mail",
+     "messages": 1
+    }
+   ],
+   "ok": true,
+   "total": 4
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/export/plan?account=cy@example.test",
+  "status": 200
+ },
+ {
+  "headers": {
+   "content-disposition": "attachment; filename=mailmind-20261102T120000Z.db",
+   "content-type": "application/octet-stream"
+  },
+  "request": "GET /api/export",
+  "status": 200
+ },
+ {
+  "note": "messages in the export",
+  "value": 25
+ }
+]

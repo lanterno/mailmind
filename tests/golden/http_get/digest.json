@@ -1,0 +1,114 @@
+[
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "ai": {
+    "engine": "none",
+    "key_from": "",
+    "last_error": "",
+    "last_ok": null,
+    "last_ts": 0,
+    "model": ""
+   },
+   "aliases": {
+    "ada@example.test": "Ada",
+    "bea@example.test": "Bea",
+    "cy@example.test": "Cy"
+   },
+   "generated": "2026-11-02T12:00:00+00:00",
+   "items": [],
+   "send_accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "signature_default": "",
+   "signatures": {
+    "ada@example.test": "",
+    "bea@example.test": "",
+    "cy@example.test": ""
+   },
+   "stats": {
+    "kept": 21,
+    "needs": 21,
+    "summarized": 0,
+    "total": 25,
+    "verified": 0
+   },
+   "status": {},
+   "sync": {
+    "last": null,
+    "result": "idle",
+    "running": false
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/digest",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "ai": {
+    "engine": "none",
+    "key_from": "",
+    "last_error": "",
+    "last_ok": null,
+    "last_ts": 0,
+    "model": ""
+   },
+   "aliases": {
+    "ada@example.test": "Ada",
+    "bea@example.test": "Bea",
+    "cy@example.test": "Cy"
+   },
+   "generated": "2026-11-02T12:00:00+00:00",
+   "items": [],
+   "send_accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "signature_default": "",
+   "signatures": {
+    "ada@example.test": "",
+    "bea@example.test": "",
+    "cy@example.test": ""
+   },
+   "stats": {
+    "kept": 21,
+    "needs": 21,
+    "summarized": 0,
+    "total": 25,
+    "verified": 0
+   },
+   "status": {},
+   "sync": {
+    "last": null,
+    "result": "idle",
+    "running": false
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/digest?account=ada@example.test&min=3",
+  "status": 200
+ }
+]

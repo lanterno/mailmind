@@ -1,0 +1,297 @@
+[
+ {
+  "body": {
+   "docs": [],
+   "facets": {},
+   "ok": true,
+   "shown": 0,
+   "total": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/documents before any body is opened",
+  "status": 200
+ },
+ {
+  "body": {
+   "docs": [
+    {
+     "account": "bea@example.test",
+     "filename": "comments.pdf",
+     "from": "Bea Novak",
+     "kind": "pdf",
+     "part_id": "3",
+     "pk": 21,
+     "size": 45,
+     "subject": "Re: Contract draft v2",
+     "url": "/api/message/21/attachment/3",
+     "when": "16h ago"
+    }
+   ],
+   "facets": {
+    "pdf": 1
+   },
+   "ok": true,
+   "shown": 1,
+   "total": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/documents",
+  "status": 200
+ },
+ {
+  "body": {
+   "docs": [
+    {
+     "account": "bea@example.test",
+     "filename": "comments.pdf",
+     "from": "Bea Novak",
+     "kind": "pdf",
+     "part_id": "3",
+     "pk": 21,
+     "size": 45,
+     "subject": "Re: Contract draft v2",
+     "url": "/api/message/21/attachment/3",
+     "when": "16h ago"
+    }
+   ],
+   "facets": {
+    "pdf": 1
+   },
+   "ok": true,
+   "shown": 1,
+   "total": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/documents?limit=nope",
+  "status": 200
+ },
+ {
+  "body": {
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "senders": [],
+   "totals": {
+    "candidate_messages": 0,
+    "candidate_senders": 0
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/senders with one issue of each newsletter",
+  "status": 200
+ },
+ {
+  "body": {
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "senders": [
+    {
+     "accounts": [
+      {
+       "count": 3,
+       "email": "ada@example.test"
+      }
+     ],
+     "bucket": "newsletters/marketing",
+     "count": 3,
+     "domain": "loom.example.test",
+     "from_addr": "news@loom.example.test",
+     "from_name": "The Weekly Loom",
+     "last_seen": "5d ago",
+     "lu_likely": true,
+     "noise_score": 2.52,
+     "sample_subjects": [
+      "This week: five new patterns",
+      "Issue 217: weaving notes",
+      "Issue 216: weaving notes"
+     ],
+     "unseen": 3,
+     "unseen_ratio": 1.0
+    }
+   ],
+   "totals": {
+    "candidate_messages": 3,
+    "candidate_senders": 1
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/senders",
+  "status": 200
+ },
+ {
+  "body": {
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "senders": [],
+   "totals": {
+    "candidate_messages": 0,
+    "candidate_senders": 0
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/senders?buckets=automated-notifications&min_count=1",
+  "status": 200
+ },
+ {
+  "body": {
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "senders": [
+    {
+     "accounts": [
+      {
+       "count": 3,
+       "email": "ada@example.test"
+      }
+     ],
+     "bucket": "newsletters/marketing",
+     "count": 3,
+     "domain": "loom.example.test",
+     "from_addr": "news@loom.example.test",
+     "from_name": "The Weekly Loom",
+     "last_seen": "5d ago",
+     "lu_likely": true,
+     "noise_score": 2.52,
+     "sample_subjects": [
+      "This week: five new patterns",
+      "Issue 217: weaving notes",
+      "Issue 216: weaving notes"
+     ],
+     "unseen": 3,
+     "unseen_ratio": 1.0
+    }
+   ],
+   "totals": {
+    "candidate_messages": 3,
+    "candidate_senders": 1
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/senders?min_count=x&limit=y",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "ff324b90c9cb79d8",
+   "count": 3,
+   "domain": "loom.example.test",
+   "from_addr": "news@loom.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 3,
+   "unseen": 3,
+   "unsub": {
+    "method": "none"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/sender?addr=news@loom.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "4b16decb40287c17",
+   "count": 1,
+   "domain": "spindle.example.test",
+   "from_addr": "deals@spindle.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 0,
+   "unseen": 0,
+   "unsub": {
+    "method": "none"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/sender?addr=deals@spindle.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "no such sender",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/sender?addr=nobody@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "bad address",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/cleanup/sender?addr=not-an-address",
+  "status": 200
+ }
+]

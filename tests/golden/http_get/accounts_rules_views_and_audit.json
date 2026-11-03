@@ -1,0 +1,307 @@
+[
+ {
+  "body": {
+   "accounts": [
+    {
+     "alias": "Ada",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "ada@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "imap"
+    },
+    {
+     "alias": "Bea",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "bea@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "proton"
+    },
+    {
+     "alias": "Cy",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "cy@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "[Gmail]/Trash",
+     "type": "gmail"
+    }
+   ],
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "signature_default": ""
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": {
+    "alias": "Bea",
+    "credential": {
+     "set": true,
+     "style": "plain"
+    },
+    "defaults_applied": {
+     "host": false,
+     "port": false,
+     "smtp_host": false,
+     "smtp_port": false,
+     "smtp_starttls": true,
+     "starttls": false,
+     "trash": true
+    },
+    "disabled": false,
+    "email": "bea@example.test",
+    "host": "127.0.0.1",
+    "port": "<imap>",
+    "signature": "",
+    "smtp_host": "127.0.0.1",
+    "smtp_port": 9,
+    "smtp_starttls": true,
+    "starttls": true,
+    "trash": "Trash",
+    "type": "proton"
+   },
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts?email=bea@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": null,
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts?email=nobody@example.test",
+  "status": 404
+ },
+ {
+  "body": {
+   "rules": {
+    "block_domains": [],
+    "block_senders": [],
+    "expire_hours": {},
+    "keep_domains": [],
+    "keep_senders": []
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/rules",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "views": [
+    {
+     "builtin": true,
+     "id": "__unread__",
+     "name": "Unread",
+     "q": "is:unread"
+    },
+    {
+     "builtin": true,
+     "id": "__flagged__",
+     "name": "Flagged",
+     "q": "is:flagged"
+    },
+    {
+     "builtin": true,
+     "id": "__attach__",
+     "name": "Has attachments",
+     "q": "has:attachment"
+    },
+    {
+     "builtin": true,
+     "dynamic": "last7",
+     "id": "__last7__",
+     "name": "Last 7 days",
+     "q": "__LAST7__"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_feed__",
+     "name": "Feed",
+     "q": "is:newsletter"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_papertrail__",
+     "name": "Paper trail",
+     "q": "is:receipt"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_notifications__",
+     "name": "Notifications",
+     "q": "is:notification"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_action__",
+     "name": "Action needed",
+     "q": "category:action-needed"
+    },
+    {
+     "builtin": true,
+     "id": "__lane_finance__",
+     "name": "Finance",
+     "q": "category:finance"
+    }
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/views",
+  "status": 200
+ },
+ {
+  "body": {
+   "events": [],
+   "has_more": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/audit",
+  "status": 200
+ },
+ {
+  "body": {
+   "events": [],
+   "has_more": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/audit?kind=reconcile&limit=5",
+  "status": 200
+ },
+ {
+  "body": {
+   "items": [],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/outbox",
+  "status": 200
+ },
+ {
+  "body": {
+   "counters": {
+    "created": 0,
+    "discard_dirty": 0,
+    "reused": 0,
+    "validate_fail": 0
+   },
+   "enabled": false,
+   "ok": true,
+   "slots": {},
+   "target": ""
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/debug/pool",
+  "status": 200
+ }
+]

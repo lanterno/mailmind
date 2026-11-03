@@ -1,0 +1,384 @@
+[
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Tue, 27 Oct 2026 09:14:00 +0000",
+   "from_addr": "lin@example.test",
+   "from_name": "Lin Mori",
+   "has_html": false,
+   "html": null,
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<lunch-1@lin.example.test>",
+   "ok": true,
+   "pk": 1,
+   "references": "",
+   "reply_to": "",
+   "subject": "Lunch on Thursday?",
+   "text": "Hi Ada,\r\n\r\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\r\nLin\r\n",
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-01-lunch.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [
+    {
+     "content_id": null,
+     "content_type": "text/calendar",
+     "filename": "invite.ics",
+     "is_inline": 1,
+     "part_id": "3",
+     "size": 950
+    }
+   ],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Fri, 30 Oct 2026 08:30:00 +0000",
+   "from_addr": "noor@studio.example.test",
+   "from_name": "Noor Haddad",
+   "has_html": true,
+   "html": "<p>Let's walk through the new layouts.</p>\r\n",
+   "in_reply_to": "",
+   "invite": {
+    "all_day": false,
+    "attendees": [
+     {
+      "email": "ada@example.test",
+      "name": "Ada Park"
+     }
+    ],
+    "description": "",
+    "end_iso": "2026-11-03T15:00:00",
+    "exdates": [],
+    "location": "Room 2",
+    "method": "REQUEST",
+    "organizer": {
+     "email": "noor@studio.example.test",
+     "name": "Noor Haddad"
+    },
+    "recurrence": "",
+    "recurrence_id": "",
+    "rrule": "",
+    "start_iso": "2026-11-03T14:00:00",
+    "status": "CONFIRMED",
+    "summary": "Design review",
+    "tzid": "",
+    "uid": "040000008200E00074C5B7101A82E0080000000000000000000000000000000000000000review",
+    "when": "Tue, Nov 3 · 2:00 PM–3:00 PM"
+   },
+   "invite_part": "3",
+   "message_id": "<DB9P250MB0001.review@studio.example.test>",
+   "ok": true,
+   "pk": 6,
+   "references": "",
+   "reply_to": "",
+   "subject": "Design review",
+   "text": "Let's walk through the new layouts.\r\n",
+   "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-06-outlook-invite.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [
+    {
+     "content_id": null,
+     "content_type": "message/rfc822",
+     "filename": "Fabric samples.eml",
+     "is_inline": 0,
+     "part_id": "2",
+     "size": 0
+    }
+   ],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Fri, 30 Oct 2026 12:00:00 +0000",
+   "from_addr": "noor@studio.example.test",
+   "from_name": "Noor Haddad",
+   "has_html": false,
+   "html": null,
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<fwd-samples@studio.example.test>",
+   "ok": true,
+   "pk": 7,
+   "references": "",
+   "reply_to": "",
+   "subject": "Fwd: Fabric samples",
+   "text": "Forwarding Lin's note, see attached.\r\n",
+   "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-07-forward-rfc822.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Sat, 31 Oct 2026 09:45:00 +0100",
+   "from_addr": "renee@atelier.example.test",
+   "from_name": "Renée Lefèvre",
+   "has_html": false,
+   "html": null,
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<atelier-nov@atelier.example.test>",
+   "ok": true,
+   "pk": 9,
+   "references": "<atelier-oct@atelier.example.test>\r  <atelier-sep@atelier.example.test>",
+   "reply_to": "",
+   "subject": "Projet d’atelier — planning de novembre",
+   "text": "Bonjour Ada, voici le planning de novembre pour l’atelier.\r\n",
+   "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-09-rfc2047-folded.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [
+    {
+     "content_id": "quilt@lin.example.test",
+     "content_type": "image/png",
+     "filename": "quilt.png",
+     "is_inline": 1,
+     "part_id": "2",
+     "size": 66
+    }
+   ],
+   "blocked_css_urls": 0,
+   "blocked_images": 1,
+   "cc": "",
+   "date": "Sun, 01 Nov 2026 18:30:00 +0000",
+   "from_addr": "lin@example.test",
+   "from_name": "Lin Mori",
+   "has_html": true,
+   "html": "<p>It's done!</p><img alt=\"quilt\"/>\r\n",
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<quilt-photo@lin.example.test>",
+   "ok": true,
+   "pk": 11,
+   "references": "",
+   "reply_to": "",
+   "subject": "The finished quilt",
+   "text": null,
+   "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-11-html-cid.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "attachments": [
+    {
+     "content_id": null,
+     "content_type": "application/pdf",
+     "filename": "comments.pdf",
+     "is_inline": 0,
+     "part_id": "3",
+     "size": 45
+    }
+   ],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Sun, 01 Nov 2026 20:00:00 +0000",
+   "draft_id": 1,
+   "draft_mode": "new",
+   "from_addr": "bea@example.test",
+   "from_name": "Bea Novak",
+   "has_html": true,
+   "html": "<div>Hi Ivo, my comments are in the attached file. <b>Two points</b> stand out.</div>",
+   "in_reply_to": "<contract-v2@harbor.example.test>",
+   "invite": null,
+   "invite_part": null,
+   "is_draft": true,
+   "message_id": "<A1B2C3D4-0000-4000-8000-000000000001@example.test>",
+   "ok": true,
+   "pk": 21,
+   "references": "<contract-v2@harbor.example.test>",
+   "reply_to": "",
+   "subject": "Re: Contract draft v2",
+   "text": "Hi Ivo, my comments are in the attached file. Two points stand out.\r\n",
+   "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
+   "to": "Ivo Brandt <ivo@harbor.example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of bea-drafts-01-apple-mail.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "attachments": [],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Mon, 02 Nov 2026 07:45:00 +0000",
+   "from_addr": "tracking@parcels.example.test",
+   "from_name": "Parcel Service",
+   "has_html": false,
+   "html": null,
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<parcel-77@parcels.example.test>",
+   "ok": true,
+   "pk": 24,
+   "references": "",
+   "reply_to": "",
+   "subject": "Your parcel is out for delivery",
+   "text": "Parcel 77 will arrive today between 10:00 and 14:00.\r\n",
+   "thread_id": "gm:cy@example.test:1800000000000000004",
+   "to": "cy@example.test"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of cy-inbox-03-unrelated.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "attachments": [
+    {
+     "content_id": "quilt@lin.example.test",
+     "content_type": "image/png",
+     "filename": "quilt.png",
+     "is_inline": 1,
+     "part_id": "2",
+     "size": 66
+    }
+   ],
+   "blocked_css_urls": 0,
+   "blocked_images": 0,
+   "cc": "",
+   "date": "Sun, 01 Nov 2026 18:30:00 +0000",
+   "from_addr": "lin@example.test",
+   "from_name": "Lin Mori",
+   "has_html": true,
+   "html": "<p>It's done!</p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgAAACAAFUok9dAAAAAElFTkSuQmCC\" alt=\"quilt\"/>\r\n",
+   "in_reply_to": "",
+   "invite": null,
+   "invite_part": null,
+   "message_id": "<quilt-photo@lin.example.test>",
+   "ok": true,
+   "pk": 11,
+   "references": "",
+   "reply_to": "",
+   "subject": "The finished quilt",
+   "text": null,
+   "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+   "to": "Ada Park <ada@example.test>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of ada-inbox-11-html-cid.eml with images",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "prefetched": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET body of bea-inbox-01-client.eml as a prefetch",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/message/999999/body",
+  "status": 200
+ },
+ {
+  "note": "UID FETCH commands per account",
+  "value": {
+   "ada@example.test": 4,
+   "bea@example.test": 2,
+   "cy@example.test": 1
+  }
+ }
+]

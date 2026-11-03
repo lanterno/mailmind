@@ -1,0 +1,209 @@
+[
+ {
+  "body": {
+   "error": "account required",
+   "folders": [],
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/folders",
+  "status": 400
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folders": [
+    {
+     "name": "INBOX",
+     "role": "inbox",
+     "total": 12,
+     "unseen": 10
+    },
+    {
+     "name": "Sent",
+     "role": "sent",
+     "total": 1,
+     "unseen": 0
+    },
+    {
+     "name": "Drafts",
+     "role": "drafts",
+     "total": 2,
+     "unseen": 0
+    },
+    {
+     "name": "Archive",
+     "role": "archive",
+     "total": 1,
+     "unseen": 0
+    },
+    {
+     "name": "Junk",
+     "role": "junk",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Trash",
+     "role": "trash",
+     "total": 1,
+     "unseen": 0
+    }
+   ],
+   "muted": 0,
+   "ok": true,
+   "replylater": 0,
+   "snoozed": 0,
+   "waiting": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/folders?account=ada@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "folders": [
+    {
+     "name": "INBOX",
+     "role": "inbox",
+     "total": 2,
+     "unseen": 1
+    },
+    {
+     "name": "Sent",
+     "role": "sent",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Drafts",
+     "role": "drafts",
+     "total": 1,
+     "unseen": 0
+    },
+    {
+     "name": "All Mail",
+     "role": "archive",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Archive",
+     "role": "archive",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Folders/Clients",
+     "role": "custom",
+     "total": 1,
+     "unseen": 0
+    },
+    {
+     "name": "Labels/Important",
+     "role": "custom",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Spam",
+     "role": "junk",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "Trash",
+     "role": "trash",
+     "total": 0,
+     "unseen": 0
+    }
+   ],
+   "muted": 0,
+   "ok": true,
+   "replylater": 0,
+   "snoozed": 0,
+   "waiting": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/folders?account=bea@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "folders": [
+    {
+     "name": "INBOX",
+     "role": "inbox",
+     "total": 3,
+     "unseen": 2
+    },
+    {
+     "name": "[Gmail]/Sent Mail",
+     "role": "sent",
+     "total": 1,
+     "unseen": 0
+    },
+    {
+     "name": "[Gmail]/Drafts",
+     "role": "drafts",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "[Gmail]/All Mail",
+     "role": "archive",
+     "total": 4,
+     "unseen": 2
+    },
+    {
+     "name": "[Gmail]/Starred",
+     "role": "custom",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "[Gmail]/Spam",
+     "role": "junk",
+     "total": 0,
+     "unseen": 0
+    },
+    {
+     "name": "[Gmail]/Trash",
+     "role": "trash",
+     "total": 0,
+     "unseen": 0
+    }
+   ],
+   "muted": 0,
+   "ok": true,
+   "replylater": 0,
+   "snoozed": 0,
+   "waiting": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/folders?account=cy@example.test",
+  "status": 200
+ }
+]

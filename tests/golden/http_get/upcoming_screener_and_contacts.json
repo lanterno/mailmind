@@ -1,0 +1,285 @@
+[
+ {
+  "body": {
+   "items": [
+    {
+     "account": "ada@example.test",
+     "all_day": false,
+     "end": "2026-11-03T15:00",
+     "invite": true,
+     "location": "Room 2",
+     "organizer": "Noor Haddad",
+     "pk": 6,
+     "recurrence": "",
+     "start": "2026-11-03T14:00",
+     "summary": "Design review",
+     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64"
+    }
+   ],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/upcoming",
+  "status": 200
+ },
+ {
+  "body": {
+   "items": [],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/upcoming?account=bea@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": null,
+   "items": [],
+   "ok": true,
+   "total": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/screener",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "items": [
+    {
+     "count": 3,
+     "domain": "example.test",
+     "from_addr": "lin@example.test",
+     "from_name": "Lin Mori",
+     "when": "17h ago"
+    },
+    {
+     "count": 1,
+     "domain": "atelier.example.test",
+     "from_addr": "renee@atelier.example.test",
+     "from_name": "Renée Lefèvre",
+     "when": "2d ago"
+    },
+    {
+     "count": 1,
+     "domain": "mailer.example.test",
+     "from_addr": "legacy@mailer.example.test",
+     "from_name": "Old Mailer",
+     "when": "2d ago"
+    },
+    {
+     "count": 2,
+     "domain": "studio.example.test",
+     "from_addr": "noor@studio.example.test",
+     "from_name": "Noor Haddad",
+     "when": "3d ago"
+    },
+    {
+     "count": 1,
+     "domain": "thimble.example.test",
+     "from_addr": "orders@thimble.example.test",
+     "from_name": "Thimble & Co",
+     "when": "4d ago"
+    }
+   ],
+   "ok": true,
+   "total": 5
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/screener?account=ada@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "items": [
+    {
+     "addr": "lin@example.test",
+     "n": 4,
+     "name": "Lin Mori"
+    },
+    {
+     "addr": "ada@example.test",
+     "n": 3,
+     "name": "Ada Park"
+    },
+    {
+     "addr": "noor@studio.example.test",
+     "n": 2,
+     "name": "Noor Haddad"
+    },
+    {
+     "addr": "ivo@harbor.example.test",
+     "n": 2,
+     "name": "Ivo Brandt"
+    },
+    {
+     "addr": "mae@guild.example.test",
+     "n": 2,
+     "name": "Mae Lindqvist"
+    },
+    {
+     "addr": "tracking@parcels.example.test",
+     "n": 1,
+     "name": "Parcel Service"
+    },
+    {
+     "addr": "winner@prizes.example.test",
+     "n": 1,
+     "name": "Prize Desk"
+    },
+    {
+     "addr": "bea@example.test",
+     "n": 1,
+     "name": "Bea Novak"
+    }
+   ],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/contacts",
+  "status": 200
+ },
+ {
+  "body": {
+   "items": [
+    {
+     "addr": "lin@example.test",
+     "n": 4,
+     "name": "Lin Mori"
+    },
+    {
+     "addr": "mae@guild.example.test",
+     "n": 2,
+     "name": "Mae Lindqvist"
+    }
+   ],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/contacts?q=lin",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "addr": "lin@example.test",
+   "count": 4,
+   "first_ago": "12d",
+   "known": true,
+   "last_ago": "17h",
+   "name": "Lin Mori",
+   "ok": true,
+   "recent": [
+    {
+     "account": "ada@example.test",
+     "pk": 11,
+     "seen": false,
+     "subject": "The finished quilt",
+     "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "when": "17h ago"
+    },
+    {
+     "account": "ada@example.test",
+     "pk": 2,
+     "seen": false,
+     "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "when": "6d ago"
+    },
+    {
+     "account": "ada@example.test",
+     "pk": 1,
+     "seen": true,
+     "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "when": "6d ago"
+    },
+    {
+     "account": "ada@example.test",
+     "pk": 16,
+     "seen": true,
+     "subject": "Quilt pattern ideas",
+     "thread_id": "rf:ada@example.test:c5862e0831764395",
+     "when": "1w ago"
+    }
+   ],
+   "replied": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/contact?addr=lin@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [],
+   "addr": "nobody@example.test",
+   "count": 0,
+   "first_ago": null,
+   "known": false,
+   "last_ago": null,
+   "name": "",
+   "ok": true,
+   "recent": [],
+   "replied": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/contact?addr=nobody@example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "bad address",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/contact?addr=",
+  "status": 400
+ }
+]

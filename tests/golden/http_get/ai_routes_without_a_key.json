@@ -1,0 +1,139 @@
+[
+ {
+  "body": {
+   "cached": false,
+   "generated": "2026-11-02T12:00:00+00:00",
+   "groups": [],
+   "model": "empty",
+   "narrative": "Nothing needs you right now — your inbox is quiet.",
+   "ok": true,
+   "stale": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/briefing",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "review unavailable",
+   "ok": false,
+   "retry": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/review",
+  "status": 502
+ },
+ {
+  "body": {
+   "error": "delta unavailable",
+   "ok": false,
+   "retry": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/briefing/since",
+  "status": 502
+ },
+ {
+  "body": {
+   "ok": true,
+   "status": "none"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/ai/draft-ahead",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "status": "none"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/ai/draft-ahead without the CSRF token",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "ai": {
+    "engine": "none",
+    "key_from": "",
+    "last_error": "the API key was rejected",
+    "last_ok": false,
+    "last_ts": 1793620800,
+    "model": ""
+   },
+   "aliases": {
+    "ada@example.test": "Ada",
+    "bea@example.test": "Bea",
+    "cy@example.test": "Cy"
+   },
+   "generated": "2026-11-02T12:00:00+00:00",
+   "items": [],
+   "send_accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "signature_default": "",
+   "signatures": {
+    "ada@example.test": "",
+    "bea@example.test": "",
+    "cy@example.test": ""
+   },
+   "stats": {
+    "kept": 21,
+    "needs": 21,
+    "summarized": 0,
+    "total": 25,
+    "verified": 0
+   },
+   "status": {},
+   "sync": {
+    "last": null,
+    "result": "idle",
+    "running": false
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/digest after those",
+  "status": 200
+ },
+ {
+  "note": "requests the fake Claude API received",
+  "value": 2
+ }
+]

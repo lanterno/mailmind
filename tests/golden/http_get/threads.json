@@ -1,0 +1,189 @@
+[
+ {
+  "body": {
+   "account": "ada@example.test",
+   "count": 3,
+   "items": [
+    {
+     "answered": true,
+     "flagged": false,
+     "folder": "INBOX",
+     "from_addr": "lin@example.test",
+     "from_name": "Lin Mori",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 1,
+     "seen": true,
+     "snippet": "Hi Ada,\r\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\nLin",
+     "subject": "Lunch on Thursday?",
+     "when": "6d ago"
+    },
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "Sent",
+     "from_addr": "ada@example.test",
+     "from_name": "Ada Park",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 13,
+     "seen": true,
+     "snippet": "",
+     "subject": "Re: Lunch on Thursday?",
+     "when": "6d ago"
+    },
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "INBOX",
+     "from_addr": "lin@example.test",
+     "from_name": "Lin Mori",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 2,
+     "seen": false,
+     "snippet": "12:30 is perfect. See you there.",
+     "subject": "Re: Lunch on Thursday?",
+     "when": "6d ago"
+    }
+   ],
+   "ok": true,
+   "reply_pk": 2,
+   "thread_id": "rf:ada@example.test:f55e4e75612a3def"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/thread for ada-inbox-01-lunch.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "count": 3,
+   "items": [
+    {
+     "answered": true,
+     "flagged": false,
+     "folder": "INBOX",
+     "from_addr": "mae@guild.example.test",
+     "from_name": "Mae Lindqvist",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 22,
+     "seen": true,
+     "snippet": "Shall we book the library hall again?",
+     "subject": "Guild meetup venue",
+     "when": "5d ago"
+    },
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "[Gmail]/Sent Mail",
+     "from_addr": "cy@example.test",
+     "from_name": "Cy Okafor",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 25,
+     "seen": true,
+     "snippet": "",
+     "subject": "Re: Guild meetup venue",
+     "when": "4d ago"
+    },
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "INBOX",
+     "from_addr": "mae@guild.example.test",
+     "from_name": "Mae Lindqvist",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 23,
+     "seen": false,
+     "snippet": "Booked for the 14th.",
+     "subject": "Re: Guild meetup venue",
+     "when": "4d ago"
+    }
+   ],
+   "ok": true,
+   "reply_pk": 23,
+   "thread_id": "gm:cy@example.test:1800000000000000001"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/thread for cy-inbox-01-thread-start.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "count": 2,
+   "items": [
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "INBOX",
+     "from_addr": "ivo@harbor.example.test",
+     "from_name": "Ivo Brandt",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 18,
+     "seen": false,
+     "snippet": "Bea, the second draft is ready for your comments.",
+     "subject": "Contract draft v2",
+     "when": "3d ago"
+    },
+    {
+     "answered": false,
+     "flagged": false,
+     "folder": "Drafts",
+     "from_addr": "bea@example.test",
+     "from_name": "Bea Novak",
+     "has_attach": false,
+     "is_junk": false,
+     "pk": 21,
+     "seen": true,
+     "snippet": "",
+     "subject": "Re: Contract draft v2",
+     "when": "16h ago"
+    }
+   ],
+   "ok": true,
+   "reply_pk": 21,
+   "thread_id": "rf:bea@example.test:1f7815dd634a2ba6"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/thread for bea-inbox-01-client.eml",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "count": 0,
+   "items": [],
+   "ok": true,
+   "reply_pk": null,
+   "thread_id": "no-such-thread"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/thread?account=ada@example.test&thread_id=no-such-thread",
+  "status": 200
+ }
+]

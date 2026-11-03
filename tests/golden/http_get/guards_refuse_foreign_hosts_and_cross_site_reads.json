@@ -1,0 +1,291 @@
+[
+ {
+  "body": {
+   "error": "bad host/origin",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts from a rebinding host",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "bad host/origin",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts with a foreign Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "cross-site request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts marked cross-site",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "cross-site request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts marked same-site",
+  "status": 403
+ },
+ {
+  "bytes": 445953,
+  "headers": {
+   "content-type": "text/html; charset=utf-8",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET / as a top-level cross-site visit",
+  "sha256": "0526f3975b4425c9c4e8e1beec3b83a8425365010dd1303cbe22247e21a165fa",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    {
+     "alias": "Ada",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "ada@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "imap"
+    },
+    {
+     "alias": "Bea",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "bea@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "proton"
+    },
+    {
+     "alias": "Cy",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "cy@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "[Gmail]/Trash",
+     "type": "gmail"
+    }
+   ],
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "signature_default": ""
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts without Sec-Fetch-Site",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    {
+     "alias": "Ada",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "ada@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "imap"
+    },
+    {
+     "alias": "Bea",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "bea@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "Trash",
+     "type": "proton"
+    },
+    {
+     "alias": "Cy",
+     "credential": {
+      "set": true,
+      "style": "plain"
+     },
+     "defaults_applied": {
+      "host": false,
+      "port": false,
+      "smtp_host": false,
+      "smtp_port": false,
+      "smtp_starttls": true,
+      "starttls": false,
+      "trash": true
+     },
+     "disabled": false,
+     "email": "cy@example.test",
+     "host": "127.0.0.1",
+     "port": "<imap>",
+     "signature": "",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": 9,
+     "smtp_starttls": true,
+     "starttls": true,
+     "trash": "[Gmail]/Trash",
+     "type": "gmail"
+    }
+   ],
+   "generated": "2026-11-02T12:00:00+00:00",
+   "ok": true,
+   "signature_default": ""
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/accounts via localhost",
+  "status": 200
+ },
+ {
+  "headers": {
+   "content-type": "text/plain",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/no-such-route",
+  "status": 404,
+  "text": "not found"
+ },
+ {
+  "body": {
+   "error": "request failed",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/messages?account=ada@example.test&limit=lots",
+  "status": 500
+ }
+]
