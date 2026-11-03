@@ -58,7 +58,7 @@ import summarize_thread
 import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
-from mailmind.platform import settings
+from mailmind.platform import perimeter, settings
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -3696,53 +3696,6 @@ def account_mutate(action, body):
     return {"ok": False, "error": "unknown action"}
 
 
-def _rebind_guard(handler):
-    """Block DNS rebinding: the Host must name this server, and an Origin, when sent, must be its
-    own. Every GET and every POST passes it. A page on a rebound name reaches 127.0.0.1 with its
-    own Host, so without this it could read the mailbox and the page's CSRF token."""
-    port = settings.current().port
-    host = (handler.headers.get("Host") or "").lower()
-    if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
-        return True
-    origin = handler.headers.get("Origin")
-    if origin and origin.lower() not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
-        return True
-    return False
-
-
-def _cross_site(handler, path):
-    """A GET another site started. It carries this server's Host and, as a no-cors request such as
-    an <img>, no Origin, so the rebind check passes it, yet it can still make the server sync a
-    folder, fetch bodies or run an AI briefing. Browsers mark it Sec-Fetch-Site cross-site, or
-    same-site when it comes from another port on this machine. A top-level visit to the page itself
-    stays allowed: it does nothing, and its contents can't be read across origins. A browser that
-    sends no Sec-Fetch-Site is judged by the rebind check alone."""
-    site = (handler.headers.get("Sec-Fetch-Site") or "").lower()
-    if site in ("", "same-origin", "none"):
-        return False
-    return not (path == "/" and handler.headers.get("Sec-Fetch-Mode") == "navigate"
-                and handler.headers.get("Sec-Fetch-Dest") == "document")
-
-
-def _strict_origin_guard(handler):
-    """For the send routes only: REQUIRE an Origin header matching the localhost
-    origin. Returns True (deny) when missing or mismatched."""
-    origin = (handler.headers.get("Origin") or "").lower()
-    port = settings.current().port
-    return origin not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}")
-
-
-def _mutation_guard(handler):
-    """Every mutating POST must pass the rebind check AND carry the CSRF token —
-    a localhost server with send/flag/move/delete is otherwise reachable from any
-    browser tab. Returns an error string, or None if allowed."""
-    if _rebind_guard(handler):
-        return "bad host/origin"
-    if not secrets.compare_digest(handler.headers.get("X-CSRF-Token") or "", CSRF):
-        return "bad or missing CSRF token"
-    return None
-
-
 # ----------------------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
@@ -3865,11 +3818,13 @@ class H(BaseHTTPRequestHandler):
             return {}
 
     def do_GET(self):
-        if _rebind_guard(self):
-            return self._json({"ok": False, "error": "bad host/origin"}, 403)
+        no = perimeter.refuse_host(self.headers, settings.current().port)
+        if no:
+            return self._json(no.answer(), no.status)
         u = urlparse(self.path)
-        if _cross_site(self, u.path):
-            return self._json({"ok": False, "error": "cross-site request"}, 403)
+        no = perimeter.refuse_cross_site(self.headers, u.path)
+        if no:
+            return self._json(no.answer(), no.status)
         q = parse_qs(u.query)
         _ui_touch(u.path)
         try:
@@ -3887,7 +3842,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(*ai_delta(q))
             elif u.path == "/api/ai/draft-ahead":   # serve/peek; the generation KICK needs the CSRF token
                 self._json(*ai_draft_ahead_get(
-                    q, kick_ok=secrets.compare_digest(self.headers.get("X-CSRF-Token") or "", CSRF)))
+                    q, kick_ok=perimeter.token_matches(self.headers, CSRF)))
             elif u.path == "/api/stats":
                 self._json(live_stats(q.get("account", [None])[0], q.get("refresh", ["0"])[0] == "1"))
             elif u.path == "/api/rules":
@@ -3962,22 +3917,15 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         # 1) Cap the body size BEFORE reading it, so an unauthenticated/cross-tab
         #    request can't make us read+parse an arbitrary-size payload.
-        cap = post_body_cap(u.path)
-        try:
-            length = int(self.headers.get("Content-Length", 0) or 0)
-        except ValueError:
-            length = -1
-        if length < 0 or length > cap:
+        no = perimeter.refuse_body(self.headers, post_body_cap(u.path))
+        if no:
             self.close_connection = True
-            return self._json({"ok": False, "error": "payload too large"}, 413)
+            return self._json(no.answer(), no.status)
         b = self._body()                  # now safe to consume the request body
-        g = _mutation_guard(self)         # then gate EVERY mutation (rebind + CSRF)
-        if g:
-            return self._json({"ok": False, "error": g}, 403)
-        # send is the most dangerous route — additionally REQUIRE a matching Origin
-        # (legit same-origin fetch always sends one; treat its absence as deny).
-        if u.path in ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/api/outbox/cancel", "/api/outbox/sendnow", "/api/cleanup/execute") and _strict_origin_guard(self):
-            return self._json({"ok": False, "error": "origin required"}, 403)
+        # 2) Then gate every mutation: host, CSRF token, and on the send routes a matching Origin.
+        no = perimeter.refuse_mutation(u.path, self.headers, port=settings.current().port, token=CSRF)
+        if no:
+            return self._json(no.answer(), no.status)
         _ui_touch(u.path)                 # only a request that got past the guards: someone is here
         try:
             if u.path == "/api/send":
