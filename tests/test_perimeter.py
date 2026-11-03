@@ -116,10 +116,21 @@ def test_a_get_is_judged_by_its_host_before_where_it_came_from():
                                 port=PORT).error == "cross-site request"
 
 
-@pytest.mark.parametrize("path", ["/", "/api/digest"])
-def test_every_answer_says_what_its_body_is_and_keeps_out_of_other_pages(path):
-    assert dict(perimeter.answer_headers(path)) == {
-        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"}
+def test_every_answer_says_what_its_body_is_and_keeps_out_of_other_pages():
+    got = dict(perimeter.answer_headers("/"))
+    assert {k: got.pop(k) for k in ("X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options",
+                                    "Cross-Origin-Opener-Policy", "Cross-Origin-Resource-Policy")} == {
+        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY",
+        "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Resource-Policy": "same-origin"}
+    policy = dict(f.split("=") for f in got.pop("Permissions-Policy").split(", "))
+    assert set(policy.values()) == {"()"} and {"camera", "microphone", "geolocation", "payment"} <= set(policy)
+    assert got == {}
+
+
+def test_no_cache_keeps_an_api_answer():
+    assert dict(perimeter.answer_headers("/api/digest")) == {**dict(perimeter.answer_headers("/")),
+                                                             "Cache-Control": "no-store"}
+    assert "Cache-Control" not in dict(perimeter.answer_headers("/"))
 
 
 def test_every_refusal_answers_in_one_shape():
