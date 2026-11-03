@@ -71,7 +71,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     rows and two copies. A Send during a first save leaves that save's copy behind. The fix is a
     per-composer `cmp._saving` promise that later saves, `autosaveTick` and `composeSend` wait
     on. On the server, read `prev` (and `same`) inside the lock, and dedupe first saves on the
-    composer's `idempotency_key`, which `do_draft` ignores today.
+    composer's `idempotency_key`, which `do_draft` ignores today (pinned by
+    `test_a_first_save_sent_twice_makes_one_draft`).
 - **Drafts are recognised by folder name** · high value · effort M — `_draft_info` and
   `draft_resume` treat any folder with "draft" anywhere in its name as Drafts ("Contract drafts",
   "Clients/Draft agreements", every subfolder of one), and never check `\Draft`. Viewing a message
@@ -101,6 +102,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     empty-SEARCH guards.
 
   Then reload a Drafts list that is on screen, since `composeDiscard` refreshes only the rail.
+  Pinned by `test_a_saved_draft_shows_in_an_open_drafts_list`.
 - **Fresh replies name their original by pk** · medium value · effort M — A reply or forward that
   wasn't reopened from Drafts sends `in_reply_to_pk` on every save and send, and `_compose_spec`
   resolves it with `store.get_message`. pks are AUTOINCREMENT and never reused, so it can't hit
@@ -114,7 +116,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   server hand back the threading headers and quote so the composer switches to `resume`. Store the
   original's Message-ID and `thread_id` on the outbox row (append-only migration), and set
   `\Answered` by Message-ID in whatever folder it moved to (the `mailops._uid_by_msgid` pattern
-  `apply_queued_mutation` uses).
+  `apply_queued_mutation` uses). Pinned by
+  `test_a_reply_marks_its_original_answered_after_the_original_is_archived`.
 - **Outgoing replies carry the reader's quote fold** · medium value · effort S —
   `compose.reply_bodies` and `forward_bodies` run the original's HTML through
   `sanitize_html.sanitize`. That function wraps the first top-level blockquote that follows text
@@ -126,6 +129,12 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   which the `resume` branch re-sends without sanitizing. The fix is a `fold=False` switch on
   `sanitize` for the three compose callers, a strip of the wrapper from stored `tail_html`, and a
   compose test that neither MIME part contains `<details`.
+- **A draft with an older copy can't be edited** · medium value · effort S — When another client
+  leaves an old copy of a draft behind, the two copies share a Message-ID. The Drafts row then
+  stands for a two-message conversation (`convoRow`), which opens in the thread reader. That reader
+  offers Reply and Forward but no Edit, so the draft can't be reopened from the list. In Drafts,
+  open the newest copy in the single-message reader. Pinned by
+  `test_a_draft_with_an_older_copy_still_opens_for_editing` (tests/browser).
 
 ## AI that acts, not just describes
 
@@ -268,9 +277,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Pool the reconcile read** · low value · effort S — Half done: `reconcile_account` now connects
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   `_ops_lock` instead of using `pool.borrow` the way the three read call sites do.
-- **CONDSTORE / QRESYNC flag-delta** · low value · effort M — Carried over from the original phase
-  plan; no `CONDSTORE`, `QRESYNC` or `MODSEQ` reference exists anywhere. Re-fetching FLAGS for the
-  visible window is genuinely enough today; revisit only if flag-sync cost becomes visible.
 
 ## Keyboard, screen readers and reversibility
 
@@ -313,6 +319,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   clickable pill via `showNewPill()`; a snoozed message waking back into the open folder either
   silently reloads or flashes a 2.6s toast. `onSnoozeWake` never calls the pill functions that
   already exist.
+- **A heading for the reader** · low value · effort S — With a message open, axe reports
+  `page-has-heading-one`, the only finding on the inbox, reader and composer. Make the subject an
+  `<h1>`, and lower `tests/golden/browser/axe_baseline.json` with `--update-golden`.
 
 ## The reading room and the visual system
 
@@ -351,7 +360,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   inner message's bytes (a compat32 generator with CRLF, to stay close to the original) for size,
   download and forward. Attach message/rfc822 in `build_message` as a parsed message, which goes
   out 8bit, for forwards and uploads alike. Stop listing inner files while keeping the walk's part
-  indexes stable. Then lift the refusal.
+  indexes stable. Then lift the refusal. Pinned by
+  `test_hwf_an_attached_emails_files_are_not_listed_as_the_outers` and
+  `test_hwf_an_attached_emails_text_is_not_taken_for_the_outers`.
 - **Folded subjects and senders** · medium value · effort S — `ingest._process` reads headers with
   compat32 and `ingest.dec` turns a fold's CR/LF into spaces. "…items⏎ for next week" is stored
   with three spaces. HTML hides the run, but Reply and Forward put it into the subject box and the
@@ -407,10 +418,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   signal. And the string is fixed — `sync()` polls `/api/digest` every 3s but reads only
   `d.sync.running`, ignoring the message count already in `d.stats`, so "read N messages so far…" is
   two lines inside the existing loop.
-- **Honest empty vs. silently-failed folder** · low value · effort S — A first-open `sync_folder`
-  failure is caught and only printed, and the `messages_in` return dict carries no error flag, so an
-  empty folder and a folder whose sync threw look identical. Without that flag the empty state cannot
-  offer "Couldn't sync this folder — Retry."
+- **A folder whose first sync failed** · medium value · effort S — `ingest.sync_folder` writes
+  the folder's `sync_state` (`set_uidvalidity`) before its `UID SEARCH`, and never checks that
+  SEARCH's `typ`. On a NO it parses the answer text as UIDs and throws. The throw is caught and only
+  printed, but the folder now counts as synced, so `messages_in` never runs its first sync
+  again and the folder stays empty. Check `typ`, write `sync_state` only after a sync that saw
+  every UID, and return an error flag so the empty state can offer "Couldn't sync this folder —
+  Retry." Pinned by `test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open`.
 - **Consistency sweep: buttons, empty-state strings, toast vs. persistent** · low value · effort M —
   Three concrete, checkable changes rather than a vibe: (1) one `.btn-retry` replacing `.ai-rerun`,
   `.frail-retry`, `.ob-retry` and `.do-confirm`; (2) one `EMPTY` string table replacing the four
@@ -442,7 +456,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   text) to api.anthropic.com. `/api/review` and `/api/briefing/since` do this on every open, and
   the 401 then shows as "the API key was rejected" while `summarize.status` reports the engine as
   `none`. Once the CLI goes (D8) this is the default path. Raise before the request when `key()` is
-  empty. Pinned by `test_without_a_key_no_mail_leaves_for_the_api`.
+  empty. Pinned by `test_without_a_key_no_mail_leaves_for_the_api` and, for triage,
+  `test_bug_without_a_key_triage_sends_no_mail`.
 - **Undo a Proton trash without marking the mail read** · medium value · effort S — Bridge marks a
   message read on its way to Trash, and `mailops._mk_move_undo` keeps no `\Seen` state, so Undo
   brings unread mail back read. Record `seen` in the descriptor and clear `\Seen` after the move
@@ -510,6 +525,129 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - a multipart with no boundary loses its text, in the snippet and when opened;
   - a forwarded `message/rfc822` attachment downloads empty with size 0
     (`mailparse.extract_part` uses `get_payload(decode=True)`, which is None for that type).
+- **Refresh the flags of mail already stored** · medium value · effort M — FLAGS are read once,
+  in `ingest._process`'s FETCH of new mail. Nothing reads them again, so mail read, starred or
+  answered in another client keeps its old state here. Fetch FLAGS for the stored INBOX UIDs
+  during reconcile. CONDSTORE/QRESYNC, which nothing references yet, would make that cheap later.
+  Pinned by `test_hwf_mail_read_in_another_client_shows_read_after_a_sync`.
+- **Prune what sync never prunes** · high value · effort M — three gaps, each pinned by a strict
+  xfail in `tests/test_hwf_mailio.py`:
+  - an INBOX emptied in another client is never pruned, because no route passes `force` to
+    `reconcile_account` (`test_hwf_an_inbox_emptied_elsewhere_can_be_pruned`);
+  - only INBOX is reconciled, so mail deleted from any other folder stays listed
+    (`test_hwf_mail_deleted_from_another_folder_leaves_the_list`);
+  - a folder that `warm.warm_tick` touched first (`sync_folder(recent=WARM_RECENT)`) never fetches
+    its older mail, since the watermark is already past it
+    (`test_hwf_opening_a_warmed_folder_shows_its_older_mail`).
+- **Undo that fails partway, or says it worked** · high value · effort S —
+  - In `do_undo` a group child that can't be found is skipped, and the group still answers
+    `ok`. A child that raises aborts the loop and pushes the whole entry back, including children
+    it already reversed, without invalidating the stats or folder caches. Report what was
+    reversed, and keep only what wasn't. Pinned by
+    `test_a_partly_failed_group_undo_keeps_what_it_couldnt_reverse` and
+    `test_a_refusal_partway_through_a_group_undo_still_reports_what_it_reversed`.
+  - Undoing a Gmail archive: `mailops.relabel_by_msgid` ignores the STORE answer, and the undo path
+    ignores `ingest_message` returning 0. A refused unarchive therefore reports success, uses up
+    the entry, and leaves the message out of the list. Pinned by
+    `test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone`.
+  - A trash queued offline and undone while still offline is lost. Pinned by
+    `test_hwf_an_offline_trash_undone_while_offline_comes_back`.
+- **The offline queue's remaining gaps** · medium value · effort S —
+  - Marking read or starring while IMAP is away answers 500. `read_mutations.op` allows `flag` and
+    `apply_queued_mutation` handles it, but `do_write` never queues one. Pinned by
+    `test_marking_read_while_the_server_is_away_is_queued`.
+  - A queued move for an account removed from the config stays `running` until restart. Give it up
+    as `error`. Pinned by `test_hwf_a_queued_move_for_a_removed_account_is_given_up`.
+  - `connectEvents` registers no listener for the `readmutq` and `undo` events the server
+    publishes, so the list doesn't refresh when a queued move lands.
+- **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
+  - `outbox.send_one` returns from a failed attempt before `_after_send`, so no `outbox` event
+    goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
+    on still shows as pending. Pinned by `test_the_page_hears_when_the_outbox_gives_up`
+    (tests/browser).
+  - `/api/outbox/retry` keeps `attempts`, so one more failure gives up again. Pinned by
+    `test_hwf_a_manual_retry_gets_a_fresh_set_of_attempts`.
+  - The worker wakes on a 30-second poll, so a send goes out up to 30 s after its Undo window
+    ends. Wait until the next `next_attempt_at` instead. Pinned by
+    `test_hwf_a_send_goes_out_when_its_undo_window_ends`.
+- **The rules file can stop the app** · high value · effort S — `rules.save` writes
+  `mailmind_rules.json` in place with default permissions. A failed write leaves it truncated.
+  From then on every `rules.load` raises, so `/api/rules` answers 500, and the classifier's own
+  read raises into ingest, which stops every sync. Write it as `views.save` does (temp file, 0600,
+  rename), and let a bad file fall back to the last good rules. Pinned by
+  `test_a_failed_rules_write_keeps_the_rules`, `test_hwf_a_malformed_rules_file_does_not_stop_sync`
+  and `test_hwf_the_rules_file_is_written_owner_only`.
+- **Move mail on a server without MOVE, into the right folder** · medium value · effort S —
+  - `manage.move_verified` has no COPY, STORE and EXPUNGE fallback, unlike `mailops._move_uid`, so
+    sweep and expiry move nothing on such a server, and `server._auto_expire_one` says nothing.
+    Pinned by `test_hwf_a_sweep_on_a_server_without_move_still_moves_the_junk`.
+  - Folder hints match by substring, so a user folder named "Bulk orders" listed before the
+    special-use `\Junk` folder receives junk. Prefer the special-use flag. Pinned by
+    `test_hwf_junk_goes_to_the_special_use_junk_folder`.
+  - `manage.sweep_account` prunes local rows by live UID, where expiry and the AI sweep prune by
+    Message-ID. Across a UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The
+    next sync's reset heals them.
+- **Keep the folder rail when LIST is refused** · low value · effort S —
+  `server._live_folder_list` ignores LIST's `typ`. A NO gives an empty list, which is cached for the
+  rail's lifetime, while a dropped connection correctly serves the last list. Pinned by
+  `test_a_refused_folder_list_keeps_the_last_list`.
+- **The rail's counts go stale after a snooze** · medium value · effort S — `loadFolders` bumps
+  `state.cseq` and, with the folders cached, calls `loadCMessages`, which bumps it again. The
+  folder answer then reads as superseded and is dropped, so the Snoozed count, unread counts and
+  badges keep their old values until a refresh-only `loadFolders(true)`. Give the rail its own
+  sequence. Pinned by `test_the_rail_counts_a_message_just_snoozed` (tests/browser).
+- **IDLE watches the accounts it booted with** · medium value · effort S — `realtime.start`
+  starts one worker per account at boot. An account removed later keeps being watched, and one
+  added later isn't watched until restart. Pinned by
+  `test_hwf_an_idle_worker_stops_watching_a_removed_account`.
+- **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
+  `tests/test_hwf_ai.py`:
+  - the brief, the delta, the review and thread summaries don't re-check their cache after taking
+    the lead, so two first loads both pay (`test_bug_two_first_loads_of_a_cached_ai_read_pay_once`);
+  - a cached brief keeps the pks it was built with, and a thread summary's fingerprint includes
+    pks, so a renumbered folder shrinks the brief's chips and marks the summary stale
+    (`test_bug_a_cached_brief_still_names_its_messages_after_a_renumber`,
+    `test_bug_a_thread_summary_stays_fresh_across_a_renumber`);
+  - opening your own reply in Sent kicks a pre-draft that `_gen_draft_ahead`'s GC then drops as
+    moot, so every open pays again. Check the anchor's folder in `_draft_eligible`
+    (`test_bug_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted`);
+  - with From switched to another account, Draft looks the thread up under that account and
+    answers 404 (`test_bug_a_draft_survives_switching_the_from_account`);
+  - from a browser that sends no `Sec-Fetch-Site`, `/api/briefing`, `/api/review` and
+    `/api/briefing/since` spend AI without the CSRF token the draft-ahead kick requires
+    (`test_bug_an_ai_spending_get_needs_the_csrf_token`);
+  - the review's `cleaned` count ignores the account it is scoped to, because `unsub_log` has no
+    account column (`test_bug_the_review_counts_only_this_accounts_cleanups`);
+  - a message without a thread id is summarized as thread `pk:N`, which matches nothing (404). Sync
+    gives every row a thread id, so this path is dead in practice
+    (`test_bug_a_message_without_a_thread_id_can_be_summarized`);
+  - the brief's `_clean` keeps the model's group `count` unclamped, so a chip can claim more
+    messages than its pks hold.
+- **Threads, Reply Later and the classifier: smaller bugs** · low value · effort S — each pinned by a
+  strict xfail in `tests/test_hwf_domain.py`:
+  - a mute is left behind when its thread joins a Gmail thread, or when every copy is stored again
+    and the thread mints a new id (`test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute`,
+    `test_hwf_a_thread_stored_again_whole_keeps_its_mute`);
+  - `store.list_replylater` has no state filter, so a dismissed thread stays in the stack
+    (`test_hwf_a_dismissed_reply_later_thread_leaves_the_stack`);
+  - the ESP marker `"sg."` matches by substring, so `msg.` and `nsg.` domains count as bulk
+    (`test_hwf_a_domain_merely_containing_an_esp_marker_is_not_bulk`);
+  - the Screener's decided-domain check is exact, so a rule for a parent domain doesn't cover its
+    sub-domains (`test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided`).
+    `server.cleanup_senders` repeats the same check;
+  - `manage.plan_account_db`, behind `/api/stats`, reads `list_unsub_raw`, which is filled only at
+    preview time, so mail that is junk only by its List headers counts as kept
+    (`test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored`);
+  - a full re-scan of a folder blanks the snippets that fetched bodies filled, and INBOX snippets
+    taken at sync keep invisible preheader padding, because `_html_to_snippet_text` never strips
+    what it unescapes (`test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message`,
+    `test_hwf_an_inbox_snippet_drops_invisible_preheader_padding`);
+  - `server.body_backfill_tick` retries the same 12 newest bodies forever when they can't be
+    fetched (deleted elsewhere, say), and never reaches older mail
+    (`test_hwf_backfill_moves_past_bodies_it_cannot_fetch`).
+- **A JSON body that isn't an object** · low value · effort S — a POST whose body is a JSON array
+  answers 500 instead of 400 "bad request". Pinned by
+  `test_a_json_body_that_isnt_an_object_is_a_bad_request`.
 
 ## Open decisions
 
@@ -524,6 +662,11 @@ implementation.
   unified-inbox-across-accounts and global search both want broader coverage.
 - **Default remote-image policy** — block-by-default with per-message "Load images" (current, and the
   privacy-preserving choice) vs. allowing images for known/personal senders.
+- **Should a notification's row show its AI summary?** — `rowMarkup` and `storedSummaryCard` skip
+  the summary when `it.bucket==="NOTIF"`, but the API sends `"automated-notifications"`, so the
+  checks never match. Background triage skips notifications (they are in `JUNK_BUCKETS`), so only
+  one summarized on request shows a summary. Either compare with the real value, or delete the
+  checks if a summary the user asked for should show.
 
 ## Next up
 
