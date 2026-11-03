@@ -363,14 +363,14 @@ def test_no_page_may_frame_the_app():
 _uid = [500]
 
 
-def _message(folder="INBOX"):
+def _message(folder="INBOX", sender="bo@example.test"):
     """A fictional message row in the temp database; returns its pk."""
     _uid[0] += 1
     c = store.conn()
     cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, "
                     "subject) VALUES (?,?,?,?,?,?,?,?,?)",
                     ("ada@example.test", "imap", folder, _uid[0], f"<h{_uid[0]}@example.test>",
-                     f"h{_uid[0]}", "2026-11-01T09:00:00+00:00", "bo@example.test", "Lunch"))
+                     f"h{_uid[0]}", "2026-11-01T09:00:00+00:00", sender, "Lunch"))
     c.commit()
     pk = cur.lastrowid
     c.close()
@@ -553,6 +553,36 @@ def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync():
         n = ingest.ingest_message(accounts.get("ada@example.test"), "Archive", "<filed@example.test>")
     assert n == 1, n
     assert not ingest.folder_synced("ada@example.test", "Archive")
+
+
+@contextlib.contextmanager
+def _trash_probe():
+    """Replaces trash_message; yields the list of whether _ops_lock was held at each call."""
+    held, real = [], mailops.trash_message
+
+    def probe(pk):
+        held.append(server._ops_lock.locked())
+        return True, "trashed", None
+    mailops.trash_message = probe
+    try:
+        yield held
+    finally:
+        mailops.trash_message = real
+
+
+def test_cleanup_and_block_trash_mail_under_the_imap_lock():
+    for _ in range(2):
+        _message(sender="promo@example.test")
+    with _trash_probe() as held:
+        res, code = server.cleanup_execute({"from_addr": "promo@example.test"})
+    assert code == 200 and res["swept"] == 2, (code, res)
+    assert held == [True, True], held
+    pk = _message(sender="spam@example.test")
+    with _trash_probe() as held:
+        res = server.H._rules_post(None, {"token": "spam@example.test", "verdict": "block", "pk": pk})
+    assert res["trashed"] is True, res
+    assert held == [True], held
+    assert not server._ops_lock.locked()
 
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
