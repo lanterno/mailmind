@@ -584,6 +584,25 @@ def test_cleanup_and_block_trash_mail_under_the_imap_lock():
     assert held == [True], held
     assert not server._ops_lock.locked()
 
+
+def test_nosync_reads_one_way_and_fails_toward_read_only():
+    real = os.environ.get("MAILMIND_NOSYNC")
+    try:
+        for value, want in (("1", True), ("true", True), ("yes", True), (" On ", True), ("anything", True),
+                            ("", False), ("0", False), ("false", False), ("No", False), ("off", False)):
+            os.environ["MAILMIND_NOSYNC"] = value
+            assert server.nosync() is want, (value, want)
+        os.environ.pop("MAILMIND_NOSYNC")
+        assert server.nosync() is False
+    finally:
+        if real is None:
+            os.environ.pop("MAILMIND_NOSYNC", None)
+        else:
+            os.environ["MAILMIND_NOSYNC"] = real
+    with open(server.__file__, encoding="utf-8") as f:
+        src = f.read()
+    assert src.count('os.environ.get("MAILMIND_NOSYNC"') == 1, "read MAILMIND_NOSYNC only in nosync()"
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
