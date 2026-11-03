@@ -59,7 +59,7 @@ def enqueue(built, meta):
         "subject": meta.get("subject") or "",
         "raw": built["raw"],
         "draft_id": meta.get("draft_id"),
-        # grace window OR a future scheduled time (send-later) — outbox_due gates on this, so
+        # grace window OR a future scheduled time (send-later) — QUEUE.due gates on this, so
         # scheduling needs ZERO worker changes. A queued future row is still Cancel-able.
         "next_attempt_at": max(_now() + SEND_DELAY, int(meta.get("send_after") or 0)),
         "created_at": datetime.now(timezone.utc).isoformat(),

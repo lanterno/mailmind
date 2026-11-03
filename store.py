@@ -31,7 +31,7 @@ def unsub_log_put(c, from_addr, method, status, http_status, ts, key):
     return c.execute("SELECT * FROM unsub_log WHERE idempotency_key=?", (key,)).fetchone()
 
 
-# ---- offline read-mutation queue helpers (mirror outbox_* exactly) ----
+# ---- offline read-mutation queue: the rows; readmutq.QUEUE moves them through their states ----
 def read_mut_insert(c, row):
     """Insert a queued mutation; (id, created) — created=False on idempotency_key dupe. Race-safe."""
     existing = c.execute("SELECT id FROM read_mutations WHERE idempotency_key=?",
@@ -55,39 +55,6 @@ def read_mut_get(c, mid):
     return c.execute("SELECT * FROM read_mutations WHERE id=?", (mid,)).fetchone()
 
 
-def read_mut_due(c, now_ts):
-    return [r["id"] for r in c.execute(
-        "SELECT id FROM read_mutations WHERE state='queued' AND next_attempt_at<=? ORDER BY id",
-        (now_ts,))]
-
-
-def read_mut_claim(c, mid):
-    """Atomically flip queued->running; True only for the single winner."""
-    return c.execute("UPDATE read_mutations SET state='running' WHERE id=? AND state='queued'",
-                     (mid,)).rowcount == 1
-
-
-def read_mut_mark_applied(c, mid):
-    """The IMAP op landed — set the instant it returns, before bookkeeping, so it never re-runs."""
-    c.execute("UPDATE read_mutations SET applied=1 WHERE id=?", (mid,))
-
-
-def read_mut_release(c, mid, err, attempts, next_attempt_at, terminal):
-    c.execute("UPDATE read_mutations SET state=?, attempts=?, next_attempt_at=?, last_error=? WHERE id=?",
-              ("error" if terminal else "queued", attempts, next_attempt_at, err, mid))
-
-
-def read_mut_mark_done(c, mid, done_at):
-    c.execute("UPDATE read_mutations SET state='done', done_at=?, last_error=NULL WHERE id=?",
-              (done_at, mid))
-
-
-def read_mut_cancel_unapplied(c, mid):
-    """Undo: delete a row that hasn't shipped yet (queued OR claimed-but-not-applied). The worker
-    re-reads the row under the lock and skips if it's gone, so this closes the claim→cancel race."""
-    return c.execute("DELETE FROM read_mutations WHERE id=? AND applied=0", (mid,)).rowcount == 1
-
-
 def read_mut_set_dest(c, mid, dest):
     """Persist the destination the worker resolved online, so a later undo can find the message."""
     c.execute("UPDATE read_mutations SET dest=? WHERE id=?", (dest, mid))
@@ -98,11 +65,6 @@ def read_mut_latest_by_msgid(c, account, message_id):
     cancel-vs-counter-move and to recover the resolved destination folder."""
     return c.execute("SELECT * FROM read_mutations WHERE account=? AND message_id=? "
                      "ORDER BY id DESC LIMIT 1", (account, message_id)).fetchone()
-
-
-def read_mut_reset_stuck(c):
-    """Boot recovery: running->queued. Safe because an applied=1 row skips the wire op on retry."""
-    c.execute("UPDATE read_mutations SET state='queued' WHERE state='running'")
 
 
 def record_sync_result(c, account, ok, err_name=None, kind=None, when=None):
@@ -365,60 +327,12 @@ def outbox_insert(c, row):
         return (r["id"] if r else None), False
 
 
-def outbox_mark_delivered(c, oid):
-    """Record that the wire send SUCCEEDED — set the instant smtpsend.send returns,
-    before any side effects, so a crash/DB-failure afterward can never re-send."""
-    c.execute("UPDATE outbox SET delivered=1 WHERE id=?", (oid,))
-
-
-def outbox_get(c, oid):
-    return c.execute("SELECT * FROM outbox WHERE id=?", (oid,)).fetchone()
-
-
-def outbox_due(c, now_ts):
-    """ids of rows eligible to send now (queued + past their backoff gate)."""
-    return [r["id"] for r in c.execute(
-        "SELECT id FROM outbox WHERE state='queued' AND next_attempt_at<=? ORDER BY id",
-        (now_ts,))]
-
-
-def outbox_claim(c, oid):
-    """Atomically flip queued->sending; returns True only for the single winner."""
-    cur = c.execute("UPDATE outbox SET state='sending' WHERE id=? AND state='queued'", (oid,))
-    return cur.rowcount == 1
-
-
-def outbox_release(c, oid, err, attempts, next_attempt_at, terminal):
-    """Send attempt failed: record scrubbed error + backoff, return to queue or error."""
-    c.execute("""UPDATE outbox SET state=?, attempts=?, next_attempt_at=?, last_error=?
-                 WHERE id=?""",
-              ("error" if terminal else "queued", attempts, next_attempt_at, err, oid))
-
-
-def outbox_mark_sent(c, oid, sent_at):
-    c.execute("UPDATE outbox SET state='sent', sent_at=?, last_error=NULL WHERE id=?",
-              (sent_at, oid))
-
-
 def outbox_set(c, oid, **flags):
     cols = {k: int(v) for k, v in flags.items() if k in ("sent_appended", "answered_set", "draft_deleted", "followup_recorded")}
     if not cols:
         return
     sets = ", ".join(f"{k}=?" for k in cols)
     c.execute(f"UPDATE outbox SET {sets} WHERE id=?", [*cols.values(), oid])
-
-
-def outbox_cancel(c, oid):
-    """Delete a still-queued send (Undo). No-op if it's already sending/sent."""
-    cur = c.execute("DELETE FROM outbox WHERE id=? AND state='queued'", (oid,))
-    return cur.rowcount == 1
-
-
-def outbox_requeue(c, oid):
-    """Manual retry of an errored row: back to queued, clear backoff + error."""
-    cur = c.execute("""UPDATE outbox SET state='queued', next_attempt_at=0, last_error=NULL
-                       WHERE id=? AND state='error'""", (oid,))
-    return cur.rowcount == 1
 
 
 def outbox_send_now(c, oid, now_ts):
@@ -806,13 +720,6 @@ def draft_repoint(c, seen, folder, uid, uidvalidity, forget=False):
 
 def draft_delete(c, did):
     c.execute("DELETE FROM drafts WHERE id=?", (did,))
-
-
-def outbox_reset_stuck(c):
-    """On boot, any row left 'sending' (crash mid-send) returns to queued. Safe
-    against double-send because send_one() skips the wire send when delivered=1 and
-    only finishes the bookkeeping/side-effects; a delivered=0 row truly never sent."""
-    c.execute("UPDATE outbox SET state='queued' WHERE state='sending'")
 
 
 def delete_by_uids(c, account, folder, uids):
