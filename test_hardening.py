@@ -59,10 +59,42 @@ def test_starttls_on_loopback_accepts_bridges_own_certificate():
         assert not ctx.check_hostname, host
 
 
+class _FakeSMTP:
+    """Stands in for smtplib.SMTP and SMTP_SSL: records the TLS context each was given."""
+    ctxs = []
+
+    def __init__(self, host, port, timeout=None, context=None):
+        if context is not None:
+            _FakeSMTP.ctxs.append(context)
+
+    def ehlo(self):
+        pass
+
+    def starttls(self, context=None):
+        _FakeSMTP.ctxs.append(context)
+
+    def login(self, user, pw):
+        pass
+
+
+def _smtp_ctx(host, starttls):
+    real = smtpsend.smtplib.SMTP, smtpsend.smtplib.SMTP_SSL, smtpsend.config.resolve_credential
+    smtpsend.smtplib.SMTP = smtpsend.smtplib.SMTP_SSL = _FakeSMTP
+    smtpsend.config.resolve_credential = lambda acct: "app-password"
+    try:
+        smtpsend.smtp_connect({"email": "ada@example.test", "smtp_host": host,
+                               "smtp_port": 587 if starttls else 465, "smtp_starttls": starttls})
+    finally:
+        smtpsend.smtplib.SMTP, smtpsend.smtplib.SMTP_SSL, smtpsend.config.resolve_credential = real
+    return _FakeSMTP.ctxs[-1]
+
+
 def test_smtp_follows_the_same_loopback_rule():
-    assert smtpsend._ctx("smtp.example.test").verify_mode == ssl.CERT_REQUIRED
-    assert smtpsend._ctx("smtp.example.test").check_hostname
-    assert smtpsend._ctx("127.0.0.1").verify_mode == ssl.CERT_NONE
+    for starttls in (True, False):
+        ctx = _smtp_ctx("smtp.example.test", starttls)
+        assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname, starttls
+        ctx = _smtp_ctx("127.0.0.1", starttls)
+        assert ctx.verify_mode == ssl.CERT_NONE and not ctx.check_hostname, starttls
 
 
 if __name__ == "__main__":
