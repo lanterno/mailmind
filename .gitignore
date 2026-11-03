@@ -17,6 +17,10 @@ mailmind_views.json
 *.log
 
 # === Backups & screenshots (may contain real mail) ===
+backups/
+*.db
+*.db-shm
+*.db-wal
 .redesign_backup/
 screenshots/
 mm-*.png
