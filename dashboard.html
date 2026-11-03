@@ -3921,8 +3921,10 @@ function showSendFloat(cls,text,retry){ const el=$("#sendFloat"); el.hidden=fals
   el.innerHTML=`<span>${text}</span>`+(retry?`<button id="sfEdit">Edit</button><button id="sfDismiss">Dismiss</button>`:""); }
 function hideSendFloat(){ $("#sendFloat").hidden=true; }
 /* ---------- undo (archive / trash / junk / move / snooze) ---------- */
-let _undoFloatT=null, _undoGroupSeq=0;
-function undoGroup(){ return "ug"+(++_undoGroupSeq); }   // one id per bulk batch -> one z reverses all
+let _undoFloatT=null;
+// one id per bulk batch -> one z reverses all. Unique across reloads: the server's undo stack outlives
+// the page, and a counter restarting at ug1 merged a new batch into an older one still on top.
+function undoGroup(){ return "ug-"+((self.crypto&&crypto.randomUUID)?crypto.randomUUID():rid()); }
 function showUndoFloat(label){
   const el=$("#undoFloat"); if(!el)return; el.hidden=false; el.className="send-float undo-float";
   el.innerHTML=`<span>${esc(label)}</span><button id="ufUndo">Undo · <kbd>z</kbd></button>`;
