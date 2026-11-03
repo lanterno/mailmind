@@ -1,0 +1,10 @@
+From: Build Bot <noreply@ci.example.test>
+To: ada@example.test
+Subject: [quilt] Build #412 passed
+Date: Wed, 28 Oct 2026 16:21:00 +0000
+Message-ID: <build-412@ci.example.test>
+Auto-Submitted: auto-generated
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Build #412 of quilt/main passed in 3m 12s.

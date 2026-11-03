@@ -1,0 +1,9 @@
+From: Example Bank <alerts@bank.example.test>
+To: bea@example.test
+Subject: New sign-in to your account
+Date: Sat, 31 Oct 2026 22:10:00 +0000
+Message-ID: <signin-31@bank.example.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+We noticed a new sign-in from a Mac. If this was you, no action is needed.

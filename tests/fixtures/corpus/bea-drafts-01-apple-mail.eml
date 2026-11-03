@@ -1,0 +1,33 @@
+From: Bea Novak <bea@example.test>
+To: Ivo Brandt <ivo@harbor.example.test>
+Subject: Re: Contract draft v2
+Date: Sun, 01 Nov 2026 20:00:00 +0000
+Message-ID: <A1B2C3D4-0000-4000-8000-000000000001@example.test>
+In-Reply-To: <contract-v2@harbor.example.test>
+References: <contract-v2@harbor.example.test>
+X-Uniform-Type-Identifier: com.apple.mail-draft
+X-Mailer: Apple Mail (2.3826)
+Mime-Version: 1.0 (Mac OS X Mail 16.0)
+Content-Type: multipart/mixed; boundary="Apple-Mail=_draft"
+
+--Apple-Mail=_draft
+Content-Type: multipart/alternative; boundary="Apple-Mail=_alt"
+
+--Apple-Mail=_alt
+Content-Type: text/plain; charset=us-ascii
+
+Hi Ivo, my comments are in the attached file. Two points stand out.
+
+--Apple-Mail=_alt
+Content-Type: text/html; charset=us-ascii
+
+<html><body><div>Hi Ivo, my comments are in the attached file. <b>Two points</b> stand out.</div></body></html>
+--Apple-Mail=_alt--
+
+--Apple-Mail=_draft
+Content-Disposition: attachment; filename=comments.pdf
+Content-Type: application/pdf; x-unix-mode=0644; name="comments.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKMSAwIG9iajw8Pj5lbmRvYmoKdHJhaWxlcjw8Pj4KJSVFT0YK
+--Apple-Mail=_draft--

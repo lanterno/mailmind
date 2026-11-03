@@ -1,0 +1,9 @@
+From: Parcel Service <tracking@parcels.example.test>
+To: cy@example.test
+Subject: Your parcel is out for delivery
+Date: Mon, 02 Nov 2026 07:45:00 +0000
+Message-ID: <parcel-77@parcels.example.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Parcel 77 will arrive today between 10:00 and 14:00.

@@ -54,3 +54,50 @@ def data_dir(tmp_path, monkeypatch):
     import store
     store.init()
     return tmp_path
+
+
+def _redirect(mp, directory):
+    import importlib
+    for mod, attr, name in DATA_PATHS:
+        mp.setattr(importlib.import_module(mod), attr, os.path.join(directory, name) if name else str(directory))
+    import mailclass
+    mp.setattr(mailclass, "_rules_cache", {})
+
+
+@pytest.fixture(scope="session")
+def world_template(tmp_path_factory):
+    """The world's database, built once by the app's own ingest. Tests get a copy via `world`."""
+    from fakes.imap_server import FakeIMAPServer
+    from fixtures import world
+    import sqlite3
+    import store
+    d = tmp_path_factory.mktemp("world-template")
+    with pytest.MonkeyPatch.context() as mp, FakeIMAPServer() as srv:
+        _redirect(mp, str(d))
+        placed = world.populate(srv)
+        world.write_config(srv, str(d))
+        store.init()
+        world.ingest_all()
+        db = sqlite3.connect(os.path.join(d, "mailmind.db"))
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        db.close()
+    return os.path.join(d, "mailmind.db"), placed
+
+
+@pytest.fixture
+def world(world_template, data_dir):
+    """A fresh copy of the world: a running fake server holding the corpus, a config pointing at
+    it, and the database the app built from it, in this test's data_dir."""
+    import shutil
+    from fakes.imap_server import FakeIMAPServer
+    from fixtures import world as w
+    template, placed = world_template
+    for suffix in ("", "-wal", "-shm"):
+        p = data_dir / ("mailmind.db" + suffix)
+        if p.exists():
+            p.unlink()
+    shutil.copyfile(template, data_dir / "mailmind.db")
+    with FakeIMAPServer() as srv:
+        assert w.populate(srv) == placed
+        w.write_config(srv, str(data_dir))
+        yield w.World(srv, placed, data_dir)

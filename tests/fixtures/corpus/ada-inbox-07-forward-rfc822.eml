@@ -1,0 +1,27 @@
+From: Noor Haddad <noor@studio.example.test>
+To: Ada Park <ada@example.test>
+Subject: Fwd: Fabric samples
+Date: Fri, 30 Oct 2026 12:00:00 +0000
+Message-ID: <fwd-samples@studio.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="fwd-outer"
+
+--fwd-outer
+Content-Type: text/plain; charset=utf-8
+
+Forwarding Lin's note, see attached.
+
+--fwd-outer
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="Fabric samples.eml"
+
+From: Lin Mori <lin@example.test>
+To: Noor Haddad <noor@studio.example.test>
+Subject: Fabric samples
+Date: Mon, 26 Oct 2026 15:00:00 +0000
+Message-ID: <samples@lin.example.test>
+Content-Type: text/plain; charset=utf-8
+
+The samples arrive Friday.
+
+--fwd-outer--

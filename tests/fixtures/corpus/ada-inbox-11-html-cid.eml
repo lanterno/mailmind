@@ -1,0 +1,21 @@
+From: Lin Mori <lin@example.test>
+To: Ada Park <ada@example.test>
+Subject: The finished quilt
+Date: Sun, 01 Nov 2026 18:30:00 +0000
+Message-ID: <quilt-photo@lin.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>It's done!</p><img src="cid:quilt@lin.example.test" alt="quilt"></body></html>
+
+--rel
+Content-Type: image/png; name="quilt.png"
+Content-Transfer-Encoding: base64
+Content-ID: <quilt@lin.example.test>
+Content-Disposition: inline; filename="quilt.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgAAACAAFUok9dAAAAAElFTkSuQmCC
+--rel--

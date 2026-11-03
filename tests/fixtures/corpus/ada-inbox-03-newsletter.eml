@@ -1,0 +1,26 @@
+From: The Weekly Loom <news@loom.example.test>
+To: ada@example.test
+Subject: This week: five new patterns
+Date: Wed, 28 Oct 2026 07:00:00 +0000
+Message-ID: <issue-218@loom.example.test>
+List-ID: The Weekly Loom <weekly.loom.example.test>
+List-Unsubscribe: <https://loom.example.test/u/ada-218>, <mailto:unsubscribe@loom.example.test?subject=unsubscribe>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="loom-alt"
+
+--loom-alt
+Content-Type: text/plain; charset=utf-8
+
+Five new patterns this week, from herringbone to houndstooth.
+Read online: https://loom.example.test/issues/218
+
+--loom-alt
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>.wrap{width:100%}</style></head><body><div class="wrap">
+<h1>Five new patterns</h1><p>From herringbone to houndstooth.</p>
+<img src="https://loom.example.test/pixel.gif" width="1" height="1">
+<a href="https://loom.example.test/issues/218">Read online</a></div></body></html>
+
+--loom-alt--

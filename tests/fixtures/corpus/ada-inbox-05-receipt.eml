@@ -1,0 +1,15 @@
+From: Thimble & Co <orders@thimble.example.test>
+To: Ada Park <ada@example.test>
+Subject: Your receipt for order 1042
+Date: Thu, 29 Oct 2026 11:05:00 +0000
+Message-ID: <order-1042@thimble.example.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thanks for your order.
+
+Order 1042
+1 x Linen thread, natural    4.50
+Total                        4.50
+
+Paid with card ending 0000.

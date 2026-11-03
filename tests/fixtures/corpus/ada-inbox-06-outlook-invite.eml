@@ -1,0 +1,57 @@
+From: Noor Haddad <noor@studio.example.test>
+To: Ada Park <ada@example.test>
+Subject: Design review
+Date: Fri, 30 Oct 2026 08:30:00 +0000
+Message-ID: <DB9P250MB0001.review@studio.example.test>
+X-Mailer: Microsoft Outlook 16.0
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="_000_review_"
+
+--_000_review_
+Content-Type: text/plain; charset="us-ascii"
+
+Let's walk through the new layouts.
+
+--_000_review_
+Content-Type: text/html; charset="us-ascii"
+
+<html><body><p>Let's walk through the new layouts.</p></body></html>
+
+--_000_review_
+Content-Type: text/calendar; charset="utf-8"; method=REQUEST
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+METHOD:REQUEST
+PRODID:Microsoft Exchange Server 2010
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:W. Europe Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Noor Haddad:mailto:noor@studio.example.test
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Ada Park:mailto:ada@example.test
+SUMMARY;LANGUAGE=en-US:Design review
+DTSTART;TZID=W. Europe Standard Time:20261103T140000
+DTEND;TZID=W. Europe Standard Time:20261103T150000
+UID:040000008200E00074C5B7101A82E0080000000000000000000000000000000000000000review
+SEQUENCE:0
+DTSTAMP:20261030T083000Z
+LOCATION;LANGUAGE=en-US:Room 2
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
+
+--_000_review_--

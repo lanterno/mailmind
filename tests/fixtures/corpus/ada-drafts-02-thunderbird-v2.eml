@@ -1,0 +1,13 @@
+From: Ada Park <ada@example.test>
+To: Noor Haddad <noor@studio.example.test>
+Subject: Notes for the review
+Date: Mon, 02 Nov 2026 08:20:00 +0000
+Message-ID: <draft-notes@ada.example.test>
+User-Agent: Mozilla Thunderbird
+X-Mozilla-Draft-Info: internal/draft; vcard=0; receipt=0; DSN=0; uuencode=0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8; format=flowed
+
+First thoughts on the layouts:
+- the grid is too tight on mobile
+- the header colour fights the logo

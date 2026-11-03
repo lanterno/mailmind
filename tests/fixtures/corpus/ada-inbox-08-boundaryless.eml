@@ -1,0 +1,10 @@
+From: Old Mailer <legacy@mailer.example.test>
+To: ada@example.test
+Subject: Monthly statement
+Date: Sat, 31 Oct 2026 06:00:00 +0000
+Message-ID: <statement-10@mailer.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed
+
+This message claims to be multipart but names no boundary.
+Your statement for October is ready.
