@@ -138,10 +138,12 @@ def world_template(tmp_path_factory):
 
 @pytest.fixture
 def world(world_template, data_dir):
-    """A fresh copy of the world: a running fake server holding the corpus, a config pointing at
-    it, and the database the app built from it, in this test's data_dir."""
+    """A fresh copy of the world: a running fake IMAP server holding the corpus, a fake SMTP
+    server the accounts send through, a config pointing at both, and the database the app built
+    from the corpus, in this test's data_dir."""
     import shutil
     from fakes.imap_server import FakeIMAPServer
+    from fakes.smtp_server import FakeSMTPServer
     from fixtures import world as w
     template, placed = world_template
     for suffix in ("", "-wal", "-shm"):
@@ -149,10 +151,11 @@ def world(world_template, data_dir):
         if p.exists():
             p.unlink()
     shutil.copyfile(template, data_dir / "mailmind.db")
-    with FakeIMAPServer() as srv:
+    with FakeIMAPServer() as srv, FakeSMTPServer() as smtp:
         assert w.populate(srv) == placed
-        w.write_config(srv, str(data_dir))
-        yield w.World(srv, placed, data_dir)
+        w.connect_smtp(srv, smtp)
+        w.write_config(srv, str(data_dir), smtp)
+        yield w.World(srv, placed, data_dir, smtp)
 
 
 @pytest.fixture
@@ -195,7 +198,7 @@ def golden(request, world, app):
     rec = g.Golden(request.node.nodeid, request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
                          (f"localhost:{app.port}", "localhost:<app>")],
-                   ports={world.server.port: "<imap>", app.port: "<app>"})
+                   ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"})
     yield rec
     if request.node.stash.get(_CALL_PASSED, False):
         rec.verify()

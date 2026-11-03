@@ -96,17 +96,36 @@ def populate(server):
     return placed
 
 
-def config(server):
-    """The MailMind config for the world's accounts on `server`."""
+def config(server, smtp=None):
+    """The MailMind config for the world's accounts on `server`, sending through `smtp` if given."""
     accounts = []
     for email, _, alias, _ in ACCOUNTS:
-        accounts.append({**server.config_entry(email), "alias": alias})
+        entry = {**server.config_entry(email), "alias": alias}
+        if smtp is not None:
+            entry.update(smtp_host="127.0.0.1", smtp_port=smtp.port, smtp_starttls=True)
+        accounts.append(entry)
     return {"accounts": accounts}
 
 
-def write_config(server, data_dir):
+def write_config(server, data_dir, smtp=None):
     with open(os.path.join(data_dir, "mailmind.config.json"), "w") as f:
-        json.dump(config(server), f, indent=2)
+        json.dump(config(server, smtp), f, indent=2)
+
+
+def connect_smtp(server, smtp):
+    """Give each world account a login on `smtp`, and file what Gmail accounts send in their
+    [Gmail]/Sent Mail, threaded with the mail it answers, as Gmail itself does."""
+    import email.parser
+    kinds = {email_: kind for email_, kind, _, _ in ACCOUNTS}
+    for user in kinds:
+        smtp.add_user(user, server.accounts[user].password)
+
+    def file_sent(delivery):
+        if kinds.get(delivery.user) == "gmail":
+            head = email.parser.BytesHeaderParser().parsebytes(delivery.data)
+            server.deliver(delivery.user, "[Gmail]/Sent Mail", delivery.data, flags=(SEEN,),
+                           thread_of=(head.get("In-Reply-To") or "").strip() or None)
+    smtp.on_message = file_sent
 
 
 def synced_folders():
@@ -127,11 +146,11 @@ def ingest_all():
 
 
 class World:
-    """A built world for one test: the running fake server, where each corpus file landed, and
-    the data directory holding the database."""
+    """A built world for one test: the running fake IMAP and SMTP servers, where each corpus file
+    landed, and the data directory holding the database."""
 
-    def __init__(self, server, placed, data_dir):
-        self.server, self.placed, self.dir = server, placed, data_dir
+    def __init__(self, server, placed, data_dir, smtp=None):
+        self.server, self.placed, self.dir, self.smtp = server, placed, data_dir, smtp
 
     def uid(self, name):
         return self.placed[name][2]
