@@ -1,0 +1,230 @@
+[
+ {
+  "body": {
+   "draft_id": 1,
+   "message_id": "<msg 1>",
+   "ok": true,
+   "uid": 3
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "save a draft",
+  "status": 200
+ },
+ {
+  "note": "server writes for the first save",
+  "value": [
+   "ada@example.test [Drafts] APPEND \"Drafts\" (\\Draft) \"02-Nov-2026 12:00:00 +0000\" {literal}"
+  ]
+ },
+ {
+  "body": {
+   "draft_id": 1,
+   "message_id": "<msg 2>",
+   "ok": true,
+   "uid": 4
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "save it again with more text",
+  "status": 200
+ },
+ {
+  "note": "server writes for the resave",
+  "value": [
+   "ada@example.test [Drafts] UID STORE 3 +FLAGS (\\Deleted)",
+   "ada@example.test [Drafts] UID EXPUNGE 3",
+   "ada@example.test [Drafts] APPEND \"Drafts\" (\\Draft) \"02-Nov-2026 12:00:00 +0000\" {literal}"
+  ]
+ },
+ {
+  "note": "drafts",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "bcc": null,
+    "folder": "Drafts",
+    "id": 1,
+    "mode": "new",
+    "own_text": "Hi Lin,\n\nThe linen came in.",
+    "subject": "Fabric order (draft)",
+    "uid": 4
+   }
+  ]
+ },
+ {
+  "note": "Ada's Drafts on the server",
+  "value": [
+   "Fabric order (draft)",
+   "Notes for the review",
+   "Notes for the review"
+  ]
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "bcc": [],
+   "cc": [],
+   "draft_id": 1,
+   "files": [],
+   "in_reply_to": "",
+   "mode": "new",
+   "notes": {
+    "bcc_dropped": 0,
+    "inline": 0,
+    "plain": false
+   },
+   "ok": true,
+   "orig_pk": null,
+   "participants": [],
+   "references": "",
+   "split": "exact",
+   "subject": "Fabric order (draft)",
+   "tail_text": "",
+   "text": "Hi Lin,\n\nThe linen came in.",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reopen it",
+  "status": 200
+ },
+ {
+  "body": {
+   "draft_id": null,
+   "empty": true,
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "save an empty draft",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send it",
+  "status": 200
+ },
+ {
+  "note": "sent: on the wire",
+  "value": [
+   {
+    "data": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order (draft)\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <msg 3>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in.\r\n",
+    "login": "ada@example.test",
+    "mail_from": "ada@example.test",
+    "rcpts": [
+     "lin@example.test"
+    ]
+   }
+  ]
+ },
+ {
+  "note": "sent: server writes",
+  "value": [
+   "ada@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 12:00:11 +0000\" {literal}",
+   "ada@example.test [Drafts] UID STORE 4 +FLAGS (\\Deleted)",
+   "ada@example.test [Drafts] UID EXPUNGE 4"
+  ]
+ },
+ {
+  "note": "sent: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 0,
+    "delivered": 1,
+    "draft_deleted": 1,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 3>",
+    "next_attempt_at": 1793620810,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 1,
+    "state": "sent",
+    "subject": "Fabric order (draft)"
+   }
+  ]
+ },
+ {
+  "note": "drafts after the send",
+  "value": []
+ },
+ {
+  "body": {
+   "draft_id": 2,
+   "message_id": "<msg 4>",
+   "ok": true,
+   "uid": 5
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "save another",
+  "status": 200
+ },
+ {
+  "body": {
+   "deleted": true,
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "delete it",
+  "status": 200
+ },
+ {
+  "note": "server writes for the delete",
+  "value": [
+   "ada@example.test [Drafts] APPEND \"Drafts\" (\\Draft) \"02-Nov-2026 12:00:11 +0000\" {literal}",
+   "ada@example.test [Drafts] UID STORE 5 +FLAGS (\\Deleted)",
+   "ada@example.test [Drafts] UID EXPUNGE 5"
+  ]
+ },
+ {
+  "note": "Ada's Drafts at the end",
+  "value": [
+   "Notes for the review",
+   "Notes for the review"
+  ]
+ }
+]

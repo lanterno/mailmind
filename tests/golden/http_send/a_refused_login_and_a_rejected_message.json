@@ -1,0 +1,79 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send with a password the server no longer takes",
+  "status": 200
+ },
+ {
+  "note": "login refused: on the wire",
+  "value": []
+ },
+ {
+  "note": "login refused: server writes",
+  "value": []
+ },
+ {
+  "note": "login refused: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 1,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "auth failed",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793620831,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "message rejected: on the wire",
+  "value": []
+ },
+ {
+  "note": "message rejected: server writes",
+  "value": []
+ },
+ {
+  "note": "message rejected: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 2,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "rejected by server",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793624451,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ }
+]

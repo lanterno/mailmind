@@ -1,0 +1,110 @@
+[
+ {
+  "body": {
+   "account": "ada@example.test",
+   "bcc": [],
+   "cc": [],
+   "draft_id": 1,
+   "files": [],
+   "in_reply_to": "",
+   "mode": "new",
+   "notes": {
+    "bcc_dropped": 0,
+    "inline": 0,
+    "plain": false
+   },
+   "ok": true,
+   "orig_pk": null,
+   "participants": [],
+   "references": "",
+   "split": "whole",
+   "subject": "Notes for the review",
+   "tail_text": "",
+   "text": "First thoughts on the layouts:\n- the grid is too tight on mobile\n- the header colour fights the logo",
+   "to": [
+    "Noor Haddad <noor@studio.example.test>"
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reopen Thunderbird's draft",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "bcc": [],
+   "cc": [],
+   "draft_id": 2,
+   "files": [
+    {
+     "b64": "JVBERi0xLjQKMSAwIG9iajw8Pj5lbmRvYmoKdHJhaWxlcjw8Pj4KJSVFT0YK",
+     "content_type": "application/pdf",
+     "filename": "comments.pdf",
+     "size": 45
+    }
+   ],
+   "in_reply_to": "<contract-v2@harbor.example.test>",
+   "mode": "reply",
+   "notes": {
+    "bcc_dropped": 0,
+    "inline": 0,
+    "plain": true
+   },
+   "ok": true,
+   "orig_pk": 18,
+   "participants": [
+    "ivo@harbor.example.test",
+    "bea@example.test"
+   ],
+   "references": "<contract-v2@harbor.example.test>",
+   "split": "whole",
+   "subject": "Re: Contract draft v2",
+   "tail_text": "",
+   "text": "Hi Ivo, my comments are in the attached file. Two points stand out.",
+   "to": [
+    "Ivo Brandt <ivo@harbor.example.test>"
+   ]
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reopen Apple Mail's draft",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "That message isn’t a draft.",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reopen a message that isn't a draft",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "Missing draft.",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reopen nothing",
+  "status": 400
+ }
+]

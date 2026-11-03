@@ -1,0 +1,207 @@
+[
+ {
+  "body": {
+   "error": "unknown sending account",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: an account that isn't configured",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "at least one recipient is required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: no recipients",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "not a valid address: 'lin'",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: a recipient that isn't an address",
+  "status": 400
+ },
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: a header break in the subject",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "missing original message",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: a reply with no original",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "original message not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: a reply to a missing original",
+  "status": 404
+ },
+ {
+  "body": {
+   "error": "bad attachment encoding",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: an attachment that isn't base64",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad attachments",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: attachments that aren't a list",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "too many recipients (max 100)",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: too many recipients",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad draft data",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: resume data that isn't an object",
+  "status": 400
+ },
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 2,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send: a reply by pk that is fine",
+  "status": 200
+ },
+ {
+  "note": "queued after the refusals",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 0,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793620810,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Hi\r\nBcc: everyone@example.test"
+   },
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 0,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 2,
+    "last_error": null,
+    "message_id": "<msg 2>",
+    "next_attempt_at": 1793620810,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "the header-break message's Subject and Bcc lines",
+  "value": [
+   "Subject: HiBcc: everyone@example.test"
+  ]
+ }
+]

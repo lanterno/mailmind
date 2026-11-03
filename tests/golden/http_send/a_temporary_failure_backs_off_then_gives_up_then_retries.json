@@ -1,0 +1,266 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send",
+  "status": 200
+ },
+ {
+  "note": "first attempt: on the wire",
+  "value": []
+ },
+ {
+  "note": "first attempt: server writes",
+  "value": []
+ },
+ {
+  "note": "first attempt: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 1,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793620831,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "attempt 2: on the wire",
+  "value": []
+ },
+ {
+  "note": "attempt 2: server writes",
+  "value": []
+ },
+ {
+  "note": "attempt 2: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 2,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793621751,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "attempt 3: on the wire",
+  "value": []
+ },
+ {
+  "note": "attempt 3: server writes",
+  "value": []
+ },
+ {
+  "note": "attempt 3: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 3,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793622691,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "attempt 4: on the wire",
+  "value": []
+ },
+ {
+  "note": "attempt 4: server writes",
+  "value": []
+ },
+ {
+  "note": "attempt 4: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 4,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793623671,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "attempt 5: on the wire",
+  "value": []
+ },
+ {
+  "note": "attempt 5: server writes",
+  "value": []
+ },
+ {
+  "note": "attempt 5: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 5,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793624731,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "error",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "after giving up, nothing more: on the wire",
+  "value": []
+ },
+ {
+  "note": "after giving up, nothing more: server writes",
+  "value": []
+ },
+ {
+  "note": "after giving up, nothing more: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 5,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": "recipient refused",
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793624731,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "error",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "body": {
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "retry",
+  "status": 200
+ },
+ {
+  "note": "after retry: on the wire",
+  "value": [
+   {
+    "data": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <msg 1>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+    "login": "ada@example.test",
+    "mail_from": "ada@example.test",
+    "rcpts": [
+     "lin@example.test"
+    ]
+   }
+  ]
+ },
+ {
+  "note": "after retry: server writes",
+  "value": [
+   "ada@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 13:15:11 +0000\" {literal}"
+  ]
+ },
+ {
+  "note": "after retry: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 5,
+    "delivered": 1,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 1>",
+    "next_attempt_at": 0,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 1,
+    "state": "sent",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "body": {
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "retry a sent one",
+  "status": 404
+ }
+]

@@ -1,0 +1,71 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send",
+  "status": 200
+ },
+ {
+  "body": {
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "cancel it",
+  "status": 200
+ },
+ {
+  "note": "after the window: on the wire",
+  "value": []
+ },
+ {
+  "note": "after the window: server writes",
+  "value": []
+ },
+ {
+  "note": "after the window: the outbox",
+  "value": []
+ },
+ {
+  "body": {
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "cancel it again",
+  "status": 200
+ },
+ {
+  "body": {
+   "items": [],
+   "ok": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the outbox list",
+  "status": 200
+ }
+]

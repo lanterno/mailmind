@@ -1,0 +1,132 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 1,
+   "scheduled": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send at 18:00",
+  "status": 200
+ },
+ {
+  "note": "at 12:00:11: on the wire",
+  "value": []
+ },
+ {
+  "note": "at 12:00:11: server writes",
+  "value": []
+ },
+ {
+  "note": "at 12:00:11: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 0,
+    "delivered": 0,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793642400,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 0,
+    "state": "queued",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "note": "at 18:00:01: on the wire",
+  "value": [
+   {
+    "data": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <msg 1>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+    "login": "ada@example.test",
+    "mail_from": "ada@example.test",
+    "rcpts": [
+     "lin@example.test"
+    ]
+   }
+  ]
+ },
+ {
+  "note": "at 18:00:01: server writes",
+  "value": [
+   "ada@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 18:00:01 +0000\" {literal}"
+  ]
+ },
+ {
+  "note": "at 18:00:01: the outbox",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "answered_set": 0,
+    "attempts": 0,
+    "delivered": 1,
+    "draft_deleted": 0,
+    "envelope": "[\"lin@example.test\"]",
+    "followup_recorded": 0,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793642400,
+    "recipients": "{\"to\": [\"lin@example.test\"], \"cc\": [], \"bcc\": []}",
+    "sent_appended": 1,
+    "state": "sent",
+    "subject": "Fabric order"
+   }
+  ]
+ },
+ {
+  "body": {
+   "error": "that send time has passed",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send at a time that has passed",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "pick a send time within a year",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send at a time over a year away",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad send time",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "send at a time that isn't one",
+  "status": 400
+ }
+]

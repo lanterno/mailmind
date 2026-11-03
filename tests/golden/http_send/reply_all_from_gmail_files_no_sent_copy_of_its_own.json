@@ -1,0 +1,74 @@
+[
+ {
+  "body": {
+   "ok": true,
+   "outbox_id": 1,
+   "queued": true,
+   "recipients": 2,
+   "scheduled": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "reply all to Mae",
+  "status": 200
+ },
+ {
+  "note": "sent: on the wire",
+  "value": [
+   {
+    "data": "From: Cy <cy@example.test>\r\nTo: mae@guild.example.test\r\nCc: guild@example.test\r\nSubject: Re: Guild meetup venue\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <msg 1>\r\nIn-Reply-To: <venue-3@guild.example.test>\r\nReferences: <venue-1@guild.example.test> <venue-2@cy.example.test>\r\n <venue-3@guild.example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nPerfect, thanks!\r\n\r\nOn Wed, 28 Oct 2026 15:30:00 +0000, Mae Lindqvist <mae@guild.example.test> wr=\r\note:\r\n> Booked for the 14th.\r\n",
+    "login": "cy@example.test",
+    "mail_from": "cy@example.test",
+    "rcpts": [
+     "mae@guild.example.test",
+     "guild@example.test"
+    ]
+   }
+  ]
+ },
+ {
+  "note": "sent: server writes",
+  "value": [
+   "cy@example.test [INBOX] UID STORE 2 +FLAGS (\\Answered)"
+  ]
+ },
+ {
+  "note": "sent: the outbox",
+  "value": [
+   {
+    "account": "cy@example.test",
+    "answered_set": 1,
+    "attempts": 0,
+    "delivered": 1,
+    "draft_deleted": 0,
+    "envelope": "[\"mae@guild.example.test\", \"guild@example.test\"]",
+    "followup_recorded": 1,
+    "id": 1,
+    "last_error": null,
+    "message_id": "<msg 1>",
+    "next_attempt_at": 1793620810,
+    "recipients": "{\"to\": [\"mae@guild.example.test\"], \"cc\": [\"guild@example.test\"], \"bcc\": []}",
+    "sent_appended": 1,
+    "state": "sent",
+    "subject": "Re: Guild meetup venue"
+   }
+  ]
+ },
+ {
+  "note": "Cy's Sent Mail on the server",
+  "value": [
+   [
+    "Re: Guild meetup venue",
+    true
+   ],
+   [
+    "Re: Guild meetup venue",
+    true
+   ]
+  ]
+ }
+]
