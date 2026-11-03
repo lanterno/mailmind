@@ -37,13 +37,14 @@ python3 test_send_after.py        # /api/send refuses passed and far-off send ti
 python3 test_send_guard.py        # the composer's send-time checks, run in node (19)
 python3 test_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
 python3 test_draft_resume_ui.py   # the composer's reopen helpers, run in node (8)
+python3 test_hardening.py         # security and data-loss fixes, one test or more per fix (37)
 ```
 
 There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
 `test_thread_file.py`, `test_claude_api.py`, `test_upcoming.py`, `test_contacts_known.py`,
-`test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py` and `test_draft_resume_ui.py`
-collect callables from `globals()` whose names start with `test_`, so you can gate them by
+`test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
+`test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
 renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
 `/* send-guard:pure:end */` out of `dashboard.html` and runs it in node, so that block must
 stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
@@ -120,6 +121,9 @@ mutations, undo, reconcile, the outbox worker. It is coarse and a known bottlene
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
 work with them unset.
 
+`server.nosync()` is the only reader of `MAILMIND_NOSYNC`. Any value but empty, `0`, `false`,
+`no` or `off` turns it on, so a typo fails toward read-only.
+
 ### Writes, undo, and offline
 
 - Mutations go through `mailops.py`. A connection failure raises a member of
@@ -128,8 +132,17 @@ work with them unset.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It mirrors `outbox.py` 1:1, except the primary op is itself an IMAP
   op, so it runs under `_ops_lock`.
+- A server NO or BAD means the message didn't move. `_imap_mutate` returns `(False, None)`, and
+  trash, archive, junk and move answer `ok: false` and keep the local row. imaplib returns a NO
+  rather than raising it, so check `typ` on COPY, STORE and APPEND. Never send a bulk `EXPUNGE`:
+  `mailops.expunge_uid` removes one UID, and `_move_uid` flags the original only after COPY succeeds.
+- The queue's idempotency key carries the request's `mutation_id`, or a random one when the
+  client sends none, so only a resubmit of the same request dedupes.
+- `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
+  creates a folder's `sync_state` row; only a sync that saw every UID may.
 - Undo is an in-memory LIFO `_undo_stack` — **lost on restart**, by design. Bulk actions
-  push one grouped entry with children.
+  push one grouped entry with children. A group id must be unique for the process's life:
+  the frontend's `undoGroup()` is a UUID, since the stack outlives a page load.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
@@ -159,12 +172,24 @@ work with them unset.
 
 ### Security model
 
-Three guards in `server.py`, applied per route:
+Four guards in `server.py`:
 
-- `_rebind_guard` — Host/Origin must be localhost (blocks DNS rebinding).
+- `_rebind_guard` — Host/Origin must be localhost (blocks DNS rebinding). It is the first
+  check in `do_GET`, so it covers every GET, `/` included; POSTs get it via `_mutation_guard`.
+- `_cross_site` — every GET: refuses one the browser marks `Sec-Fetch-Site` cross-site or
+  same-site, which a no-cors `<img>` from any page would otherwise pass. A top-level visit to
+  `/` is still allowed.
 - `_mutation_guard` — rebind check **plus** a `X-CSRF-Token` header compared with
   `secrets.compare_digest`. Required on every mutating POST.
 - `_strict_origin_guard` — send routes only; an Origin header is mandatory, not optional.
+
+Every `_send` answer carries `X-Frame-Options: DENY`. A failed GET or POST answers a fixed
+message and logs the detail. STARTTLS, IMAP and SMTP alike, takes `accounts.tls_context(host)`:
+verified everywhere but loopback, where Proton Bridge's certificate is self-signed.
+
+Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
+gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
+trailing backslash) with `accounts.BadMailbox`, an `IMAP4.error`. Never build `f'"{folder}"'`.
 
 `CSRF` is a per-process token. `dashboard.html` ships a `__CSRF_TOKEN__` placeholder in a
 `<meta>` tag that `server.py` substitutes at serve time; the frontend's `api()` helper

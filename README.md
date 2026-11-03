@@ -301,6 +301,9 @@ automatically.
   and turns into one desktop notification when the tab is in the background.
 - **Triage survives an outage.** Archive, trash, junk and move queue durably with an
   optimistic local update and an undo, then re-apply exactly once when IMAP returns.
+- **Filing never loses mail.** A move the server refuses leaves the message where it was
+  and says so. On a server without MOVE, MailMind copies the one message, checks the
+  copy landed, then removes only that message, never expunging the rest of the folder.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
   per tick against the server, yields instantly to anything you're doing, and pushes an
   event so open lists drop messages deleted in another client.
@@ -324,6 +327,9 @@ automatically.
   Settings, plus a CLI that exports lossless per-message `.eml` files or standard
   `mbox` archives (`python3 export.py --format eml --out DIR`). Read-only — it never
   touches IMAP.
+- **Only your own MailMind page can talk to the local server.** It answers just its
+  own host name, refuses requests other websites start, can't be framed by another
+  page, and checks every folder name before it reaches the mail server.
 - **Bodies render in a locked sandbox** with an explicit deny-all CSP, remote images
   blocked by default, and a runtime guard that strips scripting permission from any
   reader frame.
@@ -431,13 +437,15 @@ Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://
   Verification → App passwords), *not* your login password. Defaults to
   `imap.gmail.com:993`, trash `[Gmail]/Trash`.
 - **Generic IMAP** — set `host`/`port`. Default is `:993` direct TLS; use
-  `"port": 143, "starttls": true` for STARTTLS. The **trash folder name matters** —
+  `"port": 143, "starttls": true` for STARTTLS. Either way the server's certificate
+  is verified, so a self-signed one won't connect. The **trash folder name matters** —
   some servers use `INBOX.Trash` instead of `Trash`; a wrong name silently breaks
   sweeps. Run `python3 manage.py inventory you@company.com` to see the real names.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
   (`MAILMIND_PROTON_OP_ITEM`), or `~/.config/mailmind/proton_bridge_pass`
-  (chmod 600). STARTTLS to `127.0.0.1` skips cert verification by design.
+  (chmod 600). Only STARTTLS to this machine (`127.0.0.1`, `localhost`, `::1`) skips
+  certificate verification, because Bridge's certificate is self-signed.
 
 ## Two ways to use it
 
@@ -469,7 +477,7 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 
 | Variable | Effect |
 |---|---|
-| `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync) |
+| `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync). Any value but empty, `0`, `false`, `no` or `off` turns it on. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: use the `claude` CLI. |
 | `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5` on the API, the CLI's own default otherwise), e.g. `claude-haiku-5-5` |
@@ -515,10 +523,11 @@ python3 test_send_after.py     # send-later times: passed or far-off ones are re
 python3 test_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
 python3 test_draft_resume.py   # reopened drafts: text and quote, files, Bcc, threading, refusals
 python3 test_draft_resume_ui.py # the composer's side of reopening a draft (needs node)
+python3 test_hardening.py      # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all twelve and `just verify` adds lint, byte-compile and a
+`just test` runs all thirteen and `just verify` adds lint, byte-compile and a
 frontend syntax check — `just` on its own lists every recipe.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
