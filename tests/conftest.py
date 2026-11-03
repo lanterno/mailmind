@@ -158,17 +158,20 @@ def world(world_template, data_dir):
 @pytest.fixture
 def app(world, monkeypatch):
     """The app's HTTP server over this test's world, with the clock frozen at NOW and every
-    module's process state reset. Yields an AppClient."""
+    module's process state reset. Yields an AppClient; its .clock moves the frozen time
+    (clock.shift(timedelta(...)), clock.move_to(datetime))."""
     import time_machine
     import app_client
     import server
     app_client.reset_state()
     monkeypatch.setattr(server, "CSRF", app_client.CSRF)
-    with time_machine.travel(NOW, tick=False):
+    with time_machine.travel(NOW, tick=False) as clock:
         running = app_client.RunningApp().start()
         monkeypatch.setattr(server, "PORT", running.port)
         try:
-            yield app_client.AppClient(running.port)
+            client = app_client.AppClient(running.port)
+            client.clock = clock
+            yield client
         finally:
             running.stop()
             app_client.reset_state()
