@@ -419,6 +419,24 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   the user was not looking** — then apply it, since snooze-wake toasts today while new mail gets a
   sticky pill.
 
+## Correctness and hardening
+
+- **Check the server's answer when starring or marking read** · medium value · effort S —
+  `mailops.set_flags` sends `UID STORE +FLAGS/-FLAGS` without reading `typ`, then mirrors the
+  flag locally through `store.set_local_flags`. imaplib returns a NO rather than raising it, so a
+  STORE the server refuses (a UID that has gone, a read-only folder) still shows as starred or read
+  until the next flag refresh. Check `typ` the way `_move_uid` does, skip the local mirror on a
+  refusal, and let `/api/flag` and `/api/seen` answer `ok: false`.
+- **Quote expiry tokens before they reach IMAP** · low value · effort S — `manage.expire_account`
+  searches `FROM f'"{token}"'` for each key of `rules.EXPIRE`. Tokens are set only from the CLI
+  (`rules.py expire`), but the server's hourly `expire_loop` runs the same search, so a token
+  holding a quote breaks it and one holding a line break sends a second command. Refuse such tokens
+  in `rules.set_expiry`, as `accounts.mailbox_arg` does for folder names.
+- **Keep request text out of log lines** · low value · effort S — `messages_in` prints
+  `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
+  holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but
+  a forged line could pass for a real one. Print request-supplied values with `!r`.
+
 ## Open decisions
 
 These are carried forward from the original phase plan because they need a call, not an
