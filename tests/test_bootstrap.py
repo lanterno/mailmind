@@ -33,8 +33,8 @@ def test_the_workers_report_back_to_the_server(unwired):
                          ids=["read-only", "nosync", "full"])
 def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_path, unwired, monkeypatch,
                                                                      capsys):
-    """What both front doors run before they serve. Read-only, only the outbox, the offline queue
-    and snooze wake start, so queued sends still go out."""
+    """What both front doors run before they serve. Read-only, none of the syncs, IDLE or the
+    periodic jobs start; snooze wake, which needs no mail server, does."""
     import outbox
     import readmutq
     import realtime
@@ -61,7 +61,10 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
     syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
                server.reconcile_loop, server.expire_loop, realtime.start]
-    assert spawned == (always if read_only else always + syncing)
+    if read_only:
+        assert server.snooze_tick in spawned and set(spawned) <= set(always)
+    else:
+        assert spawned == always + syncing
     out = capsys.readouterr().out
     assert ("auto-sync disabled" in out) == read_only
     assert "[ai] Claude API" in out
