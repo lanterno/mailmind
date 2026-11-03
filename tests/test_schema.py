@@ -38,15 +38,17 @@ def dump(path):
 
 
 @pytest.fixture
-def fresh_db(data_dir, monkeypatch):
-    """A path for a new, empty database that store.conn() will open."""
-    import store
+def fresh_db(data_dir):
+    """A path for a new, empty database that store.conn() will open: mailmind.db in a data
+    directory of its own, made the app's (data_dir puts its own back after the test)."""
+    from mailmind.platform import settings
     n = iter(range(100))
 
     def make():
-        path = str(data_dir / f"schema-{next(n)}.db")
-        monkeypatch.setattr(store, "DB", path)
-        return path
+        home = data_dir / f"schema-{next(n)}"
+        home.mkdir()
+        settings.configure(settings.Settings(home=str(home)))
+        return settings.current().db
     return make
 
 

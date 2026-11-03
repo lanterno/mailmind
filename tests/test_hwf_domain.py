@@ -77,9 +77,13 @@ def rows(sql, *args):
 # -- migrations that carry data -----------------------------------------------
 
 def _db_at(monkeypatch, data_dir, version, name):
-    """A new database made by init() with only the first `version` migrations; store.conn() opens it."""
+    """A new database made by init() with only the first `version` migrations, in a data directory
+    of its own that the app then uses (data_dir puts its own back after the test)."""
     import store
-    monkeypatch.setattr(store, "DB", str(data_dir / name))
+    from mailmind.platform import settings
+    home = data_dir / name
+    home.mkdir()
+    settings.configure(settings.Settings(home=str(home)))
     with monkeypatch.context() as m:
         m.setattr(store, "_MIGRATIONS", store._MIGRATIONS[:version])
         store.init()
