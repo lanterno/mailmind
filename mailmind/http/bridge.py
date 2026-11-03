@@ -9,7 +9,8 @@ of the body. A response that never ends (the live event stream) or is too big to
 (the database export) streams as it did over the socket.
 
 When the client goes away, or the server cancels the request as it shuts down, the handler's next
-write raises BrokenPipeError, as a closed socket's would.
+write raises BrokenPipeError, as a closed socket's would. `close()` ends every response already
+under way, for a server that is about to stop: the event stream never ends on its own.
 """
 import io
 import logging
@@ -40,6 +41,13 @@ class HandlerBridge:
     def __init__(self, handler_class, *, max_body):
         self.handler_class = handler_class
         self.max_body = max_body
+        self._live = set()
+
+    async def close(self):
+        """End every response that has started, now, without waiting for its handler; the
+        handler's next write fails. Requests not yet answered are left to finish."""
+        for x in list(self._live):
+            await x.end()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -52,15 +60,19 @@ class HandlerBridge:
             await _send_whole(send, *_TOO_LARGE)
             return
         x = _Exchange(send)
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_for_disconnect, receive, x.gone)
-            threading.Thread(target=self._handle, args=(_request_bytes(scope, body), scope, x),
-                             name="bridge-request", daemon=True).start()
-            try:
-                await x.finished.wait()
-            finally:
-                x.gone.set()            # if the request was cancelled, the handler's next write ends it
-                tg.cancel_scope.cancel()
+        self._live.add(x)
+        try:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_watch_for_disconnect, receive, x.gone)
+                threading.Thread(target=self._handle, args=(_request_bytes(scope, body), scope, x),
+                                 name="bridge-request", daemon=True).start()
+                try:
+                    await x.finished.wait()
+                finally:
+                    x.gone.set()        # if the request was cancelled, the handler's next write ends it
+                    tg.cancel_scope.cancel()
+        finally:
+            self._live.discard(x)
 
     async def _read_body(self, scope, receive):
         """The request body, b"" when the declared length is over the cap, or None when the body
@@ -124,17 +136,31 @@ class _Exchange:
         self._send = send
         self._lock = anyio.Lock()
         self._token = anyio.lowlevel.current_token()
-        self.gone = threading.Event()       # the client left, or the request was cancelled
-        self.finished = anyio.Event()       # the handler's thread is done with the response
+        self.gone = threading.Event()       # the client left, or the request was cancelled or ended
+        self.finished = anyio.Event()       # nothing more will be sent
+        self.started = False
         self.ended = False
 
     async def emit(self, message):
         async with self._lock:
             if self.ended:
                 raise BrokenPipeError("the response has ended")
-            if message["type"] == "http.response.body" and not message.get("more_body", False):
+            if message["type"] == "http.response.start":
+                self.started = True
+            elif not message.get("more_body", False):
                 self.ended = True
             await self._send(message)
+
+    async def end(self):
+        """End the response here if it has started and not ended, and stop waiting for the
+        handler, whose next write fails."""
+        async with self._lock:
+            if not self.started or self.ended:
+                return
+            self.gone.set()
+            self.ended = True
+            await self._send({"type": "http.response.body", "body": b"", "more_body": False})
+        self.finished.set()
 
     async def emit_whole(self, status, headers, body):
         await self.emit({"type": "http.response.start", "status": status,
