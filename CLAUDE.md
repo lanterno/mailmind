@@ -25,6 +25,7 @@ MAILMIND_NOSYNC=1 python3 server.py   # serve read-only, no background sync (saf
 python3 config.py check           # verify credentials resolve, per account (prints ok/fail, no secrets)
 python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
 python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
+python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 ```
 
 Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
@@ -183,6 +184,9 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
   and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
   (`HandlerBridge.close`), so Ctrl-C stops at once.
+- `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
+  checks an upgrade on a copy (see Schema migrations). It is standard library only, since
+  `python3 server.py` uses it.
 - `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
   from `mailmind`.
 - Two checks hold the shape. import-linter's layers contract in `pyproject.toml` (bootstrap,
@@ -202,14 +206,32 @@ through `HandlerBridge`, so that holds there too.
 
 ### Schema migrations
 
-`store.py` holds a `SCHEMA` executescript plus `_MIGRATIONS`, a list of
-`(target_user_version, callable)` run against `PRAGMA user_version` in `init()`.
+The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()` call into it.
 
+- `database.connect` opens every connection: WAL, `synchronous=FULL` with `fullfsync` (a commit
+  survives a power cut, because `delivered` and `applied` are exactly-once gates),
+  `busy_timeout` 60 s, and `foreign_keys=ON`, which the cascades depend on.
+- `migrations.MIGRATIONS` is a list of `(target_user_version, callable)` run against
+  `PRAGMA user_version`. Migrations 1 to 20 are frozen in `migrations/m0001_m0020.py`, beside
+  `BASE_SCHEMA`, `LEGACY_COLS` (pre-versioning column adds) and copies of the code they call
+  (`_frozen_threads.py`, `_frozen_mailparse.py`). Never edit those files. A schema change is a
+  new migration in a new file after them; one that needs the app's code freezes a copy of it.
 - Migrations are **append-only**. Never renumber or delete one — the version number is
-  the on-disk contract, and retired features leave a historical no-op behind (see `_m14`
-  notes → `_m18_drop_notes`).
-- Each must be idempotent; `init()` runs on every process start.
-- `_LEGACY_COLS` handles pre-versioning DBs via idempotent column adds.
+  the on-disk contract, and retired features leave a historical no-op behind (`_m14_notes` →
+  `_m18_drop_notes`).
+- `migrate.init` runs the base schema, then each pending migration, each in a transaction of its
+  own (`BEGIN IMMEDIATE`) that sets its version too, so one that fails leaves the database as it
+  was before it. A migration gets the connection through `_Within`: `execute`, and
+  `executescript` run one statement at a time inside the transaction. It never commits.
+- Each must still be idempotent; `init()` runs on every process start.
+- Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
+  to `backups/mailmind-v{N}-{UTC time}.db` beside it, readable by its owner only, keeping the
+  newest 3 (`backup.py` says how to roll back).
+- `python3 -m mailmind db check-upgrade` (`just db-check-upgrade`) migrates a read-only copy and
+  prints only per-table row counts and integrity verdicts. The owner runs it on the real
+  database before an upgrade; no agent does.
+- `tests/test_db_upgrade.py` upgrades a database seeded with data from every version. A
+  migration that derives a column on purpose adds it to `DERIVED` there.
 
 ### Concurrency
 

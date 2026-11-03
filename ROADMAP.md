@@ -169,8 +169,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   call.
 - **Weekly Review v2** · effort M overall — three follow-ons of different shapes; treat separately:
   - **Answer "you handled N this week"** · medium value · effort S — unanswerable today because no
-    `archived_at` column exists. Add it via the `_MIGRATIONS` table, stamp it in the `/api/archive`
-    handler, and **clear it on the undo path** — otherwise the column lies after every undo.
+    `archived_at` column exists. Add it as a new migration in `mailmind/platform/db/migrations`,
+    stamp it in the `/api/archive` handler, and **clear it on the undo path** — otherwise the
+    column lies after every undo.
   - **Meetings and deadlines in the retrospective** · medium value · effort M — feed `_invite_for()`'s
     parsed VEVENTs into `summarize_review.py`, which has zero calendar/ics references today.
   - **Scheduled delivery of the review** · needs a decision first, not a sub-bullet — it would be the

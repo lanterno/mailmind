@@ -330,6 +330,10 @@ automatically.
   Settings, plus a CLI that exports lossless per-message `.eml` files or standard
   `mbox` archives (`python3 export.py --format eml --out DIR`). Read-only — it never
   touches IMAP.
+- **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
+  backs it up beside it (the newest three kept, readable only by you), and each step of the change
+  lands whole or not at all. `python3 -m mailmind db check-upgrade` tries the next upgrade on a copy
+  first and reports only row counts and integrity checks, never a message.
 - **Only your own MailMind page can talk to the local server.** It answers just its
   own host name, refuses requests other websites start and any change that lacks the page's
   token and origin, can't be framed by another page, and checks every folder name before it
