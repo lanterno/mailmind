@@ -1,0 +1,166 @@
+"""mailmind.http.bridge.HandlerBridge: an http.server handler class served over ASGI, the way the
+new front door serves the legacy app. A toy handler stands in for server.H."""
+import http.client
+import json
+import threading
+import time
+from http.server import BaseHTTPRequestHandler
+
+import pytest
+
+from asgi_server import Uvicorn
+from mailmind.http.bridge import HandlerBridge
+
+CAP = 1000
+
+
+class Toy(BaseHTTPRequestHandler):
+    seen = []                       # what each request looked like to the handler
+    proceed = threading.Event()     # lets a streaming response go on
+    outcome = []                    # how a streaming response ended
+
+    def log_message(self, *a):
+        pass
+
+    def _reply(self, code, obj, extra=()):
+        data = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        for k, v in extra:
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        Toy.seen.append({"path": self.path, "host": self.headers.get("Host"),
+                         "tags": self.headers.get_all("X-Tag"), "client": self.client_address[0]})
+        if self.path == "/boom":
+            raise RuntimeError("secret detail")
+        if self.path == "/silent":
+            return
+        if self.path == "/stream":
+            return self._stream()
+        self._reply(200, {"ok": True}, [("X-Frame-Options", "DENY"), ("Connection", "keep-alive")])
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length > CAP:
+            return self._reply(413, {"error": "payload too large"})
+        body = self.rfile.read(length)
+        Toy.seen.append({"path": self.path, "body": body.decode()})
+        self._reply(200, {"got": len(body)})
+
+    def _stream(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        try:
+            self.wfile.write(b"first\n")
+            Toy.proceed.wait(10)
+            for _ in range(500):                        # up to 5 s, until the client's absence shows
+                self.wfile.write(b"more\n")
+                time.sleep(0.01)
+            Toy.outcome.append("wrote everything")
+        except BrokenPipeError:
+            Toy.outcome.append("client gone")
+
+
+@pytest.fixture
+def served():
+    Toy.seen, Toy.outcome = [], []
+    Toy.proceed = threading.Event()
+    srv = Uvicorn(HandlerBridge(Toy, max_body=CAP), name="bridge-http").start()
+    try:
+        yield srv
+    finally:
+        Toy.proceed.set()
+        srv.stop()
+
+
+def call(srv, method, path, body=None, headers=None, **kw):
+    conn = http.client.HTTPConnection("127.0.0.1", srv.port, timeout=10)
+    try:
+        conn.request(method, path, body=body, headers={"Host": f"127.0.0.1:{srv.port}", **(headers or {})}, **kw)
+        r = conn.getresponse()
+        return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
+    finally:
+        conn.close()
+
+
+def test_the_handler_sees_the_request_as_it_was_sent(served):
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=10)
+    conn.putrequest("GET", "/api/x%2Fy?q=a%20b&n=1", skip_host=True)
+    conn.putheader("Host", f"localhost:{served.port}")
+    conn.putheader("X-Tag", "one")
+    conn.putheader("X-Tag", "two")
+    conn.endheaders()
+    r = conn.getresponse()
+    r.read()
+    conn.close()
+    assert Toy.seen == [{"path": "/api/x%2Fy?q=a%20b&n=1", "host": f"localhost:{served.port}",
+                         "tags": ["one", "two"], "client": "127.0.0.1"}]
+
+
+def test_the_handlers_answer_comes_back_without_its_connection_headers(served):
+    status, headers, body = call(served, "GET", "/")
+    assert (status, json.loads(body)) == (200, {"ok": True})
+    assert headers["content-type"] == "application/json"
+    assert headers["x-frame-options"] == "DENY"
+    assert headers["server"].startswith("BaseHTTP/")             # the handler's own, as before
+    assert headers.get("connection") != "keep-alive"
+
+
+def test_a_post_body_reaches_the_handler(served):
+    status, _, body = call(served, "POST", "/p", body=b"x" * 600, headers={"Content-Type": "text/plain"})
+    assert (status, json.loads(body)) == (200, {"got": 600})
+    assert Toy.seen == [{"path": "/p", "body": "x" * 600}]
+
+
+def test_a_body_declared_over_the_cap_is_left_unread_for_the_handler_to_refuse(served):
+    status, _, body = call(served, "POST", "/p", body=b"x" * (CAP + 1))
+    assert (status, json.loads(body)) == (413, {"error": "payload too large"})
+    assert Toy.seen == []
+
+
+def test_an_undeclared_body_over_the_cap_is_refused_before_the_handler_runs(served):
+    chunks = iter([b"x" * 600, b"x" * 600])
+    status, _, body = call(served, "POST", "/p", body=chunks, encode_chunked=True,
+                           headers={"Transfer-Encoding": "chunked"})
+    assert (status, body) == (413, b"payload too large")
+    assert Toy.seen == []
+
+
+def test_a_response_streams_while_the_handler_is_still_writing(served):
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=10)
+    conn.request("GET", "/stream", headers={"Host": f"127.0.0.1:{served.port}"})
+    r = conn.getresponse()
+    assert r.status == 200
+    assert r.readline() == b"first\n"                       # before the handler may go on
+    Toy.proceed.set()
+    assert r.readline() == b"more\n"
+    conn.close()
+
+
+def test_the_handler_learns_the_client_left_from_its_next_write(served):
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=10)
+    conn.request("GET", "/stream", headers={"Host": f"127.0.0.1:{served.port}"})
+    r = conn.getresponse()
+    assert r.readline() == b"first\n"
+    r.close()
+    conn.close()
+    Toy.proceed.set()
+    served.stop()                                           # waits for the handler's thread
+    assert Toy.outcome == ["client gone"]
+
+
+@pytest.mark.parametrize("path", ["/boom", "/silent"])
+def test_a_handler_that_fails_or_answers_nothing_gives_a_bare_500(served, path):
+    status, headers, body = call(served, "GET", path)
+    assert (status, body) == (500, b"request failed")
+    assert headers["content-type"] == "text/plain; charset=utf-8"
+
+
+def test_a_method_the_handler_lacks_gets_its_own_501(served):
+    status, _, _ = call(served, "DELETE", "/")
+    assert status == 501
