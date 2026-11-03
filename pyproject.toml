@@ -18,3 +18,8 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.3",
 ]
+
+[tool.ruff.lint]
+# Pyflakes' checks only (undefined names, unused imports and the like), the lint this repo
+# has always run. Widening the rule set is a change of its own.
+select = ["F"]

@@ -1,5 +1,6 @@
 # MailMind — common commands.  `just` with no argument lists everything.
-# Stdlib-only project: there is nothing to install and nothing to build.
+# The app is standard library only: `python3 server.py` needs nothing installed.
+# Lint and tests use the dev tools in pyproject.toml, which `uv run` installs on first use.
 
 py := "python3"
 
@@ -77,23 +78,9 @@ test-hardening:
 test-send-guard:
     {{py}} test_send_guard.py
 
-# Undefined names and unused imports. Fails on anything not in the known baseline.
+# Undefined names, unused imports and pyflakes' other checks, run by ruff
 lint:
-    #!/usr/bin/env python3
-    import subprocess, sys
-    # Known and accepted. readmutq's lambda closes over an `except ... as e` name, which
-    # Python unbinds at block exit — safe only because _commit invokes it synchronously.
-    # Fixing it is a behaviour change, not a lint fix. Remove this entry if that changes.
-    BASELINE = {"readmutq.py:105:67: undefined name 'e'"}
-    out = subprocess.run([sys.executable, "-m", "pyflakes", *__import__("glob").glob("*.py")],
-                         capture_output=True, text=True)
-    lines = [l for l in (out.stdout + out.stderr).splitlines() if l.strip()]
-    new = [l for l in lines if l not in BASELINE]
-    for l in new:
-        print(l)
-    if new:
-        sys.exit(f"{len(new)} new pyflakes finding(s)")
-    print(f"lint ok — 0 new findings ({len(BASELINE & set(lines))} known baseline)")
+    uv run ruff check
 
 # Byte-compile every module without running it
 compile:

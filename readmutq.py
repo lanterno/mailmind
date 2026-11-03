@@ -102,7 +102,9 @@ def apply_one(mid):
             attempts = row["attempts"] + 1
             terminal = attempts >= MAX_ATTEMPTS
             delay = min(_BACKOFF_CAP, _BACKOFF_BASE * (2 ** (attempts - 1)))
-            _commit(lambda c: store.read_mut_release(c, mid, type(e).__name__, attempts, _now() + delay, terminal))
+            # `e` is unbound when the except block ends, so the lambda would fail if it ran later.
+            # It doesn't: _commit calls it synchronously, inside the block.
+            _commit(lambda c: store.read_mut_release(c, mid, type(e).__name__, attempts, _now() + delay, terminal))  # noqa: F821
             print(f"[readmutq] #{mid} unreachable ({type(e).__name__}); "
                   f"{'giving up' if terminal else f'retry {delay}s'}", flush=True)
             return
