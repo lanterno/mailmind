@@ -296,18 +296,20 @@ def test_hwf_the_queue_finds_its_message_by_message_id_not_its_old_uid(app, worl
 
 def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ships(app, world, monkeypatch):
     import readmutq
-    import store
+    from mailmind.platform.workers import gates
     queue(app, world)
-    since, undone, read = world.mark(), [], store.read_mut_get
+    since, undone = world.mark(), []
 
-    def then_the_undo_gets_the_lock_first(c, mid):
-        """The worker reads the row once it has claimed it, then again under the lock: the undo
-        lands between the two."""
-        row = read(c, mid)
-        if not undone:
+    class TheUndoGetsTheGateFirst:
+        """The gate as the queue's worker sees it: when the worker, having claimed the row, asks
+        for the gate, the user's undo takes it first."""
+        def __getattr__(self, name):
+            return getattr(gates, name)
+
+        def run(self, account, fn, **kw):
             undone.append(app.post("/api/undo", {}).json["ok"])
-        return row
-    monkeypatch.setattr(store, "read_mut_get", then_the_undo_gets_the_lock_first)
+            return gates.run(account, fn, **kw)
+    monkeypatch.setattr(readmutq, "gates", TheUndoGetsTheGateFirst())
     readmutq.drain()                                            # claimed, then cancelled before it got the lock
     assert undone == [True]
     assert world.writes(since) == []
