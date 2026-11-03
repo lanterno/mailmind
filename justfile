@@ -27,6 +27,12 @@ run-fast port="":
 test *args:
     uv run pytest {{args}}
 
+# Every suite plus the browser tests, which drive dashboard.html in Chromium (Playwright).
+# The first run downloads Playwright's Chromium; later runs find it cached.
+test-full *args:
+    uv run playwright install chromium
+    uv run pytest --browser {{args}}
+
 # Classifier behaviour
 test-classifier:
     {{py}} tests.py

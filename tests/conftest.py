@@ -30,6 +30,17 @@ NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
 def pytest_addoption(parser):
     parser.addoption("--update-golden", action="store_true",
                      help="rewrite tests/golden/ from what the app answers now, instead of comparing")
+    parser.addoption("--browser", action="store_true",
+                     help="also run the tests marked browser, which drive dashboard.html in Chromium")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--browser"):
+        return
+    skip = pytest.mark.skip(reason="browser test: run with --browser (just test-full)")
+    for item in items:
+        if item.get_closest_marker("browser"):
+            item.add_marker(skip)
 
 
 @pytest.hookimpl(wrapper=True)
