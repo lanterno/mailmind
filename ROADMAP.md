@@ -613,9 +613,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     (`test_bug_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted`);
   - with From switched to another account, Draft looks the thread up under that account and
     answers 404 (`test_bug_a_draft_survives_switching_the_from_account`);
-  - from a browser that sends no `Sec-Fetch-Site`, `/api/briefing`, `/api/review` and
-    `/api/briefing/since` spend AI without the CSRF token the draft-ahead kick requires
-    (`test_bug_an_ai_spending_get_needs_the_csrf_token`);
   - the review's `cleaned` count ignores the account it is scoped to, because `unsub_log` has no
     account column (`test_bug_the_review_counts_only_this_accounts_cleanups`);
   - a message without a thread id is summarized as thread `pk:N`, which matches nothing (404). Sync
