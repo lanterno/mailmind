@@ -13,14 +13,13 @@ write raises BrokenPipeError, as a closed socket's would. `close()` ends every r
 under way, for a server that is about to stop: the event stream never ends on its own.
 """
 import asyncio
+import concurrent.futures
 import io
 import logging
 import threading
 import urllib.parse
 
 import anyio
-import anyio.from_thread
-import anyio.lowlevel
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +30,9 @@ _HOP_BY_HOP = {b"connection", b"keep-alive", b"proxy-connection", b"transfer-enc
 # What a call onto the event loop raises when the loop won't run it. A call the loop cancels as it
 # stops comes back as asyncio's CancelledError, which is a BaseException, not an Exception.
 _CALL_FAILED = (Exception, asyncio.CancelledError)
+
+# How often a handler's thread, waiting on the event loop, checks that the loop still runs.
+_LOOP_CHECK = 0.5
 
 _TOO_LARGE = (413, [(b"content-type", b"text/plain; charset=utf-8")], b"payload too large")
 _FAILED = (500, [(b"content-type", b"text/plain; charset=utf-8")], b"request failed")
@@ -129,10 +131,7 @@ class HandlerBridge:
             out.finish()
         except BrokenPipeError:
             pass                                # the response was ended, or the event loop is gone
-        try:
-            x.call_sync(x.finished.set)
-        except _CALL_FAILED:
-            pass                                # the event loop is gone; nothing waits any more
+        x.say_finished()
 
 
 class _ClientGone(Exception):
@@ -146,7 +145,7 @@ class _Exchange:
     def __init__(self, send):
         self._send = send
         self._lock = anyio.Lock()
-        self._token = anyio.lowlevel.current_token()
+        self._loop = asyncio.get_running_loop()
         self.gone = threading.Event()       # the client left, or the request was cancelled or ended
         self.finished = anyio.Event()       # nothing more will be sent
         self.started = False
@@ -179,11 +178,11 @@ class _Exchange:
         await self.emit({"type": "http.response.body", "body": body, "more_body": False})
 
     def call(self, func, *args):
-        """Run coroutine function `func` on the event loop, from the handler's thread. When the
-        loop won't run it (it cancelled the call as it shut down, or has stopped), the handler
-        gets BrokenPipeError, as from a socket that closed."""
+        """Run coroutine function `func` on the event loop, from the handler's thread, and wait
+        for it. When the loop won't run it to the end (it cancelled the call as it shut down, or
+        has stopped or closed), the handler gets BrokenPipeError, as from a socket that closed."""
         try:
-            return anyio.from_thread.run(func, *args, token=self._token)
+            return self._wait(asyncio.run_coroutine_threadsafe(func(*args), self._loop))
         except BrokenPipeError:
             raise
         except _CALL_FAILED as e:
@@ -191,8 +190,26 @@ class _Exchange:
             log.debug("response write dropped: %s", type(e).__name__)
             raise BrokenPipeError("the server is shutting down") from e
 
-    def call_sync(self, func, *args):
-        return anyio.from_thread.run_sync(func, *args, token=self._token)
+    def _wait(self, future):
+        """The call's result. A loop that has stopped runs nothing more, so rather than wait on it
+        for good, give up once it is no longer running."""
+        while True:
+            try:
+                return future.result(timeout=_LOOP_CHECK)
+            except concurrent.futures.TimeoutError:
+                if future.done():
+                    raise                       # the call itself raised it
+                if not self._loop.is_running():
+                    future.cancel()
+                    raise RuntimeError("the event loop has stopped") from None
+
+    def say_finished(self):
+        """Tell the event loop the handler is done, from the handler's thread, without waiting:
+        a loop that has stopped never runs the call."""
+        try:
+            self._loop.call_soon_threadsafe(self.finished.set)
+        except RuntimeError:
+            pass                                # the event loop is closed; nothing waits any more
 
 
 class _ResponseWriter:
