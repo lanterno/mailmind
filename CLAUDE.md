@@ -5,19 +5,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 A `justfile` wraps everything below — `just` alone lists the recipes. The raw commands
-work identically if `just` isn't installed. `just lint` and `just test` need
-[uv](https://docs.astral.sh/uv/) (`brew install uv`); `uv run` installs the dev tools on first use.
+work identically if `just` isn't installed. `just run`, `just lint` and `just test` need
+[uv](https://docs.astral.sh/uv/) (`brew install uv`); `uv run` installs the runtime packages and
+the dev tools on first use.
 
 ```bash
 just verify                       # lint + compile + all tests + frontend check — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
 just dev                          # read-only server, no background sync (safest for local work)
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
+just run-old [port]               # the same through the old front door, which needs nothing installed
 ```
 
 ```bash
-python3 server.py [port]          # run the app (default http://127.0.0.1:8721)
-MAILMIND_NOSYNC=1 python3 server.py   # serve read-only, no background sync (safe for local dev)
+uv run python -m mailmind serve [port]   # run the app (default http://127.0.0.1:8721)
+python3 server.py [port]          # the old front door: the same app, with nothing installed
+MAILMIND_NOSYNC=1 python3 server.py   # serve read-only, no background sync (safe for local dev; either door)
 
 python3 config.py check           # verify credentials resolve, per account (prints ok/fail, no secrets)
 python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
@@ -76,8 +79,12 @@ The fixtures, from the bottom up:
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
   renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
-- `app` runs `server.py` in-process. Its CSRF token is fixed, and the clock is frozen at
-  `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves it.
+- `app` runs the app in-process through each front door in turn: `door=old` is `server.py`'s own
+  `ThreadingHTTPServer`, `door=new` the app `mailmind.bootstrap.front.build` makes, on uvicorn.
+  So every app test runs twice, both runs share one golden file, and `app.door` says which run
+  this is. Its CSRF token is fixed, and the clock is frozen at `conftest.NOW` (2026-11-02 12:00
+  UTC); `app.clock.shift(timedelta(...))` moves it. `tests/test_front_door.py` runs each door as a
+  program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
   Without `ai` there is no key, and AI calls get a 401.
@@ -94,7 +101,8 @@ fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
-- Console errors fail the test.
+- Console errors fail the test, and so does any content security policy violation, which a
+  report-only policy logs at the info level.
 - axe's findings are compared with `tests/golden/browser/axe_baseline.json`, which may only go down.
 
 These tests are marked `browser` and skipped unless pytest runs with `--browser`.
@@ -120,7 +128,8 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
   runtime packages (FastAPI and uvicorn so far), each declared in `pyproject.toml` and locked
   with hashes in `uv.lock`. Each dependency change is its own commit, and the `uv.lock` change
   goes in the next. But `python3 server.py`, the old front door, is the kill switch while the
-  new one carries daily use, so nothing it imports may import a third-party package.
+  new one carries daily use, so nothing it imports may import a third-party package;
+  `tests/test_front_door.py` checks that.
 - **The frontend is one file.** `dashboard.html` (~340KB) holds all HTML, CSS and JS
   inline. No bundler, no modules, no npm. Edit it directly. This holds until the refactor's
   frontend track moves it to React 19 and Vite.
@@ -159,16 +168,27 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
   directory; unset, it is the repo root. It must exist, and nothing creates it.
-  `python3 server.py [port]` puts the port in the settings.
+  `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` connects the outbox, the read-mutation queue, the
   thread summarizer and the IDLE layer to the server's lock and callbacks. `server.__main__` passes
   `sys.modules[__name__]`: importing `server` there would load a second copy with its own lock.
+  `legacy.start(server)` is the startup both doors share: the schema, `wire`, then the worker
+  threads (the outbox, the read-mutation queue, snoozes and, unless `server.nosync()`, the sync
+  loops and IDLE).
+- `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
+  `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
+  bound to 127.0.0.1. Every route still runs in `server.H`: `mailmind.http.bridge.HandlerBridge`,
+  the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
+  its own, and streams back what it writes, the event stream and the export included.
+  `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
+  and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
+  (`HandlerBridge.close`), so Ctrl-C stops at once.
 - `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
   from `mailmind`.
 - Two checks hold the shape. import-linter's layers contract in `pyproject.toml` (bootstrap,
-  then platform, then kernel) runs in `just lint`. `tests/legacy_ratchet.txt` lists every import
-  of a legacy module from inside the package; `tests/test_ratchet.py` fails when the code and the
-  list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
+  then http, then platform, then kernel) runs in `just lint`. `tests/legacy_ratchet.txt` lists
+  every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
+  code and the list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
 
 ### Routing — there is no router
 
@@ -177,7 +197,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
 no decorator registry, and no `getattr`-based dispatch anywhere in the file.
 
 Consequence: to find a route, grep the literal path. To confirm a handler is dead, grep
-its name — nothing can reach it dynamically.
+its name — nothing can reach it dynamically. The new front door serves this same handler
+through `HandlerBridge`, so that holds there too.
 
 ### Schema migrations
 
@@ -255,20 +276,34 @@ for the next socket opened.
 
 ### Security model
 
-Four guards in `server.py`:
+Every request passes `mailmind.platform.perimeter` before any route, through either door:
+`server.H`'s `do_GET` and `do_POST` call it, and so does the new door's `Perimeter` middleware.
+It is standard library only.
 
-- `_rebind_guard` — Host/Origin must be localhost (blocks DNS rebinding). It is the first
-  check in `do_GET`, so it covers every GET, `/` included; POSTs get it via `_mutation_guard`.
-- `_cross_site` — every GET: refuses one the browser marks `Sec-Fetch-Site` cross-site or
-  same-site, which a no-cors `<img>` from any page would otherwise pass. A top-level visit to
-  `/` is still allowed.
-- `_mutation_guard` — rebind check **plus** a `X-CSRF-Token` header compared with
-  `secrets.compare_digest`. Required on every mutating POST.
-- `_strict_origin_guard` — send routes only; an Origin header is mandatory, not optional.
+- `refuse_host` — the Host must be this server's (127.0.0.1 or localhost on its port), and an
+  Origin, when sent, its own. Blocks DNS rebinding. Every request, `/` included.
+- `refuse_cross_site` — under `/api/` only `Sec-Fetch-Site: same-origin` passes, so another
+  site's no-cors `<img>`, a typed URL and a client that says nothing are all refused. `/` also
+  opens from a typed URL or another site's top-level link.
+- `refuse_body` — a Content-Length over the route's cap (`server.post_body_cap`:
+  `MAX_SEND_POST` for send and draft, `MAX_POST` otherwise), judged before the body is read.
+- `refuse_mutation` — every POST: the two checks above, then the `X-CSRF-Token` header
+  compared with `secrets.compare_digest`, then an Origin, which must be this server's.
 
-Every `_send` answer carries `X-Frame-Options: DENY`. A failed GET or POST answers a fixed
-message and logs the detail. STARTTLS, IMAP and SMTP alike, takes `accounts.tls_context(host)`:
-verified everywhere but loopback, where Proton Bridge's certificate is self-signed.
+The new door puts every method but GET and HEAD through the POST checks, and refuses before it
+reads a body; the old one reads the body first.
+
+Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
+`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
+Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
+an answer didn't set itself, and so does the middleware. The page also carries
+`Content-Security-Policy-Report-Only` from `perimeter.page_policy`: its own inline scripts by
+sha256 and nothing else, styles and fonts from Google Fonts too, connections to this server
+only, framed by no one. The browser tests fail on any violation.
+
+A failed GET or POST answers a fixed message and logs the detail. STARTTLS, IMAP and SMTP
+alike, takes `accounts.tls_context(host)`: verified everywhere but loopback, where Proton
+Bridge's certificate is self-signed.
 
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
@@ -322,6 +357,10 @@ holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 
 - **Don't create `*.bak-*` snapshot files.** The repo used to carry 38 of them; they are
   now gitignored. Use a git branch.
+- **No inline event handlers in `dashboard.html`.** The page's content security policy lets its
+  `<script>` blocks run by hash and nothing else, so an `onclick=` or the like is a violation:
+  attach a listener instead (delegated, like `#doPanel`'s). Keep each script a plain `<script>`
+  with no attributes, or `perimeter.page_policy` won't find it to hash.
 - **Keep `dashboard.html` free of raw control bytes.** A single literal NUL byte once
   made `grep` and `ripgrep` treat the file as binary and silently return nothing past it,
   hiding half the frontend from every search tool. Use escape sequences in string
