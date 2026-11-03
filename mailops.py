@@ -18,6 +18,16 @@ import store
 _UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort)
 
 
+def account_of(pk):
+    """The account the message `pk` is in, or None when there's no such message."""
+    c = store.conn()
+    try:
+        r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
+    finally:
+        c.close()
+    return r["account"] if r else None
+
+
 def _do_imap(acct, fn):
     """Connect, run fn(M), logout. A connection failure raises (a member of _UNREACHABLE) so the
     caller can queue/retry; a clean command-level IMAP4.error from fn propagates as a logical error."""

@@ -1212,17 +1212,6 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
 
 
-def _account_of(pk):
-    """The account a message is in, whose IMAP gate an operation on it takes. EVERY_ACCOUNT when
-    there's no such message: the operation finds that out under the gate, as it always has."""
-    c = store.conn()
-    try:
-        r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
-    finally:
-        c.close()
-    return r["account"] if r else gates.EVERY_ACCOUNT
-
-
 def do_write(path, body):
     """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Move-type ops
     fall back to the durable offline queue if IMAP is unreachable; seen/flag stay local-only as before."""
@@ -1256,7 +1245,9 @@ def do_write(path, body):
                 return None, None, None, _readmut_enqueue(op, pk, dest, body.get("undo_group"),
                                                           body.get("mutation_id"))
         return False, "unknown", None, None
-    ok, msg, undo, queued = gates.run(_account_of(pk), write, priority=gates.Priority.INTERACTIVE)
+    # no such message: the op finds that out under the gate, as it always has
+    ok, msg, undo, queued = gates.run(mailops.account_of(pk) or gates.EVERY_ACCOUNT, write,
+                                      priority=gates.Priority.INTERACTIVE)
     if queued is not None:
         return queued
     if ok:
@@ -1279,7 +1270,8 @@ def do_trash(body):
         except mailops._UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
             return None, None, None, _readmut_enqueue("trash", pk, None, body.get("undo_group"),
                                                       body.get("mutation_id"))
-    ok, msg, undo, queued = gates.run(_account_of(pk), trash, priority=gates.Priority.INTERACTIVE)
+    ok, msg, undo, queued = gates.run(mailops.account_of(pk) or gates.EVERY_ACCOUNT, trash,
+                                      priority=gates.Priority.INTERACTIVE)
     if queued is not None:
         return queued
     if ok:
@@ -4167,7 +4159,8 @@ class H(BaseHTTPRequestHandler):
         trashed = False
         if verdict == "block" and pk is not None:  # close the loop: block also trashes now
             try:                                   # serialized with every other live-IMAP op
-                trashed, _, _ = gates.run(_account_of(int(pk)), lambda: mailops.trash_message(int(pk)),
+                trashed, _, _ = gates.run(mailops.account_of(int(pk)) or gates.EVERY_ACCOUNT,
+                                          lambda: mailops.trash_message(int(pk)),
                                           priority=gates.Priority.INTERACTIVE)   # block-sender is NOT undoable
             except Exception:
                 trashed = False
