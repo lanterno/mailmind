@@ -38,7 +38,7 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
-python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (22)
+python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (23)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
