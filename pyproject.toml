@@ -4,10 +4,12 @@ version = "0.1.0"
 description = "A local-first mail client with AI triage, served on 127.0.0.1."
 readme = "README.md"
 requires-python = ">=3.14"
-# Runtime code is still standard-library only: `python3 server.py` needs nothing installed.
-# Third-party runtime packages arrive with the refactor's Phase 2. Until then only the dev
-# group below holds anything, and only `just` recipes use it.
-dependencies = []
+# What the new front door (`python -m mailmind serve`) runs on. The old one, `python3 server.py`,
+# imports none of these, so it still runs with nothing installed: it is the kill switch.
+dependencies = [
+    "fastapi>=0.162.0",
+    "uvicorn>=0.54.0",
+]
 
 [tool.uv]
 # Flat modules, not an installable package: uv manages the dev environment and the lock only.
