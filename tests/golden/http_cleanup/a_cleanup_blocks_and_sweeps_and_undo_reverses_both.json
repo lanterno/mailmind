@@ -1,0 +1,184 @@
+[
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "ff324b90c9cb79d8",
+   "count": 3,
+   "domain": "loom.example.test",
+   "from_addr": "news@loom.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 3,
+   "unseen": 3,
+   "unsub": {
+    "mailto_to": "unsubscribe@loom.example.test",
+    "method": "mailto"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "preview news@loom.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "none",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "no_method",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 3,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "clean up the Loom",
+  "status": 200
+ },
+ {
+  "note": "one-click POSTs",
+  "value": []
+ },
+ {
+  "note": "SMTP messages",
+  "value": 0
+ },
+ {
+  "note": "server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 3 \"Trash\"",
+   "ada@example.test [INBOX] UID MOVE 14 \"Trash\"",
+   "ada@example.test [INBOX] UID MOVE 13 \"Trash\""
+  ]
+ },
+ {
+  "note": "after: block rules",
+  "value": {
+   "block_domains": [],
+   "block_senders": [
+    "news@loom.example.test"
+   ]
+  }
+ },
+ {
+  "note": "after: where the newsletter is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Trash",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "events": [
+    {
+     "from": "news@loom.example.test",
+     "kind": "sender_cleanup",
+     "status": "no_method",
+     "swept": 3,
+     "token": "news@loom.example.test",
+     "ts": "2026-11-02T12:00:00+00:00"
+    }
+   ],
+   "has_more": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the audit trail",
+  "status": 200
+ },
+ {
+  "body": {
+   "account": null,
+   "failed": 0,
+   "folder": null,
+   "label": "Cleaned up news@loom.example.test",
+   "ok": true,
+   "remaining": 0,
+   "reversed": 4
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo",
+  "status": 200
+ },
+ {
+  "note": "server writes for the undo",
+  "value": [
+   "ada@example.test [Trash] UID MOVE 4 \"INBOX\"",
+   "ada@example.test [Trash] UID MOVE 3 \"INBOX\"",
+   "ada@example.test [Trash] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "after the undo: block rules",
+  "value": {
+   "block_domains": [],
+   "block_senders": []
+  }
+ },
+ {
+  "note": "after the undo: where the newsletter is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 1,
+     "seen": 0,
+     "uid": 17
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     17,
+     []
+    ]
+   ]
+  }
+ }
+]

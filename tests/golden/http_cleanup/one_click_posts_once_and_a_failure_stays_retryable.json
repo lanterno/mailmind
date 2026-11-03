@@ -1,0 +1,142 @@
+[
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "ff324b90c9cb79d8",
+   "count": 2,
+   "domain": "loom.example.test",
+   "from_addr": "news@loom.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 1,
+   "unseen": 1,
+   "unsub": {
+    "https_host": "loom.example.test",
+    "method": "one-click"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "preview news@loom.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": 503,
+   "method": "one-click",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "failed",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 1,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the list's server is down",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": 200,
+   "method": "one-click",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "unsubscribed_oneclick",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 0,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "try again",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "one-click",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "unsubscribed_oneclick",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 0,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "and again, once it worked",
+  "status": 200
+ },
+ {
+  "note": "one-click POSTs",
+  "value": [
+   "https://loom.example.test/u/ada-218",
+   "https://loom.example.test/u/ada-218"
+  ]
+ },
+ {
+  "note": "the unsubscribe ledger",
+  "value": [
+   {
+    "from_addr": "news@loom.example.test",
+    "http_status": 200,
+    "id": 1,
+    "idempotency_key": "unsub:news@loom.example.test",
+    "method": "one-click",
+    "status": "unsubscribed_oneclick",
+    "ts": "2026-11-02T12:00:00+00:00"
+   }
+  ]
+ }
+]

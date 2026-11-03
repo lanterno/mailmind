@@ -1,0 +1,58 @@
+[
+ {
+  "body": {
+   "block_scope": "domain",
+   "blocked_token": "loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "none",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "skipped",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 1,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "block loom.example.test",
+  "status": 200
+ },
+ {
+  "note": "one-click POSTs",
+  "value": []
+ },
+ {
+  "note": "after: block rules",
+  "value": {
+   "block_domains": [
+    "loom.example.test"
+   ],
+   "block_senders": []
+  }
+ },
+ {
+  "note": "after: where the newsletter is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Trash",
+     2,
+     []
+    ]
+   ]
+  }
+ }
+]

@@ -1,0 +1,30 @@
+[
+ {
+  "body": {
+   "error": "bad address",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "no address",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad address",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "not an address",
+  "status": 400
+ }
+]

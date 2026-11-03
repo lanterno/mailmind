@@ -1,0 +1,118 @@
+[
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "none",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "no_token",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 1,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "no token",
+  "status": 200
+ },
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "4b16decb40287c17",
+   "count": 1,
+   "domain": "spindle.example.test",
+   "from_addr": "deals@spindle.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 0,
+   "unseen": 0,
+   "unsub": {
+    "method": "none"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "preview deals@spindle.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "none",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "no_token",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 0,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "another sender's token",
+  "status": 200
+ },
+ {
+  "note": "one-click POSTs",
+  "value": []
+ },
+ {
+  "note": "after: block rules",
+  "value": {
+   "block_domains": [],
+   "block_senders": [
+    "news@loom.example.test"
+   ]
+  }
+ },
+ {
+  "note": "after: where the newsletter is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Trash",
+     2,
+     []
+    ]
+   ]
+  }
+ }
+]

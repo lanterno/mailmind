@@ -1,0 +1,81 @@
+[
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test"
+   ],
+   "confirm_token": "ff324b90c9cb79d8",
+   "count": 2,
+   "domain": "loom.example.test",
+   "from_addr": "news@loom.example.test",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "sweep_capped": false,
+   "sweep_count": 1,
+   "unseen": 1,
+   "unsub": {
+    "mailto_to": "unsubscribe@loom.example.test",
+    "method": "mailto"
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "preview news@loom.example.test",
+  "status": 200
+ },
+ {
+  "body": {
+   "block_scope": "sender",
+   "blocked_token": "news@loom.example.test",
+   "browser_url": null,
+   "http_status": null,
+   "method": "mailto",
+   "ok": true,
+   "reversible": {
+    "block": true,
+    "sweep": true,
+    "unsubscribe": false
+   },
+   "status": "mailto_sent",
+   "sweep_capped": false,
+   "sweep_failed": 0,
+   "sweep_queued": 0,
+   "swept": 1,
+   "undo_group": "<undo group>"
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "clean up the Loom by mail",
+  "status": 200
+ },
+ {
+  "note": "on the wire",
+  "value": [
+   {
+    "data": "From: ada@example.test\nTo: unsubscribe@loom.example.test\nSubject: unsubscribe ada\nAuto-Submitted: auto-generated\nContent-Type: text/plain; charset=\"utf-8\"\nContent-Transfer-Encoding: 7bit\nMIME-Version: 1.0\n\nPlease unsubscribe me.\n\r\n",
+    "login": "ada@example.test",
+    "mail_from": "ada@example.test",
+    "rcpts": [
+     "from",
+     "to"
+    ]
+   }
+  ]
+ },
+ {
+  "note": "one-click POSTs",
+  "value": []
+ }
+]
