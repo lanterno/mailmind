@@ -3960,7 +3960,6 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
-        _ui_touch(u.path)
         # 1) Cap the body size BEFORE reading it, so an unauthenticated/cross-tab
         #    request can't make us read+parse an arbitrary-size payload.
         cap = post_body_cap(u.path)
@@ -3979,6 +3978,7 @@ class H(BaseHTTPRequestHandler):
         # (legit same-origin fetch always sends one; treat its absence as deny).
         if u.path in ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/api/outbox/cancel", "/api/outbox/sendnow", "/api/cleanup/execute") and _strict_origin_guard(self):
             return self._json({"ok": False, "error": "origin required"}, 403)
+        _ui_touch(u.path)                 # only a request that got past the guards: someone is here
         try:
             if u.path == "/api/send":
                 try:
