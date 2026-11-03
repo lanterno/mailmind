@@ -340,12 +340,16 @@ def test_another_site_can_link_to_the_app_but_not_frame_it():
         assert code == 403, code
 
 
-def test_the_apps_own_reads_and_older_browsers_still_work():
+def test_the_api_answers_only_the_pages_own_reads():
     with _live_server() as get:
-        for site in ("same-origin", "none", None):
+        code, _ = get("/api/digest", _PAGE)
+        assert code == 200, code
+        for site in ("none", None):      # a typed URL; a browser too old to say, or a script
             h = dict(_HOST, **({"Sec-Fetch-Site": site} if site else {}))
             code, _ = get("/api/digest", h)
-            assert code == 200, (site, code)
+            assert code == 403, (site, code)
+            code, body = get("/", h)     # the page itself still opens
+            assert code == 200 and server.CSRF.encode() in body, (site, code)
 
 
 def test_no_page_may_frame_the_app():

@@ -752,10 +752,9 @@ def test_bug_without_a_key_triage_sends_no_mail(world, anthropic_api):
     assert anthropic_api.requests == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known gap: from a browser that sends no Sec-Fetch-Site, these GETs spend AI without "
-                          "the CSRF token the draft-ahead kick demands")
-def test_bug_an_ai_spending_get_needs_the_csrf_token(app, world, ai):
+def test_an_ai_spending_get_the_page_didnt_make_spends_nothing(app, world, ai):
+    """These GETs spend AI without the CSRF token the draft-ahead kick demands, so only the page's
+    own same-origin request may reach them: not one that says nothing of where it came from."""
     summarize_as(world.pk(LUNCH), 5, "action-needed", "Reply")
     for path in ("/api/briefing", "/api/review", "/api/briefing/since?since=0"):
         app.get(path, headers={"X-CSRF-Token": None, "Sec-Fetch-Site": None})

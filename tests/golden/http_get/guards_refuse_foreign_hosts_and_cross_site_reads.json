@@ -67,92 +67,8 @@
  },
  {
   "body": {
-   "accounts": [
-    {
-     "alias": "Ada",
-     "credential": {
-      "set": true,
-      "style": "plain"
-     },
-     "defaults_applied": {
-      "host": false,
-      "port": false,
-      "smtp_host": false,
-      "smtp_port": false,
-      "smtp_starttls": false,
-      "starttls": false,
-      "trash": true
-     },
-     "disabled": false,
-     "email": "ada@example.test",
-     "host": "127.0.0.1",
-     "port": "<imap>",
-     "signature": "",
-     "smtp_host": "127.0.0.1",
-     "smtp_port": "<smtp>",
-     "smtp_starttls": true,
-     "starttls": true,
-     "trash": "Trash",
-     "type": "imap"
-    },
-    {
-     "alias": "Bea",
-     "credential": {
-      "set": true,
-      "style": "plain"
-     },
-     "defaults_applied": {
-      "host": false,
-      "port": false,
-      "smtp_host": false,
-      "smtp_port": false,
-      "smtp_starttls": false,
-      "starttls": false,
-      "trash": true
-     },
-     "disabled": false,
-     "email": "bea@example.test",
-     "host": "127.0.0.1",
-     "port": "<imap>",
-     "signature": "",
-     "smtp_host": "127.0.0.1",
-     "smtp_port": "<smtp>",
-     "smtp_starttls": true,
-     "starttls": true,
-     "trash": "Trash",
-     "type": "proton"
-    },
-    {
-     "alias": "Cy",
-     "credential": {
-      "set": true,
-      "style": "plain"
-     },
-     "defaults_applied": {
-      "host": false,
-      "port": false,
-      "smtp_host": false,
-      "smtp_port": false,
-      "smtp_starttls": false,
-      "starttls": false,
-      "trash": true
-     },
-     "disabled": false,
-     "email": "cy@example.test",
-     "host": "127.0.0.1",
-     "port": "<imap>",
-     "signature": "",
-     "smtp_host": "127.0.0.1",
-     "smtp_port": "<smtp>",
-     "smtp_starttls": true,
-     "starttls": true,
-     "trash": "[Gmail]/Trash",
-     "type": "gmail"
-    }
-   ],
-   "generated": "2026-11-02T12:00:00+00:00",
-   "ok": true,
-   "signature_default": ""
+   "error": "same-origin request required",
+   "ok": false
   },
   "headers": {
    "content-type": "application/json",
@@ -161,7 +77,7 @@
    "x-frame-options": "DENY"
   },
   "request": "GET /api/accounts without Sec-Fetch-Site",
-  "status": 200
+  "status": 403
  },
  {
   "body": {

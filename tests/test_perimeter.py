@@ -34,10 +34,29 @@ def test_any_other_host_or_origin_is_refused(kw):
     assert perimeter.refuse_host(headers(**kw), PORT) == perimeter.Refusal(403, "bad host/origin")
 
 
-@pytest.mark.parametrize("site", [None, "same-origin", "none", "SAME-ORIGIN"])
-def test_a_read_from_this_page_or_no_page_passes(site):
+@pytest.mark.parametrize("site", ["same-origin", "SAME-ORIGIN"])
+def test_the_pages_own_api_requests_pass(site):
+    assert perimeter.refuse_cross_site(headers(Sec_Fetch_Site=site), "/api/digest") is None
+
+
+@pytest.mark.parametrize("site", [None, "none"])
+def test_an_api_request_that_doesnt_come_from_the_page_is_refused(site):
+    """A typed URL says none; a browser too old to say, or a script, says nothing."""
     h = headers(**({"Sec-Fetch-Site": site} if site else {}))
-    assert perimeter.refuse_cross_site(h, "/api/digest") is None
+    assert perimeter.refuse_cross_site(h, "/api/digest") == perimeter.Refusal(403, "same-origin request required")
+    assert perimeter.refuse_cross_site(h, "/api") is not None
+
+
+@pytest.mark.parametrize("site", [None, "none", "same-origin"])
+def test_the_page_itself_opens_from_a_typed_url_or_an_older_browser(site):
+    h = headers(**({"Sec-Fetch-Site": site} if site else {}))
+    assert perimeter.refuse_cross_site(h, "/") is None
+    assert perimeter.refuse_cross_site(h, "/apical") is None             # not under /api/
+
+
+def test_a_post_the_page_didnt_make_is_refused_before_its_token_is_looked_at():
+    h = headers(Host=OWN, X_CSRF_Token=TOKEN)
+    assert perimeter.refuse_mutation("/api/seen", h, port=PORT, token=TOKEN).error == "same-origin request required"
 
 
 @pytest.mark.parametrize("site", ["cross-site", "same-site"])
