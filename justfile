@@ -89,9 +89,9 @@ test-send-guard:
 lint:
     uv run ruff check
 
-# Byte-compile every module without running it
+# Byte-compile every module, and the mailmind package, without running them
 compile:
-    {{py}} -m py_compile *.py && echo "compile ok"
+    {{py}} -m py_compile *.py && {{py}} -m compileall -q mailmind && echo "compile ok"
 
 # Syntax-check the inline JS in dashboard.html (needs node) and reject raw control bytes
 check-frontend:
