@@ -356,6 +356,47 @@ def test_no_page_may_frame_the_app():
             _, _, headers = get(path, _HOST, with_headers=True)
             assert headers.get("X-Frame-Options") == "DENY", path
 
+
+_uid = [500]
+
+
+def _message(folder="INBOX"):
+    """A fictional message row in the temp database; returns its pk."""
+    _uid[0] += 1
+    c = store.conn()
+    cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, "
+                    "subject) VALUES (?,?,?,?,?,?,?,?,?)",
+                    ("ada@example.test", "imap", folder, _uid[0], f"<h{_uid[0]}@example.test>",
+                     f"h{_uid[0]}", "2026-11-01T09:00:00+00:00", "bo@example.test", "Lunch"))
+    c.commit()
+    pk = cur.lastrowid
+    c.close()
+    return pk
+
+
+@contextlib.contextmanager
+def _connection(M):
+    real = accounts.connect
+    accounts.connect = lambda acct, timeout=60: M
+    try:
+        yield M
+    finally:
+        accounts.connect = real
+
+
+def test_a_request_can_only_star_or_mark_read():
+    pk = _message()
+    for flag in ("deleted", "draft", "answered", "Deleted", "bogus"):
+        with _connection(_ScriptedIMAP()) as M:
+            res = server.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
+        assert res["ok"] is False, (flag, res)
+        assert M.calls == [], (flag, M.calls)
+    for flag, imap in (("flagged", "(\\Flagged)"), ("seen", "(\\Seen)")):
+        with _connection(_ScriptedIMAP()) as M:
+            res = server.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
+        assert res["ok"] is True, (flag, res)
+        assert ("STORE", str(_uid[0]), "+FLAGS", imap) in M.calls, (flag, M.calls)
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
