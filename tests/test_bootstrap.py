@@ -29,11 +29,12 @@ def test_the_workers_report_back_to_the_server(unwired):
 
 
 
-@pytest.mark.parametrize("nosync", ["1", ""], ids=["nosync", "sync"])
-def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp_path, unwired, monkeypatch,
+@pytest.mark.parametrize("env", [{"MAILMIND_PROFILE": "read-only"}, {"MAILMIND_NOSYNC": "1"}, {}],
+                         ids=["read-only", "nosync", "full"])
+def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_path, unwired, monkeypatch,
                                                                      capsys):
-    """What both front doors run before they serve. Under MAILMIND_NOSYNC only the outbox, the
-    offline queue and snooze wake start, so queued sends still go out."""
+    """What both front doors run before they serve. Read-only, only the outbox, the offline queue
+    and snooze wake start, so queued sends still go out."""
     import outbox
     import readmutq
     import realtime
@@ -42,7 +43,11 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp
     from mailmind.bootstrap import legacy
     from mailmind.platform import settings
     from mailmind.platform.db import migrations
-    monkeypatch.setenv("MAILMIND_NOSYNC", nosync)
+    monkeypatch.delenv("MAILMIND_PROFILE", raising=False)
+    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    read_only = bool(env)
     monkeypatch.setattr(realtime, "start", lambda: spawned.append(realtime.start))
     spawned = []
     with settings.use(settings.Settings(home=str(tmp_path))):
@@ -56,7 +61,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(nosync, tmp
     always = [outbox.worker_loop, readmutq.worker_loop, server.snooze_tick]
     syncing = [server.startup, server.sync_loop, server.body_backfill_tick, server.draft_ahead_tick,
                server.reconcile_loop, server.expire_loop, realtime.start]
-    assert spawned == (always if nosync else always + syncing)
+    assert spawned == (always if read_only else always + syncing)
     out = capsys.readouterr().out
-    assert ("auto-sync disabled" in out) == bool(nosync)
+    assert ("auto-sync disabled" in out) == read_only
     assert "[ai] Claude API" in out
