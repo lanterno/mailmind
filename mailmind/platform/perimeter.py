@@ -10,6 +10,7 @@ Every request reaches 127.0.0.1, so the danger is another page in the browser:
 - another site's no-cors GET, an <img>, which carries this server's Host and no Origin
   (`refuse_cross_site`);
 - another site's POST, which can't carry the page's CSRF token (`refuse_mutation`).
+The API answers only the page's own requests, which browsers mark Sec-Fetch-Site: same-origin.
 """
 import secrets
 from dataclasses import dataclass
@@ -54,14 +55,27 @@ def refuse_host(headers, port):
     return None
 
 
+def _api(path):
+    return path == "/api" or path.startswith("/api/")
+
+
 def refuse_cross_site(headers, path):
-    """A GET another site started. It carries this server's Host and, as a no-cors request such
-    as an <img>, no Origin, so the host check passes it, yet it could still make the server sync a
-    folder, fetch bodies or run an AI briefing. Browsers mark it Sec-Fetch-Site cross-site, or
-    same-site when it comes from another port on this machine. A top-level visit to the page
-    itself stays allowed: it does nothing, and its contents can't be read across origins. A
-    browser that sends no Sec-Fetch-Site is judged by the host check alone."""
+    """A request the page didn't make. Another site's no-cors GET, such as an <img>, carries this
+    server's Host and no Origin, so the host check passes it, yet it could still make the server
+    sync a folder, fetch bodies or run an AI briefing. Browsers mark it Sec-Fetch-Site cross-site,
+    or same-site when it comes from another port on this machine.
+
+    Under /api/ only same-origin passes: the page's own fetches, its event stream and its
+    downloads. A request that says nothing (a browser too old to send the header, or not a
+    browser) or comes from no page (a typed URL) is refused as well. The page itself, `/`, also
+    opens from a typed or bookmarked URL, or from another site's link: a top-level visit does
+    nothing, and its contents can't be read across origins."""
     site = (headers.get("Sec-Fetch-Site") or "").lower()
+    if _api(path):
+        if site == "same-origin":
+            return None
+        return Refusal(403, "cross-site request" if site in ("cross-site", "same-site")
+                       else "same-origin request required")
     if site in ("", "same-origin", "none"):
         return None
     if path == "/" and headers.get("Sec-Fetch-Mode") == "navigate" and headers.get("Sec-Fetch-Dest") == "document":
@@ -82,9 +96,9 @@ def refuse_body(headers, cap):
 
 
 def refuse_mutation(path, headers, *, port, token):
-    """A POST must pass the host check and carry the CSRF token; a send route must also carry a
-    matching Origin, since a same-origin fetch always sends one."""
-    refusal = refuse_host(headers, port)
+    """A POST must pass the host and cross-site checks and carry the CSRF token; a send route must
+    also carry a matching Origin, since a same-origin fetch always sends one."""
+    refusal = refuse_host(headers, port) or refuse_cross_site(headers, path)
     if refusal:
         return refusal
     if not token_matches(headers, token):
