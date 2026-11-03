@@ -79,3 +79,17 @@ def test_a_guarded_post_changes_nothing_on_the_server(app, world):
     app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml")}, headers={"Host": "evil.example.test"})
     assert world.writes(since) == []
     assert world.where("ada-inbox-05-receipt.eml")["server"] == [[w.ADA, "INBOX", 5, []]]
+
+
+def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(app, world, monkeypatch):
+    """Presence keeps the AI pre-drafting replies, so another site's refused POSTs mustn't."""
+    import time
+    import server
+    monkeypatch.setattr(server, "_LAST_UI_TS", 0.0)
+    seen = {"pk": world.pk("ada-inbox-02-lunch-confirm.eml"), "seen": True}
+    assert app.post("/api/seen", seen, headers={"X-CSRF-Token": None}).status == 403
+    assert app.post("/api/seen", seen, headers={"Host": "evil.example.test"}).status == 403
+    assert app.post("/api/send", {}, headers={"Origin": None}).status == 403
+    assert server._LAST_UI_TS == 0.0
+    assert app.post("/api/seen", seen).status == 200
+    assert server._LAST_UI_TS == time.time()
