@@ -57,6 +57,7 @@ import realtime
 import summarize_thread
 import summarize_briefing
 import summarize_review
+from mailmind.bootstrap import legacy
 from mailmind.platform import settings
 
 HERE = os.path.dirname(__file__)
@@ -4201,12 +4202,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         settings.configure(dataclasses.replace(settings.current(), port=int(sys.argv[1])))
     store.init()
+    legacy.wire(sys.modules[__name__])   # the workers share _ops_lock and report back here
     # The outbox drains on its own worker, serialized with live IMAP ops via _ops_lock;
     # runs even under NOSYNC so queued/retryable sends still go out.
-    outbox.configure(ops_lock=_ops_lock, after_send=_after_send)
-    readmutq.configure(ops_lock=_ops_lock, after_apply=_after_readmut)   # offline read-mutation drain
-    summarize_thread.configure(ops_lock=_ops_lock)
-    realtime.configure(sync_handler=sync_guarded)
     threading.Thread(target=outbox.worker_loop, daemon=True).start()
     threading.Thread(target=readmutq.worker_loop, daemon=True).start()
     threading.Thread(target=snooze_tick, daemon=True).start()   # wakes snoozes even under NOSYNC
