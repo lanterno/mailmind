@@ -121,10 +121,12 @@ def _uidvalidity(M):
         return None
 
 
-def _process(M, acct, uids, folder="INBOX", with_body=False):
+def _process(M, acct, uids, folder="INBOX", with_body=False, advance=True):
     """Store ALL of the given UIDs (junk kept as a badge, with flags) for the
     folder. Bodies are fetched only when with_body (INBOX, for the AI snippet);
-    other folders get headers+flags only (fast) and fetch the body lazily on open."""
+    other folders get headers+flags only (fast) and fetch the body lazily on open.
+    advance=False stores them without touching the folder's watermark: only a sync that has
+    seen every UID up to a point may say the folder is synced to there."""
     rows, max_uid, kept, junk = [], 0, 0, 0
     thrid = "X-GM-THRID " if acct.get("kind") == "gmail" else ""  # only Gmail understands it
     for start in range(0, len(uids), HDR_BATCH):
@@ -195,8 +197,9 @@ def _process(M, acct, uids, folder="INBOX", with_body=False):
             except Exception as e:
                 print(f"[ingest] keep invite {acct['email']} uid {r['uid']}: {e}", flush=True)
         c.commit()
-    store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
-    c.commit()
+    if advance:
+        store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
+        c.commit()
     c.close()
     return kept, junk, max_uid
 
@@ -248,6 +251,9 @@ def ingest_message(acct, folder, message_id):
     """Force-ingest ONE message identified by RFC822 Message-ID into `folder`,
     bypassing the incremental watermark. Needed by undo: a re-labeled Gmail message
     keeps its original (<= watermark) UID, so a normal incremental sync skips it.
+    The watermark stays where it was. A message moved back gets a new, highest UID, and
+    raising the mark to it would skip mail that arrived since the last sync; in a folder
+    never opened, it would also mark the folder synced, so its first full sync never ran.
     Returns the number of messages stored (0 if not found)."""
     if not message_id:
         return 0
@@ -258,7 +264,7 @@ def ingest_message(acct, folder, message_id):
         uids = [x.decode() for x in (d[0].split() if (typ == "OK" and d and d[0]) else [])]
         if not uids:
             return 0
-        _process(M, acct, uids[-1:], folder, with_body=(folder.upper() == "INBOX"))
+        _process(M, acct, uids[-1:], folder, with_body=(folder.upper() == "INBOX"), advance=False)
         c = store.conn()
         threads.recompute_threads(c, acct["email"])
         store.apply_mute_on_ingest(c, acct["email"])
