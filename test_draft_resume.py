@@ -33,6 +33,7 @@ def _home():
 _home()                                               # before anything opens a file
 import compose
 import mailparse
+import outbox
 import server
 
 ACCT = "ada@example.test"
@@ -1101,7 +1102,7 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened():
     r, code = _resume(pk)
     assert code == 423 and "in the outbox" in r["error"], (code, r)
     c = store.conn()
-    store.outbox_cancel(c, oid)
+    outbox.QUEUE.cancel_queued(c, oid)
     c.commit()
     c.close()
     assert _resume(pk)[1] == 200                                # cancelled: free to edit

@@ -429,7 +429,7 @@ def test_hwf_a_crash_after_delivery_never_sends_twice(app, world, monkeypatch):
     assert (outbox_row(oid)["state"], outbox_row(oid)["delivered"], len(world.smtp.messages)) == ("sending", 1, 1)
     monkeypatch.setattr(outbox, "_side_effects", real)
     c = store.conn()
-    store.outbox_reset_stuck(c)                                  # what the worker does at boot
+    outbox.QUEUE.reset_stuck(c)                                  # what the worker does at boot
     c.commit()
     c.close()
     outbox.drain()

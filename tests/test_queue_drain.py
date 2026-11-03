@@ -104,7 +104,7 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
     drain()                                                            # moved, then "crashed"
     assert (rows()[0]["state"], rows()[0]["applied"]) == ("running", 1)
     c = store.conn()
-    store.read_mut_reset_stuck(c)                                      # what the worker does at boot
+    readmutq.QUEUE.reset_stuck(c)                                      # what the worker does at boot
     c.commit()
     c.close()
     since = world.mark()

@@ -24,6 +24,7 @@ def _home():
 
 
 _home()                                               # before anything opens a file
+import outbox
 import server
 
 ACCT = "ada@example.test"
@@ -62,7 +63,7 @@ def _outbox(envelope, delivered):
         "recipients": json.dumps({"to": envelope, "cc": [], "bcc": []}), "subject": "Plans",
         "raw": b"x", "next_attempt_at": 0, "draft_id": None, "created_at": "2026-10-01T09:00:00"})
     if delivered:
-        store.outbox_mark_delivered(c, oid)
+        outbox.QUEUE.mark_gate(c, oid)
     c.commit()
     c.close()
 

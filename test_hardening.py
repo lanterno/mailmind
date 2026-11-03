@@ -26,6 +26,7 @@ with open(settings.current().config, "w") as f:
 import accounts
 import ingest
 import mailops
+import readmutq
 import server
 import smtpsend
 store.init()
@@ -628,7 +629,7 @@ def test_trashing_the_same_message_offline_again_queues_it_again():
         first = server.do_trash({"pk": _message(mid=mid)})
         assert first["ok"] and first.get("status") == "queued", first
         c = store.conn()
-        store.read_mut_mark_done(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")   # the queue applied it
+        readmutq.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
         c.commit()
         c.close()
         second = server.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again
