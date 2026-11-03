@@ -8,7 +8,9 @@ EXPUNGE, APPEND, IDLE, NOOP, CLOSE and LOGOUT, with literals both ways. Each acc
 - "proton": Proton Bridge's habits. A message copied or moved into Trash is marked read.
 - "gmail": X-GM-EXT-1. Every message also sits in [Gmail]/All Mail, carries X-GM-THRID and
   X-GM-MSGID, and STORE +/-X-GM-LABELS (\\Inbox) adds it to or drops it from INBOX. A message
-  re-labelled \\Inbox gets its old INBOX UID back, as the app's ingest_message expects.
+  re-labelled \\Inbox gets its old INBOX UID back, as the app's ingest_message expects. Trash
+  and Spam are outside All Mail: a message moved into either leaves All Mail and every label,
+  and one moved back out returns to All Mail under its old UID.
 
 STARTTLS is required before LOGIN (the app must never send a password in the clear), with a
 throwaway certificate from trustme. The app trusts any certificate on loopback, as it does for
@@ -50,6 +52,7 @@ FOLDERS = {
                ("[Gmail]/Spam", "\\Junk"), ("[Gmail]/Starred", "\\Flagged")],
 }
 ALL_MAIL = "[Gmail]/All Mail"
+OUTSIDE_ALL_MAIL = ("\\Trash", "\\Junk")       # Gmail's Trash and Spam
 SYSTEM_FLAGS = ("\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft")
 
 UIDVALIDITY_BASE = 1_700_000_001
@@ -103,7 +106,7 @@ class Mailbox:
     uidvalidity: int = UIDVALIDITY_BASE
     uidnext: int = 1
     messages: dict = field(default_factory=dict)    # uid -> Message, in UID order
-    former: dict = field(default_factory=dict)      # Gmail INBOX: gm_msgid -> the UID it had
+    former: dict = field(default_factory=dict)      # Gmail INBOX, All Mail: gm_msgid -> the UID it had
 
     @property
     def selectable(self):
@@ -939,8 +942,8 @@ class FakeIMAPServer:
         if acct.kind == "gmail":
             msg.gm_msgid = next(self._gm)
             msg.gm_thrid = self._thread_id(acct, thread_of) or msg.gm_msgid
-            if box.name != ALL_MAIL:
-                acct.mailboxes[ALL_MAIL].add(msg)          # the same message object: one identity
+            if box.name != ALL_MAIL and box.special not in OUTSIDE_ALL_MAIL:
+                self._join_all_mail(acct, msg)             # the same message object: one identity
         uid = box.add(msg)
         if box.name == "INBOX" and acct.kind == "gmail":
             box.former[msg.gm_msgid] = uid
@@ -950,6 +953,10 @@ class FakeIMAPServer:
     def _copy_into(self, acct, src, uid, dest):
         msg = src.messages[uid]
         if acct.kind == "gmail":
+            if dest.special in OUTSIDE_ALL_MAIL and src.special not in OUTSIDE_ALL_MAIL:
+                self._leave_all_mail(acct, msg, keep=src)
+            elif src.special in OUTSIDE_ALL_MAIL and dest.special not in OUTSIDE_ALL_MAIL:
+                self._join_all_mail(acct, msg)
             if dest.name == ALL_MAIL:
                 for u, m in dest.messages.items():
                     if m is msg:
@@ -967,6 +974,25 @@ class FakeIMAPServer:
         uid = dest.add(new)
         self._notify(acct, dest)
         return uid
+
+    def _join_all_mail(self, acct, msg):
+        box = acct.mailboxes[ALL_MAIL]
+        for u, m in box.messages.items():
+            if m.gm_msgid == msg.gm_msgid:
+                return u
+        uid = box.add(msg, box.former.get(msg.gm_msgid))
+        box.former[msg.gm_msgid] = uid
+        return uid
+
+    def _leave_all_mail(self, acct, msg, keep):
+        """Into Trash or Spam: out of All Mail and every label but `keep`, the source, which the
+        command itself empties (MOVE now, COPY's client with STORE and EXPUNGE)."""
+        for box in acct.mailboxes.values():
+            if box is keep or box.special in OUTSIDE_ALL_MAIL:
+                continue
+            for u, m in list(box.messages.items()):
+                if m.gm_msgid == msg.gm_msgid:
+                    box.messages.pop(u)
 
     def _label_inbox(self, acct, msg):
         inbox = acct.mailboxes["INBOX"]
