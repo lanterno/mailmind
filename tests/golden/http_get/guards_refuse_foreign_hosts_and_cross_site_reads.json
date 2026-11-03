@@ -56,7 +56,6 @@
   "status": 403
  },
  {
-  "bytes": 445953,
   "headers": {
    "content-type": "text/html; charset=utf-8",
    "referrer-policy": "no-referrer",
@@ -64,7 +63,6 @@
    "x-frame-options": "DENY"
   },
   "request": "GET / as a top-level cross-site visit",
-  "sha256": "0526f3975b4425c9c4e8e1beec3b83a8425365010dd1303cbe22247e21a165fa",
   "status": 200
  },
  {

@@ -40,8 +40,9 @@ def test_guards_refuse_foreign_hosts_and_cross_site_reads(app, golden):
           headers={"Sec-Fetch-Site": "cross-site"})
     fetch(app, golden, "/api/accounts", "GET /api/accounts marked same-site",
           headers={"Sec-Fetch-Site": "same-site"})
-    fetch(app, golden, "/", "GET / as a top-level cross-site visit",
-          headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"})
+    golden.record("GET / as a top-level cross-site visit",       # served; its content isn't this test's
+                  app.get("/", headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate",
+                                        "Sec-Fetch-Dest": "document"}), body=False)
     fetch(app, golden, "/api/accounts", "GET /api/accounts without Sec-Fetch-Site",
           headers={"Sec-Fetch-Site": None})
     fetch(app, golden, "/api/accounts", "GET /api/accounts via localhost",
