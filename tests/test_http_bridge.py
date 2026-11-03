@@ -270,6 +270,40 @@ def test_a_write_still_waiting_when_the_event_loop_stops_fails_as_a_closed_socke
     assert got == ["BrokenPipeError"] and x.gone.is_set()
 
 
+def test_a_handler_still_at_work_when_the_event_loop_has_stopped_ends_instead_of_waiting_for_good():
+    """A loop that has stopped, and not yet closed, runs nothing more, so a write sent to it then
+    would wait forever, and so would the handler's word that it has finished. The write fails as a
+    closed socket's would, the word goes without waiting, and the thread ends."""
+    import asyncio
+    from mailmind.http.bridge import _Exchange
+
+    async def send(message):
+        pass
+
+    async def exchange():
+        return _Exchange(send)
+
+    loop = asyncio.new_event_loop()
+    x = loop.run_until_complete(exchange())                 # the loop ran, and has stopped
+    went = []
+
+    def handler():
+        try:
+            x.call(x.emit, {"type": "http.response.start", "status": 200, "headers": []})
+        except BrokenPipeError:
+            went.append("client gone")
+        x.say_finished()
+        went.append("ended")
+
+    t = threading.Thread(target=handler, daemon=True)
+    t.start()
+    t.join(5)
+    ended = not t.is_alive()
+    loop.run_until_complete(asyncio.sleep(0))   # as asyncio.run does on its way out, to cancel the rest
+    loop.close()
+    assert ended and went == ["client gone", "ended"] and x.gone.is_set()
+
+
 def test_each_request_runs_on_a_daemon_thread_of_its_own(served):
     """As under ThreadingHTTPServer: a handler still blocked when the process exits doesn't hold
     the exit, and no request waits for another's thread."""
