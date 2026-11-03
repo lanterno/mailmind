@@ -25,8 +25,9 @@ python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
 ```
 
 Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
-all through `tests/test_legacy_suites.py`, each in its own interpreter, because they point
-module globals at temp files on import:
+all through `tests/test_legacy_suites.py`, each in its own interpreter with a temp
+`MAILMIND_HOME`, because on import each makes a temp directory the data directory
+(`settings.configure`) and some replace module functions with fakes:
 
 ```bash
 python3 tests.py                  # classifier behaviour (27 assertions)
@@ -61,13 +62,16 @@ The rest of `tests/` pins today's behaviour ahead of the refactor. Each test see
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
 MailMind module loads:
 
-- It removes any Claude key from the environment, pins `MAILMIND_AI=api` and sets `TZ=UTC`.
-- It installs the tripwire in `tests/guard.py`. The tripwire refuses the real data files, any
-  non-loopback host, and the `claude`, `op` and `security` programs. A test that trips it fails.
+- It removes any Claude key and any `MAILMIND_HOME` from the environment, pins
+  `MAILMIND_AI=api` and sets `TZ=UTC`.
+- It installs the tripwire in `tests/guard.py`. The tripwire refuses the real data files (at the
+  repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
+  `claude`, `op` and `security` programs. A test that trips it fails.
 
 The fixtures, from the bottom up:
 
-- `data_dir` points every module's data path at a fresh temp directory and creates the schema.
+- `data_dir` makes a fresh temp directory the app's data directory (`settings.use`) and creates
+  the schema there.
 - `world` is a fictional 25-message corpus (`tests/fixtures/corpus/`, three accounts) served by
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
@@ -97,12 +101,13 @@ These tests are marked `browser` and skipped unless pytest runs with `--browser`
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
 to stay fast.
 
-There is no build step. `pyproject.toml` declares dev tools only (pytest, ruff), locked with
-hashes in `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is
-`ruff check` with pyflakes' rules only (`select = ["F"]`). Its one accepted finding carries a
-`# noqa: F821` in `readmutq.py`: a lambda closing over an `except ... as e` name, safe because
-`_commit` invokes it synchronously. New pytest-native tests go in `tests/`; pytest's
-`--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
+There is no build step. `pyproject.toml` declares dev tools only (pytest, ruff, import-linter,
+Playwright and the like), locked with hashes in `uv.lock`, and `.python-version` pins 3.14 for
+uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
+then `lint-imports` (import-linter) on the `mailmind` package's layers. Ruff's one accepted
+finding carries a `# noqa: F821` in `readmutq.py`: a lambda closing over an `except ... as e`
+name, safe because `_commit` invokes it synchronously. New pytest-native tests go in `tests/`;
+pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
 `just check-frontend` parses every inline `<script>` with `node --check`, checks CSS
 brace balance, and rejects raw control bytes in `dashboard.html` (see Conventions).
@@ -120,6 +125,7 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
   frontend track moves it to React 19 and Vite.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
+  They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
   The repo is public — treat any real address, employer or message count as a leak.
 
 ## Architecture
@@ -142,6 +148,26 @@ The app is one view, a real folder-and-account client whose Inbox opens on today
 side column, `briefSideHtml`, from `/api/upcoming` and the `__waiting__` view).
 A separate Briefing view existed until it was folded into this one; `body.mode-client`
 survives as a CSS specificity hook, not a mode.
+
+### The `mailmind` package
+
+The refactor's new code grows in `mailmind/`, beside the legacy modules at the repo root. The
+legacy modules may import from it freely; the reverse goes only through `mailmind.bootstrap`.
+
+- `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
+  `settings.current()` where it opens a file or checks the port, never once at import, so a test
+  can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
+  directory; unset, it is the repo root. It must exist, and nothing creates it.
+  `python3 server.py [port]` puts the port in the settings.
+- `mailmind.bootstrap.legacy.wire(server)` connects the outbox, the read-mutation queue, the
+  thread summarizer and the IDLE layer to the server's lock and callbacks. `server.__main__` passes
+  `sys.modules[__name__]`: importing `server` there would load a second copy with its own lock.
+- `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
+  from `mailmind`.
+- Two checks hold the shape. import-linter's layers contract in `pyproject.toml` (bootstrap,
+  then platform, then kernel) runs in `just lint`. `tests/legacy_ratchet.txt` lists every import
+  of a legacy module from inside the package; `tests/test_ratchet.py` fails when the code and the
+  list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
 
 ### Routing — there is no router
 
@@ -172,6 +198,10 @@ mutations, undo, reconcile, the outbox worker. It is coarse and a known bottlene
 `pool.py` (persistent per-account IMAP connections) and `warm.py` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
 work with them unset.
+
+`realtime.stop()` only shuts each IDLE worker's socket down; the worker closes its own
+connection. Closing a socket another thread may be about to wait on frees its descriptor number
+for the next socket opened.
 
 `server.nosync()` is the only reader of `MAILMIND_NOSYNC`. Any value but empty, `0`, `false`,
 `no` or `off` turns it on, so a typo fails toward read-only.

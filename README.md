@@ -477,6 +477,7 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 
 | Variable | Effect |
 |---|---|
+| `MAILMIND_HOME` | The data directory: the database, config, rules, saved views and audit trails. Unset, the repo folder, where they have always lived. It must already exist; MailMind never creates it. Every command reads it: the server, `ingest.py`, `summarize.py`, `manage.py`, `config.py check`, `export.py`. |
 | `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync). Any value but empty, `0`, `false`, `no` or `off` turns it on. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: use the `claude` CLI. |
 | `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
@@ -500,13 +501,16 @@ launcher script if you want them on.
 
 ## Where your data lives (all local, all git-ignored)
 
+In the repo folder, or in the directory `MAILMIND_HOME` names:
+
 - `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
 - `mailmind_rules.json` — your learned keep/block lists and expiry rules.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.
 - `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
 - `mailmind.config.json` — your accounts + credentials.
 
-All of the above are in `.gitignore`. **Nothing personal is committed.**
+All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
+it altogether. **Nothing personal is committed.**
 
 ## Testing
 
