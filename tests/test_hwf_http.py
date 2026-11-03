@@ -144,6 +144,34 @@ def test_hwf_smtp_delivery_holds_no_imap_lock(app, world):
     assert held == [False]
 
 
+def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
+    """The outbox's Sent copy and \\Answered flag, a queued move and a thread summary's body fetch
+    reach IMAP from worker threads, and each holds the lock as a request does."""
+    import outbox
+    import readmutq
+    import summarize_thread
+    appends, stores = lock_spy(world, "APPEND", user=w.ADA), lock_spy(world, "UID STORE", user=w.ADA)
+    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk("ada-inbox-02-lunch-confirm.eml"),
+                               "to": ["bea@example.test"], "subject": "Re: Lunch", "text": "See you there.",
+                               "idempotency_key": "k-gated"}).json
+    assert r["ok"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert (appends, stores) == ([True], [True])
+
+    moves = lock_spy(world, "UID MOVE", user=w.ADA)
+    world.server.drop("SELECT", user=w.ADA)
+    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["status"] == "queued"
+    readmutq.drain()
+    assert moves == [True]
+
+    pk = world.pk("bea-inbox-01-client.eml")                  # its body was never fetched
+    fetches = lock_spy(world, "UID FETCH", user=w.BEA)
+    summarize_thread._gather([{"pk": pk, "body_text": None, "snippet": "", "body_fetched": 0,
+                               "from_name": "Bea", "from_addr": w.BEA, "date_iso": ""}])
+    assert fetches == [True]
+
+
 # -- the offline queue and undo --------------------------------------------
 
 def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_ships(app, world):
