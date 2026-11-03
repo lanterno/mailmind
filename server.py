@@ -4201,24 +4201,7 @@ class _Server(ThreadingHTTPServer):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         settings.configure(dataclasses.replace(settings.current(), port=int(sys.argv[1])))
-    store.init()
-    legacy.wire(sys.modules[__name__])   # the workers share _ops_lock and report back here
-    # The outbox drains on its own worker, serialized with live IMAP ops via _ops_lock;
-    # runs even under NOSYNC so queued/retryable sends still go out.
-    threading.Thread(target=outbox.worker_loop, daemon=True).start()
-    threading.Thread(target=readmutq.worker_loop, daemon=True).start()
-    threading.Thread(target=snooze_tick, daemon=True).start()   # wakes snoozes even under NOSYNC
-    if nosync():
-        print("(auto-sync disabled via MAILMIND_NOSYNC — serving read-only; outbox+snooze still run)", flush=True)
-    else:
-        threading.Thread(target=startup, daemon=True).start()
-        threading.Thread(target=sync_loop, daemon=True).start()
-        threading.Thread(target=body_backfill_tick, daemon=True).start()  # make old mail full-text searchable
-        threading.Thread(target=draft_ahead_tick, daemon=True).start()    # top-K reply pre-gen (AI-polite)
-        threading.Thread(target=reconcile_loop, daemon=True).start()      # periodic ghost prune (MAILMIND_RECONCILE_SECS)
-        threading.Thread(target=expire_loop, daemon=True).start()         # age-out expiry rules (MAILMIND_EXPIRE_SECS)
-        realtime.start()                 # per-account IMAP IDLE workers + SSE dispatch
-    print(f"[ai] {summarize.describe_engine()}", flush=True)
+    legacy.start(sys.modules[__name__])  # the schema, the workers' wiring, and the workers
     port = settings.current().port
     print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)
     _Server(("127.0.0.1", port), H).serve_forever()

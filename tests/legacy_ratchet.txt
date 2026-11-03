@@ -8,4 +8,6 @@
 mailmind.bootstrap.legacy outbox
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime
+mailmind.bootstrap.legacy store
+mailmind.bootstrap.legacy summarize
 mailmind.bootstrap.legacy summarize_thread
