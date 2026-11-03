@@ -283,8 +283,17 @@ def test_a_handler_still_at_work_when_the_event_loop_has_stopped_ends_instead_of
     async def exchange():
         return _Exchange(send)
 
+    def on_its_own_thread(fn):
+        """The loop runs on a thread of its own: the test's may have one running already
+        (Playwright's, under --browser), and a loop can't run inside another."""
+        out = []
+        t = threading.Thread(target=lambda: out.append(fn()), daemon=True)
+        t.start()
+        t.join(5)
+        return out[0]
+
     loop = asyncio.new_event_loop()
-    x = loop.run_until_complete(exchange())                 # the loop ran, and has stopped
+    x = on_its_own_thread(lambda: loop.run_until_complete(exchange()))   # the loop ran, and has stopped
     went = []
 
     def handler():
@@ -299,7 +308,7 @@ def test_a_handler_still_at_work_when_the_event_loop_has_stopped_ends_instead_of
     t.start()
     t.join(5)
     ended = not t.is_alive()
-    loop.run_until_complete(asyncio.sleep(0))   # as asyncio.run does on its way out, to cancel the rest
+    on_its_own_thread(lambda: loop.run_until_complete(asyncio.sleep(0)))   # as asyncio.run does on its way out
     loop.close()
     assert ended and went == ["client gone", "ended"] and x.gone.is_set()
 
