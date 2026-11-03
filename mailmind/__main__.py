@@ -3,6 +3,8 @@
   serve [port]   serve the app on http://127.0.0.1:<port> (default 8721) through the new front door
 """
 import argparse
+import os
+import signal
 import sys
 
 
@@ -18,7 +20,13 @@ def main(argv=None):
         except ModuleNotFoundError as e:
             sys.exit(f"serve needs the runtime packages, and {e.name} isn't installed. Run it as "
                      f"`uv run python -m mailmind serve`, or use the old front door, `python3 server.py`.")
-        front.serve(args.port)
+        try:
+            front.serve(args.port)
+        except KeyboardInterrupt:
+            # uvicorn stops cleanly on Ctrl-C, then raises it again so the program ends as
+            # interrupted. End that way, so a caller such as `just` stops too, without a traceback.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            os.kill(os.getpid(), signal.SIGINT)
 
 
 if __name__ == "__main__":
