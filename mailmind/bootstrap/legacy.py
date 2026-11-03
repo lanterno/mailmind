@@ -1,7 +1,8 @@
 """Wiring for the legacy modules at the repo root.
 
 Each front door calls `start(server)` before it serves, and the tests' app fixture calls
-`wire(server)`, so all of them put the app together the same way.
+`wire(server)`, so all of them put the app together the same way. This is the one module in the
+package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 """
 import threading
 
@@ -24,6 +25,13 @@ def wire(server):
     readmutq.configure(ops_lock=server._ops_lock, after_apply=server._after_readmut)
     summarize_thread.configure(ops_lock=server._ops_lock)
     realtime.configure(sync_handler=server.sync_guarded)
+
+
+def server_module():
+    """The legacy server module, for a front door other than server.py itself. Imported here, at
+    call time: server imports this module, and run as __main__ it would load a second copy."""
+    import server
+    return server
 
 
 def _daemon(target):
