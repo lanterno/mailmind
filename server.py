@@ -59,6 +59,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
 from mailmind.platform import perimeter, settings
+from mailmind.platform.workers import gates
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -73,7 +74,7 @@ MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + hea
 _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
 _sync_lock = threading.Lock()
-_ops_lock = threading.Lock()              # serialize live-IMAP ops (stats/sweep/reconcile) vs each other
+_ops_lock = gates._lock                   # the IMAP gate's lock, while callers still take it by hand
 _stats_cache = {"data": None, "exp": 0}
 _undo_stack = []                          # per-process LIFO of reversible actions (in-memory; lost on restart)
 _undo_lock = threading.Lock()
