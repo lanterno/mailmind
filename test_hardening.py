@@ -244,7 +244,7 @@ def test_the_app_still_loads_on_its_own_host():
         for host in ("127.0.0.1:PORT", "localhost:PORT"):
             code, body = get("/", {"Host": host})
             assert code == 200 and server.CSRF.encode() in body, (host, code)
-        code, _ = get("/api/digest", {"Host": "127.0.0.1:PORT", "Origin": "http://127.0.0.1:PORT"})
+        code, _ = get("/api/digest", {**_PAGE, "Origin": "http://127.0.0.1:PORT"})
         assert code == 200, code
 
 
@@ -309,7 +309,7 @@ def test_an_injected_folder_in_the_url_reaches_no_imap_command():
     try:
         with _live_server() as get:
             q = urllib.parse.urlencode({"account": "ada@example.test", "folder": _EVIL})
-            code, _ = get("/api/messages?" + q, {"Host": "127.0.0.1:PORT"})
+            code, _ = get("/api/messages?" + q, _PAGE)
     finally:
         accounts.connect = real
     assert code == 200, code
@@ -317,6 +317,7 @@ def test_an_injected_folder_in_the_url_reaches_no_imap_command():
 
 
 _HOST = {"Host": "127.0.0.1:PORT"}
+_PAGE = {**_HOST, "Sec-Fetch-Site": "same-origin"}     # what the page's own fetch sends
 
 
 def test_a_read_another_site_starts_is_refused():
@@ -350,7 +351,7 @@ def test_the_apps_own_reads_and_older_browsers_still_work():
 def test_no_page_may_frame_the_app():
     with _live_server() as get:
         for path in ("/", "/api/digest", "/api/no-such-route"):
-            _, _, headers = get(path, _HOST, with_headers=True)
+            _, _, headers = get(path, _PAGE, with_headers=True)
             assert headers.get("X-Frame-Options") == "DENY", path
 
 
@@ -505,7 +506,7 @@ def test_a_failed_read_answers_without_the_exception_text():
     server.digest_json = boom
     try:
         with _live_server() as get:
-            code, body = get("/api/digest", _HOST)
+            code, body = get("/api/digest", _PAGE)
     finally:
         server.digest_json = real
     assert code == 500, code

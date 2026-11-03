@@ -244,7 +244,8 @@ def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monk
                  f"/api/ai/draft-ahead?pk={world.pk(VENUE_END)}"):
         assert app.get(path).status == 200
     s = socket.create_connection(("127.0.0.1", app.port), timeout=10)     # a hidden tab's event stream
-    s.sendall(f"GET /api/events HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\n\r\n".encode())
+    s.sendall(f"GET /api/events HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nSec-Fetch-Site: same-origin\r\n\r\n"
+              .encode())
     assert b" 200 " in s.recv(64)
     s.close()
     deadline = time.monotonic() + 5

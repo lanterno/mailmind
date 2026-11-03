@@ -18,7 +18,8 @@ STRICT = ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/
 def raw_post(app, path, body=b"{}", headers=()):
     """A POST whose headers the test writes itself, Content-Length included."""
     h = {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "X-CSRF-Token": app_client.CSRF,
-         "Content-Type": "application/json", "Content-Length": str(len(body)), **dict(headers)}
+         "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json", "Content-Length": str(len(body)),
+         **dict(headers)}
     conn = http.client.HTTPConnection("127.0.0.1", app.port, timeout=30)
     try:
         conn.putrequest("POST", path, skip_host=True, skip_accept_encoding=True)
@@ -103,8 +104,8 @@ def test_the_new_door_refuses_a_post_before_reading_its_body(app):
     conn = http.client.HTTPConnection("127.0.0.1", app.port, timeout=5)
     try:
         conn.putrequest("POST", "/api/seen", skip_host=True, skip_accept_encoding=True)
-        for k, v in {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "Content-Type": "application/json",
-                     "Content-Length": "1000"}.items():
+        for k, v in {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "Sec-Fetch-Site": "same-origin",
+                     "Content-Type": "application/json", "Content-Length": "1000"}.items():
             conn.putheader(k, v)
         conn.endheaders()
         r = conn.getresponse()

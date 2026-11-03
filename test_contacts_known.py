@@ -242,7 +242,7 @@ def test_route_requires_csrf():
             out = r.status, json.loads(r.read() or b"{}")
             h.close()
             return out
-        origin = {"Origin": f"http://127.0.0.1:{port}"}
+        origin = {"Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"}
         code, _ = post(origin)
         assert code == 403, code
         code, body = post({**origin, "X-CSRF-Token": server.CSRF})

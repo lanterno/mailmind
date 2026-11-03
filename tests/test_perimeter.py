@@ -10,6 +10,7 @@ from mailmind.platform import perimeter
 PORT = 8721
 OWN = f"127.0.0.1:{PORT}"
 TOKEN = "the-token"
+PAGE = {"Host": OWN, "Sec-Fetch-Site": "same-origin"}   # what the page's own fetch sends
 
 
 def headers(**kw):
@@ -61,19 +62,19 @@ def test_a_body_is_judged_by_its_declared_length(length, refused):
 
 
 def test_a_post_needs_the_host_then_the_token():
-    ok = {"Host": OWN, "X-CSRF-Token": TOKEN}
+    ok = {**PAGE, "X-CSRF-Token": TOKEN}
     assert perimeter.refuse_mutation("/api/seen", headers(**ok), port=PORT, token=TOKEN) is None
     assert perimeter.refuse_mutation("/api/seen", headers(Host="evil.example.test", X_CSRF_Token="nope"),
                                      port=PORT, token=TOKEN).error == "bad host/origin"
     for token in (None, "nope", TOKEN + "x"):
-        h = headers(Host=OWN, **({"X-CSRF-Token": token} if token else {}))
+        h = headers(**PAGE, **({"X-CSRF-Token": token} if token else {}))
         assert perimeter.refuse_mutation("/api/seen", h, port=PORT, token=TOKEN) == \
             perimeter.Refusal(403, "bad or missing CSRF token")
 
 
 @pytest.mark.parametrize("path", sorted(perimeter.SEND_ROUTES))
 def test_a_send_route_also_needs_this_servers_origin(path):
-    ok = {"Host": OWN, "X-CSRF-Token": TOKEN}
+    ok = {**PAGE, "X-CSRF-Token": TOKEN}
     assert perimeter.refuse_mutation(path, headers(**ok), port=PORT, token=TOKEN) == \
         perimeter.Refusal(403, "origin required")
     assert perimeter.refuse_mutation(path, headers(**ok, Origin=f"http://{OWN}"), port=PORT, token=TOKEN) is None
