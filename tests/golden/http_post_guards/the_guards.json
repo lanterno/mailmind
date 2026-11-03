@@ -61,9 +61,8 @@
  },
  {
   "body": {
-   "msg": "ok",
-   "ok": true,
-   "undoable": false
+   "error": "origin required",
+   "ok": false
   },
   "headers": {
    "content-type": "application/json",
@@ -72,7 +71,7 @@
    "x-frame-options": "DENY"
   },
   "request": "POST /api/seen without an Origin",
-  "status": 200
+  "status": 403
  },
  {
   "body": {

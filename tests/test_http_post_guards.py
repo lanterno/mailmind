@@ -1,6 +1,6 @@
 """What every POST must get past before a route runs: the body-size cap, the rebind check, the
-CSRF token, and on the send routes a matching Origin. Malformed input gets a clean refusal. The
-golden file is in tests/golden/http_post_guards/.
+CSRF token and this server's Origin. Malformed input gets a clean refusal. The golden file is in
+tests/golden/http_post_guards/.
 """
 import http.client
 import json
@@ -10,8 +10,8 @@ import pytest
 import app_client
 from fixtures import world as w
 
-# The routes that also require a matching Origin header.
-STRICT = ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/api/outbox/cancel",
+# The routes that send mail or act on queued sends, where a POST the page didn't make costs most.
+SENDS = ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/api/outbox/cancel",
           "/api/outbox/sendnow", "/api/cleanup/execute")
 
 
@@ -43,7 +43,7 @@ def test_the_guards(app, golden, world):
                                                                    headers={"Origin": "http://evil.example.test"}))
     golden.note("the message is still unread", world.row("ada-inbox-02-lunch-confirm.eml")["seen"])
     golden.record("POST /api/seen without an Origin", app.post("/api/seen", seen, headers={"Origin": None}))
-    for path in STRICT:
+    for path in SENDS:
         golden.record(f"POST {path} without an Origin", app.post(path, {}, headers={"Origin": None}))
     golden.record("POST /api/no-such-route", app.post("/api/no-such-route", {}))
     golden.record("POST /api/accounts/no-such-action", app.post("/api/accounts/no-such-action", {}))

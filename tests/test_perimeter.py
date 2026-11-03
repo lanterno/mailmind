@@ -92,12 +92,14 @@ def test_a_post_needs_the_host_then_the_token():
             perimeter.Refusal(403, "bad or missing CSRF token")
 
 
-@pytest.mark.parametrize("path", sorted(perimeter.SEND_ROUTES))
-def test_a_send_route_also_needs_this_servers_origin(path):
+@pytest.mark.parametrize("path", ["/api/seen", "/api/send"])
+def test_every_post_also_needs_this_servers_origin(path):
+    """A browser sends an Origin with every POST; one without came from no page."""
     ok = {**PAGE, "X-CSRF-Token": TOKEN}
     assert perimeter.refuse_mutation(path, headers(**ok), port=PORT, token=TOKEN) == \
         perimeter.Refusal(403, "origin required")
-    assert perimeter.refuse_mutation(path, headers(**ok, Origin=f"http://{OWN}"), port=PORT, token=TOKEN) is None
+    for origin in (f"http://{OWN}", f"http://localhost:{PORT}"):
+        assert perimeter.refuse_mutation(path, headers(**ok, Origin=origin), port=PORT, token=TOKEN) is None
 
 
 def test_a_post_is_judged_by_its_size_before_its_guards():
