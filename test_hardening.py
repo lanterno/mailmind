@@ -318,6 +318,37 @@ def test_an_injected_folder_in_the_url_reaches_no_imap_command():
     assert code == 200, code
     assert not _sent_a_line_break(M), _sent_a_line_break(M)
 
+
+_HOST = {"Host": "127.0.0.1:PORT"}
+
+
+def test_a_read_another_site_starts_is_refused():
+    with _live_server() as get:
+        for site in ("cross-site", "same-site"):
+            for path in ("/api/digest", "/api/stats?refresh=1", "/api/contacts?q=a", "/api/no-such-route"):
+                code, _ = get(path, {**_HOST, "Sec-Fetch-Site": site, "Sec-Fetch-Mode": "no-cors",
+                                     "Sec-Fetch-Dest": "image"})
+                assert code == 403, (site, path, code)
+
+
+def test_another_site_can_link_to_the_app_but_not_frame_it():
+    with _live_server() as get:
+        nav = {**_HOST, "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}
+        code, body = get("/", {**nav, "Sec-Fetch-Dest": "document"})
+        assert code == 200 and server.CSRF.encode() in body, code
+        code, _ = get("/", {**nav, "Sec-Fetch-Dest": "iframe"})
+        assert code == 403, code
+        code, _ = get("/api/digest", {**nav, "Sec-Fetch-Dest": "document"})
+        assert code == 403, code
+
+
+def test_the_apps_own_reads_and_older_browsers_still_work():
+    with _live_server() as get:
+        for site in ("same-origin", "none", None):
+            h = dict(_HOST, **({"Sec-Fetch-Site": site} if site else {}))
+            code, _ = get("/api/digest", h)
+            assert code == 200, (site, code)
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
