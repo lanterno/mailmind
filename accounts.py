@@ -43,13 +43,27 @@ def imap_quote(s):
     return '"' + (s or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def connect(acct, timeout=60):
-    if acct["starttls"]:  # e.g. Proton Bridge: plain socket + STARTTLS, self-signed localhost cert
-        ctx = ssl.create_default_context()
+LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
+
+
+def is_loopback(host):
+    return (host or "").strip().lower() in LOOPBACK
+
+
+def tls_context(host):
+    """Verified TLS, except on loopback, where Proton Bridge serves a self-signed certificate.
+    Any host off this machine is verified, so a forged certificate can't capture the password."""
+    ctx = ssl.create_default_context()
+    if is_loopback(host):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def connect(acct, timeout=60):
+    if acct["starttls"]:  # e.g. Proton Bridge: plain socket + STARTTLS
         M = imaplib.IMAP4(acct["host"], acct["port"], timeout=timeout)
-        M.starttls(ctx)
+        M.starttls(tls_context(acct["host"]))
     else:  # direct TLS (Gmail + most hosted IMAP on 993)
         M = imaplib.IMAP4_SSL(acct["host"], acct["port"],
                               ssl_context=ssl.create_default_context(), timeout=timeout)
