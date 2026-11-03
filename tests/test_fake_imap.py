@@ -323,6 +323,32 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
         assert list(srv.messages(ADA, "INBOX")) == [a, b]
 
 
+def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
+    import accounts
+    with FakeIMAPServer(kind="gmail") as srv:
+        entry = srv.add_account(ADA)
+        (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
+        a = srv.deliver(ADA, "INBOX", _mail(1))
+        srv.deliver(ADA, "INBOX", _mail(2))
+        all_uid = srv.find(ADA, "[Gmail]/All Mail", "<note-1@example.test>")
+        M = accounts.connect(accounts.get(ADA), timeout=5)
+        M.select('"INBOX"')
+        assert M.uid("MOVE", str(a), '"[Gmail]/Trash"')[0] == "OK"
+        assert srv.find(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == []
+        assert len(srv.messages(ADA, "[Gmail]/Trash")) == 1
+        M.select('"[Gmail]/Trash"')
+        t = list(srv.messages(ADA, "[Gmail]/Trash"))[0]
+        assert M.uid("MOVE", str(t), '"INBOX"')[0] == "OK"          # back out: same UIDs as before
+        assert srv.find(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == all_uid
+        assert srv.find(ADA, "INBOX", "<note-1@example.test>") == [a]
+        M.select('"INBOX"')
+        assert M.uid("MOVE", str(a), '"[Gmail]/Spam"')[0] == "OK"
+        assert srv.find(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == []
+        M.logout()
+        srv.deliver(ADA, "[Gmail]/Spam", _mail(3))                   # delivered straight to Spam
+        assert srv.find(ADA, "[Gmail]/All Mail", "<note-3@example.test>") == []
+
+
 # ── ingest end to end ───────────────────────────────────────────────────────────────────────────
 
 def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
