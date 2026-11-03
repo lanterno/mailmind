@@ -81,7 +81,7 @@ lint:
     # Python unbinds at block exit — safe only because _commit invokes it synchronously.
     # Fixing it is a behaviour change, not a lint fix. Remove this entry if that changes.
     BASELINE = {"readmutq.py:105:67: undefined name 'e'"}
-    out = subprocess.run(["pyflakes", *__import__("glob").glob("*.py")],
+    out = subprocess.run([sys.executable, "-m", "pyflakes", *__import__("glob").glob("*.py")],
                          capture_output=True, text=True)
     lines = [l for l in (out.stdout + out.stderr).splitlines() if l.strip()]
     new = [l for l in lines if l not in BASELINE]
