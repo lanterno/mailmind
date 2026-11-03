@@ -12,6 +12,7 @@ When the client goes away, or the server cancels the request as it shuts down, t
 write raises BrokenPipeError, as a closed socket's would. `close()` ends every response already
 under way, for a server that is about to stop: the event stream never ends on its own.
 """
+import asyncio
 import io
 import logging
 import threading
@@ -26,6 +27,10 @@ log = logging.getLogger(__name__)
 # Headers about this one connection. The ASGI server frames and closes the connection itself.
 _HOP_BY_HOP = {b"connection", b"keep-alive", b"proxy-connection", b"transfer-encoding", b"upgrade",
                b"te", b"trailer"}
+
+# What a call onto the event loop raises when the loop won't run it. A call the loop cancels as it
+# stops comes back as asyncio's CancelledError, which is a BaseException, not an Exception.
+_CALL_FAILED = (Exception, asyncio.CancelledError)
 
 _TOO_LARGE = (413, [(b"content-type", b"text/plain; charset=utf-8")], b"payload too large")
 _FAILED = (500, [(b"content-type", b"text/plain; charset=utf-8")], b"request failed")
@@ -126,7 +131,7 @@ class HandlerBridge:
             pass                                # the response was ended, or the event loop is gone
         try:
             x.call_sync(x.finished.set)
-        except Exception:
+        except _CALL_FAILED:
             pass                                # the event loop is gone; nothing waits any more
 
 
@@ -181,7 +186,7 @@ class _Exchange:
             return anyio.from_thread.run(func, *args, token=self._token)
         except BrokenPipeError:
             raise
-        except Exception as e:
+        except _CALL_FAILED as e:
             self.gone.set()
             log.debug("response write dropped: %s", type(e).__name__)
             raise BrokenPipeError("the server is shutting down") from e
