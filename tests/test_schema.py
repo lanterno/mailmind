@@ -111,6 +111,29 @@ def test_every_migration_can_run_twice(fresh_db):
     assert dump(path) == before
 
 
+@pytest.mark.parametrize("last", [19, 20], ids=["a-script", "column-adds"])
+def test_a_migration_that_fails_leaves_the_database_as_it_was_before_it(fresh_db, last):
+    """A migration and its version commit together, so one that fails halfway leaves nothing of
+    itself behind, and the next start runs it again."""
+    from mailmind.platform.db import migrate, migrations
+    before, (version_, real) = migrations.MIGRATIONS[:last - 1], migrations.MIGRATIONS[last - 1]
+
+    def fails_halfway(c):
+        real(c)
+        raise RuntimeError("the disk filled up")
+
+    path = fresh_db()
+    with pytest.raises(RuntimeError, match="the disk filled up"):
+        migrate.init(path, [*before, (version_, fails_halfway)])
+    stopped = fresh_db()
+    migrate.init(stopped, before)
+    assert dump(path) == dump(stopped)
+    migrate.init(path)
+    done = fresh_db()
+    migrate.init(done)
+    assert dump(path) == dump(done)
+
+
 def test_migration_versions_only_go_up_by_one():
     from mailmind.platform.db import migrations
     assert [t for t, _ in migrations.MIGRATIONS] == list(range(1, version() + 1))
