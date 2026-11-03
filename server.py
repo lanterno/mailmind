@@ -662,12 +662,11 @@ def message_body(pk, load_images, prefetch=False):
         except gates.Busy:
             return {"ok": False, "busy": True}
         return {"ok": True, "prefetched": True}
-    with _ops_lock:
-        parsed = ingest.fetch_body(pk)
+    parsed = gates.run(row["account"], lambda: ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
     if parsed is None:
         return {"ok": False, "error": "not found"}
     html, text = parsed.get("html"), parsed.get("text")
-    if html and len(html) > 2_000_000:        # hard body cap before sanitize (runs under _ops_lock; DoS)
+    if html and len(html) > 2_000_000:        # hard body cap before sanitize (DoS)
         html = html[:2_000_000]
     safe_html, info = (sanitize_html.sanitize(html, load_images=load_images)
                        if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
@@ -764,18 +763,20 @@ def _folders_list_cached(account, acct):
         hit = _folder_list_cache.get(account)
     if hit and (time.time() - hit["ts"]) < _FOLDER_LIST_TTL:
         return hit["folders"]
+
+    def refresh():
+        # double-check under the IMAP gate: a concurrent caller may have refreshed
+        # while we waited, so a cold burst does ONE live fetch, not N.
+        with _folder_list_lock:
+            fresh = _folder_list_cache.get(account)
+        if fresh and (time.time() - fresh["ts"]) < _FOLDER_LIST_TTL:
+            return fresh["folders"]
+        folders = _live_folder_list(acct)
+        with _folder_list_lock:
+            _folder_list_cache[account] = {"folders": folders, "ts": time.time()}
+        return folders
     try:
-        with _ops_lock:
-            # double-check under the ops lock: a concurrent caller may have refreshed
-            # while we waited, so a cold burst does ONE live fetch, not N.
-            with _folder_list_lock:
-                fresh = _folder_list_cache.get(account)
-            if fresh and (time.time() - fresh["ts"]) < _FOLDER_LIST_TTL:
-                return fresh["folders"]
-            folders = _live_folder_list(acct)
-            with _folder_list_lock:
-                _folder_list_cache[account] = {"folders": folders, "ts": time.time()}
-            return folders
+        return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE)
     except Exception as e:
         if hit:
             print(f"[folders] {account}: live refresh failed ({type(e).__name__}), serving cached", flush=True)
@@ -1008,11 +1009,12 @@ def messages_in(account, folder, offset, limit, group=False):
     if folder == "__replylater__":
         return replylater_in(account, offset, limit)
     if offset == 0 and not ingest.folder_synced(account, folder):
-        with _ops_lock:  # first open of a folder: pull it (UIDVALIDITY-checked, stores all)
+        def first_sync():   # first open of a folder: pull it (UIDVALIDITY-checked, stores all)
             try:
                 ingest.sync_folder(accounts.get(account), folder, full=True)
             except Exception as e:
                 print(f"[folder-sync] {account}/{folder}: {type(e).__name__}: {e}", flush=True)
+        gates.run(account, first_sync, priority=gates.Priority.INTERACTIVE)
     c = store.conn()
     if group:
         # collapse to conversations: one row per thread (the latest message) + rollups
@@ -1553,8 +1555,8 @@ def _compose_spec(body):
         if not orow:
             raise _Http(404, "original message not found")
         try:
-            with _ops_lock:
-                parsed = ingest.fetch_body(opk) or {}
+            parsed = gates.run(orow["account"], lambda: ingest.fetch_body(opk),
+                               priority=gates.Priority.INTERACTIVE) or {}
         except Exception as e:
             print(f"[compose] original fetch failed for pk {opk}: {_sanitize_conn_error(e)}", flush=True)
             raise _Http(502, "could not load the original message")
@@ -2354,8 +2356,8 @@ def do_invite_rsvp(body):
     except KeyError:
         return {"ok": False, "error": "unknown account"}, 400
     try:
-        with _ops_lock:
-            parsed = ingest.fetch_body(pk) or {}
+        parsed = gates.run(row["account"], lambda: ingest.fetch_body(pk),
+                           priority=gates.Priority.INTERACTIVE) or {}
     except Exception as e:
         print(f"[rsvp] fetch failed for pk {pk}: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "could not load the invite"}, 502
@@ -2664,33 +2666,39 @@ def draft_resume(body):
         return {"ok": False, "error": "This draft is in the outbox, waiting to be sent. Cancel it there "
                                       "first to change it."}, 423
     live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
-    try:
-        with _ops_lock:
-            # the probe ran before the lock: a save or a send that held it meanwhile may have replaced
-            # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
+
+    def reread_then_fetch():
+        """The 409 when the copy changed, else None once the body is fetched."""
+        # the probe ran before the gate: a save or a send that held it meanwhile may have replaced
+        # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
+        c = store.conn()
+        now = store.draft_get(c, before["id"]) if before is not None else None
+        c.close()
+        moved = before is not None and (now is None or (now["uid"], now["message_id"])
+                                        != (before["uid"], before["message_id"]))
+        if live is False or moved:
             c = store.conn()
-            now = store.draft_get(c, before["id"]) if before is not None else None
+            store.delete_message(c, pk)
+            c.commit()
             c.close()
-            moved = before is not None and (now is None or (now["uid"], now["message_id"])
-                                            != (before["uid"], before["message_id"]))
-            if live is False or moved:
-                c = store.conn()
-                store.delete_message(c, pk)
-                c.commit()
-                c.close()
-                try:                                         # full: only a full scan brings back older UIDs
-                    ingest.sync_folder(acct, row["folder"], full=True)
-                except Exception as e:
-                    print(f"[resume] drafts resync failed: {_sanitize_conn_error(e)}", flush=True)
-                return {"ok": False, "error": "This draft changed since the list loaded. "
-                                              "Open it again from the refreshed list."}, 409
-            ingest.fetch_body(pk)
+            try:                                         # full: only a full scan brings back older UIDs
+                ingest.sync_folder(acct, row["folder"], full=True)
+            except Exception as e:
+                print(f"[resume] drafts resync failed: {_sanitize_conn_error(e)}", flush=True)
+            return {"ok": False, "error": "This draft changed since the list loaded. "
+                                          "Open it again from the refreshed list."}, 409
+        ingest.fetch_body(pk)
+        return None
+    try:
+        changed = gates.run(acct["email"], reread_then_fetch, priority=gates.Priority.INTERACTIVE)
     except mailops._UNREACHABLE + (imaplib.IMAP4.error,) as e:
         print(f"[resume] fetch failed: {_sanitize_conn_error(e)}", flush=True)
         return unreachable, 502
     except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
         print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
         return unreadable, 422
+    if changed:
+        return changed
     c = store.conn()
     raw = store.get_body(c, pk)
     c.close()
@@ -3774,8 +3782,8 @@ class H(BaseHTTPRequestHandler):
         c = store.conn(); row = store.get_message(c, pk); c.close()
         if not row:
             return self._json({"ok": False, "error": "not found"}, 404)
-        with _ops_lock:                                  # ensure body + attachment metadata exist
-            ingest.fetch_body(pk)
+        gates.run(row["account"], lambda: ingest.fetch_body(pk),   # ensure body + attachment metadata exist
+                  priority=gates.Priority.INTERACTIVE)
         c = store.conn()
         att = c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
                         (pk, part_id)).fetchone()
