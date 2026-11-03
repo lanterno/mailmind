@@ -2,6 +2,7 @@
 database and config, fake IMAP and SMTP connections, and fictional addresses, so nothing here
 can reach a real server.
 Run: python3 test_hardening.py"""
+import imaplib
 import json
 import os
 import ssl
@@ -16,6 +17,7 @@ with open(config.CONFIG, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
 import accounts
+import mailops
 import smtpsend
 
 
@@ -95,6 +97,108 @@ def test_smtp_follows_the_same_loopback_rule():
         assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname, starttls
         ctx = _smtp_ctx("127.0.0.1", starttls)
         assert ctx.verify_mode == ssl.CERT_NONE and not ctx.check_hostname, starttls
+
+
+class _ScriptedIMAP:
+    """A selected-folder IMAP connection that answers each command as scripted and records it.
+    An answer that is an exception is raised, the way imaplib raises on BAD."""
+
+    def __init__(self, **answers):
+        self.answers, self.calls = answers, []
+        self.untagged_responses = {"UIDVALIDITY": [b"7"]}
+
+    def select(self, folder, readonly=False):
+        self.calls.append(("SELECT", folder))
+        return "OK", [b"1"]
+
+    def uid(self, cmd, *args):
+        self.calls.append((cmd.upper(),) + args)
+        a = self.answers.get(cmd.upper(), ("OK", [b""]))
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    def expunge(self):
+        self.calls.append(("EXPUNGE-ALL",))
+        return "OK", []
+
+    def append(self, folder, flags, date, raw):
+        self.calls.append(("APPEND", folder))
+        return "OK", [b"[APPENDUID 7 42] done"]
+
+    def list(self):
+        return "OK", [b'(\\HasNoChildren \\Drafts) "/" "Drafts"']
+
+    def logout(self):
+        pass
+
+    def cmds(self):
+        return [c[0] for c in self.calls]
+
+
+_NO_MOVE = ("NO", [b"MOVE not supported"])
+_BAD = imaplib.IMAP4.error("BAD unknown command")
+
+
+def test_a_move_without_MOVE_copies_then_expunges_only_its_uid():
+    M = _ScriptedIMAP(MOVE=_NO_MOVE)
+    mailops._move_uid(M, "41", "Archive")
+    assert ("COPY", "41", '"Archive"') in M.calls
+    assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
+    assert ("EXPUNGE", "41") in M.calls
+    assert "EXPUNGE-ALL" not in M.cmds()
+
+
+def test_a_failed_copy_leaves_the_message_untouched():
+    M = _ScriptedIMAP(MOVE=_NO_MOVE, COPY=("NO", [b"[TRYCREATE] no such folder"]))
+    try:
+        mailops._move_uid(M, "41", "Gone")
+        raise AssertionError("a failed COPY must raise")
+    except imaplib.IMAP4.error as e:
+        assert "COPY failed" in str(e)
+    assert "STORE" not in M.cmds() and "EXPUNGE" not in M.cmds() and "EXPUNGE-ALL" not in M.cmds()
+
+
+def test_without_uidplus_the_message_stays_flagged_and_nothing_else_goes():
+    M = _ScriptedIMAP(MOVE=_NO_MOVE, EXPUNGE=_BAD)
+    mailops._move_uid(M, "41", "Archive")          # no exception: copied and flagged
+    assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
+    assert "EXPUNGE-ALL" not in M.cmds()
+
+
+def test_a_lost_connection_during_expunge_still_raises():
+    M = _ScriptedIMAP(EXPUNGE=imaplib.IMAP4.abort("socket closed"))
+    try:
+        mailops.expunge_uid(M, "41")
+        raise AssertionError("an abort must propagate so the caller can queue the op")
+    except imaplib.IMAP4.abort:
+        pass
+
+
+def _with_connection(M, fn):
+    real = smtpsend.accounts.connect
+    smtpsend.accounts.connect = lambda acct, timeout=60: M
+    try:
+        return fn()
+    finally:
+        smtpsend.accounts.connect = real
+
+
+def test_deleting_a_draft_copy_never_bulk_expunges():
+    M = _ScriptedIMAP(EXPUNGE=_BAD)
+    _with_connection(M, lambda: smtpsend.delete_draft_uid({"email": "ada@example.test"},
+                                                          "Drafts", 41, 7))
+    assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
+    assert "EXPUNGE-ALL" not in M.cmds()
+
+
+def test_replacing_a_draft_copy_never_bulk_expunges():
+    M = _ScriptedIMAP(EXPUNGE=_BAD)
+    out = _with_connection(M, lambda: smtpsend.append_to_drafts(
+        {"email": "ada@example.test"}, b"Subject: hi\r\n\r\nbody", prev_uid=41, prev_uidvalidity=7))
+    assert out == ("Drafts", 42, 7)
+    assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
+    assert "EXPUNGE-ALL" not in M.cmds()
 
 
 if __name__ == "__main__":
