@@ -541,9 +541,12 @@ def invalidate_stats():
 # ----------------------------------------------------------------------------- curation ops
 def do_reconcile(account, dry_run):
     accounts.preload_creds()
-    with _ops_lock:
-        accts = accounts.accounts() if not account or account == "all" else [accounts.get(account)]
-        results = [ingest.reconcile_account(a, dry_run=dry_run) for a in accts]
+    every = not account or account == "all"
+
+    def reconcile():
+        accts = accounts.accounts() if every else [accounts.get(account)]
+        return [ingest.reconcile_account(a, dry_run=dry_run) for a in accts]
+    results = gates.run(gates.EVERY_ACCOUNT if every else account, reconcile, priority=gates.Priority.INTERACTIVE)
     if not dry_run:
         stamp = now_iso()
         with open(settings.current().reconcile_audit, "a") as f:
@@ -560,9 +563,12 @@ def do_reconcile(account, dry_run):
 
 def do_sweep(account, dry_run):
     accounts.preload_creds()
-    with _ops_lock:
-        accts = accounts.accounts() if not account or account == "all" else [accounts.get(account)]
-        results = [manage.sweep_account(a, dry=dry_run) for a in accts]
+    every = not account or account == "all"
+
+    def sweep():
+        accts = accounts.accounts() if every else [accounts.get(account)]
+        return [manage.sweep_account(a, dry=dry_run) for a in accts]
+    results = gates.run(gates.EVERY_ACCOUNT if every else account, sweep, priority=gates.Priority.INTERACTIVE)
     if not dry_run:
         invalidate_stats()
     return {"ok": True, "dry_run": dry_run, "results": results,
@@ -1206,6 +1212,17 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
 
 
+def _account_of(pk):
+    """The account a message is in, whose IMAP gate an operation on it takes. EVERY_ACCOUNT when
+    there's no such message: the operation finds that out under the gate, as it always has."""
+    c = store.conn()
+    try:
+        r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
+    finally:
+        c.close()
+    return r["account"] if r else gates.EVERY_ACCOUNT
+
+
 def do_write(path, body):
     """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Move-type ops
     fall back to the durable offline queue if IMAP is unreachable; seen/flag stay local-only as before."""
@@ -1213,31 +1230,35 @@ def do_write(path, body):
         pk = int(body.get("pk"))
     except (TypeError, ValueError):
         return {"ok": False, "msg": "bad pk"}
-    undo = None
     _Q = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")),
           "/api/junk": ("junk", None)}
     if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
         # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
         # request's: \Deleted from here would bypass Trash and undo.
         return {"ok": False, "msg": "unknown flag"}
-    with _ops_lock:
+
+    def write():
+        """(ok, msg, undo, queued): queued is the answer when IMAP was down and the move waits in
+        the offline queue instead."""
         if path == "/api/seen":
-            ok, msg = mailops.set_flags(pk, {"seen": bool(body.get("seen", True))})
-        elif path == "/api/flag":
-            ok, msg = mailops.set_flags(pk, {body.get("flag", "flagged"): bool(body.get("on", True))})
-        elif path in _Q:
+            return (*mailops.set_flags(pk, {"seen": bool(body.get("seen", True))}), None, None)
+        if path == "/api/flag":
+            return (*mailops.set_flags(pk, {body.get("flag", "flagged"): bool(body.get("on", True))}), None, None)
+        if path in _Q:
             op, dest = _Q[path]
             try:
                 if op == "archive":
-                    ok, msg, undo = mailops.archive_message(pk)
-                elif op == "move":
-                    ok, msg, undo = mailops.move_message(pk, dest)
-                else:
-                    ok, msg, undo = mailops.junk_message(pk)
-            except mailops._UNREACHABLE:           # IMAP down → queue it (still under _ops_lock; no IMAP here)
-                return _readmut_enqueue(op, pk, dest, body.get("undo_group"), body.get("mutation_id"))
-        else:
-            ok, msg = False, "unknown"
+                    return (*mailops.archive_message(pk), None)
+                if op == "move":
+                    return (*mailops.move_message(pk, dest), None)
+                return (*mailops.junk_message(pk), None)
+            except mailops._UNREACHABLE:           # IMAP down → queue it (still under the gate; no IMAP here)
+                return None, None, None, _readmut_enqueue(op, pk, dest, body.get("undo_group"),
+                                                          body.get("mutation_id"))
+        return False, "unknown", None, None
+    ok, msg, undo, queued = gates.run(_account_of(pk), write, priority=gates.Priority.INTERACTIVE)
+    if queued is not None:
+        return queued
     if ok:
         if undo:
             undo_push(undo, body.get("undo_group"))
@@ -1250,11 +1271,17 @@ def do_trash(body):
     """Move one message to the account's Trash, serialized with every other live-IMAP op. Falls
     back to the durable offline queue if IMAP is unreachable, like the move-type ops in do_write."""
     pk = int(body.get("pk"))
-    with _ops_lock:
+
+    def trash():
+        """(ok, msg, undo, queued): queued is the answer when IMAP was down, as in do_write."""
         try:
-            ok, msg, undo = mailops.trash_message(pk)
-        except mailops._UNREACHABLE:       # IMAP down → durable offline queue (still under _ops_lock; no IMAP here)
-            return _readmut_enqueue("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
+            return (*mailops.trash_message(pk), None)
+        except mailops._UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
+            return None, None, None, _readmut_enqueue("trash", pk, None, body.get("undo_group"),
+                                                      body.get("mutation_id"))
+    ok, msg, undo, queued = gates.run(_account_of(pk), trash, priority=gates.Priority.INTERACTIVE)
+    if queued is not None:
+        return queued
     if ok:
         undo_push(undo, body.get("undo_group"))
         invalidate_stats()
@@ -1321,79 +1348,84 @@ def undo_push(desc, group=None):
 
 
 def _reverse_one(d):
-    """Run one descriptor's inverse under _ops_lock. Returns (ok, affected_account, src_folder)."""
+    """Run one descriptor's inverse as a job on its account's IMAP gate. Returns (ok,
+    affected_account, src_folder)."""
+    return gates.run(d.get("account") or gates.EVERY_ACCOUNT, lambda: _reverse_held(d),
+                     priority=gates.Priority.INTERACTIVE)
+
+
+def _reverse_held(d):
     kind = d.get("kind")
-    with _ops_lock:
-        if kind in ("move", "gmail_archive") and d.get("message_id"):
-            # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued or
-            # claimed-but-not-applied), CANCEL it and restore the optimistically-removed local row —
-            # no counter-move. If it already shipped, recover the dest the worker resolved online so
-            # the counter-move searches the RIGHT folder (the enqueued desc had an empty dest_folder
-            # for junk/archive).
-            c = store.conn()
-            q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
-            if q is not None and not q["applied"]:
-                cancelled = store.read_mut_cancel_unapplied(c, q["id"])
-                c.commit(); c.close()
-                if cancelled:
-                    src = d.get("src_folder") or "INBOX"
-                    try:
-                        n = ingest.ingest_message(accounts.get(d["account"]), src, d["message_id"])
-                    except Exception:
-                        n = 0
-                    if n:
-                        return True, d["account"], src
-                    # re-ingest found nothing (UID gone) → fall through to the normal reverse
+    if kind in ("move", "gmail_archive") and d.get("message_id"):
+        # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued or
+        # claimed-but-not-applied), CANCEL it and restore the optimistically-removed local row —
+        # no counter-move. If it already shipped, recover the dest the worker resolved online so
+        # the counter-move searches the RIGHT folder (the enqueued desc had an empty dest_folder
+        # for junk/archive).
+        c = store.conn()
+        q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
+        if q is not None and not q["applied"]:
+            cancelled = store.read_mut_cancel_unapplied(c, q["id"])
+            c.commit(); c.close()
+            if cancelled:
+                src = d.get("src_folder") or "INBOX"
+                try:
+                    n = ingest.ingest_message(accounts.get(d["account"]), src, d["message_id"])
+                except Exception:
+                    n = 0
+                if n:
+                    return True, d["account"], src
+                # re-ingest found nothing (UID gone) → fall through to the normal reverse
+        else:
+            if q is not None and q["dest"] and not d.get("dest_folder"):
+                d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
+            c.close()
+    if kind == "move":
+        ok, _ = mailops.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"])
+        if not ok:
+            return False, d["account"], d["src_folder"]
+        try:   # re-ingest the exact restored message (watermark sync would miss a re-used UID)
+            ingest.ingest_message(accounts.get(d["account"]), d["src_folder"], d["message_id"])
+        except Exception:
+            pass
+        return True, d["account"], d["src_folder"]
+    if kind == "gmail_archive":
+        allmail = mailops.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
+        ok, _ = mailops.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
+        if not ok:
+            return False, d["account"], "INBOX"
+        try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
+            ingest.ingest_message(accounts.get(d["account"]), "INBOX", d["message_id"])
+        except Exception:
+            pass
+        return True, d["account"], "INBOX"
+    if kind == "snooze":
+        c = store.conn()
+        for i, pk in enumerate(d["pks"]):
+            pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
+            if pu:
+                store.set_snooze(c, pk, pu)
             else:
-                if q is not None and q["dest"] and not d.get("dest_folder"):
-                    d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
-                c.close()
-        if kind == "move":
-            ok, _ = mailops.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"])
-            if not ok:
-                return False, d["account"], d["src_folder"]
-            try:   # re-ingest the exact restored message (watermark sync would miss a re-used UID)
-                ingest.ingest_message(accounts.get(d["account"]), d["src_folder"], d["message_id"])
-            except Exception:
-                pass
-            return True, d["account"], d["src_folder"]
-        if kind == "gmail_archive":
-            allmail = mailops.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
-            ok, _ = mailops.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
-            if not ok:
-                return False, d["account"], "INBOX"
-            try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
-                ingest.ingest_message(accounts.get(d["account"]), "INBOX", d["message_id"])
-            except Exception:
-                pass
-            return True, d["account"], "INBOX"
-        if kind == "snooze":
-            c = store.conn()
-            for i, pk in enumerate(d["pks"]):
-                pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
-                if pu:
-                    store.set_snooze(c, pk, pu)
-                else:
-                    store.clear_snooze(c, pk)
-                store.fts_index(c, pk)
-            c.commit()
-            c.close()
-            return True, d.get("account"), None
-        if kind == "mute":                              # pure-local: unmute + restore prior seen
-            c = store.conn()
-            store.unmute_thread(c, d["account"], d["thread_id"])
-            for pk, prev in d.get("prev_seen", []):
-                store.set_local_flags(c, pk, seen=int(prev or 0))
-                store.fts_index(c, pk)
-            c.commit()
-            c.close()
-            return True, d.get("account"), None
-        if kind == "unblock":                           # pure-local: drop the block rule (sender cleanup)
-            try:
-                rules.remove(d["token"])
-            except Exception:
-                return False, d.get("account"), None
-            return True, d.get("account"), None
+                store.clear_snooze(c, pk)
+            store.fts_index(c, pk)
+        c.commit()
+        c.close()
+        return True, d.get("account"), None
+    if kind == "mute":                              # pure-local: unmute + restore prior seen
+        c = store.conn()
+        store.unmute_thread(c, d["account"], d["thread_id"])
+        for pk, prev in d.get("prev_seen", []):
+            store.set_local_flags(c, pk, seen=int(prev or 0))
+            store.fts_index(c, pk)
+        c.commit()
+        c.close()
+        return True, d.get("account"), None
+    if kind == "unblock":                           # pure-local: drop the block rule (sender cleanup)
+        try:
+            rules.remove(d["token"])
+        except Exception:
+            return False, d.get("account"), None
+        return True, d.get("account"), None
     return False, d.get("account"), None
 
 
@@ -2035,15 +2067,23 @@ def cleanup_execute(body):
     targets = _cleanup_sweep_targets(c, from_addr)
     c.close()
     swept = fail = queued = 0
+
+    def trash(pk):
+        """(ok, undo), or None when IMAP was down and the move went to the offline queue."""
+        try:
+            ok, _msg, undo = mailops.trash_message(pk)
+            return ok, undo
+        except mailops._UNREACHABLE:            # IMAP down → durable offline queue (no IMAP here)
+            _readmut_enqueue("trash", pk, None, grp, None)
+            return None
     for t in targets[:_CLEANUP_SWEEP_CAP]:
         try:
-            with _ops_lock:                             # one message at a time, like /api/trash
-                try:
-                    ok, _msg, undo = mailops.trash_message(t["pk"])
-                except mailops._UNREACHABLE:            # IMAP down → durable offline queue (no IMAP here)
-                    _readmut_enqueue("trash", t["pk"], None, grp, None)
-                    queued += 1
-                    continue
+            done = gates.run(t["account"], lambda: trash(t["pk"]),   # one message at a time, like /api/trash
+                             priority=gates.Priority.INTERACTIVE)
+            if done is None:
+                queued += 1
+                continue
+            ok, undo = done
             if ok:
                 swept += 1
                 undo_push(undo, grp)
@@ -2412,8 +2452,9 @@ def do_draft(body):
         if row:
             try:
                 acct = accounts.get(row["account"])
-                with _ops_lock:
-                    smtpsend.delete_draft_uid(acct, row["folder"], row["uid"], row["uidvalidity"])
+                gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(acct, row["folder"], row["uid"],
+                                                                           row["uidvalidity"]),
+                          priority=gates.Priority.INTERACTIVE)
             except Exception as e:
                 print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
             c = store.conn(); store.draft_delete(c, int(body["draft_id"])); c.commit(); c.close()
@@ -2434,44 +2475,50 @@ def do_draft(body):
     prev = store.draft_get(c, int(did)) if did else None
     c.close()
     same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
-    try:
-        with _ops_lock:
-            folder, uid, uidv = smtpsend.append_to_drafts(
-                acct, built["raw"],
-                prev_uid=(prev["uid"] if same else None),
-                prev_uidvalidity=(prev["uidvalidity"] if same else None),
-                prev_msgid=(prev["message_id"] if same else None),
-                prev_folder=(prev["folder"] if same else None))
-            # The old copy is in another mailbox (From changed) or another folder (a draft reopened
-            # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
-            # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
-            # does a message that isn't a draft at all (MailMind didn't save it, the server doesn't
-            # flag it \Draft): Edit is offered in any folder whose name holds "draft".
-            if (prev and prev["uid"] and prev["uidvalidity"] is not None
-                    and (not same or (prev["folder"] and prev["folder"] != folder))
-                    and (prev["raw_sha"] or _flagged_draft(prev))):
-                try:
-                    smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
-                                              prev["uidvalidity"])
-                except Exception as e:
-                    print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
-            # the row moves with the copy, under the same lock: Edit re-checks it under this lock
-            now = now_iso()
-            row = {"id": int(did) if did else None, "account": acct["email"], "folder": folder, "uid": uid,
-                   "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
-                   "mode": body.get("mode", "new"), "subject": spec["subject"],
-                   "created_at": now, "updated_at": now}
-            bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
-            c = store.conn()
+    def save():
+        """APPEND the new copy, drop the old one, and move the row with them. Returns the row's id
+        and the new copy's UID."""
+        folder, uid, uidv = smtpsend.append_to_drafts(
+            acct, built["raw"],
+            prev_uid=(prev["uid"] if same else None),
+            prev_uidvalidity=(prev["uidvalidity"] if same else None),
+            prev_msgid=(prev["message_id"] if same else None),
+            prev_folder=(prev["folder"] if same else None))
+        # The old copy is in another mailbox (From changed) or another folder (a draft reopened
+        # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
+        # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
+        # does a message that isn't a draft at all (MailMind didn't save it, the server doesn't
+        # flag it \Draft): Edit is offered in any folder whose name holds "draft".
+        if (prev and prev["uid"] and prev["uidvalidity"] is not None
+                and (not same or (prev["folder"] and prev["folder"] != folder))
+                and (prev["raw_sha"] or _flagged_draft(prev))):
             try:
-                new_id = store.draft_upsert(c, row)
-                store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
-                                       compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
-                                       spec["tail"]["html"], json.dumps(bcc) if bcc else None,
-                                       hashlib.sha256(built["raw"]).hexdigest())
-                c.commit()
-            finally:
-                c.close()
+                smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
+                                          prev["uidvalidity"])
+            except Exception as e:
+                print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
+        # the row moves with the copy, under the same gate: Edit re-checks it under the gate
+        now = now_iso()
+        row = {"id": int(did) if did else None, "account": acct["email"], "folder": folder, "uid": uid,
+               "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
+               "mode": body.get("mode", "new"), "subject": spec["subject"],
+               "created_at": now, "updated_at": now}
+        bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
+        c = store.conn()
+        try:
+            new_id = store.draft_upsert(c, row)
+            store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
+                                   compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
+                                   spec["tail"]["html"], json.dumps(bcc) if bcc else None,
+                                   hashlib.sha256(built["raw"]).hexdigest())
+            c.commit()
+        finally:
+            c.close()
+        return new_id, uid
+    # an old copy in another account (From changed) is removed there too: the job spans both
+    scope = acct["email"] if prev is None or same else gates.EVERY_ACCOUNT
+    try:
+        new_id, uid = gates.run(scope, save, priority=gates.Priority.INTERACTIVE)
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     except Exception as e:
@@ -4119,9 +4166,9 @@ class H(BaseHTTPRequestHandler):
             return {"ok": False, "msg": "verdict must be keep|block|remove"}
         trashed = False
         if verdict == "block" and pk is not None:  # close the loop: block also trashes now
-            try:
-                with _ops_lock:                    # serialized with every other live-IMAP op
-                    trashed, _, _ = mailops.trash_message(int(pk))   # block-sender is NOT undoable (rule + move)
+            try:                                   # serialized with every other live-IMAP op
+                trashed, _, _ = gates.run(_account_of(int(pk)), lambda: mailops.trash_message(int(pk)),
+                                          priority=gates.Priority.INTERACTIVE)   # block-sender is NOT undoable
             except Exception:
                 trashed = False
         invalidate_stats()
