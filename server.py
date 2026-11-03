@@ -1204,6 +1204,10 @@ def do_write(path, body):
     undo = None
     _Q = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")),
           "/api/junk": ("junk", None)}
+    if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
+        # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
+        # request's: \Deleted from here would bypass Trash and undo.
+        return {"ok": False, "msg": "unknown flag"}
     with _ops_lock:
         if path == "/api/seen":
             ok, msg = mailops.set_flags(pk, {"seen": bool(body.get("seen", True))})
