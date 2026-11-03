@@ -12,7 +12,7 @@ the dev tools on first use.
 ```bash
 just verify                       # lint + compile + all tests + frontend check — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
-just dev                          # read-only server, no background sync (safest for local work)
+just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
 just run-old [port]               # the same through the old front door, which needs nothing installed
 ```
@@ -20,7 +20,7 @@ just run-old [port]               # the same through the old front door, which n
 ```bash
 uv run python -m mailmind serve [port]   # run the app (default http://127.0.0.1:8721)
 python3 server.py [port]          # the old front door: the same app, with nothing installed
-MAILMIND_NOSYNC=1 python3 server.py   # serve read-only, no background sync (safe for local dev; either door)
+MAILMIND_PROFILE=read-only python3 server.py   # the same read-only profile, either door
 
 python3 config.py check           # verify credentials resolve, per account (prints ok/fail, no secrets)
 python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
@@ -171,9 +171,9 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
 - `mailmind.bootstrap.legacy.wire(server)` connects the outbox, the read-mutation queue, the
   thread summarizer and the IDLE layer to the server's lock and callbacks. `server.__main__` passes
   `sys.modules[__name__]`: importing `server` there would load a second copy with its own lock.
-  `legacy.start(server)` is the startup both doors share: the schema, `wire`, then the worker
-  threads (the outbox, the read-mutation queue, snoozes and, unless `server.nosync()`, the sync
-  loops and IDLE).
+  `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
+  then the worker threads. Full, those are the outbox, the read-mutation queue, snoozes, the sync
+  loops and IDLE; read-only, snoozes alone.
 - `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Every route still runs in `server.H`: `mailmind.http.bridge.HandlerBridge`,
@@ -182,6 +182,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
   and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
   (`HandlerBridge.close`), so Ctrl-C stops at once.
+- `mailmind.platform.profile` says how the process runs, `full` or `read-only` (see Writes,
+  undo, and offline).
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
   Concurrency).
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
@@ -264,8 +266,11 @@ work with them unset.
 connection. Closing a socket another thread may be about to wait on frees its descriptor number
 for the next socket opened.
 
-`server.nosync()` is the only reader of `MAILMIND_NOSYNC`. Any value but empty, `0`, `false`,
-`no` or `off` turns it on, so a typo fails toward read-only.
+`mailmind.platform.profile` is the only reader of `MAILMIND_PROFILE` (`full`, the default, or
+`read-only`) and of the older `MAILMIND_NOSYNC`, which still selects read-only: any value but
+empty, `0`, `false`, `no` or `off` turns it on, so a typo fails toward read-only, and read-only
+wins when the two disagree. A front door refuses to start on a profile name it doesn't know.
+`server.nosync()` asks the profile.
 
 ### Writes, undo, and offline
 
@@ -279,6 +284,13 @@ for the next socket opened.
   irreversible step returns, so the boot-time reset of running rows never repeats it. A row's
   state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
   as a job on the account's IMAP gate; the outbox's SMTP send holds none.
+- The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
+  `accounts.connect` hands back an `accounts.ReadOnlyIMAP`, which opens every mailbox with
+  EXAMINE and raises `profile.ReadOnlyError` on any command not known to only read, before it is
+  sent. `smtpsend.smtp_connect` and `_unsub_oneclick_post` refuse too. `ReadOnlyError` is a
+  member of `mailops._UNREACHABLE`, so a move queues as it does offline, and both queues' drains
+  wait for a full run. What nothing queues (a flag, a draft, a sweep) answers 409 through
+  `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. `_imap_mutate` returns `(False, None)`, and
   trash, archive, junk and move answer `ok: false` and keep the local row. imaplib returns a NO
   rather than raising it, so check `typ` on COPY, STORE and APPEND. Never send a bulk `EXPUNGE`:
@@ -393,7 +405,7 @@ entry point that bypasses them won't show up there.
 `rules.py` layers a learned per-sender/domain keep/block list on top, persisted to
 `mailmind_rules.json` — that file is personal data and stays gitignored. The same file
 holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
-`manage.expire_account` from the CLI and by `server.expire_loop` hourly (not under NOSYNC).
+`manage.expire_account` from the CLI and by `server.expire_loop` hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 
 ## Conventions

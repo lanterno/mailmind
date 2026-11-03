@@ -559,7 +559,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **The offline queue's remaining gaps** · medium value · effort S —
   - Marking read or starring while IMAP is away answers 500. `read_mutations.op` allows `flag` and
     `apply_queued_mutation` handles it, but `do_write` never queues one. Pinned by
-    `test_marking_read_while_the_server_is_away_is_queued`.
+    `test_marking_read_while_the_server_is_away_is_queued`. The read-only profile refuses the same
+    change with a 409 for the same reason; queueing it fixes both.
+  - The page doesn't know the profile. Read-only, a move or a send that waits in its queue looks
+    done. Say `profile` in `/api/digest` and show it beside the sync status.
   - A queued move for an account removed from the config stays `running` until restart. Give it up
     as `error`. Pinned by `test_hwf_a_queued_move_for_a_removed_account_is_given_up`.
   - `connectEvents` registers no listener for the `readmutq` and `undo` events the server

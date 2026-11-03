@@ -304,6 +304,9 @@ automatically.
   and turns into one desktop notification when the tab is in the background.
 - **Triage survives an outage.** Archive, trash, junk and move queue durably with an
   optimistic local update and an undo, then re-apply exactly once when IMAP returns.
+- **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
+  mail when you open it, but writes nothing to a mail server. Its connections can only read,
+  sends and moves wait in their queues for a normal run, and what can't wait is refused.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder.
@@ -465,8 +468,9 @@ Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://
 
 **Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`), or
 `python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs (incremental
-ingest + summarize) every 5 minutes. With `MAILMIND_NOSYNC=1` either one serves read-only (no
-background sync); `just dev` does that.
+ingest + summarize) every 5 minutes. With `MAILMIND_PROFILE=read-only` either one serves
+read-only: it writes nothing to a mail server, so sends and moves wait in their queues until a
+full run, and it syncs nothing in the background. `just dev` does that.
 
 **CLI curation** (`manage.py`) — works across every account:
 
@@ -493,7 +497,8 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | Variable | Effect |
 |---|---|
 | `MAILMIND_HOME` | The data directory: the database, config, rules, saved views and audit trails. Unset, the repo folder, where they have always lived. It must already exist; MailMind never creates it. Every command reads it: the server, `ingest.py`, `summarize.py`, `manage.py`, `config.py check`, `export.py`. |
-| `MAILMIND_NOSYNC=1` | Serve the dashboard read-only (no background sync). Any value but empty, `0`, `false`, `no` or `off` turns it on. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends and moves wait in their queues, flags, drafts, sweeps and unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
+| `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: use the `claude` CLI. |
 | `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5` on the API, the CLI's own default otherwise), e.g. `claude-haiku-5-5` |
@@ -501,8 +506,8 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
-| `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs under `MAILMIND_NOSYNC`. |
-| `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by `MAILMIND_NOSYNC`). |
+| `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs read-only. |
+| `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by read-only). |
 | `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for older `claude` CLI builds and models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
