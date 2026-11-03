@@ -1,0 +1,383 @@
+[
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mark read",
+  "status": 200
+ },
+ {
+  "note": "mark read: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID STORE 2 +FLAGS (\\Seen)"
+  ]
+ },
+ {
+  "note": "mark read: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "mark unread",
+  "status": 200
+ },
+ {
+  "note": "mark unread: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID STORE 2 -FLAGS (\\Seen)"
+  ]
+ },
+ {
+  "note": "mark unread: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "star",
+  "status": 200
+ },
+ {
+  "note": "star: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID STORE 2 +FLAGS (\\Flagged)"
+  ]
+ },
+ {
+  "note": "star: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 1,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     [
+      "\\Flagged"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "unstar",
+  "status": 200
+ },
+ {
+  "note": "unstar: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID STORE 2 -FLAGS (\\Flagged)"
+  ]
+ },
+ {
+  "note": "unstar: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "flag seen",
+  "status": 200
+ },
+ {
+  "note": "flag seen: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID STORE 2 +FLAGS (\\Seen)"
+  ]
+ },
+ {
+  "note": "flag seen: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "unknown flag",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "flag deleted",
+  "status": 200
+ },
+ {
+  "note": "flag deleted: server writes",
+  "value": []
+ },
+ {
+  "note": "flag deleted: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "unknown flag",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "flag answered",
+  "status": 200
+ },
+ {
+  "note": "flag answered: server writes",
+  "value": []
+ },
+ {
+  "note": "flag answered: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     2,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "bad pk",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "flag a bad pk",
+  "status": 200
+ },
+ {
+  "note": "flag a bad pk: server writes",
+  "value": []
+ },
+ {
+  "body": {
+   "msg": "not found",
+   "ok": false,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "flag a missing message",
+  "status": 200
+ },
+ {
+  "note": "flag a missing message: server writes",
+  "value": []
+ },
+ {
+  "body": {
+   "empty": true,
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo with nothing to undo",
+  "status": 200
+ },
+ {
+  "note": "undo with nothing to undo: server writes",
+  "value": []
+ }
+]

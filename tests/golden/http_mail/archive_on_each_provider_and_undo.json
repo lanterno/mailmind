@@ -1,0 +1,275 @@
+[
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive ada-inbox-05-receipt.eml",
+  "status": 200
+ },
+ {
+  "note": "archive ada-inbox-05-receipt.eml: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 5 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive ada-inbox-05-receipt.eml: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive bea-inbox-01-client.eml",
+  "status": 200
+ },
+ {
+  "note": "archive bea-inbox-01-client.eml: server writes",
+  "value": [
+   "bea@example.test [INBOX] UID MOVE 1 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive bea-inbox-01-client.eml: where bea-inbox-01-client.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "bea@example.test",
+     "Archive",
+     1,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive cy-inbox-03-unrelated.eml",
+  "status": 200
+ },
+ {
+  "note": "archive cy-inbox-03-unrelated.eml: server writes",
+  "value": [
+   "cy@example.test [INBOX] UID STORE 3 -X-GM-LABELS (\\Inbox)"
+  ]
+ },
+ {
+  "note": "archive cy-inbox-03-unrelated.eml: where cy-inbox-03-unrelated.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     4,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo cy-inbox-03-unrelated.eml",
+  "status": 200
+ },
+ {
+  "note": "undo cy-inbox-03-unrelated.eml: server writes",
+  "value": [
+   "cy@example.test [[Gmail]/All Mail] UID STORE 4 +X-GM-LABELS (\\Inbox)"
+  ]
+ },
+ {
+  "note": "undo cy-inbox-03-unrelated.eml: where cy-inbox-03-unrelated.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 3
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "INBOX",
+     3,
+     []
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     4,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo bea-inbox-01-client.eml",
+  "status": 200
+ },
+ {
+  "note": "undo bea-inbox-01-client.eml: server writes",
+  "value": [
+   "bea@example.test [Archive] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo bea-inbox-01-client.eml: where bea-inbox-01-client.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "bea@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 3
+    }
+   ],
+   "server": [
+    [
+     "bea@example.test",
+     "INBOX",
+     3,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo ada-inbox-05-receipt.eml",
+  "status": 200
+ },
+ {
+  "note": "undo ada-inbox-05-receipt.eml: server writes",
+  "value": [
+   "ada@example.test [Archive] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo ada-inbox-05-receipt.eml: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "empty": true,
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo once more than there is",
+  "status": 200
+ },
+ {
+  "note": "undo once more than there is: server writes",
+  "value": []
+ }
+]

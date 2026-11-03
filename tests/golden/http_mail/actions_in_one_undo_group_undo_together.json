@@ -1,0 +1,148 @@
+[
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive ada-inbox-05-receipt.eml in group g1",
+  "status": 200
+ },
+ {
+  "note": "archive ada-inbox-05-receipt.eml in group g1: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 5 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive ada-inbox-05-receipt.eml in group g1: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive ada-inbox-09-rfc2047-folded.eml in group g1",
+  "status": 200
+ },
+ {
+  "note": "archive ada-inbox-09-rfc2047-folded.eml in group g1: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 9 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive ada-inbox-09-rfc2047-folded.eml in group g1: where ada-inbox-09-rfc2047-folded.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     3,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "failed": 0,
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 0,
+   "reversed": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo group g1",
+  "status": 200
+ },
+ {
+  "note": "undo group g1: server writes",
+  "value": [
+   "ada@example.test [Archive] UID MOVE 3 \"INBOX\"",
+   "ada@example.test [Archive] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo group g1: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 14
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     14,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "undo group g1: where ada-inbox-09-rfc2047-folded.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     []
+    ]
+   ]
+  }
+ }
+]

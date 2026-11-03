@@ -1,0 +1,298 @@
+[
+ {
+  "body": {
+   "msg": "trashed",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash ada-inbox-09-rfc2047-folded.eml",
+  "status": 200
+ },
+ {
+  "note": "trash ada-inbox-09-rfc2047-folded.eml: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 9 \"Trash\""
+  ]
+ },
+ {
+  "note": "trash ada-inbox-09-rfc2047-folded.eml: where ada-inbox-09-rfc2047-folded.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Trash",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "trashed",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash bea-inbox-01-client.eml",
+  "status": 200
+ },
+ {
+  "note": "trash bea-inbox-01-client.eml: server writes",
+  "value": [
+   "bea@example.test [INBOX] UID MOVE 1 \"Trash\""
+  ]
+ },
+ {
+  "note": "trash bea-inbox-01-client.eml: where bea-inbox-01-client.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "bea@example.test",
+     "Trash",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "trashed",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash cy-inbox-03-unrelated.eml",
+  "status": 200
+ },
+ {
+  "note": "trash cy-inbox-03-unrelated.eml: server writes",
+  "value": [
+   "cy@example.test [INBOX] UID MOVE 3 \"[Gmail]/Trash\""
+  ]
+ },
+ {
+  "note": "trash cy-inbox-03-unrelated.eml: where cy-inbox-03-unrelated.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/Trash",
+     1,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "folder": "INBOX",
+   "label": "Trashed",
+   "ok": true,
+   "remaining": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo cy-inbox-03-unrelated.eml",
+  "status": 200
+ },
+ {
+  "note": "undo cy-inbox-03-unrelated.eml: server writes",
+  "value": [
+   "cy@example.test [[Gmail]/Trash] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo cy-inbox-03-unrelated.eml: where cy-inbox-03-unrelated.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 3
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "INBOX",
+     3,
+     []
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     4,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "folder": "INBOX",
+   "label": "Trashed",
+   "ok": true,
+   "remaining": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo bea-inbox-01-client.eml",
+  "status": 200
+ },
+ {
+  "note": "undo bea-inbox-01-client.eml: server writes",
+  "value": [
+   "bea@example.test [Trash] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo bea-inbox-01-client.eml: where bea-inbox-01-client.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "bea@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 3
+    }
+   ],
+   "server": [
+    [
+     "bea@example.test",
+     "INBOX",
+     3,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folder": "INBOX",
+   "label": "Trashed",
+   "ok": true,
+   "remaining": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo ada-inbox-09-rfc2047-folded.eml",
+  "status": 200
+ },
+ {
+  "note": "undo ada-inbox-09-rfc2047-folded.eml: server writes",
+  "value": [
+   "ada@example.test [Trash] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo ada-inbox-09-rfc2047-folded.eml: where ada-inbox-09-rfc2047-folded.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "error": "bad request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash without a pk",
+  "status": 400
+ },
+ {
+  "note": "trash without a pk: server writes",
+  "value": []
+ },
+ {
+  "body": {
+   "msg": "not found",
+   "ok": false,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash a missing message",
+  "status": 200
+ },
+ {
+  "note": "trash a missing message: server writes",
+  "value": []
+ }
+]

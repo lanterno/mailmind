@@ -1,0 +1,88 @@
+[
+ {
+  "body": {
+   "msg": "archived",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive by COPY",
+  "status": 200
+ },
+ {
+  "note": "archive by COPY: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 5 \"Archive\"",
+   "ada@example.test [INBOX] UID COPY 5 \"Archive\"",
+   "ada@example.test [INBOX] UID STORE 5 +FLAGS (\\Deleted)",
+   "ada@example.test [INBOX] UID EXPUNGE 5"
+  ]
+ },
+ {
+  "note": "archive by COPY: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo the copied archive",
+  "status": 200
+ },
+ {
+  "note": "undo the copied archive: server writes",
+  "value": [
+   "ada@example.test [Archive] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo the copied archive: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     []
+    ]
+   ]
+  }
+ }
+]

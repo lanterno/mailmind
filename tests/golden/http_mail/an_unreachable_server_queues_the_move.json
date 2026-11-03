@@ -1,0 +1,50 @@
+[
+ {
+  "body": {
+   "msg": "queued",
+   "ok": true,
+   "status": "queued",
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive while the server drops us",
+  "status": 200
+ },
+ {
+  "note": "archive while the server drops us: server writes",
+  "value": []
+ },
+ {
+  "note": "archive while the server drops us: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     5,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "queued mutations",
+  "value": [
+   {
+    "account": "ada@example.test",
+    "applied": 0,
+    "dest": null,
+    "idempotency_key": "archive:ada@example.test:<order-1042@thimble.example.test>:m-1",
+    "message_id": "<order-1042@thimble.example.test>",
+    "op": "archive",
+    "src_folder": "INBOX"
+   }
+  ]
+ }
+]

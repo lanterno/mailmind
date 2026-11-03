@@ -1,0 +1,455 @@
+[
+ {
+  "body": {
+   "count": 2,
+   "failed": 0,
+   "msg": "filed",
+   "ok": true,
+   "pks": [
+    2,
+    1
+   ],
+   "queued": 0,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive the lunch conversation",
+  "status": 200
+ },
+ {
+  "note": "archive the lunch conversation: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 2 \"Archive\"",
+   "ada@example.test [INBOX] UID MOVE 1 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive the lunch conversation: where ada-inbox-01-lunch.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     3,
+     [
+      "\\Answered",
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "note": "archive the lunch conversation: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Archive",
+     2,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "archive the lunch conversation: where ada-sent-01-lunch-reply.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Sent",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "Sent",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "failed": 0,
+   "folder": "INBOX",
+   "label": "Archived",
+   "ok": true,
+   "remaining": 0,
+   "reversed": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo the lunch conversation",
+  "status": 200
+ },
+ {
+  "note": "undo the lunch conversation: server writes",
+  "value": [
+   "ada@example.test [Archive] UID MOVE 3 \"INBOX\"",
+   "ada@example.test [Archive] UID MOVE 2 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo the lunch conversation: where ada-inbox-01-lunch.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 1,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     [
+      "\\Answered",
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "note": "undo the lunch conversation: where ada-inbox-02-lunch-confirm.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 14
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     14,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "undo the lunch conversation: where ada-sent-01-lunch-reply.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "Sent",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "Sent",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "count": 2,
+   "failed": 0,
+   "msg": "filed",
+   "ok": true,
+   "pks": [
+    23,
+    22
+   ],
+   "queued": 0,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "trash the venue conversation",
+  "status": 200
+ },
+ {
+  "note": "trash the venue conversation: server writes",
+  "value": [
+   "cy@example.test [INBOX] UID MOVE 2 \"[Gmail]/Trash\"",
+   "cy@example.test [INBOX] UID MOVE 1 \"[Gmail]/Trash\""
+  ]
+ },
+ {
+  "note": "trash the venue conversation: where cy-inbox-01-thread-start.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/Trash",
+     2,
+     [
+      "\\Answered",
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "note": "trash the venue conversation: where cy-inbox-02-thread-end.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/Trash",
+     1,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "trash the venue conversation: where cy-sent-01-thread-reply.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "[Gmail]/Sent Mail",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     2,
+     [
+      "\\Seen"
+     ]
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/Sent Mail",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "failed": 0,
+   "folder": "INBOX",
+   "label": "Trashed",
+   "ok": true,
+   "remaining": 0,
+   "reversed": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo the venue conversation",
+  "status": 200
+ },
+ {
+  "note": "undo the venue conversation: server writes",
+  "value": [
+   "cy@example.test [[Gmail]/Trash] UID MOVE 2 \"INBOX\"",
+   "cy@example.test [[Gmail]/Trash] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo the venue conversation: where cy-inbox-01-thread-start.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 1,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "INBOX",
+     1,
+     [
+      "\\Answered",
+      "\\Seen"
+     ]
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     1,
+     [
+      "\\Answered",
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "note": "undo the venue conversation: where cy-inbox-02-thread-end.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "INBOX",
+     2,
+     []
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     3,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "note": "undo the venue conversation: where cy-sent-01-thread-reply.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "[Gmail]/Sent Mail",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 1
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     2,
+     [
+      "\\Seen"
+     ]
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/Sent Mail",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "not found",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive a conversation of a missing message",
+  "status": 200
+ },
+ {
+  "note": "archive a conversation of a missing message: server writes",
+  "value": []
+ },
+ {
+  "body": {
+   "msg": "bad pk",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive a conversation with a bad pk",
+  "status": 200
+ },
+ {
+  "note": "archive a conversation with a bad pk: server writes",
+  "value": []
+ }
+]

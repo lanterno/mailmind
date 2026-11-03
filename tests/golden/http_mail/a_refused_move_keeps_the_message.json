@@ -1,0 +1,49 @@
+[
+ {
+  "body": {
+   "msg": "the server refused the archive",
+   "ok": false,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "archive refused by the server",
+  "status": 200
+ },
+ {
+  "note": "archive refused by the server: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 5 \"Archive\"",
+   "ada@example.test [INBOX] UID COPY 5 \"Archive\""
+  ]
+ },
+ {
+  "note": "archive refused by the server: where ada-inbox-05-receipt.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 5
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     5,
+     []
+    ]
+   ]
+  }
+ }
+]

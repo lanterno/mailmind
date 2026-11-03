@@ -1,0 +1,261 @@
+[
+ {
+  "body": {
+   "msg": "junked",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "junk ada-inbox-12-scam.eml",
+  "status": 200
+ },
+ {
+  "note": "junk ada-inbox-12-scam.eml: server writes",
+  "value": [
+   "ada@example.test [INBOX] UID MOVE 12 \"Junk\""
+  ]
+ },
+ {
+  "note": "junk ada-inbox-12-scam.eml: where ada-inbox-12-scam.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "ada@example.test",
+     "Junk",
+     1,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "junked",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "junk bea-inbox-02-security.eml",
+  "status": 200
+ },
+ {
+  "note": "junk bea-inbox-02-security.eml: server writes",
+  "value": [
+   "bea@example.test [INBOX] UID MOVE 2 \"Spam\""
+  ]
+ },
+ {
+  "note": "junk bea-inbox-02-security.eml: where bea-inbox-02-security.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "bea@example.test",
+     "Spam",
+     1,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "msg": "junked",
+   "ok": true,
+   "undoable": true
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "junk cy-inbox-02-thread-end.eml",
+  "status": 200
+ },
+ {
+  "note": "junk cy-inbox-02-thread-end.eml: server writes",
+  "value": [
+   "cy@example.test [INBOX] UID MOVE 2 \"[Gmail]/Spam\""
+  ]
+ },
+ {
+  "note": "junk cy-inbox-02-thread-end.eml: where cy-inbox-02-thread-end.eml is",
+  "value": {
+   "db": [],
+   "server": [
+    [
+     "cy@example.test",
+     "[Gmail]/Spam",
+     1,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "cy@example.test",
+   "folder": "INBOX",
+   "label": "Marked junk",
+   "ok": true,
+   "remaining": 2
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo cy-inbox-02-thread-end.eml",
+  "status": 200
+ },
+ {
+  "note": "undo cy-inbox-02-thread-end.eml: server writes",
+  "value": [
+   "cy@example.test [[Gmail]/Spam] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo cy-inbox-02-thread-end.eml: where cy-inbox-02-thread-end.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "cy@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 0,
+     "uid": 2
+    }
+   ],
+   "server": [
+    [
+     "cy@example.test",
+     "INBOX",
+     2,
+     []
+    ],
+    [
+     "cy@example.test",
+     "[Gmail]/All Mail",
+     3,
+     []
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "bea@example.test",
+   "folder": "INBOX",
+   "label": "Marked junk",
+   "ok": true,
+   "remaining": 1
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo bea-inbox-02-security.eml",
+  "status": 200
+ },
+ {
+  "note": "undo bea-inbox-02-security.eml: server writes",
+  "value": [
+   "bea@example.test [Spam] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo bea-inbox-02-security.eml: where bea-inbox-02-security.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "bea@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 0,
+     "seen": 1,
+     "uid": 3
+    }
+   ],
+   "server": [
+    [
+     "bea@example.test",
+     "INBOX",
+     3,
+     [
+      "\\Seen"
+     ]
+    ]
+   ]
+  }
+ },
+ {
+  "body": {
+   "account": "ada@example.test",
+   "folder": "INBOX",
+   "label": "Marked junk",
+   "ok": true,
+   "remaining": 0
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "undo ada-inbox-12-scam.eml",
+  "status": 200
+ },
+ {
+  "note": "undo ada-inbox-12-scam.eml: server writes",
+  "value": [
+   "ada@example.test [Junk] UID MOVE 1 \"INBOX\""
+  ]
+ },
+ {
+  "note": "undo ada-inbox-12-scam.eml: where ada-inbox-12-scam.eml is",
+  "value": {
+   "db": [
+    {
+     "account": "ada@example.test",
+     "answered": 0,
+     "draft": 0,
+     "flagged": 0,
+     "folder": "INBOX",
+     "is_junk": 1,
+     "seen": 0,
+     "uid": 13
+    }
+   ],
+   "server": [
+    [
+     "ada@example.test",
+     "INBOX",
+     13,
+     []
+    ]
+   ]
+  }
+ }
+]
