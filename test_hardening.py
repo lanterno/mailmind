@@ -223,13 +223,13 @@ def _live_server():
     old_port, server.PORT = server.PORT, port
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-    def get(path, headers):
+    def get(path, headers, with_headers=False):
         h = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
         h.request("GET", path, headers={k: v.replace("PORT", str(port)) for k, v in headers.items()})
         r = h.getresponse()
         out = r.status, r.read()
         h.close()
-        return out
+        return out + (r.headers,) if with_headers else out
     try:
         yield get
     finally:
@@ -348,6 +348,13 @@ def test_the_apps_own_reads_and_older_browsers_still_work():
             h = dict(_HOST, **({"Sec-Fetch-Site": site} if site else {}))
             code, _ = get("/api/digest", h)
             assert code == 200, (site, code)
+
+
+def test_no_page_may_frame_the_app():
+    with _live_server() as get:
+        for path in ("/", "/api/digest", "/api/no-such-route"):
+            _, _, headers = get(path, _HOST, with_headers=True)
+            assert headers.get("X-Frame-Options") == "DENY", path
 
 if __name__ == "__main__":
     import sys
