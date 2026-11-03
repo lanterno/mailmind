@@ -2,11 +2,16 @@
 and how the stream ends. The golden files are in tests/golden/http_events/.
 
 The stream is read over a raw socket, as EventSource would: a GET without the CSRF header, which
-EventSource can't send. The keepalive interval is cut to a fraction of a second, so a closed
+EventSource can't send. Its body may run until the connection closes (the old front door's
+HTTP/1.0 answer) or come in chunks (uvicorn's HTTP/1.1); either reads the same, and the headers
+that only frame the connection are left out of the record. The keepalive interval is cut to a fraction of a second, so a closed
 listener is noticed (and its thread ends) within the test.
 """
 import socket
 import time
+
+# Headers about the connection, not the stream: each front door frames it its own way.
+CONNECTION_HEADERS = {"connection", "keep-alive", "transfer-encoding", "date", "server"}
 
 import pytest
 
@@ -26,17 +31,36 @@ class Stream:
         while (line := self.f.readline().decode().rstrip("\r\n")):
             k, _, v = line.partition(":")
             self.headers[k.lower()] = v.strip()
+        self.body = _Chunked(self.f) if self.headers.get("transfer-encoding") == "chunked" else self.f
 
     def frame(self):
         """The next frame, without the blank line that ends it."""
         lines = []
-        while (line := self.f.readline().decode()) not in ("\n", ""):
+        while (line := self.body.readline().decode()) not in ("\n", ""):
             lines.append(line.rstrip("\n"))
         return "\n".join(lines)
 
     def close(self):
         self.f.close()
         self.sock.close()
+
+
+class _Chunked:
+    """A chunked body, read a line at a time."""
+
+    def __init__(self, f):
+        self.f = f
+        self.buf = b""
+
+    def readline(self):
+        while b"\n" not in self.buf:
+            size = self.f.readline().split(b";")[0].strip()
+            if not size or int(size, 16) == 0:
+                break
+            self.buf += self.f.read(int(size, 16))
+            self.f.readline()                           # the CRLF after each chunk
+        line, sep, self.buf = self.buf.partition(b"\n")
+        return line + sep
 
 
 @pytest.fixture
@@ -56,7 +80,7 @@ def subscribers(realtime, n, timeout=5):
 def test_a_listener_hears_each_event_then_a_keepalive(app, golden, world, quick):
     s = Stream(app)
     golden.note("status and headers", {"status": s.status, "headers": {k: v for k, v in s.headers.items()
-                                                                       if k not in ("date", "server")}})
+                                                                       if k not in CONNECTION_HEADERS}})
     golden.note("first frame", s.frame())
     lunch = world.row("ada-inbox-02-lunch-confirm.eml")
     app.post("/api/mute", {"pk": lunch["pk"]})

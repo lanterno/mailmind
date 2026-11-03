@@ -4,7 +4,6 @@
   "value": {
    "headers": {
     "cache-control": "no-cache",
-    "connection": "keep-alive",
     "content-type": "text/event-stream",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff"
