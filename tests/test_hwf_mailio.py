@@ -636,18 +636,21 @@ def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
     assert queued()[0]["state"] == "error"
 
 
-class _StoppableKick(threading.Event):
-    """The outbox worker's kick: waits as an Event does until stop(), then ends the loop."""
-    stopping = False
+class _StoppableDrain:
+    """The outbox worker's drain: drains as before until stop(), then ends the worker's loop."""
 
-    def wait(self, timeout=None):
+    def __init__(self, drain):
+        self.drain, self.stopping = drain, False
+
+    def __call__(self):
         if self.stopping:
             raise _Stop()
-        return super().wait(timeout)
+        return self.drain()
 
     def stop(self):
+        import outbox
         self.stopping = True
-        self.set()
+        outbox.kick()
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: a send waits for the worker's 30 s poll, not the end of its window")
@@ -655,8 +658,8 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     import outbox
     import server
     monkeypatch.setattr(outbox, "SEND_DELAY", 1)                 # a one-second Undo Send window, in real time
-    kick = _StoppableKick()
-    monkeypatch.setattr(outbox, "_kick", kick)
+    drain = _StoppableDrain(outbox.drain)
+    monkeypatch.setattr(outbox, "drain", drain)
 
     def worker():
         try:
@@ -670,8 +673,9 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
         wait_until(lambda: world.smtp.messages, timeout=1.3)     # due within a second; the worker polls every 30
         assert world.smtp.messages
     finally:
-        kick.stop()
+        drain.stop()
         t.join(5)
+    assert not t.is_alive()
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: Retry keeps the attempt count, so one more failure gives up")
