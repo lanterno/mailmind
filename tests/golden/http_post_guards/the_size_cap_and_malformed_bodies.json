@@ -1,0 +1,72 @@
+[
+ {
+  "note": "a control route over 1 MB: /api/seen",
+  "value": {
+   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "status": 413
+  }
+ },
+ {
+  "note": "the send route over 38 MB: /api/send",
+  "value": {
+   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "status": 413
+  }
+ },
+ {
+  "note": "a negative length: /api/seen",
+  "value": {
+   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "status": 413
+  }
+ },
+ {
+  "note": "a length that isn't a number: /api/seen",
+  "value": {
+   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "status": 413
+  }
+ },
+ {
+  "note": "a body that isn't JSON",
+  "value": {
+   "body": "{\"ok\": false, \"msg\": \"bad pk\"}",
+   "status": 200
+  }
+ },
+ {
+  "note": "a JSON body that isn't an object",
+  "value": {
+   "body": "{\"ok\": false, \"error\": \"request failed\"}",
+   "status": 500
+  }
+ },
+ {
+  "body": {
+   "error": "bad request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "an id that isn't a number",
+  "status": 400
+ },
+ {
+  "body": {
+   "error": "bad request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "a missing id",
+  "status": 400
+ }
+]

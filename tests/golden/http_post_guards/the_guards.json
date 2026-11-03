@@ -1,0 +1,197 @@
+[
+ {
+  "body": {
+   "error": "bad or missing CSRF token",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/seen without the CSRF token",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "bad or missing CSRF token",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/seen with a wrong CSRF token",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "bad host/origin",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/seen from a rebinding host",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "bad host/origin",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/seen with a foreign Origin",
+  "status": 403
+ },
+ {
+  "note": "the message is still unread",
+  "value": 0
+ },
+ {
+  "body": {
+   "msg": "ok",
+   "ok": true,
+   "undoable": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/seen without an Origin",
+  "status": 200
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/send without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/draft without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/invite/rsvp without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/outbox/retry without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/outbox/cancel without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/outbox/sendnow without an Origin",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "origin required",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/cleanup/execute without an Origin",
+  "status": 403
+ },
+ {
+  "headers": {
+   "content-type": "text/plain",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/no-such-route",
+  "status": 404,
+  "text": "not found"
+ },
+ {
+  "headers": {
+   "content-type": "text/plain",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/accounts/no-such-action",
+  "status": 404,
+  "text": "not found"
+ }
+]
