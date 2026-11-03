@@ -20,6 +20,7 @@ import os
 import re
 import sqlite3
 import argparse
+import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email import policy as _policy
@@ -49,7 +50,8 @@ def _ro_conn():
         c.commit()
     finally:
         c.close()
-    ro = sqlite3.connect(f"file:{settings.current().db}?mode=ro", uri=True)
+    # A URI, so the path is escaped: a #, ? or % in the data directory's name would end or bend it.
+    ro = sqlite3.connect(f"file:{urllib.request.pathname2url(settings.current().db)}?mode=ro", uri=True)
     ro.row_factory = sqlite3.Row
     return ro
 
