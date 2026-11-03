@@ -1,0 +1,35 @@
+[
+ {
+  "note": "status and headers",
+  "value": {
+   "headers": {
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff"
+   },
+   "status": 200
+  }
+ },
+ {
+  "note": "first frame",
+  "value": "retry: 3000\n: connected"
+ },
+ {
+  "note": "frames for mute, undo and Reply Later",
+  "value": [
+   "event: mute\ndata: {\"account\": \"ada@example.test\"}",
+   "event: undo\ndata: {}",
+   "event: followup\ndata: {\"account\": \"ada@example.test\"}"
+  ]
+ },
+ {
+  "note": "then, with nothing to say",
+  "value": ": keepalive"
+ },
+ {
+  "note": "listeners once it hangs up",
+  "value": 0
+ }
+]

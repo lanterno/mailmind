@@ -1,0 +1,23 @@
+[
+ {
+  "body": {
+   "error": "too many listeners",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "a second listener",
+  "status": 503
+ },
+ {
+  "note": "a listener after the first hung up",
+  "value": {
+   "first frame": "retry: 3000\n: connected",
+   "status": 200
+  }
+ }
+]

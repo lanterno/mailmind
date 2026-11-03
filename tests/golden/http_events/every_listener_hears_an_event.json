@@ -1,0 +1,13 @@
+[
+ {
+  "note": "what each heard",
+  "value": [
+   "event: mute\ndata: {\"account\": \"cy@example.test\"}",
+   "event: mute\ndata: {\"account\": \"cy@example.test\"}"
+  ]
+ },
+ {
+  "note": "listeners once both hang up",
+  "value": 0
+ }
+]

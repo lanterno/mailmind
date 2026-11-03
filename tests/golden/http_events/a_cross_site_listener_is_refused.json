@@ -1,0 +1,34 @@
+[
+ {
+  "body": {
+   "error": "cross-site request",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "cross-site",
+  "status": 403
+ },
+ {
+  "body": {
+   "error": "bad host/origin",
+   "ok": false
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "another host",
+  "status": 403
+ },
+ {
+  "note": "listeners",
+  "value": 0
+ }
+]
