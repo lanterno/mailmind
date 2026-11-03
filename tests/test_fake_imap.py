@@ -365,7 +365,7 @@ def test_two_servers_given_the_same_mail_agree_on_every_id():
             first = _mail(1)
             s.deliver(ADA, "INBOX", first)
             s.deliver(ADA, "INBOX", _mail(2), thread_of=first)
-            s.renumber(ADA, "Trash")
+            s.renumber(ADA, "INBOX")
             return [(b.name, b.uidvalidity, [(u, m.gm_msgid, m.gm_thrid) for u, m in b.messages.items()])
                     for b in s.accounts[ADA].mailboxes.values()]
     for kind in ("imap", "gmail"):
