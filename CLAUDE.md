@@ -101,9 +101,9 @@ These tests are marked `browser` and skipped unless pytest runs with `--browser`
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
 to stay fast.
 
-There is no build step. `pyproject.toml` declares dev tools only (pytest, ruff, import-linter,
-Playwright and the like), locked with hashes in `uv.lock`, and `.python-version` pins 3.14 for
-uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
+There is no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
+the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
+`uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
 then `lint-imports` (import-linter) on the `mailmind` package's layers. Ruff's one accepted
 finding carries a `# noqa: F821` in `readmutq.py`: a lambda closing over an `except ... as e`
 name, safe because `_commit` invokes it synchronously. New pytest-native tests go in `tests/`;
@@ -114,12 +114,13 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
 
 ## Constraints
 
-- **The app is standard library only, for now.** `python3 server.py` must run with nothing
-  installed. This rule shaped every design decision below (hand-rolled sanitizer,
-  hand-rolled IMAP handling, no web framework, no frontend build). On 2026-11-03 the owner
-  approved lifting it for a domain-driven refactor: dev tools now, in `pyproject.toml`'s dev
-  group; runtime packages only from the refactor's Phase 2, which replaces this rule. Each
-  dependency change is its own commit, and the `uv.lock` change goes in the next.
+- **`python3 server.py` runs with nothing installed.** The app was standard library only until
+  the refactor's Phase 2, and that shaped every design decision below (hand-rolled sanitizer,
+  hand-rolled IMAP handling, no web framework, no frontend build). Since then it may use
+  runtime packages (FastAPI and uvicorn so far), each declared in `pyproject.toml` and locked
+  with hashes in `uv.lock`. Each dependency change is its own commit, and the `uv.lock` change
+  goes in the next. But `python3 server.py`, the old front door, is the kill switch while the
+  new one carries daily use, so nothing it imports may import a third-party package.
 - **The frontend is one file.** `dashboard.html` (~340KB) holds all HTML, CSS and JS
   inline. No bundler, no modules, no npm. Edit it directly. This holds until the refactor's
   frontend track moves it to React 19 and Vite.
