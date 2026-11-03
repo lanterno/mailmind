@@ -1816,7 +1816,7 @@ function renderCleanupPlan(){
   const unsubLine = m==="none" ? `<div class="do-line"><span class="ic">·</span><span style="color:var(--faint)">No List-Unsubscribe found — block + sweep only</span></div>`
                   : `<div class="do-line irrev"><span class="ic">${ico("alert")}</span><span>${unsubText}</span><span class="tag">can’t undo</span></div>`;
   const optLabel = m==="http-page" ? "open the unsubscribe page" : "also send the unsubscribe now";
-  const unsubOpt = m==="none" ? "" : `<label class="do-unsubopt"><input type="checkbox" id="doUnsubChk" ${p.do_unsub?"checked":""} onchange="if(state._cleanupPlan)state._cleanupPlan.do_unsub=this.checked"> ${optLabel}</label>`;
+  const unsubOpt = m==="none" ? "" : `<label class="do-unsubopt"><input type="checkbox" id="doUnsubChk" ${p.do_unsub?"checked":""}> ${optLabel}</label>`;
   const scopeLbl = p.scope==="domain"?p.domain:p.from_addr;
   const sweepFrom = p.scope==="domain"?` from ${esc(p.from_addr)}`:"";   // domain block, sender-only sweep
   const capNote = p.sweep_capped?`<div class="do-cap">${ico("alert")} Sweeps the most recent ${p.sweep} — run again for the rest.</div>`:"";
@@ -4852,6 +4852,9 @@ $("#doPanel").addEventListener("click",e=>{
     cleanupConfirm(); return; }
   if(e.target.closest("[data-do-cancel]")){ doDismiss(); return; }
   if(e.target.closest("[data-do-search]")){ const q=(state._doPlan&&state._doPlan.filter)||""; state._doPlan=null; state.doSeq++; closeDoPanel(); state.searching=true; $("#search").value=q; state.q=q; $("#clientCtx").innerHTML=`${ico("search")} <b>Search</b>`; runSearch(); return; }
+});
+$("#doPanel").addEventListener("change",e=>{                          // the cleanup's unsubscribe option
+  if(e.target.id==="doUnsubChk"&&state._cleanupPlan) state._cleanupPlan.do_unsub=e.target.checked;
 });
 function doDismiss(){ state._doPlan=null; state._cleanupPlan=null; state.doSeq++; closeDoPanel(); const s=$("#search");
   if(s&&s.value.startsWith("!")){ clearSearch(false); state.doSeq++; loadCMessages(); }   // restore the mailbox (don't leave a stale/ghost search under the closed modal)
