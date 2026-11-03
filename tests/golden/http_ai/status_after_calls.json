@@ -1,0 +1,80 @@
+[
+ {
+  "body": {
+   "accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "ai": {
+    "engine": "api",
+    "key_from": "ANTHROPIC_API_KEY",
+    "last_error": "",
+    "last_ok": null,
+    "last_ts": 0,
+    "model": "claude-opus-5-5"
+   },
+   "aliases": {
+    "ada@example.test": "Ada",
+    "bea@example.test": "Bea",
+    "cy@example.test": "Cy"
+   },
+   "generated": "2026-11-02T12:00:00+00:00",
+   "items": [],
+   "send_accounts": [
+    "ada@example.test",
+    "bea@example.test",
+    "cy@example.test"
+   ],
+   "signature_default": "",
+   "signatures": {
+    "ada@example.test": "",
+    "bea@example.test": "",
+    "cy@example.test": ""
+   },
+   "stats": {
+    "kept": 21,
+    "needs": 21,
+    "summarized": 0,
+    "total": 25,
+    "verified": 0
+   },
+   "status": {},
+   "sync": {
+    "last": null,
+    "result": "idle",
+    "running": false
+   }
+  },
+  "headers": {
+   "content-type": "application/json",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "the digest's AI status before any call",
+  "status": 200
+ },
+ {
+  "note": "ai after a good call",
+  "value": {
+   "engine": "api",
+   "key_from": "ANTHROPIC_API_KEY",
+   "last_error": "",
+   "last_ok": true,
+   "last_ts": 1793620800,
+   "model": "claude-opus-5-5"
+  }
+ },
+ {
+  "note": "ai after a failed call",
+  "value": {
+   "engine": "api",
+   "key_from": "ANTHROPIC_API_KEY",
+   "last_error": "Claude API 400: bad request",
+   "last_ok": false,
+   "last_ts": 1793620800,
+   "model": "claude-opus-5-5"
+  }
+ }
+]
