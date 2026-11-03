@@ -28,6 +28,7 @@ with open(config.CONFIG, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
 import accounts
+import ingest
 import mailops
 import server
 import smtpsend
@@ -514,6 +515,44 @@ def test_a_failed_read_answers_without_the_exception_text():
         server.digest_json = real
     assert code == 500, code
     assert json.loads(body) == {"ok": False, "error": "request failed"}, body
+
+
+def _undo_target(uid, mid):
+    """A server holding one message, found by its Message-ID at this UID."""
+    head = (f"From: Bo <bo@example.test>\r\nSubject: Back again\r\nMessage-ID: {mid}\r\n"
+            "Date: Mon, 2 Nov 2026 09:00:00 +0000\r\n\r\n").encode()
+    return _ScriptedIMAP(SEARCH=("OK", [str(uid).encode()]),
+                         FETCH=("OK", [(f"1 (UID {uid} FLAGS (\\Seen) BODY[] {{{len(head)}}}".encode(), head),
+                                       b")"]))
+
+
+def _watermark(folder):
+    c = store.conn()
+    wm = store.get_watermark(c, "ada@example.test", folder)
+    c.close()
+    return wm
+
+
+def test_undo_ingest_leaves_the_inbox_watermark_alone():
+    c = store.conn()
+    store.set_watermark(c, "ada@example.test", 100, "2026-11-01T09:00:00+00:00", "INBOX")
+    c.commit()
+    c.close()
+    with _connection(_undo_target(900, "<back@example.test>")):
+        n = ingest.ingest_message(accounts.get("ada@example.test"), "INBOX", "<back@example.test>")
+    assert n == 1, n
+    c = store.conn()
+    got = c.execute("SELECT uid FROM messages WHERE message_id=?", ("<back@example.test>",)).fetchall()
+    c.close()
+    assert [r["uid"] for r in got] == [900], got
+    assert _watermark("INBOX") == 100, _watermark("INBOX")    # UIDs 101..899 still get synced
+
+
+def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync():
+    with _connection(_undo_target(31, "<filed@example.test>")):
+        n = ingest.ingest_message(accounts.get("ada@example.test"), "Archive", "<filed@example.test>")
+    assert n == 1, n
+    assert not ingest.folder_synced("ada@example.test", "Archive")
 
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
