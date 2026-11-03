@@ -150,11 +150,16 @@ def world(world_template, data_dir):
         yield w.World(srv, placed, data_dir, smtp)
 
 
-@pytest.fixture
-def app(world, monkeypatch):
+# The two front doors every app test runs through: python3 server.py's and python -m mailmind serve's.
+DOORS = ("old", "new")
+_DOOR_IDS = tuple(f"door={d}" for d in DOORS)
+
+
+@pytest.fixture(params=DOORS, ids=_DOOR_IDS)
+def app(request, world, monkeypatch):
     """The app's HTTP server over this test's world, with the clock frozen at NOW and every
-    module's process state reset. Yields an AppClient; its .clock moves the frozen time
-    (clock.shift(timedelta(...)), clock.move_to(datetime))."""
+    module's process state reset, through each front door in turn. Yields an AppClient; its
+    .clock moves the frozen time (clock.shift(timedelta(...)), clock.move_to(datetime))."""
     import dataclasses
     import time_machine
     import app_client
@@ -165,7 +170,7 @@ def app(world, monkeypatch):
     legacy.wire(server)                 # as server.__main__ does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
-        running = app_client.RunningApp().start()
+        running = (app_client.RunningApp() if request.param == "old" else app_client.RunningAsgiApp()).start()
         try:
             with settings.use(dataclasses.replace(settings.current(), port=running.port)):
                 client = app_client.AppClient(running.port)
@@ -177,12 +182,21 @@ def app(world, monkeypatch):
             app_client.reset_state()
 
 
+def _without_door(nodeid):
+    """The test's id without the front door it ran through: both doors answer to one golden file."""
+    head, bracket, params = nodeid.partition("[")
+    if not bracket:
+        return nodeid
+    kept = [p for p in params.removesuffix("]").split("-") if p not in _DOOR_IDS]
+    return head + (f"[{'-'.join(kept)}]" if kept else "")
+
+
 @pytest.fixture
 def golden(request, world, app):
     """Record exchanges with golden.record / golden.note; they are compared with (or, under
     --update-golden, written to) the test's file in tests/golden/ when the test passes."""
     import golden as g
-    rec = g.Golden(request.node.nodeid, request.config.getoption("--update-golden"),
+    rec = g.Golden(_without_door(request.node.nodeid), request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
                          (f"localhost:{app.port}", "localhost:<app>")],
                    ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"})

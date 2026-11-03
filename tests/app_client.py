@@ -122,7 +122,8 @@ class AppClient:
 
 
 class RunningApp:
-    """server.H on a random loopback port, serving from a background thread."""
+    """The old front door: server.H on ThreadingHTTPServer, on a random loopback port, serving
+    from a background thread."""
 
     def __init__(self):
         import server
@@ -138,3 +139,23 @@ class RunningApp:
     def stop(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+
+
+class RunningAsgiApp:
+    """The new front door: server.H behind FastAPI and uvicorn, as `python -m mailmind serve`
+    builds it, on a random loopback port, serving from a background thread."""
+
+    def __init__(self):
+        import server
+        from asgi_server import Uvicorn
+        from mailmind.bootstrap import front
+        app, before_shutdown = front.build(server)
+        self.uvicorn = Uvicorn(app, before_shutdown=before_shutdown)
+        self.port = self.uvicorn.port
+
+    def start(self):
+        self.uvicorn.start()
+        return self
+
+    def stop(self):
+        self.uvicorn.stop()
