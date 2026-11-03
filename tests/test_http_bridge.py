@@ -242,6 +242,34 @@ def test_a_stream_ends_when_the_server_shuts_down_under_it():
         conn.close()
 
 
+def test_a_write_still_waiting_when_the_event_loop_stops_fails_as_a_closed_socket_would():
+    """A write to a client that stopped reading waits on the event loop. When the loop stops under
+    it, asyncio cancels the wait and hands the handler's thread its own CancelledError, which is
+    no Exception; the handler must get BrokenPipeError, as from a socket that closed, and end."""
+    import anyio
+    from anyio.from_thread import start_blocking_portal
+    from mailmind.http.bridge import _Exchange
+
+    async def client_stopped_reading(message):
+        await anyio.sleep_forever()
+
+    got = []
+
+    def write(x):
+        try:
+            x.call(x.emit, {"type": "http.response.start", "status": 200, "headers": []})
+        except BaseException as e:
+            got.append(type(e).__name__)
+
+    with start_blocking_portal() as portal:
+        x = portal.call(_Exchange, client_stopped_reading)
+        t = threading.Thread(target=write, args=(x,), daemon=True)
+        t.start()
+        time.sleep(0.2)                                     # the write is waiting on the client
+    t.join(5)
+    assert got == ["BrokenPipeError"] and x.gone.is_set()
+
+
 def test_each_request_runs_on_a_daemon_thread_of_its_own(served):
     """As under ThreadingHTTPServer: a handler still blocked when the process exits doesn't hold
     the exit, and no request waits for another's thread."""
