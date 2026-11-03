@@ -358,12 +358,19 @@ def snooze_tick():
             print(f"[followup] tick error: {type(e).__name__}", flush=True)
 
 
+def nosync():
+    """MAILMIND_NOSYNC: serve read-only, with no background sync, reconcile or expiry. Every check
+    reads it here. Any value but an explicit off (empty, 0, false, no, off) turns it on, so a value
+    like "true" or a typo fails toward read-only rather than starting sync."""
+    return os.environ.get("MAILMIND_NOSYNC", "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
 def body_backfill_tick():
     """Slowly fill body_text for messages ingested before full-text bodies existed, so
     search becomes mailbox-wide instead of headers-only. IMAP-polite: a few per cycle,
     only when no live user op holds the lock, gentle pacing, and never under NOSYNC
     (it does real IMAP fetches). Each fetch_body() also refreshes the FTS row."""
-    if os.environ.get("MAILMIND_NOSYNC"):
+    if nosync():
         return
     time.sleep(45)                       # let the startup sync settle first
     while True:
@@ -3371,7 +3378,7 @@ def draft_ahead_tick():
     """Top-K background pre-gen loop. Every gate runs BEFORE any AI cost; batch=1 per
     cycle means background can never hold both _AI_SEM slots. Hard ceiling ~20 calls/hour;
     steady state ≈ 0 because fp-keyed dedup never regenerates an unchanged thread."""
-    if os.environ.get("MAILMIND_NOSYNC") or os.environ.get("MAILMIND_NO_DRAFT_TICK"):
+    if nosync() or os.environ.get("MAILMIND_NO_DRAFT_TICK"):
         return
     time.sleep(DRAFT_TICK_STARTUP_DELAY)
     fails, suspended_until = 0, 0.0
@@ -4194,7 +4201,7 @@ if __name__ == "__main__":
     threading.Thread(target=outbox.worker_loop, daemon=True).start()
     threading.Thread(target=readmutq.worker_loop, daemon=True).start()
     threading.Thread(target=snooze_tick, daemon=True).start()   # wakes snoozes even under NOSYNC
-    if os.environ.get("MAILMIND_NOSYNC") == "1":
+    if nosync():
         print("(auto-sync disabled via MAILMIND_NOSYNC — serving read-only; outbox+snooze still run)", flush=True)
     else:
         threading.Thread(target=startup, daemon=True).start()
