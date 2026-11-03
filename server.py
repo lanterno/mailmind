@@ -1177,7 +1177,12 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
             dest = None
     payload = {"pk": pk, "uid": row["uid"], "is_gmail": is_gmail,
                "subject": row["subject"], "thread_id": row["thread_id"]}
-    idem = f"{op}:{acct}:{mid or pk}:{mutation_id or ''}"
+    # The client's mutation_id names one request, so a resubmit of it dedupes; without one, every
+    # request is its own. A key built from the message alone made a second trash of the same message,
+    # after the first had been applied and the message moved back, answer "queued" and do nothing.
+    if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
+        mutation_id = secrets.token_hex(16)
+    idem = f"{op}:{acct}:{mid or pk}:{mutation_id}"
     _id, created = store.read_mut_insert(c, {"account": acct, "idempotency_key": idem, "op": op,
                               "message_id": mid, "src_folder": row["folder"], "dest": dest,
                               "payload": json.dumps(payload), "next_attempt_at": 0,
@@ -2018,7 +2023,7 @@ def cleanup_execute(body):
     do_unsub = bool(body.get("do_unsubscribe"))
     token_ok = secrets.compare_digest(str(body.get("confirm_token") or ""),
                                       _cleanup_confirm_token(from_addr))
-    grp = body.get("undo_group") or ("cleanup:" + from_addr)
+    grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
     block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
 
     # 1) BLOCK (reversible) — rule + an unblock descriptor coalesced into the undo group
