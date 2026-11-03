@@ -3686,6 +3686,20 @@ def _rebind_guard(handler):
     return False
 
 
+def _cross_site(handler, path):
+    """A GET another site started. It carries this server's Host and, as a no-cors request such as
+    an <img>, no Origin, so the rebind check passes it, yet it can still make the server sync a
+    folder, fetch bodies or run an AI briefing. Browsers mark it Sec-Fetch-Site cross-site, or
+    same-site when it comes from another port on this machine. A top-level visit to the page itself
+    stays allowed: it does nothing, and its contents can't be read across origins. A browser that
+    sends no Sec-Fetch-Site is judged by the rebind check alone."""
+    site = (handler.headers.get("Sec-Fetch-Site") or "").lower()
+    if site in ("", "same-origin", "none"):
+        return False
+    return not (path == "/" and handler.headers.get("Sec-Fetch-Mode") == "navigate"
+                and handler.headers.get("Sec-Fetch-Dest") == "document")
+
+
 def _strict_origin_guard(handler):
     """For the send routes only: REQUIRE an Origin header matching the localhost
     origin. Returns True (deny) when missing or mismatched."""
@@ -3828,6 +3842,8 @@ class H(BaseHTTPRequestHandler):
         if _rebind_guard(self):
             return self._json({"ok": False, "error": "bad host/origin"}, 403)
         u = urlparse(self.path)
+        if _cross_site(self, u.path):
+            return self._json({"ok": False, "error": "cross-site request"}, 403)
         q = parse_qs(u.query)
         _ui_touch(u.path)
         try:
