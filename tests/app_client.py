@@ -1,0 +1,121 @@
+"""The app's HTTP server, run in-process against the test's world, and a client that talks to it
+the way dashboard.html does: same-origin, with the CSRF token on every request.
+
+Each test gets a clean server module: `reset_state` puts every module's private globals back to
+how they were at import (caches, the undo stack, the sync status, presence timestamps), so no
+test sees another's leftovers.
+"""
+import http.client
+import importlib
+import json
+import threading
+from dataclasses import dataclass
+
+CSRF = "test-csrf-token"
+
+# Modules whose private globals hold process state between requests.
+STATEFUL = ("server", "summarize", "summarize_briefing", "summarize_review", "summarize_thread",
+            "mailclass", "config", "pool", "warm", "realtime", "outbox", "readmutq")
+_SIMPLE = (dict, list, set, int, float, str, bool, type(None))
+_pristine = {}
+
+
+def snapshot():
+    """Record each stateful module's private globals once, as they were at import."""
+    for name in STATEFUL:
+        mod = importlib.import_module(name)
+        if name in _pristine:
+            continue
+        saved = {}
+        for k, v in vars(mod).items():
+            if k.startswith("_") and not k.startswith("__") and isinstance(v, _SIMPLE):
+                saved[k] = v.copy() if isinstance(v, (dict, list, set)) else v
+        _pristine[name] = saved
+
+
+def reset_state():
+    """Put every recorded global back. Containers are refilled in place, so a module that holds
+    a reference to one keeps a live reference."""
+    snapshot()
+    for name, saved in _pristine.items():
+        mod = importlib.import_module(name)
+        for k, v in saved.items():
+            cur = getattr(mod, k, None)
+            if isinstance(v, dict) and isinstance(cur, dict):
+                cur.clear()
+                cur.update(v)
+            elif isinstance(v, list) and isinstance(cur, list):
+                cur[:] = v
+            elif isinstance(v, set) and isinstance(cur, set):
+                cur.clear()
+                cur.update(v)
+            else:
+                setattr(mod, k, v)
+
+
+@dataclass
+class Response:
+    status: int
+    headers: dict
+    body: object            # parsed JSON, or bytes for anything else
+
+    @property
+    def json(self):
+        assert isinstance(self.body, (dict, list)), f"not JSON: {self.headers.get('content-type')}"
+        return self.body
+
+
+class AppClient:
+    def __init__(self, port):
+        self.port = port
+        self.origin = f"http://127.0.0.1:{port}"
+
+    def request(self, method, path, body=None, headers=None):
+        h = {"Host": f"127.0.0.1:{self.port}", "Sec-Fetch-Site": "same-origin", "X-CSRF-Token": CSRF}
+        data = None
+        if method == "POST":
+            h["Origin"] = self.origin
+            h["Content-Type"] = "application/json"
+            data = body if isinstance(body, bytes) else json.dumps(body if body is not None else {}).encode()
+        for k, v in (headers or {}).items():
+            if v is None:
+                h.pop(k, None)
+            else:
+                h[k] = v
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=60)
+        try:
+            conn.request(method, path, body=data, headers=h)
+            r = conn.getresponse()
+            payload = r.read()
+            hdrs = {k.lower(): v for k, v in r.getheaders()}
+        finally:
+            conn.close()
+        parsed = payload
+        if hdrs.get("content-type", "").startswith("application/json"):
+            parsed = json.loads(payload)
+        return Response(r.status, hdrs, parsed)
+
+    def get(self, path, **kw):
+        return self.request("GET", path, **kw)
+
+    def post(self, path, body=None, **kw):
+        return self.request("POST", path, body, **kw)
+
+
+class RunningApp:
+    """server.H on a random loopback port, serving from a background thread."""
+
+    def __init__(self):
+        import server
+        self.httpd = server._Server(("127.0.0.1", 0), server.H)
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
+                                       daemon=True)
+
+    def start(self):
+        self.thread.start()
+        return self
+
+    def stop(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()

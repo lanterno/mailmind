@@ -12,6 +12,7 @@ UIDVALIDITY, so conftest builds the database once and copies it for each test.
 """
 import json
 import os
+import re
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CORPUS = os.path.join(ROOT, "corpus")
@@ -60,6 +61,19 @@ MAIL = (
 def raw(name):
     with open(os.path.join(CORPUS, name), "rb") as f:
         return f.read()
+
+
+def variant(name, **headers):
+    """Corpus file `name` with some headers replaced, for a test that needs one more message like
+    it: variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@loom.example.test>").
+    Underscores in a keyword become hyphens."""
+    data = raw(name)
+    head, sep, body = data.partition(b"\r\n\r\n") if b"\r\n\r\n" in data else data.partition(b"\n\n")
+    for k, v in headers.items():
+        field = k.replace("_", "-").encode()
+        head, n = re.subn(rb"(?im)^" + re.escape(field) + rb":[^\r\n]*", field + b": " + v.encode(), head)
+        assert n == 1, f"{name} has no single {field.decode()} header"
+    return head + sep + body
 
 
 def populate(server):
@@ -124,6 +138,15 @@ class World:
         finally:
             c.close()
         return r["pk"] if r else None
+
+    def deliver(self, acct, folder, data, flags=()):
+        """Put one more message on the server and run the app's own incremental sync of that
+        folder, as the background sync would. Returns its UID."""
+        import accounts
+        import ingest
+        uid = self.server.deliver(acct, folder, data, flags=flags)
+        ingest.sync_folder(accounts.get(acct), folder)
+        return uid
 
     def row(self, name):
         import store

@@ -10,6 +10,8 @@ the `ai` fixture supplies that key.
 there. Tests that touch the store, config, rules, views or audit trails must use it.
 """
 import os
+import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -17,7 +19,28 @@ import guard
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ["MAILMIND_AI"] = "api"
+os.environ["TZ"] = "UTC"            # "today" and local times must not depend on the machine
+time.tzset()
 guard.install()
+
+# The frozen "now" for golden tests: a Monday noon, a day before the corpus's Outlook invite.
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+
+
+def pytest_addoption(parser):
+    parser.addoption("--update-golden", action="store_true",
+                     help="rewrite tests/golden/ from what the app answers now, instead of comparing")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    rep = yield
+    if rep.when == "call":
+        item.stash[_CALL_PASSED] = rep.passed
+    return rep
+
+
+_CALL_PASSED = pytest.StashKey[bool]()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -100,7 +123,8 @@ def world_template(tmp_path_factory):
     import sqlite3
     import store
     d = tmp_path_factory.mktemp("world-template")
-    with pytest.MonkeyPatch.context() as mp, FakeIMAPServer() as srv:
+    import time_machine
+    with pytest.MonkeyPatch.context() as mp, FakeIMAPServer() as srv, time_machine.travel(NOW, tick=False):
         _redirect(mp, str(d))
         placed = world.populate(srv)
         world.write_config(srv, str(d))
@@ -129,3 +153,36 @@ def world(world_template, data_dir):
         assert w.populate(srv) == placed
         w.write_config(srv, str(data_dir))
         yield w.World(srv, placed, data_dir)
+
+
+@pytest.fixture
+def app(world, monkeypatch):
+    """The app's HTTP server over this test's world, with the clock frozen at NOW and every
+    module's process state reset. Yields an AppClient."""
+    import time_machine
+    import app_client
+    import server
+    app_client.reset_state()
+    monkeypatch.setattr(server, "CSRF", app_client.CSRF)
+    with time_machine.travel(NOW, tick=False):
+        running = app_client.RunningApp().start()
+        monkeypatch.setattr(server, "PORT", running.port)
+        try:
+            yield app_client.AppClient(running.port)
+        finally:
+            running.stop()
+            app_client.reset_state()
+
+
+@pytest.fixture
+def golden(request, world, app):
+    """Record exchanges with golden.record / golden.note; they are compared with (or, under
+    --update-golden, written to) the test's file in tests/golden/ when the test passes."""
+    import golden as g
+    rec = g.Golden(request.node.nodeid, request.config.getoption("--update-golden"),
+                   subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
+                         (f"localhost:{app.port}", "localhost:<app>")],
+                   ports={world.server.port: "<imap>", app.port: "<app>"})
+    yield rec
+    if request.node.stash.get(_CALL_PASSED, False):
+        rec.verify()
