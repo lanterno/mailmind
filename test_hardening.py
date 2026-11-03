@@ -7,6 +7,7 @@ import http.client
 import imaplib
 import json
 import os
+import re
 import ssl
 import subprocess
 import sys
@@ -660,6 +661,35 @@ def test_two_cleanups_of_one_sender_undo_separately():
             res, _ = server.cleanup_execute({"from_addr": "weekly@example.test"})
         groups.append(res["undo_group"])
     assert groups[0] != groups[1], groups
+
+
+def _page_functions(*names):
+    """The named one-line functions from dashboard.html, as source."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html"), encoding="utf-8") as f:
+        page = f.read()
+    out = []
+    for name in names:
+        m = re.search(rf"^function {name}\(\)\{{.*$", page, re.M)
+        assert m, name
+        out.append(m.group(0))
+    return "\n".join(out)
+
+
+def _node(src):
+    out = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return out.stdout.split()
+
+
+def test_undo_groups_differ_across_page_loads():
+    fns = _page_functions("rid", "undoGroup")
+    load = "globalThis.self=globalThis;\n" + fns + "\nconsole.log(undoGroup(), undoGroup());"
+    first, second = _node(load), _node(load)                 # two processes: two page loads
+    ids = first + second
+    assert len(set(ids)) == 4, ids
+    assert all(re.fullmatch(r"ug-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", i) for i in ids), ids
+    bare = _node("globalThis.self={};\n" + fns + "\nconsole.log(undoGroup(), undoGroup());")   # no randomUUID
+    assert len(set(bare)) == 2 and all(i.startswith("ug-") and len(i) > 10 for i in bare), bare
 
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
