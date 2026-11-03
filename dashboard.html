@@ -1845,7 +1845,7 @@ async function cleanupConfirm(){
   catch(e){ if(win)win.close(); toast("Cleanup failed"); return; }
   if(!d.ok){ if(win)win.close(); toast(d.error||"failed"); return; }
   if(win){ if(d.browser_url){ try{win.opener=null;}catch(_){} win.location=d.browser_url; } else win.close(); }
-  const stmap={unsubscribed_oneclick:"unsubscribed",mailto_sent:"unsub email sent",needs_browser:"opened the unsub page",no_method:"no unsub link",failed:"unsub couldn’t send — retry later",no_token:"unsub not sent — reopen to retry",skipped:""};
+  const stmap={unsubscribed_oneclick:"unsubscribed",mailto_sent:"unsub email sent",needs_browser:"opened the unsub page",no_method:"no unsub link",failed:"unsub couldn’t send — retry later",no_token:"unsub not sent — reopen to retry",read_only:"unsub not sent — MailMind is read-only",skipped:""};
   const extra=stmap[d.status]||"";
   toast(`Blocked · swept ${d.swept}${extra?" · "+extra:""}`);
   showUndoFloat(`Cleaned up ${p.from_addr} — Undo (z)`);
