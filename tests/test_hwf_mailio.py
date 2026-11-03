@@ -566,6 +566,33 @@ def test_hwf_the_idle_worker_leaves_idle_before_it_asks_for_a_sync(world, idle):
     assert [c["command"] for c in world.server.commands[n:] if c["user"] == w.ADA] == ["IDLE"]   # no sync on it
 
 
+def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle, monkeypatch):
+    # stop() wakes a worker blocked in IDLE by shutting its socket down. Closing it from the stopping
+    # thread instead freed the descriptor while the worker could still be about to wait on it, so
+    # the number could pass to the next socket opened and the worker would wait on (and read) that.
+    import accounts
+    import realtime
+    closed_by = []
+    real = accounts.connect
+
+    def connect(acct, timeout=60):
+        M = real(acct, timeout=timeout)
+        close = M.sock.close
+
+        def spy():
+            closed_by.append(threading.current_thread().name)
+            close()
+        M.sock.close = spy
+        return M
+    monkeypatch.setattr(accounts, "connect", connect)
+    worker = idle()
+    assert wait_until(lambda: count(world, "IDLE") == 1)
+    realtime.stop()
+    worker.join(5)
+    assert not worker.is_alive()
+    assert closed_by and set(closed_by) == {"idle-worker"}
+
+
 # -- mute ------------------------------------------------------------------
 
 def test_hwf_a_reply_in_a_muted_thread_is_marked_read_here_only(app, world):
