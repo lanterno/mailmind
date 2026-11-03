@@ -159,7 +159,8 @@ _DOOR_IDS = tuple(f"door={d}" for d in DOORS)
 def app(request, world, monkeypatch):
     """The app's HTTP server over this test's world, with the clock frozen at NOW and every
     module's process state reset, through each front door in turn. Yields an AppClient; its
-    .clock moves the frozen time (clock.shift(timedelta(...)), clock.move_to(datetime))."""
+    .clock moves the frozen time (clock.shift(timedelta(...)), clock.move_to(datetime)), and
+    its .door says which door it is ("old" or "new")."""
     import dataclasses
     import time_machine
     import app_client
@@ -175,6 +176,7 @@ def app(request, world, monkeypatch):
             with settings.use(dataclasses.replace(settings.current(), port=running.port)):
                 client = app_client.AppClient(running.port)
                 client.clock = clock
+                client.door = request.param
                 yield client
                 client.settle()
         finally:

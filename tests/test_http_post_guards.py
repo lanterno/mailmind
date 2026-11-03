@@ -93,3 +93,21 @@ def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(a
     assert server._LAST_UI_TS == 0.0
     assert app.post("/api/seen", seen).status == 200
     assert server._LAST_UI_TS == time.time()
+
+
+def test_the_new_door_refuses_a_post_before_reading_its_body(app):
+    """Its perimeter runs ahead of the handler, so a refused POST costs no read. (The old server
+    reads a body before it checks the token, and would wait here for one that never comes.)"""
+    if app.door == "old":
+        pytest.skip("the old server reads the body before it checks the token")
+    conn = http.client.HTTPConnection("127.0.0.1", app.port, timeout=5)
+    try:
+        conn.putrequest("POST", "/api/seen", skip_host=True, skip_accept_encoding=True)
+        for k, v in {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "Content-Type": "application/json",
+                     "Content-Length": "1000"}.items():
+            conn.putheader(k, v)
+        conn.endheaders()
+        r = conn.getresponse()
+        assert (r.status, json.loads(r.read())) == (403, {"ok": False, "error": "bad or missing CSRF token"})
+    finally:
+        conn.close()
