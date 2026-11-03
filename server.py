@@ -3093,6 +3093,12 @@ DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
 
 _AI_LAST_INTERACTIVE = 0.0       # last user-initiated AI call (summarize/draft/rewrite/ask/do-plan)
 _LAST_UI_TS = time.time()        # last presence-implying /api/* request (boot counts: warm the top-K once)
+def post_body_cap(path):
+    """The most a POST to `path` may carry, in bytes, checked against its Content-Length before
+    the body is read: 38 MB where mail and its attachments go up, 1 MB everywhere else."""
+    return MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
+
+
 _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/stats",
              "/api/ai/draft-ahead"}   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
                                       # or the tick's own events would hold the vacation gate open forever
@@ -3957,7 +3963,7 @@ class H(BaseHTTPRequestHandler):
         _ui_touch(u.path)
         # 1) Cap the body size BEFORE reading it, so an unauthenticated/cross-tab
         #    request can't make us read+parse an arbitrary-size payload.
-        cap = MAX_SEND_POST if u.path in ("/api/send", "/api/draft") else MAX_POST
+        cap = post_body_cap(u.path)
         try:
             length = int(self.headers.get("Content-Length", 0) or 0)
         except ValueError:
