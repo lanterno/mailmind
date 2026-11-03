@@ -236,6 +236,16 @@ def test_a_key_in_the_config_file_wins_over_the_environment():
     _config(anthropic_api_key="")                              # empty is unset: the environment's key
     assert claude_api.key() == "sk-ant-test-key" and claude_api.key_source() == "ANTHROPIC_API_KEY"
 
+def test_the_startup_line_says_when_there_is_no_key():
+    _fresh()
+    os.environ["MAILMIND_AI"] = "api"
+    os.environ["ANTHROPIC_API_KEY"] = ""
+    assert summarize.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: set "
+                                           "anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
+    _config(anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
+    assert summarize.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: the "
+                                           "anthropic_api_key in mailmind.config.json can't be read")
+
 def test_a_config_key_that_cannot_be_read_is_no_key():
     _fresh()
     _config(anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
