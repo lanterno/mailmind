@@ -601,9 +601,16 @@ def test_nosync_reads_one_way_and_fails_toward_read_only():
             os.environ.pop("MAILMIND_NOSYNC", None)
         else:
             os.environ["MAILMIND_NOSYNC"] = real
-    with open(server.__file__, encoding="utf-8") as f:
-        src = f.read()
-    assert src.count('os.environ.get("MAILMIND_NOSYNC"') == 1, "read MAILMIND_NOSYNC only in nosync()"
+    readers = []                                    # one place reads it, so every check agrees
+    root = os.path.dirname(os.path.abspath(__file__))
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("tests", "node_modules", "__pycache__")]
+        for name in files:
+            if name.endswith(".py") and not name.startswith("test"):
+                with open(os.path.join(dirpath, name), encoding="utf-8") as f:
+                    if re.search(r"""(\.get\(|\[)\s*["']MAILMIND_NOSYNC["']""", f.read()):
+                        readers.append(name)
+    assert len(readers) == 1, f"read MAILMIND_NOSYNC in one place only, not {readers}"
 
 
 def _offline():
