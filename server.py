@@ -192,7 +192,7 @@ def sync_guarded(emails):
 # Incremental sync only ADDS new mail; it never notices messages removed on the
 # server (deleted/moved in webmail, other clients, server-side filters), so their
 # rows linger as ghosts and the message list shows phantoms. A dedicated low-rate
-# loop prunes them — ONE account per tick (round-robin) so each _ops_lock hold is a
+# loop prunes them — ONE account per tick (round-robin) so each hold of the IMAP gate is a
 # single account, taken NON-blocking so a live user op is never stalled (mirrors the
 # body-backfill loop), on its own timer so the work never piggybacks a user-triggered
 # (IDLE) sync. reconcile_account is a SAFE pure-prune (never prunes on IMAP error,
@@ -209,15 +209,14 @@ _RECONCILE_INTERVAL = _reconcile_secs()
 
 
 def _auto_reconcile_one(acct):
-    """Prune one account's INBOX ghosts, yielding to any live user op via a non-blocking
-    _ops_lock (skip this tick if a user op holds it — caught next cycle), then publish so
+    """Prune one account's INBOX ghosts, yielding to any live user op: its IMAP gate is taken
+    without waiting (skip this tick if a user op holds it — caught next cycle), then publish so
     open lists drop the pruned phantoms."""
-    if not _ops_lock.acquire(blocking=False):
-        return                                        # user op live — yield, retry next cycle
     try:
-        res = ingest.reconcile_account(acct, dry_run=False)
-    finally:
-        _ops_lock.release()
+        res = gates.run(acct["email"], lambda: ingest.reconcile_account(acct, dry_run=False),
+                        priority=gates.Priority.MAINTENANCE, wait=False)
+    except gates.Busy:
+        return                                        # user op live — yield, retry next cycle
     if res.get("error") or not res.get("pruned"):
         return
     with open(settings.current().reconcile_audit, "a") as f:
@@ -235,7 +234,7 @@ def _auto_reconcile_one(acct):
 
 def reconcile_loop():
     """Own-timer ghost pruner: one account per tick, round-robin, so the full cycle
-    spans ~MAILMIND_RECONCILE_SECS and each _ops_lock hold covers a single account."""
+    spans ~MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
     if _RECONCILE_INTERVAL <= 0:
         return
     time.sleep(min(120, _RECONCILE_INTERVAL))         # let the boot sync settle first
@@ -253,7 +252,7 @@ def reconcile_loop():
 
 
 # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
-# to Trash on an own timer. Same shape as reconcile — one account per _ops_lock hold, taken
+# to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
 # NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
 def _expire_secs():
     try:
@@ -267,12 +266,11 @@ _EXPIRE_INTERVAL = _expire_secs()
 
 
 def _auto_expire_one(acct):
-    if not _ops_lock.acquire(blocking=False):
-        return                                        # user op live — yield, retry next cycle
     try:
-        res = manage.expire_account(acct)
-    finally:
-        _ops_lock.release()
+        res = gates.run(acct["email"], lambda: manage.expire_account(acct),
+                        priority=gates.Priority.MAINTENANCE, wait=False)
+    except gates.Busy:
+        return                                        # user op live — yield, retry next cycle
     if res.get("error"):
         print(f"[expire] {acct['email']}: {res['error']}", flush=True)
         return
@@ -380,7 +378,7 @@ def body_backfill_tick():
         try:
             c = store.conn()
             try:
-                rows = c.execute("SELECT pk FROM messages WHERE body_text IS NULL "
+                rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
                                  "ORDER BY ts DESC LIMIT 12").fetchall()
             finally:
                 c.close()                    # always close, even if the SELECT raises
@@ -388,14 +386,13 @@ def body_backfill_tick():
                 time.sleep(600)          # caught up; re-check occasionally (new mail lands body-less)
                 continue
             for r in rows:
-                if not _ops_lock.acquire(blocking=False):
-                    break                # a user op is live — yield and retry next cycle
                 try:
-                    ingest.fetch_body(r["pk"])
+                    gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
+                              priority=gates.Priority.MAINTENANCE, wait=False)
+                except gates.Busy:
+                    break                # a user op is live — yield and retry next cycle
                 except Exception:
                     pass
-                finally:
-                    _ops_lock.release()
                 time.sleep(1.5)          # gentle pacing between IMAP fetches
         except Exception as e:
             print(f"[backfill] error: {type(e).__name__}", flush=True)
@@ -659,12 +656,11 @@ def message_body(pk, load_images, prefetch=False):
         # body still needs a (slow) IMAP fetch, just skip — the real open will fetch later.
         if row["body_fetched"]:
             return {"ok": True, "prefetched": True}     # already warm
-        if not _ops_lock.acquire(blocking=False):
-            return {"ok": False, "busy": True}
         try:
-            ingest.fetch_body(pk)
-        finally:
-            _ops_lock.release()
+            gates.run(row["account"], lambda: ingest.fetch_body(pk),
+                      priority=gates.Priority.MAINTENANCE, wait=False)
+        except gates.Busy:
+            return {"ok": False, "busy": True}
         return {"ok": True, "prefetched": True}
     with _ops_lock:
         parsed = ingest.fetch_body(pk)
