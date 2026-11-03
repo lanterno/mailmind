@@ -6,7 +6,8 @@
    "content-security-policy": "default-src 'none'; sandbox",
    "content-type": "application/pdf",
    "referrer-policy": "no-referrer",
-   "x-content-type-options": "nosniff"
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
   },
   "request": "GET attachment 3 of bea-drafts-01-apple-mail.eml",
   "sha256": "5a838678058f6de375e8635b5f2fea47a4e5f07cb1a882a44b10f39abc6f34ff",
@@ -19,7 +20,8 @@
    "content-security-policy": "default-src 'none'; sandbox",
    "content-type": "image/png",
    "referrer-policy": "no-referrer",
-   "x-content-type-options": "nosniff"
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
   },
   "request": "GET attachment 2 of ada-inbox-11-html-cid.eml",
   "sha256": "62d7693d527ce6e5cf4a4f54478b889fe3e01a144d09a0a0482ca512d4225b3a",
@@ -32,7 +34,8 @@
    "content-security-policy": "default-src 'none'; sandbox",
    "content-type": "message/rfc822",
    "referrer-policy": "no-referrer",
-   "x-content-type-options": "nosniff"
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
   },
   "request": "GET attachment 2 of ada-inbox-07-forward-rfc822.eml",
   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

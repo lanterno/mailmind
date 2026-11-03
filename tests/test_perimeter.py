@@ -116,5 +116,11 @@ def test_a_get_is_judged_by_its_host_before_where_it_came_from():
                                 port=PORT).error == "cross-site request"
 
 
+@pytest.mark.parametrize("path", ["/", "/api/digest"])
+def test_every_answer_says_what_its_body_is_and_keeps_out_of_other_pages(path):
+    assert dict(perimeter.answer_headers(path)) == {
+        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"}
+
+
 def test_every_refusal_answers_in_one_shape():
     assert perimeter.Refusal(403, "cross-site request").answer() == {"ok": False, "error": "cross-site request"}

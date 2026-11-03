@@ -108,7 +108,10 @@
  {
   "headers": {
    "content-disposition": "attachment; filename=mailmind-20261102T120000Z.db",
-   "content-type": "application/octet-stream"
+   "content-type": "application/octet-stream",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
   },
   "request": "GET /api/export",
   "status": 200

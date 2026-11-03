@@ -6,7 +6,8 @@
     "cache-control": "no-cache",
     "content-type": "text/event-stream",
     "referrer-policy": "no-referrer",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
    },
    "status": 200
   }
