@@ -457,6 +457,28 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
+- **Don't let reconcile prune mail a sync just stored** · high value · effort S —
+  `ingest.reconcile_account` runs under `_ops_lock`, but `sync_accounts` (the 300 s loop and the
+  IDLE dispatcher) does not take it. Mail a sync stores between reconcile's `UID SEARCH` and
+  `store.reconcile` isn't in the live set, so it is pruned. The watermark has already passed it,
+  so incremental sync never brings it back. Prune only UIDs at or below the highest UID the SEARCH
+  returned, or only the UIDs read before it. Pinned by
+  `test_mail_a_sync_stores_while_reconcile_runs_survives_it`.
+- **Bring back a queued move that doesn't happen** · high value · effort S — `_readmut_enqueue`
+  drops the local row when it queues. If the server then refuses the move,
+  `mailops.apply_queued_mutation` reads the `IMAP4.error` as done, and `readmutq.apply_one` never
+  looks at its result. If the queue gives up after `MAX_ATTEMPTS`, the row is never restored
+  either. Both times the message stays in the server's folder but is gone from MailMind's list,
+  and incremental sync won't refetch it. Mark the row `error` and re-ingest the message with
+  `ingest.ingest_message`, as Undo's cancel branch does. Pinned by
+  `test_a_queued_move_the_server_refuses_comes_back` and `test_a_queued_move_given_up_on_comes_back`.
+- **Negation in search** · medium value · effort S — two gaps in `search.build`, each pinned by a
+  strict xfail in `tests/test_search_build.py`:
+  - a negated FTS term with nothing positive (`-from:lin`) is dropped, so the query matches all
+    mail, the named sender's included. Use `m.pk NOT IN (SELECT rowid FROM msg_fts WHERE msg_fts
+    MATCH ?)`;
+  - `-category:x` builds `s.category <> ?`, which is NULL for mail without a summary, so it hides
+    every unsummarized message. Use `s.category IS NOT ?`.
 - **Make cleanup's unsubscribe fire** · high value · effort S — three bugs, each pinned by a strict
   xfail in `tests/test_http_cleanup.py`. Together they mean the unsubscribe almost never goes out:
   - `cleanup_execute` sweeps the sender's INBOX mail to Trash before it calls `_resolve_unsub`.
