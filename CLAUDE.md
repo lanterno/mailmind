@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 A `justfile` wraps everything below — `just` alone lists the recipes. The raw commands
-work identically if `just` isn't installed.
+work identically if `just` isn't installed. `just lint` and `just test` need
+[uv](https://docs.astral.sh/uv/) (`brew install uv`); `uv run` installs the dev tools on first use.
 
 ```bash
 just verify                       # lint + compile + all tests + frontend check — run before committing
@@ -22,7 +23,9 @@ python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>
 python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
 ```
 
-Tests — plain scripts, no runner, each exits non-zero on failure:
+Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
+all through `tests/test_legacy_suites.py`, each in its own interpreter, because they point
+module globals at temp files on import:
 
 ```bash
 python3 tests.py                  # classifier behaviour (27 assertions)
@@ -40,7 +43,8 @@ python3 test_draft_resume_ui.py   # the composer's reopen helpers, run in node (
 python3 test_hardening.py         # security and data-loss fixes, one test or more per fix (37)
 ```
 
-There is no single-test flag. `tests.py` and `tests_sanitize.py` are linear scripts —
+`just test -k hardening` picks suites by file name; within a suite there is no single-test
+flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
 `test_thread_file.py`, `test_claude_api.py`, `test_upcoming.py`, `test_contacts_known.py`,
 `test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
@@ -50,22 +54,27 @@ renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:star
 stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
 `/* draft-resume:pure:start */` … `/* draft-resume:pure:end */` block.
 
-There is no build step, no linter config and no dependency manifest. `pyflakes` is the
-de-facto lint. `just lint` runs it against a one-entry baseline — a known warning in
-`readmutq.py` (a lambda closing over an `except ... as e` name, safe because `_commit`
-invokes it synchronously) — and fails on anything new. If you fix that, drop it from
-`BASELINE` in the justfile.
+There is no build step. `pyproject.toml` declares dev tools only (pytest, ruff), locked with
+hashes in `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is
+`ruff check` with pyflakes' rules only (`select = ["F"]`). Its one accepted finding carries a
+`# noqa: F821` in `readmutq.py`: a lambda closing over an `except ... as e` name, safe because
+`_commit` invokes it synchronously. New pytest-native tests go in `tests/`; pytest's
+`--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
 `just check-frontend` parses every inline `<script>` with `node --check`, checks CSS
 brace balance, and rejects raw control bytes in `dashboard.html` (see Conventions).
 
 ## Constraints
 
-- **Standard library only.** No `pip install`, ever. This is the single hardest rule in
-  the project — it shapes every design decision below (hand-rolled sanitizer, hand-rolled
-  IMAP handling, no web framework, no frontend build).
+- **The app is standard library only, for now.** `python3 server.py` must run with nothing
+  installed. This rule shaped every design decision below (hand-rolled sanitizer,
+  hand-rolled IMAP handling, no web framework, no frontend build). On 2026-11-03 the owner
+  approved lifting it for a domain-driven refactor: dev tools now, in `pyproject.toml`'s dev
+  group; runtime packages only from the refactor's Phase 2, which replaces this rule. Each
+  dependency change is its own commit, and the `uv.lock` change goes in the next.
 - **The frontend is one file.** `dashboard.html` (~340KB) holds all HTML, CSS and JS
-  inline. No bundler, no modules, no npm. Edit it directly.
+  inline. No bundler, no modules, no npm. Edit it directly. This holds until the refactor's
+  frontend track moves it to React 19 and Vite.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
   The repo is public — treat any real address, employer or message count as a leak.

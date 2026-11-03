@@ -368,7 +368,7 @@ automatically.
 
 ## Prerequisites
 
-- **Python 3.10+** (developed/tested on 3.14). No third-party packages.
+- **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14. No third-party packages.
 - **Claude**, for summaries — either a Claude API key, as `"anthropic_api_key"` in
   `mailmind.config.json` or in `ANTHROPIC_API_KEY` (MailMind calls the Messages API
   itself, no SDK), or the `claude` CLI on your `PATH`, installed and authenticated
@@ -526,9 +526,11 @@ python3 test_draft_resume_ui.py # the composer's side of reopening a draft (need
 python3 test_hardening.py      # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
 ```
 
-Each exits non-zero on failure. With [`just`](https://just.systems) installed,
-`just test` runs all thirteen and `just verify` adds lint, byte-compile and a
-frontend syntax check — `just` on its own lists every recipe.
+Each exits non-zero on failure. With [`just`](https://just.systems) and
+[uv](https://docs.astral.sh/uv/) installed, `just test` runs all thirteen under pytest
+and `just verify` adds lint (ruff), byte-compile and a frontend syntax check — `just`
+on its own lists every recipe. uv installs those dev tools from `pyproject.toml` on
+first use; running the app still needs nothing installed.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
 re-runs `summarize.py` until every non-junk message has a summary, backing off
@@ -539,7 +541,7 @@ when Claude rate-limits.
 This is a personal-data app. **Never commit** `mailmind.config.json`,
 `mailmind_rules.json` (it holds your personal keep/block entries), `mailmind.db`,
 the audit `*.jsonl` files, or screenshots of real mail — the `.gitignore` covers
-them; don't `git add -f` around it. PRs welcome; keep it dependency-free.
+them; don't `git add -f` around it. PRs welcome; keep the app itself dependency-free.
 
 ## License
 
