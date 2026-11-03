@@ -25,6 +25,7 @@ from email.message import EmailMessage
 from email import policy as _policy
 
 import store
+from mailmind.platform import settings
 
 _BAD = re.compile(r'[\x00-\x1f/\\:*?"<>|]+')        # path separators + control + shell-hostile
 
@@ -48,7 +49,7 @@ def _ro_conn():
         c.commit()
     finally:
         c.close()
-    ro = sqlite3.connect(f"file:{store.db_path()}?mode=ro", uri=True)
+    ro = sqlite3.connect(f"file:{settings.current().db}?mode=ro", uri=True)
     ro.row_factory = sqlite3.Row
     return ro
 

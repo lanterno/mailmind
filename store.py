@@ -4,13 +4,6 @@ from datetime import datetime, timezone, timedelta
 
 from mailmind.platform import settings
 
-DB = None    # A path pinned here wins over the settings'. Only the legacy test suites still pin one.
-
-
-def db_path():
-    """The database file, mailmind.db in the data directory (settings.current().home)."""
-    return DB or settings.current().db
-
 # Latest schema (fresh DBs get this directly; older DBs are upgraded by the
 # versioned migrator below). All tables use CREATE IF NOT EXISTS so executescript
 # is safe on an existing DB; the migrator handles in-place changes (e.g. the
@@ -169,7 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox(created_at);
 
 
 def conn():
-    c = sqlite3.connect(db_path(), timeout=60)
+    c = sqlite3.connect(settings.current().db, timeout=60)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA busy_timeout=60000")

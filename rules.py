@@ -21,17 +21,12 @@ import json
 
 from mailmind.platform import settings
 
-FILE = None    # A path pinned here wins over the settings'. Only the legacy test suites still pin one.
 KEYS = ("keep_senders", "block_senders", "keep_domains", "block_domains")
 EXPIRE = "expire_hours"   # {sender-or-domain: hours}
 
 
-def _file():
-    return FILE or settings.current().rules
-
-
 def load():
-    path = _file()
+    path = settings.current().rules
     if not os.path.exists(path):
         return {**{k: [] for k in KEYS}, EXPIRE: {}}
     with open(path) as f:
@@ -44,7 +39,7 @@ def load():
 def save(rules):
     data: dict = {k: sorted(set(rules.get(k, []))) for k in KEYS}
     data[EXPIRE] = dict(sorted((rules.get(EXPIRE) or {}).items()))
-    with open(_file(), "w") as f:
+    with open(settings.current().rules, "w") as f:
         json.dump(data, f, indent=2)
 
 

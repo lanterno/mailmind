@@ -38,13 +38,12 @@ PERSONAL = "other/personal-ish"
 JUNK_BUCKETS = {SPAM, BLOCKED, MKT, NOTIF}
 
 # --- learned overrides (a sender/domain allow- & block-list the user grows) ---
-RULES_FILE = None    # A path pinned here wins over the settings'. Only the legacy test suites still pin one.
 _rules_cache = {}
 
 
 def _rules():
     """Lazy-load mailmind_rules.json (cached by path and mtime so edits are picked up)."""
-    path = RULES_FILE or settings.current().rules
+    path = settings.current().rules
     try:
         mtime = os.path.getmtime(path)
     except OSError:
