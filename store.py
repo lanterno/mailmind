@@ -3,11 +3,7 @@ import sqlite3
 from datetime import datetime, timezone, timedelta
 
 from mailmind.platform import settings
-from mailmind.platform.db import database, migrate, migrations
-
-# The migrations init() runs, mailmind.platform.db.migrations.MIGRATIONS, named here while the
-# tests that shorten the list still patch it here.
-_MIGRATIONS = migrations.MIGRATIONS
+from mailmind.platform.db import database, migrate
 
 
 def conn():
@@ -16,7 +12,7 @@ def conn():
 
 def init():
     """Bring the data directory's database to the newest schema (see mailmind.platform.db)."""
-    migrate.init(settings.current().db, _MIGRATIONS)
+    migrate.init(settings.current().db)
 
 
 # ---- unsubscribe / sender-cleanup helpers ----
