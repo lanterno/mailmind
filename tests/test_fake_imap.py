@@ -356,3 +356,17 @@ def test_ingest_resyncs_a_folder_whose_uidvalidity_changed(srv, app):
     got = sorted((r["uid"], r["subject"]) for r in c.execute("SELECT uid, subject FROM messages"))
     c.close()
     assert got == [(1, "Note 0"), (2, "Note 1"), (3, "Note 5")]
+
+
+def test_two_servers_given_the_same_mail_agree_on_every_id():
+    def build(kind):
+        with FakeIMAPServer(kind=kind) as s:
+            s.add_account(ADA)
+            first = _mail(1)
+            s.deliver(ADA, "INBOX", first)
+            s.deliver(ADA, "INBOX", _mail(2), thread_of=first)
+            s.renumber(ADA, "Trash")
+            return [(b.name, b.uidvalidity, [(u, m.gm_msgid, m.gm_thrid) for u, m in b.messages.items()])
+                    for b in s.accounts[ADA].mailboxes.values()]
+    for kind in ("imap", "gmail"):
+        assert build(kind) == build(kind)
