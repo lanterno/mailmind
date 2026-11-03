@@ -45,8 +45,9 @@ def _uid_by_msgid(M, mid):
 def _imap_mutate(acct, fn):
     """Run a mutation's IMAP work via _do_imap. A connection-level failure (a _UNREACHABLE member,
     incl. IMAP4.abort) PROPAGATES so the route can queue it offline; a command-level IMAP4.error
-    (NO/BAD — folder/UID gone) is swallowed and returns (False, None), preserving today's behavior
-    (the caller still applies the local mirror + returns ok). Returns (ran_ok, fn_result)."""
+    (NO/BAD: no such folder, over quota, no permission) returns (False, None). The server still
+    holds the message where it was, so the caller keeps its local row and reports the failure.
+    Returns (ran_ok, fn_result)."""
     try:
         return True, _do_imap(acct, fn)
     except imaplib.IMAP4.abort:
@@ -130,10 +131,12 @@ def trash_message(pk):
         return False, "not found", None
     acct = accounts.get(row["account"])
     dest = accounts.trash_folder(acct)
-    # _UNREACHABLE (IMAP down) propagates → the route queues this offline; a command error is
-    # swallowed (unchanged behavior). Local delete + undo happen on return, as before.
-    _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
-                                  _move_uid(M, str(row["uid"]), dest)))
+    # _UNREACHABLE (IMAP down) propagates → the route queues this offline. A command the server
+    # refuses leaves the message where it was, so the local row stays and the caller is told.
+    ran, _ = _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
+                                           _move_uid(M, str(row["uid"]), dest)))
+    if not ran:
+        return False, "the server refused the move", None
     c = store.conn()
     store.delete_message(c, pk)
     c.commit()
@@ -227,7 +230,9 @@ def archive_message(pk):
         M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         uid = str(row["uid"])
         if acct["kind"] == "gmail":
-            M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")
+            typ, d = M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")
+            if typ != "OK":                       # imaplib returns a NO; it doesn't raise one
+                raise imaplib.IMAP4.error(f"STORE failed: {d}")
             return ("gmail", None)
         arch = _find_folder(M, ("archive", "\\archive", "all mail", "\\all"))
         if not arch:
@@ -236,16 +241,18 @@ def archive_message(pk):
         return ("moved", arch)
 
     ran, info = _imap_mutate(acct, op)            # _UNREACHABLE propagates → route queues
-    if ran and info and info[0] == "nofolder":    # logical: no archive folder → unchanged behavior
+    if not ran:                                   # refused: the message is still where it was
+        return False, "the server refused the archive", None
+    if info[0] == "nofolder":
         return False, "no archive folder on this account", None
     undo = None
-    if ran and info and info[0] == "gmail":
+    if info[0] == "gmail":
         mid = (row["message_id"] or "").strip()
         if mid:   # reverse = re-add the \Inbox label, found by Message-ID in All Mail
             undo = {"kind": "gmail_archive", "account": row["account"], "src_folder": "INBOX",
                     "message_id": mid, "label": "Archived",
                     "subject": row["subject"], "thread_id": row["thread_id"]}
-    elif ran and info and info[0] == "moved":
+    elif info[0] == "moved":
         undo = _mk_move_undo(row, info[1], "Archived")
     c = store.conn()
     store.delete_message(c, pk)
@@ -274,14 +281,16 @@ def junk_message(pk):
         return ("moved", junk)
 
     ran, info = _imap_mutate(acct, op)            # _UNREACHABLE propagates → route queues
-    if ran and info and info[0] == "nofolder":
+    if not ran:                                   # refused: the message is still where it was
+        return False, "the server refused the move", None
+    if info[0] == "nofolder":
         return False, "no junk folder on this account", None
-    junk = info[1] if (ran and info and info[0] == "moved") else None
+    junk = info[1]
     c = store.conn()
     store.delete_message(c, pk)
     c.commit()
     c.close()
-    return True, "junked", (_mk_move_undo(row, junk, "Marked junk") if junk else None)
+    return True, "junked", _mk_move_undo(row, junk, "Marked junk")
 
 
 def move_message(pk, dest):
@@ -291,8 +300,10 @@ def move_message(pk, dest):
     if not row or not dest:
         return False, "not found", None
     acct = accounts.get(row["account"])
-    _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
-                                  _move_uid(M, str(row["uid"]), dest)))
+    ran, _ = _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
+                                           _move_uid(M, str(row["uid"]), dest)))
+    if not ran:                                   # refused: the message is still where it was
+        return False, "the server refused the move", None
     c = store.conn()
     store.delete_message(c, pk)
     c.commit()
