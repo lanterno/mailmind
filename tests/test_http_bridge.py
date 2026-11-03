@@ -41,6 +41,9 @@ class Toy(BaseHTTPRequestHandler):
             return
         if self.path == "/stream":
             return self._stream()
+        if self.path == "/thread":
+            t = threading.current_thread()
+            Toy.outcome.append((t.name, t.daemon, t is threading.main_thread()))
         self._reply(200, {"ok": True}, [("X-Frame-Options", "DENY"), ("Connection", "keep-alive")])
 
     def do_POST(self):
@@ -188,3 +191,11 @@ def test_a_stream_ends_when_the_server_shuts_down_under_it():
         assert Toy.outcome == ["client gone"]
     finally:
         conn.close()
+
+
+def test_each_request_runs_on_a_daemon_thread_of_its_own(served):
+    """As under ThreadingHTTPServer: a handler still blocked when the process exits doesn't hold
+    the exit, and no request waits for another's thread."""
+    call(served, "GET", "/thread")
+    call(served, "GET", "/thread")
+    assert Toy.outcome == [("bridge-request", True, False)] * 2
