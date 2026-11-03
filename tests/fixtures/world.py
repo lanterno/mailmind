@@ -28,6 +28,10 @@ ACCOUNTS = (
 
 SEEN, ANSWERED, DRAFT, FLAGGED = "\\Seen", "\\Answered", "\\Draft", "\\Flagged"
 
+# IMAP commands that change mail on the server, as the fake records them
+WRITES = {"APPEND", "CREATE", "DELETE", "RENAME", "STORE", "COPY", "MOVE", "EXPUNGE",
+          "UID STORE", "UID COPY", "UID MOVE", "UID EXPUNGE"}
+
 # (corpus file, account, folder, flags, Gmail thread: the file whose X-GM-THRID it shares)
 MAIL = (
     ("ada-inbox-01-lunch.eml", ADA, "INBOX", (SEEN, ANSWERED), None),
@@ -61,6 +65,11 @@ MAIL = (
 def raw(name):
     with open(os.path.join(CORPUS, name), "rb") as f:
         return f.read()
+
+
+def message_id(name):
+    import email.parser
+    return (email.parser.BytesHeaderParser().parsebytes(raw(name)).get("Message-ID") or "").strip()
 
 
 def variant(name, **headers):
@@ -147,6 +156,37 @@ class World:
         uid = self.server.deliver(acct, folder, data, flags=flags)
         ingest.sync_folder(accounts.get(acct), folder)
         return uid
+
+    def mark(self):
+        """A point in the server's command log, for writes()."""
+        return len(self.server.commands)
+
+    def writes(self, since=0):
+        """The commands since mark() that change mail on the server, as "<account> [<selected
+        mailbox>] <command>", without imaplib's random tag."""
+        return [f"{c['user']} [{c['mailbox']}] {c['line'].split(' ', 1)[1]}"
+                for c in self.server.commands[since:] if c["command"] in WRITES]
+
+    def where(self, name):
+        """Where the corpus message `name` is now, found by its Message-ID: on the server (account,
+        mailbox, UID, flags) and in the database (account, folder, UID and the flag columns)."""
+        import store
+        mid = message_id(name)
+        server = []
+        with self.server.lock:
+            for user, acct in self.server.accounts.items():
+                for box_name, box in acct.mailboxes.items():
+                    for uid, m in box.messages.items():
+                        if (m.headers().get("Message-ID") or "").strip() == mid:
+                            server.append([user, box_name, uid, sorted(m.flags)])
+        c = store.conn()
+        try:
+            db = [dict(r) for r in c.execute(
+                "SELECT account, folder, uid, seen, flagged, answered, draft, is_junk FROM messages "
+                "WHERE message_id=? ORDER BY account, folder, uid", (mid,))]
+        finally:
+            c.close()
+        return {"server": sorted(server), "db": db}
 
     def row(self, name):
         import store
