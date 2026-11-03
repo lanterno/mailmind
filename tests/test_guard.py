@@ -153,6 +153,23 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
         "sweep_audit.jsonl"]
 
 
+def test_the_directory_mailmind_home_names_is_guarded_too(tmp_path, refused):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "notes.txt").write_text("")
+    guard.protect(str(home))
+    with pytest.raises(guard.Tripwire):
+        open(home / "mailmind.config.json")
+    open(home / "notes.txt").close()                                  # only the data files
+    assert refused == [f"open {str(home / 'mailmind.config.json')!r}"]
+
+
+def test_the_tests_never_inherit_a_data_directory():
+    from mailmind.platform import settings
+    assert "MAILMIND_HOME" not in os.environ
+    assert os.path.realpath(settings.from_env().home) == ROOT        # what a test without data_dir gets
+
+
 def test_no_module_builds_a_data_path_beside_its_source():
     """Data paths come from mailmind.platform.settings, so moving the data directory moves them all."""
     import re

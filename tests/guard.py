@@ -19,6 +19,9 @@ import sys
 import threading
 
 ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+# Where the owner's data may live: the repo root, and any directory MAILMIND_HOME named when the
+# tests started (protect() adds it; conftest takes the variable out of the environment).
+_data_dirs = {ROOT.lower()}
 
 # The owner's data at the repo root (CLAUDE.md, "Nothing personal is committed"), and the temp
 # files config.save and views.save write beside it.
@@ -47,7 +50,12 @@ def _private(path):
     if not p or p == ":memory:":
         return False
     d, name = os.path.split(os.path.realpath(os.path.abspath(p)))
-    return d.lower() == ROOT.lower() and any(fnmatch.fnmatchcase(name.lower(), pat) for pat in PRIVATE)
+    return d.lower() in _data_dirs and any(fnmatch.fnmatchcase(name.lower(), pat) for pat in PRIVATE)
+
+
+def protect(directory):
+    """Guard the data files in `directory` as those at the repo root are."""
+    _data_dirs.add(os.path.realpath(os.path.abspath(os.path.expanduser(directory))).lower())
 
 
 def _remote(host):
