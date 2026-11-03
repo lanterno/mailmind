@@ -1,9 +1,9 @@
 """SMTP transport + per-provider Sent-folder APPEND for MailMind — stdlib only.
 
 smtp_connect(acct) mirrors accounts.connect (same credential path) but for SMTP, and —
-critically — only drops TLS verification (CERT_NONE) for a LOCALHOST host (the Proton
-Bridge case). For any real host, certificates are fully verified, so a forged-cert MITM
-can never capture the SMTP AUTH password. The SMTP host/port/credential come ONLY from
+critically — takes its TLS context from accounts.tls_context, which drops verification only
+for a loopback host (the Proton Bridge case). For any real host, certificates are fully
+verified, so a forged-cert MITM can never capture the SMTP AUTH password. The SMTP host/port/credential come ONLY from
 config.accounts() (keyed by the account email) — never from a request — so there is no
 SSRF/arbitrary-host primitive.
 """
@@ -18,22 +18,6 @@ import accounts
 import config
 import mailops
 
-_LOCAL = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
-
-
-def _is_localhost(host):
-    return (host or "").strip().lower() in _LOCAL
-
-
-def _ctx(host):
-    """Verified TLS, EXCEPT a localhost literal (Proton Bridge self-signed cert)."""
-    ctx = ssl.create_default_context()
-    if _is_localhost(host):
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 def provider_saves_sent(acct):
     """Gmail auto-files SMTP-sent mail in [Gmail]/Sent — an explicit APPEND would double it."""
     return acct.get("kind") == "gmail"
@@ -44,10 +28,10 @@ def smtp_connect(acct):
     if acct.get("smtp_starttls", True):
         s = smtplib.SMTP(host, port, timeout=60)
         s.ehlo()
-        s.starttls(context=_ctx(host))
+        s.starttls(context=accounts.tls_context(host))
         s.ehlo()
     else:  # implicit TLS (e.g. 465)
-        s = smtplib.SMTP_SSL(host, port, context=_ctx(host), timeout=60)
+        s = smtplib.SMTP_SSL(host, port, context=accounts.tls_context(host), timeout=60)
         s.ehlo()
     s.login(acct["email"], config.resolve_credential(acct))
     return s
