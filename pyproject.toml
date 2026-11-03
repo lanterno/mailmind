@@ -26,5 +26,7 @@ select = ["F"]
 
 [tool.pytest]
 testpaths = ["tests"]
+# The app's flat modules, and the helpers beside the tests (guard, fakes, fixtures).
+pythonpath = [".", "tests"]
 # importlib mode: test modules are imported by path, so tests/ never shadows the root's tests.py.
 addopts = ["--import-mode=importlib", "-ra"]
