@@ -2,9 +2,10 @@
 
 Before any MailMind module loads, this takes any Claude key out of the environment, pins the AI
 engine to the API (never a `claude` CLI call), and installs the tripwire in guard.py. It takes
-MAILMIND_HOME out too, so a test that forgets data_dir lands on the repo root, and has the
-tripwire guard the directory it named as it guards the repo root. Every test
-then fails if the tripwire refused anything during it. The API itself is a local fake
+MAILMIND_PROFILE and MAILMIND_NOSYNC out, so every test starts in the full profile and one that
+wants read-only sets it. It takes MAILMIND_HOME out too, so a test that forgets data_dir lands on
+the repo root, and has the tripwire guard the directory it named as it guards the repo root.
+Every test then fails if the tripwire refused anything during it. The API itself is a local fake
 (fakes/anthropic_api.py) for the whole session; it refuses every call that lacks its key, and
 the `ai` fixture supplies that key.
 
@@ -21,6 +22,8 @@ import pytest
 import guard
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ.pop("MAILMIND_PROFILE", None)
+os.environ.pop("MAILMIND_NOSYNC", None)
 _home = os.environ.pop("MAILMIND_HOME", "")
 os.environ["MAILMIND_AI"] = "api"
 os.environ["TZ"] = "UTC"            # "today" and local times must not depend on the machine
