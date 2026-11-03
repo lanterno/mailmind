@@ -363,13 +363,13 @@ def test_no_page_may_frame_the_app():
 _uid = [500]
 
 
-def _message(folder="INBOX", sender="bo@example.test"):
+def _message(folder="INBOX", sender="bo@example.test", mid=None):
     """A fictional message row in the temp database; returns its pk."""
     _uid[0] += 1
     c = store.conn()
     cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, "
                     "subject) VALUES (?,?,?,?,?,?,?,?,?)",
-                    ("ada@example.test", "imap", folder, _uid[0], f"<h{_uid[0]}@example.test>",
+                    ("ada@example.test", "imap", folder, _uid[0], mid or f"<h{_uid[0]}@example.test>",
                      f"h{_uid[0]}", "2026-11-01T09:00:00+00:00", sender, "Lunch"))
     c.commit()
     pk = cur.lastrowid
@@ -602,6 +602,64 @@ def test_nosync_reads_one_way_and_fails_toward_read_only():
     with open(server.__file__, encoding="utf-8") as f:
         src = f.read()
     assert src.count('os.environ.get("MAILMIND_NOSYNC"') == 1, "read MAILMIND_NOSYNC only in nosync()"
+
+
+def _offline():
+    real = accounts.connect
+
+    def unreachable(acct, timeout=60):
+        raise ConnectionRefusedError("IMAP down")
+    accounts.connect = unreachable
+    return real
+
+
+def _queued(mid):
+    c = store.conn()
+    rows = c.execute("SELECT id, state FROM read_mutations WHERE message_id=? ORDER BY id", (mid,)).fetchall()
+    c.close()
+    return rows
+
+
+def test_trashing_the_same_message_offline_again_queues_it_again():
+    mid = "<again@example.test>"
+    real = _offline()
+    try:
+        first = server.do_trash({"pk": _message(mid=mid)})
+        assert first["ok"] and first.get("status") == "queued", first
+        c = store.conn()
+        store.read_mut_mark_done(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")   # the queue applied it
+        c.commit()
+        c.close()
+        second = server.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again
+    finally:
+        accounts.connect = real
+    rows = _queued(mid)
+    assert len(rows) == 2 and rows[-1]["state"] == "queued", [dict(r) for r in rows]
+    assert second.get("undoable") is True, second
+
+
+def test_a_resubmit_with_the_same_mutation_id_queues_once():
+    mid = "<twice@example.test>"
+    pk = _message(mid=mid)
+    real = _offline()
+    try:
+        server.do_trash({"pk": pk, "mutation_id": "m-1"})
+        pk2 = _message(mid=mid)
+        again = server.do_trash({"pk": pk2, "mutation_id": "m-1"})
+    finally:
+        accounts.connect = real
+    assert len(_queued(mid)) == 1, _queued(mid)
+    assert again["ok"] and again.get("undoable") is False, again
+
+
+def test_two_cleanups_of_one_sender_undo_separately():
+    groups = []
+    for _ in range(2):
+        _message(sender="weekly@example.test")
+        with _trash_probe():
+            res, _ = server.cleanup_execute({"from_addr": "weekly@example.test"})
+        groups.append(res["undo_group"])
+    assert groups[0] != groups[1], groups
 
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
