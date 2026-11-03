@@ -10,6 +10,7 @@ import os
 import ssl
 import tempfile
 import threading
+import urllib.parse
 
 import store
 import config
@@ -270,6 +271,52 @@ def test_a_refused_read_is_not_counted_as_someone_at_the_screen():
         server._LAST_UI_TS = 0
         get("/api/digest", {"Host": "rebound.example.test:PORT"})
         assert server._LAST_UI_TS == 0, server._LAST_UI_TS
+
+
+_EVIL = 'INBOX"' + "\r\nA1 DELETE Archive"
+
+
+def test_folder_names_from_list_pass_through_unchanged():
+    for name in ("INBOX", "[Gmail]/All Mail", "Folders/Receipts", 'Notes \\"old\\"', "a\\\\b", "Tab\there"):
+        assert accounts.mailbox_arg(name) == f'"{name}"', name
+
+
+def test_a_folder_name_that_would_break_the_command_is_refused():
+    assert issubclass(accounts.BadMailbox, imaplib.IMAP4.error)    # handled like the server's BAD
+    for name in (_EVIL, "a\nb", "a\rb", "a\x00b", 'x"y', "trail\\", "", None):
+        try:
+            accounts.mailbox_arg(name)
+            raise AssertionError(f"accepted {name!r}")
+        except accounts.BadMailbox:
+            pass
+
+
+def _sent_a_line_break(M):
+    return [c for c in M.calls if any(isinstance(a, str) and ("\r" in a or "\n" in a) for a in c)]
+
+
+def test_a_move_to_an_injected_folder_sends_nothing():
+    M = _ScriptedIMAP()
+    try:
+        mailops._move_uid(M, "41", "Archive\r\nA1 DELETE INBOX")
+        raise AssertionError("an injected destination must be refused")
+    except accounts.BadMailbox:
+        pass
+    assert M.calls == [], M.calls
+
+
+def test_an_injected_folder_in_the_url_reaches_no_imap_command():
+    M = _ScriptedIMAP()
+    real = accounts.connect
+    accounts.connect = lambda acct, timeout=60: M
+    try:
+        with _live_server() as get:
+            q = urllib.parse.urlencode({"account": "ada@example.test", "folder": _EVIL})
+            code, _ = get("/api/messages?" + q, {"Host": "127.0.0.1:PORT"})
+    finally:
+        accounts.connect = real
+    assert code == 200, code
+    assert not _sent_a_line_break(M), _sent_a_line_break(M)
 
 if __name__ == "__main__":
     import sys
