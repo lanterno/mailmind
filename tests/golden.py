@@ -3,8 +3,9 @@ tests/golden/ exactly. `pytest --update-golden` rewrites the files instead; revi
 before committing it, because that diff *is* the behaviour change.
 
 Values that differ from run to run for reasons the test doesn't control (the server's port, the
-temp data directory) are replaced with placeholders before comparison. The clock is frozen by
-the `app` fixture, so timestamps are stable and stay in the record.
+temp data directory, an id the app draws at random) are replaced with placeholders before
+comparison; a test names its random values with `alias`. The clock is frozen by the `app`
+fixture, so timestamps are stable and stay in the record.
 """
 import hashlib
 import json
@@ -62,15 +63,20 @@ class Golden:
         else:
             entry["bytes"] = len(resp.body)
             entry["sha256"] = hashlib.sha256(resp.body).hexdigest()
-        self.entries.append(self._norm(entry))
+        self.entries.append(json.loads(json.dumps(entry)))     # a copy: later changes don't leak in
         return resp
 
     def note(self, label, value):
         """Record any other value the test wants pinned (a database row, the server's commands)."""
-        self.entries.append(self._norm({"note": label, "value": value}))
+        self.entries.append(json.loads(json.dumps({"note": label, "value": value})))
+
+    def alias(self, literal, placeholder):
+        """Write `placeholder` wherever `literal` appears, in every entry, before or after this
+        call: for ids the app draws at random."""
+        self.subs = sorted([*self.subs, (str(literal), placeholder)], key=lambda s: -len(s[0]))
 
     def verify(self):
-        text = json.dumps(self.entries, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+        text = json.dumps(self._norm(self.entries), indent=1, sort_keys=True, ensure_ascii=False) + "\n"
         if self.update:
             os.makedirs(os.path.dirname(self.path), exist_ok=True)
             with open(self.path, "w", encoding="utf-8") as f:
