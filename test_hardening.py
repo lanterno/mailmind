@@ -397,6 +397,66 @@ def test_a_request_can_only_star_or_mark_read():
         assert res["ok"] is True, (flag, res)
         assert ("STORE", str(_uid[0]), "+FLAGS", imap) in M.calls, (flag, M.calls)
 
+
+_REFUSE = {"MOVE": ("NO", [b"[OVERQUOTA] no room"]), "COPY": ("NO", [b"[OVERQUOTA] no room"])}
+_FOLDERS = ("OK", [b'(\\HasNoChildren \\Junk) "/" "Junk"', b'(\\HasNoChildren \\Archive) "/" "Archive"'])
+
+
+def _still_there(pk):
+    c = store.conn()
+    row = store.get_message(c, pk)
+    c.close()
+    return row is not None
+
+
+def _refusing():
+    M = _ScriptedIMAP(**_REFUSE)
+    M.list = lambda: _FOLDERS
+    return M
+
+
+def test_a_refused_move_keeps_the_message_and_says_so():
+    for name, op in (("trash", mailops.trash_message), ("archive", mailops.archive_message),
+                     ("junk", mailops.junk_message), ("move", lambda pk: mailops.move_message(pk, "Archive"))):
+        pk = _message()
+        with _connection(_refusing()):
+            ok, msg, undo = op(pk)
+        assert ok is False and undo is None, (name, ok, msg)
+        assert _still_there(pk), name
+
+
+def test_a_refused_gmail_archive_keeps_the_message():
+    pk = _message()
+    real = accounts.get
+    accounts.get = lambda email: {**real(email), "kind": "gmail"}
+    try:
+        with _connection(_ScriptedIMAP(STORE=("NO", [b"label not removed"]))):
+            ok, _, undo = mailops.archive_message(pk)
+    finally:
+        accounts.get = real
+    assert ok is False and undo is None, ok
+    assert _still_there(pk)
+
+
+def test_an_accepted_move_still_files_the_message():
+    pk = _message()
+    M = _ScriptedIMAP()
+    M.list = lambda: _FOLDERS
+    with _connection(M):
+        ok, _, undo = mailops.archive_message(pk)
+    assert ok is True and undo and undo["dest_folder"] == "Archive", (ok, undo)
+    assert not _still_there(pk)
+
+
+def test_the_route_reports_a_refusal_and_offers_no_undo():
+    pk = _message()
+    depth = len(server._undo_stack)
+    with _connection(_refusing()):
+        res = server.do_write("/api/move", {"pk": pk, "dest": "Archive"})
+    assert res["ok"] is False and res["undoable"] is False, res
+    assert len(server._undo_stack) == depth
+    assert _still_there(pk)
+
 if __name__ == "__main__":
     import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
