@@ -15,7 +15,7 @@ _ANSWER_HEADERS = [(b"x-content-type-options", b"nosniff"), (b"referrer-policy",
 class Perimeter:
     """`token()` is the page's CSRF token; `body_cap(method, path)` the most a request's body may
     hold, with the path as sent. A GET (or HEAD) must pass the host and cross-site checks; any
-    other method, the size cap, the host, the token and, on a send route, the Origin."""
+    other method, the size cap, the host and cross-site checks, the token and the Origin."""
 
     def __init__(self, app, *, token, body_cap):
         self.app = app
