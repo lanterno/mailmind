@@ -4,16 +4,16 @@ IMAP was unreachable), this worker re-applies it once the server is back, exactl
 
 Mirrors the outbox machinery 1:1: a single worker thread, atomic claim (queued→running), the
 `applied` flag as the exactly-once gate (= outbox.delivered), exponential backoff, reset-stuck on
-boot. The ONE difference from the outbox: the primary op here IS an IMAP op, so it runs under the
-shared _ops_lock (the outbox's SMTP send is lock-free).
+boot. The ONE difference from the outbox: the primary op here IS an IMAP op, so it runs as a job
+on the account's IMAP gate (the outbox's SMTP send holds none).
 """
 import time
 import threading
-import contextlib
 from datetime import datetime, timezone
 
 import store
 import mailops
+from mailmind.platform.workers import gates
 
 MAX_ATTEMPTS = 5
 _BACKOFF_BASE = 20      # secs; doubles per attempt
@@ -21,14 +21,11 @@ _BACKOFF_CAP = 900
 _POLL = 30
 
 _kick = threading.Event()
-_ops_lock = contextlib.nullcontext()
 _after_apply = None
 
 
-def configure(ops_lock=None, after_apply=None):
-    global _ops_lock, _after_apply
-    if ops_lock is not None:
-        _ops_lock = ops_lock
+def configure(after_apply=None):
+    global _after_apply
     _after_apply = after_apply
 
 
@@ -92,12 +89,15 @@ def apply_one(mid):
     # exactly-once: a recovered row (applied=1, requeued by reset_stuck) skips the IMAP op and only
     # finishes bookkeeping, so a crash after the op can never re-move/re-expunge.
     if not row["applied"]:
+        def apply():                                         # IMAP op takes the account's gate (unlike SMTP)
+            fresh = _commit_get(mid)                          # re-read under the gate: an undo may have
+            if fresh is None:                                #   cancelled (deleted) the row between claim and here
+                return False
+            mailops.apply_queued_mutation(fresh)
+            return True
         try:
-            with _ops_lock:                                  # IMAP op holds the shared lock (unlike SMTP)
-                fresh = _commit_get(mid)                      # re-read under the lock: an undo may have
-                if fresh is None:                            #   cancelled (deleted) the row between claim and here
-                    return
-                mailops.apply_queued_mutation(fresh)
+            if not gates.run(row["account"], apply, priority=gates.Priority.AFTER_USER):
+                return
         except mailops._UNREACHABLE as e:
             attempts = row["attempts"] + 1
             terminal = attempts >= MAX_ATTEMPTS

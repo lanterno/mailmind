@@ -1,9 +1,10 @@
 """Durable outbound queue + a single drain worker for MailMind.
 
 A send is enqueued (state=queued) by the server after compose.build_message has already
-validated it; the worker claims it (queued->sending atomically), delivers over SMTP under
-the shared ops lock, then does the best-effort post-send side effects (APPEND to Sent for
-non-Gmail, set \\Answered on the original for replies — each guarded by a done-once flag),
+validated it; the worker claims it (queued->sending atomically), delivers over SMTP, holding
+no IMAP gate, then does the best-effort post-send side effects (APPEND to Sent for non-Gmail,
+set \\Answered on the original for replies — each guarded by a done-once flag, and each a job
+on its account's IMAP gate),
 and marks it sent. Failures back off exponentially and retry; after MAX_ATTEMPTS the row
 is 'error' (terminal until an explicit retry). Exactly-once delivery is enforced by a
 persisted `delivered` flag set the instant the wire send returns: a crash/DB-failure after
@@ -13,12 +14,12 @@ The Message-ID + raw bytes are built once and reused, so the Sent copy matches t
 import json
 import time
 import threading
-import contextlib
 from datetime import datetime, timezone
 
 import store
 import accounts
 import smtpsend
+from mailmind.platform.workers import gates
 
 MAX_ATTEMPTS = 5
 _BACKOFF_BASE = 20      # secs; doubles per attempt
@@ -27,15 +28,12 @@ _POLL = 30             # worker wakes at least this often to catch due retries
 SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
 
 _kick = threading.Event()
-_ops_lock = contextlib.nullcontext()
 _after_send = None
 
 
-def configure(ops_lock=None, after_send=None):
-    """Wire the worker to the server's shared IMAP/SMTP lock + a post-send callback."""
-    global _ops_lock, _after_send
-    if ops_lock is not None:
-        _ops_lock = ops_lock
+def configure(after_send=None):
+    """Wire the worker to the server's post-send callback."""
+    global _after_send
     _after_send = after_send
 
 
@@ -149,22 +147,23 @@ def _commit(fn):
 
 def _side_effects(oid, row, acct):
     """Best-effort, done-once: Sent copy (non-Gmail) + \\Answered on the original.
-    Each IMAP op grabs _ops_lock briefly (NOT held across the whole thing). A failure
-    here never fails an already-delivered send — it's logged + skipped."""
+    Each IMAP op is a job of its own on its account's IMAP gate (NOT one across the whole
+    thing). A failure here never fails an already-delivered send — it's logged + skipped."""
     if smtpsend.provider_saves_sent(acct) and not row["sent_appended"]:
         _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))   # Gmail auto-saves
     elif not row["sent_appended"]:
         try:
-            with _ops_lock:
-                smtpsend.append_to_sent(acct, row["raw"])
+            gates.run(acct["email"], lambda: smtpsend.append_to_sent(acct, row["raw"]),
+                      priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))
         except Exception as e:
             print(f"[outbox] Sent-copy failed for #{oid}: {smtpsend.sanitize_smtp_error(e)}", flush=True)
     if row["in_reply_to_pk"] and not row["answered_set"]:
         try:
             import mailops
-            with _ops_lock:
-                mailops.set_flags(row["in_reply_to_pk"], {"answered": True})
+            gates.run(mailops.account_of(row["in_reply_to_pk"]) or gates.EVERY_ACCOUNT,
+                      lambda: mailops.set_flags(row["in_reply_to_pk"], {"answered": True}),
+                      priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, answered_set=1))
         except Exception as e:
             print(f"[outbox] \\Answered failed for #{oid}: {type(e).__name__}", flush=True)
@@ -189,10 +188,11 @@ def _side_effects(oid, row, acct):
             # them as function-locals and break every earlier reference with UnboundLocalError
             c = store.conn(); dr = store.draft_get(c, row["draft_id"]); c.close()
             if dr:
-                with _ops_lock:          # the row goes with its copy: Edit re-checks it under this lock
+                def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
                     smtpsend.delete_draft_uid(accounts.get(dr["account"]), dr["folder"],
                                               dr["uid"], dr["uidvalidity"])
                     _commit(lambda c: store.draft_delete(c, row["draft_id"]))
+                gates.run(dr["account"], cleanup, priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, draft_deleted=1))
         except Exception as e:
             print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)

@@ -11,19 +11,17 @@ import readmutq
 import realtime
 import store
 import summarize
-import summarize_thread
 
 
 def wire(server):
-    """Connect the legacy workers to the server: the outbox, the offline read-mutation queue and
-    the thread summarizer share its IMAP lock and report back through its callbacks, and the IDLE
-    layer syncs through it. Starts nothing.
+    """Connect the legacy workers to the server: the outbox and the offline read-mutation queue
+    report back through its callbacks, and the IDLE layer syncs through it. Starts nothing. (Each
+    takes the IMAP gate itself, from mailmind.platform.workers.gates.)
 
     It takes the server module as an argument rather than importing it: `python3 server.py` runs
     as __main__, and an import here would load a second copy with a lock of its own."""
-    outbox.configure(ops_lock=server._ops_lock, after_send=server._after_send)
-    readmutq.configure(ops_lock=server._ops_lock, after_apply=server._after_readmut)
-    summarize_thread.configure(ops_lock=server._ops_lock)
+    outbox.configure(after_send=server._after_send)
+    readmutq.configure(after_apply=server._after_readmut)
     realtime.configure(sync_handler=server.sync_guarded)
 
 

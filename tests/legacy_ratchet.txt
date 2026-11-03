@@ -11,4 +11,3 @@ mailmind.bootstrap.legacy realtime
 mailmind.bootstrap.legacy server
 mailmind.bootstrap.legacy store
 mailmind.bootstrap.legacy summarize
-mailmind.bootstrap.legacy summarize_thread

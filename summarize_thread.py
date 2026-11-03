@@ -8,12 +8,12 @@ import re
 import json
 import hashlib
 import threading
-import contextlib
 from datetime import datetime, timezone
 
 import store
 import ingest
 import summarize as _sz
+from mailmind.platform.workers import gates
 
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
@@ -21,7 +21,6 @@ CAP_TOTAL = 14000
 _AI_SEM = threading.Semaphore(2)          # max concurrent Claude calls from the bridge
 _inflight = {}
 _inflight_lock = threading.Lock()
-_ops_lock = contextlib.nullcontext()
 
 _QUOTE = re.compile(r"^\s*>")
 _ATTR = re.compile(r"^(On .+ wrote:|From:.*|-{3,} ?Forwarded)", re.I)
@@ -38,12 +37,6 @@ Subject: {subject}
 {label} ({n}{omit}):
 {blocks}
 """
-
-
-def configure(ops_lock=None):
-    global _ops_lock
-    if ops_lock is not None:
-        _ops_lock = ops_lock
 
 
 def _now():
@@ -63,7 +56,7 @@ def _trim(text):
 
 def _rows(c, account, thread_id):
     rows = c.execute(
-        """SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched
+        """SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched
            FROM messages WHERE account=? AND thread_id=? ORDER BY ts ASC, pk ASC""",
         (account, thread_id)).fetchall()
     seen, out = set(), []
@@ -91,8 +84,8 @@ def _gather(rows):
         body = r["body_text"] or r["snippet"] or ""
         if not body and not r["body_fetched"]:     # only hit IMAP for body-less members
             try:
-                with _ops_lock:
-                    parsed = ingest.fetch_body(r["pk"]) or {}
+                parsed = gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
+                                   priority=gates.Priority.INTERACTIVE) or {}
                 body = parsed.get("text") or ""
             except Exception:
                 body = ""
