@@ -153,18 +153,11 @@ def app(world, monkeypatch):
     import dataclasses
     import time_machine
     import app_client
-    import outbox
-    import readmutq
-    import realtime
     import server
-    import summarize_thread
+    from mailmind.bootstrap import legacy
     app_client.reset_state()
     monkeypatch.setattr(server, "CSRF", app_client.CSRF)
-    # wire the workers to the server as server.__main__ does, without starting their threads
-    outbox.configure(ops_lock=server._ops_lock, after_send=server._after_send)
-    readmutq.configure(ops_lock=server._ops_lock, after_apply=server._after_readmut)
-    summarize_thread.configure(ops_lock=server._ops_lock)
-    realtime.configure(sync_handler=server.sync_guarded)
+    legacy.wire(server)                 # as server.__main__ does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
         running = app_client.RunningApp().start()
