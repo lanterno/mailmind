@@ -1,0 +1,20 @@
+[project]
+name = "mailmind"
+version = "0.1.0"
+description = "A local-first mail client with AI triage, served on 127.0.0.1."
+readme = "README.md"
+requires-python = ">=3.14"
+# Runtime code is still standard-library only: `python3 server.py` needs nothing installed.
+# Third-party runtime packages arrive with the refactor's Phase 2. Until then only the dev
+# group below holds anything, and only `just` recipes use it.
+dependencies = []
+
+[tool.uv]
+# Flat modules, not an installable package: uv manages the dev environment and the lock only.
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]

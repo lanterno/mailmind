@@ -25,6 +25,9 @@ mm-*.png
 # === Python ===
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
 
 # === macOS ===
 .DS_Store
