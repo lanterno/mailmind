@@ -1,8 +1,10 @@
 """Shared setup for the pytest-native tests in this directory.
 
 Before any MailMind module loads, this takes any Claude key out of the environment, pins the AI
-engine to the API (so a missing key means AI is off, never a `claude` CLI call), and installs the
-tripwire in guard.py. Every test then fails if the tripwire refused anything during it.
+engine to the API (never a `claude` CLI call), and installs the tripwire in guard.py. Every test
+then fails if the tripwire refused anything during it. The API itself is a local fake
+(fakes/anthropic_api.py) for the whole session; it refuses every call that lacks its key, and
+the `ai` fixture supplies that key.
 
 `data_dir` points every module's data path at a fresh temp directory and creates the schema
 there. Tests that touch the store, config, rules, views or audit trails must use it.
@@ -16,6 +18,32 @@ import guard
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ["MAILMIND_AI"] = "api"
 guard.install()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def anthropic_api():
+    """The fake Claude API, there for every test and every legacy suite run from this session
+    (they inherit ANTHROPIC_BASE_URL). Without the `ai` fixture there is no key, so it answers 401."""
+    from fakes.anthropic_api import FakeAnthropic
+    with FakeAnthropic() as fake:
+        os.environ["ANTHROPIC_BASE_URL"] = fake.url
+        try:
+            yield fake
+        finally:
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
+
+
+@pytest.fixture(autouse=True)
+def _anthropic_reset(anthropic_api):
+    anthropic_api.reset()
+
+
+@pytest.fixture
+def ai(anthropic_api, monkeypatch):
+    """AI on: a key the fake API accepts. It answers each call from the call's own schema unless
+    the test queues replies (anthropic_api.queue). Returns the fake, whose .requests the test can read."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", anthropic_api.KEY)
+    return anthropic_api
 
 
 @pytest.fixture(autouse=True)
