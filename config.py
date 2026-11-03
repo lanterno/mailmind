@@ -30,9 +30,11 @@ import tempfile
 import threading
 
 import mailsecrets
+from mailmind.platform import settings
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG = os.path.join(HERE, "mailmind.config.json")
+# A path pinned here wins over the settings'. Only the legacy test suites still pin one.
+HERE = None                 # where save() writes its temp file; None: beside the config
+CONFIG = None
 _cred_cache = {}
 _write_lock = threading.Lock()
 
@@ -51,10 +53,16 @@ TYPE_DEFAULTS = {
 _SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_starttls")
 
 
+def config_path():
+    """mailmind.config.json in the data directory (settings.current().home)."""
+    return CONFIG or settings.current().config
+
+
 def _raw():
-    if not os.path.exists(CONFIG):
+    path = config_path()
+    if not os.path.exists(path):
         return {"accounts": []}
-    with open(CONFIG) as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -246,14 +254,15 @@ def save(raw):
         raise ValueError("bad config shape")
     blob = json.dumps(raw, indent=2, ensure_ascii=False)
     json.loads(blob)  # round-trip validation
-    fd, tmp = tempfile.mkstemp(dir=HERE, prefix=".cfg-", suffix=".tmp")
+    path = config_path()
+    fd, tmp = tempfile.mkstemp(dir=HERE or os.path.dirname(path), prefix=".cfg-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(blob)
             f.flush()
             os.fsync(f.fileno())
         os.chmod(tmp, 0o600)
-        os.replace(tmp, CONFIG)
+        os.replace(tmp, path)
     except Exception:
         try:
             os.remove(tmp)
@@ -436,7 +445,7 @@ def materialize(only=None):
         print(f"  materialized {entry.get('email')}")
     if changed:
         save(raw)
-    print(f"done — {changed} account(s) now self-contained in {os.path.basename(CONFIG)}")
+    print(f"done — {changed} account(s) now self-contained in {os.path.basename(config_path())}")
 
 
 def check():

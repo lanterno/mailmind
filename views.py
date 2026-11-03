@@ -16,8 +16,15 @@ import json
 import tempfile
 import secrets
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-FILE = os.path.join(HERE, "mailmind_views.json")
+from mailmind.platform import settings
+
+# A path pinned here wins over the settings'. Only the legacy test suites still pin one.
+HERE = None                 # where save() writes its temp file; None: beside the views file
+FILE = None
+
+
+def _file():
+    return FILE or settings.current().views
 
 # Built-in smart defaults (always present, non-deletable). q uses the live search grammar; the
 # __LAST7__ sentinel is expanded to after:<date> client-side so the FIXED grammar stays untouched.
@@ -40,10 +47,11 @@ _BUILTIN_IDS = {v["id"] for v in DEFAULTS} | {v["id"] for v in LANES}
 
 def load():
     """User views only (no builtins). TOTAL — never raises, drops malformed entries."""
-    if not os.path.exists(FILE):
+    path = _file()
+    if not os.path.exists(path):
         return []
     try:
-        with open(FILE) as f:
+        with open(path) as f:
             raw = json.load(f)
     except Exception:
         return []
@@ -68,14 +76,15 @@ def save(user_views):
     """Atomic write (tempfile + fsync + chmod 600 + os.replace), persisting ONLY user views."""
     blob = json.dumps(user_views, indent=2, ensure_ascii=False)
     json.loads(blob)
-    fd, tmp = tempfile.mkstemp(dir=HERE, prefix=".views-", suffix=".tmp")
+    path = _file()
+    fd, tmp = tempfile.mkstemp(dir=HERE or os.path.dirname(path), prefix=".views-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(blob)
             f.flush()
             os.fsync(f.fileno())
         os.chmod(tmp, 0o600)
-        os.replace(tmp, FILE)
+        os.replace(tmp, path)
     except Exception:
         try:
             os.remove(tmp)

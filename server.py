@@ -56,18 +56,29 @@ import realtime
 import summarize_thread
 import summarize_briefing
 import summarize_review
+from mailmind.platform import settings
 
 HERE = os.path.dirname(__file__)
 PORT = 8721                               # `python3 server.py [port]` overrides it in __main__
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
 STATS_TTL = 90                            # seconds to cache the live per-account stats
-RECON_AUDIT = os.path.join(HERE, "reconcile_audit.jsonl")
-SWEEP_AUDIT = os.path.join(HERE, "sweep_audit.jsonl")
+# The audit trails live in the data directory. A path pinned here wins; only legacy test suites pin one.
+RECON_AUDIT = None
+SWEEP_AUDIT = None
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 MAX_ATTACH_BYTES = 25 << 20               # 25 MB total decoded attachment budget
 # /api/send body cap must hold MAX_ATTACH_BYTES AFTER base64 (~4/3) + JSON overhead.
 MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + headroom
+
+
+def _recon_audit():
+    return RECON_AUDIT or settings.current().reconcile_audit
+
+
+def _sweep_audit():
+    return SWEEP_AUDIT or settings.current().sweep_audit
+
 
 _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
@@ -218,7 +229,7 @@ def _auto_reconcile_one(acct):
         _ops_lock.release()
     if res.get("error") or not res.get("pruned"):
         return
-    with open(RECON_AUDIT, "a") as f:
+    with open(_recon_audit(), "a") as f:
         f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
                             "account": res["account"], "pruned": res["pruned"],
                             "live": res["live"]}) + "\n")
@@ -547,7 +558,7 @@ def do_reconcile(account, dry_run):
         results = [ingest.reconcile_account(a, dry_run=dry_run) for a in accts]
     if not dry_run:
         stamp = now_iso()
-        with open(RECON_AUDIT, "a") as f:
+        with open(_recon_audit(), "a") as f:
             for r in results:
                 if r.get("pruned"):
                     f.write(json.dumps({"kind": "reconcile", "ts": stamp,
@@ -575,9 +586,9 @@ def read_audit(kind="all", limit=120):
     events = []
     files = []
     if kind in ("all", "sweep"):
-        files.append(SWEEP_AUDIT)
+        files.append(_sweep_audit())
     if kind in ("all", "reconcile"):
-        files.append(RECON_AUDIT)
+        files.append(_recon_audit())
     for path in files:
         if not os.path.exists(path):
             continue
@@ -2004,7 +2015,7 @@ def cleanup_sender(qs):
 
 def _cleanup_audit(from_addr, token, swept, status):
     try:
-        with open(SWEEP_AUDIT, "a") as f:
+        with open(_sweep_audit(), "a") as f:
             f.write(json.dumps({"kind": "sender_cleanup", "ts": now_iso(), "from": from_addr,
                                 "token": token, "swept": swept, "status": status}) + "\n")
     except Exception:

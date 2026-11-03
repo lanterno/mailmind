@@ -48,7 +48,7 @@ def _ro_conn():
         c.commit()
     finally:
         c.close()
-    ro = sqlite3.connect(f"file:{store.DB}?mode=ro", uri=True)
+    ro = sqlite3.connect(f"file:{store.db_path()}?mode=ro", uri=True)
     ro.row_factory = sqlite3.Row
     return ro
 

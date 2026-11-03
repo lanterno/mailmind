@@ -25,6 +25,8 @@ import re
 import os
 import json
 
+from mailmind.platform import settings
+
 SPAM = "spam/scam"
 BLOCKED = "blocked"                     # user said "always trash this sender/domain"
 MKT = "newsletters/marketing"
@@ -36,21 +38,23 @@ PERSONAL = "other/personal-ish"
 JUNK_BUCKETS = {SPAM, BLOCKED, MKT, NOTIF}
 
 # --- learned overrides (a sender/domain allow- & block-list the user grows) ---
-RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mailmind_rules.json")
+RULES_FILE = None    # A path pinned here wins over the settings'. Only the legacy test suites still pin one.
 _rules_cache = {}
 
 
 def _rules():
-    """Lazy-load mailmind_rules.json (cached by mtime so edits are picked up)."""
+    """Lazy-load mailmind_rules.json (cached by path and mtime so edits are picked up)."""
+    path = RULES_FILE or settings.current().rules
     try:
-        mtime = os.path.getmtime(RULES_FILE)
+        mtime = os.path.getmtime(path)
     except OSError:
         return {"keep_senders": set(), "block_senders": set(),
                 "keep_domains": set(), "block_domains": set()}
-    if _rules_cache.get("mtime") != mtime:
-        with open(RULES_FILE) as f:
+    if _rules_cache.get("mtime") != mtime or _rules_cache.get("path") != path:
+        with open(path) as f:
             raw = json.load(f)
         _rules_cache.clear()
+        _rules_cache["path"] = path
         _rules_cache["mtime"] = mtime
         for k in ("keep_senders", "block_senders", "keep_domains", "block_domains"):
             _rules_cache[k] = set(x.lower() for x in raw.get(k, []))

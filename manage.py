@@ -36,8 +36,9 @@ import accounts
 import mailclass
 import pool
 import rules
+from mailmind.platform import settings
 
-AUDIT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sweep_audit.jsonl")
+AUDIT_FILE = None    # A path pinned here wins over the settings'. Only the legacy test suites still pin one.
 
 HDR_BATCH = 300
 MOVE_BATCH = 200
@@ -99,7 +100,7 @@ def classify_rows(rows):
 def audit(account, rows):
     """Append a reviewable record of everything a sweep trashed."""
     stamp = datetime.now(timezone.utc).isoformat()
-    with open(AUDIT_FILE, "a") as f:
+    with open(AUDIT_FILE or settings.current().sweep_audit, "a") as f:
         for r in rows:
             f.write(json.dumps({"kind": "sweep", "ts": stamp, "account": account,
                                 "uid": r["uid"], "from": r["from"],
