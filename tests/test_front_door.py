@@ -3,7 +3,7 @@
 installed. Every app test also runs through both doors (the app fixture's door=old and door=new).
 
 Each program runs in a child process with the tripwire installed and an empty temp data
-directory, read-only (MAILMIND_NOSYNC), with no Claude key.
+directory, read-only (MAILMIND_PROFILE), with no Claude key.
 """
 import http.client
 import os
@@ -25,7 +25,7 @@ GUARDED = ("import sys; sys.path[:0] = [{tests!r}, {root!r}]; import guard; guar
 
 def child_env(home):
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-    return {**env, "MAILMIND_HOME": str(home), "MAILMIND_NOSYNC": "1", "MAILMIND_AI": "api",
+    return {**env, "MAILMIND_HOME": str(home), "MAILMIND_PROFILE": "read-only", "MAILMIND_AI": "api",
             "PYTHONUNBUFFERED": "1"}
 
 
