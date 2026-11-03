@@ -5,21 +5,22 @@ validated it; the worker claims it (queued->sending atomically), delivers over S
 no IMAP gate, then does the best-effort post-send side effects (APPEND to Sent for non-Gmail,
 set \\Answered on the original for replies — each guarded by a done-once flag, and each a job
 on its account's IMAP gate),
-and marks it sent. Failures back off exponentially and retry; after MAX_ATTEMPTS the row
-is 'error' (terminal until an explicit retry). Exactly-once delivery is enforced by a
-persisted `delivered` flag set the instant the wire send returns: a crash/DB-failure after
-delivery requeues the row, but send_one() then skips the send and only finishes bookkeeping.
+and marks it sent. The queue is a DurableQueue over the outbox table: failures back off
+exponentially and retry; after MAX_ATTEMPTS the row is 'error' (terminal until an explicit
+retry). Exactly-once delivery is enforced by a persisted `delivered` flag, the queue's gate,
+set the instant the wire send returns: a crash/DB-failure after delivery requeues the row, but
+send_one() then skips the send and only finishes bookkeeping.
 The Message-ID + raw bytes are built once and reused, so the Sent copy matches the wire.
 """
 import json
 import time
-import threading
 from datetime import datetime, timezone
 
 import store
 import accounts
 import smtpsend
 from mailmind.platform.workers import gates
+from mailmind.platform.workers.durable_queue import DurableQueue
 
 MAX_ATTEMPTS = 5
 _BACKOFF_BASE = 20      # secs; doubles per attempt
@@ -27,7 +28,9 @@ _BACKOFF_CAP = 900
 _POLL = 30             # worker wakes at least this often to catch due retries
 SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
 
-_kick = threading.Event()
+QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", finished_at="sent_at",
+                     gate="delivered", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
+                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
 _after_send = None
 
 
@@ -73,26 +76,15 @@ def enqueue(built, meta):
 
 def cancel(oid):
     """Undo Send — drop the row if it's still in its grace window. False if too late."""
-    c = store.conn()
-    try:
-        ok = store.outbox_cancel(c, oid)
-        c.commit()
-        return ok
-    finally:
-        c.close()
+    return _commit(lambda c: QUEUE.cancel_queued(c, oid))
 
 
 def kick():
-    _kick.set()
+    QUEUE.kick()
 
 
 def retry(oid):
-    c = store.conn()
-    try:
-        ok = store.outbox_requeue(c, oid)
-        c.commit()
-    finally:
-        c.close()
+    ok = _commit(lambda c: QUEUE.requeue(c, oid))
     if ok:
         kick()
     return ok
@@ -137,10 +129,12 @@ def send_now(oid):
 
 
 def _commit(fn):
-    """Run a single store mutation on a short-lived connection, best-effort."""
+    """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
     c = store.conn()
     try:
-        fn(c); c.commit()
+        out = fn(c)
+        c.commit()
+        return out
     finally:
         c.close()
 
@@ -199,21 +193,13 @@ def _side_effects(oid, row, acct):
 
 
 def send_one(oid):
-    c = store.conn()
-    try:
-        claimed = store.outbox_claim(c, oid)
-        c.commit()
-        if not claimed:
-            return
-        row = store.outbox_get(c, oid)
-    finally:
-        c.close()
-    if not row:
+    row = _commit(lambda c: QUEUE.claim(c, oid))
+    if row is None:                          # lost the claim (cancelled / another worker)
         return
     try:
         acct = accounts.get(row["account"])  # host/port/creds ONLY from config (no SSRF)
     except KeyError:
-        _commit(lambda c: store.outbox_release(c, oid, "account removed", row["attempts"] + 1, 0, True))
+        _commit(lambda c: QUEUE.give_up(c, row, "account removed"))
         return
     # Deliver exactly once. A recovered row (delivered=1, requeued by reset_stuck) skips
     # the wire send and only finishes bookkeeping — so a crash after send never re-sends.
@@ -222,19 +208,16 @@ def send_one(oid):
             smtpsend.send(acct, row["raw"], json.loads(row["envelope"]))  # lock-free: SMTP != IMAP ops
         except Exception as e:
             err = smtpsend.sanitize_smtp_error(e)
-            attempts = row["attempts"] + 1
-            terminal = attempts >= MAX_ATTEMPTS
-            delay = min(_BACKOFF_CAP, _BACKOFF_BASE * (2 ** (attempts - 1)))
-            _commit(lambda c: store.outbox_release(c, oid, err, attempts, _now() + delay, terminal))
+            terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
             print(f"[outbox] send #{oid} failed ({err}); "
                   f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
             return
-        _commit(lambda c: store.outbox_mark_delivered(c, oid))  # commit BEFORE side effects
+        _commit(lambda c: QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
     # delivered — best-effort side effects, then mark sent (all guarded so a DB hiccup
     # can't strand a delivered row; next pass sees delivered=1 and only retries bookkeeping)
     try:
         _side_effects(oid, row, acct)
-        _commit(lambda c: store.outbox_mark_sent(c, oid, datetime.now(timezone.utc).isoformat()))
+        _commit(lambda c: QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))
         if _after_send:
             _after_send()
         print(f"[outbox] sent #{oid}", flush=True)
@@ -243,25 +226,8 @@ def send_one(oid):
 
 
 def drain():
-    c = store.conn()
-    try:
-        due = store.outbox_due(c, _now())
-    finally:
-        c.close()
-    for oid in due:
-        try:
-            send_one(oid)
-        except Exception as e:   # one bad row must not abort the rest of the batch
-            print(f"[outbox] send_one #{oid} errored: {type(e).__name__}: {e}", flush=True)
+    QUEUE.drain(send_one, _now())        # one bad row is logged and never aborts the rest
 
 
 def worker_loop():
-    # recover anything left mid-send by a crash
-    c = store.conn(); store.outbox_reset_stuck(c); c.commit(); c.close()
-    while True:
-        _kick.wait(timeout=_POLL)
-        _kick.clear()
-        try:
-            drain()
-        except Exception as e:
-            print(f"[outbox] drain error: {type(e).__name__}: {e}", flush=True)
+    QUEUE.run_forever(drain)             # recovers rows a crash left mid-send, then drains
