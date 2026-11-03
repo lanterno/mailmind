@@ -86,8 +86,18 @@ def engine():
 def describe_engine():
     """One line for the startup log."""
     if engine() == "api":
-        return "Claude API · " + model_label() + " · key from " + claude_api.key_source()
+        return "Claude API · " + model_label() + " · " + _key_note()
     return "claude CLI" + (" · " + MODEL if MODEL else "")
+
+
+def _key_note():
+    """Where the API key came from, or why there is none."""
+    source = claude_api.key_source()
+    if claude_api.key():
+        return "key from " + source
+    if source == "mailmind.config.json":
+        return "no key, so AI is off: the anthropic_api_key in mailmind.config.json can't be read"
+    return "no key, so AI is off: set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY"
 
 
 def model_label():
