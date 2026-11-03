@@ -23,8 +23,9 @@ run-fast port="":
 
 # ── checks ────────────────────────────────────────────────────────────────────
 
-# Every test suite; exits non-zero on the first failure
-test: test-classifier test-sanitize test-css test-expire test-thread-file test-claude-api test-upcoming test-contacts-known test-send-after test-send-guard test-draft-resume test-draft-resume-ui test-hardening
+# Every test suite, under pytest; each script suite runs alone, as `python3 <suite>.py` does
+test *args:
+    uv run pytest {{args}}
 
 # Classifier behaviour
 test-classifier:

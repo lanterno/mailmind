@@ -23,3 +23,8 @@ dev = [
 # Pyflakes' checks only (undefined names, unused imports and the like), the lint this repo
 # has always run. Widening the rule set is a change of its own.
 select = ["F"]
+
+[tool.pytest]
+testpaths = ["tests"]
+# importlib mode: test modules are imported by path, so tests/ never shadows the root's tests.py.
+addopts = ["--import-mode=importlib", "-ra"]
