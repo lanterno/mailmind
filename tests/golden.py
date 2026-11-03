@@ -16,7 +16,8 @@ GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden")
 
 # Response headers worth pinning: what a browser acts on. Length and date are left out.
 HEADERS = ("content-type", "content-disposition", "cache-control", "x-frame-options",
-           "x-content-type-options", "referrer-policy", "content-security-policy")
+           "x-content-type-options", "referrer-policy", "content-security-policy",
+           "cross-origin-opener-policy", "cross-origin-resource-policy", "permissions-policy")
 
 
 def _file_for(nodeid):
