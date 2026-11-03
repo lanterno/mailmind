@@ -8,6 +8,7 @@ What it answers:
 - 401 authentication_error unless the request carries KEY, as the real API does for a missing or
   wrong key;
 - the next reply a test queued with `queue`, if any;
+- else what the test's `responder` returns for the request, if it set one and it returns a reply;
 - otherwise an answer built from the request's own schema (see `instance`), or STUB_TEXT for a
   call without one. The same request always gets the same answer, so AI routes can be golden-tested
   without scripting each reply.
@@ -80,6 +81,7 @@ class FakeAnthropic:
     def __init__(self):
         self.requests = []
         self._queued = []
+        self.responder = None         # optional: Request -> reply, or None for the default
         self._lock = threading.Lock()
         fake = self
 
@@ -120,6 +122,10 @@ class FakeAnthropic:
             if self._queued:
                 reply = self._queued.pop(0)
                 return reply(req) if callable(reply) else reply
+            responder = self.responder
+        reply = responder(req) if responder else None
+        if reply is not None:
+            return reply
         if req.schema is None:
             return answer(STUB_TEXT)
         return answer(instance(req.schema))
@@ -134,6 +140,7 @@ class FakeAnthropic:
         with self._lock:
             self.requests.clear()
             self._queued.clear()
+            self.responder = None
 
     def start(self):
         self._thread.start()
