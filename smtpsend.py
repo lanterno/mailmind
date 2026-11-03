@@ -109,10 +109,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
         if del_uid:
             try:
                 M.uid("STORE", del_uid, "+FLAGS", "(\\Deleted)")
-                try:
-                    M.uid("EXPUNGE", del_uid)          # UIDPLUS: expunge only this UID
-                except Exception:
-                    M.expunge()                        # fallback (folder holds only drafts)
+                mailops.expunge_uid(M, del_uid)
             except Exception:
                 pass
         typ, d = M.append(f'"{drafts}"', "(\\Draft)", imaplib.Time2Internaldate(time.time()), raw)
@@ -146,10 +143,7 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
         if uidvalidity is not None and cur is not None and uidvalidity != cur:
             return                                     # UIDs rolled — don't risk deleting the wrong one
         M.uid("STORE", str(uid), "+FLAGS", "(\\Deleted)")
-        try:
-            M.uid("EXPUNGE", str(uid))
-        except Exception:
-            M.expunge()
+        mailops.expunge_uid(M, str(uid))
     finally:
         try:
             M.logout()

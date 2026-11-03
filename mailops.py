@@ -187,15 +187,30 @@ def _find_folder(M, hints):
     return None
 
 
+def expunge_uid(M, uid):
+    """Expunge this one UID (UIDPLUS). Never a bulk EXPUNGE: that also erases every other message
+    already flagged \\Deleted in the folder, and Proton Bridge breaks on it. A server without
+    UIDPLUS leaves the message flagged \\Deleted, the way any client without UIDPLUS deletes;
+    the next expunge, from any client, finishes it."""
+    try:
+        M.uid("EXPUNGE", uid)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        pass
+
+
 def _move_uid(M, uid, dest):
     try:
         typ, d = M.uid("MOVE", uid, f'"{dest}"')
         if typ != "OK":
             raise imaplib.IMAP4.error(str(d))
-    except imaplib.IMAP4.error:  # per-message COPY + delete + expunge (NEVER bulk-expunge)
-        M.uid("COPY", uid, f'"{dest}"')
+    except imaplib.IMAP4.error:  # no MOVE: copy this one message, then remove only its UID
+        typ, d = M.uid("COPY", uid, f'"{dest}"')
+        if typ != "OK":          # nothing landed in dest, so the original stays untouched
+            raise imaplib.IMAP4.error(f"COPY failed: {d}")
         M.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
-        M.expunge()
+        expunge_uid(M, uid)
 
 
 def archive_message(pk):
