@@ -172,6 +172,7 @@ def app(world, monkeypatch):
             client = app_client.AppClient(running.port)
             client.clock = clock
             yield client
+            client.settle()
         finally:
             running.stop()
             app_client.reset_state()

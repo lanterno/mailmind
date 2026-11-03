@@ -9,6 +9,7 @@ import http.client
 import importlib
 import json
 import threading
+import time
 from dataclasses import dataclass
 
 CSRF = "test-csrf-token"
@@ -69,6 +70,24 @@ class AppClient:
     def __init__(self, port):
         self.port = port
         self.origin = f"http://127.0.0.1:{port}"
+        self._before = set(threading.enumerate())
+
+    def started_threads(self):
+        """Threads alive now that weren't when the client was made, other than the fakes' and
+        the app's serving thread: work a request started in the background (a sync, a draft)."""
+        return [t for t in threading.enumerate()
+                if t not in self._before and t is not threading.current_thread()
+                and not t.name.startswith(("fake-", "app-http"))]
+
+    def settle(self, timeout=30):
+        """Wait for the background work requests started. Raises if any is still running, so a
+        test never ends with a thread that would write into the next test's data directory."""
+        deadline = time.monotonic() + timeout
+        for t in self.started_threads():
+            t.join(max(0.0, deadline - time.monotonic()))
+        left = [t.name for t in self.started_threads() if t.is_alive()]
+        if left:
+            raise AssertionError(f"background threads still running after {timeout}s: {left}")
 
     def request(self, method, path, body=None, headers=None):
         h = {"Host": f"127.0.0.1:{self.port}", "Sec-Fetch-Site": "same-origin", "X-CSRF-Token": CSRF}
@@ -110,7 +129,7 @@ class RunningApp:
         self.httpd = server._Server(("127.0.0.1", 0), server.H)
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
-                                       daemon=True)
+                                       name="app-http", daemon=True)
 
     def start(self):
         self.thread.start()

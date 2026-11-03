@@ -752,6 +752,11 @@ class _Handler(socketserver.BaseRequestHandler):
 
 class _TCP(socketserver.ThreadingTCPServer):
     daemon_threads = True
+
+    def process_request(self, request, client_address):
+        # named, so the app fixture can tell the fake's sessions from threads the app started
+        threading.Thread(target=self.process_request_thread, args=(request, client_address),
+                         name="fake-imap-session", daemon=True).start()
     allow_reuse_address = True
 
 
@@ -788,7 +793,8 @@ class FakeIMAPServer:
         self._tcp = _TCP(("127.0.0.1", 0), _Handler)
         self._tcp.fake = self
         self.port = self._tcp.server_address[1]
-        threading.Thread(target=self._tcp.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        threading.Thread(target=self._tcp.serve_forever, kwargs={"poll_interval": 0.05},
+                         name="fake-imap", daemon=True).start()
         return self
 
     def stop(self):

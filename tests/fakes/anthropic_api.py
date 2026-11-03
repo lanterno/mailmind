@@ -98,11 +98,17 @@ class FakeAnthropic:
             def log_message(self, format, *args):
                 pass
 
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.httpd.daemon_threads = True
+        class Server(ThreadingHTTPServer):
+            daemon_threads = True
+
+            def process_request(self, request, client_address):
+                threading.Thread(target=self.process_request_thread, args=(request, client_address),
+                                 name="fake-anthropic-request", daemon=True).start()
+
+        self.httpd = Server(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self.httpd.server_port}"
         self._thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
-                                        daemon=True)
+                                        name="fake-anthropic", daemon=True)
 
     def _reply(self, path, req):
         with self._lock:
