@@ -15,12 +15,13 @@ from mailmind.platform import settings
 
 def build(server):
     """The ASGI app over the legacy server module, and the coroutine function to await when
-    shutdown begins. The bridge reads a POST's body up to the route's own cap, and no other body:
-    server.H reads none."""
+    shutdown begins. A POST's body may hold up to the route's own cap, and the bridge reads no
+    other body: server.H reads none. The perimeter checks the page's token as server.H does, so
+    both see the same one."""
     def body_cap(method, path):
         return server.post_body_cap(path) if method == "POST" else 0
     bridge = HandlerBridge(server.H, body_cap=body_cap)
-    return create_app(bridge), bridge.close
+    return create_app(bridge, token=lambda: server.CSRF, body_cap=body_cap), bridge.close
 
 
 def serve(port=None):
