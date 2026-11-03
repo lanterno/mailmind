@@ -457,6 +457,18 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
+- **Make cleanup's unsubscribe fire** · high value · effort S — three bugs, each pinned by a strict
+  xfail in `tests/test_http_cleanup.py`. Together they mean the unsubscribe almost never goes out:
+  - `cleanup_execute` sweeps the sender's INBOX mail to Trash before it calls `_resolve_unsub`.
+    The moves delete the local rows that `_resolve_unsub` reads, so a sender whose mail is all in
+    the INBOX gets `no_method`. Resolve the method before the sweep.
+  - `_parse_list_unsub` takes one-click only when `List-Unsubscribe-Post` reads `List=One-Click`.
+    RFC 8058's value is `List-Unsubscribe=One-Click`, so a compliant sender falls back to mailto
+    or the landing page.
+  - `_unsub_mailto_send` passes `{"from": …, "to": [...]}` as the envelope. `smtplib.sendmail`
+    iterates the dict's keys, so it sends `RCPT TO:<from>` and `RCPT TO:<to>`. It also sends
+    `m.as_bytes()` with bare LF line ends, which RFC 5321 forbids. Pass `[to]` and use
+    `policy=email.policy.SMTP`.
 - **Give up at once on a refusal that won't change** · medium value · effort S —
   `outbox.send_one` backs off and retries every failure up to `MAX_ATTEMPTS`. A 550 for a
   recipient or a 554 for the message is sent four more times over about half an hour. A 535 logs in
