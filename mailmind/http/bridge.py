@@ -1,8 +1,9 @@
 """Serve an `http.server` handler class over ASGI, without a socket.
 
 The legacy app is one `BaseHTTPRequestHandler` subclass. `HandlerBridge` hands it each request as
-the bytes a socket would have carried, in a worker thread, so the handler parses the request line
-and headers itself and sees the real Host, Origin and token. What the handler writes goes back out
+the bytes a socket would have carried, on a daemon thread of its own as `ThreadingHTTPServer` does,
+so the handler parses the request line and headers itself and sees the real Host, Origin and
+token, and a handler still blocked when the process exits doesn't hold the exit. What the handler writes goes back out
 as it writes it: the status line and headers as the response start, every later write as a piece
 of the body. A response that never ends (the live event stream) or is too big to hold in memory
 (the database export) streams as it did over the socket.
@@ -15,8 +16,9 @@ import logging
 import threading
 import urllib.parse
 
+import anyio
 import anyio.from_thread
-import anyio.to_thread
+import anyio.lowlevel
 
 log = logging.getLogger(__name__)
 
@@ -49,14 +51,15 @@ class HandlerBridge:
         if body is None:
             await _send_whole(send, *_TOO_LARGE)
             return
-        gone = threading.Event()
+        x = _Exchange(send)
         async with anyio.create_task_group() as tg:
-            tg.start_soon(_watch_for_disconnect, receive, gone)
+            tg.start_soon(_watch_for_disconnect, receive, x.gone)
+            threading.Thread(target=self._handle, args=(_request_bytes(scope, body), scope, x),
+                             name="bridge-request", daemon=True).start()
             try:
-                await anyio.to_thread.run_sync(self._handle, _request_bytes(scope, body), scope, send, gone,
-                                               abandon_on_cancel=True)
+                await x.finished.wait()
             finally:
-                gone.set()              # if the request was cancelled, the handler's next write ends it
+                x.gone.set()            # if the request was cancelled, the handler's next write ends it
                 tg.cancel_scope.cancel()
 
     async def _read_body(self, scope, receive):
@@ -83,9 +86,9 @@ class HandlerBridge:
                 break
         return b"".join(chunks)
 
-    def _handle(self, raw, scope, send, gone):
-        """Run the handler on one request, in a worker thread."""
-        out = _ResponseWriter(send, gone)
+    def _handle(self, raw, scope, x):
+        """Run the handler on one request, on the request's own thread."""
+        out = _ResponseWriter(x)
         handler = self.handler_class.__new__(self.handler_class)
         handler.rfile = io.BytesIO(raw)
         handler.wfile = out
@@ -99,25 +102,73 @@ class HandlerBridge:
             pass                                # the client left; nothing more to send
         except Exception:
             log.exception("handler failed on %s %s", scope.get("method"), scope.get("path"))
-        out.finish()
+        try:
+            out.finish()
+        except BrokenPipeError:
+            pass                                # the response was ended, or the event loop is gone
+        try:
+            x.call_sync(x.finished.set)
+        except Exception:
+            pass                                # the event loop is gone; nothing waits any more
 
 
 class _ClientGone(Exception):
     """The client left before its request body arrived."""
 
 
+class _Exchange:
+    """One request's response, shared by the event loop and the handler's thread. Every message
+    goes out on the loop, one at a time, and none after the response has ended."""
+
+    def __init__(self, send):
+        self._send = send
+        self._lock = anyio.Lock()
+        self._token = anyio.lowlevel.current_token()
+        self.gone = threading.Event()       # the client left, or the request was cancelled
+        self.finished = anyio.Event()       # the handler's thread is done with the response
+        self.ended = False
+
+    async def emit(self, message):
+        async with self._lock:
+            if self.ended:
+                raise BrokenPipeError("the response has ended")
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                self.ended = True
+            await self._send(message)
+
+    async def emit_whole(self, status, headers, body):
+        await self.emit({"type": "http.response.start", "status": status,
+                         "headers": [*headers, (b"content-length", str(len(body)).encode())]})
+        await self.emit({"type": "http.response.body", "body": body, "more_body": False})
+
+    def call(self, func, *args):
+        """Run coroutine function `func` on the event loop, from the handler's thread. When the
+        loop won't run it (it cancelled the call as it shut down, or has stopped), the handler
+        gets BrokenPipeError, as from a socket that closed."""
+        try:
+            return anyio.from_thread.run(func, *args, token=self._token)
+        except BrokenPipeError:
+            raise
+        except Exception as e:
+            self.gone.set()
+            log.debug("response write dropped: %s", type(e).__name__)
+            raise BrokenPipeError("the server is shutting down") from e
+
+    def call_sync(self, func, *args):
+        return anyio.from_thread.run_sync(func, *args, token=self._token)
+
+
 class _ResponseWriter:
     """The handler's wfile: parses the status line and headers out of what it writes, then turns
     every write into an ASGI message. Runs in the handler's thread."""
 
-    def __init__(self, send, gone):
-        self._send = send
-        self._gone = gone
+    def __init__(self, x):
+        self._x = x
         self._head = b""
         self._started = False
 
     def write(self, data):
-        if self._gone.is_set():
+        if self._x.gone.is_set():
             raise BrokenPipeError("the client went away")
         data = bytes(data)
         if self._started:
@@ -142,18 +193,18 @@ class _ResponseWriter:
         self._emit({"type": "http.response.body", "body": data, "more_body": True})
 
     def _emit(self, message):
-        anyio.from_thread.run(self._send, message)
+        self._x.call(self._x.emit, message)
 
     def finish(self):
         """End the response. A handler that wrote no complete head gets a plain 500."""
-        if self._gone.is_set():
+        if self._x.gone.is_set():
             return
         if self._started:
             self._emit({"type": "http.response.body", "body": b"", "more_body": False})
         else:
             if self._head:
                 log.error("handler wrote an incomplete response head")
-            anyio.from_thread.run(_send_whole, self._send, *_FAILED)
+            self._x.call(self._x.emit_whole, *_FAILED)
 
 
 def _parse_head(head):
