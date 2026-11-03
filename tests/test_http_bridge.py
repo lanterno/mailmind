@@ -164,3 +164,27 @@ def test_a_handler_that_fails_or_answers_nothing_gives_a_bare_500(served, path):
 def test_a_method_the_handler_lacks_gets_its_own_501(served):
     status, _, _ = call(served, "DELETE", "/")
     assert status == 501
+
+
+def test_a_stream_ends_when_the_server_shuts_down_under_it():
+    """uvicorn cancels what is still running once its grace period is over; the handler's thread
+    can't be cancelled, so its next write fails instead of keeping the stream, and the shutdown,
+    alive."""
+    Toy.seen, Toy.outcome = [], []
+    Toy.proceed = threading.Event()
+    srv = Uvicorn(HandlerBridge(Toy, max_body=CAP), name="bridge-http", grace=0.2).start()
+    conn = http.client.HTTPConnection("127.0.0.1", srv.port, timeout=10)
+    try:
+        conn.request("GET", "/stream", headers={"Host": f"127.0.0.1:{srv.port}"})
+        r = conn.getresponse()
+        assert r.readline() == b"first\n"
+        Toy.proceed.set()
+        began = time.monotonic()
+        srv.stop()
+        assert time.monotonic() - began < 3
+        deadline = time.monotonic() + 3
+        while not Toy.outcome and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert Toy.outcome == ["client gone"]
+    finally:
+        conn.close()

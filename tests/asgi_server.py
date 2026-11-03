@@ -6,12 +6,12 @@ import time
 
 
 class Uvicorn:
-    def __init__(self, app, name="app-http"):
+    def __init__(self, app, name="app-http", grace=5):
         import uvicorn
         self.sock = socket.create_server(("127.0.0.1", 0))
         self.port = self.sock.getsockname()[1]
         config = uvicorn.Config(app, log_level="warning", server_header=False, date_header=False,
-                                timeout_graceful_shutdown=5)
+                                timeout_graceful_shutdown=grace)
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self.server.run, kwargs={"sockets": [self.sock]},
                                        name=name, daemon=True)
