@@ -9,17 +9,11 @@ Every request reaches 127.0.0.1, so the danger is another page in the browser:
 - a page on a rebound name, which reaches this server with its own Host (`refuse_host`);
 - another site's no-cors GET, an <img>, which carries this server's Host and no Origin
   (`refuse_cross_site`);
-- another site's POST, which can't carry the page's CSRF token (`refuse_mutation`).
+- another site's POST, which can't carry the page's CSRF token or its Origin (`refuse_mutation`).
 The API answers only the page's own requests, which browsers mark Sec-Fetch-Site: same-origin.
 """
 import secrets
 from dataclasses import dataclass
-
-# The routes that send mail or act on queued sends: these also require an Origin, and a matching
-# one, where the other POSTs accept a request that carries none.
-SEND_ROUTES = frozenset({"/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry",
-                         "/api/outbox/cancel", "/api/outbox/sendnow", "/api/cleanup/execute"})
-
 
 @dataclass(frozen=True)
 class Refusal:
@@ -96,14 +90,14 @@ def refuse_body(headers, cap):
 
 
 def refuse_mutation(path, headers, *, port, token):
-    """A POST must pass the host and cross-site checks and carry the CSRF token; a send route must
-    also carry a matching Origin, since a same-origin fetch always sends one."""
+    """A POST must pass the host and cross-site checks, carry the CSRF token and carry this
+    server's Origin: a browser sends one with every POST, the page's own fetches included."""
     refusal = refuse_host(headers, port) or refuse_cross_site(headers, path)
     if refusal:
         return refusal
     if not token_matches(headers, token):
         return Refusal(403, "bad or missing CSRF token")
-    if path in SEND_ROUTES and (headers.get("Origin") or "").lower() not in _own_origins(port):
+    if (headers.get("Origin") or "").lower() not in _own_origins(port):
         return Refusal(403, "origin required")
     return None
 
