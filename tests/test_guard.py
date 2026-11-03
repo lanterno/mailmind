@@ -67,10 +67,11 @@ def test_a_swallowed_refusal_is_still_recorded(refused):
 
 
 def test_a_module_path_left_pointing_at_the_repo_is_caught(refused):
-    import views
-    assert views.FILE == os.path.join(ROOT, "mailmind_views.json")   # no data_dir here
-    assert views.load() == []                                         # views.load swallows errors
-    assert refused
+    import store
+    assert store.DB == os.path.join(ROOT, "mailmind.db")              # no data_dir here
+    with pytest.raises(guard.Tripwire):                               # refused whether or not the
+        store.conn()                                                  # file exists in this checkout
+    assert refused == [f"sqlite3.connect {store.DB!r}"]
 
 
 @pytest.mark.parametrize("host", ["192.0.2.1", "2001:db8::1"])
