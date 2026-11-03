@@ -9,6 +9,7 @@ Usage: python3 server.py [port]   then open http://127.0.0.1:<port>
 import sys
 import os
 import re
+import dataclasses
 import json
 import time
 import zlib
@@ -59,7 +60,7 @@ import summarize_review
 from mailmind.platform import settings
 
 HERE = os.path.dirname(__file__)
-PORT = 8721                               # `python3 server.py [port]` overrides it in __main__
+PORT = None                               # pinned by a legacy test; else settings.current().port
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
 STATS_TTL = 90                            # seconds to cache the live per-account stats
 # The audit trails live in the data directory. A path pinned here wins; only legacy test suites pin one.
@@ -70,6 +71,11 @@ MAX_POST = 1 << 20                        # 1 MB cap for control routes
 MAX_ATTACH_BYTES = 25 << 20               # 25 MB total decoded attachment budget
 # /api/send body cap must hold MAX_ATTACH_BYTES AFTER base64 (~4/3) + JSON overhead.
 MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + headroom
+
+
+def _port():
+    """The port served on: `python3 server.py [port]` sets it in the settings (default 8721)."""
+    return PORT or settings.current().port
 
 
 def _recon_audit():
@@ -3704,11 +3710,12 @@ def _rebind_guard(handler):
     """Block DNS rebinding: the Host must name this server, and an Origin, when sent, must be its
     own. Every GET and every POST passes it. A page on a rebound name reaches 127.0.0.1 with its
     own Host, so without this it could read the mailbox and the page's CSRF token."""
+    port = _port()
     host = (handler.headers.get("Host") or "").lower()
-    if host not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
+    if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
         return True
     origin = handler.headers.get("Origin")
-    if origin and origin.lower() not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+    if origin and origin.lower() not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
         return True
     return False
 
@@ -3731,7 +3738,8 @@ def _strict_origin_guard(handler):
     """For the send routes only: REQUIRE an Origin header matching the localhost
     origin. Returns True (deny) when missing or mismatched."""
     origin = (handler.headers.get("Origin") or "").lower()
-    return origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}")
+    port = _port()
+    return origin not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}")
 
 
 def _mutation_guard(handler):
@@ -4208,7 +4216,7 @@ class _Server(ThreadingHTTPServer):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        PORT = int(sys.argv[1])
+        settings.configure(dataclasses.replace(settings.current(), port=int(sys.argv[1])))
     store.init()
     # The outbox drains on its own worker, serialized with live IMAP ops via _ops_lock;
     # runs even under NOSYNC so queued/retryable sends still go out.
@@ -4230,5 +4238,5 @@ if __name__ == "__main__":
         threading.Thread(target=expire_loop, daemon=True).start()         # age-out expiry rules (MAILMIND_EXPIRE_SECS)
         realtime.start()                 # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {summarize.describe_engine()}", flush=True)
-    print(f"MailMind → http://127.0.0.1:{PORT}  (serving now)", flush=True)
-    _Server(("127.0.0.1", PORT), H).serve_forever()
+    print(f"MailMind → http://127.0.0.1:{_port()}  (serving now)", flush=True)
+    _Server(("127.0.0.1", _port()), H).serve_forever()
