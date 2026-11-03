@@ -8,6 +8,8 @@ import imaplib
 import json
 import os
 import ssl
+import subprocess
+import sys
 import tempfile
 import threading
 import urllib.parse
@@ -457,8 +459,48 @@ def test_the_route_reports_a_refusal_and_offers_no_undo():
     assert len(server._undo_stack) == depth
     assert _still_there(pk)
 
+
+def _optimized(code):
+    """Run code under python -O, which strips asserts, from this directory; return its stdout."""
+    out = subprocess.run([sys.executable, "-O", "-c", code], cwd=os.path.dirname(os.path.abspath(__file__)),
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    return out.stdout.strip()
+
+
+def test_bcc_never_leaves_even_under_python_O():
+    for name in ("Bcc", "BCC", "bcc "):
+        got = _optimized(f"""
+import compose
+class Leaky(compose.EmailMessage):
+    def as_bytes(self, *a, **k):
+        return b"{name}: hidden@example.test\\r\\n" + super().as_bytes(*a, **k)
+compose.EmailMessage = Leaky
+try:
+    compose.build_message({{"account": "ada@example.test", "to": ["bo@example.test"],
+                            "bcc": ["hidden@example.test"], "subject": "Hi", "text": "Hello"}})
+    print("SENT")
+except ValueError:
+    print("REFUSED")
+""")
+        assert got == "REFUSED", (name, got)
+
+
+def test_a_malformed_config_is_never_written_even_under_python_O():
+    got = _optimized("""
+import os, tempfile, config
+config.HERE = tempfile.mkdtemp()
+config.CONFIG = os.path.join(config.HERE, "mailmind.config.json")
+open(config.CONFIG, "w").write('{"accounts": []}')
+try:
+    config.save({"accounts": "wiped"})
+    print("WRITTEN")
+except ValueError:
+    print("REFUSED", open(config.CONFIG).read(), sorted(os.listdir(config.HERE)))
+""")
+    assert got == "REFUSED {\"accounts\": []} ['mailmind.config.json']", got
+
 if __name__ == "__main__":
-    import sys
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
     for fn in fns:
