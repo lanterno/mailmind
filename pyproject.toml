@@ -36,3 +36,13 @@ pythonpath = [".", "tests"]
 # importlib mode: test modules are imported by path, so tests/ never shadows the root's tests.py.
 addopts = ["--import-mode=importlib", "-ra"]
 markers = ["browser: drives dashboard.html in Chromium; skipped unless pytest runs with --browser"]
+
+[tool.importlinter]
+# The package's own layers. Which legacy modules it imports is the ratchet's job
+# (tests/test_ratchet.py), since those modules sit outside the package.
+root_packages = ["mailmind"]
+
+[[tool.importlinter.contracts]]
+name = "bootstrap, then platform, then kernel: each imports only the layers below it"
+type = "layers"
+layers = ["mailmind.bootstrap", "mailmind.platform", "mailmind.kernel"]

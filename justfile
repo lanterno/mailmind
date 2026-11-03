@@ -85,9 +85,11 @@ test-hardening:
 test-send-guard:
     {{py}} test_send_guard.py
 
-# Undefined names, unused imports and pyflakes' other checks, run by ruff
+# Undefined names, unused imports and pyflakes' other checks, run by ruff; then the import rules
+# between the mailmind package's layers (import-linter; the contracts are in pyproject.toml)
 lint:
     uv run ruff check
+    uv run lint-imports --no-cache --no-logo
 
 # Byte-compile every module, and the mailmind package, without running them
 compile:
