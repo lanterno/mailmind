@@ -231,14 +231,14 @@ def _auto_reconcile_one(acct):
     print(f"[reconcile] auto: {acct['email']} pruned {res['pruned']} ghost row(s)", flush=True)
 
 
-def reconcile_loop():
-    """Own-timer ghost pruner: one account per tick, round-robin, so the full cycle
-    spans ~MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
-    if _RECONCILE_INTERVAL <= 0:
-        return
-    time.sleep(min(120, _RECONCILE_INTERVAL))         # let the boot sync settle first
+def reconcile_rounds():
+    """A ghost pruner's round function, with its own place in the round-robin: each round prunes
+    one account and returns the seconds until the next, so the full cycle spans about
+    MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
     rr = 0
-    while True:
+
+    def reconcile_round():
+        nonlocal rr
         accts = accounts.accounts()
         n = len(accts) or 1
         if accts:
@@ -247,7 +247,18 @@ def reconcile_loop():
             except Exception as e:
                 print(f"[reconcile] loop error: {type(e).__name__}: {e}", flush=True)
             rr += 1
-        time.sleep(max(30, _RECONCILE_INTERVAL // n))  # spread the full cycle across accounts
+        return max(30, _RECONCILE_INTERVAL // n)       # spread the full cycle across accounts
+    return reconcile_round
+
+
+def reconcile_loop():
+    """Own-timer ghost pruner: one account per tick, round-robin."""
+    if _RECONCILE_INTERVAL <= 0:
+        return
+    time.sleep(min(120, _RECONCILE_INTERVAL))         # let the boot sync settle first
+    reconcile_round = reconcile_rounds()
+    while True:
+        time.sleep(reconcile_round())
 
 
 # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
@@ -284,17 +295,22 @@ def _auto_expire_one(acct):
     print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
 
 
+def expire_round():
+    """One pass of the expiry rules over every account, when there are any rules."""
+    if rules.load()[rules.EXPIRE]:
+        for a in accounts.accounts():
+            try:
+                _auto_expire_one(a)
+            except Exception as e:
+                print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
+
+
 def expire_loop():
     if _EXPIRE_INTERVAL <= 0:
         return
     time.sleep(min(180, _EXPIRE_INTERVAL))            # let the boot sync settle first
     while True:
-        if rules.load()[rules.EXPIRE]:
-            for a in accounts.accounts():
-                try:
-                    _auto_expire_one(a)
-                except Exception as e:
-                    print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
+        expire_round()
         time.sleep(_EXPIRE_INTERVAL)
 
 
@@ -342,19 +358,25 @@ def followups_tick():
         realtime.publish("followup", {"count": len(after)})
 
 
+def snooze_round():
+    """Wake due snoozes, then bring the follow-ups up to date. Database only, so it runs read-only
+    too; one step failing doesn't stop the other."""
+    try:
+        wake_snoozed()
+    except Exception as e:
+        print(f"[snooze] tick error: {type(e).__name__}", flush=True)
+    try:
+        followups_tick()
+    except Exception as e:
+        print(f"[followup] tick error: {type(e).__name__}", flush=True)
+
+
 def snooze_tick():
     """Always-on 60s wake loop so snooze + follow-up nudges work even read-only
     (where sync_loop is not running)."""
     while True:
         time.sleep(60)
-        try:
-            wake_snoozed()
-        except Exception as e:
-            print(f"[snooze] tick error: {type(e).__name__}", flush=True)
-        try:
-            followups_tick()
-        except Exception as e:
-            print(f"[followup] tick error: {type(e).__name__}", flush=True)
+        snooze_round()
 
 
 def nosync():
@@ -372,29 +394,36 @@ def body_backfill_tick():
         return
     time.sleep(45)                       # let the startup sync settle first
     while True:
-        rows = None
         try:
-            c = store.conn()
-            try:
-                rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
-                                 "ORDER BY ts DESC LIMIT 12").fetchall()
-            finally:
-                c.close()                    # always close, even if the SELECT raises
-            if not rows:
-                time.sleep(600)          # caught up; re-check occasionally (new mail lands body-less)
-                continue
-            for r in rows:
-                try:
-                    gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
-                              priority=gates.Priority.MAINTENANCE, wait=False)
-                except gates.Busy:
-                    break                # a user op is live — yield and retry next cycle
-                except Exception:
-                    pass
-                time.sleep(1.5)          # gentle pacing between IMAP fetches
+            delay = backfill_round()
         except Exception as e:
             print(f"[backfill] error: {type(e).__name__}", flush=True)
-        time.sleep(8 if rows else 600)   # drain a backlog briskly; idle once caught up
+            delay = 600
+        time.sleep(delay)
+
+
+def backfill_round():
+    """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
+    apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
+    there is a backlog, ten minutes once caught up (new mail lands body-less)."""
+    c = store.conn()
+    try:
+        rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
+                         "ORDER BY ts DESC LIMIT 12").fetchall()
+    finally:
+        c.close()                        # always close, even if the SELECT raises
+    if not rows:
+        return 600
+    for r in rows:
+        try:
+            gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
+                      priority=gates.Priority.MAINTENANCE, wait=False)
+        except gates.Busy:
+            break                        # a user op is live — yield and retry next cycle
+        except Exception:
+            pass
+        time.sleep(1.5)                  # gentle pacing between IMAP fetches
+    return 8                             # drain a backlog briskly
 
 
 def sync_loop():
@@ -3441,41 +3470,53 @@ def draft_ahead_tick():
     if nosync() or os.environ.get("MAILMIND_NO_DRAFT_TICK"):
         return
     time.sleep(DRAFT_TICK_STARTUP_DELAY)
-    fails, suspended_until = 0, 0.0
+    draft_ahead_round = draft_ahead_rounds()
     while True:
         try:
-            now = time.time()
-            if now < suspended_until:
-                pass                                             # circuit breaker open
-            elif _sync["running"]:
-                pass                                             # summarize backlog owns the sem
-            elif now - _LAST_UI_TS > DRAFT_ACTIVE_WINDOW:
-                pass                                             # nobody looking (vacation gate)
-            elif now - _AI_LAST_INTERACTIVE < DRAFT_IDLE_GRACE:
-                pass                                             # user mid-AI-flow → yield
-            elif not _ai_idle():
-                pass                                             # bridge busy → yield
-            else:
-                cand = _pick_draft_candidate()
-                if cand is not None:
-                    ok = _gen_draft_ahead(cand["account"], cand["pk"], source="topk")
-                    if ok is True:
-                        fails = 0
-                    elif ok is False:                                # neutral (None) leaves the count untouched
-                        fails += 1
-                    if fails >= DRAFT_TICK_TRIP:
-                        suspended_until = time.time() + DRAFT_TICK_SUSPEND
-                        fails = 0
-                        print("[draft] tick suspended 30m after repeated failures", flush=True)
-                c = store.conn()
-                try:                                                 # close() rolls back a half-done GC — a leaked
-                    store.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock
-                    c.commit()
-                finally:
-                    c.close()
+            draft_ahead_round()
         except Exception as e:
             print(f"[draft] tick error: {type(e).__name__}: {str(e)[:120]}", flush=True)
         time.sleep(DRAFT_TICK_INTERVAL)
+
+
+def draft_ahead_rounds():
+    """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
+    drafts at most one reply ahead, and only when nothing else wants the AI, then collects the
+    expired drafts."""
+    fails, suspended_until = 0, 0.0
+
+    def draft_ahead_round():
+        nonlocal fails, suspended_until
+        now = time.time()
+        if now < suspended_until:
+            pass                                                 # circuit breaker open
+        elif _sync["running"]:
+            pass                                                 # summarize backlog owns the sem
+        elif now - _LAST_UI_TS > DRAFT_ACTIVE_WINDOW:
+            pass                                                 # nobody looking (vacation gate)
+        elif now - _AI_LAST_INTERACTIVE < DRAFT_IDLE_GRACE:
+            pass                                                 # user mid-AI-flow → yield
+        elif not _ai_idle():
+            pass                                                 # bridge busy → yield
+        else:
+            cand = _pick_draft_candidate()
+            if cand is not None:
+                ok = _gen_draft_ahead(cand["account"], cand["pk"], source="topk")
+                if ok is True:
+                    fails = 0
+                elif ok is False:                                # neutral (None) leaves the count untouched
+                    fails += 1
+                if fails >= DRAFT_TICK_TRIP:
+                    suspended_until = time.time() + DRAFT_TICK_SUSPEND
+                    fails = 0
+                    print("[draft] tick suspended 30m after repeated failures", flush=True)
+            c = store.conn()
+            try:                                                 # close() rolls back a half-done GC — a leaked
+                store.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock
+                c.commit()
+            finally:
+                c.close()
+    return draft_ahead_round
 
 
 def ai_ask(body):
