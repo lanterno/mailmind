@@ -4,10 +4,17 @@ import sqlite3
 
 def connect(path):
     """A connection to the database at `path`: rows readable by column name, write-ahead logging,
-    a minute's wait for a lock, and foreign keys enforced."""
+    each commit on the disk itself before it returns, a minute's wait for a lock, and foreign keys
+    enforced."""
     c = sqlite3.connect(path, timeout=60)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
+    # A commit survives a power cut, not only a crash: the outbox's `delivered` and the queue's
+    # `applied` are exactly-once gates, and losing one would send or apply something twice. FULL
+    # syncs the log at every commit; on macOS a sync reaches the drive's own cache unless
+    # fullfsync is on (about half a millisecond a commit; elsewhere it does nothing).
+    c.execute("PRAGMA synchronous=FULL")
+    c.execute("PRAGMA fullfsync=ON")
     c.execute("PRAGMA busy_timeout=60000")
     c.execute("PRAGMA foreign_keys=ON")
     return c
