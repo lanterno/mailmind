@@ -557,7 +557,7 @@ def test_hwf_a_pooled_connection_is_checked_with_noop_and_dropped_after_an_error
     a, logins = acct(), count(world, "LOGIN")
     try:
         with pool.borrow(a) as first:
-            first.select('"INBOX"', readonly=True)
+            first.select("INBOX")
         with pool.borrow(a) as again:
             assert again is first
         assert (count(world, "LOGIN"), count(world, "NOOP")) == (logins + 1, 1)    # reused after a NOOP

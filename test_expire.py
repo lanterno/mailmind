@@ -3,6 +3,7 @@ rules file is redirected to a temp path and nothing touches IMAP. All addresses 
 Run: python3 test_expire.py"""
 import email
 import tempfile
+from datetime import datetime, timezone
 
 import rules
 import manage
@@ -60,17 +61,17 @@ def test_unknown_age_never_expires():
 
 # ── arrival time ──────────────────────────────────────────────────────────────
 def test_arrival_prefers_internaldate():
-    meta = b'7 (UID 42 INTERNALDATE "01-Jan-2026 12:00:00 +0000" BODY[HEADER.FIELDS (DATE)] {40}'
+    arrived = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
     msg = email.message_from_string("Date: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\n")
-    assert manage._arrival_ts(meta, msg) == 1767268800
+    assert manage._arrival_ts(arrived, msg) == 1767268800
 
 def test_arrival_falls_back_to_date_header():
     msg = email.message_from_string("Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\r\n")
-    assert manage._arrival_ts(b"7 (UID 42 BODY[] {40}", msg) == 1767268800
+    assert manage._arrival_ts(None, msg) == 1767268800
 
 def test_arrival_unknown_is_none():
     msg = email.message_from_string("Subject: no date\r\n\r\n")
-    assert manage._arrival_ts(b"7 (UID 42 BODY[] {40}", msg) is None
+    assert manage._arrival_ts(None, msg) is None
 
 
 # ── storage ───────────────────────────────────────────────────────────────────
