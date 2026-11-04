@@ -1897,7 +1897,9 @@ async function sync(){ if(_manualSync)return;   // guard: no double-submit / lea
     if(!(d.sync&&d.sync.running)||n>40){ clearInterval(iv); done(); loadDigest(true); loadStats(); toast("Sync complete"); } },3000); }
 
 /* ---------- Mailbox mode (full email client) ---------- */
-const FOLDER_ICON={inbox:"inbox",sent:"send",drafts:"file",archive:"archive",trash:"trash",junk:"ban",custom:"folder",snoozed:"clock"};
+const FOLDER_ICON={inbox:"inbox",sent:"send",drafts:"file",archive:"archive",all:"archive",trash:"trash",junk:"ban",custom:"folder",snoozed:"clock"};
+const ROLE_LABEL={all:"All mail"};   // a role whose name isn’t the folder’s: all = every message (Gmail’s All Mail)
+function roleLabel(f){ return f.role==="custom"?f.name:(ROLE_LABEL[f.role]||f.role[0].toUpperCase()+f.role.slice(1)); }
 function openMailbox(){   // the only view: folders, list and reader, its Inbox opening on today's brief
   if(!state.account) state.account=(state.accountsList||[])[0]||"";
   renderMonos(); openClient();
@@ -1942,7 +1944,7 @@ function renderFolders(){
   if(!state.account)return;   // first run: no account, no folders — firstRun owns the empty rail
   const snz="__snoozed__";
   const rows=state.folders.map(f=>{
-    const lbl=f.role==="custom"?f.name:f.role[0].toUpperCase()+f.role.slice(1);
+    const lbl=roleLabel(f);
     return `<div class="frow${f.name===state.folder?" on":""}" data-folder="${esc(f.name)}">
       <span class="ic2">${ico(FOLDER_ICON[f.role]||"folder")}</span><span class="fn">${esc(lbl)}</span>
       ${f.unseen?`<span class="unread">${f.unseen}</span>`:""}</div>`;
@@ -2048,7 +2050,7 @@ function _dayGroup(ts){   // list section for a message time (epoch seconds), by
 const FOLDER_TITLE={__snoozed__:"Snoozed",__muted__:"Muted",__waiting__:"Waiting",__replylater__:"Reply later",__screener__:"Screener"};
 function folderTitle(name){   // as the rail names it
   const f=(state.folders||[]).find(x=>x.name===name);
-  return FOLDER_TITLE[name]||(!f||f.role==="custom"?name:f.role[0].toUpperCase()+f.role.slice(1));
+  return FOLDER_TITLE[name]||(!f?name:roleLabel(f));
 }
 function listTitle(t){ $("#listTitle").textContent=t; }
 const INBOX_TABS=[["needs","Needs you"],["all","Everything"],["unread","Unread"]];
@@ -5251,7 +5253,8 @@ document.addEventListener("keydown",e=>{
     if(k==="z"){ selectFolder("__snoozed__"); }
     else if(k==="w"){ selectFolder("__waiting__"); }
     else if(k==="l"){ selectFolder("__replylater__"); }
-    else if(role){ const f=(state.folders||[]).find(x=>x.role===role); if(f)selectFolder(f.name); else toast("No "+role+" folder on this account"); }
+    else if(role){ const fs=state.folders||[], f=fs.find(x=>x.role===role)||(role==="archive"&&fs.find(x=>x.role==="all"));   // Gmail archives into All Mail
+      if(f)selectFolder(f.name); else toast("No "+role+" folder on this account"); }
     e.preventDefault(); return; }
   const sel=state.csel;
   const marked=state.cmarked.size>0;   // with a selection set, the verb keys act on the whole set
@@ -5306,7 +5309,7 @@ function buildPaletteEntries(){
   (state.accountsList||[]).forEach(a=>{
     E.push({group:"Navigation", label:"Account · "+nameOf(a), fn:()=>{ clearSearch(false); state.allInbox=false; state.account=a; renderMonos(); loadFolders(); }});
     (state.foldersByAcct&&state.foldersByAcct[a]||[]).forEach(f=>{
-      const lbl=nameOf(a)+" / "+(f.role==="custom"?f.name:_cap(f.role));
+      const lbl=nameOf(a)+" / "+roleLabel(f);
       E.push({group:"Navigation", label:lbl, fn:()=>selectAccountThenFolder(a, f.name)});
     });
     E.push({group:"Navigation", label:nameOf(a)+" / Snoozed", fn:()=>selectAccountThenFolder(a,"__snoozed__")});
