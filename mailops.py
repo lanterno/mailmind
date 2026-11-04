@@ -224,7 +224,9 @@ _FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
 
 
 def set_flags(pk, flags):
-    """flags: {'seen':True,'flagged':False,...} -> UID STORE +/-FLAGS, mirrored locally."""
+    """flags: {'seen':True,'flagged':False,...} -> UID STORE +/-FLAGS, mirrored locally once the
+    server took it. A refusal (the UID gone, a read-only folder) leaves the local row as the server
+    has it, and answers (False, why)."""
     c = store.conn()
     row = store.get_message(c, pk)
     c.close()
@@ -237,7 +239,11 @@ def set_flags(pk, flags):
         s.select(row["folder"], readonly=False)
         for k, v in flags.items():
             if k in _FLAG:
-                _ignoring_refusal(s.add_flags if v else s.remove_flags, [row["uid"]], [_FLAG[k]])
+                (s.add_flags if v else s.remove_flags)([row["uid"]], [_FLAG[k]])
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return False, "the server refused the flag change"
     finally:
         try:
             s.logout()
