@@ -99,8 +99,11 @@ class _Refusing:
         return "NO", [b"[UNAVAILABLE] try later"]
 
 
-def test_a_refused_list_reads_as_no_folders():
-    assert imap_list.list_folders(_Refusing()) == []
+def test_a_refused_list_raises_and_find_role_falls_back():
+    import mailops
+    with pytest.raises(imaplib.IMAP4.error, match="LIST refused"):
+        imap_list.list_folders(_Refusing())
+    assert mailops.find_role(_Refusing(), "sent") is None
 
 
 # ── through the fake server and the app ────────────────────────────────────────────────────────

@@ -440,7 +440,6 @@ def test_hwf_a_browser_dropping_its_connection_prints_no_traceback(capsys):
 
 # -- known bugs -----------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, reason="known bug: a LIST the server refuses empties the folder rail")
 def test_a_refused_folder_list_keeps_the_last_list(app, world):
     first = app.get(f"/api/folders?account={w.ADA}").json["folders"]
     app.clock.shift(timedelta(minutes=1))
