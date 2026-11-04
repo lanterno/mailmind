@@ -581,10 +581,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - `manage.sweep_account` prunes local rows by live UID, where expiry and the AI sweep prune by
     Message-ID. Across a UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The
     next sync's reset heals them.
-- **Keep the folder rail when LIST is refused** · low value · effort S —
-  `server._live_folder_list` ignores LIST's `typ`. A NO gives an empty list, which is cached for the
-  rail's lifetime, while a dropped connection correctly serves the last list. Pinned by
-  `test_a_refused_folder_list_keeps_the_last_list`.
 - **The rail's counts go stale after a snooze** · medium value · effort S — `loadFolders` bumps
   `state.cseq` and, with the folders cached, calls `loadCMessages`, which bumps it again. The
   folder answer then reads as superseded and is dropped, so the Snoozed count, unread counts and
