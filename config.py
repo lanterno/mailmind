@@ -23,13 +23,12 @@ Type defaults (override per account as needed):
   proton -> 127.0.0.1:1143 STARTTLS (local Bridge), trash "Trash"
 """
 import os
-import json
 import subprocess
 import time
-import tempfile
 import threading
 
 import mailsecrets
+from mailmind.accounts.adapters import config_file
 from mailmind.platform import settings
 
 _cred_cache = {}
@@ -51,11 +50,8 @@ _SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_starttls")
 
 
 def _raw():
-    path = settings.current().config
-    if not os.path.exists(path):
-        return {"accounts": []}
-    with open(path) as f:
-        return json.load(f)
+    """The file's contents, a copy of the caller's own; parsed again only when the file changed."""
+    return config_file.FILE.read()
 
 
 def accounts():
@@ -255,25 +251,7 @@ def masked_rows():
 def save(raw):
     """Atomically persist the whole config. Validates, fsyncs, chmod 600 before
     an atomic rename so a crash can never leave a partial/world-readable file."""
-    if not (isinstance(raw, dict) and isinstance(raw.get("accounts"), list)):   # not an assert: -O strips those
-        raise ValueError("bad config shape")
-    blob = json.dumps(raw, indent=2, ensure_ascii=False)
-    json.loads(blob)  # round-trip validation
-    path = settings.current().config
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".cfg-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(blob)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        raise
+    config_file.FILE.write(raw)
 
 
 def _find(raw, email):
