@@ -7,12 +7,12 @@ text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks 
 """
 import json
 import hashlib
-import threading
 from datetime import datetime, timezone
 
 import store
 import summarize as _sz
 import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
+from mailmind.platform.workers.singleflight import SingleFlight
 
 TOP_N = 40
 CAP_TOTAL = 12000
@@ -46,8 +46,7 @@ Items (most important first):
 {items}
 """
 
-_inflight = {}
-_inflight_lock = threading.Lock()
+_FLIGHTS = SingleFlight()     # one brief or delta made at a time for each key
 
 
 def _now():
@@ -230,34 +229,23 @@ def build_delta(accounts_set, since_ts):
     accounts_set = set(accounts_set or [])
     c = store.conn()
     rows = _delta_rows(c, accounts_set, since_ts)
+    c.close()
     if not rows:
-        c.close()
         return {"ok": True, "empty": True, "count": 0}, 200
     key = _delta_key(accounts_set, since_ts, len(rows))   # row-count in the key → grown window re-summarizes
-    cached = store.get_briefing(c, key)
-    c.close()
-    if cached:
-        its = json.loads(cached["groups_json"] or "[]")
-        return {"ok": True, "empty": False, "headline": cached["narrative"],
-                "items": its, "count": len(rows), "cached": True}, 200
 
-    with _inflight_lock:
-        ev = _inflight.get(key)
-        leader = ev is None
-        if leader:
-            ev = _inflight[key] = threading.Event()
-    if not leader:                              # another tab is already building this exact delta
-        ev.wait(timeout=30)
+    def read():
         c = store.conn()
-        row = store.get_briefing(c, key)
-        c.close()
-        if row:
-            its = json.loads(row["groups_json"] or "[]")
-            return {"ok": True, "empty": False, "headline": row["narrative"],
-                    "items": its, "count": len(rows), "cached": True}, 200
-        return {"ok": False, "error": "delta unavailable", "retry": True}, 502
+        try:
+            row = store.get_briefing(c, key)
+        finally:
+            c.close()
+        if row is None:
+            return None
+        return {"ok": True, "empty": False, "headline": row["narrative"],
+                "items": json.loads(row["groups_json"] or "[]"), "count": len(rows), "cached": True}, 200
 
-    try:
+    def make():
         lines, total = [], 0
         for r in rows:
             who = r["from_name"] or r["from_addr"] or "someone"
@@ -285,10 +273,9 @@ def build_delta(accounts_set, since_ts):
         c.close()
         return {"ok": True, "empty": False, "headline": headline,
                 "items": items, "count": len(rows), "cached": False}, 200
-    finally:
-        with _inflight_lock:
-            _inflight.pop(key, None)
-        ev.set()
+
+    return (read() or _FLIGHTS.run(key, make, read, wait=30)       # another tab may be making it
+            or ({"ok": False, "error": "delta unavailable", "retry": True}, 502))
 
 
 def build(accounts_set, force=False):
@@ -308,22 +295,18 @@ def build(accounts_set, force=False):
         return {"ok": True, "narrative": "Nothing needs you right now — your inbox is quiet.",
                 "groups": [], "model": "empty", "generated": _now(), "cached": False, "stale": False}, 200
 
-    with _inflight_lock:
-        ev = _inflight.get(key)
-        leader = ev is None
-        if leader:
-            ev = _inflight[key] = threading.Event()
-    if not leader:                              # a concurrent first-load is already running it
-        ev.wait(timeout=60)
+    def read():
         c = store.conn()
-        row = store.get_briefing(c, key)
-        c.close()
-        if row:
-            return _result(key, row["narrative"], json.loads(row["groups_json"] or "[]"),
-                           row["model"], row["created_at"], True, row["fingerprint"] != fp), 200
-        return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
+        try:
+            row = store.get_briefing(c, key)
+        finally:
+            c.close()
+        if row is None:
+            return None
+        return _result(key, row["narrative"], json.loads(row["groups_json"] or "[]"),
+                       row["model"], row["created_at"], True, row["fingerprint"] != fp), 200
 
-    try:
+    def make():
         valid = {r["pk"] for r in rows}
         lines, total = [], 0
         for r in rows:
@@ -352,7 +335,6 @@ def build(accounts_set, force=False):
         c.commit()
         c.close()
         return _result(key, narrative, groups, model, created, False, False), 200
-    finally:
-        with _inflight_lock:
-            _inflight.pop(key, None)
-        ev.set()
+
+    return (_FLIGHTS.run(key, make, read, wait=60, recheck=not force)   # a first load may be making it
+            or ({"ok": False, "error": "briefing unavailable", "retry": True}, 502))

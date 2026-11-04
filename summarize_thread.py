@@ -14,13 +14,13 @@ import store
 import ingest
 import summarize as _sz
 from mailmind.platform.workers import gates
+from mailmind.platform.workers.singleflight import SingleFlight
 
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
 CAP_TOTAL = 14000
 _AI_SEM = threading.Semaphore(2)          # max concurrent Claude calls from the bridge
-_inflight = {}
-_inflight_lock = threading.Lock()
+_FLIGHTS = SingleFlight()     # one summary made at a time for each (account, thread, scope)
 
 _QUOTE = re.compile(r"^\s*>")
 _ATTR = re.compile(r"^(On .+ wrote:|From:.*|-{3,} ?Forwarded)", re.I)
@@ -142,23 +142,18 @@ def summarize(account, thread_id, scope="thread", force=False):
         return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                 "cached": True, "stale": cached["fingerprint"] != fp, **_expand(cached)}, 200
 
-    key = (account, thread_id, scope)
-    with _inflight_lock:
-        ev = _inflight.get(key)
-        leader = ev is None
-        if leader:
-            ev = _inflight[key] = threading.Event()
-    if not leader:                                  # a concurrent request is already running it
-        ev.wait(timeout=60)
+    def read():                                     # a summary of the thread as it is now
         c = store.conn()
-        row = store.get_thread_summary(c, account, thread_id, scope)
-        c.close()
-        if row and row["fingerprint"] == fp:
-            return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
-                    "cached": True, "stale": False, **_expand(row)}, 200
-        return {"ok": False, "error": "still summarizing"}, 504
+        try:
+            row = store.get_thread_summary(c, account, thread_id, scope)
+        finally:
+            c.close()
+        if row is None or row["fingerprint"] != fp:
+            return None
+        return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
+                "cached": True, "stale": False, **_expand(row)}, 200
 
-    try:
+    def make():
         blocks, omitted = _gather(rows)
         subject = rows[0]["subject"] or "(no subject)"
         kind = "MESSAGE" if scope == "message" else "THREAD"
@@ -192,7 +187,6 @@ def summarize(account, thread_id, scope="thread", force=False):
                 "cached": False, "stale": False, "tldr": parsed["tldr"], "points": parsed["points"],
                 "action": parsed["action"], "participants": parsed["participants"],
                 "message_count": len(rows), "model": model, "created_at": row["created_at"]}, 200
-    finally:
-        with _inflight_lock:
-            _inflight.pop(key, None)
-        ev.set()
+
+    return (_FLIGHTS.run((account, thread_id, scope), make, read, wait=60, recheck=not force)
+            or ({"ok": False, "error": "still summarizing"}, 504))

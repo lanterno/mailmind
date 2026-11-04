@@ -8,12 +8,12 @@ deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUS
 """
 import json
 import hashlib
-import threading
 from datetime import datetime, timezone
 
 import store
 import summarize as _sz
 import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
+from mailmind.platform.workers.singleflight import SingleFlight
 
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
@@ -48,8 +48,7 @@ YOU'RE WAITING ON A REPLY FROM:
 {waiting}
 """
 
-_inflight = {}
-_inflight_lock = threading.Lock()
+_FLIGHTS = SingleFlight()     # one review made at a time for each key
 
 
 def _now():
@@ -184,25 +183,21 @@ def build(accounts_set, force=False):
                        cached_row["model"], cached_row["created_at"], True,
                        cached_row["fingerprint"] != fp, since_ts), 200
 
-    with _inflight_lock:
-        ev = _inflight.get(key)
-        leader = ev is None
-        if leader:
-            ev = _inflight[key] = threading.Event()
-    if not leader:
-        ev.wait(timeout=60)
+    def read():
         c = store.conn()
-        row = store.get_briefing(c, key)
-        c.close()
-        if row:
-            payload = json.loads(row["groups_json"] or "{}")
-            return _result(payload.get("stats", stats), payload.get("needs", needs),
-                           payload.get("waiting", waiting),
-                           {"narrative": row["narrative"], "next": payload.get("next", [])},
-                           row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
-        return {"ok": False, "error": "review unavailable", "retry": True}, 502
+        try:
+            row = store.get_briefing(c, key)
+        finally:
+            c.close()
+        if row is None:
+            return None
+        payload = json.loads(row["groups_json"] or "{}")
+        return _result(payload.get("stats", stats), payload.get("needs", needs),
+                       payload.get("waiting", waiting),
+                       {"narrative": row["narrative"], "next": payload.get("next", [])},
+                       row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
 
-    try:
+    def make():
         bl = ", ".join(f"{k}: {v}" for k, v in sorted(stats["by_bucket"].items(), key=lambda kv: -kv[1])[:5])
         stats_txt = (f"Sent: {stats['sent']}\nReceived in inbox: {stats['received']} ({bl})\n"
                      f"Still need your reply: {stats['needs_you']}\n"
@@ -238,7 +233,6 @@ def build(accounts_set, force=False):
         finally:
             c.close()                          # release the handle even if save/commit raises
         return _result(stats, needs, waiting, ai, model, created, False, False, since_ts), 200
-    finally:
-        with _inflight_lock:
-            _inflight.pop(key, None)
-        ev.set()
+
+    return (_FLIGHTS.run(key, make, read, wait=60, recheck=not force)   # a first load may be making it
+            or ({"ok": False, "error": "review unavailable", "retry": True}, 502))

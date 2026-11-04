@@ -60,6 +60,7 @@ from mailmind.bootstrap import legacy
 from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
+from mailmind.platform.workers.singleflight import SingleFlight
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -3135,8 +3136,7 @@ def ai_rewrite(body):
 # revalidates fingerprint + TTL + eligibility + thread-anchor, so a stale draft is never surfaced.
 # Single-flight per key + the shared _AI_SEM cap (via draft_reply); fingerprint = thread state.
 # ─────────────────────────────────────────────────────────────────────────────
-_DRAFT_INFLIGHT = {}       # (account, ref_key) -> threading.Event (single-flight; process-local)
-_DRAFT_LOCK = threading.Lock()
+DRAFT_FLIGHTS = SingleFlight()   # one generation at a time for each (account, ref_key)
 DRAFT_DB_TTL = 24 * 3600         # servable age; fp is the correctness gate, this is temporal-drift hygiene
 DRAFT_FAIL_TTL = 60              # GET-route re-kick suppression (interactive dwell recovers fast)
 DRAFT_FAIL_BASE = 300            # tick backoff after the 1st failure: 5 min…
@@ -3246,60 +3246,59 @@ def _gen_draft_ahead(account, pk, source="dwell"):
         mid = row["message_id"]                       # thread change → fp mismatch on read → regen, never a stale serve
     finally:
         c.close()
-    with _DRAFT_LOCK:
-        ev = _DRAFT_INFLIGHT.get(key)
-        leader = ev is None
-        if leader:
-            ev = _DRAFT_INFLIGHT[key] = threading.Event()
-    if not leader:
-        ev.wait(timeout=45)
-        return None                                   # neutral: joined someone else's generation
-    ok = False
-    try:
-        import draft_reply
-        c = store.conn()                              # warm re-check AFTER winning leadership: a leader that
-        try:                                          # committed between our cache read and its inflight-pop
-            da = store.draft_ahead_get(c, key[0], key[1])   # must not be double-spent
-            if da and da["body"] and da["fp"] == fp and \
-                    (int(time.time()) - da["created_ts"]) < DRAFT_DB_TTL:
-                return None                           # neutral: already warm
-        finally:
-            c.close()
-        res, code = draft_reply.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
-                                      feature="draft-ahead")
-        now = int(time.time())
+
+    def warm():                                       # a draft for the thread as it is now
         c = store.conn()
         try:
-            if code == 200 and res.get("ok") and res.get("body"):
-                store.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                      res.get("model"), int(pk), mid, source, now)
-                store.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
-                                                              # no orphan sweeps — a reset_folder reingest may be mid-flight
-                ok = True
-            else:
-                store.draft_ahead_fail(c, key[0], key[1], now)
-            c.commit()
+            da = store.draft_ahead_get(c, key[0], key[1])
         finally:
             c.close()
-        if ok:
+        fresh = da and da["body"] and da["fp"] == fp and (int(time.time()) - da["created_ts"]) < DRAFT_DB_TTL
+        return _WARM if fresh else None
+
+    def make():
+        ok = False
+        try:
+            import draft_reply
+            res, code = draft_reply.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
+                                          feature="draft-ahead")
+            now = int(time.time())
+            c = store.conn()
             try:
-                sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                if code == 200 and res.get("ok") and res.get("body"):
+                    store.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+                                          res.get("model"), int(pk), mid, source, now)
+                    store.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
+                                                                  # no orphan sweeps — a reset_folder reingest may be mid-flight
+                    ok = True
+                else:
+                    store.draft_ahead_fail(c, key[0], key[1], now)
+                c.commit()
+            finally:
+                c.close()
+            if ok:
+                try:
+                    sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            try:
+                c = store.conn()
+                store.draft_ahead_fail(c, key[0], key[1], int(time.time()))
+                c.commit()
+                c.close()
             except Exception:
                 pass
-    except Exception as e:
-        print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
-        try:
-            c = store.conn()
-            store.draft_ahead_fail(c, key[0], key[1], int(time.time()))
-            c.commit()
-            c.close()
-        except Exception:
-            pass
-    finally:
-        with _DRAFT_LOCK:
-            _DRAFT_INFLIGHT.pop(key, None)
-        ev.set()
-    return ok
+        return ok
+
+    # The lead re-checks warm() first: a generation that stored its draft between our read above and
+    # our taking the lead must not be paid for twice.
+    led = DRAFT_FLIGHTS.run(key, make, warm, wait=45)
+    return led if isinstance(led, bool) else None     # neutral: already warm, or joined another's run
+
+
+_WARM = object()                                      # what warm() finds: a fresh draft is stored
 
 
 def _thread_anchor_pk(c, account, thread_id):
@@ -3356,9 +3355,7 @@ def ai_draft_ahead_get(qs, kick_ok=False):
             store.draft_ahead_touch(c, key[0], key[1], now)
             c.commit()
             return {"ok": True, "status": "ready", "body": da["body"], "tone": da["tone"]}, 200
-        with _DRAFT_LOCK:
-            inflight = key in _DRAFT_INFLIGHT
-        if inflight:
+        if DRAFT_FLIGHTS.busy(key):
             return {"ok": True, "status": "generating"}, 200
         if peek:
             return {"ok": True, "status": "none"}, 200
@@ -3435,9 +3432,8 @@ def _pick_draft_candidate():
                 continue                                         # per-account fairness
             if _tick_backoff_active(da, now):
                 continue                                         # persisted exponential backoff
-            with _DRAFT_LOCK:
-                if key in _DRAFT_INFLIGHT:
-                    continue
+            if DRAFT_FLIGHTS.busy(key):
+                continue
             if picked is None:
                 picked = r
                 warm_total += 1
