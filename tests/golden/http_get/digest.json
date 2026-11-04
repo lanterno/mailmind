@@ -12,7 +12,8 @@
     "last_error": "",
     "last_ok": null,
     "last_ts": 0,
-    "model": ""
+    "model": "",
+    "spent_today_micros": 0
    },
    "aliases": {
     "ada@example.test": "Ada",
@@ -72,7 +73,8 @@
     "last_error": "",
     "last_ok": null,
     "last_ts": 0,
-    "model": ""
+    "model": "",
+    "spent_today_micros": 0
    },
    "aliases": {
     "ada@example.test": "Ada",

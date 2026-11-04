@@ -211,3 +211,81 @@ def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
     assert counted == {"triage": 1, "thread": 1, "brief": 1, "delta": 1, "review": 1, "draft": 1,
                        "draft-ahead": 1, "rewrite": 1, "ask": 1, "plan": 1}
     assert sum(counted.values()) == len(ai.requests)
+
+
+# ── what the ledger reports ──────────────────────────────────────────────────
+
+def test_dollars_round_up_to_the_cent():
+    from mailmind.assistant.domain.pricing import usd
+    assert [usd(m) for m in (0, 1, 10_000, 15_200, 1_234_567_890)] == [
+        "$0.00", "$0.01", "$0.01", "$0.02", "$1,234.57"]
+
+
+def test_the_status_says_what_today_cost_and_the_debug_route_lists_each_day(app, ai):
+    import json
+    ai.queue(answer(json.dumps({"text": "See you Thursday."}), 1000, 100))
+    assert app.get("/api/digest").json["ai"]["spent_today_micros"] == 0
+    assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
+    assert app.get("/api/digest").json["ai"]["spent_today_micros"] == 1000 * 4 + 100 * 20
+    assert app.get("/api/debug/ai?days=2").json["days"] == [
+        {"day": "2026-11-02", "calls": 1, "cost_micros": 6000,
+         "features": {"rewrite": {"calls": 1, "cost_micros": 6000}}},
+        {"day": "2026-11-01", "calls": 0, "cost_micros": 0, "features": {}}]
+    assert len(app.get("/api/debug/ai").json["days"]) == 30
+    assert len(app.get("/api/debug/ai?days=0").json["days"]) == 1
+    assert len(app.get("/api/debug/ai?days=5000").json["days"]) == 366
+
+
+def test_a_ledger_that_cant_be_read_leaves_the_status_without_a_spend(data_dir, monkeypatch, capsys):
+    import sqlite3
+    import summarize
+    from mailmind.bootstrap import assistant
+
+    def broken(day):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(assistant.LEDGER, "spent", broken)
+    assert summarize.status()["spent_today_micros"] is None
+    assert "[ai] the usage ledger can't be read: OperationalError" in capsys.readouterr().out
+
+
+def test_the_command_line_lists_each_day_by_feature_and_the_total(gateway, ai, clock, capsys):
+    from mailmind.__main__ import main
+    ai.queue(answer("t", 1000), answer("d", 2000, 500), answer("t", 1000))
+    gateway.ask("one", feature="triage")
+    gateway.ask("two", feature="draft")
+    clock.shift(timedelta(days=2))
+    gateway.ask("three", feature="triage")
+    with pytest.raises(SystemExit) as ended:
+        main(["ai", "usage", "--days", "3"])
+    assert ended.value.code == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "AI usage by local day at Anthropic's list prices, the last 3 days:",
+        "  2026-11-04  $0.01      1 call   triage $0.01 (1)",
+        "  2026-11-03      -",
+        "  2026-11-02  $0.03      2 calls  draft $0.02 (1) · triage $0.01 (1)",
+        "  in all      $0.03      3 calls"]
+
+
+def test_the_command_line_reads_and_never_migrates(tmp_path, capsys):
+    import sqlite3
+    from mailmind.__main__ import ai_usage
+    from mailmind.platform import settings
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        db = settings.current().db
+        assert ai_usage(7) == 1
+        assert not (tmp_path / "mailmind.db").exists()
+        c = sqlite3.connect(db)
+        c.execute("CREATE TABLE messages (pk INTEGER PRIMARY KEY)")
+        c.execute("PRAGMA user_version=20")
+        c.commit()
+        c.close()
+        assert ai_usage(7) == 1
+        c = sqlite3.connect(db)
+        try:
+            assert c.execute("PRAGMA user_version").fetchone()[0] == 20
+            assert [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")] == ["messages"]
+        finally:
+            c.close()
+    assert capsys.readouterr().out.splitlines() == [
+        "There is no database yet, so no usage either.",
+        "The database predates the usage ledger: start the app once and it will be added."]
