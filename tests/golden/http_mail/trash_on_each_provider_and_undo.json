@@ -200,7 +200,8 @@
  {
   "note": "undo bea-inbox-01-client.eml: server writes",
   "value": [
-   "bea@example.test [Trash] UID MOVE 1 \"INBOX\""
+   "bea@example.test [Trash] UID MOVE 1 \"INBOX\"",
+   "bea@example.test [INBOX] UID STORE 3 -FLAGS (\\Seen)"
   ]
  },
  {
@@ -214,7 +215,7 @@
      "flagged": 0,
      "folder": "INBOX",
      "is_junk": 0,
-     "seen": 1,
+     "seen": 0,
      "uid": 3
     }
    ],
@@ -223,9 +224,7 @@
      "bea@example.test",
      "INBOX",
      3,
-     [
-      "\\Seen"
-     ]
+     []
     ]
    ]
   }

@@ -102,7 +102,6 @@ def test_trash_on_each_provider_and_undo(app, golden, world):
     act(app, golden, world, "trash a missing message", "/api/trash", {"pk": 999999})
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: undoing a trash on Proton brings unread mail back read")
 def test_undoing_a_proton_trash_brings_unread_mail_back_unread(app, world):
     name = "bea-inbox-01-client.eml"                       # unread in Bea's INBOX
     assert app.post("/api/trash", {"pk": world.pk(name)}).json["ok"]
@@ -110,6 +109,24 @@ def test_undoing_a_proton_trash_brings_unread_mail_back_unread(app, world):
     where = world.where(name)
     assert [(box, flags) for _, box, _, flags in where["server"]] == [("INBOX", [])]
     assert [r["seen"] for r in where["db"]] == [0]
+
+
+def test_undoing_a_proton_trash_of_read_mail_leaves_it_read(app, world):
+    name = "bea-inbox-02-security.eml"                     # read in Bea's INBOX
+    assert app.post("/api/trash", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/undo", {}).json["ok"]
+    where = world.where(name)
+    assert [(box, flags) for _, box, _, flags in where["server"]] == [("INBOX", ["\\Seen"])]
+    assert [r["seen"] for r in where["db"]] == [1]
+
+
+def test_trash_and_undo_elsewhere_neither_read_nor_change_seen(app, world):
+    name = "ada-inbox-01-lunch.eml"                        # on a server that leaves flags alone
+    since = world.mark()
+    assert app.post("/api/trash", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/undo", {}).json["ok"]
+    sent = [c["line"].split(" ", 1)[1] for c in world.server.commands[since:]]
+    assert not [line for line in sent if "STORE" in line.upper() or line.upper().endswith(" (FLAGS)")]
 
 
 def test_actions_in_one_undo_group_undo_together(app, golden, world):
