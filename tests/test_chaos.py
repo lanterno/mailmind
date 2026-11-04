@@ -61,6 +61,23 @@ def test_a_black_holed_account_doesnt_slow_another_accounts_body_open(app, world
     assert not hung.is_alive()
 
 
+@pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
+def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, world, per_account, path):
+    import gate
+    logins = {who: len(world.server.commands_for(who, "LOGIN")) for who in (w.ADA, w.CY)}
+    answers = []
+    with gate.held_elsewhere(w.BEA):                           # a long job on Bea's server
+        run = threading.Thread(target=lambda: answers.append(app.post(path, {"account": "all", "dry_run": True})),
+                               daemon=True)
+        run.start()
+        assert wait_until(lambda: len(world.server.commands_for(w.ADA, "LOGIN")) > logins[w.ADA])
+        assert wait_until(lambda: gates.held(w.BEA) and not gates.held(w.ADA))
+        assert run.is_alive() and len(world.server.commands_for(w.CY, "LOGIN")) == logins[w.CY]
+    run.join(30)
+    assert not run.is_alive() and answers[0].json["ok"]
+    assert [r["account"] for r in answers[0].json["results"]] == [w.ADA, w.BEA, w.CY]
+
+
 def boxes(world, name):
     """Where `name` is: [(account, folder)] on the server, and in the database."""
     got = world.where(name)
