@@ -266,10 +266,12 @@ def test_a_foreign_origin_reads_nothing():
 
 
 def test_a_refused_read_is_not_counted_as_someone_at_the_screen():
+    from mailmind.bootstrap import assistant
+    governor = assistant.governor()
     with _live_server() as get:
-        server._LAST_UI_TS = 0
+        governor._last_seen = 0
         get("/api/digest", {"Host": "rebound.example.test:PORT"})
-        assert server._LAST_UI_TS == 0, server._LAST_UI_TS
+        assert governor._last_seen == 0, governor._last_seen
 
 
 _EVIL = 'INBOX"' + "\r\nA1 DELETE Archive"

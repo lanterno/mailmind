@@ -131,9 +131,9 @@ def run_tick(app, monkeypatch, cycles, step=None):
 
 @pytest.fixture
 def present(app, monkeypatch):
-    """Someone is at the screen now, as far as the tick's vacation gate can tell."""
-    import server
-    monkeypatch.setattr(server, "_LAST_UI_TS", time.time())
+    """Someone is at the screen now, as far as the governor's presence gate can tell."""
+    from mailmind.bootstrap import assistant
+    assistant.governor().saw_someone()
 
 
 # -- the gateway ----------------------------------------------------------------------------------
@@ -470,7 +470,6 @@ def test_hwf_the_tick_breaker_opens_after_three_failures_it_led(app, monkeypatch
 
 def test_hwf_a_restart_during_an_outage_keeps_the_persisted_backoff(app, world, ai, monkeypatch):
     import app_client
-    import server
     pk = world.pk(QUILT)
     summarize_as(pk, 5, "personal")
     asked = []
@@ -484,7 +483,6 @@ def test_hwf_a_restart_during_an_outage_keeps_the_persisted_backoff(app, world, 
     kick(app, pk)
     app.settle()
     app_client.reset_state()                            # the process restarts; only the table remembers
-    monkeypatch.setattr(server, "_LAST_UI_TS", time.time())
     run_tick(app, monkeypatch, cycles=6)                # cycles at +120s, then every 180s
     assert [t - asked[0] for t in asked] == [0, 300, 1020]          # 300s, then 600s, after each failure
     assert draft_rows(w.ADA, thread_key(world, QUILT))[0]["fail_count"] == 3
@@ -492,15 +490,13 @@ def test_hwf_a_restart_during_an_outage_keeps_the_persisted_backoff(app, world, 
 
 def test_hwf_the_tick_skips_a_warm_draft_and_drafts_the_next(app, world, ai, monkeypatch):
     import app_client
-    import server
     warm, cold = world.pk(QUILT), world.pk(ATELIER)
     summarize_as(warm, 5, "personal")
     summarize_as(cold, 4, "work-job")
     kick(app, warm)
     app.settle()
     ai.requests.clear()
-    app_client.reset_state()
-    monkeypatch.setattr(server, "_LAST_UI_TS", time.time())
+    app_client.reset_state()                            # a restart, which counts as someone here
     run_tick(app, monkeypatch, cycles=1)
     [req] = drafts(ai)
     assert "renee@atelier.example.test" in req.prompt and "lin@example.test" not in req.prompt
@@ -528,16 +524,14 @@ def test_hwf_the_tick_yields_for_45s_after_interactive_ai(app, world, ai, monkey
     assert len(drafts(ai)) == 1
 
 
-def test_hwf_the_tick_waits_for_both_ai_slots(app, world, ai, monkeypatch, present):
-    import summarize_thread
+def test_hwf_the_tick_waits_while_an_interactive_call_runs(app, world, ai, monkeypatch, present):
+    import summarize
+    from mailmind.bootstrap import assistant
     summarize_as(world.pk(QUILT), 5, "personal")
-    assert summarize_thread._AI_SEM.acquire(timeout=1)         # an interactive call holds one slot
-    try:
+    with assistant.governor().call("interactive", "rewrite", summarize.MODEL, None):   # one in flight
         run_tick(app, monkeypatch, cycles=2)
         assert drafts(ai) == []
-    finally:
-        summarize_thread._AI_SEM.release()
-    run_tick(app, monkeypatch, cycles=1)
+    run_tick(app, monkeypatch, cycles=1)                       # 120s after it ended
     assert len(drafts(ai)) == 1
 
 

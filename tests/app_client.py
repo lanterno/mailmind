@@ -57,6 +57,7 @@ def reset_state():
     legacy.unwire()                          # the server's subscriptions on the bus, as wire() made them
     sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
     assistant.use("urllib")                  # the old door's client; the new door's build picks the SDK
+    assistant.governor().forget()            # a restart: no interactive call lately, someone here now
 
 
 @dataclass

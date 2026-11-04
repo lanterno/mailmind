@@ -262,10 +262,11 @@ def test_hwf_opening_a_message_keeps_its_threads_draft_ready(app, world, ai, rep
 
 
 def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monkeypatch):
-    import server
+    from mailmind.bootstrap import assistant
     from mailmind.platform import sse
+    governor = assistant.governor()
     monkeypatch.setattr(sse, "HEARTBEAT", 0.1)
-    monkeypatch.setattr(server, "_LAST_UI_TS", 0.0)
+    monkeypatch.setattr(governor, "_last_seen", 0.0)
     for path in (f"/api/folders?account={w.ADA}", "/api/outbox", "/api/stats",
                  f"/api/ai/draft-ahead?pk={world.pk(VENUE_END)}"):
         assert app.get(path).status == 200
@@ -277,26 +278,17 @@ def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monk
     deadline = time.monotonic() + 5
     while sse.HUB.listening() and time.monotonic() < deadline:
         time.sleep(0.02)
-    assert server._LAST_UI_TS == 0.0
+    assert governor._last_seen == 0.0
     app.get("/api/digest")
-    assert server._LAST_UI_TS == time.time()
+    assert governor._last_seen == time.time()
 
 
-def test_hwf_background_ai_starts_only_with_both_slots_free():
-    import server
-    import summarize_thread
-    sem = summarize_thread._AI_SEM
-    assert server._ai_idle() is True
-    got = [sem.acquire(blocking=False) for _ in range(2)]    # the probe gave both slots back
-    for ok in got:
-        if ok:
-            sem.release()
-    assert got == [True, True]
-    assert sem.acquire(blocking=False)                       # an interactive call holds one
-    try:
-        assert server._ai_idle() is False                    # so background work waits
-    finally:
-        sem.release()
+def test_hwf_background_ai_waits_while_an_interactive_call_runs():
+    from mailmind.assistant.application.governor import CostGovernor
+    governor = CostGovernor(spent=lambda: 0, limit=lambda: 1)
+    assert governor.held_back("background", "triage", "m", None) is None
+    with governor.call("interactive", "rewrite", "m", None):              # one call in flight
+        assert governor.held_back("background", "triage", "m", None) == "yielding"
 
 
 # -- the folder rail's cache -----------------------------------------------

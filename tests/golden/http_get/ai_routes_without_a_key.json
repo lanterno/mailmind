@@ -109,6 +109,7 @@
     "last_error": "",
     "last_ok": null,
     "last_ts": 0,
+    "limit_micros": 15000000,
     "model": "",
     "spent_today_micros": 0
    },

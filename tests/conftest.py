@@ -99,6 +99,15 @@ def _pristine_state():
 
 
 @pytest.fixture(autouse=True)
+def _fresh_governor():
+    """The cost governor as a fresh start finds it: no interactive call lately (the app tests share
+    one frozen moment, so an earlier test's call would make this one's triage yield), someone here
+    now, the breaker closed."""
+    from mailmind.bootstrap import assistant
+    assistant.governor().forget()
+
+
+@pytest.fixture(autouse=True)
 def _tripwire():
     guard.violations.clear()
     yield
@@ -183,6 +192,8 @@ def app(request, world, monkeypatch):
     legacy.wire(server)                 # as server.__main__ does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
+        from mailmind.bootstrap import assistant
+        assistant.governor().forget()   # someone here at NOW, not at the real time reset_state ran at
         running = (app_client.RunningApp() if request.param == "old" else app_client.RunningAsgiApp()).start()
         try:
             with settings.use(dataclasses.replace(settings.current(), port=running.port)):

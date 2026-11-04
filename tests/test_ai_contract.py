@@ -142,9 +142,9 @@ def test_a_refusal_reads_as_an_empty_reply(api):
     api.queue((200, {"stop_reason": "refusal", "content": [],
                      "stop_details": {"type": "refusal", "category": "cyber"}}),
               (200, {"stop_reason": "refusal", "content": []}))
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA) == {}
-    _, payload = summarize.summarize_one(ROW)
+    _, payload = summarize.summarize_one(ROW)       # triage first: it yields for 45s after any other call
     assert payload is not None and payload[-1] == "parse-error"   # stored once, not retried forever
+    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA) == {}
 
 
 def test_only_the_answer_after_a_fallback_block_counts(api):
