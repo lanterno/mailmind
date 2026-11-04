@@ -7,6 +7,7 @@ import os
 import re
 import email
 import html
+import imaplib
 from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from datetime import datetime, timezone, timedelta
@@ -19,10 +20,12 @@ import pool
 import store
 import threads
 from mailmind.accounts.domain import provider
+from mailmind.bootstrap import mailbox
 
 CUTOFF_DAYS = 90
-HDR_BATCH = 300
 BODY_CHARS = 3000
+HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
+                 "LIST-UNSUBSCRIBE", "LIST-ID")
 
 
 def dec(s):
@@ -88,27 +91,9 @@ def _has_invite(msg):
         return False
 
 
-def _uid_of(meta_bytes):
-    m = re.search(r"UID (\d+)", meta_bytes.decode("utf-8", "replace"))
-    return int(m.group(1)) if m else None
-
-
-_THRID_RE = re.compile(rb"X-GM-THRID (\d+)")
-
-
-def _thrid_of(meta_bytes):
-    """Gmail X-GM-THRID is a FETCH DATA ITEM (in the metadata line), NOT a header —
-    parse it from part[0] like UID/FLAGS, not via msg.get()."""
-    m = _THRID_RE.search(meta_bytes)
-    return m.group(1).decode() if m else None
-
-
-_FLAG_RE = re.compile(r"FLAGS \(([^)]*)\)")
-
-
-def _flags_of(meta):
-    m = _FLAG_RE.search(meta)
-    f = (m.group(1) if m else "").lower()
+def _flags_of(flags):
+    """The local flag columns from a message's IMAP flags."""
+    f = {x.lower() for x in flags}
     return {"seen": int("\\seen" in f), "flagged": int("\\flagged" in f),
             "answered": int("\\answered" in f), "draft": int("\\draft" in f),
             "deleted": int("\\deleted" in f)}
@@ -122,28 +107,20 @@ def _uidvalidity(M):
         return None
 
 
-def _process(M, acct, uids, folder="INBOX", with_body=False, advance=True):
-    """Store ALL of the given UIDs (junk kept as a badge, with flags) for the
-    folder. Bodies are fetched only when with_body (INBOX, for the AI snippet);
+def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True):
+    """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
+    has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
     other folders get headers+flags only (fast) and fetch the body lazily on open.
     advance=False stores them without touching the folder's watermark: only a sync that has
     seen every UID up to a point may say the folder is synced to there."""
     rows, max_uid, kept, junk = [], 0, 0, 0
-    thrid = "X-GM-THRID " if provider.resolve(acct).gmail_threads else ""  # only Gmail understands it
-    for start in range(0, len(uids), HDR_BATCH):
-        chunk = uids[start:start + HDR_BATCH]
-        typ, data = M.uid("FETCH", ",".join(chunk),
-                          "(UID FLAGS " + thrid + "BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE "
-                          "MESSAGE-ID IN-REPLY-TO REFERENCES LIST-UNSUBSCRIBE LIST-ID)])")
-        for part in data:
-            if not isinstance(part, tuple):
-                continue
-            uid = _uid_of(part[0])
-            if uid is None:
-                continue
+    gmail = provider.resolve(acct).gmail_threads            # only Gmail understands X-GM-THRID
+    if uids:
+        for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail):
+            uid = h.uid
             max_uid = max(max_uid, uid)
-            flags = _flags_of(part[0].decode("utf-8", "replace"))
-            msg = email.message_from_bytes(part[1])
+            flags = _flags_of(h.flags)
+            msg = email.message_from_bytes(h.raw)
             name, addr = parseaddr(msg.get("From", ""))
             has_lu = bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))
             subj = dec(msg.get("Subject", ""))
@@ -162,7 +139,7 @@ def _process(M, acct, uids, folder="INBOX", with_body=False, advance=True):
                          "subject": subj, "date_iso": iso, "ts": ts, "bucket": b,
                          "confidence": conf, "reason": reason, "is_junk": isj, "flags": flags,
                          "message_id": (msg.get("Message-ID") or "").strip(),
-                         "gmail_thread": _thrid_of(part[0]),
+                         "gmail_thread": h.gmail_thread,
                          "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
                          "refs": (msg.get("References") or "").replace("\n", " ").strip(),
                          "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:2000]})
@@ -171,10 +148,13 @@ def _process(M, acct, uids, folder="INBOX", with_body=False, advance=True):
         snippet, invite = "", None
         if with_body and not r["is_junk"]:
             try:
-                typ, data = M.uid("FETCH", str(r["uid"]), "(BODY.PEEK[])")
-                if typ != "OK":   # flaky-connection fetch failure (vs a genuinely empty body) — surface it
-                    print(f"[ingest] body fetch {acct['email']} uid {r['uid']}: {typ}", flush=True)
-                raw = next((p[1] for p in data if isinstance(p, tuple)), b"")
+                try:
+                    raw = session.body(r["uid"]) or b""
+                except imaplib.IMAP4.abort:
+                    raise
+                except imaplib.IMAP4.error:   # refused (vs a genuinely empty body): surface it
+                    print(f"[ingest] body fetch {acct['email']} uid {r['uid']}: NO", flush=True)
+                    raw = b""
                 msg = email.message_from_bytes(raw)
                 snippet = text_body(msg)
                 invite = raw if _has_invite(msg) else None
@@ -211,10 +191,9 @@ def sync_folder(acct, folder, full=False, recent=None):
     recent=N bounds a first/full scan to the most recent N UIDs (used by background folder
     warming so a huge Sent/Archive doesn't pull thousands in one pass); incremental syncs
     are already watermark-bounded and ignore it."""
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(folder), readonly=True)
-        uidv = _uidvalidity(M)
+        uidv = s.select(folder).uidvalidity
         c = store.conn()
         stored = store.get_uidvalidity(c, acct["email"], folder)
         if uidv and stored and uidv != stored:
@@ -227,14 +206,12 @@ def sync_folder(acct, folder, full=False, recent=None):
         wm = store.get_watermark(c, acct["email"], folder)
         c.close()
         if full or wm == 0:
-            typ, d = M.uid("SEARCH", None, "ALL")
-            uids = [x.decode() for x in d[0].split()]
+            uids = s.uids("ALL")
             if recent and len(uids) > recent:
-                uids = uids[-recent:]      # most-recent N only (SEARCH ALL returns ascending UIDs)
+                uids = uids[-recent:]      # the most recent N only
         else:
-            typ, d = M.uid("SEARCH", None, "UID", f"{wm + 1}:*")
-            uids = [x.decode() for x in d[0].split() if int(x) > wm]
-        result = _process(M, acct, uids, folder, with_body=(folder.upper() == "INBOX"))
+            uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
+        result = _process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"))
         c = store.conn()
         threads.recompute_threads(c, acct["email"])   # regroup conversations for new mail
         store.apply_mute_on_ingest(c, acct["email"])  # keep new members of muted threads silent
@@ -243,7 +220,7 @@ def sync_folder(acct, folder, full=False, recent=None):
         return result
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
@@ -258,14 +235,18 @@ def ingest_message(acct, folder, message_id):
     Returns the number of messages stored (0 if not found)."""
     if not message_id:
         return 0
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(folder), readonly=True)
-        typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
-        uids = [x.decode() for x in (d[0].split() if (typ == "OK" and d and d[0]) else [])]
-        if not uids:
+        s.select(folder)
+        try:
+            uid = s.by_message_id(message_id)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:                  # a refused search finds nothing
+            uid = None
+        if uid is None:
             return 0
-        _process(M, acct, uids[-1:], folder, with_body=(folder.upper() == "INBOX"), advance=False)
+        _process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False)
         c = store.conn()
         threads.recompute_threads(c, acct["email"])
         store.apply_mute_on_ingest(c, acct["email"])
@@ -275,7 +256,7 @@ def ingest_message(acct, folder, message_id):
         return 1
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
@@ -289,17 +270,16 @@ def folder_synced(acct_email, folder):
 
 
 def ingest_account(acct, days=CUTOFF_DAYS):
-    M = accounts.connect(acct)
-    M.select('"INBOX"', readonly=True)
-    if days >= 3650:
-        typ, d = M.uid("SEARCH", None, "ALL")
-    else:
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y")
-        typ, d = M.uid("SEARCH", None, "SINCE", since)
-    uids = [x.decode() for x in d[0].split()]
-    res = _process(M, acct, uids, "INBOX", with_body=True)
-    M.logout()
-    return res
+    s = mailbox.open_session(acct)
+    try:
+        s.select("INBOX")
+        if days >= 3650:
+            uids = s.uids("ALL")
+        else:
+            uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
+        return _process(s, acct, uids, "INBOX", with_body=True)
+    finally:
+        s.logout()
 
 
 def fetch_body(pk):
@@ -363,19 +343,15 @@ def reconcile_account(acct, force=False, dry_run=False):
     c.close()
     res["stored"] = len(stored_uids)
     try:
-        M = accounts.connect(acct, timeout=15)      # background/maintenance path: a hung account must
+        s = mailbox.open_session(acct, timeout=15)   # background/maintenance path: a hung account must
         try:                                          # not pin the IMAP gate for the interactive 60s
-            M.select('"INBOX"', readonly=True)
-            uidv = _uidvalidity(M)
-            typ, d = M.uid("SEARCH", None, "ALL")
+            uidv = s.select("INBOX").uidvalidity
+            live = set(s.uids("ALL"))                 # a refused SEARCH raises: nothing is pruned
         finally:
             try:
-                M.logout()                            # ALWAYS close the socket (no leak on select/SEARCH error)
+                s.logout()                            # ALWAYS close the socket (no leak on select/SEARCH error)
             except Exception:
                 pass
-        if typ != "OK":
-            raise RuntimeError(f"SEARCH returned {typ}")
-        live = set(int(x) for x in d[0].split()) if d and d[0] else set()
     except Exception as e:
         res["error"] = f"{type(e).__name__}: {e}"
         return res  # never prune on error
