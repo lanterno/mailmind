@@ -236,6 +236,13 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - `database.connect` opens every connection: WAL, `synchronous=FULL` with `fullfsync` (a commit
   survives a power cut, because `delivered` and `applied` are exactly-once gates),
   `busy_timeout` 60 s, and `foreign_keys=ON`, which the cascades depend on.
+- No transaction stays open across a network call. `database.connect` tracks each connection for
+  the thread that opened it, and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
+  while one has a transaction open, since a write held while a server answers keeps every other
+  writer waiting. An IMAP connection and each command (`accounts.connect`), an SMTP session and
+  all it sends (`smtpsend.smtp_connect`), a Claude API request and a one-click unsubscribe check
+  it, in tests and in use. Commit before talking to a server; a new network path calls
+  `refuse_network` first, or wraps the connection's method with `txguard.guard_calls`.
 - `migrations.MIGRATIONS` is a list of `(target_user_version, callable)` run against
   `PRAGMA user_version`. Migrations 1 to 20 are frozen in `migrations/m0001_m0020.py`, beside
   `BASE_SCHEMA`, `LEGACY_COLS` (pre-versioning column adds) and copies of the code they call
