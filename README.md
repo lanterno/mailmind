@@ -363,6 +363,8 @@ automatically.
 - **Your Bridge password goes only to Bridge.** Bridge's certificate is pinned the first
   time MailMind connects, so something else listening on its port while it's down gets no
   password, over IMAP or SMTP. A changed certificate shows in Settings, to trust or not.
+- **An account that's down still shows its folders.** When a server can't be reached, the
+  rail lists the folders MailMind already holds that account's mail in, with their counts.
 - **Bodies render in a locked sandbox** with an explicit deny-all CSP, remote images
   blocked by default, and a runtime guard that strips scripting permission from any
   reader frame.
