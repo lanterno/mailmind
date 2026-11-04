@@ -235,7 +235,11 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   by its owner only. `adapters.secrets` resolves a credential in each style the file allows
   (plain, `op`, `env`, the Bridge password), caching an `op` read only when it succeeds.
   `config.py` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
-  both. It is standard library only.
+  both. `domain.provider.ProviderProfile` says what an account's server does on its own and its
+  quirks: Gmail files sent mail itself, archives by dropping `\Inbox` and threads by X-GM-THRID;
+  Proton Bridge (or any loopback STARTTLS server) is fragile, recycled sooner in the pool and never
+  bulk-expunged, and marks trashed mail read; `with_capabilities` adds what CAPABILITY says.
+  `provider.resolve(acct)` replaces checking `kind == "gmail"`. It is standard library only.
 - `mailmind.mailbox` is the third: the mail on each server and its folders. So far it holds
   `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
   `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
