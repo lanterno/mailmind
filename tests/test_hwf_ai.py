@@ -637,19 +637,14 @@ def test_without_a_key_triage_sends_no_mail(world, anthropic_api):
     assert anthropic_api.requests == []
 
 
-# -- known bugs -----------------------------------------------------------------------------------
-
 CACHED_READS = {     # each cached AI read, and the store read that finds its cache
     "brief": "get_briefing", "delta": "get_briefing", "review": "get_briefing",
     "thread summary": "get_thread_summary",
 }
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: brief, delta, review and thread summary don't re-check the cache after "
-                          "winning the lead, so two first loads can both pay")
 @pytest.mark.parametrize("which", list(CACHED_READS))
-def test_bug_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatch, which):
+def test_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatch, which):
     import store
     summarize_as(world.pk(LUNCH), 5, "action-needed", "Reply")
     real = getattr(store, CACHED_READS[which])
@@ -672,6 +667,8 @@ def test_bug_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkey
     assert second.status == 200 and not first.is_alive()
     assert len(ai.requests) == 1
 
+
+# -- known bugs -----------------------------------------------------------------------------------
 
 @pytest.mark.xfail(strict=True, raises=AssertionError,
                    reason="known bug: a cached brief keeps the pks it was built with, which a renumbered folder "
