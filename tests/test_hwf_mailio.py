@@ -136,6 +136,8 @@ def idle(monkeypatch):
     monkeypatch.setattr(realtime, "_kick", threading.Event())
     monkeypatch.setattr(realtime, "_dirty", set())
     monkeypatch.setattr(realtime, "_conns", [])
+    monkeypatch.setattr(realtime, "_watchers", {})
+    monkeypatch.setattr(realtime, "_running", False)
     workers = []
 
     def start(email=w.ADA):
@@ -779,7 +781,6 @@ def test_hwf_opening_a_warmed_folder_shows_its_older_mail(app, world):
     assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an IDLE worker keeps watching an account removed after boot")
 def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkeypatch):
     import config
     import realtime

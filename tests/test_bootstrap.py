@@ -39,6 +39,20 @@ def test_the_server_hears_what_the_workers_publish(unwired):
     assert wiring() == [(), (), ()]
 
 
+def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
+    import realtime
+    import server
+    from mailmind.accounts.domain import events
+    from mailmind.bootstrap import legacy
+    from mailmind.platform.bus import BUS
+    topics = (events.AccountAdded, events.AccountChanged, events.AccountRemoved)
+    legacy.wire(server)
+    legacy.wire(server)
+    assert [BUS.subscribers(t) for t in topics] == [(realtime.reconcile,)] * 3
+    legacy.unwire()
+    assert [BUS.subscribers(t) for t in topics] == [()] * 3
+
+
 def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
     import realtime
     import server
