@@ -172,6 +172,44 @@ def masked_row(entry):
     }
 
 
+def tls_pin(email, endpoint, seen):
+    """The certificate pinned for the account `email` at `endpoint`: the one pinned before, or
+    `seen`, pinned now on first use (mailmind.accounts.domain.tls_pin). None when no account is
+    saved under `email`, as for a draft being tested: nothing is pinned for it."""
+    entry = _find(_raw(), email)
+    if entry is None:
+        return None
+    pinned = (entry.get("tls_pins") or {}).get(endpoint)
+    if pinned:
+        return pinned
+    with _write_lock:
+        raw = _raw()
+        entry = _find(raw, email)
+        if entry is None:
+            return None
+        pins = entry.get("tls_pins")
+        if not isinstance(pins, dict):
+            pins = entry["tls_pins"] = {}
+        if not pins.get(endpoint):
+            pins[endpoint] = seen
+            save(raw)
+        return pins[endpoint]
+
+
+def forget_tls_pins(email):
+    """Trust the account's servers again: forget each certificate pinned for it, so the next
+    connection pins the one it meets. Returns False when there is no such account."""
+    with _write_lock:
+        raw = _raw()
+        entry = _find(raw, email)
+        if entry is None:
+            return False
+        if entry.pop("tls_pins", None) is not None:
+            save(raw)
+    bus.publish(events.AccountChanged(entry["email"]))
+    return True
+
+
 def masked_rows():
     return [masked_row(e) for e in _raw().get("accounts", [])]
 

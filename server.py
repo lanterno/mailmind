@@ -57,7 +57,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy
-from mailmind.accounts.domain import provider
+from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
@@ -95,6 +95,8 @@ def now_iso():
 def _classify_sync_error(e):
     """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
     never its message (which can carry credentials/host strings)."""
+    if isinstance(e, tls_pin.TLSPinMismatch):
+        return "TLS_PIN"
     n = type(e).__name__.lower()
     if "timeout" in n:
         return "TIMEOUT"
@@ -3641,6 +3643,8 @@ def ai_do_plan(body):
 
 # ----------------------------------------------------------------------- accounts
 def _sanitize_conn_error(e):
+    if isinstance(e, tls_pin.TLSPinMismatch):
+        return "certificate changed"
     s = f"{type(e).__name__}: {e}".lower()
     if any(w in s for w in ("auth", "credential", "invalid", "login", "password")):
         return "AUTHENTICATIONFAILED"
@@ -3696,6 +3700,17 @@ def account_test(body):
         return {"ok": True, "connect": False,
                 "email": body.get("email") or (body.get("draft") or {}).get("email"),
                 "error": _sanitize_conn_error(e)}
+
+
+def account_trust_cert(body):
+    """Trust the account's servers again after its loopback certificate changed (Bridge reinstalled
+    or reset): forget its pins, and sync it, which pins the certificate it meets now."""
+    email = (body.get("email") or "").strip()
+    if not config.forget_tls_pins(email):
+        return {"ok": False, "error": "not found"}, 404
+    if email in {a["email"] for a in accounts.accounts()}:    # a disabled one waits until enabled
+        return do_sync_retry({"account": email})
+    return {"ok": True, "account": email}, 200
 
 
 def account_mutate(action, body):
@@ -4149,6 +4164,8 @@ class H(BaseHTTPRequestHandler):
                 action = u.path.rsplit("/", 1)[-1]
                 if action == "test":
                     self._json(account_test(b))
+                elif action == "trust-cert":
+                    self._json(*account_trust_cert(b))
                 elif action == "signature-default":
                     config.set_signature_default(b.get("signature") or "")
                     self._json({"ok": True, "signature_default": config.signature_default()})

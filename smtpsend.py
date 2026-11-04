@@ -17,6 +17,7 @@ import imaplib
 import accounts
 import config
 import mailops
+from mailmind.accounts.domain import tls_pin
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
@@ -33,6 +34,11 @@ def smtp_connect(acct):
         s = txguard.guard_calls(smtplib.SMTP_SSL(host, port, context=accounts.tls_context(host), timeout=60),
                                 "send", "SMTP")
         s.ehlo()
+    try:
+        accounts.check_pin(acct, host, port, s)
+    except tls_pin.TLSPinMismatch:
+        s.close()
+        raise
     s.login(acct["email"], config.resolve_credential(acct))
     return s
 
