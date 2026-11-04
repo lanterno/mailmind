@@ -6,6 +6,7 @@ package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 """
 import threading
 
+from mailmind.accounts.domain import events as account_events
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import scheduler
 
@@ -22,7 +23,9 @@ _wired = []                             # wire()'s subscriptions, each a functio
 def wire(server):
     """Subscribe the server to what the legacy workers publish on mailmind.platform.bus: a send
     that went out and a queued move applied refresh the stats and tell the open tabs, and IDLE's
-    news syncs those accounts. Wiring again replaces the last wiring. Starts nothing.
+    news syncs those accounts. An account added, changed or removed brings IDLE's workers in line
+    (realtime.reconcile, which does nothing until IDLE starts). Wiring again replaces the last
+    wiring. Starts nothing.
 
     It takes the server module as an argument rather than importing it: `python3 server.py` runs
     as __main__, and an import here would load a second copy with state of its own."""
@@ -30,6 +33,8 @@ def wire(server):
     _wired.extend([bus.subscribe(outbox.Sent, server._after_send),
                    bus.subscribe(readmutq.Applied, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle)])
+    _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
+                  (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))
 
 
 def unwire():

@@ -22,7 +22,8 @@ import os
 import threading
 
 from mailmind.accounts.adapters import config_file, secrets
-from mailmind.platform import settings
+from mailmind.accounts.domain import events
+from mailmind.platform import bus, settings
 
 _write_lock = threading.Lock()
 
@@ -286,7 +287,8 @@ def add_account(p):
         _validate_new(entry)
         raw["accounts"].append(entry)
         save(raw)
-        return masked_row(entry)
+    bus.publish(events.AccountAdded(entry["email"]))
+    return masked_row(entry)
 
 
 def update_account(email, p):
@@ -304,7 +306,8 @@ def update_account(email, p):
                 secrets.evict(old_cred)
         _validate_new(entry)
         save(raw)
-        return masked_row(entry)
+    bus.publish(events.AccountChanged(entry["email"]))
+    return masked_row(entry)
 
 
 def remove_account(email):
@@ -316,7 +319,8 @@ def remove_account(email):
         secrets.evict(entry.get("credential"))
         raw["accounts"] = [e for e in raw["accounts"] if e is not entry]
         save(raw)
-        return True
+    bus.publish(events.AccountRemoved(entry["email"]))
+    return True
 
 
 # --------------------------------------------------------------------------- CLI
