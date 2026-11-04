@@ -39,7 +39,7 @@ def test_before_any_event_the_position_is_zero():
 def test_a_tab_that_reconnects_hears_what_it_missed_in_order():
     hub = Hub(run="r1")
     hub.publish("mute", {"account": "ada@example.test"})
-    seen = hub.publish("undo", {})
+    seen = hub.publish("snooze-wake", {"count": 1})
     hub.publish("followup", {"count": 1})
     hub.publish("outbox", {})
     tab = hub.listen(seen)
