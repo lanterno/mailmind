@@ -1562,12 +1562,13 @@ const AI_OVER="X-MailMind-AI-Over-Limit";   // "allow": the user said this reque
 async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o.headers||{});   // on GETs too: cost-bearing reads (draft-ahead kick) verify it
   const r=await fetch(p,o);
   if(!r.ok){ let m="HTTP "+r.status, j=null; try{ j=await r.json(); if(j&&j.error)m=j.error; }catch(e){}
-    if(r.status===402&&j&&j.over_limit&&!o.headers[AI_OVER]&&await askOverLimit(j))   // at the limit: ask, then again with leave
+    if(r.status===402&&j&&j.over_limit&&o.askOver!==false&&!o.headers[AI_OVER]&&await askOverLimit(j))   // at the limit: ask, then again with leave
       return api(p,Object.assign({},o,{headers:Object.assign({},o.headers,{[AI_OVER]:"allow"})}));
     throw Object.assign(new Error(m),{status:r.status,overLimit:!!(j&&j.over_limit)}); }
   return r.json();}
 /* The daily AI limit: an AI request you started that would go over it asks first. Requests that hit
-   the limit while the question is on screen share its one answer. */
+   the limit while the question is on screen share its one answer. One the page makes on its own
+   passes askOver:false and gets the 402 as an error (overLimit) instead. */
 let _overAsk=null;
 function askOverLimit(j){
   if(_overAsk) return _overAsk;
@@ -2949,7 +2950,7 @@ function cancelSearchBar(){
 function cfindAny(pk){ return cfind(pk) || (state.searchItems||[]).find(x=>x.pk===pk) || (state.thread&&(state.thread.items||[]).find(x=>x.pk===pk)); }
 
 /* ---------- client-mode message actions (optimistic + rollback) ---------- */
-function cpost(path,obj){ return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)}); }
+function cpost(path,obj,opts){ return api(path,Object.assign({method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)},opts)); }
 function cfind(pk){ return state.cmsgs.find(x=>x.pk===pk); }
 function clearReader(){ if(briefHere()){ showBrief(false); return; }
   state.csel=null; state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No message selected."; document.body.classList.remove("reading"); }
@@ -2959,6 +2960,7 @@ function clearReader(){ if(briefHere()){ showBrief(false); return; }
    first message does too. Built from the digest (state.all) for what needs you, and the
    /api/briefing narrative, which the server computes once and caches. */
 let _briefErr=null, _briefAsked=false;
+const BRIEF_LIMIT="limit";   // _briefErr when today's AI limit kept the brief from being written
 function briefHere(){ return !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
 function briefOpen(){ return $("#reader").classList.contains("brief-pane"); }
 function needsIt(it){ return !!(String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4); }   // the to-do test: a next step, an action-needed category, or importance 4+
@@ -3163,6 +3165,7 @@ function briefHtml(){
   const narr=aiOff()&&!(b&&b.narrative)?aiOffHtml()
     :_todayInflight?`<p class="bf-wait"><span class="spin">${ico("wind")}</span> Reading your inbox…</p>`
     :b&&b.narrative?`<p class="ai-tldr bf-narr">${esc(b.narrative)}</p>`
+    :_briefErr===BRIEF_LIMIT?`<p class="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button class="ai-rerun" data-brief="retry">Write it</button></p>`
     :_briefErr?`<p class="bf-wait">The brief isn’t available right now (${esc(why)}). <button class="ai-rerun" data-brief="retry">Try again</button></p>`
     :'<p class="bf-wait">Nothing to brief yet.</p>';
   const nc=commitments().length, t=[];
@@ -3205,7 +3208,7 @@ function briefAct(a){
   else if(a==="tidy") doTidy();
   else if(a==="commits") openCommitments();
   else if(a==="week") openReview();
-  else if(a==="refresh"||a==="retry"){ loadBrief(a==="refresh"); if(a==="refresh"){ _briefSideAt=0; loadBriefSide(); } renderBrief(); }
+  else if(a==="refresh"||a==="retry"){ loadBrief(a==="refresh",true); if(a==="refresh"){ _briefSideAt=0; loadBriefSide(); } renderBrief(); }
   else if(a.startsWith("__")) selectFolder(a);
 }
 /* Lists the digest answers rather than a folder holds: Needs you, a topic from the brief, mail that
@@ -4086,14 +4089,15 @@ function renderAiCard(d){
 
 /* ---------- today's brief: the AI narrative and topic groups, computed once and cached server-side ---------- */
 let _todayInflight=false, _briefData=null;
-async function loadBrief(force){   // force: write it again from the mail as it is now (runs the AI)
+async function loadBrief(force,clicked){   // force: write it again from the mail as it is now (runs the AI)
   if(_todayInflight && !force)return;            // re-entry guard: never fork two claude calls
   _todayInflight=true;
   try{
-    const d=force ? await cpost("/api/briefing/refresh",{}) : await api("/api/briefing");   // CSRF+Origin via cpost
+    let d=force ? await cpost("/api/briefing/refresh",{}) : await api("/api/briefing");   // the GET only reads what is stored
+    if(d&&d.missing){ renderBrief(); d=await cpost("/api/briefing",{},clicked?{}:{askOver:false}); }   // none yet: write it; only a click asks at the limit
     if(!d||!d.ok){ _briefErr=(d&&d.error)||"no answer"; return; }
     _briefErr=null; _briefData=d;
-  }catch(e){ _briefErr="couldn’t reach the server"; }
+  }catch(e){ _briefErr=e.overLimit?BRIEF_LIMIT:"couldn’t reach the server"; }
   finally{ _todayInflight=false; renderBrief(); }
 }
 /* ── Tidy: close the AI→action loop. The AI already scored every message; let it do triage work.
@@ -4207,8 +4211,9 @@ function closeReview(){ const o=$("#reviewPanel"); if(o)o.classList.remove("show
 async function loadReview(force){
   const body=$("#rvBody"); if(!body)return;
   body.innerHTML=`<div class="rv-load"><span class="spin">↻</span> Looking back over your week…</div>`; $("#rvRange").textContent="";
-  let d; try{ d = force ? await cpost("/api/review/refresh",{}) : await api("/api/review"); }
-  catch(e){ body.innerHTML=`<div class="rv-err">Couldn’t build your review. <button class="ai-rerun" data-rv-retry>Retry</button></div>`; return; }
+  let d; try{ d = force ? await cpost("/api/review/refresh",{}) : await api("/api/review");   // the GET only reads what is stored
+    if(d&&d.missing) d=await cpost("/api/review",{}); }                                      // none yet: write it (you opened it)
+  catch(e){ body.innerHTML=`<div class="rv-err">${e.overLimit?"Today’s AI limit is reached, so your review isn’t written.":"Couldn’t build your review."} <button class="ai-rerun" data-rv-retry>${e.overLimit?"Write it":"Retry"}</button></div>`; return; }
   if(!d||!d.ok){ body.innerHTML=`<div class="rv-err">${esc((d&&d.error)||"Review unavailable")} <button class="ai-rerun" data-rv-retry>Retry</button></div>`; return; }
   _reviewLoaded=true; renderReview(d);
 }
@@ -4626,8 +4631,9 @@ async function buildDelta(){
   const p=$("#newPill"); if(!p||!_pendingSince)return;
   _deltaInflight=true;
   try{
-    const acct=state.allInbox?"":`&account=${encodeURIComponent(state.account||"")}`;
-    const d=await api(`/api/briefing/since?since=${Math.floor(_pendingSince/1000)}${acct}`);
+    const since=Math.floor(_pendingSince/1000), acct=state.allInbox?"":(state.account||"");
+    let d=await api(`/api/briefing/since?since=${since}${acct?"&account="+encodeURIComponent(acct):""}`);   // the GET only reads
+    if(d&&d.missing) d=await cpost("/api/briefing/since",{since,account:acct},{askOver:false});   // write it; never ask at the limit
     if(!d||!d.ok||d.empty||!d.headline)return;   // 0 new / error / timeout → leave the plain count pill (the floor)
     const p2=$("#newPill"); if(!p2)return;        // pill may have been consumed mid-fetch
     p2.dataset.ai="1"; p2.classList.add("new-pill--ai");
