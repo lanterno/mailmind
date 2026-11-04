@@ -1139,6 +1139,7 @@
   /* ---- NL bulk action (!do) preview MODAL ---- */
   .do-overlay{position:fixed;inset:0;z-index:64;display:none;align-items:flex-start;justify-content:center;background:var(--scrim);backdrop-filter:blur(4px)}
   .do-overlay.show{display:flex;animation:fsFade .16s ease both}
+  .do-overlay.ai-limit{z-index:97}
   .do-panel{max-width:540px;width:100%;margin-top:12vh;background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);box-shadow:var(--sh-3);padding:22px 24px 20px;animation:doRise .22s var(--ease) both}
   @keyframes doRise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
   .do-load{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--ai);padding:6px 2px}
@@ -1414,6 +1415,7 @@
   <div class="commit-hint"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-download"/></svg> download · click a row to open its email · Esc to close</div>
 </div></div>
 <div class="do-overlay" id="doPanel" role="dialog" aria-modal="true" aria-label="bulk action"><div class="do-panel" id="doPanelBody"></div></div>
+<div class="do-overlay ai-limit" id="aiLimitAsk" role="alertdialog" aria-modal="true" aria-labelledby="alHd" aria-describedby="alText"><div class="do-panel"><div class="do-hd" id="alHd">Today’s AI limit is reached</div><p class="do-intro" id="alText"></p><div class="do-foot"><button class="do-confirm" data-al="yes">Go over the limit</button><button class="do-cancel" data-al="no">Not now</button></div></div></div>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer">
@@ -1556,11 +1558,31 @@ const hue=a=>{let h=0;for(const c of(a||""))h=(h*31+c.charCodeAt(0))%360;return 
 function ico(n,c){ return `<svg class="ico${c?" "+c:""}" aria-hidden="true" focusable="false"><use href="#i-${n}"/></svg>`; }   // the sprite after <body>
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2600);}
 const CSRF=(document.querySelector('meta[name=csrf]')||{}).content||"";
+const AI_OVER="X-MailMind-AI-Over-Limit";   // "allow": the user said this request may go over the daily AI limit
 async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o.headers||{});   // on GETs too: cost-bearing reads (draft-ahead kick) verify it
   const r=await fetch(p,o);
-  if(!r.ok){ let m="HTTP "+r.status; try{ const j=await r.json(); if(j&&j.error)m=j.error; }catch(e){}
-    throw Object.assign(new Error(m),{status:r.status}); }
+  if(!r.ok){ let m="HTTP "+r.status, j=null; try{ j=await r.json(); if(j&&j.error)m=j.error; }catch(e){}
+    if(r.status===402&&j&&j.over_limit&&!o.headers[AI_OVER]&&await askOverLimit(j))   // at the limit: ask, then again with leave
+      return api(p,Object.assign({},o,{headers:Object.assign({},o.headers,{[AI_OVER]:"allow"})}));
+    throw Object.assign(new Error(m),{status:r.status,overLimit:!!(j&&j.over_limit)}); }
   return r.json();}
+/* The daily AI limit: an AI request you started that would go over it asks first. Requests that hit
+   the limit while the question is on screen share its one answer. */
+let _overAsk=null;
+function askOverLimit(j){
+  if(_overAsk) return _overAsk;
+  const o=$("#aiLimitAsk"), back=document.activeElement;
+  $("#alText").textContent=`MailMind has spent ${usd(j.spent_micros||0)} on AI today, and its daily limit is ${usd(j.limit_micros||0)}. Go over the limit for this?`;
+  _overAsk=new Promise(done=>{
+    const answer=yes=>{ o.classList.remove("show"); o.removeEventListener("click",onClick); o.removeEventListener("keydown",onKey);
+      _overAsk=null; if(back&&back.focus)back.focus(); done(yes); };
+    const onClick=e=>{ const b=e.target.closest("[data-al]"); if(b)answer(b.dataset.al==="yes"); else if(e.target===o)answer(false); };
+    const onKey=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); answer(false); } };
+    o.addEventListener("click",onClick); o.addEventListener("keydown",onKey);
+    o.classList.add("show"); o.querySelector('[data-al="no"]').focus();
+  });
+  return _overAsk;
+}
 
 /* ---------- the digest: AI-scored mail behind the brief, commitments and tidy ---------- */
 async function loadDigest(silent){
@@ -3129,7 +3151,8 @@ function usd(micros){ const c=Math.ceil(micros/10000); return "$"+Math.floor(c/1
 function aiLineHtml(){   // the sync menu's line about AI
   const a=state.ai; if(!a)return "";
   if(a.engine==="none") return `<div class="sm-sub sm-ai">${ico("wind")}<span>AI is off · no API key</span></div>`;
-  const spent=a.spent_today_micros, what="Claude API · "+a.model+(spent>0?` · ${usd(spent)} today`:"");
+  const spent=a.spent_today_micros, lim=a.limit_micros,
+    what="Claude API · "+a.model+(spent>0?` · ${usd(spent)}${lim?" of "+usd(lim):""} today`:"");
   return `<div class="sm-sub sm-ai${aiFailing()?" err":""}">${ico("wind")}<span>${esc(what)}${aiFailing()?` · last call failed: ${esc(a.last_error)}`:""}</span></div>
     <div class="sm-sub sm-ai m">${ico("lock")}<span>${AI_PRIVACY}</span></div>`;
 }
