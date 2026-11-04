@@ -10,6 +10,7 @@ Only this module imports imapclient; only the new door loads it.
 """
 import imaplib
 import re
+import socket
 from datetime import datetime, timezone
 
 from imapclient import IMAPClient
@@ -21,6 +22,7 @@ from mailmind.mailbox.domain.roles import Folder
 
 
 _APPENDUID = re.compile(rb"APPENDUID\s+\d+\s+(\d+)")
+_CHANGES = ("EXISTS", "RECENT", "EXPUNGE")
 
 
 def _text(v):
@@ -144,5 +146,24 @@ class ImapClientSession:
         self._c.noop()
         return True
 
+    def idle(self, seconds):
+        # Through the imaplib connection underneath: IMAPClient's idle_check reads an EOF as "nothing
+        # yet", so a connection the server dropped, or interrupt() shut down, would spin until the
+        # time was up. imaplib's IDLE raises IMAP4.abort on it.
+        with self._c._imap.idle(duration=seconds) as idler:
+            for typ, _ in idler:
+                if typ in _CHANGES:
+                    return True              # leaving the block sends DONE
+        return False
+
+    def interrupt(self):
+        try:                             # shut down, never closed here: see the imaplib adapter
+            self._c.socket().shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+
     def logout(self):
         self._c.logout()
+
+    def shutdown(self):
+        self._c.shutdown()

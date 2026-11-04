@@ -65,7 +65,10 @@ class MailSession(Protocol):
     def expunge(self, uids) -> None: ...                    # UID EXPUNGE of these alone, never a bulk one
     def append(self, folder: str, raw: bytes, *, flags=(), when=None) -> int | None: ...   # its UID
     def noop(self) -> bool: ...
+    def idle(self, seconds: float) -> bool: ...     # IDLE on the selected folder: True once it changed
+    def interrupt(self) -> None: ...                # from another thread: end an idle() now; the session is spent
     def logout(self) -> None: ...
+    def shutdown(self) -> None: ...                 # close without a LOGOUT, when the server won't answer one
 
 
 def move_by_copy(session, uids, dest):

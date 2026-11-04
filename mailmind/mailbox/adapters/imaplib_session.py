@@ -5,6 +5,7 @@ checks it and raises imaplib.IMAP4.error, as the port says. Standard library onl
 """
 import imaplib
 import re
+import socket
 import time
 from datetime import datetime, timezone
 
@@ -13,6 +14,7 @@ from mailmind.mailbox.adapters.imap_names import imap_quote, mailbox_arg
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 
+_CHANGES = ("EXISTS", "RECENT", "EXPUNGE")
 _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
 _UID = re.compile(rb"UID (\d+)")
 _THRID = re.compile(rb"X-GM-THRID (\d+)")
@@ -156,5 +158,23 @@ class ImaplibSession:
         typ, _ = self._M.noop()
         return typ == "OK"
 
+    def idle(self, seconds):
+        with self._M.idle(duration=seconds) as idler:
+            for typ, _ in idler:
+                if typ in _CHANGES:
+                    return True              # leaving the block sends DONE
+        return False
+
+    def interrupt(self):
+        # Shut the socket down, never close it: the worker may be about to wait on its descriptor,
+        # and a closed one's number can go to the next socket opened. The worker closes it.
+        try:
+            self._M.sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+
     def logout(self):
         self._M.logout()
+
+    def shutdown(self):
+        self._M.shutdown()
