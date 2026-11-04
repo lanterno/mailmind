@@ -599,8 +599,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `test_hwf_an_idle_worker_stops_watching_a_removed_account`.
 - **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
   `tests/test_hwf_ai.py`:
-  - the brief, the delta, the review and thread summaries don't re-check their cache after taking
-    the lead, so two first loads both pay (`test_bug_two_first_loads_of_a_cached_ai_read_pay_once`);
   - a cached brief keeps the pks it was built with, and a thread summary's fingerprint includes
     pks, so a renumbered folder shrinks the brief's chips and marks the summary stale
     (`test_bug_a_cached_brief_still_names_its_messages_after_a_renumber`,

@@ -211,6 +211,12 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
+- `mailmind.platform.workers.singleflight.SingleFlight` makes each costly AI read once. Only one
+  run goes at a time for each key. A caller that finds one going waits, then reads what it
+  stored. The leader reads again before it makes, unless `recheck=False` asks for a fresh one.
+  The brief and delta, the review and thread summaries each hold one (`_FLIGHTS`), and so does
+  drafting ahead (`server.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
+  library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
   `python3 server.py` uses it.
