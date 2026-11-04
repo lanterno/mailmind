@@ -148,17 +148,36 @@ def trash_message(pk):
         return False, "not found", None
     acct = accounts.get(row["account"])
     dest = accounts.trash_folder(acct)
+    marks_read = provider.resolve(acct).marks_trash_read
+
+    def op(M):
+        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
+        unseen = marks_read and not _seen_on_server(M, str(row["uid"]), bool(row["seen"]))
+        _move_uid(M, str(row["uid"]), dest)
+        return unseen
+
     # _UNREACHABLE (IMAP down) propagates → the route queues this offline. A command the server
     # refuses leaves the message where it was, so the local row stays and the caller is told.
-    ran, _ = _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
-                                           _move_uid(M, str(row["uid"]), dest)))
+    ran, unseen = _imap_mutate(acct, op)
     if not ran:
         return False, "the server refused the move", None
     c = store.conn()
     store.delete_message(c, pk)
     c.commit()
     c.close()
-    return True, "trashed", _mk_move_undo(row, dest, "Trashed")
+    undo = _mk_move_undo(row, dest, "Trashed")
+    if undo and unseen:          # the server marked it read on the way to Trash: undo unmarks it
+        undo["unseen"] = True
+    return True, "trashed", undo
+
+
+def _seen_on_server(M, uid, otherwise):
+    """Whether the selected folder's message `uid` carries \Seen, as the server says now; the
+    local row's word (`otherwise`) when it won't say."""
+    typ, d = M.uid("FETCH", uid, "(FLAGS)")
+    if typ != "OK" or not d or not isinstance(d[0], (bytes, bytearray)):
+        return otherwise
+    return b"\\SEEN" in d[0].upper()
 
 
 _FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
@@ -327,9 +346,10 @@ def move_message(pk, dest):
 
 
 # ----------------------------------------------------------------- undo reverse ops
-def move_by_msgid(account, search_folder, dest_folder, message_id):
+def move_by_msgid(account, search_folder, dest_folder, message_id, unseen=False):
     """Reverse primitive: find a message by EXACT RFC822 Message-ID in search_folder
-    and move it to dest_folder. Fails (never guesses) if not found."""
+    and move it to dest_folder. Fails (never guesses) if not found. unseen: take \Seen off it
+    there, as it was before a server that marks trashed mail read (Proton) set it."""
     acct = accounts.get(account)
     M = accounts.connect(acct)
     try:
@@ -339,6 +359,12 @@ def move_by_msgid(account, search_folder, dest_folder, message_id):
         if not uids:
             return False, "message not found"
         _move_uid(M, uids[-1].decode(), dest_folder)   # most recent copy if several
+        if unseen:
+            M.select(accounts.mailbox_arg(dest_folder), readonly=False)
+            typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
+            back = (d[0].split() if (typ == "OK" and d and d[0]) else [])
+            if back:
+                M.uid("STORE", back[-1].decode(), "-FLAGS", "(\\Seen)")
         return True, "moved back"
     finally:
         try:

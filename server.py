@@ -1369,7 +1369,8 @@ def _reverse_held(d):
                 d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
             c.close()
     if kind == "move":
-        ok, _ = mailops.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"])
+        ok, _ = mailops.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
+                                      unseen=bool(d.get("unseen")))
         if not ok:
             return False, d["account"], d["src_folder"]
         try:   # re-ingest the exact restored message (watermark sync would miss a re-used UID)
