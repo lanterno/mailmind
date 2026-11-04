@@ -455,9 +455,11 @@ One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
 stores its fallback). No key degrades to no summaries, with nothing sent, rather than
 failing; keep that property. A call that was never sent raises a `NotSent`: `AIOff`, or a
-`HeldBack` from the cost governor (`OverLimit`, `Deferred`). A caller lets `HeldBack` through
-(`except _sz.HeldBack: raise`) ahead of its own `except Exception`, and so does a route's own
-catch for `summarize.OverLimit`, so `H.do_GET` and `H.do_POST` can answer it. `call_claude` and `call_claude_json` are wrapped by `_noted`,
+`HeldBack` from the cost governor (`OverLimit`, `Deferred`). A caller lets `NotSent` through
+(`except _sz.NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
+catch for `summarize.OverLimit` and `summarize.AIOff`, so `H.do_GET` and `H.do_POST` can answer
+them: `OverLimit` as a 402 (below), `AIOff` as a 409 with `ai_off: true`, which the page shows as
+"AI is off" rather than an error to retry. `call_claude` and `call_claude_json` are wrapped by `_noted`,
 which records each call's outcome for `summarize.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
