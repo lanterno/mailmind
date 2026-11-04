@@ -12,9 +12,9 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **Next to nothing to install.** Python, two packages (FastAPI and uvicorn) that
-  [uv](https://docs.astral.sh/uv/) fetches on first run, and one HTML file. `python3 server.py`
-  still runs the app on Python alone.
+- **Next to nothing to install.** Python, three packages (FastAPI, uvicorn and the
+  Anthropic SDK) that [uv](https://docs.astral.sh/uv/) fetches on first run, and one HTML
+  file. `python3 server.py` still runs the app on Python alone.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
   Anthropic through the Claude API.
@@ -194,8 +194,9 @@ Everything here runs through Claude and returns **schema-validated** structured
 output, so malformed-response errors don't reach the UI. Nothing is ever sent
 automatically.
 
-- **The Claude API.** With an API key set, MailMind calls the Messages API
-  (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
+- **The Claude API.** With an API key set, MailMind calls the Messages API through the
+  official Anthropic SDK, or a standard-library client when `python3 server.py` runs with
+  nothing installed (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
   runs at low effort, everything else at medium). Without a key, AI is off and
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
@@ -385,9 +386,9 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
-- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's two packages,
-  FastAPI and uvicorn, from `pyproject.toml` on first run. Without it, `python3 server.py` runs
-  the same app on the standard library alone.
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's three
+  packages, FastAPI, uvicorn and the Anthropic SDK, from `pyproject.toml` on first run. Without
+  it, `python3 server.py` runs the same app on the standard library alone.
 - **A Claude API key**, for summaries and the other AI features, as
   `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
   AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
@@ -540,7 +541,6 @@ python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 le
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
 python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
-python3 test_claude_api.py     # Claude API engine against a local stub: requests, refusals, retries
 python3 test_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
 python3 test_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
 python3 test_send_after.py     # send-later times: passed or far-off ones are refused
@@ -551,7 +551,7 @@ python3 test_hardening.py      # security and data-loss fixes: TLS, other sites,
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) and
-[uv](https://docs.astral.sh/uv/) installed, `just test` runs all thirteen under pytest,
+[uv](https://docs.astral.sh/uv/) installed, `just test` runs all twelve under pytest,
 together with the pytest suite in `tests/`. That suite drives the app against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.

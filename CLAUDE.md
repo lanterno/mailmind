@@ -39,7 +39,6 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
-python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (22)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
@@ -52,7 +51,7 @@ python3 test_hardening.py         # security and data-loss fixes, one test or mo
 `just test -k hardening` picks suites by file name; within a suite there is no single-test
 flag. `tests.py` and `tests_sanitize.py` are linear scripts —
 comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
-`test_thread_file.py`, `test_claude_api.py`, `test_upcoming.py`, `test_contacts_known.py`,
+`test_thread_file.py`, `test_upcoming.py`, `test_contacts_known.py`,
 `test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
 `test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
 renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
@@ -123,7 +122,7 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
 - **`python3 server.py` runs with nothing installed.** The app was standard library only until
   the refactor's Phase 2, and that shaped every design decision below (hand-rolled sanitizer,
   hand-rolled IMAP handling, no web framework, no frontend build). Since then it may use
-  runtime packages (FastAPI and uvicorn so far), each declared in `pyproject.toml` and locked
+  runtime packages (FastAPI, uvicorn and the Anthropic SDK so far), each declared in `pyproject.toml` and locked
   with hashes in `uv.lock`. Each dependency change is its own commit, and the `uv.lock` change
   goes in the next. But `python3 server.py`, the old front door, is the kill switch while the
   new one carries daily use, so nothing it imports may import a third-party package;
@@ -213,8 +212,14 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `python3 server.py` uses it.
 - `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
   from `mailmind`.
-- Two checks hold the shape. import-linter's layers contract in `pyproject.toml` (bootstrap,
-  then http, then platform, then kernel) runs in `just lint`. `tests/legacy_ratchet.txt` lists
+- `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
+  `application` holds the ports and the `Gateway`, `domain` what it knows about the models, and
+  `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
+  and `DisabledModel`. `mailmind.bootstrap.assistant` binds one and resolves the key.
+- Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
+  bootstrap, then http, then the contexts, then platform, then kernel; within the Assistant,
+  adapters over application over domain; no adapter imported outside bootstrap; and the
+  `anthropic` package reached only through its adapter. `tests/legacy_ratchet.txt` lists
   every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
   code and the list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
 
@@ -402,21 +407,33 @@ alone cannot execute script. Preserve that ordering when touching either.
 ### AI calls
 
 Everything routes through `summarize.call_claude_json(prompt, schema)` (or
-`call_claude` for plain text), which call the Messages API through `claude_api.py`. The
-Claude API is the only engine (decision D8). The key is
+`call_claude` for plain text), which call `mailmind.bootstrap.assistant.gateway()`. The
+Claude API is the only engine (decision D8). The `Gateway` builds each request from
+`mailmind.assistant.domain`: effort where the model takes one (`models.takes_effort`), the
+refusal fallback where it takes that (`models.takes_fallback`), the schema in structured
+output's form (`schema.structured`). It sends it through a `LanguageModel` and gets back a
+`Reply`: the text, the model that served it, its `Usage` and its stop reason. A call with no
+reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
+
+The new front door talks through the Anthropic SDK (`front.build` calls
+`assistant.use("sdk")`); `python3 server.py`, the scripts and the root suites through
+`UrllibModel`, since the old door runs with nothing installed. Only
+`mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only the new door loads
+it. The two share the wire format (`adapters.wire`) and must behave the same:
+`tests/test_ai_contract.py` runs every case through each. The key is
 `config.anthropic_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
-means no key, never a fall-through to the environment's. With no key AI is off:
-`summarize.engine()` is `"none"`, and a call raises `summarize.AIOff` (a `RuntimeError`)
-before anything is sent.
+means no key, never a fall-through to the environment's. With no key the model is
+`DisabledModel`: `summarize.engine()` is `"none"`, and a call raises `AIOff` (re-exported as
+`summarize.AIOff`) before anything is sent.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
 
-`claude_api.py` is urllib, not the SDK, since `python3 server.py` imports it. `api_schema` drops the
-keywords structured output rejects (`minimum`, `maximum`, `maxLength`) and closes every
-object, so callers must keep clamping what they read. It sends `fallbacks: "default"` on
-the models that accept it, reads a refusal as an empty reply, and retries
-408/409/429/5xx twice.
+`schema.structured` drops the keywords structured output rejects (`minimum`, `maximum`,
+`maxLength`) and closes every object, so callers must keep clamping what they read. Both
+transports send `fallbacks: "default"` with its beta on the models that accept it, read a
+refusal as an empty reply, and retry 408/409/429/5xx twice. The SDK sends the key as
+`Authorization: Bearer`, urllib as `x-api-key`; the fake API accepts both.
 
 One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
