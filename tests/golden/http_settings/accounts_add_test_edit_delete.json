@@ -348,6 +348,9 @@
      "port": "<imap>",
      "signature": "Dee\n-- sent from a test",
      "starttls": true,
+     "tls_pins": {
+      "127.0.0.1:<imap>": "sha256:<imap certificate>"
+     },
      "type": "imap"
     }
    ],

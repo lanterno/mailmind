@@ -32,12 +32,19 @@ import smtpsend
 store.init()
 
 
+class _Peer:
+    """A TLS socket's view of the server's certificate, as check_pin reads it on loopback."""
+
+    def getpeercert(self, binary_form=False):
+        return b"the server's own certificate"
+
+
 class _FakeIMAP:
     """Stands in for imaplib.IMAP4: records the TLS context STARTTLS was given."""
     made = []
 
     def __init__(self, host, port, timeout=None):
-        self.host, self.ctx = host, None
+        self.host, self.ctx, self.sock = host, None, _Peer()
         _FakeIMAP.made.append(self)
 
     def starttls(self, ctx):
@@ -77,6 +84,7 @@ class _FakeSMTP:
     ctxs = []
 
     def __init__(self, host, port, timeout=None, context=None):
+        self.sock = _Peer()
         if context is not None:
             _FakeSMTP.ctxs.append(context)
 

@@ -27,6 +27,7 @@ Tests script trouble with `fail`, `drop` and `drop_after`, change a folder's UID
 """
 import email.parser
 import email.utils
+import hashlib
 import itertools
 import queue
 import re
@@ -785,6 +786,8 @@ class FakeIMAPServer:
         cert = self.ca.issue_cert("127.0.0.1", "localhost")
         self.tls_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         cert.configure_cert(self.tls_context)
+        der = ssl.PEM_cert_to_DER_cert(cert.cert_chain_pems[0].bytes().decode())
+        self.cert_sha256 = hashlib.sha256(der).hexdigest()   # the certificate, as a pin names it
         self._tcp = None
         self.port = None
 

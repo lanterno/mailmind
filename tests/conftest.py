@@ -224,7 +224,11 @@ def golden(request, world, app):
     from mailmind.platform import sse
     rec = g.Golden(_without_door(request.node.nodeid), request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
-                         (f"localhost:{app.port}", "localhost:<app>"), (f"id: {sse.HUB.run}-", "id: <run>-")],
+                         (f"localhost:{app.port}", "localhost:<app>"), (f"id: {sse.HUB.run}-", "id: <run>-"),
+                         (f"127.0.0.1:{world.server.port}", "127.0.0.1:<imap>"),
+                         (f"127.0.0.1:{world.smtp.port}", "127.0.0.1:<smtp>"),
+                         (world.server.cert_sha256, "<imap certificate>"),
+                         (world.smtp.cert_sha256, "<smtp certificate>")],
                    ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"})
     yield rec
     if request.node.stash.get(_CALL_PASSED, False):
