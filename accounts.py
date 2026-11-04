@@ -10,6 +10,7 @@ import ssl
 
 import config
 from mailmind.platform import profile
+from mailmind.platform.db import txguard
 
 
 def accounts():
@@ -81,12 +82,15 @@ def tls_context(host):
 
 
 def connect(acct, timeout=60):
+    txguard.refuse_network("an IMAP connection")
     if acct["starttls"]:  # e.g. Proton Bridge: plain socket + STARTTLS
         M = imaplib.IMAP4(acct["host"], acct["port"], timeout=timeout)
+        txguard.guard_calls(M, "_command", lambda name, *args: f"IMAP {name}")   # every command
         M.starttls(tls_context(acct["host"]))
     else:  # direct TLS (Gmail + most hosted IMAP on 993)
         M = imaplib.IMAP4_SSL(acct["host"], acct["port"],
                               ssl_context=ssl.create_default_context(), timeout=timeout)
+        txguard.guard_calls(M, "_command", lambda name, *args: f"IMAP {name}")
     try:
         M.login(acct["email"], config.resolve_credential(acct))
     except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one

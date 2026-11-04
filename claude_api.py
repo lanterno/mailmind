@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 import config
+from mailmind.platform.db import txguard
 
 MODEL = "claude-opus-5-5"          # MAILMIND_MODEL overrides it (see summarize.MODEL)
 EFFORT = "medium"                  # sent explicitly: models differ in their default
@@ -98,6 +99,7 @@ def _post(body, beta=None):
     data = json.dumps(body).encode()
     attempt = 0
     while True:
+        txguard.refuse_network("a Claude API request")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as r:

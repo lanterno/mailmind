@@ -58,6 +58,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
 from mailmind.platform import perimeter, profile, settings, sse
+from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
 
 HERE = os.path.dirname(__file__)
@@ -1781,6 +1782,7 @@ def _unsub_oneclick_post(url, _redirects=1):
     <=1 re-vetted redirect; hard timeout; read cap; no cookies/creds/ambient auth. Returns
     (ok, http_status, reason). Runs OUTSIDE the IMAP gate so a hanging remote can't stall IMAP."""
     profile.refuse_writes("an unsubscribe request")
+    txguard.refuse_network("an unsubscribe request")     # its DNS lookup included
     p = urllib.parse.urlparse(url or "")
     if p.scheme != "https" or not p.hostname:
         return False, 0, "bad_scheme"

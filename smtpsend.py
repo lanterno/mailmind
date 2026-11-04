@@ -18,6 +18,7 @@ import accounts
 import config
 import mailops
 from mailmind.platform import profile
+from mailmind.platform.db import txguard
 
 def provider_saves_sent(acct):
     """Gmail auto-files SMTP-sent mail in [Gmail]/Sent — an explicit APPEND would double it."""
@@ -26,14 +27,16 @@ def provider_saves_sent(acct):
 
 def smtp_connect(acct):
     profile.refuse_writes("SMTP")          # a read-only process sends nothing
+    txguard.refuse_network("an SMTP connection")
     host, port = acct["smtp_host"], int(acct["smtp_port"])
     if acct.get("smtp_starttls", True):
-        s = smtplib.SMTP(host, port, timeout=60)
+        s = txguard.guard_calls(smtplib.SMTP(host, port, timeout=60), "send", "SMTP")   # all it sends
         s.ehlo()
         s.starttls(context=accounts.tls_context(host))
         s.ehlo()
     else:  # implicit TLS (e.g. 465)
-        s = smtplib.SMTP_SSL(host, port, context=accounts.tls_context(host), timeout=60)
+        s = txguard.guard_calls(smtplib.SMTP_SSL(host, port, context=accounts.tls_context(host), timeout=60),
+                                "send", "SMTP")
         s.ehlo()
     s.login(acct["email"], config.resolve_credential(acct))
     return s
