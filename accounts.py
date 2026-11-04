@@ -5,6 +5,7 @@ the small API (accounts/get/connect/trash_folder/preload_creds) that the rest
 of the app imports.
 """
 import imaplib
+import re
 import ssl
 
 import config
@@ -85,10 +86,29 @@ def connect(acct, timeout=60):
         M.shutdown()
         raise
     try:
-        M.login(acct["email"], config.resolve_credential(acct))
+        _, said = M.login(acct["email"], config.resolve_credential(acct))
     except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one
         raise LoginUnreachable(str(e)) from e
+    _learn_capabilities(M, said)
     return M if profile.writes_allowed() else ReadOnlyIMAP(M)
+
+
+_CAPABILITY_CODE = re.compile(rb"\[CAPABILITY ([^\]]*)\]", re.IGNORECASE)
+
+
+def _learn_capabilities(M, said):
+    """Make M.capabilities the list a logged-in client has. imaplib keeps the one from before
+    login, which most servers (Gmail, Dovecot) keep short: MOVE, UIDPLUS and SPECIAL-USE come only
+    after it. The login answer usually carries the new list; when it doesn't, ask for it."""
+    found = next((m for m in (_CAPABILITY_CODE.search(d) for d in said or () if isinstance(d, bytes)) if m), None)
+    if found:
+        text = found.group(1)
+    else:
+        typ, dat = M.capability()
+        if typ != "OK" or not dat or not isinstance(dat[-1], bytes):
+            return
+        text = dat[-1]
+    M.capabilities = tuple(text.decode("ascii", "replace").upper().split())
 
 
 class ReadOnlyIMAP:
