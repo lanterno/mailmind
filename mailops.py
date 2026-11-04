@@ -13,9 +13,7 @@ import accounts
 import store
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
-from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.application import session as mail_session
-from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import profile
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
@@ -250,52 +248,6 @@ def set_flags(pk, flags):
     c.commit()
     c.close()
     return True, "ok"
-
-
-def find_role(M, *roles):
-    """The folder on M's server playing the first of `roles` that one plays, by its SPECIAL-USE
-    attribute, then its name (mailmind.mailbox.domain.roles); None when none does, or when the
-    server refuses the LIST, so the caller falls back to its default name. For an imaplib
-    connection, until smtpsend and warm move onto sessions (mail_session.find_role)."""
-    try:
-        folders = imap_list.list_folders(M)
-    except imaplib.IMAP4.abort:
-        raise
-    except imaplib.IMAP4.error:
-        return None
-    return folder_roles.find(folders, *roles)
-
-
-def expunge_uid(M, uid):
-    """Expunge this one UID (UIDPLUS). Never a bulk EXPUNGE: that also erases every other message
-    already flagged \\Deleted in the folder, and Proton Bridge breaks on it. A server without
-    UIDPLUS leaves the message flagged \\Deleted, the way any client without UIDPLUS deletes;
-    the next expunge, from any client, finishes it. For an imaplib connection, until smtpsend
-    moves onto sessions."""
-    try:
-        M.uid("EXPUNGE", uid)
-    except imaplib.IMAP4.abort:
-        raise
-    except imaplib.IMAP4.error:
-        pass
-
-
-def _move_uid(M, uid, dest, move=True):
-    """Move one message: MOVE, or, when that fails or the caller knows the server has no MOVE
-    (move=False), a checked COPY, then \\Deleted and a UID EXPUNGE of this UID alone. For an
-    imaplib connection, until manage moves onto sessions (MailSession.move)."""
-    try:
-        if not move:
-            raise imaplib.IMAP4.error("no MOVE")
-        typ, d = M.uid("MOVE", uid, accounts.mailbox_arg(dest))
-        if typ != "OK":
-            raise imaplib.IMAP4.error(str(d))
-    except imaplib.IMAP4.error:  # no MOVE: copy this one message, then remove only its UID
-        typ, d = M.uid("COPY", uid, accounts.mailbox_arg(dest))
-        if typ != "OK":          # nothing landed in dest, so the original stays untouched
-            raise imaplib.IMAP4.error(f"COPY failed: {d}")
-        M.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
-        expunge_uid(M, uid)
 
 
 def archive_message(pk):
