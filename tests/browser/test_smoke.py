@@ -389,14 +389,71 @@ def test_the_sync_menu_says_what_ai_cost_today(page, world, ai):
     clean(page)
 
 
-def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
+def spent_the_daily_limit():
     import time
     from mailmind.assistant.application.gateway import local_day
     from mailmind.assistant.application.ports import Spend, Usage
     from mailmind.bootstrap import assistant
     now = time.time()                                  # the server's frozen clock
     assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok",
-                                  Usage(), 15_000_000, int(now)))           # the default limit, spent
+                                  Usage(), 15_000_000, int(now)))           # the default limit, $15
+
+
+def lunch_needs_a_reply(world):
+    """Lin's lunch message, triaged as needing a reply, so the brief has something to say."""
+    import store
+    c = store.conn()
+    try:
+        store.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed",
+                           "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
+        c.commit()
+    finally:
+        c.close()
+
+
+BRIEF = "Lin is waiting to hear back about lunch on Thursday."
+
+
+def brief_replies(ai):
+    ai.responder = lambda req: (fa.answer({"narrative": BRIEF, "groups": []})
+                                if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
+
+
+def briefs(ai):
+    return [r for r in ai.requests if "narrative" in ((r.schema or {}).get("properties") or {})]
+
+
+def test_the_brief_is_written_once_when_the_inbox_opens(page, world, ai):
+    lunch_needs_a_reply(world)
+    brief_replies(ai)
+    page.goto("/")
+    expect(page.locator(".bf-narr")).to_have_text(BRIEF)
+    page.reload()
+    expect(page.locator(".bf-narr")).to_have_text(BRIEF)
+    assert len(briefs(ai)) == 1                        # the second load read what the first wrote
+    clean(page)
+
+
+def test_at_the_daily_limit_the_brief_waits_for_a_click(page, world, ai):
+    lunch_needs_a_reply(world)
+    spent_the_daily_limit()
+    brief_replies(ai)
+    page.goto("/")
+    expect(page.locator(".bf-wait")).to_contain_text("Today’s AI limit is reached, so the brief isn’t written yet.")
+    ask = page.get_by_role("alertdialog", name="Today’s AI limit is reached")
+    expect(ask).to_be_hidden()                         # opening the app asks nothing
+    assert briefs(ai) == []
+    page.get_by_role("button", name="Write it").click()
+    ask.get_by_role("button", name="Go over the limit").click()
+    expect(page.locator(".bf-narr")).to_have_text(BRIEF)
+    assert len(briefs(ai)) == 1
+    assert all("status of 402" in p for p in page.problems)
+    page.problems.clear()
+    clean(page)
+
+
+def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
+    spent_the_daily_limit()
     ai.responder = lambda req: fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": []})
     opened(page)
     ask = page.get_by_role("alertdialog", name="Today’s AI limit is reached")
