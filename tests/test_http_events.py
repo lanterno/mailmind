@@ -41,6 +41,13 @@ class Stream:
             lines.append(line.rstrip("\n"))
         return "\n".join(lines)
 
+    def event(self):
+        """The next frame that isn't a keepalive: work that outlasts the cut keepalive interval
+        lets one through first."""
+        while (frame := self.frame()) == ": keepalive":
+            pass
+        return frame
+
     def close(self):
         self.f.close()
         self.sock.close()
@@ -131,7 +138,7 @@ def test_a_tab_that_reconnects_hears_what_it_missed(app, golden, world, quick):
     s = Stream(app)
     golden.note("first frame", s.frame())
     app.post("/api/mute", {"pk": lunch["pk"]})
-    heard = s.frame()
+    heard = s.event()
     s.close()                                                     # the tab drops, say a laptop lid
     subscribers(quick, 0)
     app.post("/api/undo", {})
@@ -161,7 +168,7 @@ def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world,
     s = Stream(app)
     s.frame()
     app.post("/api/mute", {"pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
-    last = s.frame().split("\n")[0].removeprefix("id: ")
+    last = s.event().split("\n")[0].removeprefix("id: ")
     s.close()
     subscribers(quick, 0)
     monkeypatch.setattr(quick, "HUB", quick.Hub(run="later"))   # the process restarted
@@ -192,7 +199,7 @@ def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
                            "text": "Half is yours.", "idempotency_key": "k-tabs"})
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
-    assert s.frame().split("\n")[1:] == ["event: outbox", "data: {}"]
+    assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]
     s.close()
     subscribers(quick, 0)
 
@@ -205,6 +212,6 @@ def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
     r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
     assert r["status"] == "queued"
     readmutq.drain()
-    assert s.frame().split("\n")[1:] == ["event: commands-changed", "data: {}"]
+    assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
     s.close()
     subscribers(quick, 0)
