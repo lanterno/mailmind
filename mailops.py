@@ -58,6 +58,19 @@ def _uid_by_msgid(M, mid):
     return uids[-1].decode() if uids else None
 
 
+def _already_in(M, folder, mid, back_to):
+    """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
+    again after. A queued move asks before it moves: on a server without MOVE, a connection that
+    dropped after the COPY landed left the original behind, and moving it again would copy twice."""
+    if not mid:
+        return False
+    try:
+        typ, _ = M.select(accounts.mailbox_arg(folder), readonly=True)
+        return typ == "OK" and bool(_uid_by_msgid(M, mid))
+    finally:
+        M.select(accounts.mailbox_arg(back_to), readonly=False)
+
+
 def _imap_mutate(acct, fn):
     """Run a mutation's IMAP work via _do_imap. A connection-level failure (a _UNREACHABLE member,
     incl. IMAP4.abort) PROPAGATES so the route can queue it offline; a command-level IMAP4.error
@@ -117,7 +130,11 @@ def apply_queued_mutation(row):
                 store.read_mut_set_dest(cc, row["id"], d)
                 cc.commit()
                 cc.close()
-            _move_uid(M, uid, d)
+            if _already_in(M, d, mid, src):            # an earlier try's COPY landed, then its connection
+                M.uid("STORE", uid, "+FLAGS", "(\\Deleted)")   # dropped: only the original is left to remove
+                expunge_uid(M, uid)
+            else:
+                _move_uid(M, uid, d)
         return (True, None)
 
     try:
