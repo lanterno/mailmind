@@ -10,12 +10,8 @@ Accounts live in `mailmind.config.json` (NOT git-tracked). Copy
 An optional top-level "anthropic_api_key" holds the Claude API key, in any of the same styles
 (proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment.
 
-Credential styles (so this works for anyone, with or without 1Password):
-  { "plain": "the-password" }                       inline (kept off git via .gitignore)
-  { "op": "op://Vault/Item/Field" }                 read from 1Password CLI at runtime
-  { "op": ["op://.../Field A", "op://.../Field B"] } try refs in order
-  { "env": "ENV_VAR_NAME" }                          read from an environment variable
-  { "proton_bridge": true }                          resolve via mailsecrets (Bridge password)
+Credential styles (so this works for anyone, with or without 1Password): plain, op, env and
+proton_bridge, which mailmind.accounts.adapters.secrets lists and resolves.
 
 Type defaults (override per account as needed):
   gmail  -> imap.gmail.com:993 TLS, trash "[Gmail]/Trash", app-password spaces stripped
@@ -23,15 +19,11 @@ Type defaults (override per account as needed):
   proton -> 127.0.0.1:1143 STARTTLS (local Bridge), trash "Trash"
 """
 import os
-import subprocess
-import time
 import threading
 
-import mailsecrets
-from mailmind.accounts.adapters import config_file
+from mailmind.accounts.adapters import config_file, secrets
 from mailmind.platform import settings
 
-_cred_cache = {}
 _write_lock = threading.Lock()
 
 TYPE_DEFAULTS = {
@@ -118,50 +110,8 @@ def webmail_map():
             for e in _raw().get("accounts", []) if e.get("email")}
 
 
-def _op_read(ref, strip):
-    if ref in _cred_cache:
-        return _cred_cache[ref]
-    last = ""
-    for _ in range(3):
-        r = subprocess.run(["op", "read", ref], capture_output=True, text=True)
-        if r.returncode == 0:
-            pw = r.stdout.strip()
-            if strip:
-                pw = pw.replace(" ", "")
-            _cred_cache[ref] = pw
-            return pw
-        last = r.stderr.strip()
-        if "timeout" in last.lower() or "authorization" in last.lower():
-            time.sleep(3)
-            continue
-        break
-    raise RuntimeError(f"op read failed for {ref}: {last}")
-
-
 def resolve_credential(acct):
-    cred = acct.get("credential", {}) or {}
-    strip = acct.get("strip_spaces", False)
-    if isinstance(cred, str):       # shorthand: "credential": "the-password"
-        return cred
-    if "plain" in cred:
-        return cred["plain"]
-    if "env" in cred:
-        v = os.environ.get(cred["env"])
-        if not v:
-            raise RuntimeError(f"env var {cred['env']} not set for {acct['email']}")
-        return v
-    if cred.get("proton_bridge"):
-        return mailsecrets.proton_bridge_pass()
-    if "op" in cred:
-        refs = cred["op"] if isinstance(cred["op"], list) else [cred["op"]]
-        last = RuntimeError("no op refs")
-        for ref in refs:
-            try:
-                return _op_read(ref, strip)
-            except Exception as e:
-                last = e
-        raise last
-    raise RuntimeError(f"no credential configured for {acct['email']}")
+    return secrets.resolve(acct.get("credential"), who=acct["email"], strip=acct.get("strip_spaces", False))
 
 
 def anthropic_key():
@@ -260,14 +210,6 @@ def _find(raw, email):
         if (e.get("email") or "").strip().lower() == el:
             return e
     return None
-
-
-def _evict_cred(cred):
-    """Drop any cached op-read values for the given credential's refs."""
-    if isinstance(cred, dict) and "op" in cred:
-        refs = cred["op"] if isinstance(cred["op"], list) else [cred["op"]]
-        for r in refs:
-            _cred_cache.pop(r, None)
 
 
 def _cred_from_payload(p):
@@ -381,7 +323,7 @@ def update_account(email, p):
             new = _cred_from_payload(p["credential"])
             if new is not None:          # only replace when a real value/ref/var was given
                 entry["credential"] = new
-                _evict_cred(old_cred)
+                secrets.evict(old_cred)
         _validate_new(entry)
         save(raw)
         return masked_row(entry)
@@ -393,7 +335,7 @@ def remove_account(email):
         entry = _find(raw, email)
         if entry is None:
             return False
-        _evict_cred(entry.get("credential"))
+        secrets.evict(entry.get("credential"))
         raw["accounts"] = [e for e in raw["accounts"] if e is not entry]
         save(raw)
         return True
