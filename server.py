@@ -3020,40 +3020,39 @@ def ai_summarize(body):
     return summarize_thread.summarize(account, thread_id, scope, force=bool(body.get("force")))
 
 
-def ai_briefing(qs_or_body, force=False):
-    """The synthesized 'Today' card. Read-only on GET (serves cached or computes once),
-    force re-run on POST. Resolves the enabled-account set like digest_json's send_accounts."""
+def _one(qs_or_body, name):
+    """One field of a parsed query string (a list per name) or of a JSON body, or None."""
+    v = qs_or_body.get(name) if isinstance(qs_or_body, dict) else None
+    return (v[0] if v else None) if isinstance(v, list) else v
+
+
+def _ai_accounts(qs_or_body):
+    """The enabled accounts, or the one a passed ?account=/account names (matches the digest's
+    per-account view), like digest_json's send_accounts."""
     enabled = {a["email"] for a in accounts.accounts()}
-    # optional narrowing by a passed ?account=/account (matches the digest's per-account view)
-    acct = None
-    if isinstance(qs_or_body, dict):
-        v = qs_or_body.get("account")
-        acct = (v[0] if isinstance(v, list) else v) or None
-    accts = {acct} if (acct and acct in enabled) else enabled
-    return summarize_briefing.build(accts, force=force)
+    acct = _one(qs_or_body, "account") or None
+    return {acct} if (acct and acct in enabled) else enabled
 
 
-def ai_review(qs_or_body, force=False):
-    """The Weekly Review — retrospective over the last 7 days. Read-only on GET (cached/compute-once),
-    force on POST. Same enabled-account resolution as the briefing."""
-    enabled = {a["email"] for a in accounts.accounts()}
-    acct = None
-    if isinstance(qs_or_body, dict):
-        v = qs_or_body.get("account")
-        acct = (v[0] if isinstance(v, list) else v) or None
-    accts = {acct} if (acct and acct in enabled) else enabled
-    return summarize_review.build(accts, force=force)
+def ai_briefing(qs_or_body, force=False, generate=True):
+    """The synthesized 'Today' card. GET only reads what is stored (generate=False); POST
+    /api/briefing writes it once, and /api/briefing/refresh again (force)."""
+    return summarize_briefing.build(_ai_accounts(qs_or_body), force=force, generate=generate)
 
 
-def ai_delta(q):
-    """The 'since you last looked' delta digest. Read-only GET. `since`=epoch seconds (clamped
-    to a 24h floor so a stale client watermark can never scan all history)."""
-    enabled = {a["email"] for a in accounts.accounts()}
-    v = q.get("account") if isinstance(q, dict) else None
-    acct = (v[0] if isinstance(v, list) else v) or None
-    accts = {acct} if (acct and acct in enabled) else enabled
+def ai_review(qs_or_body, force=False, generate=True):
+    """The Weekly Review — retrospective over the last 7 days. GET only reads what is stored;
+    POST /api/review writes it once, and /api/review/refresh again (force)."""
+    return summarize_review.build(_ai_accounts(qs_or_body), force=force, generate=generate)
+
+
+def ai_delta(qs_or_body, generate=True):
+    """The 'since you last looked' delta digest. GET only reads what is stored; POST writes it.
+    `since`=epoch seconds (clamped to a 24h floor so a stale client watermark can never scan all
+    history)."""
+    accts = _ai_accounts(qs_or_body)
     try:
-        since = int(float((q.get("since") or ["0"])[0]))
+        since = int(float(_one(qs_or_body, "since") or 0))
     except Exception:
         since = 0
     now = int(time.time())
@@ -3061,7 +3060,7 @@ def ai_delta(q):
     floor -= floor % 600                  # quantize the 24h floor to a 10-min bucket so a stale watermark
                                           # yields a STABLE cache key (not a fresh claude call every second)
     since = min(max(since, floor), now)   # also cap at now (client/server clock-skew guard)
-    return summarize_briefing.build_delta(accts, since)
+    return summarize_briefing.build_delta(accts, since, generate=generate)
 
 
 def ai_draft_reply(body):
@@ -3880,12 +3879,12 @@ class H(BaseHTTPRequestHandler):
                            [("Content-Security-Policy-Report-Only", perimeter.page_policy(page))])
             elif u.path == "/api/digest":
                 self._json(digest_json(q))
-            elif u.path == "/api/briefing":     # read-only: cached "Today" card or compute-once
-                self._json(*ai_briefing(q, force=False))
-            elif u.path == "/api/review":       # read-only: cached Weekly Review or compute-once
-                self._json(*ai_review(q, force=False))
-            elif u.path == "/api/briefing/since":   # read-only: "since you last looked" delta digest
-                self._json(*ai_delta(q))
+            elif u.path == "/api/briefing":     # what is stored of the "Today" card; POST writes it
+                self._json(*ai_briefing(q, generate=False))
+            elif u.path == "/api/review":       # what is stored of the Weekly Review; POST writes it
+                self._json(*ai_review(q, generate=False))
+            elif u.path == "/api/briefing/since":   # what is stored of the "since you last looked" delta
+                self._json(*ai_delta(q, generate=False))
             elif u.path == "/api/ai/draft-ahead":   # serve/peek; the generation KICK needs the CSRF token
                 self._json(*ai_draft_ahead_get(
                     q, kick_ok=perimeter.token_matches(self.headers, CSRF)))
@@ -4116,6 +4115,33 @@ class H(BaseHTTPRequestHandler):
                 except Exception as ex:             # class only: the payload is a list of addresses
                     print(f"[contacts] known error: {type(ex).__name__}", flush=True)
                     res, code = {"ok": False, "error": "lookup failed"}, 500
+                self._json(res, code)
+            elif u.path == "/api/briefing":   # write the "Today" card once, if none is stored
+                try:
+                    res, code = ai_briefing(b if isinstance(b, dict) else {})
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
+                except Exception as ex:
+                    print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
+                    res, code = {"ok": False, "error": "briefing failed"}, 500
+                self._json(res, code)
+            elif u.path == "/api/review":   # write the Weekly Review once, if none is stored
+                try:
+                    res, code = ai_review(b if isinstance(b, dict) else {})
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
+                except Exception as ex:
+                    print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
+                    res, code = {"ok": False, "error": "review failed"}, 500
+                self._json(res, code)
+            elif u.path == "/api/briefing/since":   # write the "since you last looked" delta once
+                try:
+                    res, code = ai_delta(b if isinstance(b, dict) else {})
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
+                except Exception as ex:
+                    print(f"[ai] delta error: {type(ex).__name__}: {ex}", flush=True)
+                    res, code = {"ok": False, "error": "delta failed"}, 500
                 self._json(res, code)
             elif u.path == "/api/review/refresh":     # force re-run the Weekly Review (behind _mutation_guard)
                 try:

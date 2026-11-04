@@ -223,8 +223,9 @@ def _delta_fallback(rows):
     return f"{len(rows)} new since you last looked.", items
 
 
-def build_delta(accounts_set, since_ts):
-    """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count)."""
+def build_delta(accounts_set, since_ts, generate=True):
+    """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count).
+    With generate=False it only reads: nothing stored yet -> {missing:true}, and no AI call."""
     accounts_set = set(accounts_set or [])
     c = store.conn()
     rows = _delta_rows(c, accounts_set, since_ts)
@@ -274,12 +275,15 @@ def build_delta(accounts_set, since_ts):
         return {"ok": True, "empty": False, "headline": headline,
                 "items": items, "count": len(rows), "cached": False}, 200
 
+    if not generate:
+        return read() or ({"ok": True, "empty": False, "missing": True, "count": len(rows)}, 200)
     return (read() or _FLIGHTS.run(key, make, read, wait=30)       # another tab may be making it
             or ({"ok": False, "error": "delta unavailable", "retry": True}, 502))
 
 
-def build(accounts_set, force=False):
-    """-> (result_dict, http_code)."""
+def build(accounts_set, force=False, generate=True):
+    """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
+    {missing:true}, and no AI call."""
     accounts_set = set(accounts_set or [])
     key = _cache_key(accounts_set)
     c = store.conn()
@@ -294,6 +298,8 @@ def build(accounts_set, force=False):
     if not rows:
         return {"ok": True, "narrative": "Nothing needs you right now — your inbox is quiet.",
                 "groups": [], "model": "empty", "generated": _now(), "cached": False, "stale": False}, 200
+    if not generate:
+        return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}, 200
 
     def read():
         c = store.conn()

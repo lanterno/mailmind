@@ -165,8 +165,9 @@ def _result(stats, needs, waiting, ai, model, created_at, cached, stale, since_t
             "model": model, "generated": created_at, "cached": cached, "stale": stale}
 
 
-def build(accounts_set, force=False):
-    """-> (result_dict, http_code)."""
+def build(accounts_set, force=False, generate=True):
+    """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
+    {missing:true}, and no AI call."""
     accounts_set = set(accounts_set or [])
     import time
     since_ts = time.time() - WEEK_SECONDS
@@ -184,6 +185,8 @@ def build(accounts_set, force=False):
                        {"narrative": cached_row["narrative"], "next": payload.get("next", [])},
                        cached_row["model"], cached_row["created_at"], True,
                        cached_row["fingerprint"] != fp, since_ts), 200
+    if not generate:
+        return {"ok": True, "missing": True}, 200
 
     def read():
         c = store.conn()
