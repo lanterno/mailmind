@@ -52,11 +52,12 @@ def reset_state():
                 cur.update(v)
             else:
                 setattr(mod, k, v)
-    from mailmind.bootstrap import assistant, legacy
+    from mailmind.bootstrap import assistant, legacy, mailbox
     from mailmind.platform import sse
     legacy.unwire()                          # the server's subscriptions on the bus, as wire() made them
     sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
     assistant.use("urllib")                  # the old door's client; the new door's build picks the SDK
+    mailbox.reset()                          # imaplib alone; the new door's build offers IMAPClient
     assistant.governor().forget()            # a restart: no interactive call lately, someone here now
 
 

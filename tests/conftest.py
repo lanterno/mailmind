@@ -106,6 +106,14 @@ def _pristine_state():
 
 
 @pytest.fixture(autouse=True)
+def _imap_adapters():
+    """imaplib for every account and nothing else offered, as a process starts: a test that offers
+    IMAPClient, or a new door an earlier test built, can't leave it to the next."""
+    from mailmind.bootstrap import mailbox
+    mailbox.reset()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_governor():
     """The cost governor as a fresh start finds it: no interactive call lately (the app tests share
     one frozen moment, so an earlier test's call would make this one's triage yield), someone here

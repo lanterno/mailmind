@@ -97,10 +97,14 @@ def populate(server):
 
 
 def config(server, smtp=None):
-    """The MailMind config for the world's accounts on `server`, sending through `smtp` if given."""
+    """The MailMind config for the world's accounts on `server`, sending through `smtp` if given.
+    Cy's Gmail asks for IMAPClient, as an account soaking it would: the new door runs it through
+    IMAPClient, the old door through imaplib, against the same golden files."""
     accounts = []
     for email, _, alias, _ in ACCOUNTS:
         entry = {**server.config_entry(email), "alias": alias}
+        if email == CY:
+            entry["imap_adapter"] = "imapclient"
         if smtp is not None:
             entry.update(smtp_host="127.0.0.1", smtp_port=smtp.port, smtp_starttls=True)
         accounts.append(entry)

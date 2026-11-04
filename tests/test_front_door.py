@@ -95,4 +95,5 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path):
             proc.wait()
     out = proc.stdout.read() if proc.stdout else ""
     assert f"MailMind → http://127.0.0.1:{port}" in out
+    assert "[imap] mail through imaplib" in out          # no account here asks for IMAPClient
     assert "Traceback" not in out and "Tripwire" not in out, out

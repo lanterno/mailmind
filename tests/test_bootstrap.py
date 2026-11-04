@@ -129,6 +129,35 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     out = capsys.readouterr().out
     assert ("auto-sync disabled" in out) == read_only
     assert "[ai] Claude API" in out
+    assert "[imap] mail through imaplib" in out
+
+
+def test_an_account_gets_imapclient_only_where_it_is_offered(world):
+    # Cy's Gmail asks for IMAPClient in the world's config, as an account soaking it would.
+    import accounts
+    from fixtures import world as w
+    from mailmind.bootstrap import mailbox
+
+    def adapters():
+        sessions = {who: mailbox.open_session(accounts.get(who), timeout=10) for who in (w.ADA, w.CY)}
+        for s in sessions.values():
+            s.logout()
+        return {who: type(s).__name__ for who, s in sessions.items()}
+    assert adapters() == {w.ADA: "ImaplibSession", w.CY: "ImaplibSession"}       # the old door's
+    assert mailbox.describe() == "mail through imaplib"
+    mailbox.offer("imapclient")                                                  # the new door's
+    assert adapters() == {w.ADA: "ImaplibSession", w.CY: "ImapClientSession"}
+    assert mailbox.describe() == "mail through imaplib, imapclient for 1 account that asked"
+    mailbox.use("imapclient")                                                    # every account's
+    assert adapters() == {w.ADA: "ImapClientSession", w.CY: "ImapClientSession"}
+
+
+def test_each_door_runs_the_account_that_asks_on_its_own_adapter(app):
+    import accounts
+    from fixtures import world as w
+    from mailmind.bootstrap import mailbox
+    expected = "imapclient" if app.door == "new" else "imaplib"
+    assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == (expected, "imaplib")
 
 
 def scheduled(monkeypatch, **env):

@@ -159,6 +159,23 @@ def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(wo
     assert supervisor._watchers[w.ADA] is not old and supervisor.watching()[w.ADA]
 
 
+def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, supervisor, monkeypatch):
+    import config
+    from mailmind.bootstrap import mailbox
+    mailbox.offer("imapclient")                         # the new door's
+    monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
+    supervisor.start()
+    assert idling(world, w.ADA)
+    old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
+    raw = config._raw()
+    next(a for a in raw["accounts"] if a["email"] == w.ADA)["imap_adapter"] = "imapclient"
+    config.save(raw)
+    old.thread.join(5)
+    assert not old.thread.is_alive()
+    assert wait_until(lambda: count(world, "LOGIN") == logins + 1)
+    assert supervisor._watchers[w.ADA] is not old and supervisor.watching()[w.ADA]
+
+
 def test_the_configuration_says_what_happened_to_each_account(data_dir):
     import config
     from mailmind.accounts.domain import events
