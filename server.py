@@ -1441,7 +1441,7 @@ def do_undo():
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
         invalidate_stats()
         _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
-        sse.publish("undo", {})
+        sse.publish("undo-done", {})
         res["remaining"] = len(_undo_stack)
         return res, 200
     except Exception as e:
@@ -4207,7 +4207,7 @@ def _after_send(_sent):
 def _after_readmut(_applied):
     """readmutq.Applied: a queued move reached the server."""
     invalidate_stats()
-    sse.publish("readmutq", {})     # a queued read-mutation drained — refresh views
+    sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 
 
 def _after_idle(changed):

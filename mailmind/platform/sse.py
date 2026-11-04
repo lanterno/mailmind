@@ -32,8 +32,8 @@ TOPICS = frozenset({
     "mute",               # a conversation was muted or unmuted
     "draft-ready",        # a reply draft written ahead is ready
     "outbox",             # a send went out
-    "undo",               # an undo finished
-    "readmutq",           # a queued move was applied
+    "undo-done",          # an undo finished
+    "commands-changed",   # a queued move or flag change was applied
 })
 RESYNC = "resync"         # this tab missed events it can't be told: fetch afresh
 RING = 512                # the events kept for tabs that reconnect
