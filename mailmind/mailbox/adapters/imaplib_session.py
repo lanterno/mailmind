@@ -14,6 +14,8 @@ from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
 _UID = re.compile(rb"UID (\d+)")
 _THRID = re.compile(rb"X-GM-THRID (\d+)")
+_APPENDUID = re.compile(rb"APPENDUID\s+\d+\s+(\d+)")
+_SYSTEM_LABEL = re.compile(r"\\[A-Za-z]+")
 
 
 def _ok(what, typ, data):
@@ -28,6 +30,11 @@ def _uid_set(uids):
 
 def _flag_list(flags):
     return "(" + " ".join(flags) + ")"
+
+
+def _label_list(labels):
+    """Gmail's labels: a system label (\\Inbox) as it is, any other quoted."""
+    return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
 
 
 def _number(M, name):
@@ -107,26 +114,34 @@ class ImaplibSession:
     def remove_flags(self, uids, flags):
         _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "-FLAGS", _flag_list(flags)))
 
-    def copy(self, uid, dest):
-        _ok("COPY", *self._M.uid("COPY", str(int(uid)), mailbox_arg(dest)))
+    def add_labels(self, uids, labels):
+        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "+X-GM-LABELS", _label_list(labels)))
 
-    def move(self, uid, dest):
+    def remove_labels(self, uids, labels):
+        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "-X-GM-LABELS", _label_list(labels)))
+
+    def copy(self, uids, dest):
+        _ok("COPY", *self._M.uid("COPY", _uid_set(uids), mailbox_arg(dest)))
+
+    def move(self, uids, dest):
         if "MOVE" in self.capabilities:
             try:
-                _ok("MOVE", *self._M.uid("MOVE", str(int(uid)), mailbox_arg(dest)))
+                _ok("MOVE", *self._M.uid("MOVE", _uid_set(uids), mailbox_arg(dest)))
                 return
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:
-                pass                     # refused: copy it instead, as a server without MOVE needs
-        move_by_copy(self, uid, dest)
+                pass                     # refused: copy them instead, as a server without MOVE needs
+        move_by_copy(self, uids, dest)
 
     def expunge_uid(self, uid):
         _ok("EXPUNGE", *self._M.uid("EXPUNGE", str(int(uid))))
 
     def append(self, folder, raw, *, flags=(), when=None):
         date = imaplib.Time2Internaldate(when) if when is not None else None
-        _ok("APPEND", *self._M.append(mailbox_arg(folder), _flag_list(flags) if flags else None, date, raw))
+        data = _ok("APPEND", *self._M.append(mailbox_arg(folder), _flag_list(flags) if flags else None, date, raw))
+        said = next((m for m in (_APPENDUID.search(d) for d in data if isinstance(d, bytes)) if m), None)
+        return int(said.group(1)) if said else None
 
     def noop(self):
         typ, _ = self._M.noop()

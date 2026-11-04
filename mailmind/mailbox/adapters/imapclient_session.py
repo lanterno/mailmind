@@ -9,6 +9,7 @@ object (`_imap`) carries the TLS socket for the certificate pin, and the command
 Only this module imports imapclient; only the new door loads it.
 """
 import imaplib
+import re
 from datetime import datetime
 
 from imapclient import IMAPClient
@@ -17,6 +18,9 @@ from mailmind.mailbox.adapters.imap_names import escaped, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder
+
+
+_APPENDUID = re.compile(rb"APPENDUID\s+\d+\s+(\d+)")
 
 
 def _text(v):
@@ -105,26 +109,34 @@ class ImapClientSession:
     def remove_flags(self, uids, flags):
         self._c.remove_flags([int(u) for u in uids], list(flags))
 
-    def copy(self, uid, dest):
-        self._c.copy([int(uid)], unescaped(dest))
+    def add_labels(self, uids, labels):
+        self._c.add_gmail_labels([int(u) for u in uids], list(labels), silent=True)
 
-    def move(self, uid, dest):
+    def remove_labels(self, uids, labels):
+        self._c.remove_gmail_labels([int(u) for u in uids], list(labels), silent=True)
+
+    def copy(self, uids, dest):
+        self._c.copy([int(u) for u in uids], unescaped(dest))
+
+    def move(self, uids, dest):
         if "MOVE" in self.capabilities:
             try:
-                self._c.move([int(uid)], unescaped(dest))
+                self._c.move([int(u) for u in uids], unescaped(dest))
                 return
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:
-                pass                     # refused: copy it instead, as a server without MOVE needs
-        move_by_copy(self, uid, dest)
+                pass                     # refused: copy them instead, as a server without MOVE needs
+        move_by_copy(self, uids, dest)
 
     def expunge_uid(self, uid):
         self._c.uid_expunge([int(uid)])
 
     def append(self, folder, raw, *, flags=(), when=None):
-        self._c.append(unescaped(folder), raw, flags=list(flags),
-                       msg_time=when if isinstance(when, datetime) else None)
+        said = self._c.append(unescaped(folder), raw, flags=list(flags),
+                              msg_time=when if isinstance(when, datetime) else None)
+        found = _APPENDUID.search(said if isinstance(said, bytes) else str(said or "").encode())
+        return int(found.group(1)) if found else None
 
     def noop(self):
         self._c.noop()

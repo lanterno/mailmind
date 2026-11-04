@@ -17,6 +17,7 @@ import imaplib
 from dataclasses import dataclass
 from typing import Protocol
 
+from mailmind.mailbox.domain import roles
 from mailmind.mailbox.domain.roles import Folder
 from mailmind.platform import profile
 
@@ -54,34 +55,52 @@ class MailSession(Protocol):
     def body(self, uid: int) -> bytes | None: ...                           # BODY.PEEK[]
     def add_flags(self, uids, flags) -> None: ...
     def remove_flags(self, uids, flags) -> None: ...
-    def copy(self, uid: int, dest: str) -> None: ...
-    def move(self, uid: int, dest: str) -> None: ...
+    def add_labels(self, uids, labels) -> None: ...                         # Gmail's X-GM-LABELS
+    def remove_labels(self, uids, labels) -> None: ...
+    def copy(self, uids, dest: str) -> None: ...
+    def move(self, uids, dest: str) -> None: ...                            # one MOVE for them all
     def expunge_uid(self, uid: int) -> None: ...
-    def append(self, folder: str, raw: bytes, *, flags=(), when=None) -> None: ...
+    def append(self, folder: str, raw: bytes, *, flags=(), when=None) -> int | None: ...   # its UID
     def noop(self) -> bool: ...
     def logout(self) -> None: ...
 
 
-def move_by_copy(session, uid, dest):
-    """MOVE on a server without it: COPY, checked, then \\Deleted and a UID EXPUNGE of this UID
-    alone, never a bulk EXPUNGE. A refused COPY raises before the original is touched. A server
+def move_by_copy(session, uids, dest):
+    """MOVE on a server without it: COPY, checked, then \\Deleted and a UID EXPUNGE of each UID
+    alone, never a bulk EXPUNGE. A refused COPY raises before an original is touched. A server
     without UIDPLUS refuses the UID EXPUNGE and leaves the original flagged \\Deleted, the way
     any client without UIDPLUS deletes; the next expunge, from any client, finishes it."""
-    session.copy(uid, dest)
-    session.add_flags([uid], ["\\Deleted"])
+    uids = [int(u) for u in uids]
+    session.copy(uids, dest)
+    session.add_flags(uids, ["\\Deleted"])
+    for uid in uids:
+        try:
+            session.expunge_uid(uid)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            pass
+
+
+def find_role(session, *wanted):
+    """The folder on the session's server playing the first of `wanted` that one plays
+    (mailmind.mailbox.domain.roles), or None: when none does, and when the server refuses the LIST,
+    so the caller falls back to its default name."""
     try:
-        session.expunge_uid(uid)
+        folders = session.folders()
     except imaplib.IMAP4.abort:
         raise
     except imaplib.IMAP4.error:
-        pass
+        return None
+    return roles.find(folders, *wanted)
 
 
 class ReadOnlySession:
     """A read-only process's session: every folder opens read-only, and a write raises
     profile.ReadOnlyError before it is sent. Everything else is the session's own."""
 
-    _WRITES = frozenset({"add_flags", "remove_flags", "copy", "move", "expunge_uid", "append"})
+    _WRITES = frozenset({"add_flags", "remove_flags", "add_labels", "remove_labels", "copy", "move",
+                         "expunge_uid", "append"})
 
     def __init__(self, session):
         self._session = session
