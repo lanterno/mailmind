@@ -232,7 +232,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   holds `adapters.config_file`, which `config.py` reads and writes `mailmind.config.json`
   through. `ConfigFile.read` parses the file again only when its inode, size or modification
   time changed, and hands each caller a copy of its own; `write` replaces it atomically, readable
-  by its owner only. It is standard library only.
+  by its owner only. `adapters.secrets` resolves a credential in each style the file allows
+  (plain, `op`, `env`, the Bridge password), caching an `op` read only when it succeeds.
+  `config.py` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
+  both. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
@@ -447,7 +450,7 @@ The new front door talks through the Anthropic SDK (`front.build` calls
 `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only the new door loads
 it. The two share the wire format (`adapters.wire`) and must behave the same:
 `tests/test_ai_contract.py` runs every case through each. The key is
-`config.anthropic_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
+`assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
 means no key, never a fall-through to the environment's. With no key the model is
 `DisabledModel`: `summarize.engine()` is `"none"`, and a call raises `AIOff` (re-exported as
@@ -499,7 +502,7 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 - Presence. A speculative call also needs someone to have used the app in the last 45 minutes.
   `server._ui_touch` calls `saw_someone()` for every `/api/` request a person makes, except the
   polling routes in `_UI_QUIET`. A start counts as someone here.
-- The daily limit is `config.ai_daily_limit_usd()`: the top-level `"ai_daily_limit_usd"`, a
+- The daily limit is `assistant.limit_micros()`: the top-level `"ai_daily_limit_usd"`, a
   positive number, or $15 (decision D7). It counts everything the ledger holds for today, and a
   ledger that can't be read counts as over. At the limit, background and speculative calls raise
   `Deferred("limit")`. An interactive call raises `OverLimit`, which `H.do_GET` and `H.do_POST`
