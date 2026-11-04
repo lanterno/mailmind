@@ -103,4 +103,4 @@ CREATE TABLE thread_summaries ( account TEXT NOT NULL, thread_id TEXT NOT NULL, 
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE);
 
-PRAGMA user_version=21;
+PRAGMA user_version=22;
