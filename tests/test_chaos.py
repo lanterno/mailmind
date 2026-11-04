@@ -1,6 +1,6 @@
-"""Chaos against the fake servers: what one account's trouble may and may not do to the rest. With
-a gate for each account (MAILMIND_WORKERS=account), a black-holed account holds up only its own
-work."""
+"""Chaos against the fake servers: what one account's trouble may and may not do to the rest, and
+what survives a connection lost at the worst moment. With a gate for each account
+(MAILMIND_WORKERS=account), a black-holed account holds up only its own work."""
 import threading
 import time
 
@@ -59,3 +59,27 @@ def test_a_black_holed_account_doesnt_slow_another_accounts_body_open(app, world
         world.server.release_stalls()
         hung.join(30)
     assert not hung.is_alive()
+
+
+def boxes(world, name):
+    """Where `name` is: [(account, folder)] on the server, and in the database."""
+    got = world.where(name)
+    return sorted((s[0], s[1]) for s in got["server"]), sorted((d["account"], d["folder"]) for d in got["db"])
+
+
+@pytest.mark.parametrize("command", ["UID MOVE", "UID COPY"])
+def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command):
+    """The server moved it (or, without MOVE, copied it), then the connection dropped before it
+    said so. The move is queued, and its drain leaves one copy, in the Archive."""
+    import accounts
+    import ingest
+    import readmutq
+    name = "ada-inbox-05-receipt.eml"
+    if command == "UID COPY":
+        world.server.without = {"MOVE"}
+    world.server.drop_after(command, user=w.ADA)
+    r = app.post("/api/archive", {"pk": world.pk(name), "mutation_id": "m-1"}).json
+    assert r["status"] == "queued"
+    readmutq.drain()
+    ingest.sync_folder(accounts.get(w.ADA), "Archive")
+    assert boxes(world, name) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
