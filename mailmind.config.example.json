@@ -23,7 +23,7 @@
     "Tip: you can manage all of this from the dashboard's ⚙ Settings instead of editing this file by hand.",
     "",
     "CLAUDE API KEY (optional): \"anthropic_api_key\" takes the key from console.anthropic.com, in any",
-    "  credential style above. It wins over ANTHROPIC_API_KEY; with neither, the claude CLI is used."
+    "  credential style above. It wins over ANTHROPIC_API_KEY; with neither, AI is off and nothing is sent."
   ],
   "anthropic_api_key": "",
   "accounts": [
