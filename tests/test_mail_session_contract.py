@@ -3,6 +3,7 @@ adapter, imaplib's and IMAPClient's, against the fake IMAP server, and each must
 A case states what the port promises: what a call returns, what it sends, what it leaves on the
 server, and how a refusal, a dropped connection, a read-only process, a changed certificate and
 an open transaction surface."""
+import email
 import imaplib
 from datetime import datetime, timezone
 
@@ -136,6 +137,46 @@ def test_a_body_is_the_message_as_stored_and_read_leaves_it_unread(world, sessio
     assert session.body(uid) == box(world).messages[uid].raw
     assert "\\Seen" not in box(world).messages[uid].flags
     assert session.body(99999) is None
+
+
+def test_headers_come_in_uid_order_with_their_flags_and_only_the_fields_asked(world, session):
+    session.select("INBOX")
+    every = sorted(box(world).messages)
+    before = {u: frozenset(m.flags) for u, m in box(world).messages.items()}
+    got = session.headers(list(reversed(every)), ["SUBJECT", "MESSAGE-ID"])
+    assert [h.uid for h in got] == every
+    assert {h.uid: h.flags for h in got} == before == {u: frozenset(m.flags) for u, m in box(world).messages.items()}
+    receipt = next(h for h in got if h.uid == uid_of(world, RECEIPT))
+    fields = email.message_from_bytes(receipt.raw)
+    assert (fields["Message-ID"], fields["From"], receipt.gmail_thread) == (w.message_id(RECEIPT), None, None)
+    assert fields["Subject"] == email.message_from_bytes(w.raw(RECEIPT))["Subject"]
+
+
+def test_gmails_thread_id_comes_only_when_asked_for(world, kind):
+    s = open_session(w.CY)
+    try:
+        s.select("INBOX")
+        uids = s.uids("ALL")
+        since = len(world.server.commands)
+        plain, threaded = s.headers(uids, ["SUBJECT"]), s.headers(uids, ["SUBJECT"], gmail_thread=True)
+        lines = sent(world, since, user=w.CY)
+    finally:
+        s.logout()
+    assert ["X-GM-THRID" in line for line in lines] == [False, True]
+    assert {h.gmail_thread for h in plain} == {None}
+    assert {h.uid: h.gmail_thread for h in threaded} == {
+        u: str(m.gm_thrid) for u, m in box(world, "INBOX", w.CY).messages.items()}
+
+
+def test_headers_go_a_batch_at_a_time_and_none_asks_nothing(world, session, monkeypatch):
+    from mailmind.mailbox.application import session as port
+    monkeypatch.setattr(port, "HEADER_BATCH", 2)
+    session.select("INBOX")
+    every = session.uids("ALL")
+    since = len(world.server.commands)
+    assert session.headers([], ["SUBJECT"]) == []
+    assert [h.uid for h in session.headers(every[:5], ["SUBJECT"])] == every[:5]
+    assert [line.split(" ")[:2] for line in sent(world, since)] == [["UID", "FETCH"]] * 3
 
 
 def test_flags_read_add_and_remove(world, session):
