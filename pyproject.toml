@@ -91,3 +91,20 @@ type = "forbidden"
 source_modules = ["mailmind.bootstrap"]
 forbidden_modules = ["anthropic"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only the IMAPClient adapter reaches IMAPClient"
+type = "forbidden"
+source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel", "mailmind.assistant",
+                  "mailmind.accounts", "mailmind.mailbox.application", "mailmind.mailbox.domain",
+                  "mailmind.mailbox.adapters.imap_list", "mailmind.mailbox.adapters.imap_names",
+                  "mailmind.mailbox.adapters.imaplib_session"]
+forbidden_modules = ["imapclient"]
+
+[[tool.importlinter.contracts]]
+# bootstrap.mailbox loads the IMAPClient adapter when use("imapclient") asks for it, and only then.
+name = "bootstrap imports IMAPClient only through its adapter"
+type = "forbidden"
+source_modules = ["mailmind.bootstrap"]
+forbidden_modules = ["imapclient"]
+allow_indirect_imports = true

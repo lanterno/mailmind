@@ -11,3 +11,5 @@ mailmind.bootstrap.legacy realtime
 mailmind.bootstrap.legacy server
 mailmind.bootstrap.legacy store
 mailmind.bootstrap.legacy summarize
+mailmind.bootstrap.mailbox accounts
+mailmind.bootstrap.mailbox config
