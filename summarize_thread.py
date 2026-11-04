@@ -168,7 +168,7 @@ def summarize(account, thread_id, scope="thread", force=False):
                                 blocks="\n".join(blocks))
         try:
             with _AI_SEM:
-                out = _sz.call_claude(prompt)
+                out = _sz.call_claude(prompt, feature="thread")
         except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
             print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "summary unavailable", "retry": True}, 502

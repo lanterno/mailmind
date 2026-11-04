@@ -41,7 +41,7 @@ def rewrite(text, op, lang="English"):
     prompt = _PROMPT.format(instr=instr, text=text[:8000])
     try:
         with _st._AI_SEM:
-            obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA)
+            obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
     except Exception as e:
         print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "rewrite unavailable", "retry": True}, 502

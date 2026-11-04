@@ -145,7 +145,7 @@ def ask(account, question):
     prompt = _PROMPT.format(question=question, blocks="\n\n".join(blocks))
     try:
         with _st._AI_SEM:
-            obj = _sz.call_claude_json(prompt, ASK_SCHEMA)
+            obj = _sz.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
     except Exception:
         return {"ok": False, "error": "ask unavailable", "retry": True}, 502
 

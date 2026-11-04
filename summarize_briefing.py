@@ -270,7 +270,7 @@ def build_delta(accounts_set, since_ts):
         prompt = _DELTA_PROMPT.format(count=len(lines), items="\n".join(lines))
         try:
             with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, DELTA_SCHEMA)
+                obj = _sz.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "delta unavailable", "retry": True}, 502
@@ -337,7 +337,7 @@ def build(accounts_set, force=False):
         prompt = _PROMPT.format(items="\n".join(lines))
         try:
             with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA)
+                obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "briefing unavailable", "retry": True}, 502

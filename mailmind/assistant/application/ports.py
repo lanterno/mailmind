@@ -1,4 +1,5 @@
-"""The Assistant's ports: one call to a language model, what comes back, and how it fails.
+"""The Assistant's ports: one call to a language model, what comes back, how it fails, and the
+ledger that counts what each call cost.
 
 A LanguageModel sends a Prompt as one user turn and returns the Reply. When no reply comes it
 raises ModelError, a RuntimeError, so the legacy callers' "a raise is retried later" contract
@@ -69,3 +70,24 @@ class LanguageModel(Protocol):
     enabled: bool                    # False only for the stand-in used when AI is off
 
     def complete(self, prompt: Prompt) -> Reply: ...
+
+
+@dataclass(frozen=True)
+class Spend:
+    """One call, as the usage ledger counts it."""
+    day: str                         # the local date it counts against, YYYY-MM-DD
+    feature: str                     # what made it: triage, thread, brief, draft, ...
+    model: str                       # the model asked for
+    served: str                      # the model that served it; "" when no reply came
+    outcome: str                     # ok, refused, rejected (a permanent 4xx) or failed
+    usage: Usage
+    cost_micros: int                 # US dollars × 1,000,000
+    ts: int                          # when it ended, in seconds since the epoch
+
+
+class UsageLedger(Protocol):
+    def record(self, spend: Spend) -> None: ...
+
+    def spent(self, day: str) -> int: ...                # micro-dollars, that day
+
+    def days(self, since: str) -> list[dict]: ...        # per day and feature, from `since` on

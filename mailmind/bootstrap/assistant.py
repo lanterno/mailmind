@@ -10,12 +10,15 @@ The key is config.anthropic_key() (mailmind.config.json's "anthropic_api_key", i
 style), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
 switch to the environment's. Both are read at each call, so a new key takes effect at once, and the
 model is made again only when the key, ANTHROPIC_BASE_URL or the transport changes.
+
+Every call is counted in the usage ledger, the ai_usage table of the data directory's database.
 """
 import os
 import threading
 
 import config
 from mailmind.assistant.adapters.disabled import DisabledModel
+from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
 from mailmind.assistant.application.gateway import Gateway
 
@@ -64,7 +67,8 @@ class _Bound:
 
 
 _bound = _Bound("urllib")
-GATEWAY = Gateway(_bound)
+LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
+GATEWAY = Gateway(_bound, LEDGER)
 
 
 def gateway() -> Gateway:

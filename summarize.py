@@ -122,9 +122,9 @@ def status():
 
 
 @_noted
-def call_claude(prompt):
-    """Plain text result (used by summarize_thread). Unchanged signature."""
-    return assistant.gateway().ask(prompt, model=MODEL).text
+def call_claude(prompt, feature="other"):
+    """Plain text result (used by summarize_thread). `feature` names the call in the usage ledger."""
+    return assistant.gateway().ask(prompt, feature=feature, model=MODEL).text
 
 
 def _loose_json(out):
@@ -133,13 +133,14 @@ def _loose_json(out):
 
 
 @_noted
-def call_claude_json(prompt, schema, effort=None):
+def call_claude_json(prompt, schema, effort=None, feature="other"):
     """Ask Claude for a JSON object matching `schema`. Returns the dict structured output
     (output_config.format) gives, else best-effort regex-parsed JSON from the text. Raises
     RuntimeError ONLY when no reply came (AIOff, one, when AI is off), so the caller can tell
-    retry from fallback; a successful-but-unparseable reply yields {}."""
+    retry from fallback; a successful-but-unparseable reply yields {}. `feature` names the call in
+    the usage ledger."""
     out = assistant.gateway().ask(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
-                                  model=MODEL, effort=effort).text
+                                  feature=feature, model=MODEL, effort=effort).text
     try:
         obj = json.loads(out)
     except ValueError:
@@ -167,7 +168,7 @@ def summarize_one(row):
     prompt = PROMPT.format(frm=frm, subject=row["subject"] or "(no subject)",
                            date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
     try:
-        obj = call_claude_json(prompt, TRIAGE_SCHEMA, effort=TRIAGE_EFFORT)
+        obj = call_claude_json(prompt, TRIAGE_SCHEMA, effort=TRIAGE_EFFORT, feature="triage")
     except Exception:
         return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
     if obj.get("summary"):

@@ -3246,7 +3246,8 @@ def _gen_draft_ahead(account, pk, source="dwell"):
                 return None                           # neutral: already warm
         finally:
             c.close()
-        res, code = draft_reply.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct)
+        res, code = draft_reply.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
+                                      feature="draft-ahead")
         now = int(time.time())
         c = store.conn()
         try:
@@ -3634,7 +3635,7 @@ def ai_do_plan(body):
     prompt = _DO_PROMPT.replace("{today}", today).replace("{cmd}", cmd)
     try:
         with summarize_thread._AI_SEM:
-            plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA) or {}
+            plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
     except Exception:
         return {"ok": False, "error": "planner unavailable", "retry": True}, 502
     filt = str(plan.get("filter") or "").strip()[:400]

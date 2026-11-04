@@ -216,7 +216,7 @@ def build(accounts_set, force=False):
         prompt = _PROMPT.format(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
         try:
             with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA)
+                obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
             ai = _clean(obj)
             model = _sz.model_label()
             # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is

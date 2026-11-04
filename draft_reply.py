@@ -35,8 +35,9 @@ _MSG_COLS = ("SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,m
              "body_fetched FROM messages WHERE pk=?")
 
 
-def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=""):
-    """-> (result_dict, http_code). Gathers a thread (thread_id) or a single message (pk)."""
+def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me="", feature="draft"):
+    """-> (result_dict, http_code). Gathers a thread (thread_id) or a single message (pk).
+    `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
     c = store.conn()
     try:
         if thread_id:
@@ -60,7 +61,7 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
                             tone=tone_word, instr=instr, subject=subject, blocks="\n".join(blocks))
     try:
         with _st._AI_SEM:                       # share the bridge's 2-proc cap with summarize
-            obj = _sz.call_claude_json(prompt, REPLY_SCHEMA)
+            obj = _sz.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
     except Exception as e:                      # AI off / timeout / rate-limit: retryable
         print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "draft unavailable", "retry": True}, 502
