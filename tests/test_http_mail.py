@@ -6,8 +6,6 @@ files are in tests/golden/http_mail/.
 Each provider files mail its own way. Ada's plain IMAP host moves the message. Bea's Proton Bridge
 moves it, and marks anything copied into Trash as read. Cy's Gmail drops a label instead.
 """
-import pytest
-
 from fixtures import world as w
 
 
@@ -43,7 +41,6 @@ def test_seen_and_flagged(app, golden, world):
     act(app, golden, world, "undo with nothing to undo", "/api/undo", {})
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: mailops.set_flags ignores a refused STORE (ROADMAP)")
 def test_a_refused_flag_change_leaves_the_local_row_alone(app, world):
     name = "ada-inbox-02-lunch-confirm.eml"
     world.server.fail("UID STORE")
