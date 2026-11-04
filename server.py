@@ -56,7 +56,7 @@ import summarize_thread
 import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
-from mailmind.bootstrap import assistant, legacy
+from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
@@ -2585,28 +2585,22 @@ def _draft_live(acct, folder, uid):
     if uid is None:
         return None
     try:
-        M = accounts.connect(acct, timeout=_LIVE_TIMEOUT)
+        s = mailbox.open_session(acct, timeout=_LIVE_TIMEOUT)
     except Exception:
         return None
-    try:
-        typ, _ = M.select(accounts.mailbox_arg(folder), readonly=True)
-        if typ != "OK":
-            return None
-        cur = ingest._uidvalidity(M)
+    try:                                                 # a refusal (a busy server's NO) says nothing: None
+        cur = s.select(folder).uidvalidity
         c = store.conn()
         known = store.get_uidvalidity(c, acct["email"], folder)
         c.close()
         if cur is not None and known is not None and cur != known:
             return False                                 # every UID we hold for this folder is void
-        typ, d = M.uid("SEARCH", None, "UID", str(int(uid)))
-        if typ != "OK":
-            return None                                  # a busy server's NO says nothing about the copy
-        return str(int(uid)).encode() in (d[0].split() if d and d[0] else [])
+        return int(uid) in s.uids("UID", str(int(uid)))
     except Exception:
         return None
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
@@ -3728,9 +3722,9 @@ def account_test(body):
         # stateless probe — shares no IMAP state, selects no folder, uses no pooled conn, so it needs no
         # IMAP gate (holding it here froze all mail ops for up to 60s on a mistyped/black-holed host);
         # a short timeout also gives the user fast feedback on a bad host.
-        M = accounts.connect(acct, timeout=15)
+        s = mailbox.open_session(acct, timeout=15)
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
         return {"ok": True, "connect": True, "email": acct["email"],

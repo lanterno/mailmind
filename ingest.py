@@ -99,14 +99,6 @@ def _flags_of(flags):
             "deleted": int("\\deleted" in f)}
 
 
-def _uidvalidity(M):
-    try:
-        v = M.untagged_responses.get("UIDVALIDITY")
-        return int(v[0]) if v else None
-    except Exception:
-        return None
-
-
 def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True):
     """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
     has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);

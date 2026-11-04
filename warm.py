@@ -23,8 +23,9 @@ import threading
 
 import accounts
 import ingest
-import mailops
 from mailmind.accounts.domain import provider
+from mailmind.bootstrap import mailbox
+from mailmind.mailbox.application import session as mail_session
 
 WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
 _ROLES = {                          # what to warm -> the folder roles that may play it, in order
@@ -55,16 +56,16 @@ def _roles_for(acct):
             return _resolved[acct["email"]]
     out = {}
     try:
-        M = accounts.connect(acct)
+        s = mailbox.open_session(acct)
         try:
             for role, hints in _ROLES.items():
                 try:
-                    out[role] = mailops.find_role(M, *hints)
+                    out[role] = mail_session.find_role(s, *hints)
                 except Exception:
                     out[role] = None
         finally:
             try:
-                M.logout()
+                s.logout()
             except Exception:
                 pass
     except Exception as e:
