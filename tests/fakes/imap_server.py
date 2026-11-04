@@ -702,7 +702,7 @@ class Session:
         if not rest or not isinstance(rest[0], bytes):
             raise _No("APPEND needs a literal", "BAD")
         uid = self.srv._store_new(self.acct, box, rest[0], flags, when)
-        self.ok(tag, f"[APPENDUID {box.uidvalidity} {uid}] appended")
+        self.ok(tag, "appended" if "UIDPLUS" in self.srv.without else f"[APPENDUID {box.uidvalidity} {uid}] appended")
 
     def do_idle(self, tag, args):
         self.line("+ idling")

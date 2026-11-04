@@ -52,6 +52,10 @@ def uid_of(world, name):
     return world.placed[name][2]
 
 
+def inbox_ids(world, user):
+    return {email.message_from_bytes(m.raw)["Message-ID"] for m in box(world, "INBOX", user).messages.values()}
+
+
 # ── reading ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_capabilities_are_what_the_server_said_after_login(session):
@@ -207,9 +211,18 @@ def test_move_moves_with_move(world, session):
     archived = len(box(world, "Archive").messages)
     session.select("INBOX", readonly=False)
     since = len(world.server.commands)
-    session.move(uid, "Archive")
+    session.move([uid], "Archive")
     assert sent(world, since) == [f'UID MOVE {uid} "Archive"']
     assert uid not in box(world).messages and len(box(world, "Archive").messages) == archived + 1
+
+
+def test_several_move_in_one_command(world, session):
+    one, two = uid_of(world, RECEIPT), uid_of(world, "ada-inbox-04-ci.eml")
+    session.select("INBOX", readonly=False)
+    since = len(world.server.commands)
+    session.move([one, two], "Archive")
+    assert sent(world, since) == [f'UID MOVE {one},{two} "Archive"']
+    assert not {one, two} & set(box(world).messages)
 
 
 def test_move_without_move_copies_then_removes_that_uid_alone(world, kind):
@@ -222,7 +235,7 @@ def test_move_without_move_copies_then_removes_that_uid_alone(world, kind):
         uid = uid_of(world, RECEIPT)
         s.select("INBOX", readonly=False)
         since = len(world.server.commands)
-        s.move(uid, "Archive")
+        s.move([uid], "Archive")
         assert [line.split(" ")[1] for line in sent(world, since)] == ["COPY", "STORE", "EXPUNGE"]
     finally:
         s.logout()
@@ -230,12 +243,29 @@ def test_move_without_move_copies_then_removes_that_uid_alone(world, kind):
     assert len(box(world, "Archive").messages) == archived + 1
 
 
+def test_several_without_move_are_copied_together_and_expunged_one_by_one(world, kind):
+    world.server.without = {"MOVE"}
+    one, two = uid_of(world, RECEIPT), uid_of(world, "ada-inbox-04-ci.eml")
+    s = open_session()
+    try:
+        s.select("INBOX", readonly=False)
+        since = len(world.server.commands)
+        s.move([one, two], "Archive")
+        lines = sent(world, since)
+    finally:
+        s.logout()
+    assert [line.split(" ")[:3] for line in lines] == [
+        ["UID", "COPY", f"{one},{two}"], ["UID", "STORE", f"{one},{two}"],
+        ["UID", "EXPUNGE", str(one)], ["UID", "EXPUNGE", str(two)]]
+    assert not {one, two} & set(box(world).messages)
+
+
 def test_a_refused_move_falls_back_to_copy(world, session):
     uid = uid_of(world, RECEIPT)
     archived = len(box(world, "Archive").messages)
     world.server.fail("UID MOVE", "BAD [CANNOT] not today")
     session.select("INBOX", readonly=False)
-    session.move(uid, "Archive")
+    session.move([uid], "Archive")
     assert uid not in box(world).messages and len(box(world, "Archive").messages) == archived + 1
 
 
@@ -246,7 +276,7 @@ def test_a_refused_copy_raises_and_touches_nothing(world, session):
     archive = dict(box(world, "Archive").messages)
     session.select("INBOX", readonly=False)
     with pytest.raises(imaplib.IMAP4.error):
-        session.move(uid, "Archive")
+        session.move([uid], "Archive")
     assert box(world).messages[uid].flags == set() and box(world, "Archive").messages == archive
 
 
@@ -258,13 +288,50 @@ def test_expunge_removes_only_that_uid(world, session):
     assert one not in box(world).messages and two in box(world).messages
 
 
-def test_append_lands_with_its_flags_and_date(world, session):
+def test_append_lands_with_its_flags_and_date_and_says_its_uid(world, session):
     when = datetime(2026, 10, 30, 9, 15, tzinfo=timezone.utc)
     before = set(box(world, "Drafts").messages)
-    session.append("Drafts", w.raw(RECEIPT), flags=["\\Draft", "\\Seen"], when=when)
-    (m,) = [m for u, m in box(world, "Drafts").messages.items() if u not in before]
+    uid = session.append("Drafts", w.raw(RECEIPT), flags=["\\Draft", "\\Seen"], when=when)
+    (new,) = [u for u in box(world, "Drafts").messages if u not in before]
+    m = box(world, "Drafts").messages[new]
+    assert uid == new
     crlf = w.raw(RECEIPT).replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")     # IMAP's line ends
     assert (m.raw, m.flags, m.internaldate) == (crlf, {"\\Draft", "\\Seen"}, when)
+
+
+def test_append_to_a_server_without_uidplus_says_no_uid(world, kind):
+    world.server.without = {"UIDPLUS"}
+    s = open_session()
+    try:
+        assert s.append("Drafts", w.raw(RECEIPT)) is None
+    finally:
+        s.logout()
+
+
+def test_gmail_labels_come_off_and_go_back_on(world, kind):
+    name = "cy-inbox-03-unrelated.eml"
+    s = open_session(w.CY)
+    try:
+        s.select("INBOX", readonly=False)
+        since = len(world.server.commands)
+        s.remove_labels([uid_of(world, name)], ["\\Inbox"])
+        assert w.message_id(name) not in inbox_ids(world, w.CY)
+        s.select("[Gmail]/All Mail", readonly=False)
+        uid = s.by_message_id(w.message_id(name))
+        s.add_labels([uid], ["\\Inbox"])
+        lines = sent(world, since, user=w.CY)
+    finally:
+        s.logout()
+    assert [line.split(" ")[3][:12] for line in lines if line.startswith("UID STORE")] == \
+        ["-X-GM-LABELS", "+X-GM-LABELS"]
+    assert w.message_id(name) in inbox_ids(world, w.CY)
+
+
+def test_find_role_reads_the_folders_and_a_refused_list_finds_none(world, session):
+    from mailmind.mailbox.application.session import find_role
+    assert (find_role(session, "archive", "all"), find_role(session, "junk")) == ("Archive", "Junk")
+    world.server.fail("LIST")
+    assert find_role(session, "sent") is None
 
 
 def test_noop_answers(session):
@@ -322,8 +389,9 @@ def test_a_read_only_process_examines_and_writes_nothing(world, kind, monkeypatc
         since = len(world.server.commands)
         s.select("INBOX", readonly=False)
         for write in (lambda: s.add_flags([1], ["\\Seen"]), lambda: s.remove_flags([1], ["\\Seen"]),
-                      lambda: s.move(1, "Archive"), lambda: s.copy(1, "Archive"), lambda: s.expunge_uid(1),
-                      lambda: s.append("Drafts", b"x")):
+                      lambda: s.move([1], "Archive"), lambda: s.copy([1], "Archive"), lambda: s.expunge_uid(1),
+                      lambda: s.append("Drafts", b"x"), lambda: s.add_labels([1], ["\\Inbox"]),
+                      lambda: s.remove_labels([1], ["\\Inbox"])):
             with pytest.raises(profile.ReadOnlyError):
                 write()
         assert sent(world, since) == ['EXAMINE "INBOX"']
