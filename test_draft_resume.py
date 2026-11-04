@@ -405,9 +405,15 @@ class _FakeDraftsIMAP:
     def __init__(self):
         self.untagged_responses, self.calls = {"UIDVALIDITY": [b"777"]}, []
 
+    def list(self):
+        return "OK", [b'(\\HasNoChildren \\Drafts) "/" "Drafts"']
+
     def select(self, folder, readonly=False):
         self.calls.append(("select", folder))
         return "OK", [b"1"]
+
+    def response(self, code):
+        return code, self.untagged_responses.get(code, [None])
 
     def uid(self, *args):
         self.calls.append(("uid",) + args)
@@ -425,9 +431,8 @@ class _FakeDraftsIMAP:
 
 
 def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
-    connect, find = server.smtpsend.accounts.connect, server.smtpsend.mailops.find_role
+    connect = server.smtpsend.accounts.connect
     try:
-        server.smtpsend.mailops.find_role = lambda M, *roles: "Drafts"
         for prev_folder, touched in (("Old drafts", False), ("Drafts", True), (None, True)):
             fake = _FakeDraftsIMAP()
             server.smtpsend.accounts.connect = lambda acct, **kw: fake
@@ -439,7 +444,7 @@ def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
             if prev_folder == "Old drafts":                     # not even searched for by Message-ID
                 assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
     finally:
-        server.smtpsend.accounts.connect, server.smtpsend.mailops.find_role = connect, find
+        server.smtpsend.accounts.connect = connect
 
 
 def test_unvouched_old_copy_is_left_alone():
