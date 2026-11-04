@@ -6,36 +6,46 @@ line scripts and the root test suites, gets the standard-library client, since t
 run with nothing installed. Either way, with no key the model is DisabledModel: AI is off and
 nothing is sent.
 
-The key is config.anthropic_key() (mailmind.config.json's "anthropic_api_key", in any credential
-style), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
+The key is config_key() (mailmind.config.json's "anthropic_api_key", in any credential style,
+read through the Accounts context), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
 switch to the environment's. Both are read at each call, so a new key takes effect at once, and the
 model is made again only when the key, ANTHROPIC_BASE_URL or the transport changes.
 
 Every call is counted in the usage ledger, the ai_usage table of the data directory's database,
-and passes the cost governor first, whose daily limit is config.ai_daily_limit_usd() ($15 unless
-the config names another), read at each call.
+and passes the cost governor first, whose daily limit is the config's "ai_daily_limit_usd" ($15
+unless it names another, domain.limits), read at each call.
 """
 import os
 import threading
 
-import config
+from mailmind.accounts.adapters import config_file, secrets
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
+from mailmind.assistant.domain import limits
 
-__all__ = ["allowing_over", "gateway", "governor", "key", "transport", "use"]
+__all__ = ["allowing_over", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
+
+
+def config_key() -> str | None:
+    """The key mailmind.config.json's top-level "anthropic_api_key" names, in any credential style
+    but proton_bridge, or None when it names none. Raises when it names one that can't be had."""
+    cred = config_file.FILE.read().get("anthropic_api_key")
+    if not cred:
+        return None
+    return secrets.resolve(cred, who="anthropic_api_key").strip()
 
 
 def key() -> tuple[str, str]:
     """(the API key, where it came from), the key "" when there is none. The config file wins,
     so a MailMind-only key isn't shadowed by one the shell exports for other tools."""
     try:
-        k = config.anthropic_key()
+        k = config_key()
     except Exception:
         return "", CONFIG
     if k is not None:
@@ -71,13 +81,19 @@ class _Bound:
             return self._made[1]
 
 
-def _limit_micros() -> int:
-    return round(config.ai_daily_limit_usd() * 1_000_000)
+def limit_micros() -> int:
+    """Today's limit on AI spending, in micro-dollars. A config file that can't be read or parsed
+    leaves it at the default."""
+    try:
+        value = config_file.FILE.read().get("ai_daily_limit_usd")
+    except (OSError, ValueError):
+        value = None
+    return round(limits.daily_limit_usd(value) * 1_000_000)
 
 
 _bound = _Bound("urllib")
 LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
-GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=_limit_micros)
+GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros)
 GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
 
 

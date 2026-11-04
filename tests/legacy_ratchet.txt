@@ -5,9 +5,6 @@
 # The refactor moves code out of the legacy modules, so the list should only shrink: delete a line
 # when its import goes. Add one only with a reason, and only in mailmind.bootstrap, the one place
 # new code may reach legacy code. When the legacy modules are gone, so is every line.
-# The Assistant reads its API key through config.anthropic_key() until the Accounts context
-# owns the configuration (the refactor's Phase 5).
-mailmind.bootstrap.assistant config
 mailmind.bootstrap.legacy outbox
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime

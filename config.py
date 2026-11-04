@@ -114,28 +114,6 @@ def resolve_credential(acct):
     return secrets.resolve(acct.get("credential"), who=acct["email"], strip=acct.get("strip_spaces", False))
 
 
-def anthropic_key():
-    """The Claude API key from the top-level "anthropic_api_key" (any credential style above),
-    or None when the file sets none. Raises when it is set but can't be resolved."""
-    cred = _raw().get("anthropic_api_key")
-    if not cred:
-        return None
-    return resolve_credential({"email": "anthropic_api_key", "credential": cred}).strip()
-
-
-DEFAULT_AI_DAILY_LIMIT_USD = 15.0
-
-
-def ai_daily_limit_usd():
-    """The most MailMind may spend on the Claude API in a local day, in US dollars: the top-level
-    "ai_daily_limit_usd", a positive number, or 15 (decision D7) when the file sets none that is."""
-    try:
-        v = float(_raw().get("ai_daily_limit_usd"))
-    except (TypeError, ValueError, OSError):
-        return DEFAULT_AI_DAILY_LIMIT_USD
-    return v if v > 0 and v == v and v != float("inf") else DEFAULT_AI_DAILY_LIMIT_USD
-
-
 def preload():
     """Resolve every op-backed credential once (one Touch ID), so a long-running
     server never has to prompt again."""
@@ -382,8 +360,9 @@ def check():
         except Exception as e:
             print(f"  FAIL  {a['email']:42} {e}")
     if _raw().get("anthropic_api_key"):
+        from mailmind.bootstrap import assistant
         try:
-            print(f"  ok    {'anthropic_api_key':42} ({len(anthropic_key() or '')} chars)")
+            print(f"  ok    {'anthropic_api_key':42} ({len(assistant.config_key() or '')} chars)")
         except Exception as e:
             print(f"  FAIL  {'anthropic_api_key':42} {e}")
 
