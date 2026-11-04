@@ -83,3 +83,48 @@ def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command
     readmutq.drain()
     ingest.sync_folder(accounts.get(w.ADA), "Archive")
     assert boxes(world, name) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
+
+
+def late(n=1):
+    return w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID=f"<late-{n}@example.test>",
+                     Subject=f"Re: Lunch, late word {n}")
+
+
+def stored(message_id):
+    import store
+    c = store.conn()
+    try:
+        return c.execute("SELECT COUNT(*) FROM messages WHERE message_id=?", (message_id,)).fetchone()[0]
+    finally:
+        c.close()
+
+
+def test_an_idle_event_during_a_sync_isnt_lost(app, world, monkeypatch):
+    """IDLE hears Ada's new mail while a sync of Bea runs. The running sync goes round again for
+    Ada as it ends, instead of leaving her mail for the next scheduled sync, minutes away."""
+    import realtime
+    import server
+    from mailmind.platform import bus
+    running, release = threading.Event(), threading.Event()
+    sync = server.sync_accounts
+
+    def slow_first(emails=None):
+        if not running.is_set():
+            running.set()
+            release.wait(10)
+        return sync(emails)
+    monkeypatch.setattr(server, "sync_accounts", slow_first)
+    first = threading.Thread(target=lambda: server.sync_guarded({w.BEA}), daemon=True)
+    first.start()
+    try:
+        assert running.wait(5)
+        world.server.deliver(w.ADA, "INBOX", late(1))
+        bus.publish(realtime.InboxChanged(frozenset({w.ADA})))   # the app wired IDLE's news to a sync
+        world.server.deliver(w.ADA, "INBOX", late(2))
+        bus.publish(realtime.InboxChanged(frozenset({w.ADA})))   # and again: one more round covers both
+    finally:
+        release.set()
+        first.join(10)
+    assert not first.is_alive()
+    assert (stored("<late-1@example.test>"), stored("<late-2@example.test>")) == (1, 1)
+    assert not server._sync["running"]
