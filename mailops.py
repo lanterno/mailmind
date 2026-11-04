@@ -11,6 +11,8 @@ import imaplib
 sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import store
+from mailmind.mailbox.adapters import imap_list
+from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import profile
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
@@ -76,10 +78,10 @@ def _resolve_dest(M, op, acct):
     if op == "trash":
         return accounts.trash_folder(acct)
     if op == "junk":
-        j = _find_folder(M, ("\\junk", "junk", "\\spam", "spam", "bulk"))
+        j = find_role(M, "junk")
         return j or ("[Gmail]/Spam" if acct.get("kind") == "gmail" else None)
     if op == "archive":
-        return _find_folder(M, ("archive", "\\archive", "all mail", "\\all"))
+        return find_role(M, "archive", "all")
     return None
 
 
@@ -189,20 +191,10 @@ def set_flags(pk, flags):
     return True, "ok"
 
 
-def _find_folder(M, hints):
-    typ, data = M.list()
-    import re
-    for line in data or []:
-        if not line:
-            continue
-        m = re.match(r'^\(([^)]*)\)\s+(?:"[^"]*"|NIL)\s+(.+)$', line.decode("utf-8", "replace"))
-        if not m:
-            continue
-        flags, name = m.group(1).lower(), m.group(2).strip().strip('"')
-        blob = (name + " " + flags).lower()
-        if any(h in blob for h in hints) and "\\noselect" not in flags:
-            return name
-    return None
+def find_role(M, *roles):
+    """The folder on M's server playing the first of `roles` that one plays, by its SPECIAL-USE
+    attribute, then its name (mailmind.mailbox.domain.roles); None when none does."""
+    return folder_roles.find(imap_list.list_folders(M), *roles)
 
 
 def expunge_uid(M, uid):
@@ -249,7 +241,7 @@ def archive_message(pk):
             if typ != "OK":                       # imaplib returns a NO; it doesn't raise one
                 raise imaplib.IMAP4.error(f"STORE failed: {d}")
             return ("gmail", None)
-        arch = _find_folder(M, ("archive", "\\archive", "all mail", "\\all"))
+        arch = find_role(M, "archive", "all")
         if not arch:
             return ("nofolder", None)
         _move_uid(M, uid, arch)
@@ -287,7 +279,7 @@ def junk_message(pk):
 
     def op(M):
         M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
-        junk = _find_folder(M, ("\\junk", "junk", "\\spam", "spam", "bulk"))
+        junk = find_role(M, "junk")
         if not junk and acct["kind"] == "gmail":
             junk = "[Gmail]/Spam"
         if not junk:
@@ -367,12 +359,12 @@ def relabel_by_msgid(account, search_folder, message_id, label="\\Inbox"):
             pass
 
 
-def find_special(account, hints):
-    """Resolve a special folder name (e.g. Gmail All Mail) on an account."""
+def find_special(account, *roles):
+    """The folder playing the first of `roles` on an account's server (e.g. Gmail's All Mail)."""
     acct = accounts.get(account)
     M = accounts.connect(acct)
     try:
-        return _find_folder(M, hints)
+        return find_role(M, *roles)
     finally:
         try:
             M.logout()

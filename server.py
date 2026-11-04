@@ -57,6 +57,8 @@ import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy
+from mailmind.mailbox.adapters import imap_list
+from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
@@ -753,18 +755,10 @@ def _live_folder_list(acct):
     import pool
     out = []
     with pool.borrow(acct) as M:
-        typ, data = M.list()
-        for line in data or []:
-            if not line:
-                continue
-            s = line.decode("utf-8", "replace")
-            m = manage.re.match(r'^\(([^)]*)\)\s+(?:"[^"]*"|NIL)\s+(.+)$', s)
-            if not m:
-                continue
-            flags, name = m.group(1).lower(), m.group(2).strip().strip('"')
-            if name in (".", "/", "") or "\\noselect" in flags:
-                continue
-            role = _folder_role(name, flags, acct["kind"])
+        folders = [f for f in imap_list.list_folders(M) if f.selectable]
+        playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}   # one folder a role
+        for f in folders:
+            name, role = f.name, playing.get(f.name, "custom")
             unseen = 0
             try:
                 t, d = M.status(accounts.mailbox_arg(name), "(UNSEEN MESSAGES)")
@@ -774,7 +768,7 @@ def _live_folder_list(acct):
             except Exception:
                 total = 0
             out.append({"name": name, "role": role, "unseen": unseen, "total": total})
-    order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "junk": 8, "trash": 9}
+    order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
     out.sort(key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
     return out
 
@@ -832,19 +826,6 @@ def folders_for(account):
     c.close()
     return {"ok": True, "account": account, "folders": out, "snoozed": snoozed,
             "muted": muted, "waiting": waiting, "replylater": replylater}
-
-
-_ROLE_HINTS = [("inbox", ("inbox",)), ("sent", ("sent", "\\sent")), ("drafts", ("draft", "\\drafts")),
-               ("trash", ("trash", "deleted", "\\trash")), ("junk", ("junk", "spam", "\\junk")),
-               ("archive", ("archive", "all mail", "\\archive", "\\all"))]
-
-
-def _folder_role(name, flags, kind):
-    blob = (name + " " + flags).lower()
-    for role, hints in _ROLE_HINTS:
-        if any(h in blob for h in hints):
-            return role
-    return "custom"
 
 
 def snoozed_in(account, offset, limit):
@@ -914,7 +895,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
         (int(now.timestamp()) - days * 86400, account, account)).fetchall()
     seen, found = set(), []
     for r in rows:
-        if _folder_role(r["folder"], "", "") in ("trash", "junk"):
+        if folder_roles.role_by_name(r["folder"]) in ("trash", "junk"):
             continue
         try:
             raw = store.get_body(c, r["pk"])
@@ -2252,18 +2233,13 @@ def _recipient_addrs(s):
 
 
 def _is_sent_folder(folder):
-    """By the last path segment — not _folder_role, which calls INBOX.Sent "inbox"."""
-    seg = re.split(r"[/.]", folder or "")[-1].strip().lower()
-    return "draft" not in seg and (seg == "sent" or seg.startswith("sent "))
-
-
-_JUNK_FOLDER = re.compile(r"^(?:junk|spam|bulk)(?:[ _-]?(?:mail|e-?mail|folder))?$")
+    """A stored folder named as Sent is (mailmind.mailbox.domain.roles): "Sent", "INBOX.Sent"."""
+    return folder_roles.role_by_name(folder) == "sent"
 
 
 def _is_junk_folder(folder):
-    """Spam the provider filed: by the last path segment, like _is_sent_folder ("INBOX.Spam")."""
-    seg = re.split(r"[/.]", folder or "")[-1].strip().lower()
-    return bool(_JUNK_FOLDER.match(seg))   # Spam, Junk, Junk E-mail, Bulk Mail — not "Bulk orders"
+    """Spam the provider filed, by the folder's name: Spam, Junk, Junk E-mail — not "Bulk orders"."""
+    return folder_roles.role_by_name(folder) == "junk"
 
 
 def _own_addrs(c):

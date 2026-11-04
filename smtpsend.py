@@ -63,7 +63,7 @@ def append_to_sent(acct, raw):
     Returns the resolved folder name. Raises if no Sent folder or the APPEND fails."""
     M = accounts.connect(acct)
     try:
-        sent = mailops._find_folder(M, ("\\sent", "sent")) or "Sent"
+        sent = mailops.find_role(M, "sent") or "Sent"
         typ, d = M.append(accounts.mailbox_arg(sent), "(\\Seen)",
                           imaplib.Time2Internaldate(time.time()), raw)
         if typ != "OK":
@@ -87,7 +87,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
     deleted here (its UID means nothing in this one), and the caller removes it there."""
     M = accounts.connect(acct)
     try:
-        drafts = mailops._find_folder(M, ("\\drafts", "drafts", "draft")) or "Drafts"
+        drafts = mailops.find_role(M, "drafts") or "Drafts"
         if prev_folder is not None and prev_folder != drafts:
             prev_uid = prev_msgid = None
         typ, d = M.select(accounts.mailbox_arg(drafts), readonly=False)

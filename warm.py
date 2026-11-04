@@ -26,10 +26,10 @@ import ingest
 import mailops
 
 WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
-_ROLES = {                          # role -> LIST hints (matched against flags + name)
-    "drafts": ("drafts", "\\drafts"),
-    "archive": ("all mail", "\\all", "archive"),
-    "sent": ("sent", "\\sent"),
+_ROLES = {                          # what to warm -> the folder roles that may play it, in order
+    "drafts": ("drafts",),
+    "archive": ("all", "archive"),
+    "sent": ("sent",),
 }
 _STAGGER = {"drafts": 1, "archive": 2, "sent": 3}   # warm role every Nth tick
 
@@ -58,7 +58,7 @@ def _roles_for(acct):
         try:
             for role, hints in _ROLES.items():
                 try:
-                    out[role] = mailops._find_folder(M, hints)
+                    out[role] = mailops.find_role(M, *hints)
                 except Exception:
                     out[role] = None
         finally:

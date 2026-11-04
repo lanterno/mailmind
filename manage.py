@@ -36,6 +36,7 @@ import accounts
 import mailclass
 import pool
 import rules
+from mailmind.mailbox.adapters import imap_list
 from mailmind.platform import settings
 
 HDR_BATCH = 300
@@ -219,16 +220,7 @@ def cmd_inventory(accts):
             print(f"\n=== {a['email']} ===\n   ERROR: {type(e).__name__}: {e}")
             continue
         print(f"\n=== {a['email']} ({a['kind']}) ===")
-        typ, data = M.list()
-        for line in data or []:
-            if not line:
-                continue
-            s = line.decode("utf-8", "replace")
-            # LIST: (flags) "delim"|NIL  name   — name may be quoted OR a bare atom
-            m = re.match(r'^\([^)]*\)\s+(?:"[^"]*"|NIL)\s+(.+)$', s)
-            name = m.group(1).strip().strip('"') if m else None
-            if not name:
-                continue
+        for name in [f.name for f in imap_list.list_folders(M)]:
             try:
                 t, d = M.status(accounts.mailbox_arg(name), "(MESSAGES UNSEEN)")
                 s = d[0].decode()
