@@ -219,6 +219,18 @@ def test_a_notification_shows_the_summary_it_has(page, world):
     clean(page)
 
 
+def test_gmails_all_mail_is_named_so_and_g_a_opens_it(page, world):
+    opened(page)
+    switch_account(page, w.CY)
+    all_mail = folder(page, "[Gmail]/All Mail")
+    expect(all_mail).to_contain_text("All mail")
+    page.locator("#rows").click()                         # keys go to the mailbox, not a field
+    page.keyboard.press("g")
+    page.keyboard.press("a")                              # Gmail has no Archive: it files into All Mail
+    expect(all_mail).to_have_class(re.compile(r"\bon\b"))
+    clean(page)
+
+
 def test_search_finds_one_senders_mail(page, world):
     opened(page)
     page.keyboard.press("/")
