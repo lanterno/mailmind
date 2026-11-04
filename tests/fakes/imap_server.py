@@ -149,6 +149,7 @@ class Fault:
     answer: str | None = None   # the tagged reply instead of running it, e.g. "NO [UNAVAILABLE] busy"
     drop: bool = False          # close the connection instead of answering
     after: bool = False         # run the command, then drop before the tagged reply
+    stall: bool = False         # answer nothing until release_stalls(), then drop: a black hole
     times: int | None = 1       # how many matching commands it hits; None = every one
     when: object = None         # optional predicate on the command's arguments (a list of tokens)
     user: str | None = None     # only this account's connections
@@ -325,6 +326,9 @@ class Session:
             self.srv._record(self, tag, cmd, args, text)
             fault = self.srv._fault_for(self, cmd, args)
             try:
+                if fault and fault.stall:
+                    self.srv._unstalled.wait()
+                    raise _Drop()
                 if fault and fault.drop and not fault.after:
                     raise _Drop()
                 if fault and fault.answer and not fault.after:
@@ -780,6 +784,8 @@ class FakeIMAPServer:
         self.connections = 0
         self.lock = threading.RLock()
         self._faults = []
+        self._unstalled = threading.Event()
+        self._unstalled.set()
         self._sessions = set()
         self._idlers = set()
         self.ca = trustme.CA()
@@ -801,6 +807,7 @@ class FakeIMAPServer:
         return self
 
     def stop(self):
+        self._unstalled.set()
         if self._tcp:
             self._tcp.shutdown()
             self._tcp.server_close()
@@ -889,8 +896,19 @@ class FakeIMAPServer:
         can't tell whether it happened."""
         self._faults.append(Fault(command.upper(), after=True, times=times, when=when, user=user))
 
+    def stall(self, command, *, times=None, when=None, user=None):
+        """Answer nothing to a matching command, as a black-holed server would, until
+        release_stalls() (or stop()), then close the connection. Every match, by default."""
+        self._unstalled.clear()
+        self._faults.append(Fault(command.upper(), stall=True, times=times, when=when, user=user))
+
+    def release_stalls(self):
+        self._faults[:] = [f for f in self._faults if not f.stall]
+        self._unstalled.set()
+
     def clear_faults(self):
         self._faults.clear()
+        self._unstalled.set()
 
     def commands_for(self, user=None, command=None):
         """The recorded commands, optionally for one account and one command name."""

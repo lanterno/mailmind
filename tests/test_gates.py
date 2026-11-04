@@ -1,12 +1,26 @@
-"""mailmind.platform.workers.gates: the gate each account's live-IMAP work passes."""
+"""mailmind.platform.workers.gates: the gate each account's live-IMAP work passes. What holds for
+both kinds of gate runs under each; what only a gate for each account does runs under that."""
 import threading
+import time
 
 import pytest
 
 from mailmind.platform.workers import gates
 
-ADA = "ada@example.test"
+ADA, BEA = "ada@example.test", "bea@example.test"
 NOW = gates.Priority.INTERACTIVE
+
+
+@pytest.fixture(autouse=True, params=["global", "account"])
+def kind(request, monkeypatch):
+    monkeypatch.setenv("MAILMIND_WORKERS", request.param)
+    return request.param
+
+
+@pytest.fixture
+def per_account(kind):
+    if kind != "account":
+        pytest.skip("only a gate for each account does this")
 
 
 def holding(account=gates.EVERY_ACCOUNT):
@@ -86,3 +100,121 @@ def test_every_job_says_how_urgent_it_is():
     with pytest.raises(ValueError):
         gates.run(ADA, lambda: None, priority=7)
     assert [p.name for p in gates.Priority] == ["INTERACTIVE", "AFTER_USER", "SYNC", "MAINTENANCE"]
+
+
+def test_with_one_gate_for_all_another_account_waits_too(kind):
+    if kind != "global":
+        pytest.skip("only the one lock does this")
+    t, release = holding(ADA)
+    try:
+        with pytest.raises(gates.Busy):
+            gates.run(BEA, lambda: "never", priority=NOW, wait=False)
+        assert gates.held(BEA)
+    finally:
+        release.set()
+        t.join(5)
+
+
+# ── a gate for each account ────────────────────────────────────────────────────────────────────
+
+def test_a_held_account_holds_up_only_its_own_jobs(per_account):
+    t, release = holding(ADA)
+    try:
+        assert gates.run(BEA, lambda: "at once", priority=NOW, wait=False) == "at once"
+        assert (gates.held(ADA), gates.held(BEA), gates.held()) == (True, False, True)
+        with pytest.raises(gates.Busy):
+            gates.run(ADA, lambda: "never", priority=NOW, wait=False)
+    finally:
+        release.set()
+        t.join(5)
+    assert not gates.held()
+
+
+def queue_behind(account, *priorities):
+    """While `account`'s gate is held, start a job at each priority in turn, each waiting; then
+    let the gate go and return the order they ran in."""
+    t, release = holding(account)
+    ran, waiters = [], []
+    for p in priorities:
+        w = threading.Thread(target=lambda p=p: gates.run(account, lambda: ran.append(p), priority=p), daemon=True)
+        w.start()
+        waiters.append(w)
+        time.sleep(0.05)                                  # so each arrives after the last
+    release.set()
+    for w in [t, *waiters]:
+        w.join(5)
+    return ran
+
+
+def test_waiting_jobs_go_by_priority_then_in_turn(per_account):
+    P = gates.Priority
+    assert queue_behind(ADA, P.MAINTENANCE, P.SYNC, P.INTERACTIVE, P.AFTER_USER, P.INTERACTIVE) == \
+        [P.INTERACTIVE, P.INTERACTIVE, P.AFTER_USER, P.SYNC, P.MAINTENANCE]
+
+
+def test_a_job_for_every_account_waits_for_all_and_holds_them_all(per_account):
+    t, release = holding(ADA)
+    out = []
+    every = threading.Thread(target=lambda: out.append(gates.run(gates.EVERY_ACCOUNT, lambda: (gates.held(ADA),
+                                                                                          gates.held(BEA)),
+                                                                 priority=NOW)), daemon=True)
+    every.start()
+    time.sleep(0.05)
+    assert out == []                                      # ADA's job still runs
+    with pytest.raises(gates.Busy):                       # and a later BEA job waits behind it
+        gates.run(BEA, lambda: "never", priority=gates.Priority.MAINTENANCE, wait=False)
+    release.set()
+    for w in (t, every):
+        w.join(5)
+    assert out == [(True, True)]
+    assert not gates.held()
+
+
+def test_a_job_for_every_account_lets_a_more_urgent_one_go_first(per_account):
+    t, release = holding(ADA)
+    ran = []
+    every = threading.Thread(target=lambda: gates.run(gates.EVERY_ACCOUNT, lambda: ran.append("every"),
+                                                      priority=gates.Priority.MAINTENANCE), daemon=True)
+    every.start()
+    time.sleep(0.05)
+    assert gates.run(BEA, lambda: "first", priority=NOW, wait=False) == "first"
+    release.set()
+    for w in (t, every):
+        w.join(5)
+    assert ran == ["every"]
+
+
+def test_a_job_not_let_in_by_its_deadline_is_busy_and_never_runs(kind):
+    t, release = holding(ADA)
+    ran = []
+    try:
+        began = time.monotonic()
+        with pytest.raises(gates.Busy):
+            gates.run(ADA, lambda: ran.append(1), priority=NOW, deadline=0.2)
+        assert 0.15 < time.monotonic() - began < 2
+    finally:
+        release.set()
+        t.join(5)
+    assert ran == []
+    assert gates.run(ADA, lambda: "now", priority=NOW, deadline=0.2) == "now"
+
+
+def test_a_job_past_its_deadline_lets_the_next_one_in(per_account):
+    t, release = holding(ADA)
+    out = []
+    late = threading.Thread(target=lambda: out.append(gates.run(ADA, lambda: "late", priority=gates.Priority.SYNC)),
+                            daemon=True)
+    with pytest.raises(gates.Busy):
+        gates.run(ADA, lambda: "never", priority=NOW, deadline=0.1)
+    late.start()
+    release.set()
+    for w in (t, late):
+        w.join(5)
+    assert out == ["late"]
+
+
+def test_a_job_on_one_account_may_take_another_without_waiting(per_account):
+    def both():
+        return gates.run(BEA, lambda: (gates.held(ADA), gates.held(BEA)), priority=NOW, wait=False)
+    assert gates.run(ADA, both, priority=NOW) == (True, True)
+    assert not gates.held()
