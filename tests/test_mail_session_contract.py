@@ -5,7 +5,7 @@ server, and how a refusal, a dropped connection, a read-only process, a changed 
 an open transaction surface."""
 import email
 import imaplib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -166,6 +166,17 @@ def test_headers_come_in_uid_order_with_their_flags_and_only_the_fields_asked(wo
     assert fields["Subject"] == email.message_from_bytes(w.raw(RECEIPT))["Subject"]
 
 
+def test_arrival_dates_come_only_when_asked_for(world, session):
+    session.select("INBOX")
+    every = sorted(box(world).messages)
+    since = len(world.server.commands)
+    plain, dated = session.headers(every, ["SUBJECT"]), session.headers(every, ["SUBJECT"], internaldate=True)
+    assert ["INTERNALDATE" in line for line in sent(world, since)] == [False, True]
+    assert {h.internaldate for h in plain} == {None}
+    assert {h.uid: h.internaldate for h in dated} == {u: m.internaldate for u, m in box(world).messages.items()}
+    assert all(h.internaldate.utcoffset() == timedelta(0) for h in dated)
+
+
 def test_gmails_thread_id_comes_only_when_asked_for(world, kind):
     s = open_session(w.CY)
     try:
@@ -280,12 +291,14 @@ def test_a_refused_copy_raises_and_touches_nothing(world, session):
     assert box(world).messages[uid].flags == set() and box(world, "Archive").messages == archive
 
 
-def test_expunge_removes_only_that_uid(world, session):
-    one, two = uid_of(world, RECEIPT), uid_of(world, "ada-inbox-04-ci.eml")
+def test_expunge_removes_only_those_uids(world, session):
+    one, two, three = (uid_of(world, n) for n in (RECEIPT, "ada-inbox-04-ci.eml", "ada-inbox-01-lunch.eml"))
     session.select("INBOX", readonly=False)
-    session.add_flags([one, two], ["\\Deleted"])
-    session.expunge_uid(one)
-    assert one not in box(world).messages and two in box(world).messages
+    session.add_flags([one, two, three], ["\\Deleted"])
+    since = len(world.server.commands)
+    session.expunge([one, three])
+    assert sent(world, since) == [f"UID EXPUNGE {one},{three}"]
+    assert {one, three}.isdisjoint(box(world).messages) and two in box(world).messages
 
 
 def test_append_lands_with_its_flags_and_date_and_says_its_uid(world, session):
@@ -389,7 +402,7 @@ def test_a_read_only_process_examines_and_writes_nothing(world, kind, monkeypatc
         since = len(world.server.commands)
         s.select("INBOX", readonly=False)
         for write in (lambda: s.add_flags([1], ["\\Seen"]), lambda: s.remove_flags([1], ["\\Seen"]),
-                      lambda: s.move([1], "Archive"), lambda: s.copy([1], "Archive"), lambda: s.expunge_uid(1),
+                      lambda: s.move([1], "Archive"), lambda: s.copy([1], "Archive"), lambda: s.expunge([1]),
                       lambda: s.append("Drafts", b"x"), lambda: s.add_labels([1], ["\\Inbox"]),
                       lambda: s.remove_labels([1], ["\\Inbox"])):
             with pytest.raises(profile.ReadOnlyError):
