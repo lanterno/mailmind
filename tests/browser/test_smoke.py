@@ -452,6 +452,20 @@ def test_at_the_daily_limit_the_brief_waits_for_a_click(page, world, ai):
     clean(page)
 
 
+def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, world, anthropic_api):
+    lunch_needs_a_reply(world)
+    page.goto("/")
+    expect(page.locator(".bf-aioff")).to_contain_text("AI is off.")
+    page.get_by_role("button", name="Your week").click()
+    expect(page.locator("#rvBody")).to_have_text(
+        "AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.")
+    assert anthropic_api.requests == []
+    assert all("status of 409" in p for p in page.problems)    # the review it was asked for
+    assert len(page.problems) == 1                             # and nothing the page asked for itself
+    page.problems.clear()
+    clean(page)
+
+
 def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
     spent_the_daily_limit()
     ai.responder = lambda req: fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": []})
