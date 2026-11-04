@@ -574,14 +574,19 @@ def invalidate_stats():
 
 
 # ----------------------------------------------------------------------------- curation ops
+def _each_account(account, job):
+    """[job(acct)] for the account named, or for each account in turn when it names "all", each on
+    its own account's gate alone: the accounts' work is independent, so a run over all of them
+    never holds every gate at once, and one account's slow server holds up only its own turn."""
+    if account and account != "all":
+        return [gates.run(account, lambda: job(accounts.get(account)), priority=gates.Priority.INTERACTIVE)]
+    return [gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE)
+            for a in accounts.accounts()]
+
+
 def do_reconcile(account, dry_run):
     accounts.preload_creds()
-    every = not account or account == "all"
-
-    def reconcile():
-        accts = accounts.accounts() if every else [accounts.get(account)]
-        return [ingest.reconcile_account(a, dry_run=dry_run) for a in accts]
-    results = gates.run(gates.EVERY_ACCOUNT if every else account, reconcile, priority=gates.Priority.INTERACTIVE)
+    results = _each_account(account, lambda a: ingest.reconcile_account(a, dry_run=dry_run))
     if not dry_run:
         stamp = now_iso()
         with open(settings.current().reconcile_audit, "a") as f:
@@ -600,12 +605,7 @@ def do_sweep(account, dry_run):
     if not dry_run:
         profile.refuse_writes("a sweep")     # it moves mail, and its moves can't wait in a queue
     accounts.preload_creds()
-    every = not account or account == "all"
-
-    def sweep():
-        accts = accounts.accounts() if every else [accounts.get(account)]
-        return [manage.sweep_account(a, dry=dry_run) for a in accts]
-    results = gates.run(gates.EVERY_ACCOUNT if every else account, sweep, priority=gates.Priority.INTERACTIVE)
+    results = _each_account(account, lambda a: manage.sweep_account(a, dry=dry_run))
     if not dry_run:
         invalidate_stats()
     return {"ok": True, "dry_run": dry_run, "results": results,
