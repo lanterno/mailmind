@@ -472,8 +472,9 @@ Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://
 ## Two ways to use it
 
 **Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`), or
-`python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs (incremental
-ingest + summarize) every 5 minutes. With `MAILMIND_PROFILE=read-only` either one serves
+`python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs every 5 minutes
+and at once when IDLE hears new mail, and triages what arrived on a schedule of its own, so a
+slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one serves
 read-only: it writes nothing to a mail server, so sends and moves wait in their queues until a
 full run, and it syncs nothing in the background. `just dev` does that.
 

@@ -191,7 +191,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
   logged and counted, and the job goes on. `server.schedule(jobs)` is the job table: `snooze` in
-  every profile, then `sync`, `backfill`, `draft-ahead`, `reconcile` and `expire` in a full one.
+  every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile` and `expire` in a
+  full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
+  and a sync that brought new mail kicks it (`server._kick`). With AI off it tries nothing:
+  `summarize.summarize_pending` returns 0 at once.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`server.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
