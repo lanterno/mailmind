@@ -1,0 +1,68 @@
+"""The assess job: triage runs on a lane of its own, outside the sync's single-flight, so a slow
+model never holds up a sync. A sync that brings new mail kicks it. While AI is off it tries nothing
+at all. Fictional mail and the fake Claude API only."""
+from fixtures import world as w
+
+
+def unsummarized():
+    import store
+    c = store.conn()
+    try:
+        return len(store.needs_summary(c, 10_000))
+    finally:
+        c.close()
+
+
+def test_with_ai_off_a_round_tries_nothing(app, world, anthropic_api, monkeypatch):
+    import server
+    import summarize
+    tried = []
+    monkeypatch.setattr(summarize, "summarize_one", tried.append)
+    waiting = unsummarized()
+    assert waiting > 0
+    assert server.assess_round() is None
+    assert (tried, anthropic_api.requests, unsummarized()) == ([], [], waiting)
+
+
+def test_a_round_triages_a_batch_and_comes_back_at_once_while_more_wait(app, world, ai, monkeypatch):
+    import server
+    waiting = unsummarized()
+    monkeypatch.setattr(server, "ASSESS_BATCH", 3)
+    assert server.assess_round() == 0
+    assert unsummarized() == waiting - 3
+    monkeypatch.setattr(server, "ASSESS_BATCH", 300)
+    assert server.assess_round() is None
+    assert unsummarized() == 0 and len(ai.requests) == waiting
+
+
+def test_a_sync_with_new_mail_kicks_triage_and_asks_nothing_itself(app, world, ai, monkeypatch):
+    import server
+    kicked = []
+    monkeypatch.setattr(server, "_kick", kicked.append)
+    world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml",       # on the server only
+                                                   Message_ID="<lunch-5@example.test>",
+                                                   Subject="Re: Lunch, a table for three"))
+    server.sync_guarded({w.ADA})
+    assert (kicked, server._sync["result"], ai.requests) == (["assess"], "1 new", [])
+    server.sync_guarded({w.ADA})
+    assert (kicked, server._sync["result"]) == (["assess"], "0 new")
+
+
+def test_a_kick_for_a_job_this_process_doesnt_run_is_ignored(monkeypatch):
+    import server
+    from mailmind.platform.workers.scheduler import Scheduler
+    jobs = Scheduler()
+    monkeypatch.setattr(server, "JOBS", jobs)
+    server._kick("assess")                         # read-only schedules no assess job
+    jobs.add("assess", lambda: None, every=300)
+    server._kick("assess")
+    assert jobs._jobs["assess"]._wake.is_set()
+
+
+def test_the_summarize_command_says_ai_is_off_and_tries_nothing(data_dir, anthropic_api, monkeypatch, capsys):
+    import summarize
+    monkeypatch.setattr("sys.argv", ["summarize.py", "10", "1"])
+    monkeypatch.setattr(summarize, "summarize_one", lambda row: 1 / 0)
+    summarize.main()
+    assert capsys.readouterr().out == "AI is off: there is no API key, so nothing was summarized.\n"
+    assert anthropic_api.requests == []

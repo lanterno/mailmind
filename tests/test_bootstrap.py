@@ -108,8 +108,8 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     if read_only:
         assert names == ["job:snooze"]
     else:
-        assert names[:-1] == ["worker_loop", "worker_loop", "job:snooze", "job:sync", "job:backfill",
-                              "job:draft-ahead", "job:reconcile", "job:expire"]
+        assert names[:-1] == ["worker_loop", "worker_loop", "job:snooze", "job:sync", "job:assess",
+                              "job:backfill", "job:draft-ahead", "job:reconcile", "job:expire"]
         assert spawned[-1] is realtime.start
     assert [j["name"] for j in server.JOBS.snapshot()] == [n.removeprefix("job:") for n in names if "job:" in n]
     out = capsys.readouterr().out
@@ -130,8 +130,9 @@ def scheduled(monkeypatch, **env):
 
 
 def test_the_full_profile_schedules_each_job_at_its_pace(monkeypatch):
-    assert scheduled(monkeypatch) == [("snooze", 60, 60), ("sync", 300, 0), ("backfill", 600, 45),
-                                      ("draft-ahead", 180, 120), ("reconcile", 1800, 120), ("expire", 3600, 180)]
+    assert scheduled(monkeypatch) == [("snooze", 60, 60), ("sync", 300, 0), ("assess", 300, 20),
+                                      ("backfill", 600, 45), ("draft-ahead", 180, 120),
+                                      ("reconcile", 1800, 120), ("expire", 3600, 180)]
 
 
 def test_read_only_schedules_snooze_wake_alone(monkeypatch):
@@ -142,7 +143,8 @@ def test_a_job_switched_off_is_left_out(monkeypatch):
     import server
     monkeypatch.setattr(server, "_RECONCILE_INTERVAL", 0)
     monkeypatch.setattr(server, "_EXPIRE_INTERVAL", 0)
-    assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "backfill"]
+    assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "assess",
+                                                                                      "backfill"]
 
 
 def test_a_short_reconcile_cycle_still_waits_30_seconds_between_rounds(monkeypatch):
