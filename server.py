@@ -3935,6 +3935,9 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/debug/pool":
                 import pool
                 self._json({"ok": True, **pool.stats()})
+            elif u.path == "/api/debug/jobs":    # the background jobs' timing and last outcomes
+                self._json({"ok": True, "profile": profile.current().value, "jobs": JOBS.snapshot(),
+                            "generated": now_iso()})
             elif u.path == "/api/export/plan":
                 import export
                 self._json(export.plan(q.get("account", [None])[0]))
