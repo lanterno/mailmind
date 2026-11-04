@@ -312,21 +312,33 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 Every job that talks to an account's IMAP server runs through
 `gates.run(account, fn, priority=..., wait=...)` (`mailmind.platform.workers.gates`): the
 requests that open and file mail, undo, reconcile, expiry, the body backfill, the outbox, the
-offline queue and the thread summarizer. For now one process-wide lock is every account's gate,
-so all live-IMAP work is serialized. It is coarse and a known bottleneck (see ROADMAP.md); a
-later phase gives each account a worker of its own behind the same call. The connection pool's
-per-account lock is taken *inside* it. The 300 s sync and IDLE's syncs don't take it yet.
+offline queue and the thread summarizer. `MAILMIND_WORKERS` picks the gate:
 
-- A job is a function, not a block, since it may later run on another thread: it returns what
-  its caller needs instead of setting the caller's variables.
+- Unset (or `global`), one process-wide lock is every account's gate, so all live-IMAP work is
+  serialized and a black-holed account holds up the rest until its connection times out.
+- `account`, each account has a gate of its own. Waiting jobs go by priority, then in turn. An
+  `EVERY_ACCOUNT` job waits until no gate is held and holds them all, and a job that would come
+  after it waits behind it. The whole suite passes under either; the owner soaks `account`
+  before it becomes the default and the flag goes.
+
+A job runs on its caller's thread either way, so context variables (`assistant.allowing_over()`)
+and txguard's per-thread record stay with it. The connection pool's per-account lock is taken
+*inside* the gate. The 300 s sync and IDLE's syncs don't take it yet. `server.sync_guarded` is
+their single-flight: a sync asked for while one runs is recorded, and the running one goes round
+again for it as it ends.
+
+- A job is a function, not a block: it returns what its caller needs instead of setting the
+  caller's variables.
 - Each names its account (a message's through `mailops.account_of`), or `gates.EVERY_ACCOUNT`
   for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
   MAINTENANCE.
 - Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
-  the user. A job that waits on a gate from inside a job raises `RuntimeError` instead of
-  hanging.
+  the user. `deadline=` (seconds) raises `Busy` for a job not let in by then, and it never runs.
+  A job that waits on a gate from inside a job raises `RuntimeError` instead of hanging; one that
+  takes another account's gate with `wait=False` may.
 - Tests ask `gates.held(account)`, and hold the gate with `held_elsewhere()` from
-  `tests/gate.py`, which runs a job like any caller.
+  `tests/gate.py`, which runs a job like any caller. `tests/test_chaos.py` holds what one
+  account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
 `pool.py` (persistent per-account IMAP connections) and `warm.py` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must

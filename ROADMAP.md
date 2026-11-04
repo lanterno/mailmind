@@ -251,13 +251,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (a bridge branch exists in `pool._take` with its own max-age/max-uses, but `_is_bridge()` excludes
   it from the `MAILMIND_POOL=1` catch-all), extend borrowing to mutations (only reads borrow today),
   and default it on.
-- **Give each account its own IMAP gate** · high value · effort M — Every live-IMAP job now passes
-  `gates.run(account, ...)`, naming its account and priority, but one process-wide lock is still
-  every account's gate — so a slow Proton fetch still blocks archive/send/open on every other
-  account. The pool's per-account slot lock is taken *inside* it, so the pool cuts per-op latency
-  without buying any cross-account concurrency. The jobs that pass `gates.EVERY_ACCOUNT` (reconcile
-  or sweep of all accounts, a draft save whose old copy is in another account, an undo with no
-  account) need splitting first. This is the structural half of the cold-open fix.
+- **Make a gate for each account the default** · high value · effort S — `MAILMIND_WORKERS=account`
+  gives each account its own gate (`mailmind.platform.workers.gates`), so a slow Proton fetch no
+  longer blocks archive, send or open on another account; unset, one lock is still every
+  account's gate. Soak it on real accounts, then make it the default and delete the flag. Then
+  give each account's worker the connection it owns (the pool dissolved into it), and split the
+  jobs that pass `gates.EVERY_ACCOUNT` (reconcile or sweep of all accounts, a draft save whose old
+  copy is in another account, an undo with no account), which wait for every gate.
 - **Persist and document `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a
