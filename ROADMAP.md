@@ -39,13 +39,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   dashboard.html and no tracking-parameter stripper exists in any module. A pure-client handler
   that drops `utm_*`/`fbclid` and unwraps redirect wrappers before insertion. Independent of the
   markdown work.
-- **Retry a Sent copy that failed** · high value · effort S — Where the server doesn't file sent
-  mail itself (every account but Gmail), `outbox._side_effects` appends the Sent copy once, after
-  delivery. A failure is logged and the row still ends `sent`, with `sent_appended` 0, so a message
-  that went out while the server was unreachable never appears in Sent, in MailMind or any other
-  client. Retry it with the queue's back-off once the server is back (the row's `delivered` gate
-  already keeps a retry from sending twice), and say in the outbox if it never lands.
-  `test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back` holds the behaviour.
 - **Configurable Undo-Send delay** · low value · effort S — The feature ships; only "configurable"
   is unmet. `SEND_DELAY = 10` is a bare module constant in `outbox.py` with no config key and no env
   override, though `enqueue` and the `scheduled` heuristic both already read it. Keep 10s as the
@@ -266,12 +259,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   jobs that still pass `gates.EVERY_ACCOUNT`, which wait for every gate: a draft save whose old
   copy is in another account (it needs just the two accounts' gates, which `gates.run` can't take
   yet), an undo with no account, and a message whose account `mailops.account_of` can't find.
-- **Keep one account's Sent copy from holding up the outbox** · medium value · effort S — The
-  outbox works one row at a time (`DurableQueue.drain`), so a Sent copy or `\Answered` flag
-  waiting on a black-holed server holds up every other account's sends until its 60-second timeout,
-  even with a gate for each account. Hand the after-delivery steps to a job of their own, or let
-  the next row go while one waits on its account's gate.
-  `test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send` holds the behaviour.
 - **Persist and document `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a

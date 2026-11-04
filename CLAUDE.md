@@ -405,6 +405,13 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   irreversible step returns, so the boot-time reset of running rows never repeats it. A row's
   state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
   as a job on the account's IMAP gate; the outbox's SMTP send holds none.
+- The outbox's queue has a lane for each account (`DurableQueue(lane="account")`): its drain
+  runs each account's rows in turn on a thread of their own. The worker's drain doesn't wait
+  for them; any other caller's (a test's `outbox.drain()`) waits for every lane it ran.
+- A Sent copy that fails puts the delivered row back in the queue, its tries counted from the
+  delivery, until it is filed or goes to `error`. The retry looks for the copy by Message-ID
+  first (`smtpsend.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as
+  `error` once it gives up, and `cancel_queued` never deletes a row past its gate.
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,

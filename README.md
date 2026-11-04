@@ -258,7 +258,11 @@ automatically.
 ### Compose & send
 
 - **A durable outbox.** Queued mail survives a restart, retries with backoff, and
-  surfaces failures with a Retry button that reopens the composer intact.
+  surfaces failures with a Retry button that reopens the composer intact. Each account's mail
+  goes out in a lane of its own, so one account's unreachable server holds up no other's. Where
+  the server doesn't file sent mail itself, a Sent copy that fails is tried again with the same
+  backoff, never sending the message twice or filing it twice, and the outbox says so if it
+  never lands.
 - **Undo Send** — a 10-second grace window with a live countdown that pulls the
   message back before it hits the wire and restores everything you'd written. If you're
   writing another message by then, it is saved to Drafts before the undone one takes its
