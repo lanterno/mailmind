@@ -27,7 +27,8 @@ _wake = threading.Condition()   # a worker backing off waits here; stop() and a 
 _watchers = {}                  # email -> _Watch: the workers start() and reconcile() run
 _watch_lock = threading.Lock()
 _running = False                # start() has run, and stop() hasn't
-_ENDPOINT = ("kind", "host", "port", "starttls", "credential", "strip_spaces")   # how it's reached
+_ENDPOINT = ("kind", "host", "port", "starttls", "credential", "strip_spaces",   # how it's reached
+             "imap_adapter")
 _dirty = set()
 _dirty_lock = threading.Lock()
 _kick = threading.Event()

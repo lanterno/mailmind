@@ -69,6 +69,8 @@ def accounts():
             "smtp_starttls": a.get("smtp_starttls", d["smtp_starttls"]),
             "alias": (a.get("alias") or "").strip() or None,
             "credential": a.get("credential", {}),
+            # "imapclient" asks the new door for IMAPClient (mailmind.bootstrap.mailbox)
+            "imap_adapter": a.get("imap_adapter"),
         })
     return out
 

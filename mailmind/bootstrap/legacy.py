@@ -7,6 +7,7 @@ package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 import threading
 
 from mailmind.accounts.domain import events as account_events
+from mailmind.bootstrap import mailbox
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import scheduler
 
@@ -77,3 +78,4 @@ def start(server, spawn=_daemon):
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {summarize.describe_engine()}", flush=True)
+    print(f"[imap] {mailbox.describe()}", flush=True)
