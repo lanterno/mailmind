@@ -5,6 +5,8 @@ server, and how a refusal, a dropped connection, a read-only process, a changed 
 an open transaction surface."""
 import email
 import imaplib
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -50,6 +52,29 @@ def box(world, name="INBOX", user=w.ADA):
 
 def uid_of(world, name):
     return world.placed[name][2]
+
+
+def wait_until(cond, timeout=5.0):
+    ends = time.monotonic() + timeout
+    while time.monotonic() < ends:
+        if cond():
+            return True
+        time.sleep(0.02)
+    return cond()
+
+
+def idling(session, seconds):
+    """Run session.idle(seconds) on a thread of its own; the thread's `got` holds what it returned
+    or raised."""
+    def run():
+        try:
+            t.got = session.idle(seconds)
+        except Exception as e:
+            t.got = e
+    t = threading.Thread(target=run, daemon=True)
+    t.got = None
+    t.start()
+    return t
 
 
 def inbox_ids(world, user):
@@ -349,6 +374,49 @@ def test_find_role_reads_the_folders_and_a_refused_list_finds_none(world, sessio
 
 def test_noop_answers(session):
     assert session.noop() is True
+
+
+# ── waiting for mail ───────────────────────────────────────────────────────────────────────────
+
+def test_idle_says_when_new_mail_arrives_and_leaves_idle(world, session):
+    session.select("INBOX", readonly=False)
+    t = idling(session, 30)
+    assert wait_until(lambda: world.server.commands_for(w.ADA, "IDLE"))
+    world.server.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID="<idle-1@example.test>"))
+    t.join(5)
+    assert (t.is_alive(), t.got) == (False, True)
+    assert session.noop() is True                           # out of IDLE, and the session still works
+
+
+def test_idle_with_nothing_new_ends_when_its_time_is_up(world, session):
+    session.select("INBOX", readonly=False)
+    started = time.monotonic()
+    assert session.idle(0.5) is False
+    assert time.monotonic() - started < 5 and session.noop() is True
+
+
+def test_a_connection_dropped_in_idle_raises_at_once(world, session):
+    import mailops
+    session.select("INBOX", readonly=False)
+    world.server.drop("IDLE", user=w.ADA)
+    t = idling(session, 60)
+    t.join(5)
+    assert not t.is_alive() and isinstance(t.got, mailops._UNREACHABLE), t.got
+
+
+def test_an_interrupt_ends_an_idle_at_once(world, kind):
+    import mailops
+    s = open_session()
+    try:
+        s.select("INBOX", readonly=False)
+        t = idling(s, 60)
+        assert wait_until(lambda: world.server.commands_for(w.ADA, "IDLE"))
+        s.interrupt()
+        t.join(5)
+        assert not t.is_alive()
+        assert t.got is False or isinstance(t.got, mailops._UNREACHABLE), t.got
+    finally:
+        s.shutdown()
 
 
 # ── when things go wrong ───────────────────────────────────────────────────────────────────────
