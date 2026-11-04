@@ -38,6 +38,11 @@ test-full *args:
     uv run playwright install chromium
     uv run pytest --browser {{args}}
 
+# The MailSession contract against a real IMAP server, Dovecot in Docker, through each adapter.
+# Needs Docker running; the first run pulls the image.
+test-dovecot *args:
+    uv run pytest --dovecot tests/test_mail_session_dovecot.py {{args}}
+
 # Classifier behaviour
 test-classifier:
     {{py}} tests.py

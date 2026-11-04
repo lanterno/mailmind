@@ -39,7 +39,10 @@ testpaths = ["tests"]
 pythonpath = [".", "tests"]
 # importlib mode: test modules are imported by path, so tests/ never shadows the root's tests.py.
 addopts = ["--import-mode=importlib", "-ra"]
-markers = ["browser: drives dashboard.html in Chromium; skipped unless pytest runs with --browser"]
+markers = [
+    "browser: drives dashboard.html in Chromium; skipped unless pytest runs with --browser",
+    "dovecot: runs against Dovecot in Docker; skipped unless pytest runs with --dovecot",
+]
 
 [tool.importlinter]
 # The package's own layers. Which legacy modules it imports is the ratchet's job

@@ -40,15 +40,22 @@ def pytest_addoption(parser):
                      help="rewrite tests/golden/ from what the app answers now, instead of comparing")
     parser.addoption("--browser", action="store_true",
                      help="also run the tests marked browser, which drive dashboard.html in Chromium")
+    parser.addoption("--dovecot", action="store_true",
+                     help="also run the tests marked dovecot, which need Docker to run Dovecot")
+
+
+# The tests each run only when asked for: marker -> (option, how to ask).
+_OPT_IN = {"browser": ("--browser", "just test-full"), "dovecot": ("--dovecot", "just test-dovecot")}
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--browser"):
-        return
-    skip = pytest.mark.skip(reason="browser test: run with --browser (just test-full)")
-    for item in items:
-        if item.get_closest_marker("browser"):
-            item.add_marker(skip)
+    for marker, (option, recipe) in _OPT_IN.items():
+        if config.getoption(option):
+            continue
+        skip = pytest.mark.skip(reason=f"{marker} test: run with {option} ({recipe})")
+        for item in items:
+            if item.get_closest_marker(marker):
+                item.add_marker(skip)
 
 
 @pytest.hookimpl(wrapper=True)
