@@ -385,7 +385,35 @@ def test_the_sync_menu_says_what_ai_cost_today(page, world, ai):
     opened(page)
     page.locator("#statusBtn").click()
     expect(page.get_by_role("dialog", name="Sync status")).to_contain_text(
-        "Claude API · claude-opus-5-5 · $0.02 today")
+        "Claude API · claude-opus-5-5 · $0.02 of $15.00 today")
+    clean(page)
+
+
+def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
+    import time
+    from mailmind.assistant.application.gateway import local_day
+    from mailmind.assistant.application.ports import Spend, Usage
+    from mailmind.bootstrap import assistant
+    now = time.time()                                  # the server's frozen clock
+    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok",
+                                  Usage(), 15_000_000, int(now)))           # the default limit, spent
+    ai.responder = lambda req: fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": []})
+    opened(page)
+    ask = page.get_by_role("alertdialog", name="Today’s AI limit is reached")
+    page.keyboard.press("/")
+    page.get_by_role("textbox", name="search").fill("?When is lunch with Lin?")
+    expect(ask).to_contain_text("MailMind has spent $15.00 on AI today, and its daily limit is $15.00.")
+    expect(ask.get_by_role("button", name="Not now")).to_be_focused()
+    ask.get_by_role("button", name="Not now").click()
+    expect(ask).to_be_hidden()
+    expect(page.locator("#rows")).to_contain_text("ask failed")
+    assert ai.requests == []
+    page.get_by_role("textbox", name="search").fill("?When is lunch with Lin, again?")
+    ask.get_by_role("button", name="Go over the limit").click()
+    expect(page.locator(".ask-answer")).to_have_text("Lunch is on Thursday at noon.")
+    assert [r.prompt.count("When is lunch with Lin, again?") for r in ai.requests] == [1]
+    assert all("status of 402" in p for p in page.problems)    # the two refusals the page asked about
+    page.problems.clear()
     clean(page)
 
 
