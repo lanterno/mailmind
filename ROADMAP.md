@@ -454,14 +454,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
   holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but
   a forged line could pass for a real one. Print request-supplied values with `!r`.
-- **Don't send mail to the API without a key** · high value · effort S — with
-  `MAILMIND_AI=api` and no key, `summarize.call_claude` and `call_claude_json` still call
-  `claude_api.message`, and `claude_api._post` sends an empty `x-api-key` with the prompt (mail
-  text) to api.anthropic.com. `/api/review` and `/api/briefing/since` do this on every open, and
-  the 401 then shows as "the API key was rejected" while `summarize.status` reports the engine as
-  `none`. Once the CLI goes (D8) this is the default path. Raise before the request when `key()` is
-  empty. Pinned by `test_without_a_key_no_mail_leaves_for_the_api` and, for triage,
-  `test_bug_without_a_key_triage_sends_no_mail`.
 - **Undo a Proton trash without marking the mail read** · medium value · effort S — Bridge marks a
   message read on its way to Trash, and `mailops._mk_move_undo` keeps no `\Seen` state, so Undo
   brings unread mail back read. Record `seen` in the descriptor and clear `\Seen` after the move

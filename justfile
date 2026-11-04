@@ -58,7 +58,7 @@ test-expire:
 test-thread-file:
     {{py}} test_thread_file.py
 
-# Claude API engine against a local stub: request shape, refusals, retries, engine choice
+# Claude API engine against a local stub: request shape, refusals, retries, AI off without a key
 test-claude-api:
     {{py}} test_claude_api.py
 
@@ -135,7 +135,7 @@ check-config:
 ingest target="all" days="90":
     {{py}} ingest.py {{target}} {{days}}
 
-# Summarize pending messages with Claude (the API if a key is set, else the claude CLI)
+# Summarize pending messages with Claude (the API; with no key, AI is off)
 summarize limit="2000" workers="3":
     {{py}} summarize.py {{limit}} {{workers}}
 

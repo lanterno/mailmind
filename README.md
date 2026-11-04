@@ -17,13 +17,13 @@ See [Features](#features) for what ships today and
   still runs the app on Python alone.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
-  Anthropic through the Claude API or the `claude` CLI.
+  Anthropic through the Claude API.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need Claude. Put a Claude API key in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY` to call the Claude API directly (billed per token to that key's organization), or install and sign in to the [`claude`](https://docs.claude.com/en/docs/claude-code) CLI to use **your** subscription. With neither, MailMind still ingests and curates mail — it just shows no AI summaries, and the brief says so and how to turn AI on.
+> **Heads-up:** summaries and the other AI features need a Claude API key, in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY`; calls are billed per token to that key's organization. Without one, AI is off: MailMind still ingests and curates mail, sends nothing to Anthropic, and the brief says AI is off and how to turn it on.
 
 ---
 
@@ -40,7 +40,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │                      notifications / receipts / personal / protected)
    store.py  →  SQLite (mailmind.db)
         │
-   summarize.py                summarize + score importance 1–5 with Claude (API or CLI)
+   summarize.py                summarize + score importance 1–5 with Claude
         │
    server.py  +  dashboard.html        the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
@@ -60,7 +60,7 @@ live in a slide-in drawer.
 
 MailMind started as a summarizer with a reading pane. It is now a full local-first
 mail client — everything below ships today and runs against your local SQLite store
-and Claude (the Claude API, or the `claude` CLI on your own machine).
+and the Claude API.
 
 ### Reading
 
@@ -194,18 +194,18 @@ Everything here runs through Claude and returns **schema-validated** structured
 output, so malformed-response errors don't reach the UI. Nothing is ever sent
 automatically.
 
-- **Claude API or CLI.** With an API key set, MailMind calls the Messages API
-  directly (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
-  runs at low effort, everything else at medium). Without a key it uses the local
-  `claude` CLI on your subscription. A safety-classifier decline on a mail body is
+- **The Claude API.** With an API key set, MailMind calls the Messages API
+  (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
+  runs at low effort, everything else at medium). Without a key, AI is off and
+  nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   The key goes in `mailmind.config.json` as `"anthropic_api_key"` (inline, or
   `{"op": …}` / `{"env": …}` like an account password), and that wins over
   `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
-  accident. The server's startup line names the engine, the model and where the key
-  came from, and so does the sync menu, in red with the reason ("the API key was
-  rejected", "the claude command isn't signed in") when the last call failed. With no
-  AI at all, the brief says so calmly and the composer drops Draft and Rewrite; both
+  accident. The server's startup line names the model and where the key came from,
+  and so does the sync menu, in red with the reason ("the API key was rejected",
+  "rate-limited for now") when the last call failed. With no key, the brief says
+  AI is off calmly and the composer drops Draft and Rewrite; both
   places say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
 
@@ -388,11 +388,9 @@ automatically.
 - **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's two packages,
   FastAPI and uvicorn, from `pyproject.toml` on first run. Without it, `python3 server.py` runs
   the same app on the standard library alone.
-- **Claude**, for summaries — either a Claude API key, as `"anthropic_api_key"` in
-  `mailmind.config.json` or in `ANTHROPIC_API_KEY` (MailMind calls the Messages API
-  itself, no SDK), or the `claude` CLI on your `PATH`, installed and authenticated
-  (it shells out to `claude -p …` and uses your Claude subscription). Set
-  `MAILMIND_MODEL` to pick a cheaper/faster model.
+- **A Claude API key**, for summaries and the other AI features, as
+  `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
+  AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
@@ -502,16 +500,15 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | `MAILMIND_HOME` | The data directory: the database, config, rules, saved views and audit trails. Unset, the repo folder, where they have always lived. It must already exist; MailMind never creates it. Every command reads it: the server, `ingest.py`, `summarize.py`, `manage.py`, `config.py check`, `export.py`. |
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends and moves wait in their queues, flags, drafts, sweeps and unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
-| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: use the `claude` CLI. |
-| `MAILMIND_AI` | `api` or `cli` — use that engine whether or not a key is set. |
-| `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5` on the API, the CLI's own default otherwise), e.g. `claude-haiku-5-5` |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |
+| `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
 | `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs read-only. |
 | `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by read-only). |
-| `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for older `claude` CLI builds and models without structured output. |
+| `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
 

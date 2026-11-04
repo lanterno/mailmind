@@ -39,7 +39,7 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_thread_file.py       # whole-conversation archive/trash (10)
-python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (23)
+python3 test_claude_api.py        # Claude API engine against a local stub server, and summarize.status (22)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
@@ -66,8 +66,7 @@ The rest of `tests/` pins today's behaviour ahead of the refactor. Each test see
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
 MailMind module loads:
 
-- It removes any Claude key and any `MAILMIND_HOME` from the environment, pins
-  `MAILMIND_AI=api` and sets `TZ=UTC`.
+- It removes any Claude key and any `MAILMIND_HOME` from the environment and sets `TZ=UTC`.
 - It installs the tripwire in `tests/guard.py`. The tripwire refuses the real data files (at the
   repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
   `claude`, `op` and `security` programs. A test that trips it fails.
@@ -403,26 +402,27 @@ alone cannot execute script. Preserve that ordering when touching either.
 ### AI calls
 
 Everything routes through `summarize.call_claude_json(prompt, schema)` (or
-`call_claude` for plain text). `summarize.engine()` picks the backend: the Messages API
-via `claude_api.py` when a key is set, else the local `claude` CLI with
-`--output-format json --json-schema`. `MAILMIND_AI=api|cli` overrides it. The key is
+`call_claude` for plain text), which call the Messages API through `claude_api.py`. The
+Claude API is the only engine (decision D8). The key is
 `config.anthropic_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
-means no key, never a fall-through to the environment's.
-`MAILMIND_NO_SCHEMA=1` falls back to free-form text on either engine. AI actions never
+means no key, never a fall-through to the environment's. With no key AI is off:
+`summarize.engine()` is `"none"`, and a call raises `summarize.AIOff` (a `RuntimeError`)
+before anything is sent.
+`MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
 
-`claude_api.py` is urllib, not the SDK (stdlib-only rule). `api_schema` drops the
+`claude_api.py` is urllib, not the SDK, since `python3 server.py` imports it. `api_schema` drops the
 keywords structured output rejects (`minimum`, `maximum`, `maxLength`) and closes every
 object, so callers must keep clamping what they read. It sends `fallbacks: "default"` on
 the models that accept it, reads a refusal as an empty reply, and retries
 408/409/429/5xx twice.
 
-Both engines keep one contract: a failed call raises `RuntimeError` (the caller retries
+One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
-stores its fallback). No key and no `claude` degrades to no summaries rather than
+stores its fallback). No key degrades to no summaries, with nothing sent, rather than
 failing; keep that property. `call_claude` and `call_claude_json` are wrapped by `_noted`,
-which records each call's outcome for `summarize.status()` — served on `/api/digest` as
+which records each call's outcome for `summarize.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
 
