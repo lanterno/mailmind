@@ -40,8 +40,9 @@ def test_a_shallower_folder_wins_over_a_deeper_one_of_the_same_name():
     assert roles.find(fs, "archive") == "Archive"
 
 
-def test_among_equals_the_servers_order_decides():
-    assert roles.find(folders(("Spam",), ("Junk",)), "junk") == "Spam"
+def test_among_equals_the_name_decides_whatever_order_the_server_lists_them_in():
+    for listed in ((("Spam",), ("Junk",)), (("Junk",), ("Spam",))):
+        assert roles.find(folders(*listed), "junk") == "Junk"
 
 
 def test_a_folder_that_cant_be_selected_plays_no_role():
