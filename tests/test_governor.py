@@ -214,16 +214,16 @@ def test_forget_is_a_fresh_start():
     (0, 15.0), (-3, 15.0), ("lots", 15.0), (None, 15.0), (float("nan"), 15.0), (float("inf"), 15.0),
     ("missing", 15.0)])
 def test_the_daily_limit_is_a_positive_number_of_dollars_or_15(data_dir, value, limit):
-    import config
+    from mailmind.bootstrap import assistant
     body = {"accounts": []} if value == "missing" else {"accounts": [], "ai_daily_limit_usd": value}
     (data_dir / "mailmind.config.json").write_text(json.dumps(body))
-    assert config.ai_daily_limit_usd() == limit
+    assert assistant.limit_micros() == round(limit * 1_000_000)
 
 
 def test_a_config_that_cant_be_parsed_leaves_the_limit_at_15(data_dir):
-    import config
+    from mailmind.bootstrap import assistant
     (data_dir / "mailmind.config.json").write_text("{ not json")
-    assert config.ai_daily_limit_usd() == 15.0
+    assert assistant.limit_micros() == 15_000_000
 
 
 # ── through the routes ───────────────────────────────────────────────────────
