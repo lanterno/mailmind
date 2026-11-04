@@ -10,6 +10,9 @@ exponentially and retry; after MAX_ATTEMPTS the row is 'error' (terminal until a
 retry). Exactly-once delivery is enforced by a persisted `delivered` flag, the queue's gate,
 set the instant the wire send returns: a crash/DB-failure after delivery requeues the row, but
 send_one() then skips the send and only finishes bookkeeping.
+A Sent copy that fails puts the delivered row back in the queue, with the same back-off and
+attempts counted afresh, so the copy is filed once the server is back; the gate keeps the retry
+from sending again. Listed, such a row is `sent`, or `error` with a Retry once the copy gives up.
 The Message-ID + raw bytes are built once and reused, so the Sent copy matches the wire.
 """
 import json
@@ -36,9 +39,14 @@ QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", fin
                      backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
 
 
+SENT_COPY_PENDING = "Delivered; its copy in Sent is still to be saved"
+SENT_COPY_FAILED = "Delivered, but its copy couldn't be saved in Sent"
+
+
 @dataclass(frozen=True)
 class Sent:
-    """A queued send went out and its bookkeeping is done (published on mailmind.platform.bus)."""
+    """A queued send went out, or a later try at its Sent copy ended (published on
+    mailmind.platform.bus)."""
     outbox_id: int
     account: str
 
@@ -107,11 +115,14 @@ def list_recent(limit=50):
         except Exception:
             pass
         na = r["next_attempt_at"] or 0
-        scheduled = r["state"] == "queued" and na > _now() + SEND_DELAY + 5   # clearly future, not just the grace window
+        state, error = r["state"], r["last_error"]
+        if r["delivered"] and state != "sent":           # went out; only its Sent copy is owed
+            state, error = ("error", SENT_COPY_FAILED) if state == "error" else ("sent", SENT_COPY_PENDING)
+        scheduled = state == "queued" and na > _now() + SEND_DELAY + 5   # clearly future, not just the grace window
         out.append({
             "id": r["id"], "account": r["account"], "subject": r["subject"] or "(no subject)",
             "to": rcpt.get("to", []), "cc": rcpt.get("cc", []), "bcc_count": len(rcpt.get("bcc", [])),
-            "state": r["state"], "attempts": r["attempts"], "error": r["last_error"],
+            "state": state, "attempts": r["attempts"], "error": error,
             "created_at": r["created_at"], "sent_at": r["sent_at"],
             "next_attempt_at": na, "scheduled": scheduled,
         })
@@ -143,17 +154,22 @@ def _commit(fn):
 
 
 def _side_effects(oid, row, acct):
-    """Best-effort, done-once: Sent copy (non-Gmail) + \\Answered on the original.
+    """Done-once: Sent copy (non-Gmail) + \\Answered on the original, and the rest below.
     Each IMAP op is a job of its own on its account's IMAP gate (NOT one across the whole
-    thing). A failure here never fails an already-delivered send — it's logged + skipped."""
+    thing). A failure here never fails an already-delivered send. A Sent copy that failed is
+    returned (scrubbed), for send_one to try again; any other step is logged and skipped."""
+    unfiled = None
     if provider.resolve(acct).saves_sent and not row["sent_appended"]:
         _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))   # Gmail auto-saves
     elif not row["sent_appended"]:
+        # delivered before this run (a retry, or a crash's recovery): the last APPEND may have landed
+        mid = row["message_id"] if row["delivered"] else None
         try:
-            gates.run(acct["email"], lambda: smtpsend.append_to_sent(acct, row["raw"]),
+            gates.run(acct["email"], lambda: smtpsend.append_to_sent(acct, row["raw"], message_id=mid),
                       priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))
         except Exception as e:
+            unfiled = f"sent copy failed: {type(e).__name__}"
             print(f"[outbox] Sent-copy failed for #{oid}: {smtpsend.sanitize_smtp_error(e)}", flush=True)
     if row["in_reply_to_pk"] and not row["answered_set"]:
         try:
@@ -193,6 +209,7 @@ def _side_effects(oid, row, acct):
             _commit(lambda c: store.outbox_set(c, oid, draft_deleted=1))
         except Exception as e:
             print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
+    return unfiled
 
 
 def send_one(oid):
@@ -216,13 +233,21 @@ def send_one(oid):
                   f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
             return
         _commit(lambda c: QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
-    # delivered — best-effort side effects, then mark sent (all guarded so a DB hiccup
-    # can't strand a delivered row; next pass sees delivered=1 and only retries bookkeeping)
+    # delivered — side effects, then mark sent (all guarded so a DB hiccup can't strand a
+    # delivered row; next pass sees delivered=1 and only retries bookkeeping). A Sent copy that
+    # failed sends the row back to the queue instead, delivered, until it's filed or gives up.
     try:
-        _side_effects(oid, row, acct)
-        _commit(lambda c: QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))
+        unfiled = _side_effects(oid, row, acct)
+        if unfiled:
+            # the copy's tries count from the delivery, not on from the send's
+            tried = {"id": oid, "attempts": row["attempts"] if row["delivered"] else 0}
+            terminal, delay = _commit(lambda c: QUEUE.retry_later(c, tried, unfiled, _now()))
+            print(f"[outbox] sent #{oid}; its Sent copy "
+                  f"{'gives up' if terminal else f'is tried again in {delay}s'}", flush=True)
+        else:
+            _commit(lambda c: QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))
+            print(f"[outbox] sent #{oid}", flush=True)
         bus.publish(Sent(oid, row["account"]))
-        print(f"[outbox] sent #{oid}", flush=True)
     except Exception as e:
         print(f"[outbox] post-send bookkeeping for #{oid} deferred: {type(e).__name__}", flush=True)
 

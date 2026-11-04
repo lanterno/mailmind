@@ -81,8 +81,10 @@ class DurableQueue:
                          f"WHERE id=? AND state=?", (QUEUED, id_, ERROR)).rowcount == 1
 
     def cancel_queued(self, c, id_):
-        """Delete a row no worker has claimed. False once one has."""
-        return c.execute(f"DELETE FROM {self.table} WHERE id=? AND state=?", (id_, QUEUED)).rowcount == 1
+        """Delete a row no worker has claimed. False once one has, and for a row back in the
+        queue after its irreversible step (a crash's, or one whose bookkeeping failed)."""
+        return c.execute(f"DELETE FROM {self.table} WHERE id=? AND state=? AND {self.gate}=0",
+                         (id_, QUEUED)).rowcount == 1
 
     def cancel_unapplied(self, c, id_):
         """Delete a row whose irreversible step hasn't happened, claimed or not: its worker

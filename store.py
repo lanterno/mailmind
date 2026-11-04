@@ -350,7 +350,8 @@ def outbox_holds_draft(c, did):
 
 def outbox_list(c, limit=50):
     return c.execute(
-        """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at
+        """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at,
+                  delivered
            FROM outbox ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
 
 
