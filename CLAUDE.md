@@ -26,6 +26,7 @@ python3 config.py check           # verify credentials resolve, per account (pri
 python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
 python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
 python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
+python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
 ```
 
 Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
@@ -251,7 +252,8 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   `PRAGMA user_version`. Migrations 1 to 20 are frozen in `migrations/m0001_m0020.py`, beside
   `BASE_SCHEMA`, `LEGACY_COLS` (pre-versioning column adds) and copies of the code they call
   (`_frozen_threads.py`, `_frozen_mailparse.py`). Never edit those files. A schema change is a
-  new migration in a new file after them; one that needs the app's code freezes a copy of it.
+  new migration in a new file after them, as `m0021_ai_usage.py` is; one that needs the app's
+  code freezes a copy of it.
 - Migrations are **append-only**. Never renumber or delete one — the version number is
   the on-disk contract, and retired features leave a historical no-op behind (`_m14_notes` →
   `_m18_drop_notes`).
@@ -442,6 +444,22 @@ failing; keep that property. `call_claude` and `call_claude_json` are wrapped by
 which records each call's outcome for `summarize.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
+
+The `Gateway` counts every call it sends in the usage ledger, migration 21's `ai_usage` (the
+`UsageLedger` port, `adapters.sqlite_ledger`). There is one row per local day, feature, model
+asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanent 4xx) or
+`failed`. Each row holds the calls, their tokens and `cost_micros`. `domain.pricing` computes the
+cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
+dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
+`feature`: `triage`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`,
+`ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
+pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
+that fails is logged by class name and never fails the call.
+
+What the ledger holds is read back in three places:
+- `summarize.status()` carries `spent_today_micros`, which the sync menu's AI line shows.
+- `/api/debug/ai?days=N` (30 by default) lists each day by feature.
+- `python3 -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
 
 ### Classification
 

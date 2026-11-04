@@ -209,6 +209,9 @@ automatically.
   AI is off calmly and the composer drops Draft and Rewrite; both
   places say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
+  Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
+  …) at Anthropic's list prices. The sync menu shows what today cost so far, and
+  `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
