@@ -408,6 +408,11 @@ A failed GET or POST answers a fixed message and logs the detail. STARTTLS, IMAP
 alike, takes `accounts.tls_context(host)`: verified everywhere but loopback, where Proton
 Bridge's certificate is self-signed.
 
+A credential goes only to its own account's server. `/api/accounts/test` logs a saved account in
+at its saved endpoint, and tries a draft (an account not yet saved) only with a password typed
+into it, at the host typed with it. A draft naming a stored secret (`op`, `env`, the Bridge
+password) is refused, since the request names the host.
+
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
 trailing backslash) with `accounts.BadMailbox`, an `IMAP4.error`. Never build `f'"{folder}"'`.
