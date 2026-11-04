@@ -210,8 +210,14 @@ automatically.
   places say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
-  …) at Anthropic's list prices. The sync menu shows what today cost so far, and
-  `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
+  …) at Anthropic's list prices. The sync menu shows what today cost so far against the
+  daily limit, and `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
+  MailMind spends at most $15 a day unless `"ai_daily_limit_usd"` in `mailmind.config.json`
+  names another amount. At the limit, triage and pre-drafting stop until the next day, and
+  anything you ask the AI for asks first whether to go over. Background work waits while you
+  use the AI and for 45 seconds after. Pre-drafting runs only if you've used the app in the
+  last 45 minutes. If the API keeps rejecting a request, background work stops until the key
+  or the model changes, while what you ask for still goes and shows the error.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
@@ -453,6 +459,10 @@ the password — mix freely per account:
 
 Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://Vault/Item/Field"}`
 (1Password) · `{"env": "VAR_NAME"}` (environment variable) · `{"proton_bridge": true}`.
+
+Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` is the Claude API
+key, in any credential style. `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
+in US dollars: `15` unless you set another positive number.
 
 **Per-type notes**
 - **Gmail / Workspace** — you need an **App Password** (Google account → 2-Step

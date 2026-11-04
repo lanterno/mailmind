@@ -193,8 +193,9 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   logged and counted, and the job goes on. `server.schedule(jobs)` is the job table: `snooze` in
   every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile` and `expire` in a
   full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
-  and a sync that brought new mail kicks it (`server._kick`). With AI off it tries nothing:
-  `summarize.summarize_pending` returns 0 at once.
+  and a sync that brought new mail kicks it (`server._kick`). With AI off, or triage held back
+  by the cost governor (see AI calls), it tries nothing: `summarize.summarize_pending` returns 0
+  at once, and a round that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`server.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
@@ -223,7 +224,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
 - `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
   from `mailmind`.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
-  `application` holds the ports and the `Gateway`, `domain` what it knows about the models, and
+  `application` holds the ports, the `Gateway` and the `CostGovernor`, `domain` what it knows
+  about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`. `mailmind.bootstrap.assistant` binds one and resolves the key.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
@@ -452,7 +454,10 @@ refusal as an empty reply, and retry 408/409/429/5xx twice. The SDK sends the ke
 One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
 stores its fallback). No key degrades to no summaries, with nothing sent, rather than
-failing; keep that property. `call_claude` and `call_claude_json` are wrapped by `_noted`,
+failing; keep that property. A call that was never sent raises a `NotSent`: `AIOff`, or a
+`HeldBack` from the cost governor (`OverLimit`, `Deferred`). A caller lets `HeldBack` through
+(`except _sz.HeldBack: raise`) ahead of its own `except Exception`, and so does a route's own
+catch for `summarize.OverLimit`, so `H.do_GET` and `H.do_POST` can answer it. `call_claude` and `call_claude_json` are wrapped by `_noted`,
 which records each call's outcome for `summarize.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
@@ -472,6 +477,32 @@ What the ledger holds is read back in three places:
 - `summarize.status()` carries `spent_today_micros`, which the sync menu's AI line shows.
 - `/api/debug/ai?days=N` (30 by default) lists each day by feature.
 - `python3 -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
+
+The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
+`assistant.governor()`) before every call it sends. `domain.features.kind` sorts each feature:
+`triage` is background, `draft-ahead` speculative, and every other feature interactive.
+- Slots. Two interactive calls at a time, and two background or speculative ones beside them.
+- Yielding. Background and speculative calls don't start while an interactive one runs, or for
+  45 seconds after one ends (`YIELD_SECONDS`).
+- Presence. A speculative call also needs someone to have used the app in the last 45 minutes.
+  `server._ui_touch` calls `saw_someone()` for every `/api/` request a person makes, except the
+  polling routes in `_UI_QUIET`. A start counts as someone here.
+- The daily limit is `config.ai_daily_limit_usd()`: the top-level `"ai_daily_limit_usd"`, a
+  positive number, or $15 (decision D7). It counts everything the ledger holds for today, and a
+  ledger that can't be read counts as over. At the limit, background and speculative calls raise
+  `Deferred("limit")`. An interactive call raises `OverLimit`, which `H.do_GET` and `H.do_POST`
+  answer as a 402 with `over_limit: true`. The page's `api()` asks (`askOverLimit`), then sends
+  the request again with `X-MailMind-AI-Over-Limit: allow` (`server.AI_OVER_HEADER`), which
+  runs it inside `assistant.allowing_over()`.
+- The breaker. A 401 or 403 stops every background and speculative call, and three permanent
+  4xx in a row for one feature and model stop that pair. It stays open until the model in use
+  changes, which a new key, base URL or transport does. Interactive calls still go.
+
+Background work asks `gateway().held_back(feature)` before a batch, and a call that was held
+back anyway raises `Deferred(reason)`. Nothing is counted for it, and `_noted` doesn't record it
+as a failure. Nothing in the governor is durable: a restart closes the breaker, and the limit
+holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`, and the
+tests start each one afresh with `forget()`.
 
 ### Classification
 

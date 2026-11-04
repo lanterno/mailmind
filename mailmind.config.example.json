@@ -23,9 +23,12 @@
     "Tip: you can manage all of this from the dashboard's ⚙ Settings instead of editing this file by hand.",
     "",
     "CLAUDE API KEY (optional): \"anthropic_api_key\" takes the key from console.anthropic.com, in any",
-    "  credential style above. It wins over ANTHROPIC_API_KEY; with neither, AI is off and nothing is sent."
+    "  credential style above. It wins over ANTHROPIC_API_KEY; with neither, AI is off and nothing is sent.",
+    "AI DAILY LIMIT: \"ai_daily_limit_usd\" is the most MailMind spends on the Claude API in a day, in US",
+    "  dollars (15 unless set). At the limit, background AI work stops and what you ask for asks first."
   ],
   "anthropic_api_key": "",
+  "ai_daily_limit_usd": 15,
   "accounts": [
     {"email": "you@gmail.com", "type": "gmail", "alias": "Personal",
      "_note": "OPTION A, self-contained. Gmail/Workspace needs an App Password (myaccount.google.com/apppasswords).",
