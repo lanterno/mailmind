@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import accounts
 import store
 import mailops
 from mailmind.platform import bus, profile
@@ -94,11 +95,19 @@ def apply_one(mid):
         def apply():                                         # IMAP op takes the account's gate (unlike SMTP)
             fresh = _commit_get(mid)                          # re-read under the gate: an undo may have
             if fresh is None:                                #   cancelled (deleted) the row between claim and here
-                return False
+                return "cancelled"
+            try:
+                accounts.get(fresh["account"])
+            except KeyError:
+                return "removed"
             mailops.apply_queued_mutation(fresh)
-            return True
+            return "applied"
         try:
-            if not gates.run(row["account"], apply, priority=gates.Priority.AFTER_USER):
+            outcome = gates.run(row["account"], apply, priority=gates.Priority.AFTER_USER)
+            if outcome == "removed":                         # removed or disabled: no retry can reach it
+                _commit(lambda c: QUEUE.give_up(c, row, "account removed"))
+                print(f"[readmutq] #{mid}: its account is gone; giving up", flush=True)
+            if outcome != "applied":
                 return
         except mailops._UNREACHABLE as e:
             err = type(e).__name__
