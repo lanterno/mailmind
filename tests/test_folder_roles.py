@@ -152,3 +152,36 @@ def test_imaplib_is_what_the_parser_reads(world):
         M.logout()
     assert typ == "OK" and isinstance(M, (imaplib.IMAP4, accounts.ReadOnlyIMAP))
     assert {f.name for f in imap_list.parse(data)} >= {"INBOX", "Archive", "All Mail", "Spam", "Folders/Clients"}
+
+
+def test_an_account_out_of_reach_shows_the_folders_it_has_stored(app, world):
+    import store
+    world.server.drop("LOGIN", user=w.BEA, times=None)          # Bridge down, before any list was cached
+    r = app.get(f"/api/folders?account={w.BEA}")
+    assert r.status == 200
+    c = store.conn()
+    try:
+        stored = {row["folder"]: (row["unseen"], row["total"]) for row in c.execute(
+            "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? GROUP BY folder",
+            (w.BEA,))}
+    finally:
+        c.close()
+    assert r.json["folders"][0] == {"name": "INBOX", "role": "inbox", "unseen": stored["INBOX"][0],
+                                    "total": stored["INBOX"][1]}
+    assert {f["name"] for f in r.json["folders"]} >= set(stored)
+
+
+def test_stored_folders_play_their_roles_by_name(data_dir):
+    import server
+    import store
+    c = store.conn()
+    try:
+        c.executemany("INSERT INTO sync_state(account, folder) VALUES (?, ?)",
+                      [(w.ADA, name) for name in ("Folders/Archive", "Archive", "INBOX.Spam", "Bulk orders", "Sent")])
+        c.commit()
+    finally:
+        c.close()
+    rail = {f["name"]: f["role"] for f in server._stored_folder_list(w.ADA)}
+    assert rail == {"INBOX": "inbox", "Sent": "sent", "Archive": "archive", "INBOX.Spam": "junk",
+                    "Folders/Archive": "custom", "Bulk orders": "custom"}
+    assert [f["name"] for f in server._stored_folder_list(w.ADA)][:3] == ["INBOX", "Sent", "Archive"]
