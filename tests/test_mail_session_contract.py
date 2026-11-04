@@ -365,12 +365,14 @@ def test_gmail_labels_come_off_and_go_back_on(world, kind):
         assert w.message_id(name) not in inbox_ids(world, w.CY)
         s.select("[Gmail]/All Mail", readonly=False)
         uid = s.by_message_id(w.message_id(name))
-        s.add_labels([uid], ["\\Inbox"])
+        s.add_labels([uid], ["\\Inbox", "Work/Clients"])
         lines = sent(world, since, user=w.CY)
     finally:
         s.logout()
-    assert [line.split(" ")[3][:12] for line in lines if line.startswith("UID STORE")] == \
-        ["-X-GM-LABELS", "+X-GM-LABELS"]
+    # Both adapters send the form the old door always has: a system label bare, any other quoted.
+    assert [line for line in lines if line.startswith("UID STORE")] == [
+        f"UID STORE {uid_of(world, name)} -X-GM-LABELS (\\Inbox)",
+        f'UID STORE {uid} +X-GM-LABELS (\\Inbox "Work/Clients")']
     assert w.message_id(name) in inbox_ids(world, w.CY)
 
 
