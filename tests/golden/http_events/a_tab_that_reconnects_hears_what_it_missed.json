@@ -1,0 +1,18 @@
+[
+ {
+  "note": "first frame",
+  "value": "retry: 3000\nid: <run>-0\n: connected"
+ },
+ {
+  "note": "after the mute, it reconnects and hears",
+  "value": [
+   "retry: 3000\nid: <run>-1\n: connected",
+   "id: <run>-2\nevent: undo\ndata: {}",
+   "id: <run>-3\nevent: followup\ndata: {\"account\": \"ada@example.test\"}"
+  ]
+ },
+ {
+  "note": "then, with nothing to say",
+  "value": ": keepalive"
+ }
+]

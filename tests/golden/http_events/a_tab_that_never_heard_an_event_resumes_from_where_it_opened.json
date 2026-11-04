@@ -1,0 +1,13 @@
+[
+ {
+  "note": "it opened with",
+  "value": "retry: 3000\nid: <run>-0\n: connected"
+ },
+ {
+  "note": "and on reconnecting hears",
+  "value": [
+   "retry: 3000\nid: <run>-0\n: connected",
+   "id: <run>-1\nevent: mute\ndata: {\"account\": \"ada@example.test\"}"
+  ]
+ }
+]

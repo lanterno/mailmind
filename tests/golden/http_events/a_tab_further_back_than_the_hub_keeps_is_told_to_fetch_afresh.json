@@ -1,0 +1,9 @@
+[
+ {
+  "note": "it reconnects and hears",
+  "value": [
+   "retry: 3000\nid: small-4\n: connected",
+   "id: small-4\nevent: resync\ndata: {}"
+  ]
+ }
+]

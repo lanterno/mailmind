@@ -262,9 +262,9 @@ def test_hwf_opening_a_message_keeps_its_threads_draft_ready(app, world, ai, rep
 
 
 def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monkeypatch):
-    import realtime
     import server
-    monkeypatch.setattr(realtime, "HEARTBEAT", 0.1)
+    from mailmind.platform import sse
+    monkeypatch.setattr(sse, "HEARTBEAT", 0.1)
     monkeypatch.setattr(server, "_LAST_UI_TS", 0.0)
     for path in (f"/api/folders?account={w.ADA}", "/api/outbox", "/api/stats",
                  f"/api/ai/draft-ahead?pk={world.pk(VENUE_END)}"):
@@ -275,7 +275,7 @@ def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monk
     assert b" 200 " in s.recv(64)
     s.close()
     deadline = time.monotonic() + 5
-    while realtime._subs and time.monotonic() < deadline:
+    while sse.HUB.listening() and time.monotonic() < deadline:
         time.sleep(0.02)
     assert server._LAST_UI_TS == 0.0
     app.get("/api/digest")

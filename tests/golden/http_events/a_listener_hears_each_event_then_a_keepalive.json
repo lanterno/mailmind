@@ -17,14 +17,14 @@
  },
  {
   "note": "first frame",
-  "value": "retry: 3000\n: connected"
+  "value": "retry: 3000\nid: <run>-0\n: connected"
  },
  {
   "note": "frames for mute, undo and Reply Later",
   "value": [
-   "event: mute\ndata: {\"account\": \"ada@example.test\"}",
-   "event: undo\ndata: {}",
-   "event: followup\ndata: {\"account\": \"ada@example.test\"}"
+   "id: <run>-1\nevent: mute\ndata: {\"account\": \"ada@example.test\"}",
+   "id: <run>-2\nevent: undo\ndata: {}",
+   "id: <run>-3\nevent: followup\ndata: {\"account\": \"ada@example.test\"}"
   ]
  },
  {

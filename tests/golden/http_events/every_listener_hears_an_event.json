@@ -2,8 +2,8 @@
  {
   "note": "what each heard",
   "value": [
-   "event: mute\ndata: {\"account\": \"cy@example.test\"}",
-   "event: mute\ndata: {\"account\": \"cy@example.test\"}"
+   "id: <run>-1\nevent: mute\ndata: {\"account\": \"cy@example.test\"}",
+   "id: <run>-1\nevent: mute\ndata: {\"account\": \"cy@example.test\"}"
   ]
  },
  {

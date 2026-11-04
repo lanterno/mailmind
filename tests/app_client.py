@@ -53,7 +53,9 @@ def reset_state():
             else:
                 setattr(mod, k, v)
     from mailmind.bootstrap import legacy
+    from mailmind.platform import sse
     legacy.unwire()                          # the server's subscriptions on the bus, as wire() made them
+    sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
 
 
 @dataclass

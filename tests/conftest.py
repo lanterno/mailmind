@@ -201,9 +201,10 @@ def golden(request, world, app):
     """Record exchanges with golden.record / golden.note; they are compared with (or, under
     --update-golden, written to) the test's file in tests/golden/ when the test passes."""
     import golden as g
+    from mailmind.platform import sse
     rec = g.Golden(_without_door(request.node.nodeid), request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
-                         (f"localhost:{app.port}", "localhost:<app>")],
+                         (f"localhost:{app.port}", "localhost:<app>"), (f"id: {sse.HUB.run}-", "id: <run>-")],
                    ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"})
     yield rec
     if request.node.stash.get(_CALL_PASSED, False):

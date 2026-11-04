@@ -1,5 +1,6 @@
 """The live event stream, /api/events: what a listener receives, in the server-sent-events framing,
-and how the stream ends. The golden files are in tests/golden/http_events/.
+how a tab that reconnects resumes, and how the stream ends. The golden files are in
+tests/golden/http_events/, each event's id written <run>-<n>.
 
 The stream is read over a raw socket, as EventSource would: a GET without the CSRF header, which
 EventSource can't send. Its body may run until the connection closes (the old front door's
@@ -65,16 +66,17 @@ class _Chunked:
 
 @pytest.fixture
 def quick(monkeypatch):
-    import realtime
-    monkeypatch.setattr(realtime, "HEARTBEAT", 0.2)
-    return realtime
+    """The stream's hub, with the keepalive cut to a fifth of a second."""
+    from mailmind.platform import sse
+    monkeypatch.setattr(sse, "HEARTBEAT", 0.2)
+    return sse
 
 
-def subscribers(realtime, n, timeout=5):
+def subscribers(sse, n, timeout=5):
     deadline = time.monotonic() + timeout
-    while len(realtime._subs) != n and time.monotonic() < deadline:
+    while sse.HUB.listening() != n and time.monotonic() < deadline:
         time.sleep(0.02)
-    return len(realtime._subs)
+    return sse.HUB.listening()
 
 
 def test_a_listener_hears_each_event_then_a_keepalive(app, golden, world, quick):
@@ -104,7 +106,7 @@ def test_every_listener_hears_an_event(app, golden, world, quick):
 
 
 def test_a_listener_past_the_cap_is_turned_away(app, golden, quick, monkeypatch):
-    monkeypatch.setattr(quick, "MAX_SUBS", 1)
+    monkeypatch.setattr(quick.HUB, "max_listeners", 1)
     s = Stream(app)
     s.frame()
     golden.record("a second listener", app.get("/api/events"))
@@ -119,4 +121,77 @@ def test_a_listener_past_the_cap_is_turned_away(app, golden, quick, monkeypatch)
 def test_a_cross_site_listener_is_refused(app, golden, quick):
     golden.record("cross-site", app.get("/api/events", headers={"Sec-Fetch-Site": "cross-site"}))
     golden.record("another host", app.get("/api/events", headers={"Host": "mail.example.test"}))
-    golden.note("listeners", len(quick._subs))
+    golden.note("listeners", quick.HUB.listening())
+
+
+# -- a tab that reconnects ------------------------------------------------------
+
+def test_a_tab_that_reconnects_hears_what_it_missed(app, golden, world, quick):
+    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    s = Stream(app)
+    golden.note("first frame", s.frame())
+    app.post("/api/mute", {"pk": lunch["pk"]})
+    heard = s.frame()
+    s.close()                                                     # the tab drops, say a laptop lid
+    subscribers(quick, 0)
+    app.post("/api/undo", {})
+    app.post("/api/replylater", {"pk": lunch["pk"]})
+    last = heard.split("\n")[0].removeprefix("id: ")
+    t = Stream(app, **{"Last-Event-ID": last})
+    golden.note("after the mute, it reconnects and hears", [t.frame() for _ in range(3)])
+    golden.note("then, with nothing to say", t.frame())
+    t.close()
+    subscribers(quick, 0)
+
+
+def test_a_tab_that_never_heard_an_event_resumes_from_where_it_opened(app, golden, world, quick):
+    s = Stream(app)
+    opened = s.frame()
+    s.close()
+    subscribers(quick, 0)
+    app.post("/api/mute", {"pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    t = Stream(app, **{"Last-Event-ID": opened.split("\nid: ")[1].split("\n")[0]})
+    golden.note("it opened with", opened)
+    golden.note("and on reconnecting hears", [t.frame(), t.frame()])
+    t.close()
+    subscribers(quick, 0)
+
+
+def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
+    s = Stream(app)
+    s.frame()
+    app.post("/api/mute", {"pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    last = s.frame().split("\n")[0].removeprefix("id: ")
+    s.close()
+    subscribers(quick, 0)
+    monkeypatch.setattr(quick, "HUB", quick.Hub(run="later"))   # the process restarted
+    t = Stream(app, **{"Last-Event-ID": last})
+    golden.note("it reconnects and hears", [t.frame(), t.frame()])
+    t.close()
+    subscribers(quick, 0)
+
+
+def test_a_tab_further_back_than_the_hub_keeps_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
+    monkeypatch.setattr(quick, "HUB", quick.Hub(ring=2, run="small"))
+    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    for _ in range(2):
+        app.post("/api/mute", {"pk": lunch["pk"]})
+        app.post("/api/undo", {})
+    t = Stream(app, **{"Last-Event-ID": "small-1"})
+    golden.note("it reconnects and hears", [t.frame(), t.frame()])
+    t.close()
+    subscribers(quick, 0)
+
+
+def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
+    from datetime import timedelta
+    import outbox
+    s = Stream(app)
+    s.frame()
+    app.post("/api/send", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Linen",
+                           "text": "Half is yours.", "idempotency_key": "k-tabs"})
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert s.frame().split("\n")[1:] == ["event: outbox", "data: {}"]
+    s.close()
+    subscribers(quick, 0)

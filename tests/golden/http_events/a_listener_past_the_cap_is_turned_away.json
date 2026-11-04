@@ -20,7 +20,7 @@
  {
   "note": "a listener after the first hung up",
   "value": {
-   "first frame": "retry: 3000\n: connected",
+   "first frame": "retry: 3000\nid: <run>-0\n: connected",
    "status": 200
   }
  }
