@@ -14,7 +14,8 @@ from datetime import datetime
 from imapclient import IMAPClient
 
 from mailmind.mailbox.adapters.imap_names import escaped, unescaped
-from mailmind.mailbox.application.session import Selected, move_by_copy
+from mailmind.mailbox.application import session as port
+from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder
 
 
@@ -81,6 +82,18 @@ class ImapClientSession:
         if not uids:
             return {}
         return {int(u): frozenset(_text(f) for f in fs) for u, fs in self._c.get_flags(list(uids)).items()}
+
+    def headers(self, uids, fields, *, gmail_thread=False):
+        items = ["UID", "FLAGS"] + (["X-GM-THRID"] if gmail_thread else []) + \
+            ["BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")]"]
+        uids, out = [int(u) for u in uids], []
+        for start in range(0, len(uids), port.HEADER_BATCH):
+            for uid, got in self._c.fetch(uids[start:start + port.HEADER_BATCH], items).items():
+                raw = next((v for k, v in got.items() if bytes(k).upper().startswith(b"BODY[HEADER")), None)
+                thread = got.get(b"X-GM-THRID")
+                out.append(Headers(int(uid), frozenset(_text(f) for f in got.get(b"FLAGS", ())), raw or b"",
+                                   str(thread) if thread is not None else None))
+        return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):
         got = self._c.fetch([int(uid)], ["BODY.PEEK[]"])

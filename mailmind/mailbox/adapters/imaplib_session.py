@@ -8,10 +8,12 @@ import re
 
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.adapters.imap_names import imap_quote, mailbox_arg
-from mailmind.mailbox.application.session import Selected, move_by_copy
+from mailmind.mailbox.application import session as port
+from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 
 _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
 _UID = re.compile(rb"UID (\d+)")
+_THRID = re.compile(rb"X-GM-THRID (\d+)")
 
 
 def _ok(what, typ, data):
@@ -76,6 +78,24 @@ class ImaplibSession:
             if uid and flags:
                 out[int(uid.group(1))] = frozenset(f.decode() for f in flags.group(1).split())
         return out
+
+    def headers(self, uids, fields, *, gmail_thread=False):
+        items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "")
+                 + "BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")])")
+        uids, out = [int(u) for u in uids], []
+        for start in range(0, len(uids), port.HEADER_BATCH):
+            data = _ok("FETCH", *self._M.uid("FETCH", _uid_set(uids[start:start + port.HEADER_BATCH]), items))
+            for i, item in enumerate(data):
+                if not isinstance(item, tuple):
+                    continue
+                after = data[i + 1] if i + 1 < len(data) and isinstance(data[i + 1], bytes) else b""
+                meta = (item[0] or b"") + after          # a server may send FLAGS after the literal
+                uid, flags, thread = _UID.search(meta), _FLAGS.search(meta), _THRID.search(meta)
+                if uid:
+                    out.append(Headers(int(uid.group(1)),
+                                       frozenset(f.decode() for f in flags.group(1).split()) if flags else frozenset(),
+                                       item[1] or b"", thread.group(1).decode() if thread else None))
+        return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):
         data = _ok("FETCH", *self._M.uid("FETCH", str(int(uid)), "(BODY.PEEK[])"))

@@ -29,6 +29,18 @@ class Selected:
     uidnext: int | None
 
 
+@dataclass(frozen=True)
+class Headers:
+    """One message's header fields, as a header fetch got them."""
+    uid: int
+    flags: frozenset
+    raw: bytes                          # the fields asked for, as the server sent them
+    gmail_thread: str | None = None     # Gmail's X-GM-THRID, when asked for: fetch data, not a header
+
+
+HEADER_BATCH = 300                      # UIDs to a header FETCH, so no command line grows too long
+
+
 class MailSession(Protocol):
     capabilities: frozenset             # upper-case names, as CAPABILITY said after login
 
@@ -38,6 +50,7 @@ class MailSession(Protocol):
     def uids(self, *criteria: str) -> list[int]: ...                        # UID SEARCH, in order
     def by_message_id(self, message_id: str) -> int | None: ...             # the newest match
     def flags(self, uids) -> dict[int, frozenset]: ...
+    def headers(self, uids, fields, *, gmail_thread: bool = False) -> list[Headers]: ...   # in UID order
     def body(self, uid: int) -> bytes | None: ...                           # BODY.PEEK[]
     def add_flags(self, uids, flags) -> None: ...
     def remove_flags(self, uids, flags) -> None: ...
