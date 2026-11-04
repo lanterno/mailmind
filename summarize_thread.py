@@ -6,7 +6,6 @@ the prompt tells the model to treat it as data, not instructions.
 """
 import re
 import json
-import threading
 from datetime import datetime, timezone
 
 import store
@@ -19,7 +18,6 @@ from mailmind.platform.workers.singleflight import SingleFlight
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
 CAP_TOTAL = 14000
-_AI_SEM = threading.Semaphore(2)          # max concurrent Claude calls from the bridge
 _FLIGHTS = SingleFlight()     # one summary made at a time for each (account, thread, scope)
 
 _QUOTE = re.compile(r"^\s*>")
@@ -163,8 +161,9 @@ def summarize(account, thread_id, scope="thread", force=False):
                                 omit=(f", {omitted} older omitted" if omitted else ""),
                                 blocks="\n".join(blocks))
         try:
-            with _AI_SEM:
-                out = _sz.call_claude(prompt, feature="thread")
+            out = _sz.call_claude(prompt, feature="thread")
+        except _sz.HeldBack:                        # over the daily limit: the route asks the user
+            raise
         except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
             print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "summary unavailable", "retry": True}, 502

@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 import store
 import summarize as _sz
-import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
 from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -213,8 +212,7 @@ def build(accounts_set, force=False):
         waiting_txt = "\n".join(f"- {w['subject']} → {w['to']}" for w in waiting) or "(nothing)"
         prompt = _PROMPT.format(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
         try:
-            with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
+            obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
             ai = _clean(obj)
             model = _sz.model_label()
             # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is
@@ -223,6 +221,8 @@ def build(accounts_set, force=False):
                 fb = _fallback(stats, needs, waiting)
                 ai = {"narrative": fb["narrative"], "next": ai["next"] or fb["next"]}
                 model = "fallback"
+        except _sz.HeldBack:                    # over the daily limit: the route asks the user
+            raise
         except Exception as e:
             print(f"[ai] review failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "review unavailable", "retry": True}, 502

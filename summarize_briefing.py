@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 import store
 import summarize as _sz
-import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
 from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -257,8 +256,9 @@ def build_delta(accounts_set, since_ts):
             lines.append(line)
         prompt = _DELTA_PROMPT.format(count=len(lines), items="\n".join(lines))
         try:
-            with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
+            obj = _sz.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
+        except _sz.HeldBack:                    # over the daily limit: the route asks the user
+            raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "delta unavailable", "retry": True}, 502
@@ -319,8 +319,9 @@ def build(accounts_set, force=False):
             lines.append(line)
         prompt = _PROMPT.format(items="\n".join(lines))
         try:
-            with _st._AI_SEM:
-                obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
+            obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
+        except _sz.HeldBack:                    # over the daily limit: the route asks the user
+            raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "briefing unavailable", "retry": True}, 502

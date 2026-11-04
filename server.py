@@ -56,7 +56,7 @@ import summarize_thread
 import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
-from mailmind.bootstrap import legacy
+from mailmind.bootstrap import assistant, legacy
 from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
@@ -66,6 +66,7 @@ HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
 ASSESS_INTERVAL = 300                     # seconds between the assess job's rounds, unless kicked
 ASSESS_BATCH = 300                        # messages triaged in one round
+ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
 STATS_TTL = 90                            # seconds to cache the live per-account stats
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
@@ -381,7 +382,12 @@ def nosync():
 def assess_round():
     """The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. It runs
     on its own lane, so a slow model never holds up a sync, and with AI off it tries nothing. A full
-    batch means more are waiting, so the next round follows at once."""
+    batch means more are waiting, so the next round follows at once. While the user is using AI the
+    round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
+    waits its interval."""
+    why = assistant.gateway().held_back("triage", summarize.MODEL)
+    if why:
+        return ASSESS_YIELD if why == "yielding" else None
     done = summarize.summarize_pending(limit=ASSESS_BATCH, workers=summarize.WORKERS)
     if done:
         print(f"[assess] {done} summarized", flush=True)
@@ -2997,7 +3003,6 @@ def do_replylater(body):
 # --------------------------------------------------------------------- AI bridge
 def ai_summarize(body):
     """On-demand thread/message summary via claude. Returns (result, code)."""
-    _ai_touch()
     scope = "thread"
     account = body.get("account")
     thread_id = body.get("thread_id")
@@ -3062,7 +3067,6 @@ def ai_delta(q):
 def ai_draft_reply(body):
     """Draft an editable reply to a thread/message via claude. Returns (result, code)."""
     import draft_reply
-    _ai_touch()
     account = body.get("account")
     thread_id = body.get("thread_id")
     pk = body.get("pk")
@@ -3122,7 +3126,6 @@ def ai_draft_reply(body):
 def ai_rewrite(body):
     """Rewrite/tone/translate the composer text via claude. Returns (result, code)."""
     import rewrite
-    _ai_touch()
     return rewrite.rewrite(str(body.get("text") or ""), str(body.get("op") or ""),
                            lang=str(body.get("lang") or "English"))
 
@@ -3134,7 +3137,7 @@ def ai_rewrite(body):
 # The durable `draft_ahead` table is the ONLY cache (drafts survive restarts); it is keyed on
 # (account, 't:<thread_id>'|'m:<message_id>') — natural keys, never pk — and every serve
 # revalidates fingerprint + TTL + eligibility + thread-anchor, so a stale draft is never surfaced.
-# Single-flight per key + the shared _AI_SEM cap (via draft_reply); fingerprint = thread state.
+# Single-flight per key; the cost governor decides when it may run; fingerprint = thread state.
 # ─────────────────────────────────────────────────────────────────────────────
 DRAFT_FLIGHTS = SingleFlight()   # one generation at a time for each (account, ref_key)
 DRAFT_DB_TTL = 24 * 3600         # servable age; fp is the correctness gate, this is temporal-drift hygiene
@@ -3146,13 +3149,9 @@ DRAFT_TICK_STARTUP_DELAY = 120   # let the startup sync + summarize backlog sett
 DRAFT_TOPK = 6                   # maintain warm drafts for at most the 6 best candidates (batch=1 per cycle)
 DRAFT_TOPK_PER_ACCOUNT = 2       # fairness across accounts
 DRAFT_RECENCY_WINDOW = 3 * 86400 # only mail from the last 72h; older mail drafts on demand
-DRAFT_IDLE_GRACE = 45            # skip a tick cycle if interactive AI ran in the last 45s
-DRAFT_ACTIVE_WINDOW = 45 * 60    # skip if no presence-implying /api/* request in 45 min (vacation gate)
 DRAFT_TICK_TRIP = 3              # consecutive led-generation failures → circuit breaker…
 DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
 
-_AI_LAST_INTERACTIVE = 0.0       # last user-initiated AI call (summarize/draft/rewrite/ask/do-plan)
-_LAST_UI_TS = time.time()        # last presence-implying /api/* request (boot counts: warm the top-K once)
 def post_body_cap(path):
     """The most a POST to `path` may carry, in bytes, checked against its Content-Length before
     the body is read: 38 MB where mail and its attachments go up, 1 MB everywhere else."""
@@ -3164,17 +3163,22 @@ _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/stats",
                                       # or the tick's own events would hold the vacation gate open forever
 
 
-def _ai_touch():
-    global _AI_LAST_INTERACTIVE
-    _AI_LAST_INTERACTIVE = time.time()
-
-
 def _ui_touch(path):
-    """Presence signal for the tick's vacation gate. _UI_QUIET routes are excluded because the
-    SSE followup/outbox listeners re-fetch them even from a hidden, forgotten-open tab."""
-    global _LAST_UI_TS
+    """Someone is here, for the cost governor's presence gate on drafting ahead. _UI_QUIET routes
+    are excluded because the SSE followup/outbox listeners re-fetch them even from a hidden,
+    forgotten-open tab."""
     if path.startswith("/api/") and path not in _UI_QUIET:
-        _LAST_UI_TS = time.time()
+        assistant.governor().saw_someone()
+
+
+AI_OVER_HEADER = "X-MailMind-AI-Over-Limit"   # "allow": the user said this request may go over
+
+
+def _over_limit_answer(e):
+    """The 402 an interactive AI request gets at the daily limit. The page asks the user, then
+    sends the request again with AI_OVER_HEADER."""
+    return {"ok": False, "error": "today's AI spending has reached the daily limit", "over_limit": True,
+            "spent_micros": e.spent_micros, "limit_micros": e.limit_micros}, 402
 
 
 def _draft_key(row):
@@ -3279,6 +3283,8 @@ def _gen_draft_ahead(account, pk, source="dwell"):
                     sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
                 except Exception:
                     pass
+        except summarize.HeldBack:
+            return None                                   # neutral: the governor said not now
         except Exception as e:
             print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             try:
@@ -3367,21 +3373,6 @@ def ai_draft_ahead_get(qs, kick_ok=False):
         c.close()
 
 
-def _ai_idle():
-    """True iff BOTH _AI_SEM slots are free (probe-and-release). Background pre-gen only
-    starts when the bridge is fully idle; being serial it then holds at most 1 of 2 slots,
-    so an interactive click always finds a free slot at background-start time. The
-    probe-release gap is TOCTOU-racy but benign: worst case one background gen briefly queues."""
-    sem = summarize_thread._AI_SEM
-    if not sem.acquire(blocking=False):
-        return False
-    got2 = sem.acquire(blocking=False)
-    sem.release()
-    if got2:
-        sem.release()
-    return got2
-
-
 _DRAFT_CAND_SQL = """
 SELECT m.pk, m.account, m.thread_id, m.message_id, m.from_addr,
        m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
@@ -3443,23 +3434,18 @@ def _pick_draft_candidate():
 
 def draft_ahead_rounds():
     """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
-    drafts at most one reply ahead, and only when nothing else wants the AI, then collects the
-    expired drafts."""
+    drafts at most one reply ahead, only when the cost governor would let it go (nobody is using
+    AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it), then
+    collects the expired drafts."""
     fails, suspended_until = 0, 0.0
 
     def draft_ahead_round():
         nonlocal fails, suspended_until
         now = time.time()
         if now < suspended_until:
-            pass                                                 # circuit breaker open
-        elif _sync["running"]:
-            pass                                                 # summarize backlog owns the sem
-        elif now - _LAST_UI_TS > DRAFT_ACTIVE_WINDOW:
-            pass                                                 # nobody looking (vacation gate)
-        elif now - _AI_LAST_INTERACTIVE < DRAFT_IDLE_GRACE:
-            pass                                                 # user mid-AI-flow → yield
-        elif not _ai_idle():
-            pass                                                 # bridge busy → yield
+            pass                                                 # circuit breaker open (an outage)
+        elif assistant.gateway().held_back("draft-ahead", summarize.MODEL):
+            pass                                                 # yielding, away, at the limit, rejected
         else:
             cand = _pick_draft_candidate()
             if cand is not None:
@@ -3486,7 +3472,6 @@ def ai_ask(body):
     Pure read (FTS retrieve → bounded claude read), no mutation/SMTP — like ai_summarize/
     ai_rewrite. Account is validated before any mail is touched. Returns (result, code)."""
     import ask
-    _ai_touch()
     account = (body.get("account") or "all").strip() or "all"
     question = str(body.get("question") or "").strip()[:8000]
     if account != "all" and account not in {a["email"] for a in accounts.accounts()}:
@@ -3640,15 +3625,15 @@ def ai_do_plan(body):
     """Plan an NL bulk command → a validated, capped {verb, pks} PREVIEW. READ-ONLY: generates no
     mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted, safely-scoped
     action. Returns (result, code)."""
-    _ai_touch()
     cmd = str(body.get("cmd") or "").strip()[:512]
     if not cmd:
         return {"ok": False, "error": "empty command"}, 400
     today = datetime.now().astimezone().date().isoformat()
     prompt = _DO_PROMPT.replace("{today}", today).replace("{cmd}", cmd)
     try:
-        with summarize_thread._AI_SEM:
-            plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
+        plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
+    except summarize.HeldBack:                # over the daily limit: the route asks the user
+        raise
     except Exception:
         return {"ok": False, "error": "planner unavailable", "retry": True}, 502
     filt = str(plan.get("filter") or "").strip()[:400]
@@ -3885,6 +3870,8 @@ class H(BaseHTTPRequestHandler):
             return self._json(no.answer(), no.status)
         q = parse_qs(u.query)
         _ui_touch(u.path)
+        over = assistant.allowing_over(self.headers.get(AI_OVER_HEADER) == "allow")
+        over.__enter__()
         try:
             if u.path == "/":
                 with open(os.path.join(HERE, "dashboard.html"), "r", encoding="utf-8") as f:
@@ -3950,7 +3937,8 @@ class H(BaseHTTPRequestHandler):
                             "generated": now_iso()})
             elif u.path == "/api/debug/ai":      # what AI cost each local day, by feature
                 days = max(1, min(366, int(q.get("days", ["30"])[0])))
-                self._json({"ok": True, "days": summarize.usage(days), "generated": now_iso()})
+                self._json({"ok": True, "days": summarize.usage(days), "governor": assistant.governor().snapshot(),
+                            "generated": now_iso()})
             elif u.path == "/api/export/plan":
                 import export
                 self._json(export.plan(q.get("account", [None])[0]))
@@ -3974,9 +3962,13 @@ class H(BaseHTTPRequestHandler):
                                 "signature_default": config.signature_default(), "generated": now_iso()})
             else:
                 self._send(404, b"not found", "text/plain")
+        except summarize.OverLimit as e:      # the page asks before it goes over
+            self._json(*_over_limit_answer(e))
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[get] {u.path}: {type(e).__name__}: {e}", flush=True)
             self._json({"ok": False, "error": "request failed"}, 500)
+        finally:
+            over.__exit__(None, None, None)
 
     def do_POST(self):
         u = urlparse(self.path)
@@ -3992,6 +3984,8 @@ class H(BaseHTTPRequestHandler):
         if no:
             return self._json(no.answer(), no.status)
         _ui_touch(u.path)                 # only a request that got past the guards: someone is here
+        over = assistant.allowing_over(self.headers.get(AI_OVER_HEADER) == "allow")
+        over.__enter__()
         try:
             if u.path == "/api/send":
                 try:
@@ -4067,6 +4061,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/summarize":
                 try:
                     res, code = ai_summarize(b)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "summary failed"}, 500
@@ -4074,6 +4070,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/draft-reply":
                 try:
                     res, code = ai_draft_reply(b)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] draft error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "draft failed"}, 500
@@ -4081,6 +4079,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/rewrite":
                 try:
                     res, code = ai_rewrite(b)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] rewrite error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "rewrite failed"}, 500
@@ -4088,6 +4088,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/ask":
                 try:
                     res, code = ai_ask(b)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] ask error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "ask failed"}, 500
@@ -4095,6 +4097,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/do-plan":     # read-only: NL command → validated, capped action PREVIEW
                 try:
                     res, code = ai_do_plan(b)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] do-plan error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "plan failed"}, 500
@@ -4116,6 +4120,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/review/refresh":     # force re-run the Weekly Review (behind _mutation_guard)
                 try:
                     res, code = ai_review(b, force=True)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "review failed"}, 500
@@ -4123,6 +4129,8 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing/refresh":   # force re-run (behind _mutation_guard)
                 try:
                     res, code = ai_briefing(b, force=True)
+                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                    raise
                 except Exception as ex:
                     print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "briefing failed"}, 500
@@ -4150,9 +4158,13 @@ class H(BaseHTTPRequestHandler):
         except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
             print(f"[post] {self.path}: read-only, refused {e}", flush=True)
             self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
+        except summarize.OverLimit as e:      # the page asks before it goes over
+            self._json(*_over_limit_answer(e))
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[post] {self.path}: {type(e).__name__}: {e}", flush=True)
             self._json({"ok": False, "error": "request failed"}, 500)
+        finally:
+            over.__exit__(None, None, None)
 
     def _rules_post(self, b):
         token = (b.get("token") or "").strip().lower()

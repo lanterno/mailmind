@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 import store
 import accounts
 import summarize as _sz
-import summarize_thread as _st            # the shared Semaphore(2) AI cap lives here
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
 CAND_LIMIT = 40         # FTS rows pulled before body-coverage selection
@@ -144,8 +143,9 @@ def ask(account, question):
 
     prompt = _PROMPT.format(question=question, blocks="\n\n".join(blocks))
     try:
-        with _st._AI_SEM:
-            obj = _sz.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
+        obj = _sz.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
+    except _sz.HeldBack:                        # over the daily limit: the route asks the user
+        raise
     except Exception:
         return {"ok": False, "error": "ask unavailable", "retry": True}, 502
 

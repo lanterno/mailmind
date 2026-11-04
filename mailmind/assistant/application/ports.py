@@ -4,7 +4,8 @@ ledger that counts what each call cost.
 A LanguageModel sends a Prompt as one user turn and returns the Reply. When no reply comes it
 raises ModelError, a RuntimeError, so the legacy callers' "a raise is retried later" contract
 holds: the API rejected the call (`status` says how), or nothing answered (`status` is None).
-AIOff is the one a model raises without sending anything, when there is no key.
+Some say nothing was sent (NotSent): AIOff, which a model raises when there is no key, and what
+the cost governor raises when it holds a call back (OverLimit, Deferred).
 """
 from dataclasses import dataclass
 from typing import Protocol
@@ -62,8 +63,37 @@ class ModelError(RuntimeError):
         return self.status is not None and 400 <= self.status < 500 and self.status not in RETRIED
 
 
-class AIOff(ModelError):
+class NotSent(ModelError):
+    """Nothing was sent, so no call was made: not a failure, and the ledger counts nothing."""
+
+
+class AIOff(NotSent):
     """AI is off: there is no API key, so nothing was sent."""
+
+
+class HeldBack(NotSent):
+    """The cost governor held the call back. Callers that turn a failure into "try again later"
+    let this through, so the route or the job can say why."""
+
+
+class OverLimit(HeldBack):
+    """An interactive call at the daily AI spending limit, which the user hasn't said may go over.
+    The page asks, then sends the request again with leave to."""
+
+    def __init__(self, spent_micros: int, limit_micros: int):
+        super().__init__("today's AI spending has reached the daily limit")
+        self.spent_micros = spent_micros
+        self.limit_micros = limit_micros
+
+
+class Deferred(HeldBack):
+    """Background or speculative work that may not start now. `reason` says why: "yielding" (the
+    user is using AI), "away" (nobody has used the app lately), "limit" (today's spending reached
+    the daily limit) or "breaker" (the API keeps rejecting these calls)."""
+
+    def __init__(self, reason: str):
+        super().__init__(f"held back: {reason}")
+        self.reason = reason
 
 
 class LanguageModel(Protocol):

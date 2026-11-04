@@ -4,7 +4,6 @@ input is UNTRUSTED data — the prompt forbids following instructions inside it;
 text only.
 """
 import summarize as _sz
-import summarize_thread as _st
 
 REWRITE_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
 
@@ -40,8 +39,9 @@ def rewrite(text, op, lang="English"):
     instr = instr.format(lang=(lang or "English")[:40])
     prompt = _PROMPT.format(instr=instr, text=text[:8000])
     try:
-        with _st._AI_SEM:
-            obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
+        obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
+    except _sz.HeldBack:                        # over the daily limit: the route asks the user
+        raise
     except Exception as e:
         print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "rewrite unavailable", "retry": True}, 502

@@ -3,7 +3,8 @@
 Every AI call in the app goes through call_claude_json / call_claude here, which call the Claude
 API through the Assistant's gateway (mailmind.bootstrap.assistant). With no API key AI is off: those
 calls raise AIOff before anything is sent, and status() says "none" rather than counting them as
-failed calls.
+failed calls. The cost governor may hold a call back instead (HeldBack: OverLimit for one someone
+asked for at the daily limit, Deferred for background work), which isn't a failed call either.
 Usage: python3 summarize.py [limit] [workers]
 """
 import sys
@@ -16,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
-from mailmind.assistant.application.ports import AIOff   # the calls below raise it when AI is off
+from mailmind.assistant.application.ports import AIOff, HeldBack, NotSent, OverLimit   # noqa: F401 (re-exported)
 from mailmind.assistant.domain import models
 from mailmind.bootstrap import assistant
 
@@ -96,11 +97,11 @@ def _plain(e):
 
 def _noted(fn):
     """Record each call's outcome in _last, passing its result or exception through unchanged.
-    A call refused because AI is off was never made, so it isn't recorded."""
+    A call that was never made (AI off, or held back by the cost governor) isn't recorded."""
     def run(*a, **kw):
         try:
             out = fn(*a, **kw)
-        except AIOff:
+        except NotSent:
             raise
         except Exception as e:
             _last.update(ok=False, ts=int(time.time()), error=_plain(e))
@@ -120,7 +121,7 @@ def status():
     return {"engine": "api" if on else "none", "model": model_label() if on else "",
             "key_from": assistant.key()[1] if on else "",
             "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"],
-            "spent_today_micros": spent_today()}
+            "spent_today_micros": spent_today(), "limit_micros": assistant.governor().limit_micros()}
 
 
 def spent_today():
@@ -202,8 +203,9 @@ def summarize_one(row):
 
 def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
     """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
-    many were summarized. With AI off it returns 0 at once: not one message is tried."""
-    if engine() == "none":
+    many were summarized. With AI off, or while the cost governor holds triage back, it returns 0
+    at once: not one message is tried."""
+    if engine() == "none" or assistant.gateway().held_back("triage", MODEL):
         return 0
     c = store.conn()
     rows = store.needs_summary(c, limit)
@@ -234,6 +236,10 @@ def main():
     workers = int(sys.argv[2]) if len(sys.argv) > 2 else WORKERS
     if engine() == "none":
         print("AI is off: there is no API key, so nothing was summarized.")
+        return
+    why = assistant.gateway().held_back("triage", MODEL)
+    if why:
+        print(f"Triage is held back ({why}), so nothing was summarized.")
         return
     summarize_pending(limit, workers, log=lambda m: print(m, flush=True))
     print("stats:", store.stats(store.conn()))

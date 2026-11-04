@@ -177,6 +177,19 @@ def anthropic_key():
     return resolve_credential({"email": "anthropic_api_key", "credential": cred}).strip()
 
 
+DEFAULT_AI_DAILY_LIMIT_USD = 15.0
+
+
+def ai_daily_limit_usd():
+    """The most MailMind may spend on the Claude API in a local day, in US dollars: the top-level
+    "ai_daily_limit_usd", a positive number, or 15 (decision D7) when the file sets none that is."""
+    try:
+        v = float(_raw().get("ai_daily_limit_usd"))
+    except (TypeError, ValueError, OSError):
+        return DEFAULT_AI_DAILY_LIMIT_USD
+    return v if v > 0 and v == v and v != float("inf") else DEFAULT_AI_DAILY_LIMIT_USD
+
+
 def preload():
     """Resolve every op-backed credential once (one Touch ID), so a long-running
     server never has to prompt again."""

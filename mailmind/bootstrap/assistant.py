@@ -11,7 +11,9 @@ style), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no k
 switch to the environment's. Both are read at each call, so a new key takes effect at once, and the
 model is made again only when the key, ANTHROPIC_BASE_URL or the transport changes.
 
-Every call is counted in the usage ledger, the ai_usage table of the data directory's database.
+Every call is counted in the usage ledger, the ai_usage table of the data directory's database,
+and passes the cost governor first, whose daily limit is config.ai_daily_limit_usd() ($15 unless
+the config names another), read at each call.
 """
 import os
 import threading
@@ -21,6 +23,9 @@ from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
 from mailmind.assistant.application.gateway import Gateway
+from mailmind.assistant.application.governor import CostGovernor, allowing_over
+
+__all__ = ["allowing_over", "gateway", "governor", "key", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -66,13 +71,22 @@ class _Bound:
             return self._made[1]
 
 
+def _limit_micros() -> int:
+    return round(config.ai_daily_limit_usd() * 1_000_000)
+
+
 _bound = _Bound("urllib")
 LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
-GATEWAY = Gateway(_bound, LEDGER)
+GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=_limit_micros)
+GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
 
 
 def gateway() -> Gateway:
     return GATEWAY
+
+
+def governor() -> CostGovernor:
+    return GOVERNOR
 
 
 def use(transport: str) -> None:

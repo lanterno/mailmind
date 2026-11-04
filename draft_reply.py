@@ -60,8 +60,9 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
     prompt = _PROMPT.format(ctx=("thread" if thread_id else "message"), me=(me or "the user"),
                             tone=tone_word, instr=instr, subject=subject, blocks="\n".join(blocks))
     try:
-        with _st._AI_SEM:                       # share the bridge's 2-proc cap with summarize
-            obj = _sz.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
+        obj = _sz.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
+    except _sz.HeldBack:                        # over the limit, or a draft ahead that must wait
+        raise
     except Exception as e:                      # AI off / timeout / rate-limit: retryable
         print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "draft unavailable", "retry": True}, 502
