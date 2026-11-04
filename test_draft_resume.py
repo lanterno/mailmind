@@ -1258,6 +1258,9 @@ class _FakeIMAP:
             raise OSError("connection reset")
         return self._select, [b"3"]
 
+    def response(self, code):
+        return code, self.untagged_responses.get(code, [None])
+
     def uid(self, *args):
         self.calls.append(("uid",) + args)
         if self.search != "OK":                         # a busy server: its words, not UIDs
