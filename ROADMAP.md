@@ -282,14 +282,15 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   the IMAP gate instead of using `pool.borrow` the way the three read call sites do.
 
-- **Move the mail code onto MailSession, then IMAPClient** · high value · effort L — The port
-  (`mailmind.mailbox.application.session`) and its two adapters pass the contract suite against
-  the fake, but `mailops`, `ingest`, `manage`, `smtpsend`'s Drafts and Sent, `warm`, `pool` and
-  `realtime` still drive imaplib connections from `accounts.connect` directly. Move them over a
-  module at a time through `mailmind.bootstrap.mailbox.open_session`, widening the port (IDLE,
-  FETCH of headers and X-GM-*, Gmail labels, APPENDUID and COPYUID) with a contract case for
-  each. Run the contract suite against Dovecot too, opt-in like the browser tests. Then make
-  IMAPClient the new door's adapter, and soak it on real accounts.
+- **Run the mail code on IMAPClient** · high value · effort M — Every IMAP connection the app
+  opens now comes from `mailmind.bootstrap.mailbox.open_session`, and both adapters pass the
+  contract suite against the fake. Run that suite against Dovecot too, opt-in like the browser
+  tests. Then make IMAPClient the new door's adapter (`front.build` calling
+  `mailbox.use("imapclient")`) and soak it on real accounts. Two things differ under it today:
+  IMAPClient sends a Gmail label change as `+X-GM-LABELS.SILENT ("\\Inbox")`, which the golden
+  files shared by both doors hold in imaplib's form, and
+  `test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker` spies on `accounts.connect`,
+  which the IMAPClient adapter never calls.
 
 ## Keyboard, screen readers and reversibility
 
@@ -448,17 +449,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Correctness and hardening
 
-- **Check the server's answer when starring or marking read** · medium value · effort S —
-  `mailops.set_flags` sends `UID STORE +FLAGS/-FLAGS` without reading `typ`, then mirrors the
-  flag locally through `store.set_local_flags`. imaplib returns a NO rather than raising it, so a
-  STORE the server refuses (a UID that has gone, a read-only folder) still shows as starred or read
-  until the next flag refresh. Check `typ` the way `_move_uid` does, skip the local mirror on a
-  refusal, and let `/api/flag` and `/api/seen` answer `ok: false`.
-- **Quote expiry tokens before they reach IMAP** · low value · effort S — `manage.expire_account`
-  searches `FROM f'"{token}"'` for each key of `rules.EXPIRE`. Tokens are set only from the CLI
-  (`rules.py expire`), but the server's hourly `expire` job runs the same search, so a token
-  holding a quote breaks it and one holding a line break sends a second command. Refuse such tokens
-  in `rules.set_expiry`, as `accounts.mailbox_arg` does for folder names.
 - **Keep request text out of log lines** · low value · effort S — `messages_in` prints
   `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
   holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but

@@ -250,18 +250,23 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   whole last segment of the name, never part of one ("Bulk orders" is nobody's junk). Where
   several could play a role, an attribute beats a name, a shallower path a deeper one, then LIST's
   order. `adapters.imap_list` reads an imaplib LIST answer into `Folder`s, literals included.
-  `mailops.find_role(M, *roles)` finds a folder on a live connection; the rail gives each role to
+  `session.find_role(s, *roles)` finds a folder on a live session; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
   there is no `archive`. `application.session.MailSession` is the port for one logged-in
-  connection (folders, status, select, UID search, a message by Message-ID, flags, a body, flag
-  changes, copy, move, a UID expunge, append, NOOP), with names as LIST gave them and imaplib's
-  error classes through either adapter: `adapters.imaplib_session` (what the old door runs on)
-  and `adapters.imapclient_session` (only it imports `imapclient`). `adapters.imap_names` holds
-  `mailbox_arg` and `imap_quote`, which `accounts` re-exports. `mailmind.bootstrap.mailbox` picks
-  the adapter (imaplib unless `use("imapclient")`) and opens a session (`open_session(acct)`) the
-  same way for both: TLS, the pin, login, txguard, `ReadOnlySession` read-only.
-  `tests/test_mail_session_contract.py` runs every case through each. Nothing calls it yet. The
-  rest of the context is standard library only.
+  connection: its capabilities (what the server says after login), folders, status, select, UID
+  search, a message by Message-ID, headers (in batches of `HEADER_BATCH`, with Gmail's thread id
+  and the arrival date when asked), flags, a body, flag and Gmail label changes, copy, move, a UID
+  expunge of the UIDs named, append (the new UID when the server says it), NOOP, and IDLE with
+  `interrupt()` from another thread. Names are as LIST gave them, and the errors are imaplib's
+  classes through either adapter: a refusal raises `IMAP4.error`, a lost connection
+  `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets. The adapters
+  are `adapters.imaplib_session` (what the old door runs on) and `adapters.imapclient_session`
+  (only it imports `imapclient`). `adapters.imap_names` holds `mailbox_arg` and `imap_quote`,
+  which `accounts` re-exports. `mailmind.bootstrap.mailbox` picks the adapter (imaplib unless
+  `use("imapclient")`) and opens a session (`open_session(acct)`) the same way for both: TLS, the
+  pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens comes from
+  it, and only the imaplib adapter calls `accounts.connect`. `tests/test_mail_session_contract.py`
+  runs every case through each. The rest of the context is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
@@ -289,7 +294,7 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - No transaction stays open across a network call. `database.connect` tracks each connection for
   the thread that opened it, and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
   while one has a transaction open, since a write held while a server answers keeps every other
-  writer waiting. An IMAP connection and each command (`accounts.connect`), an SMTP session and
+  writer waiting. An IMAP session and each command (`mailbox.open_session`), an SMTP session and
   all it sends (`smtpsend.smtp_connect`), a Claude API request and a one-click unsubscribe check
   it, in tests and in use. Commit before talking to a server; a new network path calls
   `refuse_network` first, or wraps the connection's method with `txguard.guard_calls`.
@@ -349,7 +354,7 @@ again for it as it ends.
   `tests/gate.py`, which runs a job like any caller. `tests/test_chaos.py` holds what one
   account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
-`pool.py` (persistent per-account IMAP connections) and `warm.py` (multi-folder sync)
+`pool.py` (persistent per-account IMAP sessions) and `warm.py` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
 work with them unset.
 
@@ -360,9 +365,9 @@ or signature change leaves the worker be. A worker also checks its account after
 so an edit of the file, which publishes nothing, still reaches it. `readmutq` gives up a queued
 move whose account is gone, as the outbox does a send.
 
-`realtime.stop()` and a retirement only shut a worker's socket down; the worker closes its own
-connection. Closing a socket another thread may be about to wait on frees its descriptor number
-for the next socket opened.
+`realtime.stop()` and a retirement only interrupt a worker's session (`MailSession.interrupt`, a
+socket shutdown); the worker closes its own connection. Closing a socket another thread may be
+about to wait on frees its descriptor number for the next socket opened.
 
 `mailmind.platform.profile` is the only reader of `MAILMIND_PROFILE` (`full`, the default, or
 `read-only`) and of the older `MAILMIND_NOSYNC`, which still selects read-only: any value but
@@ -383,16 +388,17 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
   as a job on the account's IMAP gate; the outbox's SMTP send holds none.
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
-  `accounts.connect` hands back an `accounts.ReadOnlyIMAP`, which opens every mailbox with
-  EXAMINE and raises `profile.ReadOnlyError` on any command not known to only read, before it is
-  sent. `smtpsend.smtp_connect` and `_unsub_oneclick_post` refuse too. `ReadOnlyError` is a
+  A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
+  before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
+  which refuses any command not known to only read. `smtpsend.smtp_connect` and `_unsub_oneclick_post` refuse too. `ReadOnlyError` is a
   member of `mailops._UNREACHABLE`, so a move queues as it does offline, and both queues' drains
   wait for a full run. What nothing queues (a flag, a draft, a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
-- A server NO or BAD means the message didn't move. `_imap_mutate` returns `(False, None)`, and
-  trash, archive, junk and move answer `ok: false` and keep the local row. imaplib returns a NO
-  rather than raising it, so check `typ` on COPY, STORE and APPEND. Never send a bulk `EXPUNGE`:
-  `mailops.expunge_uid` removes one UID, and `_move_uid` flags the original only after COPY succeeds.
+- A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
+  `_imap_mutate` returns `(False, None)`, and trash, archive, junk and move answer `ok: false`
+  and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
+  `EXPUNGE`: `MailSession.expunge(uids)` removes the UIDs named and no others, and
+  `move_by_copy` flags each original only after its COPY succeeded.
 - The queue's idempotency key carries the request's `mutation_id`, or a random one when the
   client sends none, so only a resubmit of the same request dedupes.
 - `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
@@ -474,6 +480,9 @@ password) is refused, since the request names the host.
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
 trailing backslash) with `accounts.BadMailbox`, an `IMAP4.error`. Never build `f'"{folder}"'`.
+Any other quoted value (a Message-ID, an expiry token) goes through `accounts.imap_quote`, which
+refuses CR, LF and NUL with `BadValue`, an `IMAP4.error` too: a sender can fold the Message-ID
+header so the ID stored holds a line break.
 
 `CSRF` is a per-process token. `dashboard.html` ships a `__CSRF_TOKEN__` placeholder in a
 `<meta>` tag that `server.py` substitutes at serve time; the frontend's `api()` helper

@@ -326,7 +326,9 @@ automatically.
   sends and moves wait in their queues for a normal run, and what can't wait is refused.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
-  copy landed, then removes only that message, never expunging the rest of the folder.
+  copy landed, then removes only that message, never expunging the rest of the folder. A star
+  or a read mark the server refuses is taken back on the page too, instead of showing until the
+  next sync.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
   per tick against the server, yields instantly to anything you're doing, and pushes an
   event so open lists drop messages deleted in another client.
@@ -356,10 +358,11 @@ automatically.
   first and reports only row counts and integrity checks, never a message.
 - **Only your own MailMind page can talk to the local server.** It answers just its
   own host name, refuses requests other websites start and any change that lacks the page's
-  token and origin, can't be framed by another page, and checks every folder name before it
-  reaches the mail server. Its answers tell the browser to keep them from other sites and out
-  of caches, and the page carries a content security policy, report-only for now, that lets
-  only its own scripts run.
+  token and origin, can't be framed by another page, and checks every folder name and search
+  value before it reaches the mail server, so a message whose ID hides a line break can't slip
+  in a command of its own. Its answers tell the browser to keep them from other sites and out of
+  caches, and the page carries a content security policy, report-only for now, that lets only
+  its own scripts run.
 - **Your Bridge password goes only to Bridge.** Bridge's certificate is pinned the first
   time MailMind connects, so something else listening on its port while it's down gets no
   password, over IMAP or SMTP. A changed certificate shows in Settings, to trust or not.
