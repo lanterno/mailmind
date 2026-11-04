@@ -1,12 +1,15 @@
 """Opening a connection to MailMind's SQLite database."""
 import sqlite3
 
+from mailmind.platform.db import txguard
+
 
 def connect(path):
     """A connection to the database at `path`: rows readable by column name, write-ahead logging,
     each commit on the disk itself before it returns, a minute's wait for a lock, and foreign keys
-    enforced."""
-    c = sqlite3.connect(path, timeout=60)
+    enforced. txguard tracks it, so a network call made while it has a transaction open raises."""
+    c = sqlite3.connect(path, timeout=60, factory=txguard.Connection)
+    txguard.track(c)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     # A commit survives a power cut, not only a crash: the outbox's `delivered` and the queue's
