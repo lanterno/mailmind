@@ -10,11 +10,11 @@ reconcile(), and a worker that finds its account changed under it leaves on its 
 
 Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread clean exit.
 """
-import socket
 import threading
 from dataclasses import dataclass
 
 import accounts
+from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
 
 IDLE_SECONDS = 24 * 60          # re-IDLE before servers drop (~29 min)
@@ -22,7 +22,7 @@ MAX_IDLE_ACCOUNTS = 12
 _DEBOUNCE = 3                   # coalesce a burst of IDLE signals into one sync
 
 _stop = threading.Event()
-_conns = []                     # worker IMAP conns, for force-close on stop()
+_conns = []                     # worker IMAP sessions, for force-close on stop()
 _wake = threading.Condition()   # a worker backing off waits here; stop() and a retirement wake it
 _watchers = {}                  # email -> _Watch: the workers start() and reconcile() run
 _watch_lock = threading.Lock()
@@ -105,26 +105,20 @@ def _worker(acct, watch=None):
             return
         M = None
         try:
-            M = accounts.connect(acct)
-            caps = getattr(M, "capabilities", ())
-            if "IDLE" not in caps:
+            M = mailbox.open_session(acct)
+            if "IDLE" not in M.capabilities:
                 print(f"[idle] {email}: server has no IDLE — falling back to periodic sync", flush=True)
                 try:
                     M.logout()
                 except Exception:
                     pass
                 return
-            M.select('"INBOX"')
+            M.select("INBOX", readonly=False)
             _conns.append(M)
             watch.conn = M               # set before leaving() is asked: _retire sets quit first
             backoff = 5
             while not watch.leaving():
-                changed = False
-                with M.idle(duration=IDLE_SECONDS) as idler:
-                    for typ, data in idler:
-                        if typ in ("EXISTS", "RECENT", "EXPUNGE"):
-                            changed = True
-                            break                # leave IDLE (sends DONE) before syncing
+                changed = M.idle(IDLE_SECONDS)   # it leaves IDLE (sends DONE) before syncing
                 if watch.leaving():
                     break
                 if changed:
@@ -168,10 +162,7 @@ def _retire(watch):
         _wake.notify_all()
     M = watch.conn
     if M is not None:
-        try:
-            M.sock.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
+        M.interrupt()
 
 
 def reconcile(_event=None):
@@ -231,7 +222,4 @@ def stop():
         # from here: the worker may be about to wait on that descriptor, and once closed its number
         # can go to the next socket opened, which the worker would then wait on (and read from).
         # The worker closes its own connection on the way out.
-        try:
-            M.sock.shutdown(socket.SHUT_RDWR)
-        except Exception:
-            pass
+        M.interrupt()
