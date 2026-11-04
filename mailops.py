@@ -193,8 +193,15 @@ def set_flags(pk, flags):
 
 def find_role(M, *roles):
     """The folder on M's server playing the first of `roles` that one plays, by its SPECIAL-USE
-    attribute, then its name (mailmind.mailbox.domain.roles); None when none does."""
-    return folder_roles.find(imap_list.list_folders(M), *roles)
+    attribute, then its name (mailmind.mailbox.domain.roles); None when none does, or when the
+    server refuses the LIST, so the caller falls back to its default name."""
+    try:
+        folders = imap_list.list_folders(M)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return None
+    return folder_roles.find(folders, *roles)
 
 
 def expunge_uid(M, uid):

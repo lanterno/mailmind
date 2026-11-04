@@ -8,6 +8,7 @@ line break is left out, since it can't be sent back.
 
 Standard library only.
 """
+import imaplib
 import re
 
 from mailmind.mailbox.domain.roles import Folder
@@ -51,8 +52,9 @@ def parse(data):
 
 
 def list_folders(M):
-    """The folders on M's server, [] when it refuses the LIST."""
+    """The folders on M's server. A LIST it refuses raises imaplib.IMAP4.error: imaplib hands a NO
+    back rather than raising it, and read as no folders it would look like an empty server."""
     typ, data = M.list()
     if typ != "OK":
-        return []
+        raise imaplib.IMAP4.error(f"LIST refused: {data!r}"[:200])
     return parse(data)
