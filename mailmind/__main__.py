@@ -4,6 +4,8 @@
                          front door
   db check-upgrade       try the next start's migrations on a copy of the database, and report
                          only row counts and integrity checks
+  ai usage [--days N]    what the Claude API cost each local day of the last N (default 7), by
+                         feature, from the usage ledger; it migrates nothing and calls nothing
 """
 import argparse
 import os
@@ -19,7 +21,12 @@ def main(argv=None):
     db = commands.add_parser("db", help="the database").add_subparsers(dest="db_command", required=True)
     check = db.add_parser("check-upgrade", help="try the migrations on a copy of the database")
     check.add_argument("--db", help="the database to check (default: the data directory's)")
+    ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
+    usage = ai.add_parser("usage", help="what AI cost each day, by feature")
+    usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
     args = parser.parse_args(argv)
+    if args.command == "ai":
+        sys.exit(ai_usage(args.days))
     if args.command == "db":
         from mailmind.platform import settings
         from mailmind.platform.db import check as db_check
@@ -37,6 +44,44 @@ def main(argv=None):
             # interrupted. End that way, so a caller such as `just` stops too, without a traceback.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
             os.kill(os.getpid(), signal.SIGINT)
+
+
+def ai_usage(days):
+    """Print what AI cost each of the last `days` local days, newest first, by feature, and the
+    total. It reads the usage ledger and nothing else: no migration, no call. 0 when it could."""
+    import sqlite3
+    from mailmind.platform import settings
+    db = settings.current().db
+    if not os.path.exists(db):
+        print("There is no database yet, so no usage either.")
+        return 1
+    from mailmind.assistant.domain.pricing import usd
+    from mailmind.bootstrap import assistant
+    try:
+        report = assistant.gateway().usage(max(1, days))
+    except sqlite3.OperationalError as e:
+        if "no such table" not in str(e):
+            raise
+        print("The database predates the usage ledger: start the app once and it will be added.")
+        return 1
+    span = "today" if len(report) == 1 else f"the last {len(report)} days"
+    print(f"AI usage by local day at Anthropic's list prices, {span}:")
+    calls = sum(d["calls"] for d in report)
+    total = usd(sum(d["cost_micros"] for d in report))
+    width = max([len(total)] + [len(usd(d["cost_micros"])) for d in report])
+    for d in report:
+        if not d["calls"]:
+            print(f"  {d['day']}  {'-':>{width}}")
+            continue
+        parts = sorted(d["features"].items(), key=lambda kv: (-kv[1]["cost_micros"], kv[0]))
+        what = " · ".join(f"{name} {usd(f['cost_micros'])} ({f['calls']})" for name, f in parts)
+        print(f"  {d['day']}  {usd(d['cost_micros']):>{width}}  {_calls(d['calls'])}  {what}")
+    print(f"  {'in all':<10}  {total:>{width}}  {_calls(calls)}")
+    return 0
+
+
+def _calls(n):
+    return f"{n:>5} {'call' if n == 1 else 'calls':<5}"
 
 
 if __name__ == "__main__":

@@ -113,12 +113,29 @@ def _noted(fn):
 
 def status():
     """What the UI says about AI, with no call made: the engine ("api", or "none" with no key),
-    its model, where the key came from, and how the most recent call went (last_ok None until
-    one has run)."""
+    its model, where the key came from, how the most recent call went (last_ok None until one
+    has run), and what today's calls cost so far in micro-dollars (None when the usage ledger
+    can't be read)."""
     on = engine() == "api"
     return {"engine": "api" if on else "none", "model": model_label() if on else "",
             "key_from": assistant.key()[1] if on else "",
-            "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"]}
+            "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"],
+            "spent_today_micros": spent_today()}
+
+
+def spent_today():
+    """What today's AI calls cost so far, in micro-dollars, or None when the ledger can't be read."""
+    try:
+        return assistant.gateway().spent_today()
+    except Exception as e:
+        print(f"[ai] the usage ledger can't be read: {type(e).__name__}", flush=True)
+        return None
+
+
+def usage(days=30):
+    """Each of the last `days` local days, newest first: its AI calls and their cost in
+    micro-dollars, in all and by feature (the usage ledger's report)."""
+    return assistant.gateway().usage(days)
 
 
 @_noted

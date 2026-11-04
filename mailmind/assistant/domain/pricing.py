@@ -65,3 +65,10 @@ def cost_micros(asked: str, served: str, input_tokens: int = 0, output_tokens: i
         return input_tokens * i + output_tokens * o + cache_write_tokens * w + cache_read_tokens * r
     nanos = max(at(price(asked, prompt)), at(price(served or asked, prompt)))
     return -(-nanos // 1000)
+
+
+def usd(micros: int) -> str:
+    """`micros` in dollars and cents, rounded up to the cent, so a little spending never reads as
+    none: 15_200 is "$0.02"."""
+    cents = -(-int(micros) // 10_000)
+    return f"${cents // 100:,}.{cents % 100:02d}"

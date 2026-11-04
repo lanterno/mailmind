@@ -192,6 +192,10 @@ expire target="all":
 db-check-upgrade *args:
     {{py}} -m mailmind db check-upgrade {{args}}
 
+# What the Claude API cost each day, by feature, from the usage ledger (`just ai-usage --days 30`)
+ai-usage *args:
+    {{py}} -m mailmind ai usage {{args}}
+
 # What an export would contain, without writing anything
 export-plan:
     {{py}} export.py --format plan
