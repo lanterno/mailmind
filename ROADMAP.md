@@ -454,10 +454,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
   holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but
   a forged line could pass for a real one. Print request-supplied values with `!r`.
-- **Undo a Proton trash without marking the mail read** · medium value · effort S — Bridge marks a
-  message read on its way to Trash, and `mailops._mk_move_undo` keeps no `\Seen` state, so Undo
-  brings unread mail back read. Record `seen` in the descriptor and clear `\Seen` after the move
-  back when it was unset. Pinned by `test_undoing_a_proton_trash_brings_unread_mail_back_unread`.
 - **Let a received nudge expire** · medium value · effort S — `followups_tick` runs
   `store.expire_followups` (older than `FOLLOWUP_EXPIRE_DAYS`, 14) and then
   `store.followup_detect_received`, whose floor is 30 days and which only skips threads that
