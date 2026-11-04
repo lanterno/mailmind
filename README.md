@@ -311,6 +311,9 @@ automatically.
   tab and a move queued offline that lands refresh the list too. A tab that drops off (a
   sleeping laptop, a restart) hears what it missed when it reconnects, or fetches afresh
   when the server can no longer replay it.
+- **Push that follows your accounts.** IMAP IDLE watches each account's inbox. Add an
+  account, change its password or server, or remove it, and IDLE follows at once, with no
+  restart; a move still queued for a removed account is given up rather than left waiting.
 - **Background notifications.** An opt-in 🔔 fires a desktop notification and keeps an
   unread count in the tab title when MailMind isn't focused.
 - **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill

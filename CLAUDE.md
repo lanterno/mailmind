@@ -169,7 +169,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
   what the legacy workers publish: `outbox.Sent`, `readmutq.Applied` and `realtime.InboxChanged`.
-  Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
+  It also hands each account event (below) to `realtime.reconcile`. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
   `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
   copy with state of its own.
   `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
@@ -239,7 +239,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   quirks: Gmail files sent mail itself, archives by dropping `\Inbox` and threads by X-GM-THRID;
   Proton Bridge (or any loopback STARTTLS server) is fragile, recycled sooner in the pool and never
   bulk-expunged, and marks trashed mail read; `with_capabilities` adds what CAPABILITY says.
-  `provider.resolve(acct)` replaces checking `kind == "gmail"`. It is standard library only.
+  `provider.resolve(acct)` replaces checking `kind == "gmail"`. `domain.events` holds
+  `AccountAdded`, `AccountChanged` and `AccountRemoved`, which `config.add_account`,
+  `update_account` and `remove_account` publish on the bus once the file holds the change (a
+  refused change publishes nothing). It is standard library only.
 - `mailmind.mailbox` is the third: the mail on each server and its folders. So far it holds
   `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
   `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
@@ -328,7 +331,14 @@ per-account lock is taken *inside* it. The 300 s sync and IDLE's syncs don't tak
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
 work with them unset.
 
-`realtime.stop()` only shuts each IDLE worker's socket down; the worker closes its own
+IDLE's workers follow the configuration. `realtime.reconcile`, which the account events call,
+retires the worker of an account removed, disabled or now reached another way (kind, host, port,
+TLS, credential), and starts one for each account without one, up to `MAX_IDLE_ACCOUNTS`. An alias
+or signature change leaves the worker be. A worker also checks its account after each IDLE cycle,
+so an edit of the file, which publishes nothing, still reaches it. `readmutq` gives up a queued
+move whose account is gone, as the outbox does a send.
+
+`realtime.stop()` and a retirement only shut a worker's socket down; the worker closes its own
 connection. Closing a socket another thread may be about to wait on frees its descriptor number
 for the next socket opened.
 

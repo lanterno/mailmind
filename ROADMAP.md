@@ -551,8 +551,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     change with a 409 for the same reason; queueing it fixes both.
   - The page doesn't know the profile. Read-only, a move or a send that waits in its queue looks
     done. Say `profile` in `/api/digest` and show it beside the sync status.
-  - A queued move for an account removed from the config stays `running` until restart. Give it up
-    as `error`. Pinned by `test_hwf_a_queued_move_for_a_removed_account_is_given_up`.
 - **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
   - `outbox.send_one` returns from a failed attempt before it publishes `outbox.Sent`, so no
     `outbox` event goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
@@ -579,10 +577,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   folder answer then reads as superseded and is dropped, so the Snoozed count, unread counts and
   badges keep their old values until a refresh-only `loadFolders(true)`. Give the rail its own
   sequence. Pinned by `test_the_rail_counts_a_message_just_snoozed` (tests/browser).
-- **IDLE watches the accounts it booted with** · medium value · effort S — `realtime.start`
-  starts one worker per account at boot. An account removed later keeps being watched, and one
-  added later isn't watched until restart. Pinned by
-  `test_hwf_an_idle_worker_stops_watching_a_removed_account`.
 - **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
   `tests/test_hwf_ai.py`:
   - a cached brief keeps the pks it was built with, so a renumbered folder shrinks its chips
