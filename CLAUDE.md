@@ -334,8 +334,10 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   to `backups/mailmind-v{N}-{UTC time}.db` beside it, readable by its owner only, keeping the
   newest 3 (`backup.py` says how to roll back).
 - `python3 -m mailmind db check-upgrade` (`just db-check-upgrade`) migrates a read-only copy and
-  prints only per-table row counts and integrity verdicts. The owner runs it on the real
-  database before an upgrade; no agent does.
+  prints only per-table row counts and integrity verdicts. A foreign-key problem the database
+  already held (an orphaned body or summary from before foreign keys were on) is reported by
+  table and passes; one the migrations add fails. The owner runs it on the real database before
+  an upgrade; no agent does.
 - `tests/test_db_upgrade.py` upgrades a database seeded with data from every version. A
   migration that derives a column on purpose adds it to `DERIVED` there.
 
