@@ -169,3 +169,12 @@ def test_a_frame_is_id_event_and_json_data():
 def test_each_hub_draws_its_own_run():
     assert Hub().run != Hub().run
     assert sse.publish("outbox", {}).startswith(sse.HUB.run + "-")
+
+
+def test_the_page_listens_for_every_topic_and_for_resync_and_nothing_else():
+    import os
+    import re
+    path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+    with open(path, encoding="utf-8") as f:
+        heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', f.read()))
+    assert heard == sse.TOPICS | {RESYNC}

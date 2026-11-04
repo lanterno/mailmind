@@ -138,6 +138,18 @@ def test_archive_from_the_list_then_undo(page, world):
     clean(page)
 
 
+def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "archived on the server")
+    assert app.post("/api/undo", {}).json["ok"]           # another tab's Undo: this one hears undo-done
+    expect(rows_titled(page, "Your receipt for order 1042")).to_have_count(1)
+    clean(page)
+
+
 def test_archive_a_conversation_files_every_message_then_undo(page, world):
     opened(page)
     convo = rows_titled(page, "Lunch on Thursday?")
