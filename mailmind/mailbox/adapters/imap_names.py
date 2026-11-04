@@ -24,6 +24,7 @@ class BadValue(imaplib.IMAP4.error):
 
 _MAILBOX_BODY = re.compile(r'(?:[^"\\\r\n\x00]|\\["\\])*')
 _UNSENDABLE = re.compile(r"[\r\n\x00]")
+_SYSTEM_LABEL = re.compile(r"\\[A-Za-z]+")
 
 
 def sendable(value):
@@ -37,6 +38,12 @@ def imap_quote(s):
     """Wrap a value as an IMAP quoted-string so embedded quotes/specials (e.g. a malformed
     sender Message-ID like <…b'AB'…>) can't break a SEARCH/command."""
     return '"' + sendable(s or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def gmail_labels(labels):
+    """Gmail's labels as an X-GM-LABELS list: a system label (\\Inbox) as it is, any other quoted.
+    Both adapters send this one form, the one the old door has always sent Gmail."""
+    return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
 
 
 def mailbox_arg(name):

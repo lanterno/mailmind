@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters import imap_list
-from mailmind.mailbox.adapters.imap_names import imap_quote, mailbox_arg
+from mailmind.mailbox.adapters.imap_names import gmail_labels, imap_quote, mailbox_arg
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 
@@ -19,7 +19,6 @@ _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
 _UID = re.compile(rb"UID (\d+)")
 _THRID = re.compile(rb"X-GM-THRID (\d+)")
 _APPENDUID = re.compile(rb"APPENDUID\s+\d+\s+(\d+)")
-_SYSTEM_LABEL = re.compile(r"\\[A-Za-z]+")
 
 
 def _ok(what, typ, data):
@@ -34,11 +33,6 @@ def _uid_set(uids):
 
 def _flag_list(flags):
     return "(" + " ".join(flags) + ")"
-
-
-def _label_list(labels):
-    """Gmail's labels: a system label (\\Inbox) as it is, any other quoted."""
-    return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
 
 
 def _arrived(meta):
@@ -126,10 +120,10 @@ class ImaplibSession:
         _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "-FLAGS", _flag_list(flags)))
 
     def add_labels(self, uids, labels):
-        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "+X-GM-LABELS", _label_list(labels)))
+        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "+X-GM-LABELS", gmail_labels(labels)))
 
     def remove_labels(self, uids, labels):
-        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "-X-GM-LABELS", _label_list(labels)))
+        _ok("STORE", *self._M.uid("STORE", _uid_set(uids), "-X-GM-LABELS", gmail_labels(labels)))
 
     def copy(self, uids, dest):
         _ok("COPY", *self._M.uid("COPY", _uid_set(uids), mailbox_arg(dest)))

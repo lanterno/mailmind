@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from imapclient import IMAPClient
 
-from mailmind.mailbox.adapters.imap_names import escaped, sendable, unescaped
+from mailmind.mailbox.adapters.imap_names import escaped, gmail_labels, sendable, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder
@@ -114,10 +114,18 @@ class ImapClientSession:
         self._c.remove_flags([int(u) for u in uids], list(flags))
 
     def add_labels(self, uids, labels):
-        self._c.add_gmail_labels([int(u) for u in uids], list(labels), silent=True)
+        self._store_labels("+X-GM-LABELS", uids, labels)
 
     def remove_labels(self, uids, labels):
-        self._c.remove_gmail_labels([int(u) for u in uids], list(labels), silent=True)
+        self._store_labels("-X-GM-LABELS", uids, labels)
+
+    def _store_labels(self, item, uids, labels):
+        # Through the imaplib connection underneath, in the form the old door has always sent
+        # Gmail. IMAPClient's own would quote a system label ("\\Inbox") and add .SILENT, a
+        # form MailMind has never sent Gmail. imaplib's uid() takes the FETCH answers with it.
+        typ, data = self._c._imap.uid("STORE", ",".join(str(int(u)) for u in uids), item, gmail_labels(labels))
+        if typ != "OK":
+            raise imaplib.IMAP4.error(f"STORE refused: {data!r}"[:200])
 
     def copy(self, uids, dest):
         self._c.copy([int(u) for u in uids], unescaped(dest))
