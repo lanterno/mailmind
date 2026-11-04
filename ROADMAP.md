@@ -382,8 +382,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `headerregistry` raise, and `mailparse._hdr` doesn't guard `msg.get`. So `parse()` raises for
   the whole message. `ingest.fetch_body` never stores the body, `message_body` returns 500, and
   the reader's Retry fails the same way. Reply and Forward can't load it and its body is never
-  indexed. `body_backfill_tick` re-downloads it every cycle under the IMAP gate, and twelve such
-  messages among the newest unfetched bodies starve everything older. From is safe, since ingest
+  indexed. `server.backfill_round` re-downloads it every round under the IMAP gate, and twelve
+  such messages among the newest unfetched bodies starve everything older. From is safe, since ingest
   reads it with compat32. The fix: fall back in `_hdr` to the raw value from `raw_items()`,
   unfolded, decoded and with CR/LF turned to spaces, the idea `server._hdr_text` already uses.
 - **format=flowed is read as hard breaks** · low value · effort S — Nothing reads the `format` or
@@ -447,7 +447,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   refusal, and let `/api/flag` and `/api/seen` answer `ok: false`.
 - **Quote expiry tokens before they reach IMAP** · low value · effort S — `manage.expire_account`
   searches `FROM f'"{token}"'` for each key of `rules.EXPIRE`. Tokens are set only from the CLI
-  (`rules.py expire`), but the server's hourly `expire_loop` runs the same search, so a token
+  (`rules.py expire`), but the server's hourly `expire` job runs the same search, so a token
   holding a quote breaks it and one holding a line break sends a second command. Refuse such tokens
   in `rules.set_expiry`, as `accounts.mailbox_arg` does for folder names.
 - **Keep request text out of log lines** · low value · effort S — `messages_in` prints
@@ -646,7 +646,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     taken at sync keep invisible preheader padding, because `_html_to_snippet_text` never strips
     what it unescapes (`test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message`,
     `test_hwf_an_inbox_snippet_drops_invisible_preheader_padding`);
-  - `server.body_backfill_tick` retries the same 12 newest bodies forever when they can't be
+  - `server.backfill_round` retries the same 12 newest bodies forever when they can't be
     fetched (deleted elsewhere, say), and never reaches older mail
     (`test_hwf_backfill_moves_past_bodies_it_cannot_fetch`).
 - **A JSON body that isn't an object** · low value · effort S — a POST whose body is a JSON array

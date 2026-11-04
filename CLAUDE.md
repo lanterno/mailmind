@@ -172,8 +172,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   thread summarizer and the IDLE layer to the server's lock and callbacks. `server.__main__` passes
   `sys.modules[__name__]`: importing `server` there would load a second copy with its own lock.
   `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
-  then the worker threads. Full, those are the outbox, the read-mutation queue, snoozes, the sync
-  loops and IDLE; read-only, snoozes alone.
+  then the workers. Full, those are the outbox's and the read-mutation queue's drains, the
+  scheduler's jobs and IDLE; read-only, the snooze job alone.
 - `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Every route still runs in `server.H`: `mailmind.http.bridge.HandlerBridge`,
@@ -186,6 +186,14 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   undo, and offline).
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
   Concurrency).
+- `mailmind.platform.workers.scheduler.Scheduler` runs the background jobs. A job is a round (a
+  function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
+  its rounds never overlap. A round may return the seconds until its next; one that raises is
+  logged and counted, and the job goes on. `server.schedule(jobs)` is the job table: `snooze` in
+  every profile, then `sync`, `backfill`, `draft-ahead`, `reconcile` and `expire` in a full one.
+  `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
+  A test calls the round itself (`server.backfill_round()`) or `jobs.run(name)`. It is
+  standard library only.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
@@ -405,7 +413,7 @@ entry point that bypasses them won't show up there.
 `rules.py` layers a learned per-sender/domain keep/block list on top, persisted to
 `mailmind_rules.json` — that file is personal data and stays gitignored. The same file
 holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
-`manage.expire_account` from the CLI and by `server.expire_loop` hourly (not read-only).
+`manage.expire_account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 
 ## Conventions

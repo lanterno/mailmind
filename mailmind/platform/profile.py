@@ -3,9 +3,9 @@
 - `full` is the real thing. It syncs in the background, and it sends and files mail.
 - `read-only` writes nothing to a mail server or anywhere else outside (decision D4): no IMAP
   change, no SMTP, no unsubscribe request. Sends and moves wait in their queues for a full run,
-  and what can't wait there is refused with ReadOnlyError. It starts no background work: no sync,
-  IDLE, reconcile, expiry, body backfill or reply drafting. It reads IMAP only when someone asks,
-  by opening mail or a folder or starting a sync.
+  and what can't wait there is refused with ReadOnlyError. Its one background job is snooze's,
+  which touches the database alone: no sync, IDLE, reconcile, expiry, body backfill or reply
+  drafting. It reads IMAP only when someone asks, by opening mail or a folder or starting a sync.
 
 MAILMIND_PROFILE names the profile; unset or empty, it is `full`. MAILMIND_NOSYNC, the older
 switch, still selects read-only: any value but empty, 0, false, no or off turns it on, so a typo
