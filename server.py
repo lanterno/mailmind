@@ -53,12 +53,11 @@ import outbox
 import search
 import mailparse
 import ics
-import realtime
 import summarize_thread
 import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
-from mailmind.platform import perimeter, profile, settings
+from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.workers import gates, scheduler
 
 HERE = os.path.dirname(__file__)
@@ -117,9 +116,9 @@ def sync_accounts(emails=None):
                 new += kept
                 _status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
                 store.record_sync_result(hc, a["email"], True); hc.commit()
-                realtime.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
+                sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
                 if kept > 0:
-                    realtime.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
+                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
             except Exception as e:
                 _status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
                 store.record_sync_result(hc, a["email"], False, type(e).__name__, _classify_sync_error(e)); hc.commit()
@@ -241,7 +240,7 @@ def _auto_reconcile_one(acct):
     invalidate_stats()
     _invalidate_folders(acct["email"])                # folder badge counts changed
     try:
-        realtime.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
+        sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
     except Exception:
         pass
     print(f"[reconcile] auto: {acct['email']} pruned {res['pruned']} ghost row(s)", flush=True)
@@ -295,7 +294,7 @@ def _auto_expire_one(acct):
     invalidate_stats()
     _invalidate_folders(acct["email"])
     try:                                              # same refresh as a ghost prune: open lists drop the rows
-        realtime.publish("reconcile", {"account": acct["email"], "pruned": res["moved"]})
+        sse.publish("reconcile", {"account": acct["email"], "pruned": res["moved"]})
     except Exception:
         pass
     print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
@@ -325,7 +324,7 @@ def wake_snoozed():
     c.close()
     if due:
         invalidate_stats()
-        realtime.publish("snooze-wake", {"count": len(due),
+        sse.publish("snooze-wake", {"count": len(due),
                                          "accounts": sorted(set(r["account"] for r in due))})
         print(f"[snooze] woke {len(due)} message(s)", flush=True)
 
@@ -352,7 +351,7 @@ def followups_tick():
         c.close()
     if after != before:                                   # set comparison catches swaps, not just count deltas
         invalidate_stats()
-        realtime.publish("followup", {"count": len(after)})
+        sse.publish("followup", {"count": len(after)})
 
 
 def snooze_round():
@@ -1442,7 +1441,7 @@ def do_undo():
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
         invalidate_stats()
         _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
-        realtime.publish("undo", {})
+        sse.publish("undo", {})
         res["remaining"] = len(_undo_stack)
         return res, 200
     except Exception as e:
@@ -2922,7 +2921,7 @@ def do_mute(body):
     undo_push({"kind": "mute", "account": acct, "thread_id": tid,
                "prev_seen": prev, "label": "Muted"}, body.get("undo_group"))
     invalidate_stats()
-    realtime.publish("mute", {"account": acct})
+    sse.publish("mute", {"account": acct})
     return {"ok": True, "thread_id": tid}, 200
 
 
@@ -2936,7 +2935,7 @@ def do_unmute(body):
     c.commit()
     c.close()
     invalidate_stats()
-    realtime.publish("mute", {"account": acct})
+    sse.publish("mute", {"account": acct})
     return {"ok": True, "thread_id": tid}, 200
 
 
@@ -2950,7 +2949,7 @@ def do_dismiss_followup(body):
     c.commit()
     c.close()
     invalidate_stats()
-    realtime.publish("followup", {"account": acct})
+    sse.publish("followup", {"account": acct})
     return {"ok": True, "thread_id": tid}, 200
 
 
@@ -2969,7 +2968,7 @@ def do_replylater(body):
         store.clear_replylater(c, acct, tid)
     c.commit()
     c.close()
-    realtime.publish("followup", {"account": acct})
+    sse.publish("followup", {"account": acct})
     return {"ok": True, "thread_id": tid, "on": bool(on)}, 200
 
 
@@ -3262,7 +3261,7 @@ def _gen_draft_ahead(account, pk, source="dwell"):
             c.close()
         if ok:
             try:
-                realtime.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
             except Exception:
                 pass
     except Exception as e:
@@ -3778,11 +3777,12 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_events(self):
-        """Hand-rolled SSE stream: blocks this handler thread, pushing realtime events
-        until the client disconnects. Heartbeat keeps it alive + detects dead sockets."""
-        import queue as _q
-        sub = realtime.subscribe()
-        if sub is None:
+        """The live event stream (mailmind.platform.sse): blocks this handler thread, passing on
+        each event until the tab hangs up. A tab that reconnects resumes after the Last-Event-ID
+        its EventSource sends, or gets one resync. A keepalive on a quiet stream finds a dead
+        socket."""
+        tab = sse.HUB.listen(self.headers.get("Last-Event-ID"))
+        if tab is None:
             return self._json({"ok": False, "error": "too many listeners"}, 503)
         try:
             self.send_response(200)
@@ -3790,22 +3790,16 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
             self.end_headers()
-            self.wfile.write(b"retry: 3000\n: connected\n\n")
+            self.wfile.write(tab.opening())
             self.wfile.flush()
             while True:
-                try:
-                    event, data = sub.get(timeout=realtime.HEARTBEAT)
-                except _q.Empty:
-                    self.wfile.write(b": keepalive\n\n")
-                    self.wfile.flush()
-                    continue
-                frame = f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
-                self.wfile.write(frame)
+                events = tab.next(sse.HEARTBEAT)
+                self.wfile.write(b"".join(e.frame() for e in events) or b": keepalive\n\n")
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError, ValueError):
             pass
         finally:
-            realtime.unsubscribe(sub)
+            tab.close()
 
     def _serve_attachment(self, pk, part_id):
         if not re.match(r"^[0-9]+$", part_id or ""):     # only mailparse-style indices
@@ -4207,13 +4201,13 @@ def schedule(jobs):
 def _after_send(_sent):
     """outbox.Sent: a queued send went out."""
     invalidate_stats()
-    realtime.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
+    sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 
 
 def _after_readmut(_applied):
     """readmutq.Applied: a queued move reached the server."""
     invalidate_stats()
-    realtime.publish("readmutq", {})     # a queued read-mutation drained — refresh views
+    sse.publish("readmutq", {})     # a queued read-mutation drained — refresh views
 
 
 def _after_idle(changed):

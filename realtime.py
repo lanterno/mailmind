@@ -1,12 +1,10 @@
-"""Real-time layer for MailMind (stdlib only):
-  - per-account IMAP IDLE workers that detect INBOX changes and trigger a scoped sync,
-  - a thread-safe pub/sub bus that feeds the hand-rolled SSE endpoint in server.py.
+"""IMAP IDLE for MailMind (stdlib only): one worker per account watches its INBOX, and a
+dispatcher coalesces a burst of changes into one InboxChanged on mailmind.platform.bus, which the
+server answers with a sync of those accounts. The open tabs hear of the result through the live
+event stream, mailmind.platform.sse.
 
-Events carry ONLY non-sensitive counters/ids (account/folder/count) — never subjects,
-addresses, or bodies; the browser re-fetches through the existing authenticated routes.
-Bounded (1 IDLE conn/account, capped subscribers), reconnect-safe, daemon-thread clean exit.
+Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread clean exit.
 """
-import queue
 import socket
 import threading
 from dataclasses import dataclass
@@ -16,12 +14,8 @@ from mailmind.platform import bus
 
 IDLE_SECONDS = 24 * 60          # re-IDLE before servers drop (~29 min)
 MAX_IDLE_ACCOUNTS = 12
-MAX_SUBS = 8
-HEARTBEAT = 20                  # SSE keepalive seconds
 _DEBOUNCE = 3                   # coalesce a burst of IDLE signals into one sync
 
-_subs = []
-_subs_lock = threading.Lock()
 _stop = threading.Event()
 _conns = []                     # worker IMAP conns, for force-close on stop()
 _dirty = set()
@@ -34,35 +28,6 @@ class InboxChanged:
     """IDLE saw these accounts' INBOX change, a burst of signals coalesced into one (published on
     mailmind.platform.bus). Whoever hears it syncs them."""
     accounts: frozenset[str]
-
-
-# ------------------------------------------------------------------- pub/sub bus
-def subscribe():
-    with _subs_lock:
-        if len(_subs) >= MAX_SUBS:
-            return None
-        q = queue.Queue(maxsize=64)
-        _subs.append(q)
-        return q
-
-
-def unsubscribe(q):
-    with _subs_lock:
-        try:
-            _subs.remove(q)
-        except ValueError:
-            pass
-
-
-def publish(event, data):
-    """Fan an (event, data) out to all subscribers; drop on a slow/full client queue."""
-    with _subs_lock:
-        targets = list(_subs)
-    for q in targets:
-        try:
-            q.put_nowait((event, data))
-        except queue.Full:
-            pass
 
 
 # ------------------------------------------------------------- IDLE sync dispatch
