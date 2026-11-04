@@ -6,7 +6,12 @@ directory), migrates the copy the way a start would, and runs SQLite's integrity
 full-text-index checks on it. It prints only table names, row counts and the checks' verdicts,
 never a row's contents, so its report can be shared. The database itself is never written; the
 copy is deleted afterwards.
+
+A row that points at a row that's gone (a body or summary whose message was deleted while an
+older MailMind left foreign keys off) is the database's, not the upgrade's: the foreign-key check
+counts what was there before the migrations too, and fails only on what they add.
 """
+import collections
 import os
 import pathlib
 import sqlite3
@@ -28,10 +33,10 @@ def check_upgrade(path, say=print):
     with tempfile.TemporaryDirectory(prefix=".mailmind-check-", dir=beside) as folder:
         copy = os.path.join(folder, "upgrade-copy.db")
         _copy_read_only(path, copy)
-        before, v_before = _counts(copy), _version(copy)
+        before, v_before, keys_before = _counts(copy), _version(copy), _key_problems(copy)
         migrate.init(copy)
         after, v_after = _counts(copy), _version(copy)
-        checks = _checks(copy)
+        checks = _checks(copy, keys_before)
     say(f"A copy of the database, migrated from version {v_before} to {v_after}:")
     say("")
     width = max([len(t) for t in (*before, *after)] + [5])
@@ -44,10 +49,10 @@ def check_upgrade(path, say=print):
             changed.append(table)
         say(f"  {table:<{width}}  {_n(b):>10}  {_n(a):>10}{note}")
     say("")
-    for name, verdict in checks:
+    for name, verdict, _ in checks:
         say(f"  {name}: {verdict}")
     say(f"  every table kept its rows: {'yes' if not changed else 'no (' + ', '.join(changed) + ')'}")
-    return OK if not changed and all(v == "ok" for _, v in checks) else PROBLEM
+    return OK if not changed and all(passed for *_, passed in checks) else PROBLEM
 
 
 def _copy_read_only(path, dest):
@@ -80,22 +85,45 @@ def _counts(path):
     return {t: _query(path, f'SELECT count(*) FROM "{t}"')[0][0] for t in tables}
 
 
-def _checks(path):
-    """(check, verdict) pairs: each verdict "ok", or the number of problems found, never what they
-    are about."""
+def _key_problems(path):
+    """How many rows point at a row that's gone, by (table, the table it points at)."""
+    return collections.Counter((table, parent) for table, _, parent, _ in
+                               _query(path, "PRAGMA foreign_key_check"))
+
+
+def _by_table(problems):
+    counts = collections.Counter()
+    for (table, _), n in problems.items():
+        counts[table] += n
+    return ", ".join(f"{table} {n}" for table, n in sorted(counts.items()))
+
+
+def _checks(path, keys_before):
+    """(check, verdict, passed) triples: each verdict "ok", or the number of problems found, and
+    for foreign keys the tables they're in, never what they are about. `keys_before` is what
+    _key_problems found before the migrations."""
     out = []
     integrity = [r for (r,) in _query(path, "PRAGMA integrity_check")]
-    out.append(("integrity_check", "ok" if integrity == ["ok"] else f"{len(integrity)} problem(s)"))
-    keys = _query(path, "PRAGMA foreign_key_check")
-    out.append(("foreign_key_check", "ok" if not keys else f"{len(keys)} problem(s)"))
+    out.append(("integrity_check", "ok" if integrity == ["ok"] else f"{len(integrity)} problem(s)",
+                integrity == ["ok"]))
+    keys = _key_problems(path)
+    added = keys - keys_before
+    total = sum(keys.values())
+    if not total:
+        verdict = "ok"
+    elif not added:
+        verdict = f"{total} problem(s), all there before the upgrade ({_by_table(keys)})"
+    else:
+        verdict = f"{total} problem(s), {sum(added.values())} of them new ({_by_table(added)})"
+    out.append(("foreign_key_check", verdict, not added))
     c = sqlite3.connect(path)
     try:
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='msg_fts'").fetchone():
             try:
                 c.execute("INSERT INTO msg_fts(msg_fts) VALUES('integrity-check')")
-                out.append(("full-text index", "ok"))
+                out.append(("full-text index", "ok", True))
             except sqlite3.DatabaseError:
-                out.append(("full-text index", "1 problem(s)"))
+                out.append(("full-text index", "1 problem(s)", False))
     finally:
         c.close()
     return out
