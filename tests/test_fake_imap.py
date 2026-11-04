@@ -105,16 +105,14 @@ def test_uid_search_all_by_range_and_by_message_id(srv, app):
 
 
 def test_fetching_header_fields_returns_only_those_fields_folded_lines_kept(srv, app):
-    import ingest
+    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
     folded = "References: <a@example.test>\r\n <b@example.test>\r\nX-Other: hidden\r\n"
     uid = srv.deliver(ADA, "INBOX", _mail(1, extra=folded), flags=["\\Seen"])
     M = _connect(app)
     M.select('"INBOX"', readonly=True)
-    typ, data = M.uid("FETCH", str(uid), "(UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT REFERENCES)])")
-    meta, body = data[0]
-    assert ingest._uid_of(meta) == uid
-    assert ingest._flags_of(meta.decode())["seen"] == 1
-    assert body == (b"Subject: Note 1\r\nReferences: <a@example.test>\r\n <b@example.test>\r\n\r\n")
+    [got] = ImaplibSession(M).headers([uid], ["SUBJECT", "REFERENCES"])
+    assert (got.uid, got.flags) == (uid, {"\\Seen"})
+    assert got.raw == (b"Subject: Note 1\r\nReferences: <a@example.test>\r\n <b@example.test>\r\n\r\n")
     M.logout()
 
 
@@ -301,7 +299,7 @@ def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
 
 def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
     import accounts
-    import ingest
+    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
     with FakeIMAPServer(kind="gmail") as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
@@ -311,8 +309,7 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
         acct = accounts.get(ADA)
         M = accounts.connect(acct, timeout=5)
         M.select('"INBOX"')
-        data = M.uid("FETCH", f"{a},{b}", "(UID X-GM-THRID BODY.PEEK[HEADER.FIELDS (SUBJECT)])")[1]
-        thrids = {ingest._thrid_of(p[0]) for p in data if isinstance(p, tuple)}
+        thrids = {h.gmail_thread for h in ImaplibSession(M).headers([a, b], ["SUBJECT"], gmail_thread=True)}
         assert len(thrids) == 1 and None not in thrids
         assert M.uid("STORE", str(a), "-X-GM-LABELS", "(\\Inbox)")[0] == "OK"
         M.logout()

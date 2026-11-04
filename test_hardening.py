@@ -130,6 +130,9 @@ class _ScriptedIMAP:
         self.calls.append(("SELECT", folder))
         return "OK", [b"1"]
 
+    def response(self, code):
+        return code, self.untagged_responses.pop(code, [None])
+
     def uid(self, cmd, *args):
         self.calls.append((cmd.upper(),) + args)
         a = self.answers.get(cmd.upper(), ("OK", [b""]))

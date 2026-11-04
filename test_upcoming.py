@@ -9,6 +9,7 @@ from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
 import store
+from mailmind.mailbox.application.session import Headers
 from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 import ics
@@ -260,18 +261,16 @@ def test_a_one_off_event_is_its_own_only_occurrence():
     assert _next("", start="20261102T100000", end="20261102T103000")[0] == "2026-11-02T10:00+01:00"
 
 
-class _FakeImap:
-    """Answers ingest._process's two FETCHes (headers, then the whole message) from `raws`."""
+class _FakeSession:
+    """Answers ingest._process's two reads (headers, then the whole message) from `raws`."""
     def __init__(self, raws):
         self.raws = raws
 
-    def uid(self, cmd, uids, spec):
-        out = []
-        for u in uids.split(","):
-            raw = self.raws[int(u)]
-            part = raw.split(b"\n\n")[0] + b"\n\n" if "HEADER" in spec else raw
-            out.append((f"{u} (UID {u} FLAGS ())".encode(), part))
-        return "OK", out
+    def headers(self, uids, fields, gmail_thread=False):
+        return [Headers(int(u), frozenset(), self.raws[int(u)].split(b"\n\n")[0] + b"\n\n") for u in uids]
+
+    def body(self, uid):
+        return self.raws[int(uid)]
 
 
 def test_ingest_keeps_an_invite_so_it_is_listed_unopened():
@@ -284,7 +283,7 @@ def test_ingest_keeps_an_invite_so_it_is_listed_unopened():
         if cal:
             m.add_attachment(cal.encode(), maintype="text", subtype="calendar", filename="invite.ics")
         return m.as_bytes()
-    ingest._process(_FakeImap({1: raw(1, _ics("in", NOW + timedelta(days=1))), 2: raw(2)}),
+    ingest._process(_FakeSession({1: raw(1, _ics("in", NOW + timedelta(days=1))), 2: raw(2)}),
                     {"email": ACCT, "kind": "imap"}, ["1", "2"], "INBOX", with_body=True)
     c = store.conn()
     rows = {r["uid"]: r for r in c.execute("SELECT pk, uid, body_fetched, seen FROM messages")}

@@ -238,10 +238,10 @@ def test_hwf_rows_commit_one_by_one_and_the_watermark_moves_only_after_all(world
 # -- reconcile -------------------------------------------------------------
 
 def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, monkeypatch):
-    import accounts
     import ingest
-    real, timeouts = accounts.connect, []
-    monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: (timeouts.append(timeout), real(a, timeout))[1])
+    from mailmind.bootstrap import mailbox
+    real, timeouts = mailbox.open_session, []
+    monkeypatch.setattr(mailbox, "open_session", lambda a, timeout=60: (timeouts.append(timeout), real(a, timeout))[1])
     for trouble in (None, "UID SEARCH", "EXAMINE"):
         if trouble:
             world.server.fail(trouble, user=w.ADA)
