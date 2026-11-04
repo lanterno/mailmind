@@ -57,6 +57,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy
+from mailmind.accounts.domain import provider
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
@@ -428,15 +429,11 @@ def backfill_round():
 
 # ----------------------------------------------------------------------------- helpers
 def deep_link(row, wmap=None):
-    mid = (row["message_id"] or "").strip().strip("<>")
-    if row["kind"] == "gmail" and mid:
-        return f"https://mail.google.com/mail/u/?authuser={quote(row['account'])}#search/rfc822msgid:{quote(mid)}"
-    if row["kind"] == "proton":
-        return f"https://mail.proton.me/u/0/almost-all-mail#keyword={quote((row['subject'] or '')[:64])}"
-    wm = (wmap or {}).get(row["account"])
-    if wm:
-        return wm  # best-effort: opens the account's webmail (e.g. Nextcloud Mail)
-    return ""
+    """The message in its provider's web client (ProviderProfile.deep_link), else the account's
+    webmail (e.g. Nextcloud Mail), else ""."""
+    return provider.resolve({"kind": row["kind"]}).deep_link(
+        account=row["account"], message_id=row["message_id"], subject=row["subject"],
+        webmail=(wmap or {}).get(row["account"]))
 
 
 def rel_time(iso):
@@ -1172,7 +1169,7 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
         return {"ok": False, "msg": "not found"}
     acct, mid = row["account"], (row["message_id"] or "").strip()
     try:
-        is_gmail = accounts.get(acct).get("kind") == "gmail"
+        is_gmail = provider.resolve(accounts.get(acct)).archive_is_label_removal   # archive drops a label
     except KeyError:
         is_gmail = False
     if op == "trash" and not dest:                  # trash dest is static (no IMAP) — store it for undo

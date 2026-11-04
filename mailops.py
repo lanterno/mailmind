@@ -11,6 +11,7 @@ import imaplib
 sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import store
+from mailmind.accounts.domain import provider
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import profile
@@ -79,7 +80,7 @@ def _resolve_dest(M, op, acct):
         return accounts.trash_folder(acct)
     if op == "junk":
         j = find_role(M, "junk")
-        return j or ("[Gmail]/Spam" if acct.get("kind") == "gmail" else None)
+        return j or provider.resolve(acct).junk_fallback
     if op == "archive":
         return find_role(M, "archive", "all")
     return None
@@ -243,7 +244,7 @@ def archive_message(pk):
     def op(M):
         M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         uid = str(row["uid"])
-        if acct["kind"] == "gmail":
+        if provider.resolve(acct).archive_is_label_removal:
             typ, d = M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")
             if typ != "OK":                       # imaplib returns a NO; it doesn't raise one
                 raise imaplib.IMAP4.error(f"STORE failed: {d}")
@@ -287,8 +288,8 @@ def junk_message(pk):
     def op(M):
         M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
         junk = find_role(M, "junk")
-        if not junk and acct["kind"] == "gmail":
-            junk = "[Gmail]/Spam"
+        if not junk:
+            junk = provider.resolve(acct).junk_fallback
         if not junk:
             return ("nofolder", None)
         _move_uid(M, str(row["uid"]), junk)

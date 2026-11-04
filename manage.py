@@ -36,6 +36,7 @@ import accounts
 import mailclass
 import pool
 import rules
+from mailmind.accounts.domain import provider
 from mailmind.mailbox.adapters import imap_list
 from mailmind.platform import settings
 
@@ -487,7 +488,7 @@ def cmd_plan(accts, do_sweep=False, dry=False):
 
 def cmd_empty_trash(accts):
     for a in accts:
-        if a["kind"] == "proton":
+        if provider.resolve(a).bulk_expunge_unsafe:
             print(f"{a['email']:30} SKIPPED — empty Proton Trash with the native button "
                   "(Bridge crashes on bulk expunge).")
             continue

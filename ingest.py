@@ -18,6 +18,7 @@ import mailparse
 import pool
 import store
 import threads
+from mailmind.accounts.domain import provider
 
 CUTOFF_DAYS = 90
 HDR_BATCH = 300
@@ -128,7 +129,7 @@ def _process(M, acct, uids, folder="INBOX", with_body=False, advance=True):
     advance=False stores them without touching the folder's watermark: only a sync that has
     seen every UID up to a point may say the folder is synced to there."""
     rows, max_uid, kept, junk = [], 0, 0, 0
-    thrid = "X-GM-THRID " if acct.get("kind") == "gmail" else ""  # only Gmail understands it
+    thrid = "X-GM-THRID " if provider.resolve(acct).gmail_threads else ""  # only Gmail understands it
     for start in range(0, len(uids), HDR_BATCH):
         chunk = uids[start:start + HDR_BATCH]
         typ, data = M.uid("FETCH", ",".join(chunk),

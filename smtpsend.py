@@ -20,11 +20,6 @@ import mailops
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
-def provider_saves_sent(acct):
-    """Gmail auto-files SMTP-sent mail in [Gmail]/Sent — an explicit APPEND would double it."""
-    return acct.get("kind") == "gmail"
-
-
 def smtp_connect(acct):
     profile.refuse_writes("SMTP")          # a read-only process sends nothing
     txguard.refuse_network("an SMTP connection")

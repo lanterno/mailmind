@@ -9,6 +9,7 @@ import re
 import ssl
 
 import config
+from mailmind.accounts.domain import provider
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
@@ -25,9 +26,7 @@ def get(email):
 
 
 def trash_folder(acct):
-    if acct.get("trash"):
-        return acct["trash"]
-    return "[Gmail]/Trash" if acct.get("kind") == "gmail" else "Trash"
+    return acct.get("trash") or provider.resolve(acct).trash_fallback
 
 
 def preload_creds():

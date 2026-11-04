@@ -26,9 +26,10 @@ import threading
 import contextlib
 
 import accounts
+from mailmind.accounts.domain import provider
 
-MAX_AGE = 600        # seconds; discard a pooled conn older than this (well under ~29-min server idle drop)
-MAX_USES = 200       # discard after this many reuses
+# A pooled connection is discarded after ProviderProfile.recycle_seconds (600, well under a
+# server's ~29-minute idle drop; 90 on Bridge) or recycle_uses (200; 40 on Bridge).
 
 _reg_lock = threading.Lock()
 _slots = {}          # email -> {"M": conn|None, "lock": Lock, "born": float, "uses": int}
@@ -39,18 +40,12 @@ def _targets():
     return os.environ.get("MAILMIND_POOL", "").strip()
 
 
-def _is_bridge(acct):
-    """Proton Bridge (loopback + STARTTLS) has a low per-account connection cap and is fragile —
-    excluded from the broad catch-all; only an explicit per-email opt-in (Phase 2) may pool it."""
-    return acct.get("kind") == "proton" or (acct.get("host") == "127.0.0.1" and acct.get("starttls"))
-
-
 def _enabled(acct):
     v = _targets()
     if not v:
         return False
     if v.lower() in ("1", "all", "on", "true", "yes"):
-        return not _is_bridge(acct)        # "all" = every account EXCEPT the fragile Bridge
+        return not provider.resolve(acct).bridge   # "all" = every account EXCEPT the fragile Bridge
     return acct["email"] in {x.strip() for x in v.split(",") if x.strip()}   # explicit list honored verbatim
 
 
@@ -83,9 +78,8 @@ def _take(slot, acct):
     """Return a ready connection: a validated cached one, or a fresh login. Caller holds slot lock.
     Proton Bridge (loopback) is fragile + connection-capped, so a pooled Bridge connection is
     recycled far more aggressively (shorter age, fewer reuses) and still validated every borrow."""
-    bridge = _is_bridge(acct)
-    max_age = 90 if bridge else MAX_AGE
-    max_uses = 40 if bridge else MAX_USES
+    p = provider.resolve(acct)
+    max_age, max_uses = p.recycle_seconds, p.recycle_uses
     M = slot["M"]
     if M is not None:
         too_old = (time.time() - slot["born"]) > max_age or slot["uses"] >= max_uses

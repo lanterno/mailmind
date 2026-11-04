@@ -24,6 +24,7 @@ import threading
 import accounts
 import ingest
 import mailops
+from mailmind.accounts.domain import provider
 
 WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
 _ROLES = {                          # what to warm -> the folder roles that may play it, in order
@@ -93,7 +94,7 @@ def warm_tick(emails=None):
             # Gmail "All Mail" is a SUPERSET of INBOX (every message is also there) — warming it
             # would duplicate INBOX in search/threading. Skip Archive for Gmail; Sent/Drafts are
             # distinct. Non-Gmail Archive is a separate store, so warm it normally.
-            if role == "archive" and a.get("kind") == "gmail":
+            if role == "archive" and provider.resolve(a).archive_is_label_removal:
                 continue
             folder = roles.get(role)
             if not folder or folder.upper() == "INBOX":

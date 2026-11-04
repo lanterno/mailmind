@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import store
 import accounts
 import smtpsend
+from mailmind.accounts.domain import provider
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
@@ -145,7 +146,7 @@ def _side_effects(oid, row, acct):
     """Best-effort, done-once: Sent copy (non-Gmail) + \\Answered on the original.
     Each IMAP op is a job of its own on its account's IMAP gate (NOT one across the whole
     thing). A failure here never fails an already-delivered send — it's logged + skipped."""
-    if smtpsend.provider_saves_sent(acct) and not row["sent_appended"]:
+    if provider.resolve(acct).saves_sent and not row["sent_appended"]:
         _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))   # Gmail auto-saves
     elif not row["sent_appended"]:
         try:
