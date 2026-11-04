@@ -83,9 +83,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   permanent on Dovecot-style servers; on Gmail it only drops the label. The registered row also
   adds the folder to the "new to you" lookup's draft folders, so sent mail filed there stops
   vouching for its recipients. A localized Drafts folder ("Entwürfe", "Brouillons") gets no Edit
-  at all. The fix: resolve the account's Drafts folder by the `\Drafts` special-use attribute
-  first and an exact name second (`mailops._find_folder` prefers name hints today), or go by the
-  message's own `\Draft` flag. Give Discard and the outbox cleanup the guard `do_draft` uses for a
+  at all. The fix: go by the role `mailmind.mailbox.domain.roles` gives the folder (the
+  `\Drafts` special-use attribute first, then the whole name), as saves already do through
+  `mailops.find_role`, or by the message's own `\Draft` flag. Give Discard and the outbox cleanup the guard `do_draft` uses for a
   copy elsewhere, `raw_sha` or `_flagged_draft`. Keep both checks, because a MailMind save that
   never synced has no `messages` row to be flagged.
 - **The Drafts list never updates** · high value · effort M — `messages_in` syncs a folder only
@@ -578,9 +578,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - `manage.move_verified` has no COPY, STORE and EXPUNGE fallback, unlike `mailops._move_uid`, so
     sweep and expiry move nothing on such a server, and `server._auto_expire_one` says nothing.
     Pinned by `test_hwf_a_sweep_on_a_server_without_move_still_moves_the_junk`.
-  - Folder hints match by substring, so a user folder named "Bulk orders" listed before the
-    special-use `\Junk` folder receives junk. Prefer the special-use flag. Pinned by
-    `test_hwf_junk_goes_to_the_special_use_junk_folder`.
   - `manage.sweep_account` prunes local rows by live UID, where expiry and the AI sweep prune by
     Message-ID. Across a UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The
     next sync's reset heals them.

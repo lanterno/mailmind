@@ -236,6 +236,15 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   (plain, `op`, `env`, the Bridge password), caching an `op` read only when it succeeds.
   `config.py` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
   both. It is standard library only.
+- `mailmind.mailbox` is the third: the mail on each server and its folders. So far it holds
+  `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
+  `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
+  whole last segment of the name, never part of one ("Bulk orders" is nobody's junk). Where
+  several could play a role, an attribute beats a name, a shallower path a deeper one, then LIST's
+  order. `adapters.imap_list` reads an imaplib LIST answer into `Folder`s, literals included.
+  `mailops.find_role(M, *roles)` finds a folder on a live connection; the rail gives each role to
+  the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
+  there is no `archive`. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
