@@ -43,6 +43,11 @@ def _connect(app):
     return accounts.connect(app, timeout=5)
 
 
+def _session(M):
+    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    return ImaplibSession(M)
+
+
 # ── connecting ──────────────────────────────────────────────────────────────────────────────────
 
 def test_the_app_connects_over_starttls_and_logs_in(srv, app):
@@ -69,12 +74,12 @@ def test_a_wrong_password_is_a_login_failure(srv, app):
 
 
 def test_list_shows_each_folder_with_its_special_use(srv, app):
-    import mailops
+    from mailmind.mailbox.application.session import find_role
     M = _connect(app)
     typ, data = M.list()
     assert typ == "OK" and any(b"\\Trash" in d and b'"Trash"' in d for d in data)
-    assert mailops.find_role(M, "junk") == "Junk"
-    assert mailops.find_role(M, "archive") == "Archive"
+    assert find_role(_session(M), "junk") == "Junk"
+    assert find_role(_session(M), "archive") == "Archive"
     M.logout()
 
 
@@ -131,18 +136,16 @@ def test_a_peek_leaves_mail_unread_and_a_plain_body_fetch_marks_it_read(srv, app
 # ── writing ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_move_lands_the_message_in_the_destination(srv, app):
-    import mailops
     uid = srv.deliver(ADA, "INBOX", _mail(1))
     M = _connect(app)
     M.select('"INBOX"')
-    mailops._move_uid(M, str(uid), "Archive")
+    _session(M).move([uid], "Archive")
     M.logout()
     assert not srv.messages(ADA, "INBOX")
     assert [m.headers()["Subject"] for m in srv.messages(ADA, "Archive").values()] == ["Note 1"]
 
 
 def test_without_move_the_app_copies_then_expunges_only_that_uid(app):
-    import mailops
     with FakeIMAPServer(without=("MOVE",)) as srv:
         entry = srv.add_account(ADA)
         app = {**app, "port": entry["port"]}
@@ -150,7 +153,7 @@ def test_without_move_the_app_copies_then_expunges_only_that_uid(app):
         uid = srv.deliver(ADA, "INBOX", _mail(2))
         M = _connect(app)
         M.select('"INBOX"')
-        mailops._move_uid(M, str(uid), "Archive")
+        _session(M).move([uid], "Archive")
         M.logout()
         assert list(srv.messages(ADA, "INBOX")) == [keep]
         assert len(srv.messages(ADA, "Archive")) == 1
@@ -159,14 +162,13 @@ def test_without_move_the_app_copies_then_expunges_only_that_uid(app):
 
 
 def test_without_uidplus_the_message_is_left_flagged_deleted(app):
-    import mailops
     with FakeIMAPServer(without=("MOVE", "UIDPLUS")) as srv:
         entry = srv.add_account(ADA)
         app = {**app, "port": entry["port"]}
         uid = srv.deliver(ADA, "INBOX", _mail(1))
         M = _connect(app)
         M.select('"INBOX"')
-        mailops._move_uid(M, str(uid), "Archive")
+        _session(M).move([uid], "Archive")
         M.logout()
         assert srv.messages(ADA, "INBOX")[uid].flags == {"\\Deleted"}
         assert len(srv.messages(ADA, "Archive")) == 1
@@ -285,14 +287,13 @@ def test_idle_hears_new_mail(srv, app):
 
 def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
     import accounts
-    import mailops
     with FakeIMAPServer(kind="proton") as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
         uid = srv.deliver(ADA, "INBOX", _mail(1))
         M = accounts.connect(accounts.get(ADA), timeout=5)
         M.select('"INBOX"')
-        mailops._move_uid(M, str(uid), "Trash")
+        _session(M).move([uid], "Trash")
         M.logout()
         assert [m.flags for m in srv.messages(ADA, "Trash").values()] == [{"\\Seen"}]
 

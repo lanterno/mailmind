@@ -100,24 +100,26 @@ class _Refusing:
 
 
 def test_a_refused_list_raises_and_find_role_falls_back():
-    import mailops
+    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.application.session import find_role
     with pytest.raises(imaplib.IMAP4.error, match="LIST refused"):
         imap_list.list_folders(_Refusing())
-    assert mailops.find_role(_Refusing(), "sent") is None
+    assert find_role(ImaplibSession(_Refusing()), "sent") is None
 
 
 # ── through the fake server and the app ────────────────────────────────────────────────────────
 
 def test_on_the_fake_each_role_finds_its_special_use_folder(world):
     import accounts
-    import mailops
+    from mailmind.bootstrap import mailbox
+    from mailmind.mailbox.application.session import find_role
     found = {}
     for acct in (w.ADA, w.BEA, w.CY):
-        M = accounts.connect(accounts.get(acct), timeout=10)
+        s = mailbox.open_session(accounts.get(acct), timeout=10)
         try:
-            found[acct] = {r: mailops.find_role(M, r) for r in ("sent", "drafts", "archive", "all", "junk", "trash")}
+            found[acct] = {r: find_role(s, r) for r in ("sent", "drafts", "archive", "all", "junk", "trash")}
         finally:
-            M.logout()
+            s.logout()
     assert found == {
         w.ADA: {"sent": "Sent", "drafts": "Drafts", "archive": "Archive", "all": None, "junk": "Junk", "trash": "Trash"},
         w.BEA: {"sent": "Sent", "drafts": "Drafts", "archive": "Archive", "all": "All Mail", "junk": "Spam",

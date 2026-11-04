@@ -17,6 +17,7 @@ import threading
 import urllib.parse
 
 import store
+from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.platform import settings
 from mailmind.platform.workers import gates
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
@@ -167,7 +168,7 @@ _BAD = imaplib.IMAP4.error("BAD unknown command")
 
 def test_a_move_without_MOVE_copies_then_expunges_only_its_uid():
     M = _ScriptedIMAP(MOVE=_NO_MOVE)
-    mailops._move_uid(M, "41", "Archive")
+    ImaplibSession(M).move([41], "Archive")
     assert ("COPY", "41", '"Archive"') in M.calls
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert ("EXPUNGE", "41") in M.calls
@@ -177,16 +178,16 @@ def test_a_move_without_MOVE_copies_then_expunges_only_its_uid():
 def test_a_failed_copy_leaves_the_message_untouched():
     M = _ScriptedIMAP(MOVE=_NO_MOVE, COPY=("NO", [b"[TRYCREATE] no such folder"]))
     try:
-        mailops._move_uid(M, "41", "Gone")
+        ImaplibSession(M).move([41], "Gone")
         raise AssertionError("a failed COPY must raise")
     except imaplib.IMAP4.error as e:
-        assert "COPY failed" in str(e)
+        assert "COPY refused" in str(e)
     assert "STORE" not in M.cmds() and "EXPUNGE" not in M.cmds() and "EXPUNGE-ALL" not in M.cmds()
 
 
 def test_without_uidplus_the_message_stays_flagged_and_nothing_else_goes():
     M = _ScriptedIMAP(MOVE=_NO_MOVE, EXPUNGE=_BAD)
-    mailops._move_uid(M, "41", "Archive")          # no exception: copied and flagged
+    ImaplibSession(M).move([41], "Archive")        # no exception: copied and flagged
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert "EXPUNGE-ALL" not in M.cmds()
 
@@ -194,7 +195,7 @@ def test_without_uidplus_the_message_stays_flagged_and_nothing_else_goes():
 def test_a_lost_connection_during_expunge_still_raises():
     M = _ScriptedIMAP(EXPUNGE=imaplib.IMAP4.abort("socket closed"))
     try:
-        mailops.expunge_uid(M, "41")
+        ImaplibSession(M).move([41], "Archive")
         raise AssertionError("an abort must propagate so the caller can queue the op")
     except imaplib.IMAP4.abort:
         pass
@@ -313,7 +314,7 @@ def _sent_a_line_break(M):
 def test_a_move_to_an_injected_folder_sends_nothing():
     M = _ScriptedIMAP()
     try:
-        mailops._move_uid(M, "41", "Archive\r\nA1 DELETE INBOX")
+        ImaplibSession(M).move([41], "Archive\r\nA1 DELETE INBOX")
         raise AssertionError("an injected destination must be refused")
     except accounts.BadMailbox:
         pass
