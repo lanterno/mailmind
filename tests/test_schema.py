@@ -1,5 +1,5 @@
 """The database schema: a fresh store.init(), an upgrade from the version before the last migration,
-and init() run again must all give the schema in tests/golden/schema_v20.sql (rewritten by
+and init() run again must all give the schema in tests/golden/schema_v<N>.sql (rewritten by
 `pytest --update-golden`). Every migration must also be safe to run twice, since init() runs on
 every start. These run on empty temporary databases only.
 

@@ -40,6 +40,9 @@ CREATE INDEX idx_readmut_state ON read_mutations(state, next_attempt_at);
 -- index idx_unsub_log_addr
 CREATE INDEX idx_unsub_log_addr ON unsub_log(from_addr);
 
+-- table ai_usage
+CREATE TABLE ai_usage( day TEXT NOT NULL, feature TEXT NOT NULL, model TEXT NOT NULL, served TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL, calls INTEGER NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cost_micros INTEGER NOT NULL DEFAULT 0, last_ts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, feature, model, served, outcome));
+
 -- table attachments
 CREATE TABLE attachments ( id INTEGER PRIMARY KEY AUTOINCREMENT, message_pk INTEGER REFERENCES messages(pk) ON DELETE CASCADE, part_id TEXT, filename TEXT, content_type TEXT, size INTEGER, sha256 TEXT, -- content-addressed file under attachments/ is_inline INTEGER DEFAULT 0, content_id TEXT );
 
@@ -100,4 +103,4 @@ CREATE TABLE thread_summaries ( account TEXT NOT NULL, thread_id TEXT NOT NULL, 
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE);
 
-PRAGMA user_version=20;
+PRAGMA user_version=21;
