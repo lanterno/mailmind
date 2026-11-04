@@ -1564,7 +1564,7 @@ async function api(p,o){o=o||{}; o.headers=Object.assign({"X-CSRF-Token":CSRF},o
   if(!r.ok){ let m="HTTP "+r.status, j=null; try{ j=await r.json(); if(j&&j.error)m=j.error; }catch(e){}
     if(r.status===402&&j&&j.over_limit&&o.askOver!==false&&!o.headers[AI_OVER]&&await askOverLimit(j))   // at the limit: ask, then again with leave
       return api(p,Object.assign({},o,{headers:Object.assign({},o.headers,{[AI_OVER]:"allow"})}));
-    throw Object.assign(new Error(m),{status:r.status,overLimit:!!(j&&j.over_limit)}); }
+    throw Object.assign(new Error(m),{status:r.status,overLimit:!!(j&&j.over_limit),aiOff:!!(j&&j.ai_off)}); }
   return r.json();}
 /* The daily AI limit: an AI request you started that would go over it asks first. Requests that hit
    the limit while the question is on screen share its one answer. One the page makes on its own
@@ -4094,10 +4094,10 @@ async function loadBrief(force,clicked){   // force: write it again from the mai
   _todayInflight=true;
   try{
     let d=force ? await cpost("/api/briefing/refresh",{}) : await api("/api/briefing");   // the GET only reads what is stored
-    if(d&&d.missing){ renderBrief(); d=await cpost("/api/briefing",{},clicked?{}:{askOver:false}); }   // none yet: write it; only a click asks at the limit
+    if(d&&d.missing&&!aiOff()){ renderBrief(); d=await cpost("/api/briefing",{},clicked?{}:{askOver:false}); }   // none yet: write it; only a click asks at the limit
     if(!d||!d.ok){ _briefErr=(d&&d.error)||"no answer"; return; }
     _briefErr=null; _briefData=d;
-  }catch(e){ _briefErr=e.overLimit?BRIEF_LIMIT:"couldn’t reach the server"; }
+  }catch(e){ _briefErr=e.overLimit?BRIEF_LIMIT:e.aiOff?null:"couldn’t reach the server"; }   // AI off: the brief says so (aiOffHtml)
   finally{ _todayInflight=false; renderBrief(); }
 }
 /* ── Tidy: close the AI→action loop. The AI already scored every message; let it do triage work.
@@ -4213,7 +4213,8 @@ async function loadReview(force){
   body.innerHTML=`<div class="rv-load"><span class="spin">↻</span> Looking back over your week…</div>`; $("#rvRange").textContent="";
   let d; try{ d = force ? await cpost("/api/review/refresh",{}) : await api("/api/review");   // the GET only reads what is stored
     if(d&&d.missing) d=await cpost("/api/review",{}); }                                      // none yet: write it (you opened it)
-  catch(e){ body.innerHTML=`<div class="rv-err">${e.overLimit?"Today’s AI limit is reached, so your review isn’t written.":"Couldn’t build your review."} <button class="ai-rerun" data-rv-retry>${e.overLimit?"Write it":"Retry"}</button></div>`; return; }
+  catch(e){ body.innerHTML=e.aiOff?`<div class="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>`
+      :`<div class="rv-err">${e.overLimit?"Today’s AI limit is reached, so your review isn’t written.":"Couldn’t build your review."} <button class="ai-rerun" data-rv-retry>${e.overLimit?"Write it":"Retry"}</button></div>`; return; }
   if(!d||!d.ok){ body.innerHTML=`<div class="rv-err">${esc((d&&d.error)||"Review unavailable")} <button class="ai-rerun" data-rv-retry>Retry</button></div>`; return; }
   _reviewLoaded=true; renderReview(d);
 }
@@ -4628,7 +4629,7 @@ function showNewPill(){
 function scheduleDelta(){ clearTimeout(_deltaDeb); _deltaDeb=setTimeout(buildDelta,1500); }   // calmer than the 400ms refresh; coalesces a burst into one call
 async function buildDelta(){
   if(_deltaInflight){ _deltaDirty=true; return; }   // a burst landed mid-fetch → re-run once when this finishes
-  const p=$("#newPill"); if(!p||!_pendingSince)return;
+  const p=$("#newPill"); if(!p||!_pendingSince||aiOff())return;   // AI off: the plain count pill is all there is
   _deltaInflight=true;
   try{
     const since=Math.floor(_pendingSince/1000), acct=state.allInbox?"":(state.account||"");
