@@ -6,7 +6,7 @@ never re-litigate the same sender. A domain entry also matches its sub-domains.
 
 Expiry rules are separate from keep/block: `expire github.com 72` moves INBOX mail
 from that sender/domain to Trash once it is older than 72 hours (manage.py expire,
-and the server's expire_loop). A kept sender can also expire — keep decides what
+and the server's expire job). A kept sender can also expire — keep decides what
 the classifier shows, expiry decides how long it stays.
 
   python3 rules.py list

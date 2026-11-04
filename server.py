@@ -59,7 +59,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.bootstrap import legacy
 from mailmind.platform import perimeter, profile, settings
-from mailmind.platform.workers import gates
+from mailmind.platform.workers import gates, scheduler
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -163,6 +163,22 @@ def sync_once():
     sync_guarded(None)
 
 
+def sync_rounds():
+    """The background sync's round function. Its first round resolves the credentials still
+    waiting (1Password's) before it syncs, so a long-running server never has to ask again."""
+    warmed = False
+
+    def sync_round():
+        nonlocal warmed
+        if not warmed:
+            warmed = True
+            n = accounts.preload_creds()  # 0 when every credential is plaintext
+            if n:
+                print(f"Warmed {n} 1Password-backed credential(s).", flush=True)
+        sync_once()
+    return sync_round
+
+
 def sync_guarded(emails):
     """Single-flight sync of `emails` (or all). Wakes due snoozes first. Both the 300s
     loop and the IDLE dispatcher route through here so syncs never overlap."""
@@ -251,16 +267,6 @@ def reconcile_rounds():
     return reconcile_round
 
 
-def reconcile_loop():
-    """Own-timer ghost pruner: one account per tick, round-robin."""
-    if _RECONCILE_INTERVAL <= 0:
-        return
-    time.sleep(min(120, _RECONCILE_INTERVAL))         # let the boot sync settle first
-    reconcile_round = reconcile_rounds()
-    while True:
-        time.sleep(reconcile_round())
-
-
 # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
 # to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
 # NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
@@ -303,15 +309,6 @@ def expire_round():
                 _auto_expire_one(a)
             except Exception as e:
                 print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
-
-
-def expire_loop():
-    if _EXPIRE_INTERVAL <= 0:
-        return
-    time.sleep(min(180, _EXPIRE_INTERVAL))            # let the boot sync settle first
-    while True:
-        expire_round()
-        time.sleep(_EXPIRE_INTERVAL)
 
 
 def wake_snoozed():
@@ -371,35 +368,10 @@ def snooze_round():
         print(f"[followup] tick error: {type(e).__name__}", flush=True)
 
 
-def snooze_tick():
-    """Always-on 60s wake loop so snooze + follow-up nudges work even read-only
-    (where sync_loop is not running)."""
-    while True:
-        time.sleep(60)
-        snooze_round()
-
-
 def nosync():
     """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
     older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
     return profile.current() is not profile.Profile.FULL
-
-
-def body_backfill_tick():
-    """Slowly fill body_text for messages ingested before full-text bodies existed, so
-    search becomes mailbox-wide instead of headers-only. IMAP-polite: a few per cycle,
-    only when no live user op holds the lock, gentle pacing, and never under NOSYNC
-    (it does real IMAP fetches). Each fetch_body() also refreshes the FTS row."""
-    if nosync():
-        return
-    time.sleep(45)                       # let the startup sync settle first
-    while True:
-        try:
-            delay = backfill_round()
-        except Exception as e:
-            print(f"[backfill] error: {type(e).__name__}", flush=True)
-            delay = 600
-        time.sleep(delay)
 
 
 def backfill_round():
@@ -424,15 +396,6 @@ def backfill_round():
             pass
         time.sleep(1.5)                  # gentle pacing between IMAP fetches
     return 8                             # drain a backlog briskly
-
-
-def sync_loop():
-    while True:
-        time.sleep(SYNC_INTERVAL)
-        try:
-            sync_once()
-        except Exception as e:
-            print(f"[sync] loop error: {e}", flush=True)
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -3463,22 +3426,6 @@ def _pick_draft_candidate():
         c.close()
 
 
-def draft_ahead_tick():
-    """Top-K background pre-gen loop. Every gate runs BEFORE any AI cost; batch=1 per
-    cycle means background can never hold both _AI_SEM slots. Hard ceiling ~20 calls/hour;
-    steady state ≈ 0 because fp-keyed dedup never regenerates an unchanged thread."""
-    if nosync() or os.environ.get("MAILMIND_NO_DRAFT_TICK"):
-        return
-    time.sleep(DRAFT_TICK_STARTUP_DELAY)
-    draft_ahead_round = draft_ahead_rounds()
-    while True:
-        try:
-            draft_ahead_round()
-        except Exception as e:
-            print(f"[draft] tick error: {type(e).__name__}: {str(e)[:120]}", flush=True)
-        time.sleep(DRAFT_TICK_INTERVAL)
-
-
 def draft_ahead_rounds():
     """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
     drafts at most one reply ahead, and only when nothing else wants the AI, then collects the
@@ -4232,11 +4179,26 @@ class H(BaseHTTPRequestHandler):
 
 
 # ----------------------------------------------------------------------------- boot
-def startup():
-    n = accounts.preload_creds()  # only resolves any remaining op-backed creds; 0 when all are plaintext
-    if n:
-        print(f"Warmed {n} 1Password-backed credential(s).", flush=True)
-    sync_once()
+JOBS = scheduler.Scheduler()             # the background jobs; legacy.start puts the running ones here
+
+
+def schedule(jobs):
+    """Put the background work on `jobs`, a Scheduler. Snooze wake always runs, since it needs no
+    mail server. Read-only, nothing else does: no sync, backfill, pre-drafting, reconcile or
+    expiry."""
+    jobs.add("snooze", snooze_round, every=60, first=60)
+    if nosync():
+        return
+    jobs.add("sync", sync_rounds(), every=SYNC_INTERVAL, first=0)
+    jobs.add("backfill", backfill_round, every=600, first=45)              # old mail, full-text searchable
+    if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
+        jobs.add("draft-ahead", draft_ahead_rounds(), every=DRAFT_TICK_INTERVAL,
+                 first=DRAFT_TICK_STARTUP_DELAY)                           # top-K reply pre-gen (AI-polite)
+    if _RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
+        jobs.add("reconcile", reconcile_rounds(), every=max(30, _RECONCILE_INTERVAL),
+                 first=min(120, _RECONCILE_INTERVAL))
+    if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
+        jobs.add("expire", expire_round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
 
 
 def _after_send():
