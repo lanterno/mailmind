@@ -228,8 +228,13 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`. `mailmind.bootstrap.assistant` binds one and resolves the key.
+- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. So far it
+  holds `adapters.config_file`, which `config.py` reads and writes `mailmind.config.json`
+  through. `ConfigFile.read` parses the file again only when its inode, size or modification
+  time changed, and hands each caller a copy of its own; `write` replaces it atomically, readable
+  by its owner only. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
-  bootstrap, then http, then the contexts, then platform, then kernel; within the Assistant,
+  bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic` package reached only through its adapter. `tests/legacy_ratchet.txt` lists
   every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
