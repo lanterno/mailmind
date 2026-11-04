@@ -3,6 +3,7 @@ what survives a connection lost at the worst moment. With a gate for each accoun
 (MAILMIND_WORKERS=account), a black-holed account holds up only its own work."""
 import threading
 import time
+from datetime import timedelta
 
 import pytest
 
@@ -76,6 +77,27 @@ def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, w
     run.join(30)
     assert not run.is_alive() and answers[0].json["ok"]
     assert [r["account"] for r in answers[0].json["results"]] == [w.ADA, w.BEA, w.CY]
+
+
+@pytest.mark.xfail(strict=True, reason="known bug: the outbox works one row at a time, so a Sent copy "
+                                      "waiting on a black-holed server holds up every account's sends")
+def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(app, world, per_account):
+    import outbox
+    world.server.stall("APPEND", user=w.BEA)                   # Bea's server takes the send's copy, then nothing
+    for who, key in ((w.BEA, "k-bea"), (w.ADA, "k-ada")):     # Bea's first: the outbox goes in order
+        assert app.post("/api/send", {"account": who, "mode": "new", "to": ["Lin Mori <lin@example.test>"],
+                                      "subject": "Fabric order", "text": "The linen came in.",
+                                      "idempotency_key": key}).json["ok"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    drain = threading.Thread(target=outbox.drain, daemon=True)
+    drain.start()
+    try:
+        assert wait_until(lambda: world.server.commands_for(w.BEA, "APPEND"))
+        assert wait_until(lambda: len(world.smtp.messages) == 2), "Ada's send waits on Bea's server"
+    finally:
+        world.server.release_stalls()
+        drain.join(60)
+    assert not drain.is_alive()
 
 
 def boxes(world, name):

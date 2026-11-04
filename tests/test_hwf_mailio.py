@@ -487,6 +487,22 @@ def test_hwf_the_sent_copy_is_the_bytes_that_went_on_the_wire(app, world):
     assert copy.rstrip(b"\r\n") == wire.data.rstrip(b"\r\n")
 
 
+@pytest.mark.xfail(strict=True, reason="known bug: a Sent copy that fails is logged and never tried "
+                                      "again, so the message, delivered, never reaches Sent")
+def test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back(app, world):
+    import outbox
+    oid = app.post("/api/send", new(idempotency_key="k-sent-later")).json["outbox_id"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    world.server.drop("APPEND", user=w.ADA)                     # the connection goes as the copy goes up
+    outbox.drain()
+    assert len(world.smtp.messages) == 1                         # delivered all the same
+    app.clock.shift(timedelta(minutes=20))                       # past any back-off
+    outbox.drain()
+    r = outbox_row(oid)
+    assert (r["sent_appended"], len(world.smtp.messages)) == (1, 1)
+    assert len(world.server.find(w.ADA, "Sent", r["message_id"])) == 1
+
+
 def test_hwf_only_a_send_past_the_undo_window_is_listed_as_scheduled(app):
     import outbox
     now = int(time.time())                                       # frozen
