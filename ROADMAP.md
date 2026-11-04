@@ -570,13 +570,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   rename), and let a bad file fall back to the last good rules. Pinned by
   `test_a_failed_rules_write_keeps_the_rules`, `test_hwf_a_malformed_rules_file_does_not_stop_sync`
   and `test_hwf_the_rules_file_is_written_owner_only`.
-- **Move mail on a server without MOVE, into the right folder** · medium value · effort S —
-  - `manage.move_verified` has no COPY, STORE and EXPUNGE fallback, unlike `mailops._move_uid`, so
-    sweep and expiry move nothing on such a server, and `server._auto_expire_one` says nothing.
-    Pinned by `test_hwf_a_sweep_on_a_server_without_move_still_moves_the_junk`.
-  - `manage.sweep_account` prunes local rows by live UID, where expiry and the AI sweep prune by
-    Message-ID. Across a UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The
-    next sync's reset heals them.
+- **Prune a sweep's local rows by Message-ID** · low value · effort S — `manage.sweep_account`
+  prunes local rows by live UID, where expiry and the AI sweep prune by Message-ID. Across a
+  UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The next sync's reset heals
+  them.
 - **The rail's counts go stale after a snooze** · medium value · effort S — `loadFolders` bumps
   `state.cseq` and, with the folders cached, calls `loadCMessages`, which bumps it again. The
   folder answer then reads as superseded and is dropped, so the Snoozed count, unread counts and
