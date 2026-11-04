@@ -34,6 +34,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
 import mailclass
+import mailops
 import pool
 import rules
 from mailmind.accounts.domain import provider
@@ -159,20 +160,34 @@ def plan_account_db(acct):
     return res
 
 
+def _move_one(M, uid, dest, can_move):
+    """One message, through mailops._move_uid: MOVE, or on a server without it a checked COPY, then
+    \\Deleted and a UID EXPUNGE of this UID alone. A failure leaves it for the verification pass."""
+    try:
+        mailops._move_uid(M, uid, dest, move=can_move)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        pass
+
+
 def move_verified(M, uids, dest):
     """Move uids to dest, then re-check INBOX and retry any that didn't leave.
-    Returns (moved, stragglers)."""
+    Returns (moved, stragglers). A server that offers MOVE gets batches of MOVE_BATCH; one that
+    doesn't, or refuses a batch, gets one message at a time (_move_one)."""
+    can_move = "MOVE" in {str(c).upper() for c in (getattr(M, "capabilities", None) or ())}
     M.select('"INBOX"', readonly=False)
     for i in range(0, len(uids), MOVE_BATCH):
         chunk = uids[i:i + MOVE_BATCH]
         try:
-            M.uid("MOVE", ",".join(chunk), accounts.mailbox_arg(dest))
-        except Exception:
-            for u in chunk:  # fall back to per-message so one bad UID can't sink a batch
-                try:
-                    M.uid("MOVE", u, accounts.mailbox_arg(dest))
-                except Exception:
-                    pass
+            typ, _ = M.uid("MOVE", ",".join(chunk), accounts.mailbox_arg(dest)) if can_move else ("NO", None)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            typ = "BAD"
+        if typ != "OK":
+            for u in chunk:  # per message, so one bad UID can't sink a batch
+                _move_one(M, u, dest, can_move)
         time.sleep(0.2)
     # verification: which requested uids are STILL in INBOX?
     want = set(uids)
@@ -184,10 +199,7 @@ def move_verified(M, uids, dest):
     if remaining:  # one retry pass
         M.select('"INBOX"', readonly=False)
         for u in remaining:
-            try:
-                M.uid("MOVE", u, accounts.mailbox_arg(dest))
-            except Exception:
-                pass
+            _move_one(M, u, dest, can_move)
         M.select('"INBOX"', readonly=True)
         typ, d = M.uid("SEARCH", None, "ALL")
         present = set(x.decode() for x in d[0].split())

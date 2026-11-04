@@ -237,8 +237,12 @@ def expunge_uid(M, uid):
         pass
 
 
-def _move_uid(M, uid, dest):
+def _move_uid(M, uid, dest, move=True):
+    """Move one message: MOVE, or, when that fails or the caller knows the server has no MOVE
+    (move=False), a checked COPY, then \\Deleted and a UID EXPUNGE of this UID alone."""
     try:
+        if not move:
+            raise imaplib.IMAP4.error("no MOVE")
         typ, d = M.uid("MOVE", uid, accounts.mailbox_arg(dest))
         if typ != "OK":
             raise imaplib.IMAP4.error(str(d))
