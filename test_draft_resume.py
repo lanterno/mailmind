@@ -16,7 +16,6 @@ from email.message import EmailMessage
 
 import store
 from mailmind.platform import settings
-from mailmind.bootstrap import legacy
 from mailmind.platform.workers import gates
 
 _CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
@@ -1138,16 +1137,13 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock():
     held, real_upsert, real_delete = [], store.draft_upsert, store.draft_delete
     store.draft_upsert = lambda c, row: (held.append(("upsert", gates.held(ACCT))), real_upsert(c, row))[1]
     store.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
-    wired = (server.outbox._after_send, server.readmutq._after_apply, server.realtime._sync_handler)
     try:
         did = _save()["draft_id"]
-        legacy.wire(server)                          # the outbox as the app runs it
         server.outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "answered_set": 1,
                                         "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                                     {"email": ACCT})
     finally:
         store.draft_upsert, store.draft_delete = real_upsert, real_delete
-        server.outbox._after_send, server.readmutq._after_apply, server.realtime._sync_handler = wired
     assert held == [("upsert", True), ("delete", True)], held
     assert _row(did) is None and len(CALLS["delete"]) == 1, CALLS["delete"]
 
