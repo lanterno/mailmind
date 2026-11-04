@@ -240,6 +240,41 @@ def test_ai_routes_without_a_key(app, golden, anthropic_api):
     golden.note("requests the fake Claude API received", len(anthropic_api.requests))
 
 
+LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
+
+
+@pytest.mark.parametrize("path, body", [
+    ("/api/ai/summarize", {"pk": LUNCH}),
+    ("/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}),
+    ("/api/ai/rewrite", {"text": "can we move lunch to friday", "op": "shorten"}),
+    ("/api/ai/ask", {"question": "When is lunch with Lin?"}),
+    ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
+    ("/api/briefing/refresh", {}),
+    ("/api/review/refresh", {"account": "ada@example.test"}),
+    ("/api/briefing", {}),
+    ("/api/briefing/since", {"since": 0}),
+    ("/api/review", {"account": "ada@example.test"})])
+def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api, capfd, path, body):
+    import store
+    lunch = world.pk(LUNCH)
+    if body.get("pk") == LUNCH:
+        body = {**body, "pk": lunch}
+    c = store.conn()
+    try:                                               # triaged, so the brief has something to say
+        store.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
+                           "2026-11-02T11:00:00+00:00")
+        c.commit()
+    finally:
+        c.close()
+    r = app.post(path, body)
+    assert (r.status, r.json) == (409, {"ok": False, "error": "AI is off: MailMind has no Claude API key",
+                                        "ai_off": True})
+    assert anthropic_api.requests == []
+    assert "failed" not in capfd.readouterr().out          # nothing was tried, so nothing failed
+    ai_line = app.get("/api/digest").json["ai"]
+    assert (ai_line["engine"], ai_line["last_error"]) == ("none", "")
+
+
 def test_without_a_key_no_mail_leaves_for_the_api(app, anthropic_api):
     for path in ("/api/briefing", "/api/review", "/api/briefing/since", "/api/ai/draft-ahead"):
         app.get(path)
