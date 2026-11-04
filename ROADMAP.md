@@ -299,11 +299,18 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Soak IMAPClient on real accounts, then make it the default** · high value · effort S — The
   new door reaches an account through IMAPClient when its config asks (`"imap_adapter":
   "imapclient"`; the startup line counts them). Both adapters pass the contract against the fake
-  and against Dovecot (`just test-dovecot`), and the whole suite passes under either, but
-  IMAPClient has not yet met Proton Bridge or Gmail. The owner asks for it on one account, then
-  on all, and uses the new door daily for a week, watching Settings' sync health and the
-  server's output; removing the key goes back. Then `front.build` calls
-  `mailbox.use("imapclient")` and the ask goes.
+  and against Dovecot (`just test-dovecot`), and the whole suite passes under either. On real
+  Gmail, IMAP and Proton Bridge accounts the two answered every read alike (capabilities, folders,
+  status, searches, headers, flags, bodies, IDLE), but nothing has written through IMAPClient
+  there yet, nor run on it for days. The owner asks for it on one account, then on all, and uses
+  the new door daily for a week, watching Settings' sync health and the server's output;
+  removing the key goes back. Then `front.build` calls `mailbox.use("imapclient")` and the ask
+  goes.
+- **Break role ties without LIST's order** · low value · effort S — Where several folders could
+  play a role, `mailmind.mailbox.domain.roles.find` falls back last to the order LIST gave them,
+  but Proton Bridge lists folders in a new random order each time. An account with such a tie
+  would see archiving or the rail's Sent change folder from one connection to the next. Break the
+  last tie by name instead.
 
 ## Keyboard, screen readers and reversibility
 
