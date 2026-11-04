@@ -10,7 +10,7 @@ Only this module imports imapclient; only the new door loads it.
 """
 import imaplib
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from imapclient import IMAPClient
 
@@ -34,6 +34,7 @@ def connect(host, port, *, starttls, ssl_context, timeout, check_tls, username, 
     check_tls passed. A refused login raises imaplib.IMAP4.error."""
     client = IMAPClient(host, port=port, ssl=not starttls, ssl_context=ssl_context, timeout=timeout)
     client.folder_encode = False
+    client.normalise_times = False          # an INTERNALDATE keeps its zone, rather than turning local
     try:
         if guard is not None:
             guard(client._imap)
@@ -87,16 +88,17 @@ class ImapClientSession:
             return {}
         return {int(u): frozenset(_text(f) for f in fs) for u, fs in self._c.get_flags(list(uids)).items()}
 
-    def headers(self, uids, fields, *, gmail_thread=False):
+    def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
         items = ["UID", "FLAGS"] + (["X-GM-THRID"] if gmail_thread else []) + \
-            ["BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")]"]
+            (["INTERNALDATE"] if internaldate else []) + ["BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")]"]
         uids, out = [int(u) for u in uids], []
         for start in range(0, len(uids), port.HEADER_BATCH):
             for uid, got in self._c.fetch(uids[start:start + port.HEADER_BATCH], items).items():
                 raw = next((v for k, v in got.items() if bytes(k).upper().startswith(b"BODY[HEADER")), None)
-                thread = got.get(b"X-GM-THRID")
+                thread, arrived = got.get(b"X-GM-THRID"), got.get(b"INTERNALDATE")
                 out.append(Headers(int(uid), frozenset(_text(f) for f in got.get(b"FLAGS", ())), raw or b"",
-                                   str(thread) if thread is not None else None))
+                                   str(thread) if thread is not None else None,
+                                   arrived.astimezone(timezone.utc) if isinstance(arrived, datetime) else None))
         return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):
@@ -129,8 +131,8 @@ class ImapClientSession:
                 pass                     # refused: copy them instead, as a server without MOVE needs
         move_by_copy(self, uids, dest)
 
-    def expunge_uid(self, uid):
-        self._c.uid_expunge([int(uid)])
+    def expunge(self, uids):
+        self._c.uid_expunge([int(u) for u in uids])
 
     def append(self, folder, raw, *, flags=(), when=None):
         said = self._c.append(unescaped(folder), raw, flags=list(flags),

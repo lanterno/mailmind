@@ -15,6 +15,7 @@ Standard library only.
 """
 import imaplib
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from mailmind.mailbox.domain import roles
@@ -37,6 +38,7 @@ class Headers:
     flags: frozenset
     raw: bytes                          # the fields asked for, as the server sent them
     gmail_thread: str | None = None     # Gmail's X-GM-THRID, when asked for: fetch data, not a header
+    internaldate: datetime | None = None   # when the server took it in (INTERNALDATE), when asked for
 
 
 HEADER_BATCH = 300                      # UIDs to a header FETCH, so no command line grows too long
@@ -51,7 +53,8 @@ class MailSession(Protocol):
     def uids(self, *criteria: str) -> list[int]: ...                        # UID SEARCH, in order
     def by_message_id(self, message_id: str) -> int | None: ...             # the newest match
     def flags(self, uids) -> dict[int, frozenset]: ...
-    def headers(self, uids, fields, *, gmail_thread: bool = False) -> list[Headers]: ...   # in UID order
+    def headers(self, uids, fields, *, gmail_thread: bool = False,
+                internaldate: bool = False) -> list[Headers]: ...                  # in UID order
     def body(self, uid: int) -> bytes | None: ...                           # BODY.PEEK[]
     def add_flags(self, uids, flags) -> None: ...
     def remove_flags(self, uids, flags) -> None: ...
@@ -59,7 +62,7 @@ class MailSession(Protocol):
     def remove_labels(self, uids, labels) -> None: ...
     def copy(self, uids, dest: str) -> None: ...
     def move(self, uids, dest: str) -> None: ...                            # one MOVE for them all
-    def expunge_uid(self, uid: int) -> None: ...
+    def expunge(self, uids) -> None: ...                    # UID EXPUNGE of these alone, never a bulk one
     def append(self, folder: str, raw: bytes, *, flags=(), when=None) -> int | None: ...   # its UID
     def noop(self) -> bool: ...
     def logout(self) -> None: ...
@@ -75,7 +78,7 @@ def move_by_copy(session, uids, dest):
     session.add_flags(uids, ["\\Deleted"])
     for uid in uids:
         try:
-            session.expunge_uid(uid)
+            session.expunge([uid])
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:
@@ -100,7 +103,7 @@ class ReadOnlySession:
     profile.ReadOnlyError before it is sent. Everything else is the session's own."""
 
     _WRITES = frozenset({"add_flags", "remove_flags", "add_labels", "remove_labels", "copy", "move",
-                         "expunge_uid", "append"})
+                         "expunge", "append"})
 
     def __init__(self, session):
         self._session = session

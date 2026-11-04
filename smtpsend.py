@@ -104,7 +104,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
         if del_uid:
             try:
                 s.add_flags([del_uid], ["\\Deleted"])
-                s.expunge_uid(del_uid)       # this UID alone, never a bulk EXPUNGE
+                s.expunge([del_uid])         # this UID alone, never a bulk EXPUNGE
             except Exception:
                 pass
         new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
@@ -132,7 +132,7 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
             return                                     # UIDs rolled (or unsaid) — don't risk the wrong one
         try:
             s.add_flags([int(uid)], ["\\Deleted"])
-            s.expunge_uid(int(uid))                    # this UID alone, never a bulk EXPUNGE
+            s.expunge([int(uid)])                      # this UID alone, never a bulk EXPUNGE
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:

@@ -5,6 +5,8 @@ checks it and raises imaplib.IMAP4.error, as the port says. Standard library onl
 """
 import imaplib
 import re
+import time
+from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.adapters.imap_names import imap_quote, mailbox_arg
@@ -35,6 +37,12 @@ def _flag_list(flags):
 def _label_list(labels):
     """Gmail's labels: a system label (\\Inbox) as it is, any other quoted."""
     return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
+
+
+def _arrived(meta):
+    """The INTERNALDATE in a FETCH answer's line, as an aware UTC datetime, or None."""
+    when = imaplib.Internaldate2tuple(meta)
+    return datetime.fromtimestamp(time.mktime(when), timezone.utc) if when else None
 
 
 def _number(M, name):
@@ -86,8 +94,8 @@ class ImaplibSession:
                 out[int(uid.group(1))] = frozenset(f.decode() for f in flags.group(1).split())
         return out
 
-    def headers(self, uids, fields, *, gmail_thread=False):
-        items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "")
+    def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
+        items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "") + ("INTERNALDATE " if internaldate else "")
                  + "BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")])")
         uids, out = [int(u) for u in uids], []
         for start in range(0, len(uids), port.HEADER_BATCH):
@@ -101,7 +109,8 @@ class ImaplibSession:
                 if uid:
                     out.append(Headers(int(uid.group(1)),
                                        frozenset(f.decode() for f in flags.group(1).split()) if flags else frozenset(),
-                                       item[1] or b"", thread.group(1).decode() if thread else None))
+                                       item[1] or b"", thread.group(1).decode() if thread else None,
+                                       _arrived(meta) if internaldate else None))
         return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):
@@ -134,8 +143,8 @@ class ImaplibSession:
                 pass                     # refused: copy them instead, as a server without MOVE needs
         move_by_copy(self, uids, dest)
 
-    def expunge_uid(self, uid):
-        _ok("EXPUNGE", *self._M.uid("EXPUNGE", str(int(uid))))
+    def expunge(self, uids):
+        _ok("EXPUNGE", *self._M.uid("EXPUNGE", _uid_set(uids)))
 
     def append(self, folder, raw, *, flags=(), when=None):
         date = imaplib.Time2Internaldate(when) if when is not None else None

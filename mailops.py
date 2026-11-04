@@ -153,7 +153,7 @@ def apply_queued_mutation(row):
                 cc.close()
             if _already_in(s, d, mid, src):            # an earlier try's COPY landed, then its connection
                 _ignoring_refusal(s.add_flags, [uid], ["\\Deleted"])   # dropped: only the original is left
-                _ignoring_refusal(s.expunge_uid, uid)                  # to remove
+                _ignoring_refusal(s.expunge, [uid])                    # to remove
             else:
                 s.move([uid], d)
         return (True, None)
