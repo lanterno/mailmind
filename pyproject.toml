@@ -42,10 +42,40 @@ markers = ["browser: drives dashboard.html in Chromium; skipped unless pytest ru
 
 [tool.importlinter]
 # The package's own layers. Which legacy modules it imports is the ratchet's job
-# (tests/test_ratchet.py), since those modules sit outside the package.
+# (tests/test_ratchet.py), since those modules sit outside the package. External packages are
+# in the graph too, so a contract can say who may import one.
 root_packages = ["mailmind"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "bootstrap, then http, then platform, then kernel: each imports only the layers below it"
+name = "bootstrap, then http, then the contexts, then platform, then kernel: each imports only the layers below it"
 type = "layers"
-layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.platform", "mailmind.kernel"]
+layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.assistant", "mailmind.platform", "mailmind.kernel"]
+
+[[tool.importlinter.contracts]]
+name = "within the Assistant, adapters, then application, then domain"
+type = "layers"
+layers = ["mailmind.assistant.adapters", "mailmind.assistant.application", "mailmind.assistant.domain"]
+
+[[tool.importlinter.contracts]]
+name = "only bootstrap picks an adapter"
+type = "forbidden"
+source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel"]
+forbidden_modules = ["mailmind.assistant.adapters"]
+
+[[tool.importlinter.contracts]]
+name = "only the SDK adapter reaches the Anthropic SDK"
+type = "forbidden"
+source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel",
+                  "mailmind.assistant.application", "mailmind.assistant.domain",
+                  "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.urllib_http",
+                  "mailmind.assistant.adapters.disabled"]
+forbidden_modules = ["anthropic"]
+
+[[tool.importlinter.contracts]]
+# bootstrap.assistant loads the SDK adapter when the new door asks for it, and only then.
+name = "bootstrap imports the Anthropic SDK only through its adapter"
+type = "forbidden"
+source_modules = ["mailmind.bootstrap"]
+forbidden_modules = ["anthropic"]
+allow_indirect_imports = true

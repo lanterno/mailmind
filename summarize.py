@@ -1,8 +1,9 @@
 """Summarize + importance-score non-junk mail with Claude. Runs a few calls in parallel.
 
 Every AI call in the app goes through call_claude_json / call_claude here, which call the Claude
-API (claude_api.py). With no API key AI is off: those calls raise AIOff before anything is sent,
-and status() says "none" rather than counting them as failed calls.
+API through the Assistant's gateway (mailmind.bootstrap.assistant). With no API key AI is off: those
+calls raise AIOff before anything is sent, and status() says "none" rather than counting them as
+failed calls.
 Usage: python3 summarize.py [limit] [workers]
 """
 import sys
@@ -15,7 +16,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
-import claude_api
+from mailmind.assistant.application.ports import AIOff   # the calls below raise it when AI is off
+from mailmind.assistant.domain import models
+from mailmind.bootstrap import assistant
 
 WORKERS = 4
 MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-5-5
@@ -51,24 +54,20 @@ TRIAGE_SCHEMA = {
 }
 
 
-class AIOff(RuntimeError):
-    """AI is off: there is no API key, so nothing was sent."""
-
-
 def engine():
     """"api" when an API key resolves, else "none": AI is off."""
-    return "api" if claude_api.key() else "none"
+    return "api" if assistant.gateway().on else "none"
 
 
 def describe_engine():
     """One line for the startup log."""
-    return "Claude API · " + model_label() + " · " + _key_note()
+    return f"Claude API through {assistant.transport()} · {model_label()} · {_key_note()}"
 
 
 def _key_note():
     """Where the API key came from, or why there is none."""
-    source = claude_api.key_source()
-    if claude_api.key():
+    key, source = assistant.key()
+    if key:
         return "key from " + source
     if source == "mailmind.config.json":
         return "no key, so AI is off: the anthropic_api_key in mailmind.config.json can't be read"
@@ -77,7 +76,7 @@ def _key_note():
 
 def model_label():
     """The model name stored beside each AI result and shown under it in the UI."""
-    return MODEL or claude_api.MODEL
+    return MODEL or models.DEFAULT
 
 
 _last = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for status()
@@ -118,20 +117,14 @@ def status():
     one has run)."""
     on = engine() == "api"
     return {"engine": "api" if on else "none", "model": model_label() if on else "",
-            "key_from": claude_api.key_source() if on else "",
+            "key_from": assistant.key()[1] if on else "",
             "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"]}
-
-
-def _require_key():
-    if engine() != "api":
-        raise AIOff("AI is off: there is no API key")
 
 
 @_noted
 def call_claude(prompt):
     """Plain text result (used by summarize_thread). Unchanged signature."""
-    _require_key()
-    return claude_api.message(prompt, model=MODEL)
+    return assistant.gateway().ask(prompt, model=MODEL).text
 
 
 def _loose_json(out):
@@ -145,9 +138,8 @@ def call_claude_json(prompt, schema, effort=None):
     (output_config.format) gives, else best-effort regex-parsed JSON from the text. Raises
     RuntimeError ONLY when no reply came (AIOff, one, when AI is off), so the caller can tell
     retry from fallback; a successful-but-unparseable reply yields {}."""
-    _require_key()
-    out = claude_api.message(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
-                             model=MODEL, effort=effort)
+    out = assistant.gateway().ask(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
+                                  model=MODEL, effort=effort).text
     try:
         obj = json.loads(out)
     except ValueError:
