@@ -16,6 +16,7 @@ from email.message import EmailMessage
 
 import store
 from mailmind.platform import settings
+from mailmind.platform.db import migrations
 from mailmind.platform.workers import gates
 
 _CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
@@ -508,7 +509,7 @@ def test_v19_database_gains_the_columns():
     c.close()
     store.init()
     cols, v = _cols()
-    assert v == 20 and SIDECAR <= cols, (v, cols)
+    assert v == migrations.MIGRATIONS[-1][0] and SIDECAR <= cols, (v, cols)   # every later one ran too
     row = _row(1)
     assert (row["uid"], row["mode"], row["own_text"], row["bcc"]) == (3, "reply", None, None), dict(row)
 
