@@ -1,6 +1,7 @@
 """mailmind.platform.workers.durable_queue: the queue the outbox and the offline move queue share,
 on a table of its own in a temp database."""
 import threading
+import time
 
 import pytest
 
@@ -16,10 +17,26 @@ def q(tmp_path):
     c = database.connect(path)
     c.executescript("CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, state TEXT NOT NULL DEFAULT 'queued', "
                     "attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, "
-                    "done INTEGER NOT NULL DEFAULT 0, last_error TEXT, finished_at TEXT, what TEXT)")
+                    "done INTEGER NOT NULL DEFAULT 0, last_error TEXT, finished_at TEXT, what TEXT, lane TEXT)")
     c.close()
     return DurableQueue("jobs", "jobs", running="busy", finished="over", finished_at="finished_at", gate="done",
                         connect=lambda: database.connect(path), poll=0.05)
+
+
+@pytest.fixture
+def laned(q):
+    """The same table, its rows in lanes; the worker drains only when kicked."""
+    return DurableQueue("jobs", "jobs", running="busy", finished="over", finished_at="finished_at", gate="done",
+                        connect=q._connect, poll=30, lane="lane")
+
+
+def wait_until(cond, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while not cond():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
 
 
 def run(q, fn):
@@ -135,6 +152,59 @@ def test_draining_runs_each_due_row_and_one_that_raises_stops_none_of_the_rest(q
     q.drain(handle, NOW)
     assert handled == ids
     assert f"[jobs] handle #{ids[1]} errored: ValueError: bad row" in capsys.readouterr().out
+
+
+def test_a_lane_waiting_on_its_server_holds_up_no_other_lane(laned):
+    q = laned
+    a1, b1, a2, b2 = (add(q, n, lane=n[0]) for n in ("a1", "b1", "a2", "b2"))
+    release, handled = threading.Event(), []
+
+    def handle(id_):
+        handled.append((id_, threading.current_thread().name))
+        if id_ == a1:
+            release.wait(5)
+    drain = threading.Thread(target=lambda: q.drain(handle, NOW), daemon=True)
+    drain.start()
+    try:
+        assert wait_until(lambda: [i for i, _ in handled if i in (b1, b2)] == [b1, b2])
+        assert a2 not in [i for i, _ in handled] and drain.is_alive()   # behind a1, and drain waits for both
+    finally:
+        release.set()
+        drain.join(5)
+    assert not drain.is_alive()
+    assert [i for i, _ in handled if i in (a1, a2)] == [a1, a2]
+    assert {(i in (a1, a2), name) for i, name in handled} == {(True, "jobs:a"), (False, "jobs:b")}
+
+
+def test_the_workers_drain_passes_a_busy_lane_by_and_the_lane_kicks_it_as_it_ends(laned):
+    q = laned
+    release, handled, stop = threading.Event(), [], threading.Event()
+
+    def handle(id_):
+        if run(q, lambda c: q.claim(c, id_)) is None:
+            return
+        handled.append(id_)
+        if id_ == a1:
+            release.wait(5)
+        run(q, lambda c: q.finish(c, id_, "2026-11-02T12:00:00+00:00"))
+    a1 = add(q, "a1", lane="a")
+    worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handle, NOW), stop), daemon=True)
+    worker.start()
+    try:
+        q.kick()
+        assert wait_until(lambda: handled == [a1])                # a's lane waits on its server
+        a2, b1 = add(q, "a2", lane="a"), add(q, "b1", lane="b")
+        q.kick()
+        assert wait_until(lambda: b1 in handled), "the worker's drain waits on a's lane"
+        assert a2 not in handled
+        release.set()
+        assert wait_until(lambda: handled == [a1, b1, a2]), "a's next row waits for the 30 s poll"
+    finally:
+        release.set()
+        stop.set()
+        q.kick()
+        worker.join(5)
+    assert not worker.is_alive()
 
 
 def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):

@@ -79,8 +79,6 @@ def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, w
     assert [r["account"] for r in answers[0].json["results"]] == [w.ADA, w.BEA, w.CY]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the outbox works one row at a time, so a Sent copy "
-                                      "waiting on a black-holed server holds up every account's sends")
 def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(app, world, per_account):
     import outbox
     world.server.stall("APPEND", user=w.BEA)                   # Bea's server takes the send's copy, then nothing
@@ -98,6 +96,46 @@ def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(a
         world.server.release_stalls()
         drain.join(60)
     assert not drain.is_alive()
+
+
+def test_the_outbox_worker_sends_on_while_another_accounts_sent_copy_hangs(app, world, per_account):
+    """The worker's drains don't wait for a busy account: a send that comes due while Bea's Sent
+    copy hangs goes out at once, not after her server's 60-second timeout."""
+    import outbox
+    import store
+
+    def send(who, key):
+        return app.post("/api/send", {"account": who, "mode": "new", "to": ["Lin Mori <lin@example.test>"],
+                                      "subject": "Fabric order", "text": "The linen came in.",
+                                      "idempotency_key": key}).json["outbox_id"]
+
+    def state(oid):
+        c = store.conn()
+        try:
+            return tuple(c.execute("SELECT state, delivered FROM outbox WHERE id=?", (oid,)).fetchone())
+        finally:
+            c.close()
+    world.server.stall("APPEND", user=w.BEA)
+    bea, _ = send(w.BEA, "k-bea"), send(w.ADA, "k-ada-1")
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    stop = threading.Event()
+    worker = threading.Thread(target=lambda: outbox.QUEUE.run_forever(outbox.drain, stop), daemon=True)
+    worker.start()                                              # what outbox.worker_loop runs, with a stop
+    try:
+        assert wait_until(lambda: world.server.commands_for(w.BEA, "APPEND"))
+        assert wait_until(lambda: len(world.smtp.messages) == 2)
+        send(w.ADA, "k-ada-2")
+        app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+        outbox.kick()
+        assert wait_until(lambda: len(world.smtp.messages) == 3), "Ada's next send waits on Bea's server"
+        assert state(bea) == ("sending", 1)                    # Bea's went out; her copy still hangs
+    finally:
+        world.server.release_stalls()
+        stop.set()
+        outbox.kick()
+        worker.join(60)
+    assert not worker.is_alive()
+    assert wait_until(lambda: state(bea) == ("queued", 1))     # its copy tried again later
 
 
 def boxes(world, name):
