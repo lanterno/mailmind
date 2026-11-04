@@ -16,13 +16,27 @@ class BadMailbox(imaplib.IMAP4.error):
     the wire and handled like the server's own BAD: a failed command, never retried."""
 
 
+class BadValue(imaplib.IMAP4.error):
+    """A value no IMAP quoted string can carry: a CR or LF would end the command line and start
+    another, and a NUL ends nothing well. Refused before it reaches the wire, like BadMailbox. A
+    sender can fold a Message-ID header so the stored ID holds a line break."""
+
+
 _MAILBOX_BODY = re.compile(r'(?:[^"\\\r\n\x00]|\\["\\])*')
+_UNSENDABLE = re.compile(r"[\r\n\x00]")
+
+
+def sendable(value):
+    """`value` itself, if a quoted string can carry it; else BadValue."""
+    if _UNSENDABLE.search(value or ""):
+        raise BadValue("a value holding a line break or NUL")
+    return value
 
 
 def imap_quote(s):
     """Wrap a value as an IMAP quoted-string so embedded quotes/specials (e.g. a malformed
     sender Message-ID like <…b'AB'…>) can't break a SEARCH/command."""
-    return '"' + (s or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return '"' + sendable(s or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def mailbox_arg(name):
