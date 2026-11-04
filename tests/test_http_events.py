@@ -95,7 +95,7 @@ def test_a_listener_hears_each_event_then_a_keepalive(app, golden, world, quick)
     app.post("/api/mute", {"pk": lunch["pk"]})
     app.post("/api/undo", {})
     app.post("/api/replylater", {"pk": lunch["pk"]})
-    golden.note("frames for mute, undo and Reply Later", [s.frame() for _ in range(3)])
+    golden.note("frames for mute, undo and Reply Later", [s.event() for _ in range(3)])
     golden.note("then, with nothing to say", s.frame())
     s.close()
     golden.note("listeners once it hangs up", subscribers(quick, 0))
@@ -106,7 +106,7 @@ def test_every_listener_hears_an_event(app, golden, world, quick):
     for s in (a, b):
         s.frame()
     app.post("/api/mute", {"account": w.CY, "thread_id": world.row("cy-inbox-01-thread-start.eml")["thread_id"]})
-    golden.note("what each heard", [a.frame(), b.frame()])
+    golden.note("what each heard", [a.event(), b.event()])
     for s in (a, b):
         s.close()
     golden.note("listeners once both hang up", subscribers(quick, 0))
