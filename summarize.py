@@ -201,6 +201,10 @@ def summarize_one(row):
 
 
 def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
+    """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
+    many were summarized. With AI off it returns 0 at once: not one message is tried."""
+    if engine() == "none":
+        return 0
     c = store.conn()
     rows = store.needs_summary(c, limit)
     if not rows:
@@ -228,6 +232,9 @@ def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
 def main():
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     workers = int(sys.argv[2]) if len(sys.argv) > 2 else WORKERS
+    if engine() == "none":
+        print("AI is off: there is no API key, so nothing was summarized.")
+        return
     summarize_pending(limit, workers, log=lambda m: print(m, flush=True))
     print("stats:", store.stats(store.conn()))
 

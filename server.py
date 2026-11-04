@@ -63,6 +63,8 @@ from mailmind.platform.workers import gates, scheduler
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
+ASSESS_INTERVAL = 300                     # seconds between the assess job's rounds, unless kicked
+ASSESS_BATCH = 300                        # messages triaged in one round
 STATS_TTL = 90                            # seconds to cache the live per-account stats
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
@@ -181,7 +183,8 @@ def sync_rounds():
 
 def sync_guarded(emails):
     """Single-flight sync of `emails` (or all). Wakes due snoozes first. Both the 300s
-    loop and the IDLE dispatcher route through here so syncs never overlap."""
+    loop and the IDLE dispatcher route through here so syncs never overlap. New mail kicks the
+    assess job, which triages it outside this single-flight."""
     with _sync_lock:
         if _sync["running"]:
             return
@@ -191,8 +194,8 @@ def sync_guarded(emails):
         new = sync_accounts(emails)
         if new:
             _invalidate_folders()         # new mail → let the rail re-pull unread badges now, not after the TTL
-        done = summarize.summarize_pending(limit=300, workers=4)
-        _sync["result"] = f"{new} new · {done} summarized"
+            _kick("assess")
+        _sync["result"] = f"{new} new"
         _sync["last"] = now_iso()
         print(f"[sync] {_sync['result']}", flush=True)
         try:
@@ -372,6 +375,22 @@ def nosync():
     """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
     older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
     return profile.current() is not profile.Profile.FULL
+
+
+def assess_round():
+    """The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. It runs
+    on its own lane, so a slow model never holds up a sync, and with AI off it tries nothing. A full
+    batch means more are waiting, so the next round follows at once."""
+    done = summarize.summarize_pending(limit=ASSESS_BATCH, workers=summarize.WORKERS)
+    if done:
+        print(f"[assess] {done} summarized", flush=True)
+    return 0 if done >= ASSESS_BATCH else None
+
+
+def _kick(job):
+    """Run `job`'s next round now, if this process schedules it (read-only schedules no assess)."""
+    if job in JOBS.names():
+        JOBS.kick(job)
 
 
 def backfill_round():
@@ -4187,12 +4206,13 @@ JOBS = scheduler.Scheduler()             # the background jobs; legacy.start put
 
 def schedule(jobs):
     """Put the background work on `jobs`, a Scheduler. Snooze wake always runs, since it needs no
-    mail server. Read-only, nothing else does: no sync, backfill, pre-drafting, reconcile or
-    expiry."""
+    mail server. Read-only, nothing else does: no sync, triage, backfill, pre-drafting, reconcile
+    or expiry."""
     jobs.add("snooze", snooze_round, every=60, first=60)
     if nosync():
         return
     jobs.add("sync", sync_rounds(), every=SYNC_INTERVAL, first=0)
+    jobs.add("assess", assess_round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
     jobs.add("backfill", backfill_round, every=600, first=45)              # old mail, full-text searchable
     if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
         jobs.add("draft-ahead", draft_ahead_rounds(), every=DRAFT_TICK_INTERVAL,
