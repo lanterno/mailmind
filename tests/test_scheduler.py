@@ -1,4 +1,5 @@
 """mailmind.platform.workers.scheduler: the background jobs' timetable, one lane per job."""
+import json
 import threading
 import time
 
@@ -134,3 +135,40 @@ def test_each_lane_is_named_for_its_job():
     lanes = []
     s.start(lanes.append)
     assert [t.__name__ for t in lanes] == ["job:sync", "job:snooze"]
+
+
+# -- what /api/debug/jobs shows ---------------------------------------------------
+
+@pytest.mark.parametrize("named, shown", [(None, "full"), ("read-only", "read-only")])
+def test_the_jobs_route_shows_the_profile_and_each_jobs_last_round(app, monkeypatch, named, shown):
+    import server
+    if named:
+        monkeypatch.setenv("MAILMIND_PROFILE", named)
+    jobs = Scheduler()
+
+    def refused():
+        raise ConnectionResetError("the server said: no, ada@example.test")
+    jobs.add("sync", lambda: 30, every=300)
+    jobs.add("expire", refused, every=3600, first=180)
+    jobs.run("sync")
+    jobs.run("expire")
+    monkeypatch.setattr(server, "JOBS", jobs)
+
+    r = app.get("/api/debug/jobs")
+    assert r.status == 200
+    assert (r.json["ok"], r.json["profile"]) == (True, shown)
+    assert r.json["generated"] == "2026-11-02T12:00:00+00:00"
+    sync, expire = r.json["jobs"]
+    started = 1_793_620_800.0                                      # conftest.NOW, the frozen clock
+    assert {k: sync[k] for k in ("name", "every", "runs", "failures", "running", "last_started", "last_error")} == \
+        {"name": "sync", "every": 300.0, "runs": 1, "failures": 0, "running": False,
+         "last_started": started, "last_error": None}
+    assert {k: expire[k] for k in ("name", "runs", "failures", "last_error")} == \
+        {"name": "expire", "runs": 1, "failures": 1, "last_error": "ConnectionResetError"}
+    assert sync["last_took"] >= 0 and sync["next_at"] is None      # no lane runs it
+    assert "example.test" not in json.dumps(r.json)                # the error's text stays in the log
+
+
+def test_with_no_jobs_scheduled_the_route_shows_none(app):
+    r = app.get("/api/debug/jobs")
+    assert (r.status, r.json["jobs"]) == (200, [])
