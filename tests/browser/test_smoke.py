@@ -231,6 +231,28 @@ def test_gmails_all_mail_is_named_so_and_g_a_opens_it(page, world):
     clean(page)
 
 
+def test_a_changed_certificate_is_shown_in_settings_and_trusted_from_there(page, world):
+    import config
+    import server
+    where = f"127.0.0.1:{world.server.port}"
+
+    def bea(raw):
+        return next(a for a in raw["accounts"] if a["email"] == w.BEA)
+    raw = config._raw()
+    bea(raw)["tls_pins"] = {where: "sha256:" + "0" * 64}
+    config.save(raw)                                      # as if Bridge had been reinstalled
+    server.sync_accounts({w.BEA})
+    opened(page)
+    page.locator("#settingsBtn").click()
+    row = page.locator(f'.set-row[data-email="{w.BEA}"]')
+    expect(row).to_contain_text("certificate changed")
+    expect(row).to_contain_text("MailMind sent no password")
+    row.get_by_role("button", name="Trust it").click()
+    expect(row).to_contain_text("✓ synced", timeout=10_000)
+    assert bea(config._raw())["tls_pins"] == {where: "sha256:" + world.server.cert_sha256}
+    clean(page)
+
+
 def test_search_finds_one_senders_mail(page, world):
     opened(page)
     page.keyboard.press("/")
