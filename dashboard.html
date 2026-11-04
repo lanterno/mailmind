@@ -4661,6 +4661,8 @@ async function loadSettings(){
 }
 function healthLine(email){
   const a=state.health&&state.health[email]; if(!a)return "";
+  if(a.last_error&&a.last_error_kind==="TLS_PIN")   /* the loopback server's certificate isn't the one pinned */
+    return `<div class="set-health err">${ico("alert")} certificate changed${a.last_error_ts?" · "+esc(relWhen(a.last_error_ts)):""}: the mail server on this computer showed a different certificate, so MailMind sent no password. If you reinstalled or reset Proton Bridge, trust the new one. <button class="set-mini" data-a="trust">Trust it</button></div>`;
   if(a.last_error&&a.last_error_kind)
     return `<div class="set-health err">${ico("alert")} sync error · ${esc(a.last_error_kind)}${a.last_error_ts?" · "+esc(relWhen(a.last_error_ts)):""} <button class="set-mini" data-a="retry">↻ Retry</button></div>`;
   if(a.last_ok_ts)
@@ -4828,6 +4830,8 @@ $("#setList").addEventListener("click",e=>{
   if(a==="edit") openForm(email);
   else if(a==="retry"){ const btn=e.target.closest("[data-a]"); if(btn){btn.textContent="↻ Syncing…";btn.disabled=true;}
     cpost("/api/sync-retry-account",{account:email}).then(()=>{ toast("Re-syncing "+short(email)); setTimeout(loadSettings,2500); }).catch(()=>{ toast("Couldn’t retry"); loadSettings(); }); }
+  else if(a==="trust"){ const btn=e.target.closest("[data-a]"); if(btn){btn.textContent="Trusting…";btn.disabled=true;}
+    cpost("/api/accounts/trust-cert",{email}).then(()=>{ toast("Trusted · re-syncing "+short(email)); setTimeout(loadSettings,2500); }).catch(()=>{ toast("Couldn’t trust it"); loadSettings(); }); }
   else if(a==="test") testConn({email}, row.querySelector("[data-st]"));
   else if(a==="remove"){
     const btn=e.target.closest("[data-a]");
