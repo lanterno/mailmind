@@ -1,13 +1,13 @@
-"""A stand-in for the Claude Messages API on a loopback port, for claude_api.py to call through
-ANTHROPIC_BASE_URL.
+"""A stand-in for the Claude Messages API on a loopback port, for the app's language models (the
+Anthropic SDK and the urllib client, mailmind.assistant.adapters) to call through ANTHROPIC_BASE_URL.
 
 It keeps every request it receives (headers and JSON body), in order, so a test can check what the
 app sent: which prompt, which schema, which model and effort, and whether anything was sent at all.
 
 What it answers:
-- 401 authentication_error unless the request carries KEY, as the real API does for a missing or
-  wrong key;
-- the next reply a test queued with `queue`, if any;
+- 401 authentication_error unless the request carries KEY, as `x-api-key` (urllib) or as an
+  `Authorization: Bearer` token (the SDK), as the real API does for a missing or wrong key;
+- the next reply a test queued with `queue`, if any, with the response headers it names;
 - else what the test's `responder` returns for the request, if it set one and it returns a reply;
 - otherwise an answer built from the request's own schema (see `instance`), or STUB_TEXT for a
   call without one. The same request always gets the same answer, so AI routes can be golden-tested
@@ -35,6 +35,12 @@ class Request:
     def schema(self):
         return ((self.body.get("output_config") or {}).get("format") or {}).get("schema")
 
+    @property
+    def key(self):
+        """The API key it carried, whichever way it was sent."""
+        bearer = self.headers.get("authorization", "")
+        return self.headers.get("x-api-key") or (bearer[7:] if bearer.startswith("Bearer ") else "")
+
 
 def answer(obj, stop="end_turn"):
     """A 200 reply whose text is `obj` (JSON-encoded unless it is already a string)."""
@@ -44,8 +50,10 @@ def answer(obj, stop="end_turn"):
                  "usage": {"input_tokens": 0, "output_tokens": 0}}
 
 
-def error(status, kind, message):
-    return status, {"type": "error", "error": {"type": kind, "message": message}}
+def error(status, kind, message, headers=None):
+    """A refusal with `status`. `headers` go out with it, retry-after for one."""
+    out = status, {"type": "error", "error": {"type": kind, "message": message}}
+    return out + (headers,) if headers else out
 
 
 def instance(schema, name="value"):
@@ -89,9 +97,11 @@ class FakeAnthropic:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
                 req = Request({k.lower(): v for k, v in self.headers.items()}, body)
-                status, out = fake._reply(self.path, req)
+                status, out, *extra = fake._reply(self.path, req)
                 data = json.dumps(out).encode()
                 self.send_response(status)
+                for name, value in (extra[0] if extra else {}).items():
+                    self.send_header(name, value)
                 self.send_header("content-type", "application/json")
                 self.send_header("content-length", str(len(data)))
                 self.end_headers()
@@ -117,7 +127,7 @@ class FakeAnthropic:
             self.requests.append(req)
             if path != "/v1/messages":
                 return error(404, "not_found_error", "Not found")
-            if req.headers.get("x-api-key") != KEY:
+            if req.key != KEY:
                 return error(401, "authentication_error", "invalid x-api-key")
             if self._queued:
                 reply = self._queued.pop(0)
@@ -132,7 +142,8 @@ class FakeAnthropic:
 
     def queue(self, *replies):
         """Answer the next requests with these, in order: (status, body) pairs from answer() or
-        error(), or callables taking the Request and returning one."""
+        error(), (status, body, headers) triples, or callables taking the Request and returning
+        one."""
         with self._lock:
             self._queued.extend(replies)
 

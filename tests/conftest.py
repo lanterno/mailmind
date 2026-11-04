@@ -65,7 +65,8 @@ _CALL_PASSED = pytest.StashKey[bool]()
 @pytest.fixture(scope="session", autouse=True)
 def anthropic_api():
     """The fake Claude API, there for every test and every legacy suite run from this session
-    (they inherit ANTHROPIC_BASE_URL). Without the `ai` fixture there is no key, so it answers 401."""
+    (they inherit ANTHROPIC_BASE_URL). Without the `ai` fixture there is no key, so AI is off and
+    nothing reaches it."""
     from fakes.anthropic_api import FakeAnthropic
     with FakeAnthropic() as fake:
         os.environ["ANTHROPIC_BASE_URL"] = fake.url

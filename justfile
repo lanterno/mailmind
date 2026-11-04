@@ -58,9 +58,10 @@ test-expire:
 test-thread-file:
     {{py}} test_thread_file.py
 
-# Claude API engine against a local stub: request shape, refusals, retries, AI off without a key
+# The language model's contract, through the SDK and through urllib, against the fake Claude API:
+# request shape, refusals, retries, the key, AI off without one
 test-claude-api:
-    {{py}} test_claude_api.py
+    uv run pytest tests/test_ai_contract.py
 
 # Today & next: which invites in fetched mail are listed, updates, cancellations, local times
 test-upcoming:

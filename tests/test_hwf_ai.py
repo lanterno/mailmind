@@ -167,10 +167,10 @@ def test_hwf_only_the_text_after_the_last_fallback_block_counts(data_dir, ai):
 
 
 def test_hwf_api_schema_reads_defs_as_names_not_keywords():
-    import claude_api
+    from mailmind.assistant.domain.schema import structured
     schema = {"type": "object", "$defs": {"minimum": {"type": "integer", "minimum": 0}},
               "properties": {"n": {"$ref": "#/$defs/minimum"}}}
-    assert claude_api.api_schema(schema)["$defs"] == {"minimum": {"type": "integer"}}
+    assert structured(schema)["$defs"] == {"minimum": {"type": "integer"}}
 
 
 def test_hwf_the_rewrite_prompt_never_asks_for_json(app, world, ai):

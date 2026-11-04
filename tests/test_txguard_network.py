@@ -92,15 +92,22 @@ def test_an_open_smtp_session_sends_nothing(world, write):
         s.quit()
 
 
-def test_no_claude_api_request_is_made(world, ai, write):
-    import claude_api
-    write.open()
-    with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
-        claude_api.message("Say hello to Ada.")
-    assert ai.requests == []
-    write.end()
-    assert claude_api.message("Say hello to Ada.") is not None
-    assert len(ai.requests) == 1
+@pytest.mark.parametrize("transport", ["sdk", "urllib"])
+def test_no_claude_api_request_is_made(world, ai, write, transport, monkeypatch):
+    import summarize
+    from mailmind.bootstrap import assistant
+    monkeypatch.setattr(summarize, "_last", {"ok": None, "ts": 0, "error": ""})   # status() stays as it was
+    assistant.use(transport)
+    try:
+        write.open()
+        with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
+            summarize.call_claude("Say hello to Ada.")
+        assert ai.requests == []
+        write.end()
+        assert summarize.call_claude("Say hello to Ada.")
+        assert len(ai.requests) == 1
+    finally:
+        assistant.use("urllib")
 
 
 def test_no_unsubscribe_request_is_made_not_even_its_dns_lookup(data_dir, write, monkeypatch):
