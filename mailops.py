@@ -172,7 +172,7 @@ def trash_message(pk):
 
 
 def _seen_on_server(M, uid, otherwise):
-    """Whether the selected folder's message `uid` carries \Seen, as the server says now; the
+    """Whether the selected folder's message `uid` carries \\Seen, as the server says now; the
     local row's word (`otherwise`) when it won't say."""
     typ, d = M.uid("FETCH", uid, "(FLAGS)")
     if typ != "OK" or not d or not isinstance(d[0], (bytes, bytearray)):
@@ -352,7 +352,7 @@ def move_message(pk, dest):
 # ----------------------------------------------------------------- undo reverse ops
 def move_by_msgid(account, search_folder, dest_folder, message_id, unseen=False):
     """Reverse primitive: find a message by EXACT RFC822 Message-ID in search_folder
-    and move it to dest_folder. Fails (never guesses) if not found. unseen: take \Seen off it
+    and move it to dest_folder. Fails (never guesses) if not found. unseen: take \\Seen off it
     there, as it was before a server that marks trashed mail read (Proton) set it."""
     acct = accounts.get(account)
     M = accounts.connect(acct)
