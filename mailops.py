@@ -12,7 +12,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import store
 from mailmind.accounts.domain import provider
+from mailmind.bootstrap import mailbox
 from mailmind.mailbox.adapters import imap_list
+from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import profile
 
@@ -35,40 +37,59 @@ def account_of(pk):
 
 
 def _do_imap(acct, fn):
-    """Connect, run fn(M), logout. A connection failure raises (a member of _UNREACHABLE) so the
-    caller can queue/retry; a clean command-level IMAP4.error from fn propagates as a logical error."""
-    M = accounts.connect(acct)            # OSError/timeout/ssl/abort here → _UNREACHABLE propagates
+    """Open a session, run fn(session), log out. A connection failure raises (a member of
+    _UNREACHABLE) so the caller can queue/retry; a clean command-level IMAP4.error from fn propagates
+    as a logical error."""
+    s = mailbox.open_session(acct)        # OSError/timeout/ssl/abort here → _UNREACHABLE propagates
     try:
-        return fn(M)
+        return fn(s)
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
 
-def _uid_by_msgid(M, mid):
-    """The live UID of a message in the currently-selected folder, by RFC822 Message-ID, or None.
-    The Message-ID is sent as an IMAP quoted-string so embedded quotes/specials (some senders mint
-    malformed IDs) can't break the SEARCH command."""
+def _ignoring_refusal(command, *args):
+    """Run a session command whose refusal changes nothing here, as when imaplib handed a NO back
+    unraised; a lost connection still raises."""
+    try:
+        command(*args)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        pass
+
+
+def _uid_by_msgid(s, mid):
+    """The live UID of a message in the session's selected folder, by RFC822 Message-ID, or None,
+    also when the server refuses the search."""
     if not mid:
         return None
-    typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(mid))
-    uids = d[0].split() if (typ == "OK" and d and d[0]) else []
-    return uids[-1].decode() if uids else None
+    try:
+        return s.by_message_id(mid)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return None
 
 
-def _already_in(M, folder, mid, back_to):
+def _already_in(s, folder, mid, back_to):
     """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
     again after. A queued move asks before it moves: on a server without MOVE, a connection that
     dropped after the COPY landed left the original behind, and moving it again would copy twice."""
     if not mid:
         return False
     try:
-        typ, _ = M.select(accounts.mailbox_arg(folder), readonly=True)
-        return typ == "OK" and bool(_uid_by_msgid(M, mid))
+        try:
+            s.select(folder)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return False
+        return _uid_by_msgid(s, mid) is not None
     finally:
-        M.select(accounts.mailbox_arg(back_to), readonly=False)
+        s.select(back_to, readonly=False)
 
 
 def _imap_mutate(acct, fn):
@@ -86,16 +107,16 @@ def _imap_mutate(acct, fn):
         return False, None                     # command NO/BAD → logical, swallow as today
 
 
-def _resolve_dest(M, op, acct):
+def _resolve_dest(s, op, acct):
     """Resolve a move-type op's destination folder on the live server (used by the drain worker
     when the offline enqueue couldn't resolve it). None when the account has no such folder."""
     if op == "trash":
         return accounts.trash_folder(acct)
     if op == "junk":
-        j = find_role(M, "junk")
+        j = mail_session.find_role(s, "junk")
         return j or provider.resolve(acct).junk_fallback
     if op == "archive":
-        return find_role(M, "archive", "all")
+        return mail_session.find_role(s, "archive", "all")
     return None
 
 
@@ -110,19 +131,19 @@ def apply_queued_mutation(row):
     mid = (row["message_id"] or "").strip()
     payload = json.loads(row["payload"] or "{}")
 
-    def run(M):
-        M.select(accounts.mailbox_arg(src), readonly=False)
-        uid = _uid_by_msgid(M, mid) or (str(payload["uid"]) if payload.get("uid") else None)
+    def run(s):
+        s.select(src, readonly=False)
+        uid = _uid_by_msgid(s, mid) or (int(payload["uid"]) if payload.get("uid") else None)
         if not uid:
             return (True, None)                       # already gone → exactly-once done
         if op == "flag":
             for k, v in (payload.get("flags") or {}).items():
                 if k in _FLAG:
-                    M.uid("STORE", uid, "+FLAGS" if v else "-FLAGS", f"({_FLAG[k]})")
+                    _ignoring_refusal(s.add_flags if v else s.remove_flags, [uid], [_FLAG[k]])
         elif op == "archive" and payload.get("is_gmail"):
-            M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")   # Gmail archive = drop the Inbox label
+            _ignoring_refusal(s.remove_labels, [uid], ["\\Inbox"])   # Gmail archive = drop the Inbox label
         else:                                          # trash / junk / move / non-Gmail archive
-            d = dest or _resolve_dest(M, op, acct)     # resolve junk/archive folder online if not stored
+            d = dest or _resolve_dest(s, op, acct)     # resolve junk/archive folder online if not stored
             if not d:
                 return (True, "no dest folder")        # no target → logical done (don't loop forever)
             if d != dest and row["id"]:                # persist the resolved dest so undo can find it later
@@ -130,11 +151,11 @@ def apply_queued_mutation(row):
                 store.read_mut_set_dest(cc, row["id"], d)
                 cc.commit()
                 cc.close()
-            if _already_in(M, d, mid, src):            # an earlier try's COPY landed, then its connection
-                M.uid("STORE", uid, "+FLAGS", "(\\Deleted)")   # dropped: only the original is left to remove
-                expunge_uid(M, uid)
+            if _already_in(s, d, mid, src):            # an earlier try's COPY landed, then its connection
+                _ignoring_refusal(s.add_flags, [uid], ["\\Deleted"])   # dropped: only the original is left
+                _ignoring_refusal(s.expunge_uid, uid)                  # to remove
             else:
-                _move_uid(M, uid, d)
+                s.move([uid], d)
         return (True, None)
 
     try:
@@ -167,10 +188,10 @@ def trash_message(pk):
     dest = accounts.trash_folder(acct)
     marks_read = provider.resolve(acct).marks_trash_read
 
-    def op(M):
-        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
-        unseen = marks_read and not _seen_on_server(M, str(row["uid"]), bool(row["seen"]))
-        _move_uid(M, str(row["uid"]), dest)
+    def op(s):
+        s.select(row["folder"], readonly=False)
+        unseen = marks_read and not _seen_on_server(s, row["uid"], bool(row["seen"]))
+        s.move([row["uid"]], dest)
         return unseen
 
     # _UNREACHABLE (IMAP down) propagates → the route queues this offline. A command the server
@@ -188,13 +209,16 @@ def trash_message(pk):
     return True, "trashed", undo
 
 
-def _seen_on_server(M, uid, otherwise):
+def _seen_on_server(s, uid, otherwise):
     """Whether the selected folder's message `uid` carries \\Seen, as the server says now; the
     local row's word (`otherwise`) when it won't say."""
-    typ, d = M.uid("FETCH", uid, "(FLAGS)")
-    if typ != "OK" or not d or not isinstance(d[0], (bytes, bytearray)):
+    try:
+        flags = s.flags([uid]).get(int(uid))
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
         return otherwise
-    return b"\\SEEN" in d[0].upper()
+    return otherwise if flags is None else "\\seen" in {f.lower() for f in flags}
 
 
 _FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
@@ -210,15 +234,15 @@ def set_flags(pk, flags):
         return False, "not found"
     profile.refuse_writes("a flag change")
     acct = accounts.get(row["account"])
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
+        s.select(row["folder"], readonly=False)
         for k, v in flags.items():
             if k in _FLAG:
-                M.uid("STORE", str(row["uid"]), "+FLAGS" if v else "-FLAGS", f"({_FLAG[k]})")
+                _ignoring_refusal(s.add_flags if v else s.remove_flags, [row["uid"]], [_FLAG[k]])
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
     c = store.conn()
@@ -231,7 +255,8 @@ def set_flags(pk, flags):
 def find_role(M, *roles):
     """The folder on M's server playing the first of `roles` that one plays, by its SPECIAL-USE
     attribute, then its name (mailmind.mailbox.domain.roles); None when none does, or when the
-    server refuses the LIST, so the caller falls back to its default name."""
+    server refuses the LIST, so the caller falls back to its default name. For an imaplib
+    connection, until smtpsend and warm move onto sessions (mail_session.find_role)."""
     try:
         folders = imap_list.list_folders(M)
     except imaplib.IMAP4.abort:
@@ -245,7 +270,8 @@ def expunge_uid(M, uid):
     """Expunge this one UID (UIDPLUS). Never a bulk EXPUNGE: that also erases every other message
     already flagged \\Deleted in the folder, and Proton Bridge breaks on it. A server without
     UIDPLUS leaves the message flagged \\Deleted, the way any client without UIDPLUS deletes;
-    the next expunge, from any client, finishes it."""
+    the next expunge, from any client, finishes it. For an imaplib connection, until smtpsend
+    moves onto sessions."""
     try:
         M.uid("EXPUNGE", uid)
     except imaplib.IMAP4.abort:
@@ -256,7 +282,8 @@ def expunge_uid(M, uid):
 
 def _move_uid(M, uid, dest, move=True):
     """Move one message: MOVE, or, when that fails or the caller knows the server has no MOVE
-    (move=False), a checked COPY, then \\Deleted and a UID EXPUNGE of this UID alone."""
+    (move=False), a checked COPY, then \\Deleted and a UID EXPUNGE of this UID alone. For an
+    imaplib connection, until manage moves onto sessions (MailSession.move)."""
     try:
         if not move:
             raise imaplib.IMAP4.error("no MOVE")
@@ -281,18 +308,15 @@ def archive_message(pk):
         return False, "not found", None
     acct = accounts.get(row["account"])
 
-    def op(M):
-        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
-        uid = str(row["uid"])
+    def op(s):
+        s.select(row["folder"], readonly=False)
         if provider.resolve(acct).archive_is_label_removal:
-            typ, d = M.uid("STORE", uid, "-X-GM-LABELS", "(\\Inbox)")
-            if typ != "OK":                       # imaplib returns a NO; it doesn't raise one
-                raise imaplib.IMAP4.error(f"STORE failed: {d}")
+            s.remove_labels([row["uid"]], ["\\Inbox"])     # refused: raises, and the message stays
             return ("gmail", None)
-        arch = find_role(M, "archive", "all")
+        arch = mail_session.find_role(s, "archive", "all")
         if not arch:
             return ("nofolder", None)
-        _move_uid(M, uid, arch)
+        s.move([row["uid"]], arch)
         return ("moved", arch)
 
     ran, info = _imap_mutate(acct, op)            # _UNREACHABLE propagates → route queues
@@ -325,14 +349,14 @@ def junk_message(pk):
         return False, "not found", None
     acct = accounts.get(row["account"])
 
-    def op(M):
-        M.select(accounts.mailbox_arg(row["folder"]), readonly=False)
-        junk = find_role(M, "junk")
+    def op(s):
+        s.select(row["folder"], readonly=False)
+        junk = mail_session.find_role(s, "junk")
         if not junk:
             junk = provider.resolve(acct).junk_fallback
         if not junk:
             return ("nofolder", None)
-        _move_uid(M, str(row["uid"]), junk)
+        s.move([row["uid"]], junk)
         return ("moved", junk)
 
     ran, info = _imap_mutate(acct, op)            # _UNREACHABLE propagates → route queues
@@ -355,8 +379,7 @@ def move_message(pk, dest):
     if not row or not dest:
         return False, "not found", None
     acct = accounts.get(row["account"])
-    ran, _ = _imap_mutate(acct, lambda M: (M.select(accounts.mailbox_arg(row["folder"]), readonly=False),
-                                           _move_uid(M, str(row["uid"]), dest)))
+    ran, _ = _imap_mutate(acct, lambda s: (s.select(row["folder"], readonly=False), s.move([row["uid"]], dest)))
     if not ran:                                   # refused: the message is still where it was
         return False, "the server refused the move", None
     c = store.conn()
@@ -372,24 +395,22 @@ def move_by_msgid(account, search_folder, dest_folder, message_id, unseen=False)
     and move it to dest_folder. Fails (never guesses) if not found. unseen: take \\Seen off it
     there, as it was before a server that marks trashed mail read (Proton) set it."""
     acct = accounts.get(account)
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(search_folder), readonly=False)
-        typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
-        uids = (d[0].split() if (typ == "OK" and d and d[0]) else [])
-        if not uids:
+        s.select(search_folder, readonly=False)
+        uid = _uid_by_msgid(s, message_id)              # the most recent copy if several
+        if uid is None:
             return False, "message not found"
-        _move_uid(M, uids[-1].decode(), dest_folder)   # most recent copy if several
+        s.move([uid], dest_folder)
         if unseen:
-            M.select(accounts.mailbox_arg(dest_folder), readonly=False)
-            typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
-            back = (d[0].split() if (typ == "OK" and d and d[0]) else [])
-            if back:
-                M.uid("STORE", back[-1].decode(), "-FLAGS", "(\\Seen)")
+            s.select(dest_folder, readonly=False)
+            back = _uid_by_msgid(s, message_id)
+            if back is not None:
+                _ignoring_refusal(s.remove_flags, [back], ["\\Seen"])
         return True, "moved back"
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
@@ -398,33 +419,24 @@ def relabel_by_msgid(account, search_folder, message_id, label="\\Inbox"):
     """Gmail-archive reverse: re-add a label (default \\Inbox) to the message found by
     Message-ID in search_folder (All Mail)."""
     acct = accounts.get(account)
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(search_folder), readonly=False)
-        typ, d = M.uid("SEARCH", None, "HEADER", "Message-ID", accounts.imap_quote(message_id))
-        uids = (d[0].split() if (typ == "OK" and d and d[0]) else [])
-        if not uids:
+        s.select(search_folder, readonly=False)
+        uid = _uid_by_msgid(s, message_id)
+        if uid is None:
             return False, "message not found"
-        M.uid("STORE", uids[-1].decode(), "+X-GM-LABELS", f"({label})")
+        _ignoring_refusal(s.add_labels, [uid], [label])
         return True, "relabeled"
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
 
 def find_special(account, *roles):
     """The folder playing the first of `roles` on an account's server (e.g. Gmail's All Mail)."""
-    acct = accounts.get(account)
-    M = accounts.connect(acct)
-    try:
-        return find_role(M, *roles)
-    finally:
-        try:
-            M.logout()
-        except Exception:
-            pass
+    return _do_imap(accounts.get(account), lambda s: mail_session.find_role(s, *roles))
 
 
 if __name__ == "__main__":
