@@ -89,6 +89,15 @@ def ai(anthropic_api, monkeypatch):
     return anthropic_api
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _pristine_state():
+    """Record the stateful modules' globals before the first test, whichever runs first. A test
+    that changes one outside the app fixture (summarize._last, say) then can't make its change the
+    state every later app test is reset to."""
+    import app_client
+    app_client.snapshot()
+
+
 @pytest.fixture(autouse=True)
 def _tripwire():
     guard.violations.clear()
