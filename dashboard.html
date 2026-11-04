@@ -4518,6 +4518,9 @@ function connectEvents(){
     if(state.folder==="__waiting__"&&!state.compose&&!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages(); });
   es.addEventListener("outbox", ()=>loadOutbox());
   es.addEventListener("draft-ready", e=>onDraftReady(JSON.parse(e.data)));   // ids only; client re-fetches via the revalidating GET
+  es.addEventListener("undo-done", onChangedElsewhere);         // an undo, here or in another tab
+  es.addEventListener("commands-changed", onChangedElsewhere);  // a move queued offline reached the server
+  es.addEventListener("resync", onResync);   // the stream lost our place (a restart, or away too long)
 }
 let _newPending=0, _digestDeb=null, _bgNew=0;
 function bumpTitle(){ document.title = _bgNew>0 ? `(${_bgNew}) MailMind` : "MailMind"; }
@@ -4554,6 +4557,14 @@ function onSnoozeWake(d){
   if(d.accounts && d.accounts.includes(state.account)
      && !state.compose && !state.searching && !state.asking && state.cmarked.size===0){ loadCMessages(); }
   else toast((d.count||1)+" snoozed message"+((d.count||1)>1?"s":"")+" back");
+}
+function onChangedElsewhere(){   // mail moved without this tab doing it: badges now, the list only when idle
+  loadFolders(true);
+  if(state.compose||state.searching||state.asking||state.cmarked.size>0||document.hidden)return;
+  if(state.allInbox)loadAllInboxes(); else loadCMessages();
+}
+function onResync(){   // events were missed and can't be replayed: fetch afresh all they would have changed
+  loadDigest(true); loadOutbox(); onChangedElsewhere();
 }
 function onMute(d){   // a mute from another tab/refresh: drop the rows live (mirror snooze-wake)
   if(!state.compose && !state.searching && !state.asking && state.cmarked.size===0) loadCMessages();
