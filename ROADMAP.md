@@ -282,15 +282,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   the IMAP gate instead of using `pool.borrow` the way the three read call sites do.
 
-- **Run the mail code on IMAPClient** · high value · effort M — Every IMAP connection the app
-  opens now comes from `mailmind.bootstrap.mailbox.open_session`, and both adapters pass the
-  contract suite against the fake. Run that suite against Dovecot too, opt-in like the browser
-  tests. Then make IMAPClient the new door's adapter (`front.build` calling
-  `mailbox.use("imapclient")`) and soak it on real accounts. Two things differ under it today:
-  IMAPClient sends a Gmail label change as `+X-GM-LABELS.SILENT ("\\Inbox")`, which the golden
-  files shared by both doors hold in imaplib's form, and
-  `test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker` spies on `accounts.connect`,
-  which the IMAPClient adapter never calls.
+- **Soak IMAPClient on real accounts, then make it the default** · high value · effort S — The
+  new door reaches an account through IMAPClient when its config asks (`"imap_adapter":
+  "imapclient"`; the startup line counts them). Both adapters pass the contract against the fake
+  and against Dovecot (`just test-dovecot`), and the whole suite passes under either, but
+  IMAPClient has not yet met Proton Bridge or Gmail. The owner asks for it on one account, then
+  on all, and uses the new door daily for a week, watching Settings' sync health and the
+  server's output; removing the key goes back. Then `front.build` calls
+  `mailbox.use("imapclient")` and the ask goes.
 
 ## Keyboard, screen readers and reversibility
 

@@ -476,6 +476,11 @@ Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` is 
 key, in any credential style. `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
 in US dollars: `15` unless you set another positive number.
 
+An account may also say `"imap_adapter": "imapclient"`. `python -m mailmind serve` then reaches
+it through the IMAPClient library instead of Python's own imaplib: the new IMAP code, tried on
+real mail before it becomes the default. `python3 server.py` ignores the key, removing it goes
+back, and the startup line `[imap] …` says how many accounts asked.
+
 **Per-type notes**
 - **Gmail / Workspace** — you need an **App Password** (Google account → 2-Step
   Verification → App passwords), *not* your login password. Defaults to
@@ -586,8 +591,9 @@ together with the pytest suite in `tests/`. That suite drives the app against fa
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
 `just test-full` also runs the browser tests, which click through the dashboard in
-Chromium. `just` on its own lists every recipe. uv installs those dev tools from
-`pyproject.toml` on first use, as it does the app's own packages.
+Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
+real Dovecot server in Docker. `just` on its own lists every recipe. uv installs those dev
+tools from `pyproject.toml` on first use, as it does the app's own packages.
 
 Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
 re-runs `summarize.py` until every non-junk message has a summary, backing off

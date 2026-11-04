@@ -12,6 +12,7 @@ the dev tools on first use.
 ```bash
 just verify                       # lint + compile + all tests + frontend check — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
+just test-dovecot                 # the MailSession contract against Dovecot in Docker
 just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
 just run-old [port]               # the same through the old front door, which needs nothing installed
@@ -82,9 +83,10 @@ The fixtures, from the bottom up:
 - `app` runs the app in-process through each front door in turn: `door=old` is `server.py`'s own
   `ThreadingHTTPServer`, `door=new` the app `mailmind.bootstrap.front.build` makes, on uvicorn.
   So every app test runs twice, both runs share one golden file, and `app.door` says which run
-  this is. Its CSRF token is fixed, and the clock is frozen at `conftest.NOW` (2026-11-02 12:00
-  UTC); `app.clock.shift(timedelta(...))` moves it. `tests/test_front_door.py` runs each door as a
-  program instead.
+  this is. In the world's config Cy's Gmail asks for IMAPClient, so the new door's run reaches it
+  through IMAPClient and the old door's through imaplib. Its CSRF token is fixed, and the clock
+  is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves
+  it. `tests/test_front_door.py` runs each door as a program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
   Without `ai` there is no key, and AI calls get a 401.
@@ -109,6 +111,12 @@ These tests are marked `browser` and skipped unless pytest runs with `--browser`
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
 to stay fast.
 
+`tests/test_mail_session_dovecot.py` holds the MailSession contract against a real server,
+Dovecot 2.3 in Docker (pinned by digest), through each adapter, and checks what each call left
+through a connection of its own. Its tests are marked `dovecot` and skipped unless pytest runs
+with `--dovecot`; `just test-dovecot` runs them, and needs Docker running. One container serves
+the run, and each test logs in as a user of its own, with an empty mailbox.
+
 There is no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
 the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
 `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
@@ -123,11 +131,11 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
 - **`python3 server.py` runs with nothing installed.** The app was standard library only until
   the refactor's Phase 2, and that shaped every design decision below (hand-rolled sanitizer,
   hand-rolled IMAP handling, no web framework, no frontend build). Since then it may use
-  runtime packages (FastAPI, uvicorn and the Anthropic SDK so far), each declared in `pyproject.toml` and locked
-  with hashes in `uv.lock`. Each dependency change is its own commit, and the `uv.lock` change
-  goes in the next. But `python3 server.py`, the old front door, is the kill switch while the
-  new one carries daily use, so nothing it imports may import a third-party package;
-  `tests/test_front_door.py` checks that.
+  runtime packages (FastAPI, uvicorn, the Anthropic SDK and IMAPClient so far), each declared in
+  `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its own
+  commit, and the `uv.lock` change goes in the next. But `python3 server.py`, the old front door,
+  is the kill switch while the new one carries daily use, so nothing it imports may import a
+  third-party package; `tests/test_front_door.py` checks that.
 - **The frontend is one file.** `dashboard.html` (~340KB) holds all HTML, CSS and JS
   inline. No bundler, no modules, no npm. Edit it directly. This holds until the refactor's
   frontend track moves it to React 19 and Vite.
@@ -177,7 +185,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   scheduler's jobs and IDLE; read-only, the snooze job alone.
 - `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
-  bound to 127.0.0.1. Every route still runs in `server.H`: `mailmind.http.bridge.HandlerBridge`,
+  bound to 127.0.0.1. Its `build` picks the Anthropic SDK and offers IMAPClient to an account
+  that asks for it (see the Mailbox paragraph); both doors print at startup which IMAP adapter
+  serves how many accounts (`[imap] ...`). Every route still runs in `server.H`:
+  `mailmind.http.bridge.HandlerBridge`,
   the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
   its own, and streams back what it writes, the event stream and the export included.
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
@@ -262,11 +273,17 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets. The adapters
   are `adapters.imaplib_session` (what the old door runs on) and `adapters.imapclient_session`
   (only it imports `imapclient`). `adapters.imap_names` holds `mailbox_arg` and `imap_quote`,
-  which `accounts` re-exports. `mailmind.bootstrap.mailbox` picks the adapter (imaplib unless
-  `use("imapclient")`) and opens a session (`open_session(acct)`) the same way for both: TLS, the
-  pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens comes from
-  it, and only the imaplib adapter calls `accounts.connect`. `tests/test_mail_session_contract.py`
-  runs every case through each. The rest of the context is standard library only.
+  which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
+  `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
+  IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only the new door's
+  `front.build` does (`offer`). The old door ignores the ask and never imports `imapclient`.
+  `use(kind)` makes one adapter every account's, as the contract tests do, and an autouse fixture
+  resets both before each test. It opens a session (`open_session(acct)`) the same way for both:
+  TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
+  comes from it, and only the imaplib adapter calls `accounts.connect`.
+  `tests/test_mail_session_contract.py` runs every case through each against the fake, and
+  `tests/test_mail_session_dovecot.py` against Dovecot. The rest of the context is standard
+  library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
