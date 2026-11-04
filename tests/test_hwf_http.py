@@ -222,13 +222,14 @@ def test_hwf_since_is_held_between_a_day_ago_and_now(app, world, monkeypatch):
     import summarize_briefing
     seen = []
     monkeypatch.setattr(summarize_briefing, "build_delta",
-                        lambda accts, since: (seen.append(since), ({"ok": True}, 200))[1])
+                        lambda accts, since, generate=True: (seen.append(since), ({"ok": True}, 200))[1])
     app.clock.shift(timedelta(minutes=7))                    # 12:07
     now = int(time.time())
     for since in (0, now - 3600, now + 3600, "soon"):
         app.get(f"/api/briefing/since?since={since}")
+        app.post("/api/briefing/since", {"since": since})
     day_ago = int(datetime(2026, 11, 1, 12, 0, tzinfo=UTC).timestamp())     # 12:07 a day back, to 10 minutes
-    assert seen == [day_ago, now - 3600, now, day_ago]
+    assert seen == [day_ago, day_ago, now - 3600, now - 3600, now, now, day_ago, day_ago]
 
 
 def triaged_venue(world):

@@ -117,21 +117,25 @@ def test_do_plans_a_preview_and_degrades_to_search(app, golden, world, ai):
 
 
 @pytest.mark.parametrize("route", ["/api/briefing", "/api/review"])
-def test_briefing_and_review_compute_once_then_serve_the_cache(app, golden, world, ai, route):
+def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, world, ai, route):
     golden.note("messages triaged", triaged(ai))
     pk = world.pk("bea-inbox-01-client.eml")
     ai.queue(fa.answer({"narrative": "A quiet week with two threads that want you: Ivo's contract "
                                      "and Noor's design review on Tuesday.",
                         "next": ["Answer Ivo about the contract"],
                         "groups": [{"label": "Contracts", "count": 1, "pks": [pk, 999999]}]}))
-    golden.record(f"GET {route}", app.get(route))
+    golden.record(f"GET {route} before one is written", app.get(route))
+    golden.note("calls for the read", len(ai.requests))
+    golden.record(f"POST {route}", app.post(route, {}))
     sent(golden, ai, "sent")
-    golden.record(f"GET {route} again", app.get(route))
-    golden.note("calls for the repeat", len(ai.requests))
+    golden.record(f"GET {route} now", app.get(route))
+    golden.record(f"POST {route} again", app.post(route, {}))
+    golden.note("calls for the repeats", len(ai.requests))
     golden.record(f"POST {route}/refresh", app.post(f"{route}/refresh", {}))
     golden.note("calls for the refresh", len(ai.requests))
     ai.requests.clear()
     golden.record(f"GET {route} for Bea", app.get(f"{route}?account={w.BEA}"))
+    golden.record(f"POST {route} for Bea", app.post(route, {"account": w.BEA}))
     sent(golden, ai, "sent for Bea")
 
 
@@ -141,10 +145,13 @@ def test_since_you_last_looked(app, golden, world, ai):
     world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<lunch-4@example.test>",
                                             Subject="Re: Lunch, running late", Date="Mon, 02 Nov 2026 11:50:00 +0000"))
     since = int(time.time()) - 3600                   # the clock is frozen at NOW
-    golden.record("since an hour ago", app.get(f"/api/briefing/since?since={since}"))
+    golden.record("read since an hour ago, before one is written", app.get(f"/api/briefing/since?since={since}"))
+    golden.note("calls for the read", len(ai.requests))
+    golden.record("since an hour ago", app.post("/api/briefing/since", {"since": since}))
     sent(golden, ai, "sent")
-    golden.record("since the epoch (held to a day)", app.get("/api/briefing/since?since=0"))
-    golden.record("since a time that isn't one", app.get("/api/briefing/since?since=soon"))
+    golden.record("read since an hour ago", app.get(f"/api/briefing/since?since={since}"))
+    golden.record("since the epoch (held to a day)", app.post("/api/briefing/since", {"since": 0}))
+    golden.record("since a time that isn't one", app.post("/api/briefing/since", {"since": "soon"}))
     sent(golden, ai, "sent for those")
 
 

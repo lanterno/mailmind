@@ -273,21 +273,21 @@ def test_at_the_limit_an_interactive_request_asks_first_and_goes_when_allowed(ap
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
 
 
-@pytest.mark.parametrize("method, path, body", [
-    ("POST", "/api/ai/summarize", {"pk": LUNCH}),
-    ("POST", "/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}),
-    ("POST", "/api/ai/rewrite", REWRITE),
-    ("POST", "/api/ai/ask", {"question": "When is lunch with Lin?"}),
-    ("POST", "/api/ai/do-plan", {"cmd": "archive the newsletters"}),
-    ("POST", "/api/briefing/refresh", {}),
-    ("POST", "/api/review/refresh", {"account": "ada@example.test"}),
-    ("GET", "/api/briefing", None),
-    ("GET", "/api/briefing/since?since=0", None),
-    ("GET", "/api/review?account=ada@example.test", None)])
-def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, method, path, body):
+@pytest.mark.parametrize("path, body", [
+    ("/api/ai/summarize", {"pk": LUNCH}),
+    ("/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}),
+    ("/api/ai/rewrite", REWRITE),
+    ("/api/ai/ask", {"question": "When is lunch with Lin?"}),
+    ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
+    ("/api/briefing/refresh", {}),
+    ("/api/review/refresh", {"account": "ada@example.test"}),
+    ("/api/briefing", {}),
+    ("/api/briefing/since", {"since": 0}),
+    ("/api/review", {"account": "ada@example.test"})])
+def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, path, body):
     import store
     lunch = world.pk(LUNCH)
-    if body and body.get("pk") == LUNCH:
+    if body.get("pk") == LUNCH:
         body = {**body, "pk": lunch}
     c = store.conn()
     try:                                               # triaged, so the brief has something to say
@@ -297,8 +297,15 @@ def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, method
     finally:
         c.close()
     spend(15_000_000)
-    r = app.post(path, body) if method == "POST" else app.get(path)
+    r = app.post(path, body)
     assert (r.status, r.json["over_limit"]) == (402, True)
+    assert ai.requests == []
+
+
+def test_at_the_limit_reading_the_ai_cards_never_asks(app, world, ai):
+    spend(15_000_000)
+    for path in ("/api/briefing", "/api/review", "/api/briefing/since?since=0"):
+        assert app.get(path).status == 200                 # a GET only reads what is stored
     assert ai.requests == []
 
 

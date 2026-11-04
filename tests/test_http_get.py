@@ -231,6 +231,8 @@ def test_ai_routes_without_a_key(app, golden, anthropic_api):
     fetch(app, golden, "/api/briefing")
     fetch(app, golden, "/api/review")
     fetch(app, golden, "/api/briefing/since")
+    for path in ("/api/briefing", "/api/review", "/api/briefing/since"):
+        golden.record(f"POST {path}", app.post(path, {}))
     fetch(app, golden, "/api/ai/draft-ahead")
     fetch(app, golden, "/api/ai/draft-ahead", "GET /api/ai/draft-ahead without the CSRF token",
           headers={"X-CSRF-Token": None})
@@ -241,4 +243,6 @@ def test_ai_routes_without_a_key(app, golden, anthropic_api):
 def test_without_a_key_no_mail_leaves_for_the_api(app, anthropic_api):
     for path in ("/api/briefing", "/api/review", "/api/briefing/since", "/api/ai/draft-ahead"):
         app.get(path)
+    for path in ("/api/briefing", "/api/review", "/api/briefing/since"):
+        app.post(path, {})
     assert [r.prompt[:60] for r in anthropic_api.requests] == []

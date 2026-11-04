@@ -192,9 +192,9 @@ def test_hwf_a_do_command_with_braces_reaches_the_prompt_verbatim(app, world, ai
 # -- failures and fallbacks of the cached AI reads ------------------------------------------------
 
 AI_READS = {
-    "brief": lambda app, world: app.get("/api/briefing"),
-    "delta": lambda app, world: app.get("/api/briefing/since?since=0"),
-    "review": lambda app, world: app.get("/api/review"),
+    "brief": lambda app, world: app.post("/api/briefing", {}),
+    "delta": lambda app, world: app.post("/api/briefing/since", {"since": 0}),
+    "review": lambda app, world: app.post("/api/review", {}),
     "thread summary": lambda app, world: app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)}),
 }
 UNUSABLE = {"brief": fa.answer({}), "delta": fa.answer({}), "review": fa.answer({}),
@@ -253,12 +253,12 @@ def test_hwf_the_daily_ai_cards_roll_at_local_midnight(app, world, ai, route):
     os.environ["TZ"] = "XXX-10"           # UTC+10: the frozen noon UTC is 22:00 here
     time.tzset()
     try:
-        assert app.get(route).status == 200
+        assert app.post(route, {}).status == 200
         app.clock.shift(timedelta(hours=1))           # 23:00 local
-        app.get(route)
+        app.post(route, {})
         assert len(ai.requests) == 1
         app.clock.shift(timedelta(hours=1))           # local midnight, though UTC is still on the same day
-        app.get(route)
+        app.post(route, {})
         assert len(ai.requests) == 2
     finally:
         os.environ["TZ"] = "UTC"
@@ -268,9 +268,9 @@ def test_hwf_the_daily_ai_cards_roll_at_local_midnight(app, world, ai, route):
 # -- the "since you last looked" delta --------------------------------------------------------------
 
 def test_hwf_a_stale_watermark_keeps_one_delta_for_ten_minutes(app, world, ai):
-    assert app.get("/api/briefing/since?since=0").json["cached"] is False
+    assert app.post("/api/briefing/since", {"since": 0}).json["cached"] is False
     app.clock.shift(timedelta(minutes=5))            # the 24h floor moved, but not to a new 10-minute step
-    assert app.get("/api/briefing/since?since=0").json["cached"] is True
+    assert app.post("/api/briefing/since", {"since": 0}).json["cached"] is True
     assert len(ai.requests) == 1
 
 
@@ -278,19 +278,19 @@ def test_hwf_a_watermark_ahead_of_the_server_is_held_to_now(app, world, ai):
     world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<lunch-future@lin.example.test>",
                                             Date="Mon, 02 Nov 2026 14:00:00 +0000"))    # dated two hours ahead
     now = int(time.time())
-    first = app.get(f"/api/briefing/since?since={now + 3600}").json
-    later = app.get(f"/api/briefing/since?since={now + 5400}").json
+    first = app.post("/api/briefing/since", {"since": now + 3600}).json
+    later = app.post("/api/briefing/since", {"since": now + 5400}).json
     assert (first["count"], first["cached"], later["cached"]) == (1, False, True)
     assert len(ai.requests) == 1
 
 
 def test_hwf_a_delta_is_rewritten_when_its_window_grows(app, world, ai):
     since = int(time.time()) - 6 * 3600
-    n = app.get(f"/api/briefing/since?since={since}").json["count"]
-    assert app.get(f"/api/briefing/since?since={since}").json["cached"] is True
+    n = app.post("/api/briefing/since", {"since": since}).json["count"]
+    assert app.post("/api/briefing/since", {"since": since}).json["cached"] is True
     world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<lunch-late@lin.example.test>",
                                             Date="Mon, 02 Nov 2026 11:50:00 +0000"))
-    grown = app.get(f"/api/briefing/since?since={since}").json
+    grown = app.post("/api/briefing/since", {"since": since}).json
     assert (grown["count"], grown["cached"]) == (n + 1, False)
     assert len(ai.requests) == 2
 
@@ -298,7 +298,7 @@ def test_hwf_a_delta_is_rewritten_when_its_window_grows(app, world, ai):
 def test_hwf_the_delta_counts_newsletters_but_not_scams(app, world, ai):
     world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@loom.example.test>",
                                             Date="Mon, 02 Nov 2026 09:00:00 +0000"))
-    app.get("/api/briefing/since?since=0")
+    app.post("/api/briefing/since", {"since": 0})
     [req] = ai.requests
     assert "The Weekly Loom" in req.prompt
     assert "CONGRATULATIONS" not in req.prompt
@@ -614,13 +614,13 @@ def test_hwf_the_review_names_a_waiting_thread_by_its_thread_not_its_old_pk(app,
     execute("INSERT INTO followups(account, thread_id, kind, state, anchor_pk, first_sent_ts, last_msg_ts, "
             "due_ts, created_at) VALUES(?,?,?,?,?,?,?,?,?)", w.CY, world.row(VENUE_END)["thread_id"],
             "sent", "due", 999999, now - 3 * 86400, now - 3 * 86400, now - 86400, "2026-10-30T12:00:00+00:00")
-    r = app.get("/api/review").json
+    r = app.post("/api/review", {}).json
     assert [x["subject"] for x in r["waiting"]] == ["Re: Guild meetup venue"]
 
 
 def test_hwf_a_degenerate_review_falls_back_but_keeps_the_ai_picks(app, world, ai):
     ai.queue(fa.answer({"narrative": "test", "next": ["Answer Mae about the hall"]}))
-    r = app.get("/api/review").json
+    r = app.post("/api/review", {}).json
     assert r["model"] == "fallback" and r["narrative"].startswith("In the last 7 days you sent")
     assert r["next"] == ["Answer Mae about the hall"]
 
@@ -680,9 +680,9 @@ def test_bug_a_cached_brief_still_names_its_messages_after_a_renumber(app, world
     summarize_as(anchor, 5, "action-needed", "Reply")
     ai.queue(fa.answer({"narrative": "Lin is waiting on lunch plans for Thursday, so reply today.",
                         "groups": [{"label": "Lunch", "count": 1, "pks": [anchor]}]}))
-    assert app.get("/api/briefing").json["groups"][0]["pks"] == [anchor]
+    assert app.post("/api/briefing", {}).json["groups"][0]["pks"] == [anchor]
     renumber_inbox(world, w.ADA)
-    pks = [p for g in app.get("/api/briefing").json["groups"] for p in g["pks"]]
+    pks = [p for g in app.post("/api/briefing", {}).json["groups"] for p in g["pks"]]
     assert [m["message_id"] for p in pks for m in q("SELECT message_id FROM messages WHERE pk=?", p)] == [LUNCH_MID]
 
 
@@ -713,13 +713,13 @@ def test_bug_the_review_counts_only_this_accounts_cleanups(app, world, ai):
         c.commit()
     finally:
         c.close()
-    assert app.get(f"/api/review?account={w.ADA}").json["stats"]["cleaned"] == 1
-    assert app.get(f"/api/review?account={w.BEA}").json["stats"]["cleaned"] == 0    # Loom only ever wrote to Ada
+    assert app.post("/api/review", {"account": w.ADA}).json["stats"]["cleaned"] == 1
+    assert app.post("/api/review", {"account": w.BEA}).json["stats"]["cleaned"] == 0    # Loom only ever wrote to Ada
 
 
 def test_an_ai_spending_get_the_page_didnt_make_spends_nothing(app, world, ai):
-    """These GETs spend AI without the CSRF token the draft-ahead kick demands, so only the page's
-    own same-origin request may reach them: not one that says nothing of where it came from."""
+    """These GETs only read what is stored, and only the page's own same-origin request may reach
+    them: not one that says nothing of where it came from."""
     summarize_as(world.pk(LUNCH), 5, "action-needed", "Reply")
     for path in ("/api/briefing", "/api/review", "/api/briefing/since?since=0"):
         app.get(path, headers={"X-CSRF-Token": None, "Sec-Fetch-Site": None})

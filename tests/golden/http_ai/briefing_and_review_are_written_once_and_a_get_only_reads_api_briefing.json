@@ -6,6 +6,32 @@
  {
   "body": {
    "cached": false,
+   "groups": [],
+   "missing": true,
+   "narrative": "",
+   "ok": true,
+   "stale": false
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/briefing before one is written",
+  "status": 200
+ },
+ {
+  "note": "calls for the read",
+  "value": 0
+ },
+ {
+  "body": {
+   "cached": false,
    "generated": "2026-11-02T12:00:00+00:00",
    "groups": [
     {
@@ -31,7 +57,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/briefing",
+  "request": "POST /api/briefing",
   "status": 200
  },
  {
@@ -111,11 +137,42 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/briefing again",
+  "request": "GET /api/briefing now",
   "status": 200
  },
  {
-  "note": "calls for the repeat",
+  "body": {
+   "cached": true,
+   "generated": "2026-11-02T12:00:00+00:00",
+   "groups": [
+    {
+     "count": 1,
+     "label": "Contracts",
+     "pks": [
+      18
+     ]
+    }
+   ],
+   "model": "claude-opus-5-5",
+   "narrative": "A quiet week with two threads that want you: Ivo's contract and Noor's design review on Tuesday.",
+   "ok": true,
+   "stale": false
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "POST /api/briefing again",
+  "status": 200
+ },
+ {
+  "note": "calls for the repeats",
   "value": 0
  },
  {
@@ -156,6 +213,28 @@
  {
   "body": {
    "cached": false,
+   "groups": [],
+   "missing": true,
+   "narrative": "",
+   "ok": true,
+   "stale": false
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/briefing for Bea",
+  "status": 200
+ },
+ {
+  "body": {
+   "cached": false,
    "generated": "2026-11-02T12:00:00+00:00",
    "groups": [],
    "model": "claude-opus-5-5",
@@ -173,7 +252,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/briefing for Bea",
+  "request": "POST /api/briefing for Bea",
   "status": 200
  },
  {
