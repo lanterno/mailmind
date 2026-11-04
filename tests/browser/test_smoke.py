@@ -374,6 +374,21 @@ def test_do_confirmed_archives_then_undo(page, world, ai):
     clean(page)
 
 
+def test_the_sync_menu_says_what_ai_cost_today(page, world, ai):
+    import time
+    from mailmind.assistant.application.gateway import local_day
+    from mailmind.assistant.application.ports import Spend, Usage
+    from mailmind.bootstrap import assistant
+    now = time.time()                                  # the server's frozen clock
+    assistant.LEDGER.record(Spend(local_day(now), "triage", "claude-opus-5-5", "claude-opus-5-5", "ok",
+                                  Usage(input_tokens=3000, output_tokens=200), 16_000, int(now)))
+    opened(page)
+    page.locator("#statusBtn").click()
+    expect(page.get_by_role("dialog", name="Sync status")).to_contain_text(
+        "Claude API · claude-opus-5-5 · $0.02 today")
+    clean(page)
+
+
 # ── accessibility ───────────────────────────────────────────────────────
 
 def axe(page):
