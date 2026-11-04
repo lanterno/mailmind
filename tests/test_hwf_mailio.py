@@ -487,8 +487,6 @@ def test_hwf_the_sent_copy_is_the_bytes_that_went_on_the_wire(app, world):
     assert copy.rstrip(b"\r\n") == wire.data.rstrip(b"\r\n")
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a Sent copy that fails is logged and never tried "
-                                      "again, so the message, delivered, never reaches Sent")
 def test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back(app, world):
     import outbox
     oid = app.post("/api/send", new(idempotency_key="k-sent-later")).json["outbox_id"]
@@ -501,6 +499,46 @@ def test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back(app, world
     r = outbox_row(oid)
     assert (r["sent_appended"], len(world.smtp.messages)) == (1, 1)
     assert len(world.server.find(w.ADA, "Sent", r["message_id"])) == 1
+
+
+def test_hwf_a_sent_copy_that_landed_but_lost_its_answer_is_filed_once(app, world):
+    import outbox
+    oid = app.post("/api/send", new(idempotency_key="k-landed")).json["outbox_id"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    world.server.drop_after("APPEND", user=w.ADA)               # the copy is filed; its OK never comes
+    outbox.drain()
+    assert outbox_row(oid)["sent_appended"] == 0
+    app.clock.shift(timedelta(minutes=20))
+    outbox.drain()
+    r = outbox_row(oid)
+    assert (r["state"], r["sent_appended"], len(world.smtp.messages)) == ("sent", 1, 1)
+    assert len(world.server.find(w.ADA, "Sent", r["message_id"])) == 1
+
+
+def test_hwf_a_send_owing_its_sent_copy_is_listed_sent_and_retried_once_it_gives_up(app, world):
+    import outbox
+
+    def listed():
+        return {i["id"]: i for i in app.get("/api/outbox").json["items"]}[oid]
+    oid = app.post("/api/send", new(idempotency_key="k-owed")).json["outbox_id"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    world.server.fail("APPEND", times=outbox.MAX_ATTEMPTS, user=w.ADA)
+    outbox.drain()
+    item = listed()
+    assert (item["state"], item["scheduled"], item["error"]) == ("sent", False, outbox.SENT_COPY_PENDING)
+    assert app.post("/api/outbox/cancel", {"id": oid}).json == {"ok": False}   # it went out: nothing to undo
+    for _ in range(outbox.MAX_ATTEMPTS - 1):
+        app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
+        outbox.drain()
+    item = listed()
+    assert (item["state"], item["error"]) == ("error", outbox.SENT_COPY_FAILED)
+    assert len(world.server.commands_for(w.ADA, "APPEND")) == outbox.MAX_ATTEMPTS
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
+    outbox.drain()
+    r = outbox_row(oid)
+    assert (r["state"], r["sent_appended"], len(world.smtp.messages)) == ("sent", 1, 1)
+    assert len(world.server.find(w.ADA, "Sent", r["message_id"])) == 1
+    assert (listed()["state"], listed()["error"]) == ("sent", None)
 
 
 def test_hwf_only_a_send_past_the_undo_window_is_listed_as_scheduled(app):

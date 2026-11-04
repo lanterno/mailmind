@@ -113,6 +113,16 @@ def test_cancelling_before_the_claim_or_before_the_irreversible_step(q):
     assert run(q, lambda c: q.cancel_unapplied(c, claimed)) is True and row(q, claimed) == {}
 
 
+def test_a_row_back_in_the_queue_after_its_irreversible_step_cant_be_cancelled(q):
+    """The outbox puts a delivered send back in the queue when its Sent copy fails, and a crash
+    puts back whatever was running: Undo Send must not delete what already went out."""
+    j = add(q, "delivered")
+    run(q, lambda c: (q.claim(c, j), q.mark_gate(c, j)))
+    run(q, q.reset_stuck)
+    assert run(q, lambda c: q.cancel_queued(c, j)) is False
+    assert (row(q, j)["state"], row(q, j)["done"]) == ("queued", 1)
+
+
 def test_draining_runs_each_due_row_and_one_that_raises_stops_none_of_the_rest(q, capsys):
     ids = [add(q, w) for w in ("a", "b", "c")]
     add(q, "not yet", next_attempt_at=NOW + 60)
