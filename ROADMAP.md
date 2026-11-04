@@ -282,6 +282,15 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   the IMAP gate instead of using `pool.borrow` the way the three read call sites do.
 
+- **Move the mail code onto MailSession, then IMAPClient** · high value · effort L — The port
+  (`mailmind.mailbox.application.session`) and its two adapters pass the contract suite against
+  the fake, but `mailops`, `ingest`, `manage`, `smtpsend`'s Drafts and Sent, `warm`, `pool` and
+  `realtime` still drive imaplib connections from `accounts.connect` directly. Move them over a
+  module at a time through `mailmind.bootstrap.mailbox.open_session`, widening the port (IDLE,
+  FETCH of headers and X-GM-*, Gmail labels, APPENDUID and COPYUID) with a contract case for
+  each. Run the contract suite against Dovecot too, opt-in like the browser tests. Then make
+  IMAPClient the new door's adapter, and soak it on real accounts.
+
 ## Keyboard, screen readers and reversibility
 
 - **Real listbox semantics for the message list** · high value · effort M — `<div id="rows">` carries

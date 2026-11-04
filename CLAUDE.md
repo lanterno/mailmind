@@ -252,11 +252,20 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   order. `adapters.imap_list` reads an imaplib LIST answer into `Folder`s, literals included.
   `mailops.find_role(M, *roles)` finds a folder on a live connection; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
-  there is no `archive`. It is standard library only.
+  there is no `archive`. `application.session.MailSession` is the port for one logged-in
+  connection (folders, status, select, UID search, a message by Message-ID, flags, a body, flag
+  changes, copy, move, a UID expunge, append, NOOP), with names as LIST gave them and imaplib's
+  error classes through either adapter: `adapters.imaplib_session` (what the old door runs on)
+  and `adapters.imapclient_session` (only it imports `imapclient`). `adapters.imap_names` holds
+  `mailbox_arg` and `imap_quote`, which `accounts` re-exports. `mailmind.bootstrap.mailbox` picks
+  the adapter (imaplib unless `use("imapclient")`) and opens a session (`open_session(acct)`) the
+  same way for both: TLS, the pin, login, txguard, `ReadOnlySession` read-only.
+  `tests/test_mail_session_contract.py` runs every case through each. Nothing calls it yet. The
+  rest of the context is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
-  `anthropic` package reached only through its adapter. `tests/legacy_ratchet.txt` lists
+  `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
   every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
   code and the list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
 
