@@ -17,7 +17,8 @@ throwaway certificate from trustme. The app trusts any certificate on loopback, 
 Bridge.
 
 Tests script trouble with `fail`, `drop` and `drop_after`, change a folder's UIDVALIDITY with
-`renumber`, and read every command the app sent from `commands`, with passwords redacted.
+`renumber`, and read every command the app sent from `commands`, with passwords redacted; a line
+the fake couldn't read as a command is there too, as command "?".
 
     with FakeIMAPServer() as srv:
         acct = srv.add_account("ada@example.test", "pw")
@@ -312,6 +313,7 @@ class Session:
             text = "".join(c if isinstance(c, str) else "{literal}" for c in chars)
             tag, _, rest = text.partition(" ")
             if not tag or not rest:
+                self.srv._record(self, tag, "?", [], text)      # a broken line is recorded too
                 self.line("* BAD no tag")
                 continue
             parts = rest.split(" ")
@@ -321,6 +323,7 @@ class Session:
             try:
                 args = parse_args(chars[len(tag) + 1 + len(cmd) + 1:])   # literals stay bytes
             except (ParseError, ValueError):
+                self.srv._record(self, tag, "?", [], text)
                 self.line(f"{tag} BAD could not parse arguments")
                 continue
             self.srv._record(self, tag, cmd, args, text)

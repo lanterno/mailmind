@@ -133,6 +133,15 @@ def test_a_folder_name_that_cant_be_sent_is_refused_before_it_is(world, session)
     assert sent(world, since) == []
 
 
+def test_a_message_id_holding_a_line_break_is_refused_before_it_is_sent(world, session):
+    session.select("INBOX")
+    since = len(world.server.commands)
+    for broken in ("<fold@example.test>\r\n A1 DELETE INBOX", "<nul\x00@example.test>"):
+        with pytest.raises(imaplib.IMAP4.error):
+            session.by_message_id(broken)
+    assert sent(world, since) == []
+
+
 def test_status_counts_unseen_and_all(world, session):
     inbox = box(world)
     assert session.status("INBOX") == (sum("\\Seen" not in m.flags for m in inbox.messages.values()),
