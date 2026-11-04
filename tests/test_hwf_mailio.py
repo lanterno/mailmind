@@ -641,7 +641,6 @@ def test_hwf_an_offline_trash_undone_while_offline_comes_back(app, world):
     assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a queued move for a removed account stays running until restart")
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
     import config
     import readmutq
