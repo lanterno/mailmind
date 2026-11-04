@@ -10,9 +10,14 @@ returns (the outbox's wire send, the queue's IMAP move), before any bookkeeping.
 crash left running goes back to the queue, and its gate tells the handler whether that step
 already happened, so a crash never repeats it.
 
+A queue may name a lane column, the account the row's work goes to. Its drain then runs each
+lane's rows in turn on a thread of their own, so a row waiting on one account's server holds up
+only that account's rows.
+
 The table needs id, state, attempts, next_attempt_at, last_error, the gate column and the
-finished-at column. Every method but drain and run_forever runs on the connection it's given and
-leaves the commit to its caller. Standard library only: python3 server.py uses it.
+finished-at column, and the lane column when there is one. Every method but drain and run_forever
+runs on the connection it's given and leaves the commit to its caller. Standard library only:
+python3 server.py uses it.
 """
 import threading
 
@@ -21,15 +26,19 @@ QUEUED, ERROR = "queued", "error"
 
 class DurableQueue:
     def __init__(self, name, table, *, running, finished, finished_at, gate, connect,
-                 max_attempts=5, backoff_base=20, backoff_cap=900, poll=30):
-        """`name` labels its log lines; `running` and `finished` are the table's own names for
-        those states; `connect` opens a connection to the database for drain and run_forever."""
+                 max_attempts=5, backoff_base=20, backoff_cap=900, poll=30, lane=None):
+        """`name` labels its log lines and threads; `running` and `finished` are the table's own
+        names for those states; `connect` opens a connection to the database for drain and
+        run_forever; `lane`, a column, splits drain's rows into lanes."""
         self.name, self.table = name, table
         self.running, self.finished, self.finished_at, self.gate = running, finished, finished_at, gate
         self.max_attempts, self.backoff_base, self.backoff_cap = max_attempts, backoff_base, backoff_cap
-        self.poll = poll
+        self.poll, self.lane = poll, lane
         self._connect = connect
         self._kick = threading.Event()
+        self._lanes, self._missed = {}, set()   # lane -> the thread running its rows; lanes a drain passed
+        self._lanes_lock = threading.Lock()
+        self._worker = threading.local()        # .on in run_forever's thread
 
     def due(self, c, now):
         """The ids of queued rows whose time has come, oldest first."""
@@ -96,24 +105,74 @@ class DurableQueue:
         self._kick.set()
 
     def drain(self, handle, now):
-        """Run handle(id) for each row due at `now`. One that raises is logged, and the rest
-        still run."""
+        """Run handle(id) for each row due at `now`, oldest first. One that raises is logged,
+        and the rest still run.
+
+        With a lane column, each lane's rows run in turn on a thread of their own. In
+        run_forever's thread, drain starts them and returns, and leaves a lane still busy with an
+        earlier drain's rows be: that lane kicks the queue as it ends, and the next drain runs
+        them. Anywhere else (a test, a script) drain waits for a busy lane before it runs that
+        lane's rows, and for every lane it ran before it returns."""
         c = self._connect()
         try:
-            ids = self.due(c, now)
+            if not self.lane:
+                lanes = {None: self.due(c, now)}
+            else:
+                lanes = {}
+                for id_, lane in c.execute(f"SELECT id, {self.lane} FROM {self.table} WHERE state=? "
+                                           f"AND next_attempt_at<=? ORDER BY id", (QUEUED, now)):
+                    lanes.setdefault(lane, []).append(id_)
         finally:
             c.close()
+        if not self.lane:
+            self._run(handle, lanes[None])
+            return
+        wait = not getattr(self._worker, "on", False)
+        started = []
+        for lane, ids in lanes.items():
+            while True:
+                with self._lanes_lock:
+                    busy = self._lanes.get(lane)
+                    if busy is None:
+                        t = threading.Thread(target=self._run_lane, args=(lane, ids, handle),
+                                             name=f"{self.name}:{lane}", daemon=True)
+                        self._lanes[lane] = t
+                        t.start()
+                        started.append(t)
+                        break
+                    if not wait:
+                        self._missed.add(lane)
+                        break
+                busy.join()
+        if wait:
+            for t in started:
+                t.join()
+
+    def _run(self, handle, ids):
         for id_ in ids:
             try:
                 handle(id_)
             except Exception as e:
                 print(f"[{self.name}] {handle.__name__} #{id_} errored: {type(e).__name__}: {e}", flush=True)
 
+    def _run_lane(self, lane, ids, handle):
+        try:
+            self._run(handle, ids)
+        finally:
+            with self._lanes_lock:
+                if self._lanes.get(lane) is threading.current_thread():
+                    del self._lanes[lane]
+                missed = lane in self._missed
+                self._missed.discard(lane)
+            if missed:
+                self.kick()
+
     def run_forever(self, drain, stop=None):
         """The worker: put back what a crash left running, then call drain() whenever kicked,
         and at least every `poll` seconds to catch the retries that come due. drain is the
         worker's own, which calls self.drain with its handler and the time. It ends only once
         `stop`, an Event, is set (and the queue kicked)."""
+        self._worker.on = True
         c = self._connect()
         try:
             self.reset_stuck(c)

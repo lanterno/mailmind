@@ -34,9 +34,11 @@ _BACKOFF_CAP = 900
 _POLL = 30             # worker wakes at least this often to catch due retries
 SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
 
+# each account's sends in a lane of their own: one waiting on its IMAP server for a Sent copy
+# holds up no other account's
 QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", finished_at="sent_at",
                      gate="delivered", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
-                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
+                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL, lane="account")
 
 
 SENT_COPY_PENDING = "Delivered; its copy in Sent is still to be saved"
