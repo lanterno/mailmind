@@ -7,7 +7,8 @@ A folder's role is one of ROLES, or "custom". It comes, in order, from:
    and mail clients give each role ("Sent Items", "Junk E-mail", "Deleted Messages"...). Part of
    a name never counts, so "Bulk orders" is nobody's junk.
 Where several folders could play one role, an attribute beats a name, a shallower path a deeper
-one ("Archive" over Proton Bridge's "Folders/Archive"), and then the server's order decides.
+one ("Archive" over Proton Bridge's "Folders/Archive"), and then the name, in code point order.
+Never the server's order: Proton Bridge lists its folders in a new order each time.
 
 `all` is a folder holding every message, Gmail's All Mail and Proton's alike. Archiving moves to
 `archive`, and only where there is none to `all`.
@@ -84,8 +85,8 @@ def role_of(folder):
 def find(folders, *roles):
     """The name of the selectable folder playing the first of `roles` that one plays, or None."""
     for role in roles:
-        found = [(0 if role == "inbox" or _by_attribute(f) == role else 1, f.depth, i, f.name)
-                 for i, f in enumerate(folders) if f.selectable and role_of(f) == role]
+        found = [(0 if role == "inbox" or _by_attribute(f) == role else 1, f.depth, f.name)
+                 for f in folders if f.selectable and role_of(f) == role]
         if found:
-            return min(found)[3]
+            return min(found)[2]
     return None
