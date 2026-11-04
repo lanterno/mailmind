@@ -1,7 +1,7 @@
 """The Weekly Review — a retrospective companion to the daily briefing. Aggregates the last 7 days
 from SQLite (cheap columns only, NO body/IMAP fetch): what you sent, what came in, who's waiting on
 YOU (open action mail) vs who you're waiting on (sent-no-reply follow-ups), your reply-later stack,
-and what you cleaned up. One schema-constrained local-`claude` call turns the numbers + the top open
+and what you cleaned up. One schema-constrained Claude call turns the numbers + the top open
 threads into a short prose retrospective plus up to 3 "start next week with" suggestions. Cached in
 briefing_cache keyed on (account set + local date), so the cost is paid once a day and the lists are
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.

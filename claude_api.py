@@ -5,7 +5,7 @@ and Anthropic's server-side refusal fallback on the models that take it.
 The key comes from mailmind.config.json's "anthropic_api_key", else ANTHROPIC_API_KEY.
 ANTHROPIC_BASE_URL points the client somewhere else
 (a proxy, or the local stub the tests run). Nothing here retries forever: a failed call raises
-RuntimeError and the caller decides, exactly as it did for a failed `claude` CLI run.
+RuntimeError and the caller decides.
 """
 import os
 import json
@@ -21,7 +21,7 @@ MODEL = "claude-opus-5-5"          # MAILMIND_MODEL overrides it (see summarize.
 EFFORT = "medium"                  # sent explicitly: models differ in their default
 VERSION = "2026-10-21"             # anthropic-version header
 MAX_TOKENS = 16000                 # a ceiling, not a target; adaptive thinking counts against it
-TIMEOUT = 120                      # seconds per attempt, the same budget the CLI had
+TIMEOUT = 120                      # seconds per attempt
 RETRIES = 2                        # after the first attempt, on the statuses below and network errors
 _RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 

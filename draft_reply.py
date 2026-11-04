@@ -61,7 +61,7 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
     try:
         with _st._AI_SEM:                       # share the bridge's 2-proc cap with summarize
             obj = _sz.call_claude_json(prompt, REPLY_SCHEMA)
-    except Exception as e:                      # claude missing / timeout / rate-limit: retryable
+    except Exception as e:                      # AI off / timeout / rate-limit: retryable
         print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "draft unavailable", "retry": True}, 502
     body = (obj.get("body") or "").strip() if isinstance(obj, dict) else ""

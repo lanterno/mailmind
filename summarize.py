@@ -1,17 +1,14 @@
 """Summarize + importance-score non-junk mail with Claude. Runs a few calls in parallel.
 
-Every AI call in the app goes through call_claude_json / call_claude here. They use the Claude
-API (claude_api.py) when ANTHROPIC_API_KEY is set, and otherwise the local `claude` CLI on the
-user's subscription. MAILMIND_AI=api or =cli picks one explicitly.
+Every AI call in the app goes through call_claude_json / call_claude here, which call the Claude
+API (claude_api.py). With no API key AI is off: those calls raise AIOff before anything is sent,
+and status() says "none" rather than counting them as failed calls.
 Usage: python3 summarize.py [limit] [workers]
 """
 import sys
 import os
 import re
 import json
-import shutil
-import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,8 +19,7 @@ import claude_api
 
 WORKERS = 4
 MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-5-5
-TRIAGE_EFFORT = "low"      # API only. Triage runs on every new message and is a short classify-and-summarize
-NEUTRAL_CWD = tempfile.gettempdir()        # run claude away from project context
+TRIAGE_EFFORT = "low"      # triage runs on every new message and is a short classify-and-summarize
 
 PROMPT = """You are triaging ONE email for a personal dashboard. Reply with ONLY a JSON object (no prose, no code fence) with these keys:
 - "summary": 1-2 sentence plain-English summary of what this email is and what (if anything) it wants.
@@ -40,8 +36,8 @@ Body:
 """
 
 
-# --- triage schema: when the CLI supports --json-schema the model returns a guaranteed-valid
-#     object in a top-level `structured_output` field, killing the old regex-scrape parse-error class.
+# --- triage schema: structured output returns an object that matches it, so a triage reply needs
+#     no regex scrape (the old parse-error class).
 TRIAGE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -54,40 +50,19 @@ TRIAGE_SCHEMA = {
     "required": ["summary", "importance", "category"],
 }
 
-_SCHEMA_OK = None
 
-
-def _supports_schema():
-    """Cache whether the installed claude CLI accepts --json-schema (cheap help-text probe,
-    no API call). Older CLIs fall back to the text + regex path automatically."""
-    global _SCHEMA_OK
-    if _SCHEMA_OK is None:
-        if os.environ.get("MAILMIND_NO_SCHEMA"):
-            _SCHEMA_OK = False
-        else:
-            try:
-                r = subprocess.run(["claude", "--help"], capture_output=True, text=True,
-                                   timeout=15, cwd=NEUTRAL_CWD)
-                _SCHEMA_OK = "--json-schema" in (r.stdout + r.stderr)
-            except Exception:
-                _SCHEMA_OK = False
-    return _SCHEMA_OK
+class AIOff(RuntimeError):
+    """AI is off: there is no API key, so nothing was sent."""
 
 
 def engine():
-    """Which engine AI calls use, "api" or "cli": MAILMIND_AI when it names one, else the API
-    whenever a key is set."""
-    forced = os.environ.get("MAILMIND_AI", "").strip().lower()
-    if forced in ("api", "cli"):
-        return forced
-    return "api" if claude_api.key() else "cli"
+    """"api" when an API key resolves, else "none": AI is off."""
+    return "api" if claude_api.key() else "none"
 
 
 def describe_engine():
     """One line for the startup log."""
-    if engine() == "api":
-        return "Claude API · " + model_label() + " · " + _key_note()
-    return "claude CLI" + (" · " + MODEL if MODEL else "")
+    return "Claude API · " + model_label() + " · " + _key_note()
 
 
 def _key_note():
@@ -102,9 +77,7 @@ def _key_note():
 
 def model_label():
     """The model name stored beside each AI result and shown under it in the UI."""
-    if engine() == "api":
-        return MODEL or claude_api.MODEL
-    return MODEL or "claude-cli"
+    return MODEL or claude_api.MODEL
 
 
 _last = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for status()
@@ -113,24 +86,23 @@ _last = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went,
 def _plain(e):
     """A failed call's reason in words the setup card can show (never the prompt)."""
     s = str(e)
-    if isinstance(e, FileNotFoundError):
-        return "the claude command isn't installed"
     if " 401" in s or "authentication" in s.lower() or "invalid x-api-key" in s.lower():
         return "the API key was rejected"
-    if "login" in s.lower() or "logged in" in s.lower():
-        return "the claude command isn't signed in"
     if " 429" in s or "rate" in s.lower():
         return "rate-limited for now"
-    if isinstance(e, subprocess.TimeoutExpired) or "timed out" in s.lower():
+    if "timed out" in s.lower():
         return "it timed out"
     return s[:140] or type(e).__name__
 
 
 def _noted(fn):
-    """Record each call's outcome in _last, passing its result or exception through unchanged."""
+    """Record each call's outcome in _last, passing its result or exception through unchanged.
+    A call refused because AI is off was never made, so it isn't recorded."""
     def run(*a, **kw):
         try:
             out = fn(*a, **kw)
+        except AIOff:
+            raise
         except Exception as e:
             _last.update(ok=False, ts=int(time.time()), error=_plain(e))
             raise
@@ -141,28 +113,25 @@ def _noted(fn):
 
 
 def status():
-    """What the UI says about AI, with no call made: the engine ("api", "cli" or "none" when
-    neither a key nor the claude command is there), its model, where the key came from, and how
-    the most recent call went (last_ok None until one has run)."""
-    eng = engine()
-    ready = bool(claude_api.key()) if eng == "api" else bool(shutil.which("claude"))
-    return {"engine": eng if ready else "none", "model": model_label() if ready else "",
-            "key_from": claude_api.key_source() if ready and eng == "api" else "",
+    """What the UI says about AI, with no call made: the engine ("api", or "none" with no key),
+    its model, where the key came from, and how the most recent call went (last_ok None until
+    one has run)."""
+    on = engine() == "api"
+    return {"engine": "api" if on else "none", "model": model_label() if on else "",
+            "key_from": claude_api.key_source() if on else "",
             "last_ok": _last["ok"], "last_ts": _last["ts"], "last_error": _last["error"]}
+
+
+def _require_key():
+    if engine() != "api":
+        raise AIOff("AI is off: there is no API key")
 
 
 @_noted
 def call_claude(prompt):
     """Plain text result (used by summarize_thread). Unchanged signature."""
-    if engine() == "api":
-        return claude_api.message(prompt, model=MODEL)
-    cmd = ["claude", "-p", prompt, "--output-format", "text"]
-    if MODEL:
-        cmd += ["--model", MODEL]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=NEUTRAL_CWD)
-    if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip()[:200] or "claude failed")
-    return r.stdout.strip()
+    _require_key()
+    return claude_api.message(prompt, model=MODEL)
 
 
 def _loose_json(out):
@@ -172,42 +141,19 @@ def _loose_json(out):
 
 @_noted
 def call_claude_json(prompt, schema, effort=None):
-    """Ask Claude for a JSON object matching `schema`. Returns the validated dict from
-    structured output (the API's output_config.format, or the CLI's --json-schema), else
-    best-effort regex-parsed JSON from the text. Raises RuntimeError ONLY on a transport
-    failure (API error, or a non-zero CLI exit) so the caller can distinguish retry from
-    fallback; a successful-but-unparseable reply yields {}. `effort` applies to the API only."""
-    if engine() == "api":
-        out = claude_api.message(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
-                                 model=MODEL, effort=effort)
-        try:
-            obj = json.loads(out)
-        except ValueError:
-            obj = None
-        if isinstance(obj, dict):
-            return obj
-        try:
-            return _loose_json(out)
-        except Exception:
-            return {}
-    use = _supports_schema()
-    cmd = ["claude", "-p", prompt]
-    cmd += (["--output-format", "json", "--json-schema", json.dumps(schema)] if use
-            else ["--output-format", "text"])
-    if MODEL:
-        cmd += ["--model", MODEL]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=NEUTRAL_CWD)
-    if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip()[:200] or "claude failed")
-    out = r.stdout
-    if use:
-        try:
-            obj = json.loads(out)
-            if isinstance(obj.get("structured_output"), dict):
-                return obj["structured_output"]
-            out = obj.get("result", out)   # flag accepted but no structured field -> parse the prose
-        except Exception:
-            pass
+    """Ask Claude for a JSON object matching `schema`. Returns the dict structured output
+    (output_config.format) gives, else best-effort regex-parsed JSON from the text. Raises
+    RuntimeError ONLY when no reply came (AIOff, one, when AI is off), so the caller can tell
+    retry from fallback; a successful-but-unparseable reply yields {}."""
+    _require_key()
+    out = claude_api.message(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
+                             model=MODEL, effort=effort)
+    try:
+        obj = json.loads(out)
+    except ValueError:
+        obj = None
+    if isinstance(obj, dict):
+        return obj
     try:
         return _loose_json(out)
     except Exception:

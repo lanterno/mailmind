@@ -1,7 +1,7 @@
 """On-demand AI summary of an email thread (or single message) via Claude — reuses
-summarize.call_claude (the API, or the local `claude` CLI). Cached in thread_summaries
+summarize.call_claude (the Claude API). Cached in thread_summaries
 (content-fingerprinted, so a new reply invalidates it). Single-flight per
-(account,thread_id,scope) + a global concurrency cap so double-clicks never fork-bomb claude. Untrusted email is bounded and
+(account,thread_id,scope) + a global concurrency cap so double-clicks never pile up Claude calls. Untrusted email is bounded and
 the prompt tells the model to treat it as data, not instructions.
 """
 import re

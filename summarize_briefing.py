@@ -84,7 +84,7 @@ def _fingerprint(rows):
 
 
 def _fallback(rows):
-    """Deterministic narrative + groups straight from the rows — used when claude is flaky,
+    """Deterministic narrative + groups straight from the rows — used when Claude is flaky,
     so a bad reply is cached once rather than retried forever."""
     by_cat = {}
     for r in rows:
@@ -218,7 +218,7 @@ def _clean_delta(obj):
 
 
 def _delta_fallback(rows):
-    """Deterministic headline + items — caches a usable card once when claude is unusable."""
+    """Deterministic headline + items — caches a usable card once when Claude's reply is unusable."""
     items = [{"who": (r["from_name"] or r["from_addr"] or "someone")[:60],
               "gist": (r["subject"] or "(no subject)")[:120], "importance": r["importance"]}
              for r in rows[:DELTA_TOP_N]]
