@@ -360,6 +360,9 @@ automatically.
   reaches the mail server. Its answers tell the browser to keep them from other sites and out
   of caches, and the page carries a content security policy, report-only for now, that lets
   only its own scripts run.
+- **Your Bridge password goes only to Bridge.** Bridge's certificate is pinned the first
+  time MailMind connects, so something else listening on its port while it's down gets no
+  password, over IMAP or SMTP. A changed certificate shows in Settings, to trust or not.
 - **Bodies render in a locked sandbox** with an explicit deny-all CSP, remote images
   blocked by default, and a runtime guard that strips scripting permission from any
   reader frame.
@@ -480,8 +483,11 @@ in US dollars: `15` unless you set another positive number.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
   (`MAILMIND_PROTON_OP_ITEM`), or `~/.config/mailmind/proton_bridge_pass`
-  (chmod 600). Only STARTTLS to this machine (`127.0.0.1`, `localhost`, `::1`) skips
-  certificate verification, because Bridge's certificate is self-signed.
+  (chmod 600). Only a server on this machine (`127.0.0.1`, `localhost`, `::1`) skips
+  certificate verification, because Bridge's certificate is self-signed. Instead MailMind
+  pins the certificate it meets first, in the account's `tls_pins`, and from then on sends no
+  password to a server that shows another. If you reinstall or reset Bridge, Settings says the
+  certificate changed; **Trust it** pins the new one.
 
 ## Two ways to use it
 

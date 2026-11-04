@@ -242,7 +242,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `provider.resolve(acct)` replaces checking `kind == "gmail"`. `domain.events` holds
   `AccountAdded`, `AccountChanged` and `AccountRemoved`, which `config.add_account`,
   `update_account` and `remove_account` publish on the bus once the file holds the change (a
-  refused change publishes nothing). It is standard library only.
+  refused change publishes nothing). `domain.tls_pin` says how a loopback certificate is pinned
+  (see Security model). It is standard library only.
 - `mailmind.mailbox` is the third: the mail on each server and its folders. So far it holds
   `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
   `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
@@ -435,9 +436,14 @@ an answer didn't set itself, and so does the middleware. The page also carries
 sha256 and nothing else, styles and fonts from Google Fonts too, connections to this server
 only, framed by no one. The browser tests fail on any violation.
 
-A failed GET or POST answers a fixed message and logs the detail. STARTTLS, IMAP and SMTP
-alike, takes `accounts.tls_context(host)`: verified everywhere but loopback, where Proton
-Bridge's certificate is self-signed.
+A failed GET or POST answers a fixed message and logs the detail. Every TLS connection, IMAP
+and SMTP alike, STARTTLS or implicit, takes `accounts.tls_context(host)`: verified everywhere but
+loopback, where Proton Bridge's certificate is self-signed. There `accounts.check_pin` stands in,
+after the handshake and before LOGIN or AUTH: the first certificate an account meets at a loopback
+`host:port` is pinned (`config.tls_pin`, the account's `tls_pins`, `sha256:` of its DER bytes), and
+any other after it raises `TLSPinMismatch` (a `ConnectionError`, so a move queues) with nothing
+sent. Health calls it `TLS_PIN`; `/api/accounts/trust-cert` forgets the account's pins and syncs it.
+An unsaved draft pins nothing. A new TLS connection calls `check_pin` too.
 
 A credential goes only to its own account's server. `/api/accounts/test` logs a saved account in
 at its saved endpoint, and tries a draft (an account not yet saved) only with a password typed
