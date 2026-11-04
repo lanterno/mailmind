@@ -162,7 +162,7 @@ def summarize(account, thread_id, scope="thread", force=False):
                                 blocks="\n".join(blocks))
         try:
             out = _sz.call_claude(prompt, feature="thread")
-        except _sz.HeldBack:                        # over the daily limit: the route asks the user
+        except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
             print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)

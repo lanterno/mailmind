@@ -40,7 +40,7 @@ def rewrite(text, op, lang="English"):
     prompt = _PROMPT.format(instr=instr, text=text[:8000])
     try:
         obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
-    except _sz.HeldBack:                        # over the daily limit: the route asks the user
+    except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
         raise
     except Exception as e:
         print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)

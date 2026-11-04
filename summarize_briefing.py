@@ -258,7 +258,7 @@ def build_delta(accounts_set, since_ts, generate=True):
         prompt = _DELTA_PROMPT.format(count=len(lines), items="\n".join(lines))
         try:
             obj = _sz.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
-        except _sz.HeldBack:                    # over the daily limit: the route asks the user
+        except _sz.NotSent:                     # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -326,7 +326,7 @@ def build(accounts_set, force=False, generate=True):
         prompt = _PROMPT.format(items="\n".join(lines))
         try:
             obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
-        except _sz.HeldBack:                    # over the daily limit: the route asks the user
+        except _sz.NotSent:                     # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)

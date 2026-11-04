@@ -61,9 +61,9 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
                             tone=tone_word, instr=instr, subject=subject, blocks="\n".join(blocks))
     try:
         obj = _sz.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
-    except _sz.HeldBack:                        # over the limit, or a draft ahead that must wait
+    except _sz.NotSent:                         # AI off, over the limit, or a draft ahead that must wait
         raise
-    except Exception as e:                      # AI off / timeout / rate-limit: retryable
+    except Exception as e:                      # timeout / rate-limit: retryable
         print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
         return {"ok": False, "error": "draft unavailable", "retry": True}, 502
     body = (obj.get("body") or "").strip() if isinstance(obj, dict) else ""

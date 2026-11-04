@@ -3180,6 +3180,11 @@ def _over_limit_answer(e):
             "spent_micros": e.spent_micros, "limit_micros": e.limit_micros}, 402
 
 
+def _ai_off_answer():
+    """The 409 an AI request gets with AI off. Nothing was sent, and asking again won't help."""
+    return {"ok": False, "error": "AI is off: MailMind has no Claude API key", "ai_off": True}, 409
+
+
 def _draft_key(row):
     """Natural draft identity (account, ref_key) — survives reconcile/reset_folder
     delete+reinsert; NEVER messages.pk (same rule as muted/followups/read_mutations).
@@ -3282,8 +3287,8 @@ def _gen_draft_ahead(account, pk, source="dwell"):
                     sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
                 except Exception:
                     pass
-        except summarize.HeldBack:
-            return None                                   # neutral: the governor said not now
+        except summarize.NotSent:
+            return None                                   # neutral: AI is off, or the governor said not now
         except Exception as e:
             print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             try:
@@ -3631,7 +3636,7 @@ def ai_do_plan(body):
     prompt = _DO_PROMPT.replace("{today}", today).replace("{cmd}", cmd)
     try:
         plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
-    except summarize.HeldBack:                # over the daily limit: the route asks the user
+    except summarize.NotSent:                 # AI off, or over the daily limit: the route answers it
         raise
     except Exception:
         return {"ok": False, "error": "planner unavailable", "retry": True}, 502
@@ -3963,6 +3968,8 @@ class H(BaseHTTPRequestHandler):
                 self._send(404, b"not found", "text/plain")
         except summarize.OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
+        except summarize.AIOff:               # no key: nothing was sent, and nothing will be until one is set
+            self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[get] {u.path}: {type(e).__name__}: {e}", flush=True)
             self._json({"ok": False, "error": "request failed"}, 500)
@@ -4060,7 +4067,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/summarize":
                 try:
                     res, code = ai_summarize(b)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] error: {type(ex).__name__}: {ex}", flush=True)
@@ -4069,7 +4076,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/draft-reply":
                 try:
                     res, code = ai_draft_reply(b)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] draft error: {type(ex).__name__}: {ex}", flush=True)
@@ -4078,7 +4085,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/rewrite":
                 try:
                     res, code = ai_rewrite(b)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] rewrite error: {type(ex).__name__}: {ex}", flush=True)
@@ -4087,7 +4094,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/ask":
                 try:
                     res, code = ai_ask(b)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] ask error: {type(ex).__name__}: {ex}", flush=True)
@@ -4096,7 +4103,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/do-plan":     # read-only: NL command → validated, capped action PREVIEW
                 try:
                     res, code = ai_do_plan(b)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] do-plan error: {type(ex).__name__}: {ex}", flush=True)
@@ -4119,7 +4126,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing":   # write the "Today" card once, if none is stored
                 try:
                     res, code = ai_briefing(b if isinstance(b, dict) else {})
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
@@ -4128,7 +4135,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/review":   # write the Weekly Review once, if none is stored
                 try:
                     res, code = ai_review(b if isinstance(b, dict) else {})
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
@@ -4137,7 +4144,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing/since":   # write the "since you last looked" delta once
                 try:
                     res, code = ai_delta(b if isinstance(b, dict) else {})
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] delta error: {type(ex).__name__}: {ex}", flush=True)
@@ -4146,7 +4153,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/review/refresh":     # force re-run the Weekly Review (behind _mutation_guard)
                 try:
                     res, code = ai_review(b, force=True)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
@@ -4155,7 +4162,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing/refresh":   # force re-run (behind _mutation_guard)
                 try:
                     res, code = ai_briefing(b, force=True)
-                except summarize.OverLimit:     # the 402: the page asks before it goes over
+                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
@@ -4186,6 +4193,8 @@ class H(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
         except summarize.OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
+        except summarize.AIOff:               # no key: nothing was sent, and nothing will be until one is set
+            self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[post] {self.path}: {type(e).__name__}: {e}", flush=True)
             self._json({"ok": False, "error": "request failed"}, 500)

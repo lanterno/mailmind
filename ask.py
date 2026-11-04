@@ -144,7 +144,7 @@ def ask(account, question):
     prompt = _PROMPT.format(question=question, blocks="\n\n".join(blocks))
     try:
         obj = _sz.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
-    except _sz.HeldBack:                        # over the daily limit: the route asks the user
+    except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
         raise
     except Exception:
         return {"ok": False, "error": "ask unavailable", "retry": True}, 502
