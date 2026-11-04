@@ -58,6 +58,16 @@ def test_capabilities_are_what_the_server_said_after_login(session):
     assert {"IMAP4REV1", "MOVE", "UIDPLUS", "IDLE", "SPECIAL-USE"} <= session.capabilities
 
 
+def test_a_login_answer_without_capabilities_has_them_asked_for(world, kind):
+    world.server.login_says_capabilities = False
+    s = open_session()
+    try:
+        assert {"MOVE", "UIDPLUS", "SPECIAL-USE"} <= s.capabilities
+    finally:
+        s.logout()
+    assert world.server.commands_for(w.ADA, "CAPABILITY")
+
+
 def test_folders_carry_their_attributes_and_delimiter(session):
     from mailmind.mailbox.domain import roles
     folders = {f.name: f for f in session.folders()}

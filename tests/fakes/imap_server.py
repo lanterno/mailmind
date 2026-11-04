@@ -348,7 +348,11 @@ class Session:
                 self.line(f"{tag} BAD {type(e).__name__}: {e}")
 
     def capabilities(self):
-        caps = ["IMAP4rev1", "LITERAL+", "UIDPLUS", "MOVE", "IDLE", "SPECIAL-USE", "NAMESPACE"]
+        """As Gmail and Dovecot do, the extensions only a logged-in client may use are listed only
+        once it has: before login, and in the login answer unless the server is told not to."""
+        caps = ["IMAP4rev1", "LITERAL+", "IDLE"]
+        if self.acct is not None:
+            caps += ["UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE"]
         if not self.tls:
             caps += ["STARTTLS", "LOGINDISABLED"]
         else:
@@ -403,7 +407,8 @@ class Session:
         if not acct or acct.password != pw:
             raise _No("[AUTHENTICATIONFAILED] invalid credentials")
         self.acct = acct
-        self.ok(tag, "[CAPABILITY " + self.capabilities() + "] logged in")
+        self.ok(tag, "[CAPABILITY " + self.capabilities() + "] logged in" if self.srv.login_says_capabilities
+                else "logged in")
 
     def do_list(self, tag, args):
         pattern = str(args[1]) if len(args) > 1 else "*"
@@ -773,6 +778,7 @@ class FakeIMAPServer:
         self.default_kind = kind
         self.require_tls, self.implicit_tls = require_tls, implicit_tls
         self.without = set(without)
+        self.login_says_capabilities = True     # False: the login answer carries no CAPABILITY code
         if "UIDPLUS" in self.without:
             self.without.add("UID EXPUNGE")
         self.accounts = {}

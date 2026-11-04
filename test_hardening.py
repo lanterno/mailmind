@@ -53,6 +53,9 @@ class _FakeIMAP:
     def login(self, user, pw):
         return "OK", [b"logged in"]
 
+    def capability(self):
+        return "OK", [b"IMAP4rev1 AUTH=PLAIN"]
+
 
 def _starttls_ctx(host):
     real_imap, real_cred = accounts.imaplib.IMAP4, accounts.config.resolve_credential
