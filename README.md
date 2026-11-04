@@ -49,7 +49,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
 Around that spine sit the client modules: `mailops.py` (IMAP writes),
 `compose.py` + `smtpsend.py` + `outbox.py` (send), `search.py` (FTS + operator
 grammar), `threads.py`, `mailparse.py`, `sanitize_html.py` (the reader's
-whitelist sanitizer), `ics.py` (invites), `realtime.py` (IMAP IDLE → SSE), and
+whitelist sanitizer), `ics.py` (invites), `realtime.py` (IMAP IDLE), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 The app is one view: a real folder-and-account client whose Inbox opens on
@@ -296,7 +296,10 @@ automatically.
 
 - **Live updates without a refresh.** An SSE stream pushes new mail, snooze wake-ups,
   mutes and ready AI drafts into the open list behind a sticky `N new` pill that never
-  yanks the view mid-triage — with polling as an automatic fallback.
+  yanks the view mid-triage — with polling as an automatic fallback. An undo in another
+  tab and a move queued offline that lands refresh the list too. A tab that drops off (a
+  sleeping laptop, a restart) hears what it missed when it reconnects, or fetches afresh
+  when the server can no longer replay it.
 - **Background notifications.** An opt-in 🔔 fires a desktop notification and keeps an
   unread count in the tab title when MailMind isn't focused.
 - **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill

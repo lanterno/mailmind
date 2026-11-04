@@ -565,11 +565,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     done. Say `profile` in `/api/digest` and show it beside the sync status.
   - A queued move for an account removed from the config stays `running` until restart. Give it up
     as `error`. Pinned by `test_hwf_a_queued_move_for_a_removed_account_is_given_up`.
-  - `connectEvents` registers no listener for the `readmutq` and `undo` events the server
-    publishes, so the list doesn't refresh when a queued move lands.
 - **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
-  - `outbox.send_one` returns from a failed attempt before `_after_send`, so no `outbox` event
-    goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
+  - `outbox.send_one` returns from a failed attempt before it publishes `outbox.Sent`, so no
+    `outbox` event goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
     on still shows as pending. Pinned by `test_the_page_hears_when_the_outbox_gives_up`
     (tests/browser).
   - `/api/outbox/retry` keeps `attempts`, so one more failure gives up again. Pinned by

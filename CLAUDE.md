@@ -149,7 +149,7 @@ mailmind.config.json → config.py/accounts.py → ingest.py → mailclass.py �
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
 (send), `search.py` (FTS + operator grammar), `threads.py`, `mailparse.py`,
-`sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE → SSE), and the AI modules
+`sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
@@ -168,9 +168,11 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
   directory; unset, it is the repo root. It must exist, and nothing creates it.
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
-- `mailmind.bootstrap.legacy.wire(server)` connects the outbox, the read-mutation queue, the
-  thread summarizer and the IDLE layer to the server's lock and callbacks. `server.__main__` passes
-  `sys.modules[__name__]`: importing `server` there would load a second copy with its own lock.
+- `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
+  what the legacy workers publish: `outbox.Sent`, `readmutq.Applied` and `realtime.InboxChanged`.
+  Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
+  `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
+  copy with state of its own.
   `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
   then the workers. Full, those are the outbox's and the read-mutation queue's drains, the
   scheduler's jobs and IDLE; read-only, the snooze job alone.
@@ -194,6 +196,17 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`server.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
+- `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
+  of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
+  change has committed; one that raises is logged by class name and the rest still hear. Nothing
+  on it is durable: work that must survive a crash is a queue row written with the change.
+- `mailmind.platform.sse` is the hub behind `/api/events`, the live event stream. `sse.publish`
+  numbers each event `<run>-<n>` and keeps the last 512. A tab resumes after the `Last-Event-ID`
+  its EventSource sends; one the hub can't resume (an earlier run, or further back than it keeps)
+  gets one `resync`. `sse.TOPICS` lists every topic and `publish` refuses any other;
+  `tests/test_sse.py` checks that `connectEvents` in `dashboard.html` listens for each, and for
+  `resync`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
+  run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
