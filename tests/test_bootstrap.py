@@ -1,5 +1,8 @@
 """mailmind.bootstrap.legacy: what `python3 server.py` and the app fixture connect before anything
 runs, what a front door starts, and the background jobs each profile schedules."""
+import threading
+import time
+
 import pytest
 
 from mailmind.platform.workers.scheduler import Scheduler
@@ -7,29 +10,69 @@ from mailmind.platform.workers.scheduler import Scheduler
 
 @pytest.fixture
 def unwired(monkeypatch):
-    """The workers' wiring and the server's jobs as they were, put back after the test."""
+    """No wiring on the bus, and the server's jobs as they were, after the test."""
+    import server
+    from mailmind.bootstrap import legacy
+    monkeypatch.setattr(server, "JOBS", server.JOBS)
+    yield
+    legacy.unwire()
+
+
+def wiring():
     import outbox
     import readmutq
     import realtime
-    import server
-    for mod, attrs in ((outbox, ("_after_send",)), (readmutq, ("_after_apply",)), (realtime, ("_sync_handler",)),
-                       (server, ("JOBS",))):
-        for attr in attrs:
-            monkeypatch.setattr(mod, attr, getattr(mod, attr))
+    from mailmind.platform.bus import BUS
+    return [BUS.subscribers(topic) for topic in (outbox.Sent, readmutq.Applied, realtime.InboxChanged)]
 
 
-def test_the_workers_report_back_to_the_server(unwired):
+def test_the_server_hears_what_the_workers_publish(unwired):
     """That they hold the IMAP lock for their mail commands, test_hwf_http checks at the fake
     server."""
-    import outbox
-    import readmutq
-    import realtime
     import server
     from mailmind.bootstrap import legacy
     legacy.wire(server)
-    assert outbox._after_send is server._after_send
-    assert readmutq._after_apply is server._after_readmut
-    assert realtime._sync_handler is server.sync_guarded
+    assert wiring() == [(server._after_send,), (server._after_readmut,), (server._after_idle,)]
+    legacy.wire(server)                                       # wiring again replaces, never doubles
+    assert wiring() == [(server._after_send,), (server._after_readmut,), (server._after_idle,)]
+    legacy.unwire()
+    assert wiring() == [(), (), ()]
+
+
+def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
+    import realtime
+    import server
+    from mailmind.bootstrap import legacy
+    from mailmind.platform import bus
+    synced = []
+    monkeypatch.setattr(server, "sync_guarded", synced.append)
+    legacy.wire(server)
+    bus.publish(realtime.InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
+    assert synced == [{"ada@example.test", "cy@example.test"}]
+
+
+def test_idles_dispatcher_publishes_one_change_for_a_burst(unwired, monkeypatch):
+    import realtime
+    from mailmind.platform import bus
+    heard = []
+    stop = bus.subscribe(realtime.InboxChanged, heard.append)
+    monkeypatch.setattr(realtime, "_DEBOUNCE", 0.05)
+    monkeypatch.setattr(realtime, "_stop", threading.Event())
+    monkeypatch.setattr(realtime, "_kick", threading.Event())
+    try:
+        for email in ("ada@example.test", "ada@example.test", "cy@example.test"):
+            realtime._trigger_sync(email)
+        t = threading.Thread(target=realtime._dispatch_loop, daemon=True)
+        t.start()
+        deadline = time.monotonic() + 5
+        while not heard and time.monotonic() < deadline:
+            time.sleep(0.01)
+        realtime._stop.set()
+        realtime._kick.set()
+        t.join(5)
+    finally:
+        stop()
+    assert heard == [realtime.InboxChanged(frozenset({"ada@example.test", "cy@example.test"}))]
 
 
 

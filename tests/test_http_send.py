@@ -188,6 +188,25 @@ def test_a_temporary_failure_backs_off_then_gives_up_then_retries(send):
     send.post("retry a sent one", "/api/outbox/retry", {"id": 1})
 
 
+def test_a_send_is_published_once_it_goes_out_and_not_while_it_fails(app, world):
+    import outbox
+    from mailmind.platform import bus
+    heard = []
+    stop = bus.subscribe(outbox.Sent, heard.append)
+    try:
+        world.smtp.fail("RCPT", "451 4.3.0 try again later")
+        oid = app.post("/api/send", new(idempotency_key="k-heard")).json["outbox_id"]
+        app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+        outbox.drain()
+        assert heard == []
+        app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
+        outbox.drain()
+        outbox.drain()
+    finally:
+        stop()
+    assert heard == [outbox.Sent(oid, w.ADA)]
+
+
 def test_a_refused_login_and_a_rejected_message(send):
     send.world.smtp.users[w.ADA] = "changed"
     send.post("send with a password the server no longer takes", "/api/send", new(idempotency_key="k-auth"))

@@ -52,6 +52,8 @@ def reset_state():
                 cur.update(v)
             else:
                 setattr(mod, k, v)
+    from mailmind.bootstrap import legacy
+    legacy.unwire()                          # the server's subscriptions on the bus, as wire() made them
 
 
 @dataclass

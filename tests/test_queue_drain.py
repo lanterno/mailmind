@@ -114,6 +114,34 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
 
 
+def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monkeypatch):
+    import readmutq
+    import store
+    from mailmind.platform import bus
+    heard = []
+
+    def crash(row):
+        raise RuntimeError("the process died here")
+    stop = bus.subscribe(readmutq.Applied, heard.append)
+    try:
+        queue(app, world)
+        mirror = readmutq._local_mirror
+        monkeypatch.setattr(readmutq, "_local_mirror", crash)
+        drain()                                                        # moved, then "crashed": not yet
+        assert heard == []
+        monkeypatch.setattr(readmutq, "_local_mirror", mirror)
+        c = store.conn()
+        readmutq.QUEUE.reset_stuck(c)
+        c.commit()
+        c.close()
+        drain()
+        drain()
+    finally:
+        stop()
+    [r] = rows()
+    assert heard == [readmutq.Applied(r["id"], w.ADA)]
+
+
 def test_undo_cancels_a_queued_move_that_hasnt_shipped(app, world):
     queue(app, world)
     since = world.mark()

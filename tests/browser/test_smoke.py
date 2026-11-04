@@ -270,8 +270,8 @@ def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
     clean(page)
 
 
-@pytest.mark.xfail(strict=True, reason="outbox.drain returns from a failed attempt before calling "
-                                       "_after_send, so no outbox event reaches the page")
+@pytest.mark.xfail(strict=True, reason="outbox.send_one returns from a failed attempt before it "
+                                       "publishes outbox.Sent, so no outbox event reaches the page")
 def test_the_page_hears_when_the_outbox_gives_up(page, app, world):
     button = give_up_on_a_send(page, app, world)
     expect(button).to_have_class(re.compile("has-fail"), timeout=3000)
