@@ -6,13 +6,13 @@ the prompt tells the model to treat it as data, not instructions.
 """
 import re
 import json
-import hashlib
 import threading
 from datetime import datetime, timezone
 
 import store
 import ingest
 import summarize as _sz
+from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -56,7 +56,7 @@ def _trim(text):
 
 def _rows(c, account, thread_id):
     rows = c.execute(
-        """SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched
+        """SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
            FROM messages WHERE account=? AND thread_id=? ORDER BY ts ASC, pk ASC""",
         (account, thread_id)).fetchall()
     seen, out = set(), []
@@ -70,8 +70,9 @@ def _rows(c, account, thread_id):
 
 
 def _fingerprint(rows):
-    basis = "|".join(f'{r["pk"]}:{r["message_id"] or ""}' for r in rows) + f"#{len(rows)}"
-    return hashlib.sha256(basis.encode("utf-8", "replace")).hexdigest()[:32]
+    """The thread as summarized: its messages' Message-IDs and the newest one's time, so a
+    renumbered folder leaves its summary fresh."""
+    return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
 
 
 def _gather(rows):

@@ -6,12 +6,12 @@ and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap
 text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks (never trusted).
 """
 import json
-import hashlib
 from datetime import datetime, timezone
 
 import store
 import summarize as _sz
 import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
+from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers.singleflight import SingleFlight
 
 TOP_N = 40
@@ -54,7 +54,7 @@ def _now():
 
 
 def _top_rows(c, accounts_set, n=TOP_N):
-    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, "
+    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
            "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND s.importance>=2 "
@@ -78,8 +78,8 @@ def _cache_key(accounts_set):
 
 
 def _fingerprint(rows):
-    basis = "|".join(str(r["pk"]) for r in rows) + f"#{len(rows)}"
-    return hashlib.sha256(basis.encode("utf-8", "replace")).hexdigest()[:32]
+    """The messages a brief or a delta was made from, by Message-ID."""
+    return fingerprint.of(r["message_id"] for r in rows)
 
 
 def _fallback(rows):
@@ -177,7 +177,7 @@ New items (newest first, {count} total):
 
 
 def _delta_rows(c, accounts_set, since_ts, n=DELTA_TOP_N):
-    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, "
+    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
            "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
            "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
            "FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "

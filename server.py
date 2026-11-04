@@ -12,7 +12,6 @@ import re
 import dataclasses
 import json
 import time
-import zlib
 import shlex
 import math
 import email.message
@@ -56,6 +55,7 @@ import ics
 import summarize_thread
 import summarize_briefing
 import summarize_review
+from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import legacy
 from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.db import txguard
@@ -3221,11 +3221,9 @@ def _draft_fp(c, account, thread_id, pk):
                          (account, thread_id)).fetchall()
         if not rows:
             return "t2:gone"
-        mids = "\n".join(sorted((r["message_id"] or "") for r in rows))
-        return "t2:%d:%d:%08x" % (len(rows), max(r["ts"] or 0 for r in rows),
-                                  zlib.crc32(mids.encode("utf-8", "replace")))
+        return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
     r = c.execute("SELECT message_id, body_fetched FROM messages WHERE pk=?", (pk,)).fetchone()
-    return "m2:%s:%s" % ((r["message_id"] or "") if r else "", (r["body_fetched"] if r else 0))
+    return fingerprint.message(r["message_id"] if r else None, r["body_fetched"] if r else 0)
 
 
 def _gen_draft_ahead(account, pk, source="dwell"):

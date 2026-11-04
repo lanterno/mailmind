@@ -7,12 +7,12 @@ briefing_cache keyed on (account set + local date), so the cost is paid once a d
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.
 """
 import json
-import hashlib
 from datetime import datetime, timezone
 
 import store
 import summarize as _sz
 import summarize_thread as _st          # reuse the global _AI_SEM concurrency cap
+from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers.singleflight import SingleFlight
 
 WEEK_SECONDS = 7 * 86400
@@ -133,9 +133,12 @@ def _aggregate(c, accounts_set, since_ts):
 
 
 def _fingerprint(stats, needs, waiting):
-    basis = json.dumps([stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"],
-                        [n["pk"] for n in needs], [w["pk"] for w in waiting]], sort_keys=True)
-    return hashlib.sha256(basis.encode("utf-8", "replace")).hexdigest()[:32]
+    """The week as reviewed: its counts, and the threads that need you or wait on others, named by
+    account and thread so a renumbered folder changes nothing."""
+    def threads(items):
+        return fingerprint.of(f'{i["account"]}|{i["thread_id"]}' for i in items)
+    counts = "%d:%d:%d:%d" % (stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"])
+    return f"{counts}|{threads(needs)}|{threads(waiting)}"
 
 
 def _fallback(stats, needs, waiting):
