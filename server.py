@@ -81,6 +81,7 @@ MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + hea
 _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
 _sync_lock = threading.Lock()
+_sync_asked = []                          # syncs asked for while one ran: each a set of accounts, or None for all
 _stats_cache = {"data": None, "exp": 0}
 _undo_stack = []                          # per-process LIFO of reversible actions (in-memory; lost on restart)
 _undo_lock = threading.Lock()
@@ -189,28 +190,46 @@ def sync_rounds():
 
 
 def sync_guarded(emails):
-    """Single-flight sync of `emails` (or all). Wakes due snoozes first. Both the 300s
-    loop and the IDLE dispatcher route through here so syncs never overlap. New mail kicks the
-    assess job, which triages it outside this single-flight."""
+    """Single-flight sync of `emails` (or all). Both the 300s loop and the IDLE dispatcher route
+    through here so syncs never overlap. A sync asked for while one runs isn't dropped: the
+    running one goes round again as it ends, once for every such ask, so mail IDLE heard about
+    in the meantime is fetched now rather than at the next scheduled sync."""
     with _sync_lock:
         if _sync["running"]:
+            _sync_asked.append(None if emails is None else frozenset(emails))
             return
         _sync["running"] = True
     try:
-        wake_snoozed()
-        new = sync_accounts(emails)
-        if new:
-            _invalidate_folders()         # new mail → let the rail re-pull unread badges now, not after the TTL
-            _kick("assess")
-        _sync["result"] = f"{new} new"
-        _sync["last"] = now_iso()
-        print(f"[sync] {_sync['result']}", flush=True)
-        try:
-            warm.warm_tick(emails)        # optional background folder warming (OFF unless MAILMIND_WARM_FOLDERS)
-        except Exception as e:
-            print(f"[warm] tick error: {type(e).__name__}: {e}", flush=True)
-    finally:
-        _sync["running"] = False
+        while True:
+            _sync_round(emails)
+            with _sync_lock:
+                if not _sync_asked:
+                    _sync["running"] = False
+                    return
+                asked = _sync_asked[:]
+                _sync_asked.clear()
+            emails = None if None in asked else set().union(*asked)
+    except BaseException:
+        with _sync_lock:
+            _sync["running"] = False
+        raise
+
+
+def _sync_round(emails):
+    """One sync of `emails` (or all). Wakes due snoozes first. New mail kicks the assess job,
+    which triages it outside this single-flight."""
+    wake_snoozed()
+    new = sync_accounts(emails)
+    if new:
+        _invalidate_folders()         # new mail → let the rail re-pull unread badges now, not after the TTL
+        _kick("assess")
+    _sync["result"] = f"{new} new"
+    _sync["last"] = now_iso()
+    print(f"[sync] {_sync['result']}", flush=True)
+    try:
+        warm.warm_tick(emails)        # optional background folder warming (OFF unless MAILMIND_WARM_FOLDERS)
+    except Exception as e:
+        print(f"[warm] tick error: {type(e).__name__}: {e}", flush=True)
 
 
 # --- periodic auto-reconcile ------------------------------------------------
