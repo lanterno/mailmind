@@ -25,7 +25,7 @@ GUARDED = ("import sys; sys.path[:0] = [{tests!r}, {root!r}]; import guard; guar
 
 def child_env(home):
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-    return {**env, "MAILMIND_HOME": str(home), "MAILMIND_PROFILE": "read-only", "MAILMIND_AI": "api",
+    return {**env, "MAILMIND_HOME": str(home), "MAILMIND_PROFILE": "read-only",
             "PYTHONUNBUFFERED": "1"}
 
 

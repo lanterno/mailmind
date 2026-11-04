@@ -106,9 +106,9 @@
    "ai": {
     "engine": "none",
     "key_from": "",
-    "last_error": "the API key was rejected",
-    "last_ok": false,
-    "last_ts": 1793620800,
+    "last_error": "",
+    "last_ok": null,
+    "last_ts": 0,
     "model": ""
    },
    "aliases": {
@@ -158,6 +158,6 @@
  },
  {
   "note": "requests the fake Claude API received",
-  "value": 2
+  "value": 0
  }
 ]

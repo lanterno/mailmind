@@ -1,5 +1,6 @@
-"""The Claude API engine (claude_api.py, and summarize's choice between it and the CLI): what a
-request carries, how replies, refusals and errors come back, and when calls are retried.
+"""The Claude API engine (claude_api.py, behind summarize's call_claude and call_claude_json):
+what a request carries, how replies, refusals and errors come back, when calls are retried, and
+that with no key AI is off and nothing is sent.
 Hermetic — a local stub server stands in for api.anthropic.com and the key is fake.
 All addresses are fictional.
 Run: python3 test_claude_api.py"""
@@ -9,7 +10,7 @@ import tempfile
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-for var in ("MAILMIND_AI", "MAILMIND_MODEL", "MAILMIND_NO_SCHEMA"):
+for var in ("MAILMIND_MODEL", "MAILMIND_NO_SCHEMA"):
     os.environ.pop(var, None)
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"     # never the real one, even by accident
 
@@ -58,8 +59,7 @@ def _error(kind, message):
 def _fresh(*replies):
     os.environ["ANTHROPIC_BASE_URL"] = STUB
     os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key"
-    for var in ("MAILMIND_AI", "MAILMIND_NO_SCHEMA"):
-        os.environ.pop(var, None)
+    os.environ.pop("MAILMIND_NO_SCHEMA", None)
     if os.path.exists(settings.current().config):
         os.remove(settings.current().config)
     summarize.MODEL = None
@@ -211,17 +211,17 @@ def test_unreachable_api_raises():
         claude_api.RETRIES = retries
 
 
-# ── which engine ──────────────────────────────────────────────────────────────
-def test_engine_follows_the_key_unless_told_otherwise():
+# ── AI on or off ──────────────────────────────────────────────────────────────
+def test_ai_is_on_with_a_key_and_off_without_one():
     _fresh()
     assert summarize.engine() == "api" and summarize.model_label() == "claude-opus-5-5"
-    os.environ["MAILMIND_AI"] = "cli"
-    assert summarize.engine() == "cli" and summarize.model_label() == "claude-cli"
-    del os.environ["MAILMIND_AI"]
     os.environ["ANTHROPIC_API_KEY"] = ""
-    assert summarize.engine() == "cli"
-    os.environ["MAILMIND_AI"] = "api"
-    assert summarize.engine() == "api"
+    assert summarize.engine() == "none"
+    os.environ["MAILMIND_AI"] = "api"                          # no longer read: there is one engine
+    try:
+        assert summarize.engine() == "none"
+    finally:
+        del os.environ["MAILMIND_AI"]
 
 def test_a_key_in_the_config_file_wins_over_the_environment():
     _fresh()
@@ -238,7 +238,6 @@ def test_a_key_in_the_config_file_wins_over_the_environment():
 
 def test_the_startup_line_says_when_there_is_no_key():
     _fresh()
-    os.environ["MAILMIND_AI"] = "api"
     os.environ["ANTHROPIC_API_KEY"] = ""
     assert summarize.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: set "
                                            "anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
@@ -249,20 +248,11 @@ def test_the_startup_line_says_when_there_is_no_key():
 def test_a_config_key_that_cannot_be_read_is_no_key():
     _fresh()
     _config(anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert claude_api.key() == "" and summarize.engine() == "cli"   # not the environment's key
+    assert claude_api.key() == "" and summarize.engine() == "none"   # not the environment's key
 
 
 
 # ── what the UI is told (summarize.status) ───────────────────────────────────
-def _path_with(claude=False):
-    """A PATH holding a claude command that exits non-zero as a signed-out one does, or none at all."""
-    d = tempfile.mkdtemp()
-    if claude:
-        with open(os.path.join(d, "claude"), "w") as f:
-            f.write("#!/bin/sh\necho 'Invalid API key - Please run /login' >&2\nexit 1\n")
-        os.chmod(os.path.join(d, "claude"), 0o755)
-    return d
-
 def test_status_names_the_engine_model_and_key_source():
     _fresh()
     st = summarize.status()
@@ -280,34 +270,24 @@ def test_status_records_a_rejected_key_then_a_good_call():
     st = summarize.status()
     assert st["last_ok"] is True and st["last_error"] == "", st
 
-def test_status_without_a_key_follows_the_claude_command():
+def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed():
     _fresh()
     os.environ["ANTHROPIC_API_KEY"] = ""
-    path = os.environ["PATH"]
-    try:
-        os.environ["PATH"] = _path_with(claude=False)
-        assert summarize.status()["engine"] == "none" and summarize.status()["model"] == ""
-        os.environ["PATH"] = _path_with(claude=True)
-        assert (summarize.status()["engine"], summarize.status()["model"]) == ("cli", "claude-cli")
+    before = summarize.status()
+    assert (before["engine"], before["model"], before["key_from"]) == ("none", "", ""), before
+    for call in (lambda: summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA),
+                 lambda: summarize.call_claude("Summarize this thread.")):
         try:
-            summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
-        except RuntimeError:
+            call()
+        except summarize.AIOff:
             pass
-        assert summarize.status()["last_error"] == "the claude command isn't signed in"
-        os.environ["PATH"] = _path_with(claude=False)
-        try:
-            summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
-        except FileNotFoundError:
-            pass
-        assert summarize.status()["last_error"] == "the claude command isn't installed"
-    finally:
-        os.environ["PATH"] = path
-
-def test_a_forced_api_engine_without_a_key_is_none():
-    _fresh()
-    os.environ["ANTHROPIC_API_KEY"] = ""
-    os.environ["MAILMIND_AI"] = "api"
-    assert summarize.status()["engine"] == "none"
+        else:
+            raise AssertionError("a call with AI off must raise AIOff")
+    assert _seen == [], _seen
+    after = summarize.status()
+    assert (after["last_ok"], after["last_ts"], after["last_error"]) == \
+        (before["last_ok"], before["last_ts"], before["last_error"]), after
+    assert summarize.summarize_one(ROW) == (7, None)          # left for when AI is on, not stored
 
 
 if __name__ == "__main__":

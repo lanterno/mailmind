@@ -631,6 +631,12 @@ def test_hwf_a_degenerate_review_falls_back_but_keeps_the_ai_picks(app, world, a
     assert r["next"] == ["Answer Mae about the hall"]
 
 
+def test_without_a_key_triage_sends_no_mail(world, anthropic_api):
+    import summarize
+    summarize.summarize_pending(limit=3, workers=1)
+    assert anthropic_api.requests == []
+
+
 # -- known bugs -----------------------------------------------------------------------------------
 
 CACHED_READS = {     # each cached AI read, and the store read that finds its cache
@@ -721,14 +727,6 @@ def test_bug_the_review_counts_only_this_accounts_cleanups(app, world, ai):
         c.close()
     assert app.get(f"/api/review?account={w.ADA}").json["stats"]["cleaned"] == 1
     assert app.get(f"/api/review?account={w.BEA}").json["stats"]["cleaned"] == 0    # Loom only ever wrote to Ada
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: with no key, triage still sends every pending message to the API")
-def test_bug_without_a_key_triage_sends_no_mail(world, anthropic_api):
-    import summarize
-    summarize.summarize_pending(limit=3, workers=1)
-    assert anthropic_api.requests == []
 
 
 def test_an_ai_spending_get_the_page_didnt_make_spends_nothing(app, world, ai):

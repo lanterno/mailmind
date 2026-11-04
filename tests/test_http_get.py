@@ -5,8 +5,8 @@ into its golden file under tests/golden/http_get/. A change in any answer fails 
 the file is rewritten with `uv run pytest --update-golden` and the diff reviewed: that diff is the
 behaviour change.
 
-AI is off here (no key; the fake Claude API answers 401). The AI routes with a key are in
-test_http_ai.py.
+AI is off here: there is no key, so nothing reaches the fake Claude API. The AI routes with a key
+are in test_http_ai.py.
 """
 import sqlite3
 from urllib.parse import quote
@@ -238,7 +238,6 @@ def test_ai_routes_without_a_key(app, golden, anthropic_api):
     golden.note("requests the fake Claude API received", len(anthropic_api.requests))
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: with no key, AI routes still send mail to the API")
 def test_without_a_key_no_mail_leaves_for_the_api(app, anthropic_api):
     for path in ("/api/briefing", "/api/review", "/api/briefing/since", "/api/ai/draft-ahead"):
         app.get(path)
