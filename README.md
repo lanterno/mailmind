@@ -213,8 +213,9 @@ automatically.
   …) at Anthropic's list prices. The sync menu shows what today cost so far against the
   daily limit, and `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
   MailMind spends at most $15 a day unless `"ai_daily_limit_usd"` in `mailmind.config.json`
-  names another amount. At the limit, triage and pre-drafting stop until the next day, and
-  anything you ask the AI for asks first whether to go over. Background work waits while you
+  names another amount. At the limit, triage and pre-drafting stop until the next day,
+  anything you ask the AI for asks first whether to go over, and a brief not yet written waits
+  for you to ask for it. Background work waits while you
   use the AI and for 45 seconds after. Pre-drafting runs only if you've used the app in the
   last 45 minutes. If the API keeps rejecting a request, background work stops until the key
   or the model changes, while what you ask for still goes and shows the error.

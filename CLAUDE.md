@@ -504,6 +504,18 @@ as a failure. Nothing in the governor is durable: a restart closes the breaker, 
 holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`, and the
 tests start each one afresh with `forget()`.
 
+The brief, the delta and the review are read and written apart:
+- A GET of `/api/briefing`, `/api/briefing/since` or `/api/review` reads only what is stored. When
+  there is none it answers `missing: true` and calls nothing (the builders' `generate=False`).
+- A POST to the same path writes one, reading first, and its `/refresh` POST writes it again.
+- The page GETs, and POSTs only on `missing`. What it writes on its own (the brief as the Inbox
+  opens, the delta for the new-mail pill) passes `askOver: false` to `api()`. At the limit it
+  then gets the 402 as an error (`overLimit`), and the brief offers "Write it" instead of asking
+  unprompted.
+
+A new AI route spends on a POST. The one GET that still starts a call is drafting ahead's kick,
+which needs the CSRF token.
+
 ### Classification
 
 `mailclass.py` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
