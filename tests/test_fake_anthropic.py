@@ -11,7 +11,7 @@ pytestmark = pytest.mark.usefixtures("data_dir")       # the key is looked for i
 
 def ask(text, schema=None):
     from mailmind.bootstrap import assistant
-    return assistant.gateway().ask(text, schema).text
+    return assistant.gateway().ask(text, schema, feature="test").text
 
 
 def test_every_test_runs_against_the_fake(anthropic_api):

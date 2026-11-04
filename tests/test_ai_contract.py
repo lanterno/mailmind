@@ -161,7 +161,7 @@ def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
     from mailmind.bootstrap import assistant
     api.queue(answer("Lunch moved to Thursday.", usage={
         "input_tokens": 1200, "output_tokens": 80, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}))
-    reply = assistant.gateway().ask("Catch me up.")
+    reply = assistant.gateway().ask("Catch me up.", feature="thread")
     assert (reply.text, reply.model, reply.stop_reason) == ("Lunch moved to Thursday.", "claude-opus-5-5", "end_turn")
     assert (reply.usage.input_tokens, reply.usage.output_tokens) == (1200, 80)
     api.queue(answer("Lunch moved to Thursday.", usage={
@@ -171,7 +171,7 @@ def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
              "cache_creation_input_tokens": 300, "cache_read_input_tokens": 0},
             {"type": "fallback_message", "model": "claude-opus-4-8", "input_tokens": 600, "output_tokens": 80,
              "cache_creation_input_tokens": 0, "cache_read_input_tokens": 900}]}))
-    reply = assistant.gateway().ask("Catch me up.")
+    reply = assistant.gateway().ask("Catch me up.", feature="thread")
     assert reply.model == "claude-opus-4-8"                        # the fallback served it
     assert (reply.usage.cache_write_tokens, reply.usage.cache_read_tokens) == (300, 900)
 
