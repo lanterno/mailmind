@@ -9,8 +9,10 @@ Bounded (1 IDLE conn/account, capped subscribers), reconnect-safe, daemon-thread
 import queue
 import socket
 import threading
+from dataclasses import dataclass
 
 import accounts
+from mailmind.platform import bus
 
 IDLE_SECONDS = 24 * 60          # re-IDLE before servers drop (~29 min)
 MAX_IDLE_ACCOUNTS = 12
@@ -22,15 +24,16 @@ _subs = []
 _subs_lock = threading.Lock()
 _stop = threading.Event()
 _conns = []                     # worker IMAP conns, for force-close on stop()
-_sync_handler = None            # set by server.configure(): fn(set_of_emails) -> syncs them
 _dirty = set()
 _dirty_lock = threading.Lock()
 _kick = threading.Event()
 
 
-def configure(sync_handler):
-    global _sync_handler
-    _sync_handler = sync_handler
+@dataclass(frozen=True)
+class InboxChanged:
+    """IDLE saw these accounts' INBOX change, a burst of signals coalesced into one (published on
+    mailmind.platform.bus). Whoever hears it syncs them."""
+    accounts: frozenset[str]
 
 
 # ------------------------------------------------------------------- pub/sub bus
@@ -78,12 +81,8 @@ def _dispatch_loop():
         with _dirty_lock:
             todo = _dirty.copy()
             _dirty.clear()
-        if not todo or not _sync_handler:
-            continue
-        try:
-            _sync_handler(todo)
-        except Exception as e:
-            print(f"[idle] dispatch sync error: {type(e).__name__}: {e}", flush=True)
+        if todo:
+            bus.publish(InboxChanged(frozenset(todo)))
 
 
 # --------------------------------------------------------------------- IDLE worker

@@ -14,12 +14,13 @@ The Message-ID + raw bytes are built once and reused, so the Sent copy matches t
 """
 import json
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import store
 import accounts
 import smtpsend
-from mailmind.platform import profile
+from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
@@ -32,13 +33,13 @@ SEND_DELAY = 10        # grace window before the wire send, so Undo Send can can
 QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", finished_at="sent_at",
                      gate="delivered", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
                      backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
-_after_send = None
 
 
-def configure(after_send=None):
-    """Wire the worker to the server's post-send callback."""
-    global _after_send
-    _after_send = after_send
+@dataclass(frozen=True)
+class Sent:
+    """A queued send went out and its bookkeeping is done (published on mailmind.platform.bus)."""
+    outbox_id: int
+    account: str
 
 
 def _now():
@@ -219,8 +220,7 @@ def send_one(oid):
     try:
         _side_effects(oid, row, acct)
         _commit(lambda c: QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))
-        if _after_send:
-            _after_send()
+        bus.publish(Sent(oid, row["account"]))
         print(f"[outbox] sent #{oid}", flush=True)
     except Exception as e:
         print(f"[outbox] post-send bookkeeping for #{oid} deferred: {type(e).__name__}", flush=True)

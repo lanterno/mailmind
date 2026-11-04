@@ -4204,14 +4204,21 @@ def schedule(jobs):
         jobs.add("expire", expire_round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
 
 
-def _after_send():
+def _after_send(_sent):
+    """outbox.Sent: a queued send went out."""
     invalidate_stats()
     realtime.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 
 
-def _after_readmut():
+def _after_readmut(_applied):
+    """readmutq.Applied: a queued move reached the server."""
     invalidate_stats()
     realtime.publish("readmutq", {})     # a queued read-mutation drained — refresh views
+
+
+def _after_idle(changed):
+    """realtime.InboxChanged: IDLE saw these accounts' INBOX change."""
+    sync_guarded(set(changed.accounts))
 
 
 class _Server(ThreadingHTTPServer):

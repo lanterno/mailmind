@@ -9,11 +9,12 @@ outbox: the primary op here IS an IMAP op, so it runs as a job on the account's 
 outbox's SMTP send holds none).
 """
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import store
 import mailops
-from mailmind.platform import profile
+from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
@@ -25,12 +26,14 @@ _POLL = 30
 QUEUE = DurableQueue("readmutq", "read_mutations", running="running", finished="done", finished_at="done_at",
                      gate="applied", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
                      backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL)
-_after_apply = None
 
 
-def configure(after_apply=None):
-    global _after_apply
-    _after_apply = after_apply
+@dataclass(frozen=True)
+class Applied:
+    """A queued move or flag change reached the server and the local copy matches it (published
+    on mailmind.platform.bus)."""
+    mutation_id: int
+    account: str
 
 
 def _now():
@@ -107,8 +110,7 @@ def apply_one(mid):
     try:
         _local_mirror(row)
         _commit(lambda c: QUEUE.finish(c, mid, datetime.now(timezone.utc).isoformat()))
-        if _after_apply:
-            _after_apply()
+        bus.publish(Applied(mid, row["account"]))
         print(f"[readmutq] applied #{mid} {row['op']}", flush=True)
     except Exception as e:
         print(f"[readmutq] post-apply bookkeeping for #{mid} deferred: {type(e).__name__}", flush=True)

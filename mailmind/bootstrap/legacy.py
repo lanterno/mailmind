@@ -6,7 +6,7 @@ package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 """
 import threading
 
-from mailmind.platform import profile
+from mailmind.platform import bus, profile
 from mailmind.platform.workers import scheduler
 
 import outbox
@@ -16,16 +16,26 @@ import store
 import summarize
 
 
+_wired = []                             # wire()'s subscriptions, each a function that ends it
+
+
 def wire(server):
-    """Connect the legacy workers to the server: the outbox and the offline read-mutation queue
-    report back through its callbacks, and the IDLE layer syncs through it. Starts nothing. (Each
-    takes the IMAP gate itself, from mailmind.platform.workers.gates.)
+    """Subscribe the server to what the legacy workers publish on mailmind.platform.bus: a send
+    that went out and a queued move applied refresh the stats and tell the open tabs, and IDLE's
+    news syncs those accounts. Wiring again replaces the last wiring. Starts nothing.
 
     It takes the server module as an argument rather than importing it: `python3 server.py` runs
-    as __main__, and an import here would load a second copy with a lock of its own."""
-    outbox.configure(after_send=server._after_send)
-    readmutq.configure(after_apply=server._after_readmut)
-    realtime.configure(sync_handler=server.sync_guarded)
+    as __main__, and an import here would load a second copy with state of its own."""
+    unwire()
+    _wired.extend([bus.subscribe(outbox.Sent, server._after_send),
+                   bus.subscribe(readmutq.Applied, server._after_readmut),
+                   bus.subscribe(realtime.InboxChanged, server._after_idle)])
+
+
+def unwire():
+    """End wire()'s subscriptions."""
+    while _wired:
+        _wired.pop()()
 
 
 def server_module():
