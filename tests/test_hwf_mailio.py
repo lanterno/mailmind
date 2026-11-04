@@ -604,21 +604,22 @@ def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle,
     # stop() wakes a worker blocked in IDLE by shutting its socket down. Closing it from the stopping
     # thread instead freed the descriptor while the worker could still be about to wait on it, so
     # the number could pass to the next socket opened and the worker would wait on (and read) that.
-    import accounts
     import realtime
+    from mailmind.bootstrap import mailbox
     closed_by = []
-    real = accounts.connect
+    real = mailbox.open_session
 
-    def connect(acct, timeout=60):
-        M = real(acct, timeout=timeout)
-        close = M.sock.close
+    def open_session(acct, timeout=60):
+        s = real(acct, timeout=timeout)
+        sock = s._c.socket() if hasattr(s, "_c") else s._M.sock     # either adapter's TLS socket
+        close = sock.close
 
         def spy():
             closed_by.append(threading.current_thread().name)
             close()
-        M.sock.close = spy
-        return M
-    monkeypatch.setattr(accounts, "connect", connect)
+        sock.close = spy
+        return s
+    monkeypatch.setattr(mailbox, "open_session", open_session)
     worker = idle()
     assert wait_until(lambda: count(world, "IDLE") == 1)
     realtime.stop()
