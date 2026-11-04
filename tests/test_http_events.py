@@ -195,3 +195,16 @@ def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
     assert s.frame().split("\n")[1:] == ["event: outbox", "data: {}"]
     s.close()
     subscribers(quick, 0)
+
+
+def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
+    import readmutq
+    s = Stream(app)
+    s.frame()
+    world.server.drop("SELECT", user=w.ADA)
+    r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
+    assert r["status"] == "queued"
+    readmutq.drain()
+    assert s.frame().split("\n")[1:] == ["event: commands-changed", "data: {}"]
+    s.close()
+    subscribers(quick, 0)

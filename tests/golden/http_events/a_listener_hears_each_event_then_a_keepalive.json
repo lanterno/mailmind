@@ -23,7 +23,7 @@
   "note": "frames for mute, undo and Reply Later",
   "value": [
    "id: <run>-1\nevent: mute\ndata: {\"account\": \"ada@example.test\"}",
-   "id: <run>-2\nevent: undo\ndata: {}",
+   "id: <run>-2\nevent: undo-done\ndata: {}",
    "id: <run>-3\nevent: followup\ndata: {\"account\": \"ada@example.test\"}"
   ]
  },
