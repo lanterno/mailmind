@@ -767,9 +767,33 @@ def _live_folder_list(acct):
             except Exception:
                 total = 0
             out.append({"name": name, "role": role, "unseen": unseen, "total": total})
+    return _rail_order(out)
+
+
+def _rail_order(folders):
     order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
-    out.sort(key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
-    return out
+    return sorted(folders, key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
+
+
+def _stored_folder_list(account):
+    """The folders MailMind holds this account's mail in, from the database alone: what the rail
+    shows when the server can't be reached and no live list is cached (Bridge down, its
+    certificate changed). Roles by name, the shallower folder first; counts as stored."""
+    c = store.conn()
+    try:
+        counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
+            "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
+            "GROUP BY folder", (account,))}
+        for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
+            counts.setdefault(r["folder"], (0, 0))
+    finally:
+        c.close()
+    counts.setdefault("INBOX", (0, 0))
+    names = sorted(counts, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
+    folders = [folder_roles.Folder(n, frozenset(), None) for n in names]
+    playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}
+    return _rail_order([{"name": n, "role": playing.get(n, "custom"), "unseen": counts[n][0] or 0,
+                         "total": counts[n][1] or 0} for n in names])
 
 
 def _folders_list_cached(account, acct):
@@ -798,6 +822,9 @@ def _folders_list_cached(account, acct):
         if hit:
             print(f"[folders] {account}: live refresh failed ({type(e).__name__}), serving cached", flush=True)
             return hit["folders"]
+        if isinstance(e, mailops._UNREACHABLE):
+            print(f"[folders] {account}: unreachable ({type(e).__name__}), serving the stored folders", flush=True)
+            return _stored_folder_list(account)
         raise
 
 
