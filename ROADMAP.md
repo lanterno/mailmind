@@ -293,11 +293,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   the new door daily for a week, watching Settings' sync health and the server's output;
   removing the key goes back. Then `front.build` calls `mailbox.use("imapclient")` and the ask
   goes.
-- **Break role ties without LIST's order** · low value · effort S — Where several folders could
-  play a role, `mailmind.mailbox.domain.roles.find` falls back last to the order LIST gave them,
-  but Proton Bridge lists folders in a new random order each time. An account with such a tie
-  would see archiving or the rail's Sent change folder from one connection to the next. Break the
-  last tie by name instead.
 
 ## Keyboard, screen readers and reversibility
 

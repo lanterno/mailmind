@@ -259,8 +259,9 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
   `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
   whole last segment of the name, never part of one ("Bulk orders" is nobody's junk). Where
-  several could play a role, an attribute beats a name, a shallower path a deeper one, then LIST's
-  order. `adapters.imap_list` reads an imaplib LIST answer into `Folder`s, literals included.
+  several could play a role, an attribute beats a name, a shallower path a deeper one, then the
+  lower name, never LIST's order (Proton Bridge shuffles it). `adapters.imap_list` reads an
+  imaplib LIST answer into `Folder`s, literals included.
   `session.find_role(s, *roles)` finds a folder on a live session; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
   there is no `archive`. `application.session.MailSession` is the port for one logged-in
