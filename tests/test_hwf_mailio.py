@@ -381,6 +381,26 @@ def test_hwf_expiry_prunes_the_local_row_by_message_id(world):
     assert world.where("ada-inbox-04-ci.eml")["db"][0]["uid"] == 4    # the row stored at UID 4 stays
 
 
+def test_hwf_a_sweep_still_moves_the_junk_when_the_server_refuses_move(world):
+    import manage
+    world.server.fail("UID MOVE", "BAD [CANNOT] MOVE not supported", times=None, user=w.ADA)
+    assert manage.sweep_account(acct())["moved"] == 3
+
+
+def test_hwf_a_sweep_and_expiry_on_a_server_without_move_copy_then_expunge_one_uid(world):
+    import manage
+    import rules
+    world.server.without = {"MOVE"}
+    since = world.mark()
+    assert manage.sweep_account(acct())["moved"] == 3
+    rules.set_expiry("thimble.example.test", 1)                 # the receipt's sender
+    assert manage.expire_account(acct(), now=FAR)["moved"] == 1
+    assert boxes(world, RECEIPT)[0] == [(w.ADA, "Trash")]
+    kinds = [line.split(" ", 3)[2] + " " + line.split(" ", 3)[3].split(" ", 1)[0]
+             for line in world.writes(since)]
+    assert set(kinds) == {"UID COPY", "UID STORE", "UID EXPUNGE"}   # never MOVE, never a bulk EXPUNGE
+
+
 def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
     import email.utils
     from datetime import datetime, timezone
@@ -784,8 +804,3 @@ def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
     assert app.post("/api/undo", {}).json["ok"] is False
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: sweeps only MOVE, so a server without MOVE keeps all its junk")
-def test_hwf_a_sweep_on_a_server_without_move_still_moves_the_junk(world):
-    import manage
-    world.server.fail("UID MOVE", "BAD [CANNOT] MOVE not supported", times=None, user=w.ADA)
-    assert manage.sweep_account(acct())["moved"] == 3
