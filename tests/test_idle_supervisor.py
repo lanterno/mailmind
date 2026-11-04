@@ -29,6 +29,17 @@ def idling(world, user, n=1):
     return wait_until(lambda: count(world, "IDLE", user) >= n)
 
 
+def edit_by_hand(email, **fields):
+    """Change an account in the config file as an editor would, publishing no event. It holds the
+    config's write lock meanwhile, as the app's own writers do, so a worker pinning its first
+    certificate can't write its older copy of the file over the edit."""
+    import config
+    with config._write_lock:
+        raw = config._raw()
+        next(a for a in raw["accounts"] if a["email"] == email).update(fields)
+        config.save(raw)
+
+
 @pytest.fixture
 def supervisor(world, monkeypatch):
     """realtime with state of its own, hearing the account events, and every worker it starts
@@ -145,14 +156,11 @@ def test_a_worker_backing_off_stops_at_once_when_its_account_goes(world, supervi
 
 
 def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(world, supervisor, monkeypatch):
-    import config
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
     assert idling(world, w.ADA)
     old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
-    raw = config._raw()
-    next(a for a in raw["accounts"] if a["email"] == w.ADA)["strip_spaces"] = True
-    config.save(raw)                                    # no event: as an edit of the file would be
+    edit_by_hand(w.ADA, strip_spaces=True)              # no event: as an edit of the file would be
     old.thread.join(5)
     assert not old.thread.is_alive()
     assert wait_until(lambda: count(world, "LOGIN") == logins + 1)
@@ -160,16 +168,13 @@ def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(wo
 
 
 def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, supervisor, monkeypatch):
-    import config
     from mailmind.bootstrap import mailbox
     mailbox.offer("imapclient")                         # the new door's
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
     assert idling(world, w.ADA)
     old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
-    raw = config._raw()
-    next(a for a in raw["accounts"] if a["email"] == w.ADA)["imap_adapter"] = "imapclient"
-    config.save(raw)
+    edit_by_hand(w.ADA, imap_adapter="imapclient")
     old.thread.join(5)
     assert not old.thread.is_alive()
     assert wait_until(lambda: count(world, "LOGIN") == logins + 1)
