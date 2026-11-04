@@ -40,8 +40,8 @@ class Page:
 
 @pytest.fixture
 def page(chromium, app, monkeypatch):
-    import realtime
-    monkeypatch.setattr(realtime, "HEARTBEAT", 0.5)       # a closed page's event stream ends quickly
+    from mailmind.platform import sse
+    monkeypatch.setattr(sse, "HEARTBEAT", 0.5)            # a closed page's event stream ends quickly
     origin = f"http://127.0.0.1:{app.port}"
     ctx = chromium.new_context(viewport={"width": 1440, "height": 900}, locale="en-US", timezone_id="UTC",
                                base_url=origin)
