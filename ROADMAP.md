@@ -599,10 +599,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `test_hwf_an_idle_worker_stops_watching_a_removed_account`.
 - **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
   `tests/test_hwf_ai.py`:
-  - a cached brief keeps the pks it was built with, and a thread summary's fingerprint includes
-    pks, so a renumbered folder shrinks the brief's chips and marks the summary stale
-    (`test_bug_a_cached_brief_still_names_its_messages_after_a_renumber`,
-    `test_bug_a_thread_summary_stays_fresh_across_a_renumber`);
+  - a cached brief keeps the pks it was built with, so a renumbered folder shrinks its chips
+    (`test_bug_a_cached_brief_still_names_its_messages_after_a_renumber`);
   - opening your own reply in Sent kicks a pre-draft that `_gen_draft_ahead`'s GC then drops as
     moot, so every open pays again. Check the anchor's folder in `_draft_eligible`
     (`test_bug_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted`);

@@ -370,7 +370,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `history.back()`, the new composer's `pushState` lands before that traversal does, and the
   Back trap ends one entry short, so the next close steps the tab off the app.
 - **`pk` is not stable.** Reconcile can renumber rows, so anything durable keys on
-  `(account, message_id)` — see `store.get_message_by_msgid`.
+  `(account, message_id)` — see `store.get_message_by_msgid`. A stored AI answer is checked
+  against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
+  summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
+  moved stored thread summaries onto it.
 
 ### Security model
 
