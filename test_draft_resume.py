@@ -425,9 +425,9 @@ class _FakeDraftsIMAP:
 
 
 def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
-    connect, find = server.smtpsend.accounts.connect, server.smtpsend.mailops._find_folder
+    connect, find = server.smtpsend.accounts.connect, server.smtpsend.mailops.find_role
     try:
-        server.smtpsend.mailops._find_folder = lambda M, names: "Drafts"
+        server.smtpsend.mailops.find_role = lambda M, *roles: "Drafts"
         for prev_folder, touched in (("Old drafts", False), ("Drafts", True), (None, True)):
             fake = _FakeDraftsIMAP()
             server.smtpsend.accounts.connect = lambda acct, **kw: fake
@@ -439,7 +439,7 @@ def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
             if prev_folder == "Old drafts":                     # not even searched for by Message-ID
                 assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
     finally:
-        server.smtpsend.accounts.connect, server.smtpsend.mailops._find_folder = connect, find
+        server.smtpsend.accounts.connect, server.smtpsend.mailops.find_role = connect, find
 
 
 def test_unvouched_old_copy_is_left_alone():

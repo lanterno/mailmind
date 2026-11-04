@@ -689,7 +689,6 @@ def test_hwf_a_manual_retry_gets_a_fresh_set_of_attempts(app, world):
     assert (r["state"], r["attempts"]) == ("queued", 1)
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: folder hints match by substring, so 'Bulk orders' is taken for Junk")
 def test_hwf_junk_goes_to_the_special_use_junk_folder(app, world):
     from fakes.imap_server import Mailbox
     a = world.server.accounts[w.ADA]

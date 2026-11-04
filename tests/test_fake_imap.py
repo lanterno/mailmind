@@ -73,8 +73,8 @@ def test_list_shows_each_folder_with_its_special_use(srv, app):
     M = _connect(app)
     typ, data = M.list()
     assert typ == "OK" and any(b"\\Trash" in d and b'"Trash"' in d for d in data)
-    assert mailops._find_folder(M, ("\\junk", "junk")) == "Junk"
-    assert mailops._find_folder(M, ("archive", "\\archive")) == "Archive"
+    assert mailops.find_role(M, "junk") == "Junk"
+    assert mailops.find_role(M, "archive") == "Archive"
     M.logout()
 
 

@@ -101,14 +101,14 @@
      "unseen": 0
     },
     {
-     "name": "All Mail",
+     "name": "Archive",
      "role": "archive",
      "total": 0,
      "unseen": 0
     },
     {
-     "name": "Archive",
-     "role": "archive",
+     "name": "All Mail",
+     "role": "all",
      "total": 0,
      "unseen": 0
     },
@@ -180,7 +180,7 @@
     },
     {
      "name": "[Gmail]/All Mail",
-     "role": "archive",
+     "role": "all",
      "total": 4,
      "unseen": 2
     },
