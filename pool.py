@@ -2,10 +2,13 @@
 Proton → ~2s warm). Default OFF: with MAILMIND_POOL unset, borrow() is byte-for-byte today's
 behavior (fresh connect + logout per op), so landing this changes nothing until explicitly enabled.
 
+A borrow yields a MailSession (mailmind.mailbox.application.session), opened through
+mailmind.bootstrap.mailbox like any other.
+
 SAFETY (load-bearing):
-  • Only the read-only path (ingest.fetch_body: readonly SELECT + BODY.PEEK) borrows. MUTATIONS
-    NEVER touch the pool — they keep calling accounts.connect() fresh — so a pooled connection can
-    never carry a stale SELECTed folder into a UID STORE/MOVE/EXPUNGE. All mutation invariants
+  • Only read-only paths (ingest.fetch_body, the folder rail's counts, manage.plan_account) borrow.
+    MUTATIONS NEVER touch the pool — they keep opening a fresh session — so a pooled session can
+    never carry a stale selected folder into a UID STORE/MOVE/EXPUNGE. All mutation invariants
     (UIDVALIDITY, never-bulk-EXPUNGE, etc.) are untouched.
   • Validate-on-take: a cached connection is NOOP'd before reuse; on any failure / age / use-count
     limit it is discarded and a guaranteed-fresh connection is opened. So an idle server-side drop is
@@ -25,8 +28,8 @@ import time
 import threading
 import contextlib
 
-import accounts
 from mailmind.accounts.domain import provider
+from mailmind.bootstrap import mailbox
 
 # A pooled connection is discarded after ProviderProfile.recycle_seconds (600, well under a
 # server's ~29-minute idle drop; 90 on Bridge) or recycle_uses (200; 40 on Bridge).
@@ -66,10 +69,9 @@ def _logout(M):
 
 
 def _valid(M):
-    """A cached connection is reusable only if it answers NOOP OK."""
+    """A cached session is reusable only if it answers NOOP OK."""
     try:
-        typ, _ = M.noop()
-        return typ == "OK"
+        return M.noop()
     except Exception:
         return False
 
@@ -90,7 +92,7 @@ def _take(slot, acct):
         _stats["validate_fail"] += 1 if not too_old else 0
         _logout(M)
         slot["M"] = None
-    M = accounts.connect(acct)        # guaranteed-fresh, authenticated, no folder selected
+    M = mailbox.open_session(acct)    # guaranteed-fresh, authenticated, no folder selected
     slot["M"] = M
     slot["born"] = time.time()
     slot["uses"] = 1
@@ -100,11 +102,11 @@ def _take(slot, acct):
 
 @contextlib.contextmanager
 def borrow(acct):
-    """Yield an IMAP connection for a READ-ONLY operation. Dormant (env unset) → fresh connect+logout,
-    identical to calling accounts.connect() directly. Enabled → a validated pooled connection that is
-    repooled on a clean exit and discarded on any error."""
+    """Yield a MailSession for a READ-ONLY operation. Dormant (env unset) → a fresh session, logged
+    out after. Enabled → a validated pooled session that is repooled on a clean exit and discarded
+    on any error."""
     if not _enabled(acct):
-        M = accounts.connect(acct)
+        M = mailbox.open_session(acct)
         try:
             yield M
         finally:

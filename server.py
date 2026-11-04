@@ -58,7 +58,6 @@ import summarize_review
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy
 from mailmind.accounts.domain import provider, tls_pin
-from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
 from mailmind.platform.db import txguard
@@ -772,19 +771,15 @@ def _live_folder_list(acct):
     over a POOLED connection (reused — no per-call login/logout churn)."""
     import pool
     out = []
-    with pool.borrow(acct) as M:
-        folders = [f for f in imap_list.list_folders(M) if f.selectable]
+    with pool.borrow(acct) as s:
+        folders = [f for f in s.folders() if f.selectable]
         playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}   # one folder a role
         for f in folders:
             name, role = f.name, playing.get(f.name, "custom")
-            unseen = 0
             try:
-                t, d = M.status(accounts.mailbox_arg(name), "(UNSEEN MESSAGES)")
-                sd = d[0].decode()
-                unseen = int((manage.re.search(r"UNSEEN (\d+)", sd) or [0, 0])[1])
-                total = int((manage.re.search(r"MESSAGES (\d+)", sd) or [0, 0])[1])
+                unseen, total = s.status(name)
             except Exception:
-                total = 0
+                unseen = total = 0
             out.append({"name": name, "role": role, "unseen": unseen, "total": total})
     return _rail_order(out)
 

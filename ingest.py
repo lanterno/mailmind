@@ -295,12 +295,16 @@ def fetch_body(pk):
         return None
     if not fetched or not raw:
         acct = accounts.get(row["account"])
-        # READ-ONLY borrow: pooled when MAILMIND_POOL enables this account, else a fresh connect+
-        # logout (byte-identical to before). Mutations never use the pool.
-        with pool.borrow(acct) as M:
-            M.select(accounts.mailbox_arg(row["folder"]), readonly=True)
-            typ, d = M.uid("FETCH", str(row["uid"]), "(BODY.PEEK[])")
-            raw = next((p[1] for p in d if isinstance(p, tuple)), b"")
+        # READ-ONLY borrow: pooled when MAILMIND_POOL enables this account, else a fresh session,
+        # logged out after. Mutations never use the pool.
+        with pool.borrow(acct) as s:
+            s.select(row["folder"])
+            try:
+                raw = s.body(row["uid"]) or b""
+            except imaplib.IMAP4.abort:
+                raise
+            except imaplib.IMAP4.error:       # refused: nothing to show, and nothing stored
+                raw = b""
         if not raw:
             return mailparse.parse(b"")
         parsed = mailparse.parse(raw)

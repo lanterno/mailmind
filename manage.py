@@ -21,7 +21,6 @@ Every sweep appends what it trashed to sweep_audit.jsonl (account, sender, subje
 """
 import sys
 import os
-import re
 import json
 import email
 import time
@@ -34,17 +33,15 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
 import mailclass
-import mailops
 import pool
 import rules
 from mailmind.accounts.domain import provider
-from mailmind.mailbox.adapters import imap_list
+from mailmind.bootstrap import mailbox
 from mailmind.platform import settings
 
-HDR_BATCH = 300
 MOVE_BATCH = 200
-HDR_FIELDS = "(UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID LIST-UNSUBSCRIBE LIST-ID)])"
-EXP_FIELDS = "(UID INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)])"
+HDR_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "LIST-UNSUBSCRIBE", "LIST-ID")
+EXP_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "DATE")
 
 
 def dec(s):
@@ -62,32 +59,17 @@ def dec(s):
     return "".join(out).replace("\n", " ").replace("\r", " ").strip()
 
 
-def _uid(meta):
-    m = re.search(r"UID (\d+)", meta.decode("utf-8", "replace"))
-    return m.group(1) if m else None
-
-
-def fetch_headers(M):
-    """Return list of {uid, from, name, subject, bulk} for the selected INBOX."""
-    M.select('"INBOX"', readonly=True)
-    typ, d = M.uid("SEARCH", None, "ALL")
-    ids = d[0].split()
+def fetch_headers(s):
+    """Return list of {uid, from, name, subject, bulk} for the INBOX, which `s` selects."""
+    s.select("INBOX")
     rows = []
-    for i in range(0, len(ids), HDR_BATCH):
-        chunk = b",".join(ids[i:i + HDR_BATCH]).decode()
-        typ, data = M.uid("FETCH", chunk, HDR_FIELDS)
-        for part in data:
-            if not isinstance(part, tuple):
-                continue
-            uid = _uid(part[0])
-            if uid is None:
-                continue
-            msg = email.message_from_bytes(part[1])
-            name, addr = parseaddr(msg.get("From", ""))
-            rows.append({"uid": uid, "from": addr.lower(), "name": dec(name),
-                         "subject": dec(msg.get("Subject", "")),
-                         "mid": (msg.get("Message-ID", "") or "").strip(),
-                         "bulk": bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))})
+    for h in s.headers(s.uids("ALL"), HDR_FIELDS):
+        msg = email.message_from_bytes(h.raw)
+        name, addr = parseaddr(msg.get("From", ""))
+        rows.append({"uid": str(h.uid), "from": addr.lower(), "name": dec(name),
+                     "subject": dec(msg.get("Subject", "")),
+                     "mid": (msg.get("Message-ID", "") or "").strip(),
+                     "bulk": bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))})
     return rows
 
 
@@ -115,8 +97,8 @@ def plan_account(acct):
     res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
            "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
     try:
-        with pool.borrow(acct) as M:      # pooled read: reuse the login (no fresh connect per /api/stats)
-            rows = classify_rows(fetch_headers(M))   # ctx-mgr ALWAYS closes → no socket leak on fetch error
+        with pool.borrow(acct) as s:      # pooled read: reuse the login (no fresh connect per /api/stats)
+            rows = classify_rows(fetch_headers(s))   # ctx-mgr ALWAYS closes → no socket leak on fetch error
     except Exception as e:
         res["error"] = f"{type(e).__name__}: {e}"
         return res
@@ -160,66 +142,68 @@ def plan_account_db(acct):
     return res
 
 
-def _move_one(M, uid, dest, can_move):
-    """One message, through mailops._move_uid: MOVE, or on a server without it a checked COPY, then
-    \\Deleted and a UID EXPUNGE of this UID alone. A failure leaves it for the verification pass."""
+def _move_one(s, uid, dest):
+    """One message: MOVE, or on a server without it a checked COPY, then \\Deleted and a UID
+    EXPUNGE of this UID alone. A failure leaves it for the verification pass."""
     try:
-        mailops._move_uid(M, uid, dest, move=can_move)
+        s.move([uid], dest)
     except imaplib.IMAP4.abort:
         raise
     except imaplib.IMAP4.error:
         pass
 
 
-def move_verified(M, uids, dest):
-    """Move uids to dest, then re-check INBOX and retry any that didn't leave.
-    Returns (moved, stragglers). A server that offers MOVE gets batches of MOVE_BATCH; one that
-    doesn't, or refuses a batch, gets one message at a time (_move_one)."""
-    can_move = "MOVE" in {str(c).upper() for c in (getattr(M, "capabilities", None) or ())}
-    M.select('"INBOX"', readonly=False)
+def _still_in_inbox(s):
+    s.select("INBOX")
+    return {str(u) for u in s.uids("ALL")}
+
+
+def move_verified(s, uids, dest):
+    """Move uids (strings) to dest, then re-check INBOX and retry any that didn't leave.
+    Returns (moved, stragglers). They go MOVE_BATCH at a time, in one MOVE where the server offers
+    it, and copied together where it doesn't; a refused batch goes one message at a time
+    (_move_one), so one bad UID can't sink the rest."""
+    s.select("INBOX", readonly=False)
     for i in range(0, len(uids), MOVE_BATCH):
         chunk = uids[i:i + MOVE_BATCH]
         try:
-            typ, _ = M.uid("MOVE", ",".join(chunk), accounts.mailbox_arg(dest)) if can_move else ("NO", None)
+            s.move(chunk, dest)
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:
-            typ = "BAD"
-        if typ != "OK":
-            for u in chunk:  # per message, so one bad UID can't sink a batch
-                _move_one(M, u, dest, can_move)
+            for u in chunk:
+                _move_one(s, u, dest)
         time.sleep(0.2)
     # verification: which requested uids are STILL in INBOX?
     want = set(uids)
-    remaining = []
-    M.select('"INBOX"', readonly=True)
-    typ, d = M.uid("SEARCH", None, "ALL")
-    present = set(x.decode() for x in d[0].split())
+    present = _still_in_inbox(s)
     remaining = [u for u in uids if u in present and u in want]
     if remaining:  # one retry pass
-        M.select('"INBOX"', readonly=False)
+        s.select("INBOX", readonly=False)
         for u in remaining:
-            _move_one(M, u, dest, can_move)
-        M.select('"INBOX"', readonly=True)
-        typ, d = M.uid("SEARCH", None, "ALL")
-        present = set(x.decode() for x in d[0].split())
+            _move_one(s, u, dest)
+        present = _still_in_inbox(s)
         remaining = [u for u in remaining if u in present]
     return len(uids) - len(remaining), remaining
 
 
-def _count(M, folder):
-    typ, d = M.select(accounts.mailbox_arg(folder), readonly=True)
-    return int(d[0].decode()) if typ == "OK" else 0
+def _count(s, folder):
+    try:
+        return s.select(folder).exists
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return 0
 
 
 def cmd_status(accts):
     for a in accts:
         try:
-            M = accounts.connect(a)
-            inbox = _count(M, "INBOX")
-            trash = _count(M, accounts.trash_folder(a))
+            s = mailbox.open_session(a)
+            inbox = _count(s, "INBOX")
+            trash = _count(s, accounts.trash_folder(a))
             print(f"{a['email']:30} INBOX {inbox:>6}   Trash {trash:>6}")
-            M.logout()
+            s.logout()
         except Exception as e:
             print(f"{a['email']:30} ERROR: {type(e).__name__}: {e}")
 
@@ -228,24 +212,23 @@ def cmd_inventory(accts):
     """List every folder with message/unseen counts, for any account type."""
     for a in accts:
         try:
-            M = accounts.connect(a)
+            s = mailbox.open_session(a)
         except Exception as e:
             print(f"\n=== {a['email']} ===\n   ERROR: {type(e).__name__}: {e}")
             continue
         print(f"\n=== {a['email']} ({a['kind']}) ===")
-        for name in [f.name for f in imap_list.list_folders(M)]:
-            try:
-                t, d = M.status(accounts.mailbox_arg(name), "(MESSAGES UNSEEN)")
-                s = d[0].decode()
-                msgs = (re.search(r"MESSAGES (\d+)", s) or [None, "?"])[1]
-                uns = (re.search(r"UNSEEN (\d+)", s) or [None, "?"])[1]
-                print(f"   {name:<26} {msgs:>7}  unseen {uns}")
-            except Exception:
-                print(f"   {name:<26} {'(not selectable)':>7}")
         try:
-            M.logout()
-        except Exception:
-            pass
+            for name in [f.name for f in s.folders()]:
+                try:
+                    uns, msgs = s.status(name)
+                    print(f"   {name:<26} {msgs:>7}  unseen {uns}")
+                except Exception:
+                    print(f"   {name:<26} {'(not selectable)':>7}")
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
 
 
 def sweep_account(acct, dry=False):
@@ -262,13 +245,14 @@ def sweep_account(acct, dry=False):
         return out
     audit(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
     try:
-        M = accounts.connect(acct)
-        moved, stragglers = move_verified(M, [r["uid"] for r in junk_rows],
-                                          accounts.trash_folder(acct))
+        s = mailbox.open_session(acct)
         try:
-            M.logout()
-        except Exception:
-            pass
+            moved, stragglers = move_verified(s, [r["uid"] for r in junk_rows], accounts.trash_folder(acct))
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
@@ -307,12 +291,12 @@ def sweep_account_ai(acct, dry=False):
     if not junk_mids:
         return out
     try:
-        M = accounts.connect(acct)
+        s = mailbox.open_session(acct)
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
-    try:                                    # single try/finally so M is ALWAYS logged out (no socket leak)
-        live = fetch_headers(M)
+    try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
+        live = fetch_headers(s)
         targets, kept = [], 0
         for h in live:
             if h.get("mid") and h["mid"] in junk_mids:
@@ -325,13 +309,13 @@ def sweep_account_ai(acct, dry=False):
             return out
         audit(acct["email"], [{"uid": t["uid"], "from": t["from"], "subject": t["subject"],
                                "bucket": "ai-junk", "reason": "is_junk (AI verdict)"} for t in targets])
-        moved, stragglers = move_verified(M, [t["uid"] for t in targets], accounts.trash_folder(acct))
+        moved, stragglers = move_verified(s, [t["uid"] for t in targets], accounts.trash_folder(acct))
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
     out["moved"], out["stragglers"] = moved, stragglers
@@ -349,12 +333,11 @@ def sweep_account_ai(acct, dry=False):
     return out
 
 
-def _arrival_ts(meta, msg):
-    """Epoch seconds a message arrived: IMAP INTERNALDATE, else its Date header, else None
-    (an unknown age never expires)."""
-    t = imaplib.Internaldate2tuple(meta)
-    if t:
-        return time.mktime(t)
+def _arrival_ts(arrived, msg):
+    """Epoch seconds a message arrived: IMAP INTERNALDATE (`arrived`, a datetime), else its Date
+    header, else None (an unknown age never expires)."""
+    if arrived is not None:
+        return arrived.timestamp()
     try:
         return parsedate_to_datetime(msg.get("Date", "")).timestamp()
     except (TypeError, ValueError, IndexError):
@@ -383,32 +366,27 @@ def expire_account(acct, dry=False, now=None):
     if not expire:
         return out
     try:
-        M = accounts.connect(acct)
+        s = mailbox.open_session(acct)
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
-    try:                                    # single try/finally so M is ALWAYS logged out (no socket leak)
-        M.select('"INBOX"', readonly=True)
+    try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
+        s.select("INBOX")
         uids = set()
         for token in expire:                # coarse server-side filter; select_expired matches exactly
-            typ, d = M.uid("SEARCH", None, "FROM", f'"{token}"')
-            if typ == "OK" and d and d[0]:
-                uids.update(d[0].split())
-        ids = sorted(uids, key=int)
+            try:
+                uids.update(s.uids("FROM", accounts.imap_quote(token)))
+            except imaplib.IMAP4.abort:
+                raise
+            except imaplib.IMAP4.error:     # a refused search finds nothing
+                pass
         rows = []
-        for i in range(0, len(ids), HDR_BATCH):
-            typ, data = M.uid("FETCH", b",".join(ids[i:i + HDR_BATCH]).decode(), EXP_FIELDS)
-            for part in data:
-                if not isinstance(part, tuple):
-                    continue
-                uid = _uid(part[0])
-                if uid is None:
-                    continue
-                msg = email.message_from_bytes(part[1])
-                rows.append({"uid": uid, "from": parseaddr(msg.get("From", ""))[1].lower(),
-                             "subject": dec(msg.get("Subject", "")),
-                             "mid": (msg.get("Message-ID", "") or "").strip(),
-                             "ts": _arrival_ts(part[0], msg)})
+        for h in s.headers(sorted(uids), EXP_FIELDS, internaldate=True):
+            msg = email.message_from_bytes(h.raw)
+            rows.append({"uid": str(h.uid), "from": parseaddr(msg.get("From", ""))[1].lower(),
+                         "subject": dec(msg.get("Subject", "")),
+                         "mid": (msg.get("Message-ID", "") or "").strip(),
+                         "ts": _arrival_ts(h.internaldate, msg)})
         targets = select_expired(rows, expire, now if now is not None else time.time())
         out["planned"] = len(targets)
         if dry or not targets:
@@ -416,13 +394,13 @@ def expire_account(acct, dry=False, now=None):
         for t in targets:
             t["bucket"], t["reason"] = "expired", f"expire rule: older than {t['hours']}h"
         audit(acct["email"], targets)       # log BEFORE moving so a crash still records intent
-        moved, stragglers = move_verified(M, [t["uid"] for t in targets], accounts.trash_folder(acct))
+        moved, stragglers = move_verified(s, [t["uid"] for t in targets], accounts.trash_folder(acct))
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
     out["moved"], out["stragglers"] = moved, stragglers
@@ -505,24 +483,23 @@ def cmd_empty_trash(accts):
                   "(Bridge crashes on bulk expunge).")
             continue
         try:
-            M = accounts.connect(a)
+            s = mailbox.open_session(a)
             tf = accounts.trash_folder(a)          # [Gmail]/Trash for gmail, "Trash" for plain IMAP
-            M.select(accounts.mailbox_arg(tf), readonly=False)
-            typ, d = M.uid("SEARCH", None, "ALL")
-            uids = d[0].split()
+            s.select(tf, readonly=False)
+            uids = s.uids("ALL")
             if not uids:
                 print(f"{a['email']:30} Trash already empty")
-                M.logout()
+                s.logout()
                 continue
-            for i in range(0, len(uids), 500):
-                M.uid("STORE", b",".join(uids[i:i + 500]).decode(), "+FLAGS", "(\\Deleted)")
             try:
-                M.expunge()
-            except Exception:
+                for i in range(0, len(uids), 500):
+                    s.add_flags(uids[i:i + 500], ["\\Deleted"])
+                    s.expunge(uids[i:i + 500])     # these UIDs alone, so nothing another client flagged
+            except imaplib.IMAP4.abort:
                 pass  # Gmail sometimes drops the connection mid-expunge but completes it
             print(f"{a['email']:30} purged {len(uids)} from Trash")
             try:
-                M.logout()
+                s.logout()
             except Exception:
                 pass
         except Exception as e:
