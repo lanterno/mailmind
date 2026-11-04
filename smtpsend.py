@@ -7,17 +7,17 @@ verified, so a forged-cert MITM can never capture the SMTP AUTH password. The SM
 config.accounts() (keyed by the account email) — never from a request — so there is no
 SSRF/arbitrary-host primitive.
 """
-import re
 import ssl
-import time
 import socket
 import smtplib
 import imaplib
+from datetime import datetime
 
 import accounts
 import config
-import mailops
 from mailmind.accounts.domain import tls_pin
+from mailmind.bootstrap import mailbox
+from mailmind.mailbox.application import session as mail_session
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
@@ -62,22 +62,16 @@ def send(acct, raw, envelope):
 def append_to_sent(acct, raw):
     """IMAP APPEND the exact sent bytes to the account's Sent folder, flagged \\Seen.
     Returns the resolved folder name. Raises if no Sent folder or the APPEND fails."""
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        sent = mailops.find_role(M, "sent") or "Sent"
-        typ, d = M.append(accounts.mailbox_arg(sent), "(\\Seen)",
-                          imaplib.Time2Internaldate(time.time()), raw)
-        if typ != "OK":
-            raise imaplib.IMAP4.error(f"APPEND failed: {d}")
+        sent = mail_session.find_role(s, "sent") or "Sent"
+        s.append(sent, raw, flags=["\\Seen"], when=datetime.now().astimezone())
         return sent
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
-
-
-_APPENDUID = re.compile(rb"APPENDUID\s+(\d+)\s+(\d+)")
 
 
 def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
@@ -86,47 +80,38 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
     (folder, new_uid|None, uidvalidity|None). Delete-then-append so a crash leaves 0 drafts.
     prev_folder: where the previous copy is; when that isn't this Drafts folder, nothing is
     deleted here (its UID means nothing in this one), and the caller removes it there."""
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        drafts = mailops.find_role(M, "drafts") or "Drafts"
+        drafts = mail_session.find_role(s, "drafts") or "Drafts"
         if prev_folder is not None and prev_folder != drafts:
             prev_uid = prev_msgid = None
-        typ, d = M.select(accounts.mailbox_arg(drafts), readonly=False)
-        uidv = None
         try:
-            uidv = int((M.untagged_responses.get("UIDVALIDITY") or [b"0"])[0])
-        except Exception:
+            uidv = s.select(drafts, readonly=False).uidvalidity
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:          # refused: no copy is deleted, but the APPEND still goes
             uidv = None
         # delete the prior draft copy, if we can safely identify it
         del_uid = None
         if prev_uid and (prev_uidvalidity is None or prev_uidvalidity == uidv):
-            del_uid = str(prev_uid)
+            del_uid = int(prev_uid)
         elif prev_msgid:
             try:
-                t, dd = M.uid("SEARCH", None, "HEADER", "Message-ID", prev_msgid)
-                ids = (dd[0].split() if dd and dd[0] else [])
-                del_uid = ids[0].decode() if ids else None
+                ids = s.uids("HEADER", "Message-ID", accounts.imap_quote(prev_msgid))
+                del_uid = ids[0] if ids else None
             except Exception:
                 del_uid = None
         if del_uid:
             try:
-                M.uid("STORE", del_uid, "+FLAGS", "(\\Deleted)")
-                mailops.expunge_uid(M, del_uid)
+                s.add_flags([del_uid], ["\\Deleted"])
+                s.expunge_uid(del_uid)       # this UID alone, never a bulk EXPUNGE
             except Exception:
                 pass
-        typ, d = M.append(accounts.mailbox_arg(drafts), "(\\Draft)", imaplib.Time2Internaldate(time.time()), raw)
-        if typ != "OK":
-            raise imaplib.IMAP4.error(f"APPEND failed: {d}")
-        new_uid = None
-        for line in (d or []):
-            m = _APPENDUID.search(line if isinstance(line, bytes) else str(line).encode())
-            if m:
-                new_uid = int(m.group(2))
-                break
+        new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
         return drafts, new_uid, uidv
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
@@ -135,20 +120,26 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
     """Remove one draft message by UID (single-UID expunge). Best-effort."""
     if not uid:
         return
-    M = accounts.connect(acct)
+    s = mailbox.open_session(acct)
     try:
-        M.select(accounts.mailbox_arg(folder or "Drafts"), readonly=False)
         try:
-            cur = int((M.untagged_responses.get("UIDVALIDITY") or [b"0"])[0])
-        except Exception:
-            cur = None
-        if uidvalidity is not None and cur is not None and uidvalidity != cur:
-            return                                     # UIDs rolled — don't risk deleting the wrong one
-        M.uid("STORE", str(uid), "+FLAGS", "(\\Deleted)")
-        mailops.expunge_uid(M, str(uid))
+            cur = s.select(folder or "Drafts", readonly=False).uidvalidity
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return                                     # refused: nothing to delete from
+        if uidvalidity is not None and uidvalidity != cur:
+            return                                     # UIDs rolled (or unsaid) — don't risk the wrong one
+        try:
+            s.add_flags([int(uid)], ["\\Deleted"])
+            s.expunge_uid(int(uid))                    # this UID alone, never a bulk EXPUNGE
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            pass
     finally:
         try:
-            M.logout()
+            s.logout()
         except Exception:
             pass
 
