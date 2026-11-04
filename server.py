@@ -3681,7 +3681,12 @@ def _sanitize_conn_error(e):
 
 def account_test(body):
     """Test a SAVED account ({email}) or an UNSAVED draft (no disk write).
-    Errors are sanitized — never echoes the attempted password or server banner."""
+    Errors are sanitized — never echoes the attempted password or server banner.
+
+    A saved account's credential goes only to its saved server. A draft may only try a password
+    typed with it, against the host typed with it: a draft naming a stored secret (an op
+    reference, an environment variable, the Bridge password) would send that secret to whatever
+    host the request names, so it is refused until the account is saved."""
     t0 = time.time()
     try:
         if body.get("draft"):
@@ -3689,18 +3694,16 @@ def account_test(body):
             ty = d.get("type", "imap")
             td = config.TYPE_DEFAULTS.get(ty, config.TYPE_DEFAULTS["imap"])
             cs = (d.get("credential") or {})
-            style = cs.get("style")
-            cred = ({"plain": cs.get("value")} if style == "plain" else
-                    {"op": cs.get("ref")} if style == "op" else
-                    {"env": cs.get("var")} if style == "env" else
-                    {"proton_bridge": True} if style == "proton_bridge" else {})
             acct = {"email": d.get("email"), "kind": ty,
                     "host": d.get("host") or td["host"], "port": int(d.get("port") or td["port"]),
                     "starttls": bool(d.get("starttls", td["starttls"])),
                     "strip_spaces": bool(d.get("strip_spaces", td["strip_spaces"])),
-                    "trash": td["trash"], "credential": cred}
+                    "trash": td["trash"], "credential": {"plain": cs.get("value")}}
             if not acct["host"]:
                 return {"ok": False, "error": "a host is required"}
+            if cs.get("style") != "plain" or not cs.get("value"):
+                return {"ok": False, "error": "save the account to test a stored secret; "
+                                              "before then only a typed password is tried"}
         else:
             acct = accounts.get(body["email"])
         # stateless probe — shares no IMAP state, selects no folder, uses no pooled conn, so it needs no
