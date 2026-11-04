@@ -61,15 +61,35 @@ def test_it_reports_counts_and_verdicts_and_leaves_the_database_alone(tmp_path, 
     assert fingerprint(tmp_path) == before                  # nothing written, nothing left beside it
 
 
-def test_a_problem_fails_the_check_without_saying_what_it_holds(tmp_path):
-    path = database_at(tmp_path, NEWEST)
+def orphan(path, pk):
+    """A body whose message is gone, as an older MailMind with foreign keys off left behind."""
     c = sqlite3.connect(path)                               # foreign keys aren't enforced here
-    c.execute("INSERT INTO bodies(message_pk, raw) VALUES (99, ?)", (MARK.encode(),))
+    c.execute("INSERT INTO bodies(message_pk, raw) VALUES (?, ?)", (pk, MARK.encode()))
     c.commit()
     c.close()
+
+
+def test_a_problem_the_upgrade_adds_fails_the_check_without_saying_what_it_holds(tmp_path, monkeypatch):
+    path = database_at(tmp_path, NEWEST - 1)
+    orphan(path, 99)
+    real = migrate.init
+
+    def init_that_orphans_a_body(db, steps=None):
+        real(db, steps)
+        orphan(db, 98)
+    monkeypatch.setattr(migrate, "init", init_that_orphans_a_body)
     code, report = run(path)
     assert code == check.PROBLEM
-    assert "foreign_key_check: 1 problem(s)" in report and MARK not in report
+    assert "foreign_key_check: 2 problem(s), 1 of them new (bodies 1)" in report and MARK not in report
+
+
+def test_a_problem_already_there_is_named_by_table_and_passes(tmp_path):
+    path = database_at(tmp_path, NEWEST - 1)
+    orphan(path, 99)
+    code, report = run(path)
+    assert code == check.OK, report
+    assert "foreign_key_check: 1 problem(s), all there before the upgrade (bodies 1)" in report
+    assert MARK not in report
 
 
 def test_without_a_database_there_is_nothing_to_check(tmp_path):
