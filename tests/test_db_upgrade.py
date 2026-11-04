@@ -5,8 +5,8 @@ puts three rows in every table there is. The second message answers the first, a
 raw mail in `bodies`, so the migrations that read the mail have something to read.
 
 An upgrade keeps every row and every value. The exceptions are the columns a migration derives on
-purpose: m5 computes the thread ids, and m6 and m10 read the body text and the recipients out of
-the stored mail. Those must come out right instead. The database base is today's schema, so m1's
+purpose: m5 computes the thread ids, m6 and m10 read the body text and the recipients out of the
+stored mail, and m22 rewrites thread summaries' fingerprints. Those must come out right instead. The database base is today's schema, so m1's
 rebuild of a pre-folder sync_state is not exercised here.
 """
 import sqlite3
@@ -21,7 +21,8 @@ ROWS = 3
 ACCOUNT = "ada@example.test"
 # (table, column): the version whose migration derives it; an upgrade from below that one may
 # change it.
-DERIVED = {("messages", "thread_id"): 5, ("messages", "body_text"): 6, ("messages", "recipients"): 10}
+DERIVED = {("messages", "thread_id"): 5, ("messages", "body_text"): 6, ("messages", "recipients"): 10,
+           ("thread_summaries", "fingerprint"): 22}
 DROPPED = {"notes": 18}                 # m18 retired the private notes, and their table
 
 

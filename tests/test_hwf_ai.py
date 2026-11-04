@@ -668,6 +668,14 @@ def test_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatc
     assert len(ai.requests) == 1
 
 
+def test_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
+    assert app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)}).status == 200
+    renumber_inbox(world, w.ADA)
+    r = app.post("/api/ai/summarize", {"pk": pk_of(LUNCH_MID)}).json
+    assert r["cached"] is True
+    assert r["stale"] is False
+
+
 # -- known bugs -----------------------------------------------------------------------------------
 
 @pytest.mark.xfail(strict=True, raises=AssertionError,
@@ -682,17 +690,6 @@ def test_bug_a_cached_brief_still_names_its_messages_after_a_renumber(app, world
     renumber_inbox(world, w.ADA)
     pks = [p for g in app.get("/api/briefing").json["groups"] for p in g["pks"]]
     assert [m["message_id"] for p in pks for m in q("SELECT message_id FROM messages WHERE pk=?", p)] == [LUNCH_MID]
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: the thread summary's fingerprint includes pks, so a renumbered folder "
-                          "reads as 'thread grew'")
-def test_bug_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
-    assert app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)}).status == 200
-    renumber_inbox(world, w.ADA)
-    r = app.post("/api/ai/summarize", {"pk": pk_of(LUNCH_MID)}).json
-    assert r["cached"] is True
-    assert r["stale"] is False
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError,
