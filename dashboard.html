@@ -3402,6 +3402,19 @@ function sigFor(email){ return (state.signatures&&state.signatures[email])||stat
 function adoptSig(text, acct){   // a composer reopened with its own text tracks the signature it ends with
   const cmp=state.compose, blk=resumeSig(text, sigFor(acct));
   if(cmp&&blk){ cmp._sigBlock=blk; cmp._sigFrom=acct; } }
+// Every edit counts: a save clears `dirty` only if none landed while it was in flight.
+function markEdited(cmp){ if(!cmp)return; cmp.dirty=true; cmp.edits=(cmp.edits||0)+1; }
+function composeSnap(cmp){   // what it takes to open this composer again
+  return {mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
+    body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
+    resume:cmp.resume,autoCc:cmp.autoCc,subject0:cmp.subject0,participants:[...cmp.participants],
+    ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};
+}
+function closeSaveFailed(cmp,snap){   // the composer has gone and nothing holds its words: keep them a click away
+  state.failedSend={...snap,draftId:cmp.draftId};
+  const m="Your message couldn’t be saved";
+  showSendFloat("failed",ico("alert")+" "+m,true); announce(m);
+}
 let _closeSave=null;   // the saves composeClose started, until all settle: Edit waits for them
 function composeClose(force){
   const cmp=state.compose;
@@ -3409,7 +3422,9 @@ function composeClose(force){
   closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
   if(cmp&&cmp.dirty&&!force){   // auto-save on close
-    const p=_closeSave=Promise.all([_closeSave, composeSaveDraft().then(ok=>{ if(ok)toast("Saved to Drafts"); })]);
+    const saved=composeSaveDraft(true), snap=composeSnap(cmp);   // the save read the fields: the snapshot holds them
+    const p=_closeSave=Promise.all([_closeSave, saved.then(ok=>{
+      if(ok)toast("Saved to Drafts"); else if(ok===false)closeSaveFailed(cmp,snap); })]);
     p.finally(()=>{ if(_closeSave===p)_closeSave=null; }); }   // one still in flight from an earlier close counts too
   state.compose=null;
   $("#composeModal").classList.remove("show");
@@ -3418,6 +3433,7 @@ function composeClose(force){
 }
 async function composeDiscard(){   // explicit Discard = throw away (delete the IMAP draft if any)
   const cmp=state.compose;
+  if(cmp&&cmp._saving)await cmp._saving;   // a first save still in flight would leave its copy behind
   if(cmp&&cmp.draftId){ try{ await cpost("/api/draft",{draft_id:cmp.draftId,delete:true}); }catch(e){} loadFolders(); }
   if(cmp)cmp.dirty=false;
   composeClose(true);
@@ -3454,7 +3470,7 @@ function chipHtml(field,x,i){ const cmp=state.compose, a=rcptAddr(x.v), nw=!x.ba
 function commitChip(field,raw){
   const cmp=state.compose; if(!cmp)return;
   const added=(raw||"").split(/[,;]/).map(s=>s.trim()).filter(Boolean);
-  added.forEach(v=>{ cmp[field].push({v,bad:!looksLikeAddr(v)}); cmp.dirty=true; });
+  added.forEach(v=>{ cmp[field].push({v,bad:!looksLikeAddr(v)}); markEdited(cmp); });
   renderChips(field); const inp=fieldEl(field).querySelector(".ci"); if(inp)inp.focus();
   knownQueue(added,true); knownQueue([...cmp.to,...cmp.cc,...cmp.bcc].map(x=>x.v),false);   // a lookup that failed is asked again
   guardStale();
@@ -3490,7 +3506,7 @@ function knownPaint(cmp){   // swap only the chips whose mark changed, so half-t
     const [f,i]=b.dataset.rmchip.split(":"), x=cmp[f]&&cmp[f][+i]; if(!x)continue;
     const nw=!x.bad&&knownIsNew(cmp,el.dataset.addr);
     if(nw!==el.classList.contains("new"))el.outerHTML=chipHtml(f,x,+i); } }
-function removeChip(field,i){ state.compose[field].splice(i,1); renderChips(field); fieldEl(field).querySelector(".ci").focus(); guardStale(); }
+function removeChip(field,i){ state.compose[field].splice(i,1); markEdited(state.compose); renderChips(field); fieldEl(field).querySelector(".ci").focus(); guardStale(); }
 /* ---------- recipient autocomplete (from your own mail history; all local) ---------- */
 let _acItems=[], _acIdx=-1, _acField=null, _acTimer=null;
 function acClose(){ const m=$("#acMenu"); if(m)m.remove(); _acItems=[]; _acIdx=-1; _acField=null; }
@@ -3516,13 +3532,13 @@ function addAttachments(files){
     if(total+f.size>25*1024*1024){ toast("Attachments too large (25 MB max)"); return; }
     total+=f.size; const r=new FileReader(), id=rid(); cmp._reading.set(id,f.name);
     r.onload=()=>{ cmp._reading.delete(id); cmp.attachments.push({filename:f.name, content_type:f.type||"application/octet-stream",
-      size:f.size, b64:(r.result+"").split(",")[1]||""}); cmp.dirty=true; if(state.compose===cmp){ renderAttach(); guardStale(); } };
+      size:f.size, b64:(r.result+"").split(",")[1]||""}); markEdited(cmp); if(state.compose===cmp){ renderAttach(); guardStale(); } };
     r.onerror=r.onabort=()=>{ cmp._reading.delete(id);
       if(state.compose===cmp){ toast(`Couldn’t add ${f.name}`); announce(`Couldn’t add ${f.name}.`); guardStale(); } };
     r.readAsDataURL(f);
   });
 }
-function removeAttachment(i){ state.compose.attachments.splice(i,1); renderAttach(); guardStale(); }
+function removeAttachment(i){ state.compose.attachments.splice(i,1); markEdited(state.compose); renderAttach(); guardStale(); }
 function renderAttach(){
   const cmp=state.compose, el=$("#cmpAttach"); if(!cmp){el.innerHTML="";return;}
   el.innerHTML=cmp.attachments.map((a,i)=>
@@ -3743,7 +3759,7 @@ function guardTrimCc(){   // keep only the Cc you added yourself; it's a plain r
   const cmp=state.compose; if(!cmp||!cmp.autoCc)return;
   const n=x=>rcptAddr(x.v), before=cmp.cc.length;
   cmp.cc=cmp.cc.filter(x=>!cmp.autoCc.includes(n(x))); const k=before-cmp.cc.length;
-  renderChips("cc"); cmp.mode="reply"; $("#cmpTitle").textContent="Reply"; cmp.dirty=true;
+  renderChips("cc"); cmp.mode="reply"; $("#cmpTitle").textContent="Reply"; markEdited(cmp);
   hideSendGuard(); $("#cmpSend").focus();
   const m=guardFanout(cmp.to.map(n),cmp.cc.map(n),[...state.myAddrs]);
   guardSay(`Removed ${k} ${k===1?"person":"people"}. This reply goes to ${m} ${m===1?"person":"people"}.`); }
@@ -3778,12 +3794,12 @@ async function composeSend(sendAfter){
     attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})),
     ...resumeFields(cmp.resume) };
   const replyPk=(cmp.mode==="reply"||cmp.mode==="replyall")?cmp.origPk:null;
-  const snap={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
-    body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
-    resume:cmp.resume,autoCc:cmp.autoCc,subject0:cmp.subject0,participants:[...cmp.participants],ack:{subject:cmp._ack.subject,attach:cmp._ack.attach,fanout:cmp._ack.fanout}};   // Undo → resend unchanged isn't asked again
+  const snap=composeSnap(cmp);   // Undo → resend unchanged isn't asked again
+  const saving=cmp._saving;   // a save still in flight: the send must name the copy it leaves
   cmp.dirty=false; state.failedSend=null; composeClose(true);
   showSendFloat("sending", scheduled?(ico("clock")+" Scheduling for "+fmtWhen(sendAfter)+"…"):"↑ Sending…");
   try{
+    if(saving){ await saving; payload.draft_id=cmp.draftId||null; snap.draftId=cmp.draftId; }
     const r=await cpost("/api/send",payload);
     if(!r.ok)throw new Error(r.error||"send failed");
     if(scheduled){ showSendFloat("sent",ico("clock")+" Scheduled · "+fmtWhen(sendAfter)); setTimeout(hideSendFloat,2600); }
@@ -3794,9 +3810,7 @@ async function composeSend(sendAfter){
     loadOutbox();
     if(state.account===payload.account&&/sent/i.test(state.folder)) loadCMessages();
   }catch(e){
-    state.failedSend={mode:cmp.mode,from:cmp.from,to:cmp.to,cc:cmp.cc,bcc:cmp.bcc,subject:cmp.subject,
-      body:cmp.body,origPk:cmp.origPk,quote:cmp.quote,fwdAttach:cmp.fwdAttach,attachments:cmp.attachments,draftId:cmp.draftId,
-      resume:cmp.resume,autoCc:cmp.autoCc,subject0:cmp.subject0,participants:snap.participants,ack:snap.ack};
+    state.failedSend={...snap,draftId:cmp.draftId};
     showSendFloat("failed",ico("alert")+" Send failed — "+esc(e.message||""),true);
   }
 }
@@ -3854,7 +3868,7 @@ async function aiDraftReply(opts){   // opts: {tone, instruction, unless, quiet}
     const ta=$("#cmpBody"), had=ta.value.trim()&&ta.value.trim()!==(cmp._sigBlock||"").trim();
     if(had){ cmp._rwUndo={value:ta.value, sel:[ta.selectionStart,ta.selectionEnd]}; $("#cmpRwUndo").hidden=false; }   // what you'd written is one Undo away
     const body=d.body+(cmp._sigBlock||"");   // keep the signature below the AI-written reply
-    ta.value=body; cmp.body=body; cmp.dirty=true; ta.focus(); guardStale();   // a scripted write fires no input event
+    ta.value=body; cmp.body=body; markEdited(cmp); ta.focus(); guardStale();   // a scripted write fires no input event
     toast("Draft ready — review and edit before sending");
   }catch(e){ if(state.compose===cmp&&!opts.quiet)toast("Couldn’t draft: "+(e.message||"")); }
   finally{ btn.disabled=$("#cmpAiMore").disabled=false; paintDraftBtn(); }
@@ -3925,7 +3939,7 @@ async function aiRewrite(op){
     if(!d.ok)throw new Error(d.retry?"AI is unavailable":(d.error||"rewrite failed"));
     cmp._rwUndo={value:full, sel:[s,e]};                       // one-step undo of the prior text
     const nv=hasSel?(full.slice(0,s)+d.text+full.slice(e)):d.text;
-    ta.value=nv; cmp.body=nv; cmp.dirty=true; guardStale();
+    ta.value=nv; cmp.body=nv; markEdited(cmp); guardStale();
     if(hasSel){ ta.selectionStart=s; ta.selectionEnd=s+d.text.length; }
     $("#cmpRwUndo").hidden=false; ta.focus();
     toast((hasSel?"Selection":"Message")+" rewritten");
@@ -3942,7 +3956,8 @@ let _roomBusy=false;
 async function makeRoom(open){   // open() replaces the open composer once its save lands → false if it stays
   const cmp=state.compose; if(cmp&&_roomBusy)return false;
   if(cmp&&cmp.dirty){ _roomBusy=true; let ok;
-    try{ ok=await composeSaveDraft(true); } finally{ _roomBusy=false; }
+    try{ do{ ok=await composeSaveDraft(true); }while(ok&&state.compose===cmp&&cmp.dirty); }   // typed during the save: that too
+    finally{ _roomBusy=false; }
     if(state.compose&&state.compose!==cmp)return false;   // another opened meanwhile (one closed meanwhile saved itself)
     if(ok===false&&state.compose){ const m="The message you’re writing isn’t saved, so it stays open";
       toast(m); announce(m); return false; } }
@@ -3957,6 +3972,7 @@ async function reopenFailed(){
       subject:f.subject, origPk:f.origPk, quote:f.quote, fwdAttach:f.fwdAttach, draftId:f.draftId, resume:f.resume, noSig:true,
       autoCc:f.autoCc, subject0:f.subject0, participants:f.participants, ack:f.ack});
     state.compose.attachments=f.attachments; $("#cmpBody").value=f.body; adoptSig(f.body, f.from); renderAttach();
+    markEdited(state.compose);   // nothing holds this text but the composer: closing it saves
     if(f.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; } });
 }
 function showSendFloat(cls,text,retry){ const el=$("#sendFloat"); el.hidden=false; el.className="send-float "+cls;
@@ -4009,6 +4025,7 @@ async function reopenSend(snap){
       subject:snap.subject, origPk:snap.origPk, quote:snap.quote, fwdAttach:snap.fwdAttach, draftId:snap.draftId, resume:snap.resume, noSig:true,
       autoCc:snap.autoCc, subject0:snap.subject0, participants:snap.participants, ack:snap.ack});
     state.compose.attachments=snap.attachments; $("#cmpBody").value=snap.body; adoptSig(snap.body, snap.from); renderAttach();
+    markEdited(state.compose);   // nothing holds this text but the composer: closing it saves
     if(snap.bcc.length){ $("#cmpCcRow").hidden=false; $("#cmpBccRow").hidden=false; } });
   if(!ok){ state.failedSend=snap; showSendFloat("failed",ico("alert")+" Send undone — not reopened yet",true); }   // the open message couldn't be saved: keep it, and this one a click away
 }
@@ -4191,7 +4208,7 @@ async function openDraftAhead(pk){
     const cmp=state.compose; if(!cmp)return;
     let body=null;                                 // ALWAYS revalidate (server re-checks fingerprint + TTL + anchor) so a
     try{ const d=await api(`/api/ai/draft-ahead?pk=${pk}&peek=1`); if(d&&d.status==="ready"&&d.body)body=d.body; }catch(e){}  // stale draft is never injected after the thread moved on; peek → no double generation
-    if(body){ const full=body+(cmp._sigBlock||""); $("#cmpBody").value=full; guardStale(); cmp.body=full; cmp.dirty=true; $("#cmpBody").focus();
+    if(body){ const full=body+(cmp._sigBlock||""); $("#cmpBody").value=full; guardStale(); cmp.body=full; markEdited(cmp); $("#cmpBody").focus();
       toast("Draft ready — review and edit before sending"); }
     else { _draftReady.delete(pk); toast("Thread moved on — drafting a fresh reply…"); aiDraftReply(); }   // not fresh → on-demand path, and the chip explains itself
   }finally{ _openingDraft=null; }
@@ -4511,17 +4528,25 @@ async function composeSaveDraft(silent){   // → true once saved, false if it w
     if(!silent)toast("Nothing to save yet"); return null;
   }
   const mark=t=>{ if(state.compose===cmp)$("#cmpSaved").textContent=t; };   // a save that outlives its composer leaves the next one's footer alone
-  try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
-    cmp.draftId=r.draft_id; cmp.dirty=false; cmp._lastSaveHash=_draftHash(payload);
-    mark("Saved "+new Date().toTimeString().slice(0,5)); if(!silent)toast("Draft saved");
-    return true; }
-  catch(e){ mark("Not saved"); if(!silent)toast("Couldn’t save draft: "+(e.message||""));   // never leave an older "Saved" up
-    return false; }
+  const at=cmp.edits||0, prior=cmp._saving;
+  const mine=(async()=>{
+    if(prior)await prior;   // one composer's saves go in turn, so each names the copy the last one left
+    payload.draft_id=cmp.draftId||null;
+    try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
+      cmp.draftId=r.draft_id; if((cmp.edits||0)===at)cmp.dirty=false;   // an edit since this save began stays to save
+      cmp._lastSaveHash=_draftHash(payload);
+      mark("Saved "+new Date().toTimeString().slice(0,5)); if(!silent)toast("Draft saved");
+      return true; }
+    catch(e){ mark("Not saved"); if(!silent)toast("Couldn’t save draft: "+(e.message||""));   // never leave an older "Saved" up
+      return false; }
+  })();
+  cmp._saving=mine; mine.finally(()=>{ if(cmp._saving===mine)cmp._saving=null; });
+  return mine;
 }
 function _cheapHash(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
 function _draftHash(p){ return _cheapHash(JSON.stringify([p.to,p.cc,p.bcc,p.subject,p.text,p.account,(p.attachments||[]).map(a=>a.filename)])); }
 function autosaveTick(){
-  const cmp=state.compose; if(!cmp||cmp.status==="sending"||!cmp.dirty)return;
+  const cmp=state.compose; if(!cmp||cmp.status==="sending"||!cmp.dirty||cmp._saving)return;   // the next tick saves what this one would
   const p=composePayload(); if(!p)return;
   // skip a compose that is effectively just the inserted signature (no recipients/subject)
   const bodyTrim=(p.text||"").replace(cmp._sigBlock||"","").trim();
@@ -5019,7 +5044,7 @@ $("#cmpSaveDraft").addEventListener("click",()=>composeSaveDraft());   // not si
 $("#cmpSend").addEventListener("click",e=>guardOpen()?confirmSendGuard("footer",e):composeSend(state.compose&&state.compose._pendingAfter));
 $("#cmpSchedule").addEventListener("click",e=>{ e.stopPropagation(); openSendLaterMenu(e.currentTarget); });
 $("#cmpFrom").addEventListener("change",e=>{   // live-swap the signature block when the From account changes
-  const cmp=state.compose; if(!cmp)return; const from=e.target.value; cmp.from=from;
+  const cmp=state.compose; if(!cmp)return; const from=e.target.value; cmp.from=from; markEdited(cmp);
   const newBlk=sigFor(from)?"\n\n-- \n"+sigFor(from):"";
   const ta=$("#cmpBody");
   if(cmp._sigBlock){                                       // a sig is currently inserted
@@ -5061,7 +5086,7 @@ $("#composeModal").addEventListener("keydown",e=>{
 });
 $("#composeModal").addEventListener("input",e=>{
   const ci=e.target.closest(".ci"); if(!ci)return; const f=ci.dataset.cf;
-  if(state.compose)state.compose.dirty=true;
+  markEdited(state.compose);
   const v=ci.value.trim(); clearTimeout(_acTimer);
   if(v.length<1){ acClose(); return; }
   _acTimer=setTimeout(async()=>{
@@ -5072,9 +5097,9 @@ $("#composeModal").addEventListener("input",e=>{
     if(items.length && document.activeElement===ci) acShow(ci,f,items); else acClose();
   },140);
 });
-$("#cmpBody").addEventListener("input",()=>{ if(state.compose)state.compose.dirty=true; });
+$("#cmpBody").addEventListener("input",()=>markEdited(state.compose));
 $("#composeModal").addEventListener("input",guardStale);   // any real edit retires an open send-time check
-$("#cmpSubject").addEventListener("input",()=>{ if(state.compose)state.compose.dirty=true; });
+$("#cmpSubject").addEventListener("input",()=>markEdited(state.compose));
 $("#outboxBtn").addEventListener("click",toggleOutbox);
 $("#outboxFly").addEventListener("click",e=>{
   const r=e.target.closest("[data-retry]"); if(r){ retrySend(+r.dataset.retry); return; }
