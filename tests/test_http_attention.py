@@ -1,4 +1,6 @@
-"""Every list the page draws from says what a message's verdict asks of you."""
+"""Every list the page draws from says what a message's verdict asks of you, and the review's
+waiting list names the row a thread has now."""
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
@@ -6,6 +8,7 @@ import pytest
 
 from fixtures import world as w
 
+LUNCH = "ada-inbox-02-lunch-confirm.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
 FLAGS = ("needs_you", "reply_worthy", "commitment_worthy", "safe_to_file")
 
@@ -64,3 +67,27 @@ def test_a_message_with_no_verdict_asks_nothing(app, world, route):
         assert app.post("/api/snooze", {"pk": pk, "until": in_a_day()}).json["ok"]
     [item] = [i for i in rows(app, world, route) if i["pk"] == pk]
     assert answers(item) == (False, False, False, False)
+
+
+def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
+    import ingest
+    import accounts
+    import store
+    import summarize_review
+    lunch = world.row(LUNCH)
+    c = store.conn()
+    store.followup_record_sent(c, w.ADA, lunch["thread_id"], lunch["pk"], int(time.time()), "2026-11-01T00:00:00+00:00")
+    c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (lunch["thread_id"],))
+    c.commit()
+    c.close()
+    world.server.renumber(w.ADA, "INBOX")
+    ingest.sync_new(accounts.get(w.ADA))
+    c = store.conn()
+    try:
+        _, _, waiting = summarize_review._aggregate(c, {w.ADA}, 0)
+        [item] = [i for i in waiting if i["thread_id"] == lunch["thread_id"]]
+        newest = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? ORDER BY ts DESC, pk DESC LIMIT 1",
+                           (w.ADA, lunch["thread_id"])).fetchone()["pk"]
+    finally:
+        c.close()
+    assert item["pk"] == newest and item["pk"] != lunch["pk"]
