@@ -1924,8 +1924,8 @@ def _cleanup_confirm_token(from_addr):
 def _parse_list_unsub(raw_bytes):
     """From a raw RFC822 message → the resolvable unsubscribe method. RFC 2369 List-Unsubscribe holds
     <mailto:…> and/or <https://…>; RFC 8058 one-click needs BOTH an https URI AND
-    `List-Unsubscribe-Post: List=One-Click`. A bare https URI is a landing PAGE (open in a browser,
-    NEVER POST). Defaults to the SAFE side ('none') when ambiguous."""
+    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A bare https URI is a landing PAGE (open in
+    a browser, NEVER POST). Defaults to the SAFE side ('none') when ambiguous."""
     try:
         msg = email.message_from_bytes(raw_bytes or b"")
     except Exception:
@@ -1935,7 +1935,7 @@ def _parse_list_unsub(raw_bytes):
     uris = re.findall(r"<([^>]+)>", lu)
     https_uri = next((u.strip() for u in uris if u.strip().lower().startswith("https://")), None)
     mailto_uri = next((u.strip() for u in uris if u.strip().lower().startswith("mailto:")), None)
-    one_click = bool(https_uri) and lup == "list=one-click"
+    one_click = bool(https_uri) and lup == "list-unsubscribe=one-click"
     if one_click:
         method = "one-click"
     elif mailto_uri:
@@ -1947,7 +1947,7 @@ def _parse_list_unsub(raw_bytes):
     mailto_to = mailto_subject = mailto_body = None
     if mailto_uri:
         m = urllib.parse.urlparse(mailto_uri)
-        mailto_to = (m.path or "").strip() or None
+        mailto_to = urllib.parse.unquote(m.path or "").strip() or None
         q = urllib.parse.parse_qs(m.query)
         mailto_subject = (q.get("subject") or [None])[0]
         mailto_body = (q.get("body") or [None])[0]
@@ -2046,9 +2046,9 @@ def _unsub_rate_gate():
 def _unsub_mailto_send(from_addr, info, acct_emails):
     """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From).
     Host/creds come from config keyed by the account email — never the request → no SMTP-SSRF."""
-    to = info.get("mailto_to")
-    if not to:
-        return False
+    to = info.get("mailto_to") or ""
+    if not re.fullmatch(r"[^\s@<>,;:\"()\[\]\\]+@[^\s@<>,;:\"()\[\]\\]+", to):
+        return False                                     # one plain address, or nothing is sent
     subj = re.sub(r"[\r\n]", " ", (info.get("mailto_subject") or "unsubscribe"))[:200]
     text = re.sub(r"[\r\n]{3,}", "\n\n", (info.get("mailto_body") or "Please unsubscribe me."))[:1000]
     sent = 0
@@ -2061,9 +2061,11 @@ def _unsub_mailto_send(from_addr, info, acct_emails):
             m["From"] = em
             m["To"] = to
             m["Subject"] = subj
+            m["Date"] = email.utils.format_datetime(datetime.now(timezone.utc))
+            m["Message-ID"] = email.utils.make_msgid(domain=em.rpartition("@")[2] or None)
             m["Auto-Submitted"] = "auto-generated"
             m.set_content(text)
-            smtpsend.send(acct, m.as_bytes(), {"from": em, "to": [to]})
+            smtpsend.send(acct, m.as_bytes(policy=email.policy.SMTP), [to])   # CRLF, as SMTP wants
             sent += 1
         except Exception:
             pass
@@ -2240,6 +2242,9 @@ def cleanup_execute(body):
                                       _cleanup_confirm_token(from_addr))
     grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
     block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
+    # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
+    # the row it moved, and the sender's newest issue is most often one the sweep takes.
+    unsub = _resolve_unsub(from_addr) if do_unsub and token_ok else None
 
     # 1) BLOCK (reversible) — rule + an unblock descriptor coalesced into the undo group
     rules.add(block_token, "block")
@@ -2290,10 +2295,9 @@ def cleanup_execute(body):
         if prior and prior["status"] in _UNSUB_TERMINAL:   # already done → never re-fire
             status, method = prior["status"], prior["method"]
             if method == "http-page":
-                info, _a = _resolve_unsub(from_addr)
-                browser_url = info.get("https_uri")
+                browser_url = unsub[0].get("https_uri")
         else:
-            info, accts = _resolve_unsub(from_addr)
+            info, accts = unsub
             method = info["method"]
             if method == "one-click":
                 _unsub_rate_gate()
