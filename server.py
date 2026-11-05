@@ -1979,15 +1979,21 @@ def _doc_kind(ct, fn):
 
 
 def documents_json(qs):
-    """All real attachments across accounts, newest first, with per-kind facet counts. Read-only SQL;
-    client filters/searches over the returned list."""
+    """Real attachments across accounts, newest first: the `limit` from `offset` of those that match
+    `kind` and `q` (`matched` counts them), with per-kind facet counts of them all. Read-only SQL."""
     try:
         limit = max(1, min(1000, int((qs.get("limit") or ["400"])[0])))
     except Exception:
         limit = 400
+    try:
+        offset = max(0, int((qs.get("offset") or ["0"])[0]))
+    except Exception:
+        offset = 0
+    want_kind = (qs.get("kind") or [""])[0]
+    needle = (qs.get("q") or [""])[0].strip().lower()
     enabled = {a["email"] for a in accounts.accounts()}      # match every other corpus-wide endpoint
     if not enabled:
-        return {"ok": True, "total": 0, "shown": 0, "facets": {}, "docs": []}
+        return {"ok": True, "total": 0, "matched": 0, "shown": 0, "facets": {}, "docs": []}
     ph = ",".join("?" for _ in enabled)
     c = store.conn()
     rows = c.execute(
@@ -1996,9 +2002,9 @@ def documents_json(qs):
         "FROM attachments a JOIN messages m ON m.pk=a.message_pk "
         "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
         f"  AND m.account IN ({ph}) "
-        "ORDER BY m.ts DESC", list(enabled)).fetchall()
+        "ORDER BY m.ts DESC, a.id", list(enabled)).fetchall()   # one order, or a page could repeat or skip a file
     c.close()
-    docs, facets, seen = [], {}, set()
+    docs, facets, seen, matched = [], {}, set(), 0
     for r in rows:
         ct = (r["content_type"] or "").lower()
         if any(x in ct for x in _DOC_EXCLUDE):
@@ -2013,14 +2019,20 @@ def documents_json(qs):
             continue
         seen.add(key)
         facets[kind] = facets.get(kind, 0) + 1
-        if len(docs) >= limit:
+        if want_kind and kind != want_kind:
+            continue
+        if needle and needle not in " ".join(r[k] or "" for k in ("filename", "from_name", "from_addr", "subject")).lower():
+            continue
+        matched += 1
+        if matched <= offset or len(docs) >= limit:
             continue
         docs.append({"pk": r["pk"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
                      "size": r["size"] or 0, "account": r["account"],
                      "from": r["from_name"] or r["from_addr"] or "", "subject": r["subject"] or "(no subject)",
                      "when": rel_time(r["date_iso"]),
                      "url": f"/api/message/{r['pk']}/attachment/{quote(str(r['part_id']))}"})
-    return {"ok": True, "total": sum(facets.values()), "shown": len(docs), "facets": facets, "docs": docs}
+    return {"ok": True, "total": sum(facets.values()), "matched": matched, "shown": len(docs), "facets": facets,
+            "docs": docs}
 
 
 def do_contacts(q):
