@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import store
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
+from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
 
 TOP_N = 40
@@ -87,7 +88,7 @@ def _fallback(rows):
     by_cat = {}
     for r in rows:
         by_cat.setdefault(r["category"] or "other", []).append(r["pk"])
-    need = [r["pk"] for r in rows if (r["action"] or r["category"] == "action-needed" or (r["importance"] or 0) >= 4)]
+    need = [r["pk"] for r in rows if attention.needs_you(r["importance"], r["category"], r["action"])]
     groups = []
     if need:
         groups.append({"label": "Needs a reply", "count": len(need), "pks": need[:60]})

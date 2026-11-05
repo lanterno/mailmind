@@ -58,6 +58,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
+from mailmind.kernel import attention
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse
@@ -3695,12 +3696,9 @@ def _thread_anchor_pk(c, account, thread_id):
 
 
 def _reply_worthy(c, pk):
-    """Server-side kick gate — mirrors the client's _draftEligibleClient exactly
-    (importance>=4 OR action-needed: the background tick's bar too, so a next step alone never
-    spends an AI call). Needed because the reader surface arms on any opened mail; gates KICKS
-    only, never serving."""
-    r = c.execute("SELECT 1 FROM summaries WHERE message_pk=? AND (importance>=4 "
-                  "OR category='action-needed')", (pk,)).fetchone()
+    """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
+    opened mail; gates KICKS only, never serving."""
+    r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {attention.reply_worthy_sql('')}", (pk,)).fetchone()
     return bool(r)
 
 
@@ -3761,7 +3759,7 @@ FROM messages m
 JOIN summaries s ON s.message_pk = m.pk
 WHERE m.folder = 'INBOX'
   AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
-  AND (s.importance >= 4 OR s.category = 'action-needed')
+  AND """ + attention.reply_worthy_sql() + """
   AND m.ts >= ?
   AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
   AND (COALESCE(m.thread_id,'') = '' OR m.pk = (

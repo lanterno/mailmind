@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import store
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
+from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
 
 WEEK_SECONDS = 7 * 86400
@@ -91,7 +92,7 @@ def _aggregate(c, accounts_set, since_ts):
         "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
         "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
         "  AND m.pending_removal IS NULL "
-        "  AND (s.importance>=4 OR s.category='action-needed' OR (s.action IS NOT NULL AND s.action!='')) "
+        f"  AND {attention.needs_you_sql()} "
         "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
         + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, TOP_OPEN]).fetchall()
     needs = [{"pk": r["pk"], "account": r["account"], "thread_id": r["thread_id"],

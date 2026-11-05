@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
+from mailmind.kernel import attention
 from mailmind.mailbox.domain import identity
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
@@ -691,7 +692,7 @@ def followup_detect_received(c, now_ts, days, max_age_days):
           AND m.snoozed_until IS NULL
           AND EXISTS (SELECT 1 FROM messages mi JOIN summaries s ON s.message_pk=mi.pk
                 WHERE mi.account=m.account AND mi.thread_id=m.thread_id
-                  AND (s.importance>=4 OR s.category='action-needed'))
+                  AND """ + attention.reply_worthy_sql() + """)
           AND NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account AND mo.draft=0
                 AND mo.thread_id=m.thread_id AND lower(mo.from_addr)=lower(m.account))
           AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)
