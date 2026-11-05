@@ -926,6 +926,26 @@ def test_hwf_a_recorded_tail_is_cut_only_when_it_starts_with_a_blank_line():
         "Mine\n" + quote.rstrip("\n"), "", "whole")
 
 
+def test_hwf_a_fold_in_a_header_leaves_one_space():
+    import mailparse
+    assert mailparse.dec("Items\r\n for next week") == "Items for next week"
+    assert mailparse.dec("Items\n\tfor next week") == "Items for next week"
+
+
+def test_hwf_a_fold_beside_an_encoded_word_keeps_its_space():
+    import mailparse
+    assert mailparse.dec("Re:\r\n =?utf-8?B?2YXYsdit2KjYpw==?=") == "Re: \u0645\u0631\u062d\u0628\u0627"
+    assert mailparse.dec("=?utf-8?Q?Caf=C3=A9_menu?=\r\n for next week") == "Caf\u00e9 menu for next week"
+    assert mailparse.dec("=?utf-8?Q?no?=\r\n =?utf-8?Q?vembre?=") == "novembre"     # one word, split by the fold
+
+
+def test_hwf_a_fold_in_a_quoted_sender_keeps_the_address():
+    import email
+    import mailparse
+    msg = email.message_from_bytes(b'From: "Bo\r\n Lin" <bo@example.test>\r\n\r\nHi\r\n')
+    assert mailparse.sender_of(msg) == ("Bo Lin", "bo@example.test")
+
+
 def test_hwf_a_tab_in_a_subject_is_not_deleted():
     import email
     import compose

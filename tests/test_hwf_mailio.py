@@ -193,6 +193,15 @@ def test_hwf_a_header_in_an_unknown_charset_decodes_as_utf8(world):
     assert r["subject"] == "Caf\u00e9 menu"
 
 
+def test_hwf_a_folded_subject_and_sender_are_stored_on_one_line(world):
+    uid = world.deliver(w.ADA, "INBOX", b'From: "Bo\r\n Lin" <bo@example.test>\r\nTo: ada@example.test\r\n'
+                                        b'Subject: Items\r\n for next week\r\nMessage-ID: <fold-1@example.test>\r\n'
+                                        b'Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n')
+    [r] = q("SELECT subject, from_name, from_addr FROM messages WHERE account=? AND folder='INBOX' AND uid=?",
+            w.ADA, uid)
+    assert r == {"subject": "Items for next week", "from_name": "Bo Lin", "from_addr": "bo@example.test"}
+
+
 def test_hwf_a_body_fetch_the_server_refuses_is_logged_and_the_row_kept(world, capsys):
     def body_fetch(args):
         items = args[1] if isinstance(args[1], list) else [args[1]]
