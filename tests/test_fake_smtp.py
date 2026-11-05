@@ -71,7 +71,7 @@ def test_scripted_refusals_reach_the_app(smtp, data_dir):
 def test_a_drop_after_data_leaves_the_client_unsure(smtp, data_dir):
     import smtpsend
     smtp.drop_after_data()
-    with pytest.raises(smtplib.SMTPServerDisconnected):
+    with pytest.raises(smtpsend.Unanswered):
         smtpsend.send(acct(smtp), RAW, ["lin@example.test"])
     assert len(smtp.messages) == 1                        # it was delivered all the same
 

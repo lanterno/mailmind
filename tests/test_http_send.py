@@ -232,9 +232,9 @@ def test_a_recipient_refused_for_good_is_given_up_at_once(app, world):
     assert oid == 1
 
 
-def test_a_connection_lost_after_data_sends_twice(send):
+def test_a_connection_lost_after_data_isnt_sent_again(send):
     # The server took the message but the line dropped before it said so. The outbox can't tell,
-    # so it retries, and the recipient gets it twice. Pinned as today's behaviour.
+    # so a person decides.
     send.world.smtp.drop_after_data()
     send.post("send", "/api/send", new(idempotency_key="k-drop"))
     send.drain("the drop")
