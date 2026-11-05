@@ -3,6 +3,7 @@
   "body": {
    "ok": true,
    "placed_in": "keep_senders",
+   "reclassified": 4,
    "rules": {
     "block_domains": [],
     "block_senders": [],
@@ -32,6 +33,7 @@
   "body": {
    "ok": true,
    "placed_in": "block_domains",
+   "reclassified": 1,
    "rules": {
     "block_domains": [
      "prizes.example.test"
@@ -63,6 +65,7 @@
   "body": {
    "ok": true,
    "placed_in": "block_senders",
+   "reclassified": 0,
    "rules": {
     "block_domains": [
      "prizes.example.test"
@@ -116,6 +119,7 @@
   "body": {
    "ok": true,
    "placed_in": null,
+   "reclassified": 1,
    "rules": {
     "block_domains": [],
     "block_senders": [
