@@ -303,9 +303,12 @@ automatically.
   often and how recently you've corresponded, fully keyboard-driven.
 - **Per-account signatures** with a global default — auto-inserted into new composes
   and live-swapped when you change the From account, without clobbering your edits.
-- **Drafts that don't litter.** A compose is only "dirty" once you actually edit the
-  subject or body, autosave runs every 8 seconds, and a signature-only body is never
-  saved to your Drafts folder.
+- **Drafts that don't litter.** A compose is only "dirty" once you actually edit it,
+  autosave runs every 8 seconds, and a signature-only body is never saved to your Drafts
+  folder. Saves of one message go in turn and leave one copy, whatever overlaps them.
+- **Drafts that don't lose your words.** What you type during a save is saved next. If the
+  save that closes a message fails, the message stays a click away, and reopening it there
+  (or by Undo Send) saves it when you close it again.
 - **Drafts reopen as you left them.** Edit on a saved reply or forward brings back your text,
   with the quote or forwarded section folded below it, plus every file, the Bcc and the thread.
   All of it is read from the draft's own copy on the server, so sending it never needs the

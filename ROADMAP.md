@@ -47,33 +47,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (prefilled recipients no longer dirty the compose, signature-only bodies are never saved), but
   `composeClose` still silently auto-saves and toasts. The specified Keep editing / Save draft /
   Discard prompt was never built.
-- **Draft saves that lose or duplicate text** · high value · effort S — Three gaps around
-  `composeSaveDraft`, all in the composer's own saves:
-  - A close-save that fails loses the message. `composeClose` tears the composer down before its
-    save resolves, and a failure leaves only a 2.6-second toast that isn't a live region.
-    Everything since the last good save is gone, and the whole message is lost if none ever
-    landed: closed within the first autosave tick, IMAP down the whole time (`do_draft` has no
-    offline queue), or a red chip that makes every save fail "invalid domain". The fix is to
-    snapshot the closed-over composer into `state.failedSend` and `showSendFloat("failed", …)`,
-    so the existing Edit (`reopenFailed` → `makeRoom`) brings it back, and to `announce` it.
-    This is the safety half of the three-way Esc prompt above.
-  - Typing during a save is dropped. The save clears `cmp.dirty` when it resolves, even if keys,
-    or a file's `FileReader` onload, landed while it was in flight. `autosaveTick`,
-    `composeClose` and `makeRoom` all skip a composer that isn't dirty, so an Esc right after
-    closes it unsaved while the footer still says "Saved". `removeChip`, removing a file and
-    changing From never set `dirty` at all. The fix is an edit counter bumped wherever `dirty` is
-    set, with the save clearing `dirty` only if the counter hasn't moved.
-  - Overlapping saves orphan or duplicate a copy. Nothing serializes saves: an autosave tick
-    during a slow manual or closing save, a double Cmd-S, two tabs. `do_draft` reads `prev`
-    before its save job takes the IMAP gate, so the second save expunges the UID the first
-    already replaced and the first save's copy is left in Drafts untracked, surviving the
-    eventual Send (repro:
-    UIDs 2 and 3 kept, the row on 3). Two first saves both carry `draft_id: null` and make two
-    rows and two copies. A Send during a first save leaves that save's copy behind. The fix is a
-    per-composer `cmp._saving` promise that later saves, `autosaveTick` and `composeSend` wait
-    on. On the server, read `prev` (and `same`) inside the lock, and dedupe first saves on the
-    composer's `idempotency_key`, which `do_draft` ignores today (pinned by
-    `test_a_first_save_sent_twice_makes_one_draft`).
 - **Drafts are recognised by folder name** · high value · effort M — `_draft_info` and
   `draft_resume` treat any folder with "draft" anywhere in its name as Drafts ("Contract drafts",
   "Clients/Draft agreements", every subfolder of one), and never check `\Draft`. Viewing a message
@@ -518,13 +491,10 @@ implementation.
 
 ## Next up
 
-1. **Draft saves that lose or duplicate text** (high / S) — closing during a failed save, or
-   typing while one is in flight, silently loses what was written. These are the last ways the
-   composer drops a user's words.
-2. **Drafts are recognised by folder name** (high / M) — Discard on a message opened from any folder
+1. **Drafts are recognised by folder name** (high / M) — Discard on a message opened from any folder
    named like "Contract drafts" expunges it with no Undo.
-3. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+2. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **give
    each account its own IMAP gate**, the structural half.
-4. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+3. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.

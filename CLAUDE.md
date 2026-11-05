@@ -488,6 +488,13 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   answers 423 while a queued or sending outbox row holds the draft. A copy in another account
   or folder is removed only after the new APPEND succeeds, and only if MailMind saved it or
   the server flags it `\Draft`.
+- A composer's saves go in turn. `composeSaveDraft` chains on `cmp._saving` and names the copy the
+  last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
+  It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at
+  every edit, never `cmp.dirty=true`. A closing save that fails goes to `state.failedSend`, with the
+  float's Edit. On the server `do_draft` reads the row it replaces under the gate, and a first
+  save finds an earlier one's row by the composer's key (`drafts.idempotency_key`, migration 26),
+  as `do_send` does when it has no `draft_id`.
 - A composer replaced after an `await` (Undo Send, a failed send's Edit → `makeRoom`) must
   close and open in the same task. In the gap `_syncBack`'s MutationObserver calls
   `history.back()`, the new composer's `pushState` lands before that traversal does, and the
