@@ -1703,14 +1703,21 @@ def _reverse_held(d):
         c.commit()
         c.close()
         return True, d.get("account"), None
-    if kind == "mute":                              # pure-local: unmute + restore prior seen
+    if kind == "mute":                              # unmute + mark unread again what it marked read
         c = store.conn()
         store.unmute_thread(c, d["account"], d["thread_id"])
-        for pk, prev in d.get("prev_seen", []):
+        for pk, prev in d.get("prev_seen", []):     # an entry from when muting told the server nothing
             store.set_local_flags(c, pk, seen=int(prev or 0))
-            store.fts_index(c, pk)
+        marked, when = False, now_iso()
+        for key, folder in d.get("unread", []):
+            pk = store.copy_in_folder(c, key, folder)
+            r = store.get_message(c, pk) if pk else None
+            if r:
+                marked = store.queue_flags(c, r, {"seen": False}, f"unmute:{pk}:{when}", when) or marked
         c.commit()
         c.close()
+        if marked:
+            _flags_queued()
         return True, d.get("account"), None
     if kind == "unblock":                           # pure-local: drop the block rule (sender cleanup)
         try:
@@ -3304,14 +3311,16 @@ def do_mute(body):
     if store.is_muted(c, acct, tid):     # already muted: don't recapture prev_seen (it would be
         c.close()                        #   the post-mute all-seen state, breaking undo) — no-op
         return {"ok": True, "thread_id": tid}, 200
-    prev = store.muted_thread_seen(c, acct, tid)          # capture prior seen flags for undo
+    unread = store.muted_thread_seen(c, acct, tid, now_iso())   # the ones Undo marks unread again
     store.mute_thread(c, acct, tid, now_iso())
     c.commit()
     c.close()
     undo_push({"kind": "mute", "account": acct, "thread_id": tid,
-               "prev_seen": prev, "label": "Muted"}, body.get("undo_group"))
+               "unread": unread, "label": "Muted"}, body.get("undo_group"))
     invalidate_stats()
     sse.publish("mute", {"account": acct})
+    if unread:
+        _flags_queued()
     return {"ok": True, "thread_id": tid}, 200
 
 

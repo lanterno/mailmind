@@ -602,26 +602,28 @@ def is_muted(c, account, thread_id):
                           (account, thread_id)).fetchone())
 
 
-def muted_thread_seen(c, account, thread_id):
-    """Mark every member of a thread \\Seen locally + refresh FTS. Returns [(pk, prev_seen)]
-    so the action is undoable. Pure-local (no IMAP)."""
-    rows = c.execute("SELECT pk, seen FROM messages WHERE account=? AND thread_id=?",
+def muted_thread_seen(c, account, thread_id, when):
+    """Mark the unread members of a thread read, here and on the server through the queue (decision
+    D6). Returns [[message_key, folder]] of those, so the action is undoable: pk isn't stable."""
+    rows = c.execute("SELECT * FROM messages WHERE account=? AND thread_id=? AND seen=0",
                      (account, thread_id)).fetchall()
-    prev = [(r["pk"], r["seen"]) for r in rows]
-    for pk, _ in prev:
-        c.execute("UPDATE messages SET seen=1 WHERE pk=?", (pk,))
-        fts_index(c, pk)
-    return prev
+    for r in rows:
+        queue_flags(c, r, {"seen": True}, f"mute:{r['pk']}:{when}", when)
+    return [[r["message_key"], r["folder"]] for r in rows]
 
 
 def apply_mute_on_ingest(c, account):
-    """After recompute_threads assigns thread_ids, auto-mark unseen members of any muted
-    thread \\Seen so freshly-arrived replies in a muted thread stay silent."""
-    rows = c.execute("SELECT pk FROM messages WHERE account=? AND seen=0 AND thread_id IN "
-                     "(SELECT thread_id FROM muted WHERE account=?)", (account, account)).fetchall()
+    """After recompute_threads assigns thread_ids, mark unseen members of any muted thread read,
+    here and on the server, so freshly-arrived replies in a muted thread stay silent. One whose mark
+    is still open, or was refused and waits in the tray, isn't asked for again each sync."""
+    when = datetime.now(timezone.utc).isoformat()
+    rows = c.execute("""SELECT * FROM messages m WHERE m.account=? AND m.seen=0 AND m.thread_id IN
+                          (SELECT thread_id FROM muted WHERE account=?)
+                        AND NOT EXISTS (SELECT 1 FROM read_mutations q WHERE q.account=m.account AND q.op='flag'
+                          AND q.applied=0 AND q.message_id=m.message_id AND q.message_id!='')""",
+                     (account, account)).fetchall()
     for r in rows:
-        c.execute("UPDATE messages SET seen=1 WHERE pk=?", (r["pk"],))
-        fts_index(c, r["pk"])
+        queue_flags(c, r, {"seen": True}, f"mute:{r['pk']}:{when}", when)
     return len(rows)
 
 
