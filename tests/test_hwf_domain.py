@@ -688,7 +688,6 @@ def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(worl
     assert world.row("ada-archive-01-old-thread.eml")["bucket"] == "other/personal-ish"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the stored-mail plan ignores List-Unsubscribe headers")
 def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
     import accounts
     import manage
