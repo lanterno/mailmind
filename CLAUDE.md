@@ -494,6 +494,11 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   for nothing, and a removal has no Undo, so Discard, a Send and a replacing save remove a copy only
   if MailMind saved it, the server flags it or its folder is Drafts (`outbox.draft_copy_is_ours`).
   Older `drafts` rows may name received mail: those are forgotten and the mail stays.
+- A reply or forward names its original by pk until its first save, whose answer carries `resume`
+  (threading, the quote) and a forward's `files`; the composer then works from those, as a reopened
+  draft does, and needs no row. The outbox row keeps the original's account, Message-ID and thread
+  (`orig_*`, migration 27), so `\Answered` (`mailops.mark_answered`) and the follow-up land after an
+  archive deleted the row.
 - A copy that leaves the server takes its `messages` row with it, in the step that records the save,
   discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
   catch-up brings the new copy). A copy the server wouldn't remove stays listed.

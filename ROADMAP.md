@@ -47,21 +47,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (prefilled recipients no longer dirty the compose, signature-only bodies are never saved), but
   `composeClose` still silently auto-saves and toasts. The specified Keep editing / Save draft /
   Discard prompt was never built.
-- **Fresh replies name their original by pk** · medium value · effort M — A reply or forward that
-  wasn't reopened from Drafts sends `in_reply_to_pk` on every save and send, and `_compose_spec`
-  resolves it with `store.get_message`. pks are AUTOINCREMENT and never reused, so it can't hit
-  the wrong message. But once that row is deleted (another client moved it and reconcile pruned
-  it, a UIDVALIDITY reset, expiry, a queued archive draining), every save and send fails "original
-  message not found". The failed send's Edit reopens with the same pk, and closing loses whatever
-  wasn't saved. The outbox has the same gap: `_side_effects` looks the original up by pk after the
-  10-second grace window. Archiving the thread right after replying (`mailops.archive_message`
-  deletes the row) therefore silently skips `\Answered` and the follow-up record. Reopened drafts
-  already avoid this through the `resume` contract. The fix: after the first save, have the
-  server hand back the threading headers and quote so the composer switches to `resume`. Store the
-  original's Message-ID and `thread_id` on the outbox row (append-only migration), and set
-  `\Answered` by Message-ID in whatever folder it moved to (the `mailops._uid_by_msgid` pattern
-  `apply_queued_mutation` uses). Pinned by
-  `test_a_reply_marks_its_original_answered_after_the_original_is_archived`.
 
 ## AI that acts, not just describes
 

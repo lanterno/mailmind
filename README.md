@@ -321,6 +321,10 @@ automatically.
   - a part MailMind can't show;
   - more than 25 MB of files.
 
+  A reply you've saved once no longer needs the mail it answers: archive that first, or let another
+  device move it, and the reply still goes out with its quote and threading, and still marks it
+  answered.
+
   What counts as a draft is what your server says: the `\Draft` flag, or its Drafts folder under
   whatever name it uses. Mail you filed in "Contract drafts" stays ordinary mail, with Reply and
   no way for a Discard to remove it.
