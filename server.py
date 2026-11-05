@@ -1071,40 +1071,65 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
 
 
 FIRST_SYNC_WAIT = 8.0      # seconds a list request waits for a folder's first scan before it answers
-_first_syncs = {}          # (account, folder) -> threading.Event, set when that folder's first scan ends
+CATCH_UP_WAIT = 1.5        # ... and for a catch-up of a folder read before
+CATCH_UP_EVERY = 60.0      # seconds between catch-ups of one folder as it is opened
+_folder_syncs = {}         # (account, folder) -> threading.Event, set when that folder's sync ends
 _first_sync_failed = {}    # (account, folder) -> the error kind of its last first scan, while it failed
-_first_syncs_lock = threading.Lock()
+_caught_up = {}            # (account, folder) -> time.monotonic() its last sync on open started
+_folder_syncs_lock = threading.Lock()
 
 
-def _first_sync(account, folder):
-    """Start the first scan of a folder never read whole, unless one is running, as a job on the
-    account's gate; return the Event set when it ends. It ends by publishing folder-synced, so a
-    list that answered before the scan was done loads again."""
+def _folder_sync(account, folder, full):
+    """Sync a folder as it is opened, as a job on the account's gate, unless a sync of it is
+    running already: its first scan (full) or a catch-up (what came above the watermark, and the
+    newest flags again), since only INBOX is synced in the background. Return the Event set when
+    it ends. It ends by publishing folder-synced, with how many messages it stored, so a list that
+    answered before it was done can load again."""
     key = (account, folder)
-    with _first_syncs_lock:
-        done = _first_syncs.get(key)
+    with _folder_syncs_lock:
+        done = _folder_syncs.get(key)
         if done is not None:
             return done
-        done = _first_syncs[key] = threading.Event()
+        done = _folder_syncs[key] = threading.Event()
+        _caught_up[key] = time.monotonic()
 
-    def scan():
-        ok = False
+    def run():
+        ok, new = False, 0
         try:
-            gates.run(account, lambda: ingest.sync_folder(accounts.get(account), folder, full=True),
-                      priority=gates.Priority.INTERACTIVE)
-            ok = True
+            kept, junk, _ = gates.run(
+                account, lambda: ingest.sync_folder(accounts.get(account), folder, full=full),
+                priority=gates.Priority.INTERACTIVE if full else gates.Priority.AFTER_USER)
+            ok, new = True, kept + junk
             _first_sync_failed.pop(key, None)
         except Exception as e:
-            _first_sync_failed[key] = _classify_sync_error(e)
+            if full:
+                _first_sync_failed[key] = _classify_sync_error(e)
             print(f"[folder-sync] {account}/{folder}: {type(e).__name__}: {e}", flush=True)
         finally:
-            with _first_syncs_lock:
-                _first_syncs.pop(key, None)
+            with _folder_syncs_lock:
+                _folder_syncs.pop(key, None)
             done.set()
-        _invalidate_folders(account)
-        sse.publish("folder-synced", {"account": account, "folder": folder, "ok": ok})
-    threading.Thread(target=scan, name="first-sync", daemon=True).start()
+        if new:
+            _invalidate_folders(account)
+        sse.publish("folder-synced", {"account": account, "folder": folder, "ok": ok, "new": new})
+    threading.Thread(target=run, name="folder-sync", daemon=True).start()
     return done
+
+
+def _catch_up_due(account, folder):
+    """Whether opening a folder read before should catch it up: not INBOX, which the background
+    sync keeps, and not again within CATCH_UP_EVERY seconds, unless MailMind put mail in it since."""
+    if folder.upper() == "INBOX":
+        return False
+    with _folder_syncs_lock:
+        last = _caught_up.get((account, folder))
+    return last is None or time.monotonic() - last >= CATCH_UP_EVERY
+
+
+def _folder_touched(account, folder):
+    """MailMind put mail in `folder` (a draft saved there): its next open catches it up at once."""
+    with _folder_syncs_lock:
+        _caught_up.pop((account, folder), None)
 
 
 def messages_in(account, folder, offset, limit, group=False):
@@ -1116,12 +1141,15 @@ def messages_in(account, folder, offset, limit, group=False):
         return waiting_in(account, offset, limit)
     if folder == "__replylater__":
         return replylater_in(account, offset, limit)
-    scan = {}          # how the folder's first scan went, when this open started one
+    scan = {}          # how the sync this open started went, if it started one
     if offset == 0 and not ingest.folder_synced(account, folder):
-        if not _first_sync(account, folder).wait(FIRST_SYNC_WAIT):
+        if not _folder_sync(account, folder, full=True).wait(FIRST_SYNC_WAIT):
             scan = {"syncing": True}               # still reading: what's stored now, then folder-synced
         elif (account, folder) in _first_sync_failed:
             scan = {"sync_failed": True}
+    elif offset == 0 and _catch_up_due(account, folder):
+        if not _folder_sync(account, folder, full=False).wait(CATCH_UP_WAIT):
+            scan = {"catching_up": True}           # what's stored now; folder-synced says if more came
     c = store.conn()
     if group:
         # collapse to conversations: one row per thread (the latest message) + rollups
@@ -2633,6 +2661,7 @@ def do_draft(body):
             prev_uidvalidity=(prev["uidvalidity"] if same else None),
             prev_msgid=(prev["message_id"] if same else None),
             prev_folder=(prev["folder"] if same else None))
+        _folder_touched(acct["email"], folder)       # its list shows the new copy on its next open
         # The old copy is in another mailbox (From changed) or another folder (a draft reopened
         # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
         # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
