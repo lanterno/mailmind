@@ -27,14 +27,15 @@ QUEUED, ERROR = "queued", "error"
 
 class DurableQueue:
     def __init__(self, name, table, *, running, finished, finished_at, gate, connect,
-                 max_attempts=5, backoff_base=20, backoff_cap=900, poll=30, lane=None):
+                 max_attempts=5, backoff_base=20, backoff_cap=900, poll=30, lane=None, unsure=None):
         """`name` labels its log lines and threads; `running` and `finished` are the table's own
         names for those states; `connect` opens a connection to the database for drain and
-        run_forever; `lane`, a column, splits drain's rows into lanes."""
+        run_forever; `lane`, a column, splits drain's rows into lanes; `unsure`, (a column, why),
+        names rows a crash may have left with the irreversible step done and no one told."""
         self.name, self.table = name, table
         self.running, self.finished, self.finished_at, self.gate = running, finished, finished_at, gate
         self.max_attempts, self.backoff_base, self.backoff_cap = max_attempts, backoff_base, backoff_cap
-        self.poll, self.lane = poll, lane
+        self.poll, self.lane, self.unsure = poll, lane, unsure
         self._connect = connect
         self._kick = threading.Event()
         self._lanes, self._missed = {}, set()   # lane -> the thread running its rows; lanes a drain passed
@@ -81,7 +82,12 @@ class DurableQueue:
                   (self.finished, at, id_))
 
     def reset_stuck(self, c):
-        """At boot: rows a crash left running go back to the queue."""
+        """At boot: rows a crash left running go back to the queue, but one that may have done its
+        irreversible step goes to error, for a person to decide."""
+        if self.unsure:
+            column, why = self.unsure
+            c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=0, last_error=? "
+                      f"WHERE state=? AND {column}=1 AND {self.gate}=0", (ERROR, why, self.running))
         c.execute(f"UPDATE {self.table} SET state=? WHERE state=?", (QUEUED, self.running))
 
     def requeue(self, c, id_):

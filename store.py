@@ -505,7 +505,7 @@ def outbox_insert(c, row):
 
 
 def outbox_set(c, oid, **flags):
-    cols = {k: int(v) for k, v in flags.items() if k in ("sent_appended", "answered_set", "draft_deleted", "followup_recorded")}
+    cols = {k: int(v) for k, v in flags.items() if k in ("wire_begun", "sent_appended", "answered_set", "draft_deleted", "followup_recorded")}
     if not cols:
         return
     sets = ", ".join(f"{k}=?" for k in cols)
@@ -528,7 +528,7 @@ def outbox_holds_draft(c, did):
 def outbox_list(c, limit=50):
     return c.execute(
         """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at,
-                  delivered
+                  delivered,wire_begun
            FROM outbox ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
 
 

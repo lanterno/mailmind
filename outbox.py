@@ -37,9 +37,12 @@ SEND_DELAY = 10        # grace window before the wire send, so Undo Send can can
 
 # each account's sends in a lane of their own: one waiting on its IMAP server for a Sent copy
 # holds up no other account's
+UNSURE = "May have gone out: the server stopped answering once it had the whole message"
+
 QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", finished_at="sent_at",
                      gate="delivered", connect=lambda: store.conn(), max_attempts=MAX_ATTEMPTS,
-                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL, lane="account")
+                     backoff_base=_BACKOFF_BASE, backoff_cap=_BACKOFF_CAP, poll=_POLL, lane="account",
+                     unsure=("wire_begun", UNSURE))
 
 
 SENT_COPY_PENDING = "Delivered; its copy in Sent is still to be saved"
@@ -128,7 +131,13 @@ def kick():
 
 
 def retry(oid):
-    ok = _commit(lambda c: QUEUE.requeue(c, oid))
+    """A person's Retry. It may send what went out already if the row is an unsure one: they were told."""
+    def again(c):
+        ok = QUEUE.requeue(c, oid)
+        if ok:
+            store.outbox_set(c, oid, wire_begun=0)
+        return ok
+    ok = _commit(again)
     if ok:
         kick()
     return ok
@@ -156,6 +165,7 @@ def list_recent(limit=50):
             "id": r["id"], "account": r["account"], "subject": r["subject"] or "(no subject)",
             "to": rcpt.get("to", []), "cc": rcpt.get("cc", []), "bcc_count": len(rcpt.get("bcc", [])),
             "state": state, "attempts": r["attempts"], "error": error,
+            "unsure": bool(state == "error" and r["wire_begun"] and not r["delivered"]),
             "created_at": r["created_at"], "sent_at": r["sent_at"],
             "next_attempt_at": na, "scheduled": scheduled,
         })
@@ -282,14 +292,23 @@ def send_one(oid):
     # the wire send and only finishes bookkeeping — so a crash after send never re-sends.
     if not row["delivered"]:
         try:
-            smtpsend.send(acct, row["raw"], json.loads(row["envelope"]))  # lock-free: SMTP != IMAP ops
+            smtpsend.send(acct, row["raw"], json.loads(row["envelope"]),  # lock-free: SMTP != IMAP ops
+                          before_dot=lambda: _commit(lambda c: store.outbox_set(c, oid, wire_begun=1)))
+        except smtpsend.Unanswered:            # it may have gone out: a person decides, never a retry
+            _commit(lambda c: QUEUE.give_up(c, row, UNSURE))
+            print(f"[outbox] send #{oid} went unanswered; not sending it again", flush=True)
+            bus.publish(Failed(oid, row["account"], True))
+            return
         except Exception as e:
-            err = smtpsend.sanitize_smtp_error(e)
-            if smtpsend.permanent(e):          # a 5xx: the same answer again, so no retry
-                _commit(lambda c: QUEUE.give_up(c, row, err))
-                terminal, delay = True, 0
-            else:
-                terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
+            err, permanent = smtpsend.sanitize_smtp_error(e), smtpsend.permanent(e)
+
+            def failed(c):                     # the server answered, or it never had the whole message
+                store.outbox_set(c, oid, wire_begun=0)
+                if permanent:                  # a 5xx: the same answer again, so no retry
+                    QUEUE.give_up(c, row, err)
+                    return True, 0
+                return QUEUE.retry_later(c, row, err, _now())
+            terminal, delay = _commit(failed)
             print(f"[outbox] send #{oid} failed ({err}); "
                   f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
             bus.publish(Failed(oid, row["account"], terminal))

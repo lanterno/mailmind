@@ -43,15 +43,47 @@ def smtp_connect(acct):
     return s
 
 
-def send(acct, raw, envelope):
+class Unanswered(ConnectionError):
+    """The whole message went out and no answer came, so it may have been delivered: sent again it
+    could reach its recipients twice. That's for a person to decide."""
+
+
+def _watch_the_dot(s, before_dot):
+    """Tell apart the two sides of the message's last bytes: smtplib's data() sends the message and
+    its final dot in one send(), the only call that ends so. Returns what's known so far. A send()
+    that raises left those bytes unsent, since they come last."""
+    said = {"sent": False}
+    real = s.send
+
+    def send(data):
+        last = isinstance(data, (bytes, bytearray)) and data.endswith(b"\r\n.\r\n")
+        if last and before_dot:
+            before_dot()
+        real(data)
+        said["sent"] = said["sent"] or last
+    s.send = send
+    return said
+
+
+def send(acct, raw, envelope, before_dot=None):
     """Deliver `raw` (Bcc-less bytes) to the full `envelope` recipient set. The
     envelope-from is forced to the account email; From in the bytes is already the
-    account. Raises on failure (caller scrubs + records)."""
+    account. Raises on failure (caller scrubs + records): Unanswered when the whole message went
+    out and the server never said what became of it, which an answer of any kind isn't. `before_dot`
+    is called just before the message's last bytes go, so a crash from there on can be told too."""
     if not envelope:
         raise ValueError("no envelope recipients")
     s = smtp_connect(acct)
+    said = _watch_the_dot(s, before_dot)
     try:
-        s.sendmail(acct["email"], envelope, raw)
+        try:
+            s.sendmail(acct["email"], envelope, raw)
+        except smtplib.SMTPResponseException:
+            raise
+        except OSError as e:
+            if said["sent"]:
+                raise Unanswered("no answer to the message") from e
+            raise
     finally:
         try:
             s.quit()
@@ -173,6 +205,8 @@ def sanitize_smtp_error(e):
         return "recipient refused"
     if isinstance(e, smtplib.SMTPDataError):
         return "rejected by server"
+    if isinstance(e, Unanswered):
+        return "connection lost after the message went out"
     if isinstance(e, smtplib.SMTPServerDisconnected):
         return "connection lost"
     if isinstance(e, (smtplib.SMTPConnectError, ConnectionRefusedError)):
