@@ -2976,7 +2976,7 @@ let _briefErr=null, _briefAsked=false;
 const BRIEF_LIMIT="limit";   // _briefErr when today's AI limit kept the brief from being written
 function briefHere(){ return !state.searching && (state.allInbox||(state.folder||"").toUpperCase()==="INBOX"); }
 function briefOpen(){ return $("#reader").classList.contains("brief-pane"); }
-function needsIt(it){ return !!(String(it.action||"").trim()||it.category==="action-needed"||(it.importance||0)>=4); }   // the to-do test: a next step, an action-needed category, or importance 4+
+function needsIt(it){ return !!it.needs_you; }   // the to-do test: a next step, an action-needed category, or importance 4+
 function needsYou(){
   return (state.all||[]).filter(needsIt)
     .sort((a,b)=>(b.importance||0)-(a.importance||0)||b.pk-a.pk);
@@ -4167,10 +4167,7 @@ async function loadBrief(force,clicked){   // force: write it again from the mai
 /* ── Tidy: close the AI→action loop. The AI already scored every message; let it do triage work.
    Conservative + reversible: only low-importance INFO/OTHER noise (no to-do, never newsletters — those
    live in the Feed — never action mail). Preview via Review; one action files all to Archive; z undoes. */
-function tidyCandidates(){
-  return (state.all||[]).filter(it=> (it.importance||1)<=2 && !it.action
-    && it.category!=="action-needed" && (it.category==="info" || it.category==="other"));
-}
+function tidyCandidates(){ return (state.all||[]).filter(it=>it.safe_to_file); }
 async function doTidy(){
   const cands=tidyCandidates(); if(!cands.length)return;
   if(!confirm(`File ${cands.length} low-priority message${cands.length>1?"s":""} to Archive?\nThey stay searchable and you can undo with z.`)) return;
@@ -4190,7 +4187,7 @@ async function doTidy(){
    pk markers — never draft bodies (a browser-held body would be an unrevalidatable stale copy);
    every open re-fetches through the revalidating GET. NEVER auto-sends. ── */
 let _draftReady=new Set(), _draftingPks=new Set(), _draftDwellT=0;
-function _draftEligibleClient(it){ return it && (it.category==="action-needed" || (it.importance||0)>=4); }   // important mail only (server: _reply_worthy); a next step alone doesn't spend an AI call
+function _draftEligibleClient(it){ return it && it.reply_worthy; }   // important mail only (server: _reply_worthy); a next step alone doesn't spend an AI call
 function _viewingPk(){                 // pk whose draft chip is currently on screen, else null
   if(state.compose) return null;       // composing (any surface): never kick, poll, or announce
   return state.csel!=null ? state.csel : null;
@@ -4262,8 +4259,7 @@ function updateReaderDraftChip(pk){    // swap ONLY the button — a full reader
 }
 /* ── Commitments: the AI extracts a next-step `action` per message — surface them all as one
    checkable agenda (read-only over state.all; reuses the verified archive/snooze/open actions). ── */
-function commitments(){ return (state.all||[]).filter(it=>it.action && String(it.action).trim()
-    && ((it.importance||0)>=3 || it.category==="action-needed"))   // meaningful next-steps only — not every low-priority nudge
+function commitments(){ return (state.all||[]).filter(it=>it.commitment_worthy)   // meaningful next-steps only — not every low-priority nudge
   .sort((a,b)=>(b.importance||0)-(a.importance||0)); }
 function openCommitments(){ renderCommitList(); $("#commitPanel").classList.add("show"); }
 function closeCommitments(){ const o=$("#commitPanel"); if(o)o.classList.remove("show"); }
