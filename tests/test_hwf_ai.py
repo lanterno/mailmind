@@ -4,9 +4,6 @@ pre-drafted reply may be served, what the draft-ahead tick spends and when it ho
 guards around do-plan, the review and banking. Each test names one behaviour a rewrite could lose
 without any other test noticing.
 
-Strict xfails at the end assert the correct behaviour where the code still has a known bug; each
-is marked raises=AssertionError, so it can only xfail at its own assertion, never at setup.
-
 Everything runs against the fake Claude API (tests/fakes/anthropic_api.py) and the fictional
 world. The draft-ahead rounds run in the test's own thread, the frozen clock moved on before each
 as the background wait between them would (see run_tick).
@@ -669,8 +666,6 @@ def test_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
     assert r["cached"] is True
     assert r["stale"] is False
 
-
-# -- known bugs -----------------------------------------------------------------------------------
 
 def test_a_brief_chip_counts_the_messages_it_holds(app, world, ai):
     anchor = world.pk(LUNCH)

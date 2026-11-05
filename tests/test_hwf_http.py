@@ -4,8 +4,7 @@ undo data, undo that fails and keeps the action, the snooze presets' edges, the 
 window, draft-ahead's fingerprint and presence rules, the folder rail's cache, cleanup's
 unsubscribe lookup, and the background loops that yield or stay off.
 
-Strict xfails at the end state the correct behaviour for bugs still present; fixing one makes it
-pass, and strict makes that fail until the mark is removed. Behaviour already pinned elsewhere
+Behaviour already pinned elsewhere
 (tests/test_http_*.py and their goldens, test_draft_resume.py, test_hardening.py...) isn't
 repeated here.
 """
@@ -493,8 +492,6 @@ def test_hwf_a_browser_dropping_its_connection_prints_no_traceback(capsys):
         srv.handle_error(None, ("127.0.0.1", 50000))
     assert "RuntimeError: a real fault" in capsys.readouterr().err
 
-
-# -- known bugs -----------------------------------------------------------
 
 def test_a_refused_folder_list_keeps_the_last_list(app, world):
     first = app.get(f"/api/folders?account={w.ADA}").json["folders"]

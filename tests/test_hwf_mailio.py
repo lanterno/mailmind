@@ -4,9 +4,6 @@ IDLE worker, each pinned against the world's fake IMAP and SMTP servers. The fix
 suites already pin (test_sync_state, test_queue_drain, test_http_mail, test_http_send,
 test_hardening, test_draft_resume, test_expire...) are not repeated here.
 
-The strict xfails at the end state the right behaviour for bugs still in the code: fixing one
-makes its test pass, and strict makes that an error until the marker comes off.
-
 Most tests run on the frozen clock or none. Two need real time, briefly: the IDLE worker's, and
 the outbox worker's, whose bug is how long it sleeps. The app's endless loops (backfill) are run
 for a cycle or two with their sleeps stubbed out.
@@ -1012,8 +1009,6 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_here_only(app, world):
     assert (r["seen"], r["thread_id"]) == (1, lunch["thread_id"])
     assert w.SEEN not in world.server.messages(w.ADA, "INBOX")[uid].flags
 
-
-# -- known bugs ------------------------------------------------------------
 
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
     import config
