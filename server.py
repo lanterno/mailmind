@@ -82,8 +82,7 @@ _status = {}                              # email -> {"health": ok|syncing|error
 _sync_lock = threading.Lock()
 _sync_asked = []                          # syncs asked for while one ran: each a set of accounts, or None for all
 _stats_cache = {"data": None, "exp": 0}
-_undo_stack = []                          # per-process LIFO of reversible actions (in-memory; lost on restart)
-_undo_lock = threading.Lock()
+_undo_lock = threading.Lock()            # the undo stack is in the database (undo_entries): it outlives the process
 UNDO_MAX = 25
 
 
@@ -1486,21 +1485,30 @@ def do_thread_file(path, body):
 
 
 # --------------------------------------------------------------------- undo
+def _undo_db(fn):
+    """Run fn(c) on the undo stack under its lock, commit, and return what fn returned."""
+    with _undo_lock:
+        c = store.conn()
+        try:
+            out = fn(c)
+            c.commit()
+            return out
+        finally:
+            c.close()
+
+
 def undo_push(desc, group=None):
     """Push a reverse descriptor. With a group id, coalesce consecutive pushes into one
-    bulk entry so a single Undo reverses the whole batch."""
+    bulk entry so a single Undo reverses the whole batch. The stack keeps the newest UNDO_MAX
+    entries, in the database, so Undo still works after a restart."""
     if not desc:
         return
-    with _undo_lock:
-        if group and _undo_stack and _undo_stack[-1].get("group") == group:
-            _undo_stack[-1]["children"].append(desc)
-        elif group:
-            _undo_stack.append({"kind": "bulk", "group": group,
-                                "label": desc.get("label", "Updated"), "children": [desc]})
-        else:
-            _undo_stack.append(desc)
-        while len(_undo_stack) > UNDO_MAX:
-            _undo_stack.pop(0)
+    _undo_db(lambda c: store.undo_push(c, desc, group, UNDO_MAX))
+
+
+def undo_entries():
+    """The undo stack, oldest first."""
+    return _undo_db(store.undo_entries)
 
 
 def _reverse_one(d):
@@ -1596,10 +1604,9 @@ def _reverse_held(d):
 
 def do_undo():
     """Pop the last undoable action and reverse it. Returns (result, code)."""
-    with _undo_lock:
-        if not _undo_stack:
-            return {"ok": False, "empty": True}, 200
-        entry = _undo_stack.pop()
+    entry = _undo_db(store.undo_pop)          # off the stack before any server is asked
+    if entry is None:
+        return {"ok": False, "empty": True}, 200
     kept = False                              # what couldn't be reversed is back on the stack
     try:
         if entry.get("kind") == "bulk":
@@ -1617,8 +1624,7 @@ def do_undo():
                     left.append(child)
             done = len(entry["children"]) - len(left)
             if left:                              # a smaller group of what's left, for a retry
-                with _undo_lock:
-                    _undo_stack.append({**entry, "children": left[::-1]})
+                _undo_db(lambda c: store.undo_put_back(c, {**entry, "children": left[::-1]}))
                 kept = True
             okk = done > 0
             res = {"ok": okk, "label": entry.get("label"), "account": acct, "folder": folder,
@@ -1628,19 +1634,17 @@ def do_undo():
             okk = ok
             res = {"ok": ok, "label": entry.get("label"), "account": acct, "folder": folder}
         if not okk:
-            if not kept:
-                with _undo_lock:              # couldn't reverse -> keep it so the user can retry
-                    _undo_stack.append(entry)
+            if not kept:                      # couldn't reverse -> keep it so the user can retry
+                _undo_db(lambda c: store.undo_put_back(c, entry))
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
         invalidate_stats()
         _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
         sse.publish("undo-done", {})
-        res["remaining"] = len(_undo_stack)
+        res["remaining"] = len(undo_entries())
         return res, 200
     except Exception as e:
         if not kept:
-            with _undo_lock:
-                _undo_stack.append(entry)
+            _undo_db(lambda c: store.undo_put_back(c, entry))
         print(f"[undo] error: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "couldn’t undo"}, 200
 

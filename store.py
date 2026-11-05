@@ -1,4 +1,5 @@
 """SQLite store for MailMind: messages + AI summaries + per-account sync state."""
+import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
@@ -159,6 +160,47 @@ def set_uidvalidity(c, account, folder, uidvalidity):
            ON CONFLICT(account,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity""",
         (account, folder, uidvalidity),
     )
+
+
+def undo_push(c, entry, group, keep):
+    """Put `entry` on top of the undo stack, or, when the top gathers `group`, add it to that
+    group's children. Then keep only the newest `keep` entries."""
+    top = c.execute("SELECT id, grp, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
+    if group and top is not None and top["grp"] == group:
+        held = json.loads(top["entry"])
+        held["children"].append(entry)
+        c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps(held), top["id"]))
+    elif group:
+        c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(?,?,?)",
+                  (group, json.dumps({"kind": "bulk", "group": group, "label": entry.get("label", "Updated"),
+                                      "children": [entry]}), datetime.now(timezone.utc).isoformat()))
+    else:
+        c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(NULL,?,?)",
+                  (json.dumps(entry), datetime.now(timezone.utc).isoformat()))
+    c.execute("DELETE FROM undo_entries WHERE id NOT IN (SELECT id FROM undo_entries ORDER BY id DESC LIMIT ?)",
+              (keep,))
+
+
+def undo_put_back(c, entry):
+    """Put an entry taken off the stack back on top: it, or what's left of its group, can be tried
+    again."""
+    c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(?,?,?)",
+              (entry.get("group") if entry.get("kind") == "bulk" else None, json.dumps(entry),
+               datetime.now(timezone.utc).isoformat()))
+
+
+def undo_pop(c):
+    """Take the newest entry off the undo stack: the entry, or None when the stack is empty."""
+    top = c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
+    if top is None:
+        return None
+    c.execute("DELETE FROM undo_entries WHERE id=?", (top["id"],))
+    return json.loads(top["entry"])
+
+
+def undo_entries(c):
+    """The undo stack, oldest first."""
+    return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries ORDER BY id")]
 
 
 def get_scan_state(c, account, folder):

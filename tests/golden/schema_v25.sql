@@ -100,7 +100,10 @@ CREATE TABLE sync_state ( account TEXT NOT NULL, folder TEXT NOT NULL DEFAULT 'I
 -- table thread_summaries
 CREATE TABLE thread_summaries ( account TEXT NOT NULL, thread_id TEXT NOT NULL, scope TEXT NOT NULL DEFAULT 'thread', -- thread | message fingerprint TEXT NOT NULL, -- content hash; mismatch => stale tldr TEXT, points TEXT, action TEXT, participants TEXT, -- points/participants = JSON message_count INTEGER, model TEXT, created_at TEXT, PRIMARY KEY(account, thread_id, scope) );
 
+-- table undo_entries
+CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- the undo group the entry gathers; NULL for a single action entry TEXT NOT NULL, -- JSON: kind, label and what to reverse, or a group's children created_at TEXT NOT NULL );
+
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE);
 
-PRAGMA user_version=24;
+PRAGMA user_version=25;
