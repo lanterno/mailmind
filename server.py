@@ -362,10 +362,12 @@ def expire_round():
 
 
 def forget_round():
-    """What's kept of a message no copy of has come back to in a month goes."""
+    """What's kept of a message no copy of has come back to in a month goes, and so do queue rows
+    finished a month ago."""
     c = store.conn()
     try:
         store.forget_gone_messages(c, int(time.time()))
+        store.read_mut_forget_finished(c, int(time.time()))
         c.commit()
     finally:
         c.close()

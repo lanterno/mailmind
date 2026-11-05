@@ -102,6 +102,13 @@ def read_mut_open_counts(c):
         "AND state IN ('queued', 'running', 'error') GROUP BY state")}
 
 
+def read_mut_forget_finished(c, now_ts, days=30):
+    """A queue row finished `days` ago goes: nothing resubmits or undoes it after that. A row still
+    open, or in `error` waiting for a person, stays."""
+    cutoff = datetime.fromtimestamp(now_ts - days * 86400, timezone.utc).isoformat()
+    return c.execute("DELETE FROM read_mutations WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
+
+
 def read_mut_latest_by_msgid(c, account, message_id):
     """The most recent read-mutation row for a message (any state) — undo uses it to decide
     cancel-vs-counter-move and to recover the resolved destination folder."""
