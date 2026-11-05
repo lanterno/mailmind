@@ -150,8 +150,9 @@ def test_status_counts_unseen_and_all(world, session):
 
 def test_select_says_how_many_and_the_uid_validity(world, session):
     inbox = box(world)
-    assert session.select("INBOX") == type(session.select("INBOX"))(len(inbox.messages), inbox.uidvalidity,
-                                                                      inbox.uidnext)
+    selected = session.select("INBOX")
+    assert (selected.exists, selected.uidvalidity, selected.uidnext) == (len(inbox.messages), inbox.uidvalidity,
+                                                                          inbox.uidnext)
 
 
 def test_select_read_only_is_examine(world, session):
@@ -247,6 +248,34 @@ def test_flags_read_add_and_remove(world, session):
     session.remove_flags([uid], ["\\Flagged"])
     assert "\\Flagged" not in box(world).messages[uid].flags
     assert session.flags([]) == {}
+
+
+def test_uids_changed_since_names_only_what_changed(world, session):
+    uid = uid_of(world, RECEIPT)
+    assert session.enable_condstore() is True
+    mark = session.select("INBOX").highest_modseq
+    assert mark
+    assert session.uids_changed_since(mark) == []
+    with world.server.lock:
+        box(world).messages[uid].flags.add("\\Flagged")
+    assert session.select("INBOX").highest_modseq > mark
+    assert session.uids_changed_since(mark) == [uid]
+
+
+def test_a_folder_says_no_modseq_until_condstore_is_asked_for_and_that_comes_first(world, session):
+    assert session.select("INBOX").highest_modseq is None
+    assert session.enable_condstore() is False
+    assert session.select("INBOX").highest_modseq is None
+
+
+def test_a_server_with_no_condstore_gives_no_modseq(world, kind):
+    world.server.without.add("CONDSTORE")
+    s = open_session()
+    try:
+        assert s.enable_condstore() is False
+        assert s.select("INBOX").highest_modseq is None
+    finally:
+        s.logout()
 
 
 # ── filing ──────────────────────────────────────────────────────────────────────────────────────

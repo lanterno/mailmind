@@ -310,6 +310,27 @@ def test_a_folder_selected_read_only_keeps_its_flags(dovecot, user, session):
     assert on_server(dovecot, user, "INBOX")[uid][1] == set()
 
 
+def test_uids_changed_since_names_only_what_changed(dovecot, user, session):
+    from mailmind.mailbox.adapters.imap_names import mailbox_arg
+    _, second = seed(dovecot, user, "INBOX", message(1), message(2))
+    assert session.enable_condstore() is True
+    mark = session.select("INBOX").highest_modseq
+    assert mark
+    assert session.uids_changed_since(mark) == []
+    with own(dovecot, user) as M:
+        M.select(mailbox_arg("INBOX"))
+        M.uid("STORE", str(second), "+FLAGS", "(\\Flagged)")
+    assert session.select("INBOX").highest_modseq > mark
+    assert session.uids_changed_since(mark) == [second]
+
+
+def test_a_folder_says_no_modseq_until_condstore_is_asked_for_and_that_comes_first(dovecot, user, session):
+    seed(dovecot, user, "INBOX", message(1))
+    assert session.select("INBOX").highest_modseq is None
+    assert session.enable_condstore() is False
+    assert session.select("INBOX").highest_modseq is None
+
+
 def test_uids_search_in_order_and_a_message_is_found_by_its_message_id(dovecot, user, session):
     odd = '<quo"te\\d@example.test>'
     uids = seed(dovecot, user, "INBOX", message(1), message(2, mid=odd), message(3))

@@ -107,12 +107,24 @@ class Mailbox:
     special: str = ""
     uidvalidity: int = UIDVALIDITY_BASE
     uidnext: int = 1
+    highest_modseq: int = 1
+    modseqs: dict = field(default_factory=dict)     # CONDSTORE: uid -> (its modseq, the flags it was given for)
     messages: dict = field(default_factory=dict)    # uid -> Message, in UID order
     former: dict = field(default_factory=dict)      # Gmail INBOX, All Mail: gm_msgid -> the UID it had
 
     @property
     def selectable(self):
         return "\\Noselect" not in self.special
+
+    def modseq_now(self):
+        """HIGHESTMODSEQ, with each message's own brought up to date. A test may change flags directly
+        and a client through STORE, so a change counts when someone next asks."""
+        for uid, msg in self.messages.items():
+            flags = frozenset(msg.flags)
+            if uid not in self.modseqs or self.modseqs[uid][1] != flags:
+                self.highest_modseq += 1
+                self.modseqs[uid] = (self.highest_modseq, flags)
+        return self.highest_modseq
 
     def add(self, msg, uid=None):
         if uid is None or uid in self.messages:
@@ -275,6 +287,7 @@ class Session:
         self.acct = None
         self.box = None                                  # the selected Mailbox
         self.readonly = False
+        self.condstore = False                           # ENABLE CONDSTORE was asked
         self.events = queue.Queue()                      # untagged lines pushed while idling
         self.mute_tagged = False                         # drop_after: run, but never send the tagged reply
 
@@ -356,6 +369,8 @@ class Session:
         caps = ["IMAP4rev1", "LITERAL+", "IDLE"]
         if self.acct is not None:
             caps += ["UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE"]
+            if self.acct.kind != "proton":              # Proton Bridge has no CONDSTORE
+                caps += ["ENABLE", "CONDSTORE"]
         if not self.tls:
             caps += ["STARTTLS", "LOGINDISABLED"]
         else:
@@ -381,6 +396,17 @@ class Session:
     def ok(self, tag, text="completed"):
         if not self.mute_tagged:
             self.line(f"{tag} OK {text}")
+
+    def do_enable(self, tag, args):
+        if self.box is not None:
+            raise _No("ENABLE is only for the authenticated state", "BAD")
+        asked = [str(a).upper() for a in args]
+        if "ENABLE" in self.srv.without or "CONDSTORE" not in self.capabilities().split():
+            self.line("* ENABLED")
+        else:
+            self.condstore = self.condstore or "CONDSTORE" in asked
+            self.line("* ENABLED" + (" CONDSTORE" if "CONDSTORE" in asked else ""))
+        self.ok(tag)
 
     def do_capability(self, tag, args):
         self.line("* CAPABILITY " + self.capabilities())
@@ -447,6 +473,8 @@ class Session:
         self.line("* 0 RECENT")
         self.line(f"* OK [UIDVALIDITY {box.uidvalidity}] UIDs valid")
         self.line(f"* OK [UIDNEXT {box.uidnext}] predicted next UID")
+        if self.condstore:                              # as Dovecot: only once it's been asked for
+            self.line(f"* OK [HIGHESTMODSEQ {box.modseq_now()}] highest")
         self.ok(tag, "[READ-ONLY] EXAMINE completed" if readonly else "[READ-WRITE] SELECT completed")
 
     def do_select(self, tag, args):
@@ -494,6 +522,11 @@ class Session:
             return a or b, j
         if K == "UID":
             return parse_set(keys[i + 1], max(self.box.messages, default=0))(uid), i + 2
+        if K == "MODSEQ":
+            if "CONDSTORE" not in self.capabilities().split():
+                raise _No("unsupported search key MODSEQ", "BAD")
+            self.box.modseq_now()
+            return self.box.modseqs[uid][0] >= int(keys[i + 1]), i + 2
         if K == "HEADER":
             name, val = str(keys[i + 1]), str(keys[i + 2]).lower()
             got = [str(v) for v in (msg.headers().get_all(name) or [])]
@@ -519,7 +552,10 @@ class Session:
         if args and str(args[0]).upper() == "CHARSET":
             args = args[2:]
         hits = [u for u, m in self.box.messages.items() if self._match(args, u, m)]
-        self.line("* SEARCH" + "".join(f" {u}" for u in hits))
+        modseq = ""
+        if hits and any(str(a).upper() == "MODSEQ" for a in args):    # RFC 7162 says which it was
+            modseq = f" (MODSEQ {max(self.box.modseqs[u][0] for u in hits)})"
+        self.line("* SEARCH" + "".join(f" {u}" for u in hits) + modseq)
         self.ok(tag)
 
     def do_search(self, tag, args):
@@ -864,6 +900,8 @@ class FakeIMAPServer:
             if when is None:
                 when = self._date_of(raw)
             uid = self._store_new(acct, box, raw, {_norm_flag(f) for f in flags}, when, thread_of)
+            for each in acct.mailboxes.values():
+                each.modseq_now()
         return uid
 
     def mailbox(self, user, name):
