@@ -2010,6 +2010,7 @@ async function loadCMessages(){
   state.cmsgs=d.items||[]; state.cHasMore=!!d.has_more; state.cmarked.clear();
   state.cSyncing=!!d.syncing; state.cSyncFailed=!!d.sync_failed;   // a first scan still reading, or one that failed
   state.cCatching=!!d.catching_up;                                  // a folder read before, still checking for more
+  if(state.csel!=null&&draftsOnScreen()&&!state.cmsgs.some(m=>m.pk===state.csel))state.csel=null;   // that copy was replaced or discarded
   renderClientList();
   if((state.folder||"").toUpperCase()==="INBOX"){ touchLastLook(); clearNewPill(); }   // looking at the inbox now → reset watermark + drop the stale "N new" pill
   // desktop: preview the first message in the reader pane. Mobile (single pane): stay on the list.
@@ -3421,15 +3422,21 @@ function composeClose(force){
   if(typeof acClose==="function")acClose();
   closeDraftMenu(); closeSendLaterMenu(); guardReset(); clearTimeout(_knownT);
   if(cmp&&cmp._autosaveIv)clearInterval(cmp._autosaveIv);   // stop autosave before nulling state
-  if(cmp&&cmp.dirty&&!force){   // auto-save on close
+  const closingSave=cmp&&cmp.dirty&&!force;
+  if(closingSave){   // auto-save on close
     const saved=composeSaveDraft(true), snap=composeSnap(cmp);   // the save read the fields: the snapshot holds them
     const p=_closeSave=Promise.all([_closeSave, saved.then(ok=>{
-      if(ok)toast("Saved to Drafts"); else if(ok===false)closeSaveFailed(cmp,snap); })]);
+      if(ok){ toast("Saved to Drafts"); refreshDrafts(); } else if(ok===false)closeSaveFailed(cmp,snap); })]);
     p.finally(()=>{ if(_closeSave===p)_closeSave=null; }); }   // one still in flight from an earlier close counts too
   state.compose=null;
   $("#composeModal").classList.remove("show");
   _syncScrim();
   try{setReturnFocus&&setReturnFocus.focus();}catch(e){}
+  if(cmp&&cmp.draftId&&!closingSave)refreshDrafts();   // its saves replaced the copy this list shows
+}
+function draftsOnScreen(){ return !state.allInbox&&(state.folders||[]).some(f=>f.name===state.folder&&f.role==="drafts"); }
+function refreshDrafts(){
+  if(draftsOnScreen()&&!state.compose&&!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages();
 }
 async function composeDiscard(){   // explicit Discard = throw away (delete the IMAP draft if any)
   const cmp=state.compose;
@@ -4617,12 +4624,13 @@ function onNewMail(d){
 }
 function onReconcile(d){
   // server pruned ghost rows (mail gone from the server) for d.account, in any folder it has
-  // synced. Refresh badges, and if an open list for that account may be showing them, re-pull
-  // it — but only when idle, so nothing in-flight (compose/search/selection) is disrupted.
+  // synced, or just d.folder. Refresh badges, and if an open list for that account may be showing
+  // them, re-pull it — but only when idle, so nothing in-flight (compose/search/selection) is disrupted.
   loadFolders && loadFolders(true);
   const idle = !state.compose && !state.searching && !state.asking && state.cmarked.size===0 && !document.hidden;
   if(!idle) return;
-  if(state.allInbox){ loadAllInboxes(); }
+  if(d.folder){ if(!state.allInbox&&state.account===d.account&&state.folder===d.folder)loadCMessages(); }
+  else if(state.allInbox){ loadAllInboxes(); }
   else if(state.account===d.account){ loadCMessages(); }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=0; bumpTitle(); } });   // refocus alone ≠ "looked at new mail" (the inbox isn't reloaded) → don't advance the watermark here
