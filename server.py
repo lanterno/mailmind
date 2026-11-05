@@ -14,6 +14,7 @@ import json
 import time
 import shlex
 import math
+import base64
 import email.message
 import email.policy
 import email.utils
@@ -698,7 +699,6 @@ def _resolve_cids(pk, safe_html):
     """Rewrite src="cid:<id>" -> a data: URI for embedded RASTER images only, so the
     sandboxed iframe (CSP img-src allows data:) renders logos without any network.
     Active types (svg/html) are never embedded; oversized sets are left as cid (broken)."""
-    import base64
     c = store.conn(); raw = store.get_body(c, pk); c.close()
     if not raw:
         return safe_html
@@ -1713,7 +1713,6 @@ def _safe_filename(name):
 # --------------------------------------------------------------------- compose/send
 def _decode_attachments(items):
     """Decode client base64 attachments -> [{filename,content_type,data}], capped."""
-    import base64
     if items is None:
         items = []
     if not isinstance(items, list):
@@ -1780,6 +1779,7 @@ def _compose_spec(body):
     html = None
     in_reply_to = references = None
     in_reply_to_pk = None
+    forwarded = []                  # the original's files a forward added to the payload's
     subject = body.get("subject") or ""
     attachments = _decode_attachments(body.get("attachments"))
     resume = body.get("resume")
@@ -1809,6 +1809,9 @@ def _compose_spec(body):
         if mode in ("reply", "replyall") and in_reply_to:   # by Message-ID: a pk may have been renumbered
             c = store.conn()
             orow = store.get_message_by_msgid(c, acct["email"], in_reply_to)
+            if not orow:                                    # From changed: it is another account's
+                named = store.get_message(c, body["in_reply_to_pk"]) if isinstance(body.get("in_reply_to_pk"), int) else None
+                orow = named if named and named["message_id"] == in_reply_to else None
             c.close()
             in_reply_to_pk = orow["pk"] if orow else None
     elif mode in ("reply", "replyall", "forward"):
@@ -1841,6 +1844,7 @@ def _compose_spec(body):
                         break
                     existing += len(a["data"])
                     attachments.append(a)
+                    forwarded.append(a)
         else:
             text, html = compose.reply_bodies(text, orig)
             in_reply_to = orow["message_id"]
@@ -1853,6 +1857,7 @@ def _compose_spec(body):
         "subject": subject, "text": text, "html": html, "attachments": attachments,
         "in_reply_to": in_reply_to, "references": references,
         "own": own, "tail": {"text": tail_text, "html": tail_html},   # recorded by do_draft; build_message ignores them
+        "forwarded": forwarded,
     }
     return spec, in_reply_to_pk, acct
 
@@ -2811,7 +2816,15 @@ def do_draft(body):
         print(f"[draft] save failed: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "could not save draft"}, 502
     invalidate_stats()
-    return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
+    answer = {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}
+    if body.get("resume") is None and spec["tail"]["text"]:
+        # From here on the composer names the quote, the threading and the files itself, as a
+        # reopened draft's does, so its saves and its send no longer need the original's row.
+        answer["resume"] = {"in_reply_to": spec["in_reply_to"] or "", "references": " ".join(spec["references"] or []),
+                            "tail_text": compose.lf(spec["tail"]["text"])}
+        answer["files"] = [{"filename": a["filename"], "content_type": a["content_type"], "size": len(a["data"]),
+                            "b64": base64.b64encode(a["data"]).decode("ascii")} for a in spec["forwarded"]]
+    return answer, 200
 
 
 def _draft_list_changed(account, folder):
@@ -2915,7 +2928,6 @@ def _resume_files(msg, parsed, elsewhere):
     """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
     many were pictures in the text: every part must come back as the text or a file, or this
     raises _Http(422). Headers parse as they're read, so a hostile one raises here as well."""
-    import base64
     import mimetypes
     lost = "Part of this draft is something MailMind can’t reopen without losing it." + elsewhere
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
