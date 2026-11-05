@@ -252,3 +252,27 @@ def test_migration_30_can_run_again(tmp_path):
         assert c.execute("PRAGMA user_version").fetchone()[0] == migrations.MIGRATIONS[-1][0]
     finally:
         c.close()
+
+
+# -- where the API shows it -------------------------------------------------------------------------------
+
+def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
+    import store
+    assess()
+    row = world.row(LUNCH)
+    pk, key = row["pk"], row["message_key"]
+
+    def holds(items):
+        return [i["key"] for i in items if i["pk"] == pk] == [key]
+    assert holds(app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"])
+    assert holds(app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100&group=1").json["items"])
+    assert holds(app.get(f"/api/thread?account={w.ADA}&thread_id={row['thread_id']}").json["items"])
+    assert holds(app.get(f"/api/search?q=lunch&scope=all&account={w.ADA}").json["items"])
+    assert holds(app.get(f"/api/digest?account={w.ADA}").json["items"])
+    assert app.get(f"/api/message/{pk}/body").json["key"] == key
+    c = store.conn()
+    store.mute_thread(c, w.ADA, row["thread_id"], "now")
+    c.commit()
+    c.close()
+    assert [i["key"] for i in app.get(f"/api/messages?account={w.ADA}&folder=__muted__&limit=100").json["items"]
+            if i["thread_id"] == row["thread_id"]] != [None]
