@@ -492,7 +492,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     (`test_bug_a_message_without_a_thread_id_can_be_summarized`);
   - the brief's `_clean` keeps the model's group `count` unclamped, so a chip can claim more
     messages than its pks hold.
-- **Stats, snippets and the body backfill: smaller bugs** · low value · effort S — each pinned by a
+- **Stats and snippets: smaller bugs** · low value · effort S — each pinned by a
   strict xfail in `tests/test_hwf_domain.py`:
   - `manage.plan_account_db`, behind `/api/stats`, reads `list_unsub_raw`, which is filled only at
     preview time, so mail that is junk only by its List headers counts as kept
@@ -500,10 +500,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - a full re-scan of a folder blanks the snippets that fetched bodies filled, and INBOX snippets
     taken at sync keep invisible preheader padding, because `_html_to_snippet_text` never strips
     what it unescapes (`test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message`,
-    `test_hwf_an_inbox_snippet_drops_invisible_preheader_padding`);
-  - `server.backfill_round` retries the same 12 newest bodies forever when they can't be
-    fetched (deleted elsewhere, say), and never reaches older mail
-    (`test_hwf_backfill_moves_past_bodies_it_cannot_fetch`).
+    `test_hwf_an_inbox_snippet_drops_invisible_preheader_padding`).
 - **A JSON body that isn't an object** · low value · effort S — a POST whose body is a JSON array
   answers 500 instead of 400 "bad request". Pinned by
   `test_a_json_body_that_isnt_an_object_is_a_bad_request`.

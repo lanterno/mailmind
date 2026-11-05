@@ -187,8 +187,8 @@ and the Claude API.
 
 - **Full-text search across every account by default**, with the scope persisted
   between sessions. A polite background worker backfills bodies for mail ingested
-  before bodies were stored — yielding instantly to anything you're doing — so search
-  covers the whole mailbox, not just recent mail.
+  before bodies were stored — yielding instantly to anything you're doing, and moving on past
+  any the server won't give — so search covers the whole mailbox, not just recent mail.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:`,
   `is:unread|read|flagged|answered|junk|newsletter|receipt|notification`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
