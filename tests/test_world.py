@@ -116,7 +116,6 @@ def test_snippets_hold_no_carriage_returns(world):
     assert "\r" not in world.row("ada-inbox-01-lunch.eml")["snippet"]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a multipart with no boundary loses its text")
 def test_a_multipart_with_no_boundary_keeps_its_text(world):
     import ingest
     assert "statement for October" in world.row("ada-inbox-08-boundaryless.eml")["snippet"]
