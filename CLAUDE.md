@@ -208,8 +208,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
   logged and counted, and the job goes on. `server.schedule(jobs)` is the job table: `snooze` in
-  every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile` and `expire` in a
-  full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
+  every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
+  in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`server._kick`). With AI off, or triage held back
   by the cost governor (see AI calls), it tries nothing: `summarize.summarize_pending` returns 0
   at once, and a round that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
@@ -523,6 +523,14 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
   moved stored thread summaries onto it. A stored brief keeps each group's messages by Message-ID
   too, and a read gives the pks they have now (`summarize_briefing._groups_now`).
+- **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
+  (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
+  `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
+  said to every copy and under the key (`assessments`), and `store.upsert_message` gives it to a copy that
+  arrives, so a move, an Undo, a renumber or Gmail's All Mail copy pays for no second call.
+  `needs_summary` offers one copy of each. A key with no copy left waits 30 days (`gone_at`) for one to
+  come back, then the `forget` job ends it. `store.init` gives a key to a row an older commit wrote. Message
+  rows in the API carry it as `key`, beside `pk`. New durable state about a message keys on it.
 - **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
   union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
   Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
