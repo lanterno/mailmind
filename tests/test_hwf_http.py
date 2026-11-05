@@ -523,7 +523,6 @@ def test_a_reply_marks_its_original_answered_after_the_original_is_archived(app,
     assert (box, "\\Answered" in flags) == ("Archive", True)
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the Drafts list never shows a draft saved after it was opened")
 def test_a_saved_draft_shows_in_an_open_drafts_list(app, world):
     app.get(f"/api/messages?account={w.ADA}&folder=Drafts")
     assert app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],

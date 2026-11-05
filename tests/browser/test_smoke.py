@@ -396,6 +396,24 @@ def test_a_folder_still_reading_fills_in_when_its_first_scan_ends(page, app, wor
     clean(page)
 
 
+def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, monkeypatch):
+    import server
+    from gate import held_elsewhere
+    monkeypatch.setattr(server, "CATCH_UP_WAIT", 0.1)
+    opened(page)
+    folder(page, "Archive").click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    folder(page, "INBOX").click()
+    world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml",
+                                                     Message_ID="<issue-219@example.test>"))
+    monkeypatch.setattr(server, "CATCH_UP_EVERY", 0)
+    with held_elsewhere(w.ADA):                                  # the catch-up waits behind a long op
+        folder(page, "Archive").click()
+        expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(2)
+    clean(page)
+
+
 @pytest.mark.xfail(strict=True, reason="two copies of one draft share a Message-ID, so the Drafts row "
                                        "opens as a conversation, whose reader has no Edit")
 def test_a_draft_with_an_older_copy_still_opens_for_editing(page, world):

@@ -240,10 +240,10 @@ def test_the_end_of_a_folders_first_scan_tells_the_open_tabs(app, world, quick):
     assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 1
     head, data = s.event().split("\n")[1:]
     assert head == "event: folder-synced"
-    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Junk", "ok": True}
+    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Junk", "ok": True, "new": 1}
     world.server.fail("SELECT", user=w.ADA)
     assert app.get(f"/api/messages?account={w.ADA}&folder=Spam").json["sync_failed"] is True
     head, data = s.event().split("\n")[1:]
-    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Spam", "ok": False}
+    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Spam", "ok": False, "new": 0}
     s.close()
     subscribers(quick, 0)
