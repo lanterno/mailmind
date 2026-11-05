@@ -174,19 +174,22 @@ class DurableQueue:
             if missed:
                 self.kick()
 
-    def until_due(self, c, now):
-        """Seconds from `now` until the next queued row comes due, at most `poll`. A row due
-        already isn't waited for: a kick brings the drain that takes it (a busy lane's, as it
-        ends), and the poll a drain that wouldn't (read-only's)."""
+    def until_due(self, c, now, looked=None):
+        """Seconds from `now` until the next queued row comes due, at most `poll`, and none if one
+        has come due since the last drain began to look (`looked`, by default `now`). That drain may
+        have missed it, and no kick is coming. A row due before it looked isn't waited for: a kick
+        brings the drain that takes it (a busy lane's, as it ends), and the poll a drain that
+        wouldn't (read-only's), so the worker never goes round for it."""
+        looked = now if looked is None else looked
         r = c.execute(f"SELECT MIN(next_attempt_at) FROM {self.table} WHERE state=? AND next_attempt_at>?",
-                      (QUEUED, now)).fetchone()
-        return self.poll if r is None or r[0] is None else min(self.poll, r[0] - now)
+                      (QUEUED, looked)).fetchone()
+        return self.poll if r is None or r[0] is None else max(0, min(self.poll, r[0] - now))
 
-    def _wait(self):
+    def _wait(self, looked):
         try:
             c = self._connect()
             try:
-                return self.until_due(c, time.time())
+                return self.until_due(c, time.time(), looked)
             finally:
                 c.close()
         except Exception as e:                   # the poll still comes
@@ -205,11 +208,13 @@ class DurableQueue:
             c.commit()
         finally:
             c.close()
+        looked = time.time()
         while True:
-            self._kick.wait(timeout=self._wait())
+            self._kick.wait(timeout=self._wait(looked))
             self._kick.clear()
             if stop is not None and stop.is_set():
                 return
+            looked = time.time()
             try:
                 drain()
             except Exception as e:
