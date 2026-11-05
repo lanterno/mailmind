@@ -2191,37 +2191,86 @@ def _unsub_mailto_send(from_addr, info, acct_emails):
     return sent > 0
 
 
+UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's gate to read one message's headers
 _UNSUB_NONE = {"method": "none", "https_uri": None, "mailto_uri": None, "mailto_to": None,
                "mailto_subject": None, "mailto_body": None}
 
 
+def _unsub_stored(c, rows):
+    """What the sender's newest message that can say says, newest first through `rows`: from what
+    ingest kept of its headers, else from its stored body. None if no row can say."""
+    for r in rows:
+        m = r["list_unsub_method"]
+        if m == "none":
+            return _UNSUB_NONE                          # cached authoritative none → stop (no re-fetch)
+        if m:
+            parsed = mailparse.list_unsub_stored(r["list_unsub_raw"])
+            if parsed["method"] != "none":
+                return parsed
+        raw = store.get_body(c, r["pk"])
+        if raw is None:
+            continue                                    # body not fetched yet → can't resolve this row
+        parsed = _parse_list_unsub(raw)
+        if not m:                                       # uncached → cache the resolution
+            store.set_list_unsub(c, r["pk"], parsed.get("raw", ""), parsed["method"])
+            c.commit()
+        return parsed if parsed["method"] != "none" else _UNSUB_NONE    # newest with a body has no header → none
+    return None
+
+
+def _unsub_from_server(r):
+    """Ask the server for one message's unsubscribe headers alone (BODY.PEEK of those fields): mail from
+    before ingest kept them, with no body stored. Caches what it hears; None if it can't say now."""
+    acct = next((a for a in accounts.accounts() if a["email"] == r["account"]), None)
+    if acct is None:
+        return None
+
+    def read():
+        s = mailbox.open_session(acct)
+        try:
+            s.select(r["folder"])
+            return s.headers([r["uid"]], ("LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST"))
+        finally:
+            s.logout()
+    try:
+        got = gates.run(r["account"], read, priority=gates.Priority.INTERACTIVE, deadline=UNSUB_READ_WAIT)
+    except Exception as e:                              # a preview still works: it offers no unsubscribe
+        print(f"[unsub] header read {type(e).__name__}", flush=True)
+        return None
+    if not got:
+        return None
+    parsed = _parse_list_unsub(got[0].raw)
+    c = store.conn()
+    store.set_list_unsub(c, r["pk"], parsed.get("raw", ""), parsed["method"])
+    c.commit()
+    c.close()
+    return parsed if parsed["method"] != "none" else _UNSUB_NONE
+
+
 def _resolve_unsub(from_addr):
-    """Authoritative unsubscribe method for a sender = the newest message's List-Unsubscribe. Trust the
-    cached column when present (a cached 'none' short-circuits — no re-fetch); otherwise parse the
-    newest message with a stored body (no network) and cache the result. Never loops all bodies."""
+    """Authoritative unsubscribe method for a sender = the newest message's List-Unsubscribe: from what's
+    stored, else from the server for the newest message alone, else (a sweep took the sender's mail, and
+    this is a second try) from what was last read. Returns (method info, the accounts it wrote to)."""
     c = store.conn()
     try:
         rows = c.execute(
-            "SELECT pk, account, list_unsub_raw, list_unsub_method FROM messages "
+            "SELECT pk, account, folder, uid, list_unsub_raw, list_unsub_method FROM messages "
             "WHERE lower(from_addr)=? ORDER BY ts DESC", (from_addr,)).fetchall()
-        accts, seen_acct = [], set()
-        for r in rows:
-            if r["account"] and r["account"] not in seen_acct:
-                seen_acct.add(r["account"]); accts.append(r["account"])
-        for r in rows:                                  # newest-first; the first resolvable one is authoritative
-            m = r["list_unsub_method"]
-            if m == "none":
-                return _UNSUB_NONE, accts               # cached authoritative none → stop (no re-fetch)
-            raw = store.get_body(c, r["pk"])
-            if raw is None:
-                continue                                # body not fetched yet → can't resolve this row
-            parsed = _parse_list_unsub(raw)
-            if not m:                                   # uncached → cache the resolution
-                store.set_list_unsub(c, r["pk"], parsed.get("raw", ""), parsed["method"])
-                c.commit()
-            if parsed["method"] != "none":
-                return parsed, accts
-            return _UNSUB_NONE, accts                    # newest message with a body has no header → none
+        accts = list(dict.fromkeys(r["account"] for r in rows if r["account"]))
+        info = _unsub_stored(c, rows)
+    finally:
+        c.close()
+    if info is None and rows:
+        info = _unsub_from_server(rows[0])
+    c = store.conn()
+    try:
+        if info is not None:
+            store.sender_unsub_put(c, from_addr, info, accts, now_iso())
+            c.commit()
+            return info, accts
+        kept = store.sender_unsub_get(c, from_addr)
+        if kept is not None:
+            return mailparse.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
         return _UNSUB_NONE, accts
     finally:
         c.close()

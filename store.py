@@ -29,6 +29,20 @@ def set_list_unsub(c, pk, raw, method):
     c.execute("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?", (raw, method, pk))
 
 
+def sender_unsub_put(c, from_addr, info, accounts, when):
+    """Keep how to unsubscribe from a sender, past the sender's mail. A newest message offering no way
+    ends it: the list has stopped offering one."""
+    if info["method"] == "none":
+        c.execute("DELETE FROM sender_unsub WHERE from_addr=?", (from_addr,))
+    else:
+        c.execute("INSERT OR REPLACE INTO sender_unsub(from_addr, raw, accounts, updated_at) VALUES(?,?,?,?)",
+                  (from_addr, info["raw"], json.dumps(accounts), when))
+
+
+def sender_unsub_get(c, from_addr):
+    return c.execute("SELECT * FROM sender_unsub WHERE from_addr=?", (from_addr,)).fetchone()
+
+
 def unsub_log_get(c, key):
     return c.execute("SELECT * FROM unsub_log WHERE idempotency_key=?", (key,)).fetchone()
 
