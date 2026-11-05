@@ -585,7 +585,9 @@ launcher script if you want them on.
 In the repo folder, or in the directory `MAILMIND_HOME` names:
 
 - `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
-- `mailmind_rules.json` — your learned keep/block lists and expiry rules.
+- `mailmind_rules.json` — your learned keep/block lists and expiry rules. It's written whole or
+  not at all, readable by you only. A hand edit that breaks it leaves the rules last read in
+  force, and the next save keeps the broken copy in `backups/`.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.
 - `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
 - `mailmind.config.json` — your accounts + credentials.

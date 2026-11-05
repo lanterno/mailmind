@@ -489,13 +489,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **The rules file can stop the app** · high value · effort S — `rules.save` writes
-  `mailmind_rules.json` in place with default permissions. A failed write leaves it truncated.
-  From then on every `rules.load` raises, so `/api/rules` answers 500, and the classifier's own
-  read raises into ingest, which stops every sync. Write it as `views.save` does (temp file, 0600,
-  rename), and let a bad file fall back to the last good rules. Pinned by
-  `test_a_failed_rules_write_keeps_the_rules`, `test_hwf_a_malformed_rules_file_does_not_stop_sync`
-  and `test_hwf_the_rules_file_is_written_owner_only`.
 - **Prune a sweep's local rows by Message-ID** · low value · effort S — `manage.sweep_account`
   prunes local rows by live UID, where expiry and the AI sweep prune by Message-ID. Across a
   UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The next sync's reset heals

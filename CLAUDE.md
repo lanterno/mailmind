@@ -659,6 +659,10 @@ which needs the CSRF token.
 holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `manage.expire_account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
+`rules.save` writes the file whole (a temp file, owner-only, renamed over it). A read parses it
+again only when it changed; one that won't parse leaves the last rules read well, so a bad edit
+never stops a sync, and the next save moves it to `backups/` first. The classifier reads
+through `rules.sets()`.
 
 ## Conventions
 
