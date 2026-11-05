@@ -9,7 +9,8 @@ Grammar (tokenized with shlex so "quoted phrases" stay intact):
   has:attachment                                  -> structured
   in:FOLDER  account:EMAIL                         -> structured exact
   before:YYYY-MM-DD  after:YYYY-MM-DD              -> structured ts bound
-  -TOKEN                                           -> negation (FTS NOT / negated clause)
+  -TOKEN                                           -> negation (FTS NOT / negated clause; mail with
+                                                     no value for a negated field isn't excluded)
 
 Injection-safe: FTS column specs are FIXED literals; every user value is FTS-quoted
 (embedded " doubled) and the whole MATCH string is passed as ONE bound parameter;
@@ -70,13 +71,13 @@ def build(q):
             where.append(f"m.{col} = ?")
             params.append((1 - on) if neg_t else on)
         elif sep and lname == "is" and val.lower() in _BUCKET_ALIAS:   # is:newsletter/receipt/notification
-            where.append("m.bucket " + ("<>" if neg_t else "=") + " ?")
+            where.append("m.bucket " + ("IS NOT" if neg_t else "=") + " ?")
             params.append(_BUCKET_ALIAS[val.lower()])
         elif sep and lname == "bucket" and val:
-            where.append("m.bucket " + ("<>" if neg_t else "=") + " ?")
+            where.append("m.bucket " + ("IS NOT" if neg_t else "=") + " ?")
             params.append(_BUCKET_ALIAS.get(val.lower(), val.lower()))
         elif sep and lname == "category" and val:                      # from the summaries join
-            where.append("s.category " + ("<>" if neg_t else "=") + " ?")
+            where.append("s.category " + ("IS NOT" if neg_t else "=") + " ?")
             params.append(val.lower())
         elif sep and lname == "has" and val.lower() == "attachment":
             where.append("m.has_attach = ?")
@@ -99,5 +100,8 @@ def build(q):
     elif pos:
         match = " ".join(pos)
     else:
-        match = None                        # pure-structured (or only-negative FTS, dropped)
+        match = None                        # pure-structured
+        if neg:                             # FTS5 has no bare NOT: what MATCH finds is left out instead
+            where.append("m.pk NOT IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)")
+            params.append(" OR ".join(neg))
     return match, where, params
