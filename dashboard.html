@@ -3393,7 +3393,9 @@ function composeOpen(opts){
   $("#composeModal").classList.add("show"); $("#scrim").classList.add("on");
   setReturnFocus=document.activeElement;
   state.compose._autosaveIv=setInterval(autosaveTick, 8000);   // continuous draft autosave
-  setTimeout(()=>{ if(!state.compose)return; const f=state.compose.mode==="new"?fieldEl("to").querySelector(".ci"):$("#cmpBody"); if(f)f.focus(); },40);
+  const opened=state.compose, firstField=()=>opened.mode==="new"?fieldEl("to").querySelector(".ci"):$("#cmpBody");
+  firstField()?.focus();   // at once, so the first keys land here and not on the list's shortcuts
+  setTimeout(()=>{ if(state.compose===opened&&!$("#composeModal").contains(document.activeElement))firstField()?.focus(); },40);   // a second try, never away from a field already chosen
   knownQueue([...state.compose.to,...state.compose.cc,...state.compose.bcc].map(x=>x.v),false);   // prefilled chips are marked silently
 }
 function sigFor(email){ return (state.signatures&&state.signatures[email])||state.signatureDefault||""; }
