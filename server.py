@@ -567,7 +567,7 @@ def digest_json(qs):
     amap = config.alias_map()
     wmap = config.webmail_map()
     items = [{
-        "pk": r["pk"], "account": r["account"], "kind": r["kind"],
+        "pk": r["pk"], "key": r["message_key"], "account": r["account"], "kind": r["kind"],
         "alias": amap.get(r["account"]),
         "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
@@ -779,7 +779,7 @@ def message_body(pk, load_images, prefetch=False):
         safe_html = _resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
     invite, invite_part = _invite_for(pk, parsed)
     return {
-        "ok": True, "pk": pk, "html": safe_html, "text": text,
+        "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": text,
         "has_html": bool(html), "attachments": parsed["attachments"],
         "invite": invite, "invite_part": invite_part,
         "blocked_images": info.get("blocked_images", 0),
@@ -956,7 +956,7 @@ def snoozed_in(account, offset, limit):
     """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
     c = store.conn()
     rows = c.execute(
-        """SELECT m.pk, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
+        """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   m.snoozed_until, s.importance
            FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
@@ -967,7 +967,8 @@ def snoozed_in(account, offset, limit):
                       (account,)).fetchone()[0]
     c.close()
     items = [{
-        "pk": r["pk"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
         "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
@@ -987,7 +988,8 @@ def muted_in(account, offset, limit):
     total = len(all_rows)
     rows = all_rows[offset:offset + limit]
     items = [{
-        "pk": r["pk"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
         "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
         "seen": True, "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
@@ -1012,7 +1014,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
     now = now or datetime.now()
     c = store.conn()
     rows = c.execute(
-        """SELECT m.pk, m.account, m.folder, m.thread_id, a.part_id
+        """SELECT m.pk, m.message_key, m.account, m.folder, m.thread_id, a.part_id
            FROM attachments a JOIN messages m ON m.pk=a.message_pk
            WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?) AND m.pending_removal IS NULL
              AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
@@ -1056,7 +1058,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
         start, end = (_local_naive(d) for d in occ)
         org = inv.get("organizer") or {}
         items.append({
-            "pk": r["pk"], "account": r["account"], "thread_id": r["thread_id"],
+            "pk": r["pk"], "key": r["message_key"], "account": r["account"], "thread_id": r["thread_id"],
             "summary": inv["summary"], "location": inv.get("location", ""),
             "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
             "all_day": inv["all_day"], "organizer": org.get("name") or org.get("email") or "",
@@ -1080,7 +1082,8 @@ def waiting_in(account, offset, limit):
         else:
             label = "Awaiting your reply · " + rel_time(r["date_iso"])
         items.append({
-            "pk": r["pk"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
             "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
@@ -1101,7 +1104,8 @@ def replylater_in(account, offset, limit):
     total = len(all_rows)
     rows = all_rows[offset:offset + limit]
     items = [{
-        "pk": r["pk"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
         "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
         "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
@@ -1235,7 +1239,7 @@ def messages_in(account, folder, offset, limit, group=False):
                           (account, folder)).fetchone()[0]
     else:
         rows = c.execute(
-            """SELECT m.pk, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
+            """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
                       m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                       s.summary, s.action, s.category
                FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
@@ -1251,7 +1255,8 @@ def messages_in(account, folder, offset, limit, group=False):
     items = []
     for r in rows:
         it = {
-            "pk": r["pk"], "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
+            "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
+            "from_addr": r["from_addr"],
             "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
             "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
             "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
@@ -1274,7 +1279,7 @@ def thread_json(account, thread_id):
         return {"ok": False, "error": "missing account/thread"}
     c = store.conn()
     rows = c.execute(
-        """SELECT pk, folder, from_addr, from_name, subject, date_iso, ts, snippet,
+        """SELECT pk, message_key, folder, from_addr, from_name, subject, date_iso, ts, snippet,
                   seen, flagged, answered, has_attach, is_junk, message_id
            FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
            ORDER BY ts ASC, pk ASC""",
@@ -1287,7 +1292,8 @@ def thread_json(account, thread_id):
             continue
         seen_ids.add(key)
         items.append({
-            "pk": r["pk"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
             "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "answered": bool(r["answered"]),
@@ -1318,7 +1324,7 @@ def search_json(qs):
     c = store.conn()
     try:
         if match is not None:
-            sql = (f"""SELECT m.pk,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
+            sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
                           m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,
                           bm25(msg_fts,8.0,4.0,4.0,2.0,1.0) AS score
                    FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid
@@ -1328,7 +1334,7 @@ def search_json(qs):
                    LIMIT ? OFFSET ?""")
             args = [match, *params, limit + 1, offset]
         else:
-            sql = (f"""SELECT m.pk,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
+            sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
                           m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance
                    FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
                    WHERE 1=1{where_sql} ORDER BY m.ts DESC LIMIT ? OFFSET ?""")
@@ -1341,7 +1347,8 @@ def search_json(qs):
     has_more = len(rows) > limit
     rows = rows[:limit]
     items = [{
-        "pk": r["pk"], "account": r["account"], "folder": r["folder"], "alias": amap.get(r["account"]),
+        "pk": r["pk"], "key": r["message_key"], "account": r["account"], "folder": r["folder"],
+        "alias": amap.get(r["account"]),
         "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
         "date": (r["date_iso"] or "")[:10],
