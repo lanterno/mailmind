@@ -312,7 +312,7 @@ automatically.
 - **Live updates without a refresh.** An SSE stream pushes new mail, snooze wake-ups,
   mutes and ready AI drafts into the open list behind a sticky `N new` pill that never
   yanks the view mid-triage — with polling as an automatic fallback. An undo in another
-  tab and a move queued offline that lands refresh the list too. A tab that drops off (a
+  tab and a move queued offline that lands, or won't, refresh the list too. A tab that drops off (a
   sleeping laptop, a restart) hears what it missed when it reconnects, or fetches afresh
   when the server can no longer replay it.
 - **Push that follows your accounts.** IMAP IDLE watches each account's inbox. Add an
@@ -324,7 +324,10 @@ automatically.
   beside the sync status reads "Studio sync in 8 min"; it opens the invite or dismisses,
   and turns into one desktop notification when the tab is in the background.
 - **Triage survives an outage.** Archive, trash, junk and move queue durably with an
-  optimistic local update and an undo, then re-apply exactly once when IMAP returns.
+  optimistic local update and an undo, then re-apply exactly once when IMAP returns. The
+  message leaves the list at once but MailMind keeps it until the move lands, so a move the
+  server refuses, or one the queue gives up on, puts it back where it is, and Undo of a move
+  that hasn't gone out restores it without asking the server.
 - **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
   mail when you open it, but writes nothing to a mail server. Its connections can only read,
   sends and moves wait in their queues for a normal run, and what can't wait is refused.

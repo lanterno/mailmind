@@ -177,7 +177,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
   what the legacy workers publish: `outbox.Sent`, `readmutq.Applied` and `realtime.InboxChanged`.
-  It also hands each account event (below) to `realtime.reconcile`. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
+  It also hands each account event (below) to `realtime.reconcile`. `readmutq.Restored` (a
+  queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
   `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
   copy with state of its own.
   `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
@@ -400,7 +401,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 
 - Mutations go through `mailops.py`. A connection failure raises a member of
   `mailops._UNREACHABLE`, which the route catches and turns into a durable queue row via
-  `store.read_mut_insert`.
+  `store.read_mut_insert`. The message's row stays, marked `pending_removal` with the queue
+  row's id (migration 23), and every list, search, the conversation view, the brief and the AI's
+  inputs leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too.
+  The queue deletes the rows it marked once the move lands. A refusal (`apply_queued_mutation`
+  returns `refused` or `no_folder`), a give-up or a removed account puts the row in `error` and
+  clears the mark (`store.restore_pending`), and so does Undo of a move not yet applied.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It and `outbox.py` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth

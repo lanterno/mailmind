@@ -465,14 +465,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
-- **Bring back a queued move that doesn't happen** · high value · effort S — `_readmut_enqueue`
-  drops the local row when it queues. If the server then refuses the move,
-  `mailops.apply_queued_mutation` reads the `IMAP4.error` as done, and `readmutq.apply_one` never
-  looks at its result. If the queue gives up after `MAX_ATTEMPTS`, the row is never restored
-  either. Both times the message stays in the server's folder but is gone from MailMind's list,
-  and incremental sync won't refetch it. Mark the row `error` and re-ingest the message with
-  `ingest.ingest_message`, as Undo's cancel branch does. Pinned by
-  `test_a_queued_move_the_server_refuses_comes_back` and `test_a_queued_move_given_up_on_comes_back`.
 - **Negation in search** · medium value · effort S — two gaps in `search.build`, each pinned by a
   strict xfail in `tests/test_search_build.py`:
   - a negated FTS term with nothing positive (`-from:lin`) is dropped, so the query matches all
@@ -536,8 +528,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     ignores `ingest_message` returning 0. A refused unarchive therefore reports success, uses up
     the entry, and leaves the message out of the list. Pinned by
     `test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone`.
-  - A trash queued offline and undone while still offline is lost. Pinned by
-    `test_hwf_an_offline_trash_undone_while_offline_comes_back`.
 - **The offline queue's remaining gaps** · medium value · effort S —
   - Marking read or starring while IMAP is away answers 500. `read_mutations.op` allows `flag` and
     `apply_queued_mutation` handles it, but `do_write` never queues one. Pinned by
