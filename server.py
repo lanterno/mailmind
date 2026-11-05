@@ -443,28 +443,56 @@ def _kick(job):
         JOBS.kick(job)
 
 
+BACKFILL_RETRY = 6 * 3600     # a body the server didn't give is asked for again after this long
+BACKFILL_UNREACHABLE = 60     # the round after one whose server couldn't be reached
+_backfill_missed = {}         # pk -> when backfill may ask for its body again
+
+
 def backfill_round():
     """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
     apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
-    there is a backlog, ten minutes once caught up (new mail lands body-less)."""
+    there is a backlog, ten minutes once caught up (new mail lands body-less).
+
+    A body the server didn't give (deleted elsewhere and not yet pruned here, or refused) waits
+    BACKFILL_RETRY before it is asked for again, so the next round reaches older mail. A server
+    that can't be reached ends the round, and the next comes in BACKFILL_UNREACHABLE."""
+    now = time.time()
+    for pk in [pk for pk, at in _backfill_missed.items() if at <= now]:
+        del _backfill_missed[pk]
     c = store.conn()
     try:
         rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
-                         "AND pending_removal IS NULL ORDER BY ts DESC LIMIT 12").fetchall()
+                         "AND pending_removal IS NULL AND pk NOT IN (SELECT value FROM json_each(?)) "
+                         "ORDER BY ts DESC LIMIT 12", (json.dumps(list(_backfill_missed)),)).fetchall()
     finally:
         c.close()                        # always close, even if the SELECT raises
     if not rows:
         return 600
+    tried, wait = [], 8                  # drain a backlog briskly
     for r in rows:
         try:
             gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
                       priority=gates.Priority.MAINTENANCE, wait=False)
         except gates.Busy:
             break                        # a user op is live — yield and retry next cycle
+        except mailops._UNREACHABLE:
+            wait = BACKFILL_UNREACHABLE  # the server's down: ask nothing more of it this round
+            break
         except Exception:
             pass
+        tried.append(r["pk"])
         time.sleep(1.5)                  # gentle pacing between IMAP fetches
-    return 8                             # drain a backlog briskly
+    if tried:
+        c = store.conn()
+        try:
+            missed = [x["pk"] for x in c.execute(
+                "SELECT pk FROM messages WHERE body_text IS NULL AND pk IN (SELECT value FROM json_each(?))",
+                (json.dumps(tried),))]
+        finally:
+            c.close()
+        for pk in missed:
+            _backfill_missed[pk] = now + BACKFILL_RETRY
+    return wait
 
 
 # ----------------------------------------------------------------------------- helpers
