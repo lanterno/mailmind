@@ -4068,11 +4068,14 @@ class H(BaseHTTPRequestHandler):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def _body(self):
+        """The request's JSON object, {} for no body, or None for a body that isn't a JSON object
+        (an array, a string, not JSON at all), which the route answers 400 once the guards pass."""
         length = int(self.headers.get("Content-Length", 0) or 0)
         try:
-            return json.loads(self.rfile.read(length) or b"{}") if length else {}
+            b = json.loads(self.rfile.read(length) or b"{}") if length else {}
         except Exception:
-            return {}
+            return None
+        return b if isinstance(b, dict) else None
 
     def do_GET(self):
         no = perimeter.refuse_host(self.headers, settings.current().port)
@@ -4199,6 +4202,8 @@ class H(BaseHTTPRequestHandler):
         no = perimeter.refuse_mutation(u.path, self.headers, port=settings.current().port, token=CSRF)
         if no:
             return self._json(no.answer(), no.status)
+        if b is None:
+            return self._json({"ok": False, "error": "bad request"}, 400)
         _ui_touch(u.path)                 # only a request that got past the guards: someone is here
         over = assistant.allowing_over(self.headers.get(AI_OVER_HEADER) == "allow")
         over.__enter__()
