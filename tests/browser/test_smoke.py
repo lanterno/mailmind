@@ -188,6 +188,22 @@ def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
     clean(page)
 
 
+def test_mail_marked_unread_elsewhere_shows_on_an_open_list(page, world):
+    import accounts
+    import ingest
+    name = "ada-archive-01-old-thread.eml"
+    opened(page)
+    folder(page, "Archive").click()
+    listed = row(page, world, name)
+    expect(listed).to_have_count(1)
+    assert "unread" not in listed.get_attribute("class")
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "Archive").messages[world.uid(name)].flags.discard(w.SEEN)
+    ingest.sync_folder(accounts.get(w.ADA), "Archive")
+    until(page, lambda: "unread" in (row(page, world, name).get_attribute("class") or ""), "the row marked unread")
+    clean(page)
+
+
 def test_archive_a_conversation_files_every_message_then_undo(page, world):
     opened(page)
     convo = rows_titled(page, "Lunch on Thursday?")
