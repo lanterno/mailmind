@@ -20,6 +20,7 @@ package = false
 [dependency-groups]
 dev = [
     "axe-playwright-python>=0.1.8",
+    "hypothesis>=6.170.14",
     "import-linter>=2.15",
     "playwright>=1.64.1",
     "pytest>=9.2.0",
