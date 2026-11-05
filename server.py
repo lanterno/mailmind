@@ -1332,7 +1332,7 @@ def search_json(qs):
     limit = max(1, min(200, int(qs.get("limit", ["80"])[0])))
     offset = max(0, int(qs.get("offset", ["0"])[0]))
     match, where, params = search.build(q)
-    where = where + ["m.pending_removal IS NULL"]      # on its way out by a queued move
+    where = search.visible(where) + ["m.pending_removal IS NULL"]      # on its way out by a queued move
     if scope != "all" and account:
         where = where + ["m.account = ?"]
         params = params + [account]
@@ -4031,6 +4031,7 @@ def ai_do_plan(body):
         return {"ok": True, "intent": "search", "filter": filt}, 200
     # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
     match, where, params = search.build(filt)
+    where = search.visible(where)
     if _do_is_whole_inbox(filt, match):                # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP

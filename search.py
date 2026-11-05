@@ -5,6 +5,7 @@ Grammar (tokenized with shlex so "quoted phrases" stay intact):
   "a phrase"  bareword                            -> FTS term (phrase / word)
   is:unread|read|flagged|answered|junk            -> structured flag
   is:newsletter|receipt|notification              -> messages.bucket shorthand
+  is:snoozed                                      -> structured; else snoozed mail isn't found (visible)
   bucket:VALUE  category:VALUE                     -> exact-match lane filters (bound)
   has:attachment                                  -> structured
   in:FOLDER  account:EMAIL                         -> structured exact
@@ -48,6 +49,12 @@ def _ts(v):
         return None
 
 
+def visible(where):
+    """`where`, leaving out snoozed mail unless the query asks about it. A snoozed message is out of
+    sight until it wakes, in a search and in what a command acts on."""
+    return where if any("m.snoozed_until" in w for w in where) else where + ["m.snoozed_until IS NULL"]
+
+
 def build(q):
     """-> (match_or_None, where_fragments[list], params[list]).
     match is None when the query is purely structured (caller then runs no MATCH)."""
@@ -69,6 +76,8 @@ def build(q):
             col, on = _FLAG[val.lower()]
             where.append(f"m.{col} = ?")
             params.append((1 - on) if neg_t else on)
+        elif sep and lname == "is" and val.lower() == "snoozed":
+            where.append("m.snoozed_until IS " + ("NULL" if neg_t else "NOT NULL"))
         elif sep and lname == "is" and val.lower() in _BUCKET_ALIAS:   # is:newsletter/receipt/notification
             where.append("m.bucket " + ("IS NOT" if neg_t else "=") + " ?")
             params.append(_BUCKET_ALIAS[val.lower()])
