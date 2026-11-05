@@ -819,16 +819,66 @@ def _forwarded_email(outer_text):
     return outer.as_bytes()
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an attached email's own files are listed as the outer's")
 def test_hwf_an_attached_emails_files_are_not_listed_as_the_outers():
     import mailparse
     assert [a["content_type"] for a in mailparse.parse(_forwarded_email(True))["attachments"]] == ["message/rfc822"]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an attached email's text is taken for the outer's")
 def test_hwf_an_attached_emails_text_is_not_taken_for_the_outers():
     import mailparse
     assert mailparse.parse(_forwarded_email(False))["text"] is None
+
+
+def test_hwf_an_attached_email_is_one_part_of_the_right_size():
+    import mailparse
+    raw = _forwarded_email(True)
+    [att] = mailparse.parse(raw)["attachments"]
+    data, ctype = mailparse.extract_part(raw, att["part_id"])
+    assert ctype == "message/rfc822" and att["size"] == len(data) and b"Subject: Fabric" in data
+
+
+def test_hwf_an_attached_email_with_no_file_name_is_still_listed():
+    import mailparse
+    raw = _forwarded_email(True).replace(b"Content-Disposition: attachment\n", b"")
+    assert [(a["filename"], a["content_type"]) for a in mailparse.parse(raw)["attachments"]] == [
+        ("message.eml", "message/rfc822")]
+
+
+def test_hwf_a_snippet_leaves_an_attached_emails_text_out():
+    import email
+    import ingest
+    assert "the inner note" not in ingest.text_body(email.message_from_bytes(_forwarded_email(False)))
+
+
+def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
+    import email
+    from email import policy
+    import compose
+    import server
+    [att] = server._extract_attachments(_forwarded_email(True))
+    assert att["content_type"] == "message/rfc822" and b"Subject: Fabric" in att["data"]
+    built = compose.build_message({"account": A, "to": ["lin@example.test"], "subject": "Fwd: Fabric", "text": "fyi",
+                                   "attachments": [att]})
+    [out] = email.message_from_bytes(built["raw"], policy=policy.default).iter_attachments()
+    assert out.get_content_type() == "message/rfc822" and out["Content-Transfer-Encoding"] != "base64"
+    assert out.get_content()["Subject"] == "Fabric"
+    assert [a.get_filename() for a in out.get_content().iter_attachments()] == ["swatch.pdf"]
+
+
+def test_hwf_a_message_whose_part_rows_were_cleared_records_them_when_opened(world):
+    import ingest
+    import store
+    name = "ada-inbox-07-forward-rfc822.eml"
+    pk = world.pk(name)
+    first = ingest.fetch_body(pk)["attachments"]
+    assert first
+    c = store.conn()
+    c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))     # what migration 28 does
+    c.commit()
+    c.close()
+    assert ingest.fetch_body(pk)["attachments"] == first
+    assert [r["part_id"] for r in rows("SELECT part_id FROM attachments WHERE message_pk=?", pk)] == [
+        a["part_id"] for a in first]
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: an encoded CR or LF in To makes parse() raise (ROADMAP)")

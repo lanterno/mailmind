@@ -156,7 +156,6 @@ def test_opening_a_message_records_its_attachments(world):
     assert world.row("ada-inbox-07-forward-rfc822.eml")["body_fetched"] == 1
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a forwarded .eml attachment is empty")
 def test_a_forwarded_message_attachment_carries_the_message(world):
     import mailparse
     raw = w.raw("ada-inbox-07-forward-rfc822.eml")

@@ -175,3 +175,17 @@ def test_a_folder_synced_before_m24_still_counts_as_synced(tmp_path):
     migrate.init(path)
     assert query(path, "SELECT folder, scan_state FROM sync_state ORDER BY folder") == [
         ("INBOX", "synced"), ("Junk", "never")]
+
+
+def test_part_rows_go_only_for_a_message_with_an_email_attached(tmp_path):
+    """m28: parsing stopped numbering an attached email's parts along with the message's own."""
+    path = str(tmp_path / "m28.db")
+    migrate.init(path, migrations.MIGRATIONS[:27])
+    c = sqlite3.connect(path)
+    c.execute("PRAGMA foreign_keys=OFF")
+    for pk, ctype in ((1, "application/pdf"), (2, "application/pdf"), (2, "Message/RFC822")):
+        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (?, '2', 'f', ?)", (pk, ctype))
+    c.commit()
+    c.close()
+    migrate.init(path)
+    assert query(path, "SELECT message_pk, content_type FROM attachments") == [(1, "application/pdf")]
