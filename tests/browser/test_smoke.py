@@ -366,6 +366,31 @@ def give_up_on_a_send(page, app, world):
     return page.locator("#outboxBtn")
 
 
+def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_again(page, app, world):
+    import outbox
+    world.smtp.drop_after_data()
+    opened(page)
+    compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    let_undo_pass(page)
+    due(app)
+    assert len(world.smtp.messages) == 1
+    button = page.locator("#outboxBtn")
+    expect(button).to_be_visible()
+    button.click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("May have gone out")
+    expect(fly).to_contain_text("unsure")
+    app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+    fly.get_by_role("button", name="Send again").click()
+    until(page, lambda: app.get("/api/outbox").json["items"][0]["state"] == "queued", "queued again")
+    outbox.drain()
+    assert len(world.smtp.messages) == 2
+    expect(button).to_be_hidden()
+    clean(page)
+
+
 def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_it_back(page, app, world):
     import readmutq
     opened(page)
