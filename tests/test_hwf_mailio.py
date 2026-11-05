@@ -193,6 +193,17 @@ def test_hwf_a_header_in_an_unknown_charset_decodes_as_utf8(world):
     assert r["subject"] == "Caf\u00e9 menu"
 
 
+def test_hwf_a_folder_name_in_a_request_cant_forge_a_log_line(app, world, capsys):
+    app.get(f"/api/messages?account={w.ADA}&folder=Gone%0A%5Bsync%5D%20forged&limit=5")
+    out = []
+
+    def logged():
+        out.append(capsys.readouterr().out)
+        return "[folder-sync]" in "".join(out)
+    assert wait_until(logged)
+    assert not any(line.startswith("[sync] forged") for line in "".join(out).splitlines())
+
+
 def test_hwf_a_folded_subject_and_sender_are_stored_on_one_line(world):
     uid = world.deliver(w.ADA, "INBOX", b'From: "Bo\r\n Lin" <bo@example.test>\r\nTo: ada@example.test\r\n'
                                         b'Subject: Items\r\n for next week\r\nMessage-ID: <fold-1@example.test>\r\n'
