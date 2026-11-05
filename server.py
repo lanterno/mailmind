@@ -2147,7 +2147,7 @@ def cleanup_senders(qs):
     for row in rows:
         addr = row["addr"]
         dom = addr.rpartition("@")[2]
-        if addr in decided_addr or dom in decided_dom:
+        if addr in decided_addr or mailclass._domain_listed(dom, decided_dom):   # a rule covers sub-domains
             continue
         n = row["n"] or 0
         unseen = row["unseen"] or 0
@@ -2346,7 +2346,7 @@ def do_screener(account):
     for row in rows:
         addr = row["addr"]
         dom = addr.rpartition("@")[2]
-        if addr in decided_addr or dom in decided_dom:    # already kept or blocked -> decided
+        if addr in decided_addr or mailclass._domain_listed(dom, decided_dom):   # kept or blocked, sub-domains too
             continue
         items.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
                       "count": row["n"], "when": rel_time(row["iso"])})
