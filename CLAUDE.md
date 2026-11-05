@@ -421,12 +421,16 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It and `outbox.py` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
-  goes to `error`, where a person's retry (`requeue`) starts the count again. The worker wakes
+  goes to `error`, where a person's retry (`requeue`) starts the count again. `/api/pending` lists the
+  move queue's unapplied rows for the panel the outbox button opens; its Retry (`readmutq.retry`) marks the message or
+  shows the flags again, and its Discard (`readmutq.discard`, on the account's gate) gives them back and
+  takes the entry off the undo stack (`store.undo_forget_move`). The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
   outbox publishes `outbox.Failed` for an attempt that failed, as it does `outbox.Sent`. A send the
   server refuses for good (`smtpsend.permanent`: a 5xx, or every recipient refused with one) goes
   to `error` on its first try (`give_up`). The gate column (`applied`, `delivered`) is set the instant the one
-  irreversible step returns, so the boot-time reset of running rows never repeats it. A row's
+  irreversible step returns, so the boot-time reset of running rows never repeats it, and for a move
+  before the IMAP gate opens, so an Undo or Discard waiting on it finds it set. A row's
   state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
   as a job on the account's IMAP gate; the outbox's SMTP send holds none.
 - The outbox's queue has a lane for each account (`DurableQueue(lane="account")`): its drain

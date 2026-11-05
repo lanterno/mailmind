@@ -341,6 +341,9 @@ automatically.
   tab and a move queued offline that lands, or won't, refresh the list too. A tab that drops off (a
   sleeping laptop, a restart) hears what it missed when it reconnects, or fetches afresh
   when the server can no longer replay it.
+- **Changes that wait are in plain sight.** A move, read mark or star made while the server can't
+  be reached shows in the panel behind the outbox button, which says why it waits. One that gave
+  up offers Retry, and any of them offers Discard, which leaves the message as the server has it.
 - **Push that follows your accounts.** IMAP IDLE watches each account's inbox. Add an
   account, change its password or server, or remove it, and IDLE follows at once, with no
   restart; a move still queued for a removed account is given up rather than left waiting.
