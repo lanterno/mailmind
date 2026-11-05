@@ -6,9 +6,14 @@ recompute_threads(c, account) assigns messages.thread_id, in precedence order:
   3) the message's own id (singleton).
 It NEVER threads on subject, NEVER spans accounts, and gives every row a non-NULL
 thread_id. The rf: thread_id is derived from the component's union-find ROOT (the
-lexicographically-smallest member id), NOT the whole member set, so a thread keeps the
-SAME id as replies arrive — durable state keyed on thread_id (muted / thread_summaries)
-survives a growing thread.
+lexicographically-smallest id in it, the ids its rows only refer to included), NOT the whole
+member set, so a thread keeps the SAME id as replies arrive, and mints the same one again when
+it is synced whole after every copy went: its root is the same whichever rows were there first.
+
+An id is sticky once given. When a thread's rows take another id (two threads merged, or a
+thread that gained a Gmail thread id), the state kept under the id no row holds any more moves
+to the id its rows hold now, in the same transaction: mutes, follow-ups and Reply Later, thread
+summaries and the reply drafted ahead.
 """
 import re
 import hashlib
@@ -75,38 +80,52 @@ def recompute_threads(c, account):
     # STICKY thread_id: once a component has an rf: id, keep it as the thread grows (the union-find
     # root is the lexicographically-smallest member id, which a new reply CAN change — so we must
     # NOT re-derive it each time). Only a brand-new component with no prior id mints a fresh hash.
-    comp_existing, comp_members = {}, {}
+    comp_existing = {}
     for r in rows:
         root = uf.find(self_key[r["pk"]])
-        comp_members.setdefault(root, []).append(self_key[r["pk"]])
         ex = (r["thread_id"] or "")
         if ex.startswith("rf:"):
             comp_existing.setdefault(root, set()).add(ex)
-    dropped = {}                              # old rf: id -> surviving id, when a merge renames a thread
+    given, held = {}, set()                   # pk -> its id now; every id a row holds now
     for r in rows:
         root = uf.find(self_key[r["pk"]])
         if root in root_thrid:
             tid = f"gm:{account}:{root_thrid[root]}"
         elif comp_existing.get(root):
             tid = min(comp_existing[root])    # reuse the sticky id (deterministic if a merge joined two)
-            for old in comp_existing[root]:   # a merge of N prior threads keeps min(); re-point the rest
-                if old != tid:
-                    dropped[old] = tid
-        else:                                 # brand-new component: hash its smallest member id once
-            h = hashlib.sha1(min(comp_members[root]).encode("utf-8", "replace")).hexdigest()[:16]
+        else:                                 # brand-new component: hash its root once
+            h = hashlib.sha1(root.encode("utf-8", "replace")).hexdigest()[:16]
             tid = f"rf:{account}:{h}"
+        given[r["pk"]] = tid
+        held.add(tid)
         c.execute("UPDATE messages SET thread_id=? WHERE pk=? AND (thread_id IS NULL OR thread_id<>?)",
                   (tid, r["pk"], tid))
-    # When a merge renames a thread, carry durable per-thread state to the surviving id so muted /
-    # followups / thread_summaries never orphan (UPDATE OR IGNORE then DELETE handles a PK clash where
-    # the survivor already has a row).
-    for old, surv in dropped.items():
-        for tbl in ("muted", "followups", "thread_summaries"):
-            try:
-                c.execute(f"UPDATE OR IGNORE {tbl} SET thread_id=? WHERE account=? AND thread_id=?",
-                          (surv, account, old))
-                c.execute(f"DELETE FROM {tbl} WHERE account=? AND thread_id=?", (account, old))
-            except Exception:
-                pass                          # table may not exist yet on a pre-migration DB
+    # An id no row holds any more hands its state to the id its rows took. One a split left on some
+    # rows still has them, and keeps its state.
+    moved = {}
+    for r in rows:
+        old = r["thread_id"] or ""
+        if old and old not in held:
+            moved.setdefault(old, given[r["pk"]])
+    for old, surv in moved.items():
+        _rekey(c, account, old, surv)
+
+
+def _rekey(c, account, old, surv):
+    """Move the state kept under thread `old` to `surv`. Where `surv` has a row of its own already,
+    that row stays and `old`'s goes (UPDATE OR IGNORE, then DELETE)."""
+    for tbl in ("muted", "followups", "thread_summaries"):
+        try:
+            c.execute(f"UPDATE OR IGNORE {tbl} SET thread_id=? WHERE account=? AND thread_id=?",
+                      (surv, account, old))
+            c.execute(f"DELETE FROM {tbl} WHERE account=? AND thread_id=?", (account, old))
+        except Exception:
+            pass                              # table may not exist yet on a pre-migration DB
+    try:
+        c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
+                  ("t:" + surv, account, "t:" + old))
+        c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + old))
+    except Exception:
+        pass
 
 
