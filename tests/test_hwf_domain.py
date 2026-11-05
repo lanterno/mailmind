@@ -897,7 +897,6 @@ def test_hwf_a_recorded_tail_is_cut_only_when_it_starts_with_a_blank_line():
         "Mine\n" + quote.rstrip("\n"), "", "whole")
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a tab in a subject is deleted, gluing the words (ROADMAP)")
 def test_hwf_a_tab_in_a_subject_is_not_deleted():
     import email
     import compose
