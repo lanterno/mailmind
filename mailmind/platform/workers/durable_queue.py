@@ -20,6 +20,7 @@ runs on the connection it's given and leaves the commit to its caller. Standard 
 python3 server.py uses it.
 """
 import threading
+import time
 
 QUEUED, ERROR = "queued", "error"
 
@@ -167,11 +168,30 @@ class DurableQueue:
             if missed:
                 self.kick()
 
+    def until_due(self, c, now):
+        """Seconds from `now` until the next queued row comes due, at most `poll`. A row due
+        already isn't waited for: a kick brings the drain that takes it (a busy lane's, as it
+        ends), and the poll a drain that wouldn't (read-only's)."""
+        r = c.execute(f"SELECT MIN(next_attempt_at) FROM {self.table} WHERE state=? AND next_attempt_at>?",
+                      (QUEUED, now)).fetchone()
+        return self.poll if r is None or r[0] is None else min(self.poll, r[0] - now)
+
+    def _wait(self):
+        try:
+            c = self._connect()
+            try:
+                return self.until_due(c, time.time())
+            finally:
+                c.close()
+        except Exception as e:                   # the poll still comes
+            print(f"[{self.name}] next due: {type(e).__name__}", flush=True)
+            return self.poll
+
     def run_forever(self, drain, stop=None):
         """The worker: put back what a crash left running, then call drain() whenever kicked,
-        and at least every `poll` seconds to catch the retries that come due. drain is the
-        worker's own, which calls self.drain with its handler and the time. It ends only once
-        `stop`, an Event, is set (and the queue kicked)."""
+        and when the next queued row comes due (a send's Undo window ending, a retry's backoff),
+        at least every `poll` seconds. drain is the worker's own, which calls self.drain with its
+        handler and the time. It ends only once `stop`, an Event, is set (and the queue kicked)."""
         self._worker.on = True
         c = self._connect()
         try:
@@ -180,7 +200,7 @@ class DurableQueue:
         finally:
             c.close()
         while True:
-            self._kick.wait(timeout=self.poll)
+            self._kick.wait(timeout=self._wait())
             self._kick.clear()
             if stop is not None and stop.is_set():
                 return
