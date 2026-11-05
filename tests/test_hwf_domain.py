@@ -881,11 +881,11 @@ def test_hwf_a_message_whose_part_rows_were_cleared_records_them_when_opened(wor
         a["part_id"] for a in first]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an encoded CR or LF in To makes parse() raise (ROADMAP)")
 def test_hwf_an_encoded_line_break_in_to_does_not_break_parsing():
     import mailparse
     raw = (b"From: lin@example.test\r\nTo: =?utf-8?q?Bo=0D=0AX?= <bo@example.test>\r\nSubject: x\r\n\r\nhello\r\n")
-    assert "bo@example.test" in mailparse.parse(raw)["to"]
+    to = mailparse.parse(raw)["to"]
+    assert "bo@example.test" in to and "\r" not in to and "\n" not in to
 
 
 # -- composing ----------------------------------------------------------------
