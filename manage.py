@@ -125,15 +125,16 @@ def plan_account_db(acct):
     res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
            "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
     c = store.conn()
-    rows = c.execute("""SELECT from_addr, from_name, subject, list_unsub_raw FROM messages
+    rows = c.execute("""SELECT from_addr, from_name, subject, bucket, list_unsub_raw FROM messages
                         WHERE account=? AND folder='INBOX' AND deleted=0""", (acct["email"],)).fetchall()
     c.close()
     by = defaultdict(list)
     for r in rows:
         addr = (r["from_addr"] or "").lower()
-        b = mailclass.classify(addr, r["subject"] or "", r["from_name"] or "",
-                               bool(r["list_unsub_raw"]))[0]
-        by[b].append(addr)
+        # The stored row keeps no List header, and a sweep reads them live. What ingest saw in them
+        # shows in the bucket: the classifier's rules come first, so a rule made since still wins.
+        listed = r["bucket"] == mailclass.MKT or bool(r["list_unsub_raw"])
+        by[mailclass.classify(addr, r["subject"] or "", r["from_name"] or "", listed)[0]].append(addr)
     res["in_inbox"] = len(rows)
     res["by_bucket"] = {b: len(v) for b, v in by.items()}
     res["junk"] = sum(len(by[b]) for b in mailclass.JUNK_BUCKETS)
