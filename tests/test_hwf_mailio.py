@@ -1193,9 +1193,10 @@ def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle,
 
 # -- mute ------------------------------------------------------------------
 
-def test_hwf_a_reply_in_a_muted_thread_is_marked_read_here_only(app, world):
-    # Mute is local by design (store.muted_thread_seen and apply_mute_on_ingest are pure SQL), so a
-    # reply that lands in a muted thread is read in MailMind and still unread on the server.
+def test_hwf_a_reply_in_a_muted_thread_is_marked_read_on_the_server_too(app, world):
+    # Decision D6: other clients agree. A reply that lands in a muted thread is read in MailMind at
+    # once, and on the server once the queue has told it.
+    import readmutq
     lunch = world.row("ada-inbox-02-lunch-confirm.eml")
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
     reply = w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<late-mute@example.test>",
@@ -1204,6 +1205,8 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_here_only(app, world):
     [r] = q("SELECT seen, thread_id FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid)
     assert (r["seen"], r["thread_id"]) == (1, lunch["thread_id"])
     assert w.SEEN not in world.server.messages(w.ADA, "INBOX")[uid].flags
+    readmutq.drain()
+    assert w.SEEN in world.server.messages(w.ADA, "INBOX")[uid].flags
 
 
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):

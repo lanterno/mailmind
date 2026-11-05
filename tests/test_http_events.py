@@ -79,6 +79,8 @@ def quick(monkeypatch):
     return sse
 
 
+READ_THREAD = "ada-inbox-04-ci.eml"                     # muting it queues nothing: no `outbox` event among these
+
 def subscribers(sse, n, timeout=5):
     deadline = time.monotonic() + timeout
     while sse.HUB.listening() != n and time.monotonic() < deadline:
@@ -91,7 +93,7 @@ def test_a_listener_hears_each_event_then_a_keepalive(app, golden, world, quick)
     golden.note("status and headers", {"status": s.status, "headers": {k: v for k, v in s.headers.items()
                                                                        if k not in CONNECTION_HEADERS}})
     golden.note("first frame", s.frame())
-    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    lunch = world.row(READ_THREAD)
     app.post("/api/mute", {"pk": lunch["pk"]})
     app.post("/api/undo", {})
     app.post("/api/replylater", {"pk": lunch["pk"]})
@@ -134,7 +136,7 @@ def test_a_cross_site_listener_is_refused(app, golden, quick):
 # -- a tab that reconnects ------------------------------------------------------
 
 def test_a_tab_that_reconnects_hears_what_it_missed(app, golden, world, quick):
-    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    lunch = world.row(READ_THREAD)
     s = Stream(app)
     golden.note("first frame", s.frame())
     app.post("/api/mute", {"pk": lunch["pk"]})
@@ -156,7 +158,7 @@ def test_a_tab_that_never_heard_an_event_resumes_from_where_it_opened(app, golde
     opened = s.frame()
     s.close()
     subscribers(quick, 0)
-    app.post("/api/mute", {"pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    app.post("/api/mute", {"pk": world.pk(READ_THREAD)})
     t = Stream(app, **{"Last-Event-ID": opened.split("\nid: ")[1].split("\n")[0]})
     golden.note("it opened with", opened)
     golden.note("and on reconnecting hears", [t.frame(), t.frame()])
@@ -167,7 +169,7 @@ def test_a_tab_that_never_heard_an_event_resumes_from_where_it_opened(app, golde
 def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
     s = Stream(app)
     s.frame()
-    app.post("/api/mute", {"pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    app.post("/api/mute", {"pk": world.pk(READ_THREAD)})
     last = s.event().split("\n")[0].removeprefix("id: ")
     s.close()
     subscribers(quick, 0)
@@ -180,7 +182,7 @@ def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world,
 
 def test_a_tab_further_back_than_the_hub_keeps_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
     monkeypatch.setattr(quick, "HUB", quick.Hub(ring=2, run="small"))
-    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    lunch = world.row(READ_THREAD)
     for _ in range(2):
         app.post("/api/mute", {"pk": lunch["pk"]})
         app.post("/api/undo", {})
