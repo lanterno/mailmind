@@ -146,7 +146,10 @@ def apply_one(mid):
             except KeyError:
                 return "removed", "account removed"
             why = mailops.apply_queued_mutation(fresh)
-            return ("refused", why) if why else ("applied", None)
+            if why:
+                return "refused", why
+            _commit(lambda c: QUEUE.mark_gate(c, mid))       # applied=1, before the gate lets a cancel in
+            return "applied", None
         try:
             outcome, why = gates.run(row["account"], apply, priority=gates.Priority.AFTER_USER)
             if outcome in ("removed", "refused"):            # no retry can make it happen
@@ -169,7 +172,6 @@ def apply_one(mid):
             print(f"[readmutq] #{mid} unreachable ({err}); "
                   f"{'giving up' if terminal else f'retry {delay}s'}", flush=True)
             return
-        _commit(lambda c: QUEUE.mark_gate(c, mid))   # applied=1, committed BEFORE the local mirror
     try:
         _local_mirror(row)
         _commit(lambda c: QUEUE.finish(c, mid, datetime.now(timezone.utc).isoformat()))
