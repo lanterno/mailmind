@@ -20,6 +20,11 @@ structured values are bound `?` params. The parser is TOTAL — no input can rai
 import shlex
 from datetime import datetime
 
+# How much a hit counts in each msg_fts column: subject, from_name, from_addr, recipients, snippet,
+# body_text. Search and Ask both rank by it: a subject above a sender above the body, and a snippet is
+# only the start of the body, so it adds little.
+BM25 = "bm25(msg_fts,8.0,4.0,4.0,2.0,1.0,3.0)"
+
 _FTS_FIELDS = {"from": "{from_name from_addr}", "subject": "subject",
                "body": "body_text", "to": "recipients", "cc": "recipients"}   # To/Cc are indexed
 _FLAG = {"unread": ("seen", 0), "read": ("seen", 1), "flagged": ("flagged", 1),

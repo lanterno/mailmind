@@ -1343,7 +1343,7 @@ def search_json(qs):
         if match is not None:
             sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
                           m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action,
-                          bm25(msg_fts,8.0,4.0,4.0,2.0,1.0) AS score
+                          {search.BM25} AS score
                    FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid
                    LEFT JOIN summaries s ON s.message_pk=m.pk
                    WHERE msg_fts MATCH ?{where_sql}
