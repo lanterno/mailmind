@@ -36,9 +36,9 @@ def list_unsub(lu, post=""):
     `list_unsub_stored` reads it all back from."""
     lu = (lu or "").strip()
     lup = re.sub(r"\s+", "", post or "").lower()
-    uris = re.findall(r"<([^>]+)>", lu)
-    https_uri = next((u.strip() for u in uris if u.strip().lower().startswith("https://")), None)
-    mailto_uri = next((u.strip() for u in uris if u.strip().lower().startswith("mailto:")), None)
+    uris = [re.sub(r"\s+", "", u) for u in re.findall(r"<([^>]+)>", lu)]    # RFC 2369: whitespace within one is ignored
+    https_uri = next((u for u in uris if u.lower().startswith("https://")), None)
+    mailto_uri = next((u for u in uris if u.lower().startswith("mailto:")), None)
     one_click = bool(https_uri) and lup == "list-unsubscribe=one-click"
     if one_click:
         method = "one-click"
