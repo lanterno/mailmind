@@ -429,6 +429,30 @@ def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
     assert boxes(world, "ada-inbox-12-scam.eml") == ([(w.ADA, "Trash")], [])
 
 
+def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
+    """UIDVALIDITY changed and no sync has seen it, so a stored UID may now be another message's."""
+    import manage
+    import store
+    swept, kept = world.row("ada-inbox-04-ci.eml"), world.row("ada-inbox-01-lunch.eml")
+    c = store.conn()
+    c.execute("UPDATE messages SET uid=90001 WHERE pk=?", (swept["pk"],))
+    c.execute("UPDATE messages SET uid=? WHERE pk=?", (world.uid("ada-inbox-04-ci.eml"), kept["pk"]))
+    c.commit()
+    c.close()
+    assert manage.sweep_account(acct())["moved"] == 3
+    assert q("SELECT pk FROM messages WHERE pk=?", swept["pk"]) == []
+    assert q("SELECT pk FROM messages WHERE pk=?", kept["pk"]) == [{"pk": kept["pk"]}]
+
+
+def test_hwf_a_sweep_prunes_a_message_with_no_message_id_by_uid(world):
+    import manage
+    uid = world.deliver(w.ADA, "INBOX", b"From: News <news@loom.example.test>\r\nTo: ada@example.test\r\n"
+                                        b"Subject: No id\r\nList-Unsubscribe: <https://loom.example.test/u>\r\n"
+                                        b"Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n")
+    assert manage.sweep_account(acct())["moved"] == 4
+    assert q("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid) == []
+
+
 def test_hwf_a_sweep_audits_before_it_moves(world):
     import manage
     world.server.drop("UID MOVE", user=w.ADA)
