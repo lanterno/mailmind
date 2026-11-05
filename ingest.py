@@ -270,7 +270,7 @@ def reclassify(token):
     token = token.strip().lower()
     c = store.conn()
     try:
-        cols = "pk, from_addr, from_name, subject, bucket, reason"
+        cols = "pk, from_addr, from_name, subject, bucket, reason, list_unsub_method"
         if "@" in token:
             rows = c.execute(f"SELECT {cols} FROM messages WHERE lower(from_addr)=?", (token,)).fetchall()
         else:                                        # the domain and its sub-domains; the classifier decides
@@ -279,7 +279,8 @@ def reclassify(token):
         changed = 0
         for r in rows:
             bucket, confidence, reason = mailclass.classify((r["from_addr"] or "").lower(), r["subject"] or "",
-                                                            r["from_name"] or "")
+                                                            r["from_name"] or "",
+                                                            (r["list_unsub_method"] or "none") != "none")
             if not (mailclass.by_rule(reason) or mailclass.by_rule(r["reason"])):
                 continue
             if (bucket, reason) != (r["bucket"], r["reason"]):
