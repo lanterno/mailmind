@@ -486,8 +486,13 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   Under the gate `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
   so `do_draft` and the outbox's draft cleanup also change that row only under the gate. Edit
   answers 423 while a queued or sending outbox row holds the draft. A copy in another account
-  or folder is removed only after the new APPEND succeeds, and only if MailMind saved it or
-  the server flags it `\Draft`.
+  or folder is removed only after the new APPEND succeeds.
+- A message is a draft if the server flags it `\Draft` or its folder is the account's Drafts
+  (`server._is_draft`): the role the last LIST gave it, else `roles.names_drafts`, the whole name
+  at the top of the tree or under INBOX or Gmail's parent. A name that merely holds "draft" counts
+  for nothing, and a removal has no Undo, so Discard, a Send and a replacing save remove a copy only
+  if MailMind saved it, the server flags it or its folder is Drafts (`outbox.draft_copy_is_ours`).
+  Older `drafts` rows may name received mail: those are forgotten and the mail stays.
 - A composer's saves go in turn. `composeSaveDraft` chains on `cmp._saving` and names the copy the
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
   It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at

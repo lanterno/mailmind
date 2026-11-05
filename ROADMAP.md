@@ -47,20 +47,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (prefilled recipients no longer dirty the compose, signature-only bodies are never saved), but
   `composeClose` still silently auto-saves and toasts. The specified Keep editing / Save draft /
   Discard prompt was never built.
-- **Drafts are recognised by folder name** · high value · effort M — `_draft_info` and
-  `draft_resume` treat any folder with "draft" anywhere in its name as Drafts ("Contract drafts",
-  "Clients/Draft agreements", every subfolder of one), and never check `\Draft`. Viewing a message
-  there registers a `drafts` row for it and swaps Reply for Edit and Delete. Edit opens a received
-  message that has a text/plain body as a draft. Discard (`do_draft`'s delete branch) or a Send
-  (the outbox cleanup) then STOREs `\Deleted` and UID EXPUNGEs it, with no Undo. That is
-  permanent on Dovecot-style servers; on Gmail it only drops the label. The registered row also
-  adds the folder to the "new to you" lookup's draft folders, so sent mail filed there stops
-  vouching for its recipients. A localized Drafts folder ("Entwürfe", "Brouillons") gets no Edit
-  at all. The fix: go by the role `mailmind.mailbox.domain.roles` gives the folder (the
-  `\Drafts` special-use attribute first, then the whole name), as saves already do through
-  `mailops.find_role`, or by the message's own `\Draft` flag. Give Discard and the outbox cleanup the guard `do_draft` uses for a
-  copy elsewhere, `raw_sha` or `_flagged_draft`. Keep both checks, because a MailMind save that
-  never synced has no `messages` row to be flagged.
 - **A replaced or discarded draft stays listed** · high value · effort M — a save's new copy shows
   on the Drafts list's next open (its catch-up), but `do_draft`, Discard and the outbox's draft
   cleanup change IMAP and `drafts`, never `messages`, so the copy a re-save, a Send or a Discard
@@ -491,10 +477,8 @@ implementation.
 
 ## Next up
 
-1. **Drafts are recognised by folder name** (high / M) — Discard on a message opened from any folder
-   named like "Contract drafts" expunges it with no Undo.
-2. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
+1. **Turn the connection pool on by default and document the flags** (high / M) — the cold-open fix
    is written, reviewed and dormant behind an unset env var. Follow it immediately with **give
    each account its own IMAP gate**, the structural half.
-3. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
+2. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap, and the message list is the one surface a screen reader cannot use today.

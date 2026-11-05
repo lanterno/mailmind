@@ -320,6 +320,10 @@ automatically.
   - a part MailMind can't show;
   - more than 25 MB of files.
 
+  What counts as a draft is what your server says: the `\Draft` flag, or its Drafts folder under
+  whatever name it uses. Mail you filed in "Contract drafts" stays ordinary mail, with Reply and
+  no way for a Discard to remove it.
+
   A copy that was replaced after the list loaded is caught before it can overwrite the newer one,
   and a draft whose send is still waiting in the outbox stays shut until you cancel that send.
 
