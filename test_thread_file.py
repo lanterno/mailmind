@@ -1,6 +1,7 @@
 """Whole-conversation archive/trash (server.do_thread_file): which messages a conversation covers,
 the single undo group, partial failure, and the offline queue. Hermetic — the database is a temp
-file and the IMAP ops are replaced with local fakes. All addresses are fictional.
+file (and with it the undo stack) and the IMAP ops are replaced with local fakes. All addresses
+are fictional.
 Run: python3 test_thread_file.py"""
 import tempfile
 
@@ -17,8 +18,7 @@ def _fresh():
     """A new empty database, a clear undo stack, and fake IMAP ops that act like the real ones
     locally (drop the row, hand back an undo descriptor) and record what they were asked to file."""
     settings.configure(settings.Settings(home=tempfile.mkdtemp()))
-    store.init()
-    server._undo_stack.clear()
+    store.init()                                     # a new database: an empty undo stack
     calls = []
 
     def fake(label):
@@ -93,7 +93,7 @@ def test_trash_route_uses_trash():
     a, b = _msg("INBOX", "t1", 100), _msg("INBOX", "t1", 200)
     r = server.do_thread_file("/api/thread/trash", {"pk": b})
     assert r["ok"] and sorted(calls) == sorted([a, b])
-    assert server._undo_stack[-1]["label"] == "Trashed"
+    assert server.undo_entries()[-1]["label"] == "Trashed"
 
 
 # ── undo ──────────────────────────────────────────────────────────────────────
@@ -102,8 +102,9 @@ def test_one_undo_entry_for_the_whole_conversation():
     for ts in (100, 200, 300):
         _msg("INBOX", "t1", ts)
     r = server.do_thread_file("/api/thread/archive", {"pk": _msg("INBOX", "t1", 400)})
-    assert r["undoable"] and len(server._undo_stack) == 1, server._undo_stack
-    entry = server._undo_stack[0]
+    stack = server.undo_entries()
+    assert r["undoable"] and len(stack) == 1, stack
+    entry = stack[0]
     assert entry["kind"] == "bulk" and len(entry["children"]) == 4, entry
 
 def test_a_bulk_selection_shares_the_callers_undo_group():
@@ -113,7 +114,8 @@ def test_a_bulk_selection_shares_the_callers_undo_group():
     y1 = _msg("INBOX", "ty", 300)
     server.do_thread_file("/api/thread/archive", {"pk": x1, "undo_group": "ug1"})
     server.do_thread_file("/api/thread/archive", {"pk": y1, "undo_group": "ug1"})
-    assert len(server._undo_stack) == 1 and len(server._undo_stack[0]["children"]) == 3
+    stack = server.undo_entries()
+    assert len(stack) == 1 and len(stack[0]["children"]) == 3
 
 
 # ── failures ──────────────────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ def test_total_failure_is_not_ok():
     server.mailops.archive_message = lambda pk: (False, "no archive folder on this account", None)
     r = server.do_thread_file("/api/thread/archive", {"pk": a})
     assert not r["ok"] and r["msg"] == "no archive folder on this account" and r["pks"] == [], r
-    assert _left() == {a} and not server._undo_stack
+    assert _left() == {a} and not server.undo_entries()
 
 def test_unreachable_imap_queues_each_message():
     _fresh()

@@ -471,11 +471,11 @@ def test_an_accepted_move_still_files_the_message():
 
 def test_the_route_reports_a_refusal_and_offers_no_undo():
     pk = _message()
-    depth = len(server._undo_stack)
+    depth = len(server.undo_entries())
     with _connection(_refusing()):
         res = server.do_write("/api/move", {"pk": pk, "dest": "Archive"})
     assert res["ok"] is False and res["undoable"] is False, res
-    assert len(server._undo_stack) == depth
+    assert len(server.undo_entries()) == depth
     assert _still_there(pk)
 
 
