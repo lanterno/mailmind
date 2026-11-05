@@ -539,12 +539,12 @@ def followup_detect_received(c, now_ts, days, max_age_days):
         WHERE m.thread_id IS NOT NULL AND m.thread_id != '' AND m.seen=1 AND m.answered=0 AND m.is_junk=0
           AND m.ts <= ? AND m.ts >= ?
           AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
-                    ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
+                      AND m2.draft=0 ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
           AND m.snoozed_until IS NULL
           AND EXISTS (SELECT 1 FROM messages mi JOIN summaries s ON s.message_pk=mi.pk
                 WHERE mi.account=m.account AND mi.thread_id=m.thread_id
                   AND (s.importance>=4 OR s.category='action-needed'))
-          AND NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account
+          AND NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account AND mo.draft=0
                 AND mo.thread_id=m.thread_id AND lower(mo.from_addr)=lower(m.account))
           AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)
           AND NOT EXISTS (SELECT 1 FROM followups f WHERE f.account=m.account AND f.thread_id=m.thread_id)
@@ -553,16 +553,19 @@ def followup_detect_received(c, now_ts, days, max_age_days):
 
 def resolve_followups(c, account):
     """Auto-resolve (delete) active followups whose commitment is met: muted, or — by kind —
-    an inbound reply arrived (sent) / I replied or it's marked answered (received)."""
+    an inbound reply arrived (sent) / I replied or it's marked answered (received). A draft of a
+    reply is not a reply."""
     c.execute("""DELETE FROM followups WHERE account=? AND state IN ('pending','due') AND (
         EXISTS (SELECT 1 FROM muted mu WHERE mu.account=followups.account AND mu.thread_id=followups.thread_id)
         OR (followups.kind='sent' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
               AND m.thread_id=followups.thread_id AND m.ts > IFNULL(followups.first_sent_ts,0)
               AND lower(m.from_addr) <> lower(followups.account)))
         OR (followups.kind='received' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
-              AND m.thread_id=followups.thread_id AND (m.answered=1 OR lower(m.from_addr)=lower(followups.account))))
+              AND m.thread_id=followups.thread_id AND (m.answered=1 OR
+                  (lower(m.from_addr)=lower(followups.account) AND m.draft=0))))
         OR (followups.kind='replylater' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
-              AND m.thread_id=followups.thread_id AND (m.answered=1 OR lower(m.from_addr)=lower(followups.account))))
+              AND m.thread_id=followups.thread_id AND (m.answered=1 OR
+                  (lower(m.from_addr)=lower(followups.account) AND m.draft=0))))
     )""", (account,))
 
 
