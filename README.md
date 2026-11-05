@@ -341,7 +341,7 @@ automatically.
 - **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
   mail when you open it, but writes nothing to a mail server. Its connections can only read,
   sends, moves, read marks and stars wait in their queues for a normal run, and what can't wait
-  is refused.
+  is refused. The sync pill says Read-only, and a move says it waits.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder. A star

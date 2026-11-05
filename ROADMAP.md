@@ -489,9 +489,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **The page doesn't know the profile** · medium value · effort S — read-only, a move, a flag
-  change or a send that waits in its queue looks done. Say `profile` in `/api/digest` and show it
-  beside the sync status.
 - **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
   - `outbox.send_one` returns from a failed attempt before it publishes `outbox.Sent`, so no
     `outbox` event goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
