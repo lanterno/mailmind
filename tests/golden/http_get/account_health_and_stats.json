@@ -78,7 +78,7 @@
       "other/personal-ish": [
        "lin@example.test",
        "noor@studio.example.test",
-       "",
+       "hello@cafe.example.test",
        "legacy@mailer.example.test"
       ],
       "receipts/transactional": [
@@ -219,7 +219,7 @@
       "other/personal-ish": [
        "lin@example.test",
        "noor@studio.example.test",
-       "",
+       "hello@cafe.example.test",
        "legacy@mailer.example.test"
       ],
       "receipts/transactional": [
@@ -310,7 +310,7 @@
       "other/personal-ish": [
        "lin@example.test",
        "noor@studio.example.test",
-       "",
+       "hello@cafe.example.test",
        "legacy@mailer.example.test"
       ],
       "receipts/transactional": [

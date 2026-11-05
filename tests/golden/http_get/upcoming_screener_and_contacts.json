@@ -82,6 +82,13 @@
     },
     {
      "count": 1,
+     "domain": "cafe.example.test",
+     "from_addr": "hello@cafe.example.test",
+     "from_name": "Café Lumière",
+     "when": "yesterday"
+    },
+    {
+     "count": 1,
      "domain": "atelier.example.test",
      "from_addr": "renee@atelier.example.test",
      "from_name": "Renée Lefèvre",
@@ -110,7 +117,7 @@
     }
    ],
    "ok": true,
-   "total": 5
+   "total": 6
   },
   "headers": {
    "cache-control": "no-store",
