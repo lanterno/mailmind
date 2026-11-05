@@ -2068,39 +2068,12 @@ def _cleanup_confirm_token(from_addr):
 
 
 def _parse_list_unsub(raw_bytes):
-    """From a raw RFC822 message → the resolvable unsubscribe method. RFC 2369 List-Unsubscribe holds
-    <mailto:…> and/or <https://…>; RFC 8058 one-click needs BOTH an https URI AND
-    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A bare https URI is a landing PAGE (open in
-    a browser, NEVER POST). Defaults to the SAFE side ('none') when ambiguous."""
+    """From a raw RFC822 message → the resolvable unsubscribe method (`mailparse.list_unsub`)."""
     try:
         msg = email.message_from_bytes(raw_bytes or b"")
     except Exception:
         return {"method": "none", "raw": ""}
-    lu = (msg.get("List-Unsubscribe") or "").strip()
-    lup = re.sub(r"\s+", "", (msg.get("List-Unsubscribe-Post") or "")).lower()
-    uris = re.findall(r"<([^>]+)>", lu)
-    https_uri = next((u.strip() for u in uris if u.strip().lower().startswith("https://")), None)
-    mailto_uri = next((u.strip() for u in uris if u.strip().lower().startswith("mailto:")), None)
-    one_click = bool(https_uri) and lup == "list-unsubscribe=one-click"
-    if one_click:
-        method = "one-click"
-    elif mailto_uri:
-        method = "mailto"
-    elif https_uri:
-        method = "http-page"
-    else:
-        method = "none"
-    mailto_to = mailto_subject = mailto_body = None
-    if mailto_uri:
-        m = urllib.parse.urlparse(mailto_uri)
-        mailto_to = urllib.parse.unquote(m.path or "").strip() or None
-        q = urllib.parse.parse_qs(m.query)
-        mailto_subject = (q.get("subject") or [None])[0]
-        mailto_body = (q.get("body") or [None])[0]
-    raw_cache = (lu + (" | POST:" + lup if lup else ""))[:1000]
-    return {"method": method, "https_uri": https_uri, "mailto_uri": mailto_uri,
-            "mailto_to": mailto_to, "mailto_subject": mailto_subject, "mailto_body": mailto_body,
-            "raw": raw_cache}
+    return mailparse.list_unsub(mailparse.dec(msg.get("List-Unsubscribe")), mailparse.dec(msg.get("List-Unsubscribe-Post")))
 
 
 def _ip_is_forbidden(ip):

@@ -11,6 +11,7 @@ cid: inline images are surfaced so the sanitizer/UI can resolve them later.
 """
 import email
 import re
+import urllib.parse
 from email import policy
 from email.header import decode_header
 from email.utils import parseaddr
@@ -22,6 +23,48 @@ def _unfold(value):
     """A header value as one line. decode_header drops the space a fold leaves next to an encoded
     word, and parseaddr can't read an address across one. A raw 8-bit value is a Header: not a str."""
     return _FOLD.sub(" ", value) if isinstance(value, str) else value
+
+
+_UNSUB_POST, _UNSUB_RAW_MAX = " | POST:", 4000
+
+
+def list_unsub(lu, post=""):
+    """The way to unsubscribe that a message's headers offer, from List-Unsubscribe (`lu`, unfolded) and
+    List-Unsubscribe-Post. RFC 2369 holds <mailto:…> and/or <https://…>; RFC 8058 one-click needs BOTH an
+    https URI AND `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A bare https URI is a landing PAGE
+    (open in a browser, NEVER POST). Defaults to the SAFE side ('none') when ambiguous. `raw` is what
+    `list_unsub_stored` reads it all back from."""
+    lu = (lu or "").strip()
+    lup = re.sub(r"\s+", "", post or "").lower()
+    uris = re.findall(r"<([^>]+)>", lu)
+    https_uri = next((u.strip() for u in uris if u.strip().lower().startswith("https://")), None)
+    mailto_uri = next((u.strip() for u in uris if u.strip().lower().startswith("mailto:")), None)
+    one_click = bool(https_uri) and lup == "list-unsubscribe=one-click"
+    if one_click:
+        method = "one-click"
+    elif mailto_uri:
+        method = "mailto"
+    elif https_uri:
+        method = "http-page"
+    else:
+        method = "none"
+    mailto_to = mailto_subject = mailto_body = None
+    if mailto_uri:
+        m = urllib.parse.urlparse(mailto_uri)
+        mailto_to = urllib.parse.unquote(m.path or "").strip() or None
+        q = urllib.parse.parse_qs(m.query)
+        mailto_subject = (q.get("subject") or [None])[0]
+        mailto_body = (q.get("body") or [None])[0]
+    raw_cache = (lu + (_UNSUB_POST + lup if lup else ""))[:_UNSUB_RAW_MAX]
+    return {"method": method, "https_uri": https_uri, "mailto_uri": mailto_uri,
+            "mailto_to": mailto_to, "mailto_subject": mailto_subject, "mailto_body": mailto_body,
+            "raw": raw_cache}
+
+
+def list_unsub_stored(raw):
+    """What `list_unsub` said, from the `raw` it gave."""
+    lu, _, post = (raw or "").partition(_UNSUB_POST)
+    return list_unsub(lu, post)
 
 
 def dec(value):
