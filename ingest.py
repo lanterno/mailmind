@@ -89,6 +89,7 @@ def _flags_of(flags):
 
 
 FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sync reads again
+FLAG_BATCH = 500        # how many UIDs one flag read names
 _FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
 
 
@@ -100,34 +101,68 @@ class FlagsChanged:
     count: int
 
 
-def _refresh_flags(session, acct, folder):
-    """Read the flags of the folder's newest stored mail again (its FLAG_REFRESH highest UIDs) and
-    store what changed, so mail read, starred or answered in another client shows so here. A row
-    whose flags changed here since they were read (a click, under the IMAP gate this sync doesn't
-    take) keeps its own, and so does one with a flag change still queued, or on its way out by a
-    queued move. Returns how many rows changed."""
+_FLAG_ROW = ("SELECT pk, uid, message_id, pending_removal, " + ", ".join(_FLAG_COLS)
+             + " FROM messages WHERE account=? AND folder=? ")
+
+
+def _flag_rows(c, email, folder, uids):
+    """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
+    if uids is None:
+        return c.execute(_FLAG_ROW + "AND pending_removal IS NULL ORDER BY uid DESC LIMIT ?",
+                         (email, folder, FLAG_REFRESH)).fetchall()
+    rows = []
+    for start in range(0, len(uids), FLAG_BATCH):
+        part = uids[start:start + FLAG_BATCH]
+        rows += c.execute(_FLAG_ROW + "AND uid IN (" + ",".join("?" * len(part)) + ")",
+                          [email, folder, *part]).fetchall()
+    return rows
+
+
+def _refresh_flags(session, acct, folder, modseq=None):
+    """Read the flags of the folder's mail again and store what changed, so mail read, starred or
+    answered in another client shows so here. `modseq` is the HIGHESTMODSEQ the select just said, if
+    the server keeps one: with the mark the last read left, it says whether there is anything to read
+    and which mail, however old. Otherwise, or if the server won't say, the FLAG_REFRESH newest are read.
+    A row whose flags changed here since they were read (a click, under the IMAP gate this sync doesn't
+    take) keeps its own, and so does one with a flag change still queued, or on its way out by a queued
+    move: the mark stays behind those two, since a refusal would put back flags this read skipped.
+    Returns how many rows changed."""
+    email = acct["email"]
     c = store.conn()
     try:
-        rows = c.execute("SELECT pk, uid, message_id, " + ", ".join(_FLAG_COLS) + " FROM messages "
-                         "WHERE account=? AND folder=? AND pending_removal IS NULL "
-                         "ORDER BY uid DESC LIMIT ?", (acct["email"], folder, FLAG_REFRESH)).fetchall()
-        waiting = {r["message_id"] for r in c.execute(
-            "SELECT message_id FROM read_mutations WHERE account=? AND op='flag' AND applied=0 "
-            "AND state IN ('queued', 'running') AND message_id != ''", (acct["email"],))}
+        since = store.get_modseq(c, email, folder) if modseq else None
     finally:
         c.close()
-    if not rows:
-        return 0
+    if modseq and since == modseq:
+        return 0                                     # the server says nothing changed
+    uids, ask = None, bool(since and since < modseq)
+    if ask:
+        try:
+            uids = session.uids_changed_since(since)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            print(f"[ingest] SEARCH MODSEQ refused {email}: reading the newest instead", flush=True)
+    c = store.conn()
     try:
-        now = session.flags([r["uid"] for r in rows])
+        waiting = {r["message_id"] for r in c.execute(
+            "SELECT message_id FROM read_mutations WHERE account=? AND op='flag' AND applied=0 "
+            "AND state IN ('queued', 'running') AND message_id != ''", (email,))}
+        rows = _flag_rows(c, email, folder, uids)    # before the flags are read: see above
+    finally:
+        c.close()
+    now = {}
+    try:
+        for start in range(0, len(rows), FLAG_BATCH):
+            now.update(session.flags([r["uid"] for r in rows[start:start + FLAG_BATCH]]))
     except imaplib.IMAP4.abort:
         raise
     except imaplib.IMAP4.error:                      # a refused FETCH changes nothing here
         return 0
-    moved = [(r, new) for r in rows if r["uid"] in now and r["message_id"] not in waiting
+    held = [r for r in rows if r["pending_removal"] is not None or r["message_id"] in waiting]
+    skip = {r["pk"] for r in held}
+    moved = [(r, new) for r in rows if r["uid"] in now and r["pk"] not in skip
              for new in [_flags_of(now[r["uid"]])] if any(new[k] != r[k] for k in _FLAG_COLS)]
-    if not moved:
-        return 0
     changed = 0
     c = store.conn()
     try:
@@ -136,6 +171,8 @@ def _refresh_flags(session, acct, folder):
                 "UPDATE messages SET " + ", ".join(f"{k}=?" for k in _FLAG_COLS) + " WHERE pk=? AND "
                 + " AND ".join(f"{k} IS ?" for k in _FLAG_COLS),
                 [*(new[k] for k in _FLAG_COLS), r["pk"], *(r[k] for k in _FLAG_COLS)]).rowcount
+        if modseq and not held and (uids is not None or not ask):
+            store.set_modseq(c, email, folder, modseq)
         c.commit()
     finally:
         c.close()
@@ -233,7 +270,10 @@ def sync_folder(acct, folder, full=False, recent=None):
     A scan that fails leaves it as it was too, so a first open that failed scans again."""
     s = mailbox.open_session(acct)
     try:
-        uidv = s.select(folder).uidvalidity
+        condstore = s.enable_condstore()
+        selected = s.select(folder)
+        uidv = selected.uidvalidity
+        modseq = selected.highest_modseq if condstore else None
         c = store.conn()
         stored = store.get_uidvalidity(c, acct["email"], folder)
         if uidv and stored and uidv != stored:
@@ -260,9 +300,11 @@ def sync_folder(acct, folder, full=False, recent=None):
             store.set_scan_state(c, acct["email"], folder, scan)
             c.commit()
             c.close()
-        if not full and wm:                            # a full scan has just read every flag
-            _refresh_flags(s, acct, folder)
+        if not full and wm:
+            _refresh_flags(s, acct, folder, modseq)
         c = store.conn()
+        if scan == "synced" and modseq:                # a whole scan has just read every flag
+            store.set_modseq(c, acct["email"], folder, modseq)
         threads.recompute_threads(c, acct["email"])   # regroup conversations for new mail
         store.apply_mute_on_ingest(c, acct["email"])  # keep new members of muted threads silent
         store.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads

@@ -193,6 +193,16 @@ def get_uidvalidity(c, account, folder="INBOX"):
     return r["uidvalidity"] if r else None
 
 
+def get_modseq(c, account, folder):
+    r = c.execute("SELECT highest_modseq FROM sync_state WHERE account=? AND folder=?",
+                  (account, folder)).fetchone()
+    return r["highest_modseq"] if r else None
+
+
+def set_modseq(c, account, folder, modseq):
+    c.execute("UPDATE sync_state SET highest_modseq=? WHERE account=? AND folder=?", (modseq, account, folder))
+
+
 def set_uidvalidity(c, account, folder, uidvalidity):
     c.execute(
         """INSERT INTO sync_state(account,folder,uidvalidity) VALUES(?,?,?)
@@ -265,8 +275,8 @@ def reset_folder(c, account, folder):
         "SELECT pk FROM messages WHERE account=? AND folder=?", (account, folder))]
     for pk in pks:
         delete_message(c, pk)
-    c.execute("UPDATE sync_state SET last_uid=0, scan_state='never' WHERE account=? AND folder=?",
-              (account, folder))
+    c.execute("UPDATE sync_state SET last_uid=0, scan_state='never', highest_modseq=NULL "
+              "WHERE account=? AND folder=?", (account, folder))
     return len(pks)
 
 
