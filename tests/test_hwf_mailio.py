@@ -782,7 +782,6 @@ class _StoppableDrain:
         outbox.kick()
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a send waits for the worker's 30 s poll, not the end of its window")
 def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     import outbox
     import server

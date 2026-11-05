@@ -119,6 +119,17 @@ def test_only_a_row_in_error_can_be_retried_and_it_goes_at_once(q):
     assert run(q, lambda c: q.requeue(c, queued)) is False
 
 
+def test_the_wait_until_the_next_row_comes_due_is_at_most_the_poll(laned):
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30                  # nothing queued
+    add(laned, "due already", next_attempt_at=NOW - 5)                          # a kick or the poll takes it
+    add(laned, "failed", state="error", next_attempt_at=NOW + 1)
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30
+    add(laned, "later", next_attempt_at=NOW + 600)
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30
+    add(laned, "soon", next_attempt_at=NOW + 8)
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == 8
+
+
 def test_cancelling_before_the_claim_or_before_the_irreversible_step(q):
     """The outbox cancels only what no worker has claimed, since its send may be under way. The
     move queue cancels anything not yet applied: its worker re-reads the row before it moves."""
@@ -203,6 +214,21 @@ def test_the_workers_drain_passes_a_busy_lane_by_and_the_lane_kicks_it_as_it_end
         release.set()
         stop.set()
         q.kick()
+        worker.join(5)
+    assert not worker.is_alive()
+
+
+def test_the_worker_wakes_when_a_row_comes_due_not_at_its_next_poll(laned):
+    handled, stop = [], threading.Event()
+    soon = add(laned, "soon", next_attempt_at=int(time.time()) + 1)
+    worker = threading.Thread(target=lambda: laned.run_forever(
+        lambda: laned.drain(handled.append, int(time.time())), stop), daemon=True)
+    worker.start()                                               # its poll is 30 s
+    try:
+        assert wait_until(lambda: handled == [soon], timeout=3)
+    finally:
+        stop.set()
+        laned.kick()
         worker.join(5)
     assert not worker.is_alive()
 
