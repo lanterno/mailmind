@@ -271,7 +271,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `session.find_role(s, *roles)` finds a folder on a live session; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
   there is no `archive`. `application.session.MailSession` is the port for one logged-in
-  connection: its capabilities (what the server says after login), folders, status, select, UID
+  connection: its capabilities (what the server says after login), `enable_condstore` (before any
+  select, or the folder says no `highest_modseq`), what changed since a modseq, folders, status, select, UID
   search, a message by Message-ID, headers (in batches of `HEADER_BATCH`, with Gmail's thread id
   and the arrival date when asked), flags, a body, flag and Gmail label changes, copy, move, a UID
   expunge of the UIDs named, append (the new UID when the server says it), NOOP, and IDLE with
@@ -461,10 +462,15 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   sync waited for up to `CATCH_UP_WAIT` seconds (`catching_up: true` past that), at most once
   every `CATCH_UP_EVERY` seconds unless `server._folder_touched` says MailMind put mail in it.
   Each sync ends by publishing `folder-synced` with how many it stored.
-- An incremental sync reads the flags of the folder's `FLAG_REFRESH` newest stored UIDs again
-  (`ingest._refresh_flags`) and writes each change only where the row still holds the flags it
-  read (a click may land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag
-  change still queued or a move pending.
+- An incremental sync reads flags again (`ingest._refresh_flags`). On a CONDSTORE server it compares
+  the select's HIGHESTMODSEQ with the mark in `sync_state.highest_modseq` (migration 31): nothing if they
+  match, else what `uids_changed_since` names, however old. A server without it (Proton Bridge), or one
+  refusing the search, has its `FLAG_REFRESH` newest stored UIDs read instead. It reads the stored rows
+  before the flags and writes each change only where the row still holds the flags it read (a click may
+  land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag change still queued or a
+  move pending. The mark stays behind those two and a refused search, so what was skipped is read again.
+  A sync that changed any publishes `ingest.FlagsChanged`, and the page reloads an open list on
+  `flags-changed`.
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `store.undo_push`,
   `undo_pop`, `undo_put_back`), so it outlives a restart and is the same through either door
   (decision D3). It keeps the newest `UNDO_MAX` entries, and an entry leaves it, committed, before

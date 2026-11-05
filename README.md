@@ -77,7 +77,8 @@ and the Claude API.
 - **Summaries before you open anything.** List rows show the stored AI summary under
   the subject, and a gold chip when it names a next step ("Pay 240.00 by 29 Nov");
   opening the message shows the same summary at the top, with no extra AI call, and
-  `i` asks for the full one. Rows are grouped by day.
+  `i` asks for the full one. A message keeps its summary when it moves, and an Undo
+  brings it back, so neither pays for a second call. Rows are grouped by day.
 - **Today's brief opens the Inbox.** With no message open, the reading pane
   shows the day's AI brief on a painted landscape (sun by day, moon and stars by
   night), tallies for what needs you, what's waiting and your

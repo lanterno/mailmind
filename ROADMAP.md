@@ -332,14 +332,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   the user was not looking** — then apply it, since snooze-wake toasts today while new mail gets a
   sticky pill.
 
-## Correctness and hardening
-
-- **Flags changed elsewhere: cheaper, and live** · low value · effort M —
-  `ingest._refresh_flags` reads the flags of a folder's `FLAG_REFRESH` newest UIDs on every
-  incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
-  folder) it could ask only for what changed, and reach older mail too. What it changes isn't
-  pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-
 ## Open decisions
 
 These are carried forward from the original phase plan because they need a call, not an
