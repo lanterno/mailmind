@@ -51,7 +51,8 @@
    "sweep_count": 0,
    "unseen": 0,
    "unsub": {
-    "method": "none"
+    "https_host": "spindle.example.test",
+    "method": "http-page"
    }
   },
   "headers": {

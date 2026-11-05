@@ -386,6 +386,11 @@ def test_hwf_unsubscribe_comes_from_the_newest_message_with_a_stored_body(app, w
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID="<issue-219@loom.example.test>",
                                               Date="Mon, 02 Nov 2026 07:00:00 +0000",
                                               List_Unsubscribe="<mailto:stop-219@loom.example.test>"), (w.SEEN,))
+    import store
+    c = store.conn()        # mail from before ingest kept these headers: its body is all that can say
+    c.execute("UPDATE messages SET list_unsub_raw=NULL, list_unsub_method=NULL WHERE lower(from_addr)=?", (LOOM,))
+    c.commit()
+    c.close()
     app.get(f"/api/message/{world.pk(NEWSLETTER)}/body")    # only the older issue's body is stored
     unsub = app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]
     assert unsub["method"] != "none" and unsub.get("mailto_to") != "stop-219@loom.example.test"

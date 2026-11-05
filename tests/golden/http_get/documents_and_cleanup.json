@@ -251,7 +251,8 @@
    "sweep_count": 3,
    "unseen": 3,
    "unsub": {
-    "method": "none"
+    "https_host": "loom.example.test",
+    "method": "one-click"
    }
   },
   "headers": {
@@ -286,7 +287,8 @@
    "sweep_count": 0,
    "unseen": 0,
    "unsub": {
-    "method": "none"
+    "https_host": "spindle.example.test",
+    "method": "http-page"
    }
   },
   "headers": {
