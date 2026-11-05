@@ -121,14 +121,10 @@ def _clean(obj, valid_pks):
     for g in (obj.get("groups") or [])[:6]:
         if not isinstance(g, dict):
             continue
-        pks = [p for p in (g.get("pks") or []) if isinstance(p, int) and p in valid_pks]
+        pks = [p for p in (g.get("pks") or []) if isinstance(p, int) and p in valid_pks][:80]
         if not pks:
             continue
-        try:
-            count = int(g.get("count") or len(pks))
-        except Exception:
-            count = len(pks)
-        groups.append({"label": str(g.get("label") or "")[:40], "count": count, "pks": pks[:80]})
+        groups.append({"label": str(g.get("label") or "")[:40], "count": len(pks), "pks": pks})
     return narrative, groups
 
 
