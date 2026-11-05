@@ -207,13 +207,29 @@ def test_a_send_is_published_once_it_goes_out_and_not_while_it_fails(app, world)
     assert heard == [outbox.Sent(oid, w.ADA)]
 
 
-def test_a_refused_login_and_a_rejected_message(send):
+def test_a_refused_login_and_a_rejected_message_give_up_at_once(send):
+    import outbox
     send.world.smtp.users[w.ADA] = "changed"
     send.post("send with a password the server no longer takes", "/api/send", new(idempotency_key="k-auth"))
     send.drain("login refused")
+    send.drain("not tried again", seconds=outbox._BACKOFF_CAP)
     send.world.smtp.users[w.ADA] = send.world.server.accounts[w.ADA].password
     send.world.smtp.fail("DATA-END", "554 5.7.1 message rejected as spam")
-    send.drain("message rejected", seconds=3600)
+    send.post("retry, the password put right", "/api/outbox/retry", {"id": 1})
+    send.drain("message rejected", seconds=0)
+    send.drain("not sent again", seconds=outbox._BACKOFF_CAP)
+
+
+def test_a_recipient_refused_for_good_is_given_up_at_once(app, world):
+    import outbox
+    world.smtp.fail("RCPT", "550 5.1.1 no such user", times=None)
+    oid = app.post("/api/send", new(idempotency_key="k-nobody")).json["outbox_id"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    [row] = rows("SELECT state, attempts, last_error FROM outbox")
+    assert (row["state"], row["attempts"], row["last_error"]) == ("error", 1, "recipient refused")
+    assert len([c for c in world.smtp.commands if c["command"] == "RCPT"]) == 1
+    assert oid == 1
 
 
 def test_a_connection_lost_after_data_sends_twice(send):

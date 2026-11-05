@@ -90,3 +90,37 @@ def test_on_message_sees_each_accepted_message(smtp, data_dir):
     smtp.on_message = seen.append
     smtpsend.send(acct(smtp), RAW, ["lin@example.test"])
     assert [d.rcpts for d in seen] == [["lin@example.test"]]
+
+
+def test_a_5xx_is_permanent_and_a_4xx_or_a_drop_is_not(smtp, data_dir):
+    import smtpsend
+
+    def raised(**fault):
+        if fault:
+            smtp.fail(**fault)
+        try:
+            smtpsend.send(acct(smtp), RAW, ["lin@example.test"])
+        except Exception as e:
+            return e
+        raise AssertionError("it sent")
+
+    assert smtpsend.permanent(raised(command="RCPT", reply="550 5.1.1 no such user"))
+    assert smtpsend.permanent(raised(command="DATA-END", reply="554 5.7.1 message rejected"))
+    assert smtpsend.permanent(raised(command="MAIL", reply="553 5.7.1 sender not allowed"))
+    assert not smtpsend.permanent(raised(command="RCPT", reply="451 4.3.0 try again later"))
+    assert not smtpsend.permanent(raised(command="DATA-END", reply="452 4.3.1 out of storage"))
+    smtp.drop("MAIL")
+    assert not smtpsend.permanent(raised())
+    with pytest.raises(smtplib.SMTPAuthenticationError) as e:
+        smtpsend.send(acct(smtp, "wrong"), RAW, ["lin@example.test"])
+    assert smtpsend.permanent(e.value)
+
+
+def test_recipients_refused_are_permanent_only_when_every_one_is_5xx():
+    import smtpsend
+    refused = smtplib.SMTPRecipientsRefused
+    assert smtpsend.permanent(refused({"a@example.test": (550, b"no"), "b@example.test": (553, b"no")}))
+    assert not smtpsend.permanent(refused({"a@example.test": (550, b"no"), "b@example.test": (450, b"busy")}))
+    assert not smtpsend.permanent(refused({}))
+    assert not smtpsend.permanent(ConnectionRefusedError())
+    assert not smtpsend.permanent(TimeoutError())
