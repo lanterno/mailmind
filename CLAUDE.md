@@ -442,6 +442,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   client sends none, so only a resubmit of the same request dedupes.
 - `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
   creates a folder's `sync_state` row; only a sync that saw every UID may.
+- A folder counts as synced (`ingest.folder_synced`) only when its `scan_state` (migration 24)
+  is `synced`: a whole scan sets it, one cut to warming's newest messages sets `recent`, and an
+  incremental sync, a failed scan or a one-message re-ingest leaves it be. Anything else, the
+  first open scans the folder whole.
 - An incremental sync reads the flags of the folder's `FLAG_REFRESH` newest stored UIDs again
   (`ingest._refresh_flags`) and writes each change only where the row still holds the flags it
   read (a click may land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag

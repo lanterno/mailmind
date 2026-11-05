@@ -355,7 +355,9 @@ automatically.
   banner naming any accounts that couldn't connect.
 - **Optional multi-folder warming.** Set `MAILMIND_WARM_FOLDERS=1` to also pull each
   account's Drafts / Archive / Sent alongside INBOX so search and threading cover more
-  than the inbox — throttled, bounded, and never delaying new mail.
+  than the inbox — throttled, bounded, and never delaying new mail. Warming reads only a
+  folder's newest mail, so opening the folder still reads the rest, and so does opening one
+  whose first sync failed.
 - **A UI that stays responsive during IMAP work** — folder badges are cached and
   invalidated on real mutations, the Curate drawer reads the local DB instead of
   scanning every inbox, and adding your first account starts a sync immediately

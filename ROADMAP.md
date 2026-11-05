@@ -434,13 +434,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   signal. And the string is fixed — `sync()` polls `/api/digest` every 3s but reads only
   `d.sync.running`, ignoring the message count already in `d.stats`, so "read N messages so far…" is
   two lines inside the existing loop.
-- **A folder whose first sync failed** · medium value · effort S — `ingest.sync_folder` writes
-  the folder's `sync_state` (`set_uidvalidity`) before its `UID SEARCH`, and never checks that
-  SEARCH's `typ`. On a NO it parses the answer text as UIDs and throws. The throw is caught and only
-  printed, but the folder now counts as synced, so `messages_in` never runs its first sync
-  again and the folder stays empty. Check `typ`, write `sync_state` only after a sync that saw
-  every UID, and return an error flag so the empty state can offer "Couldn't sync this folder —
-  Retry." Pinned by `test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open`.
+- **Say when a folder's first sync failed** · medium value · effort S — a first scan that fails
+  leaves the folder's `scan_state` at `never`, so the next open tries again, but this open shows
+  "Nothing here." as if the folder were empty: `messages_in` only prints the error. Return it, so
+  the empty state can offer "Couldn't sync this folder — Retry."
 - **Consistency sweep: buttons, empty-state strings, toast vs. persistent** · low value · effort M —
   Three concrete, checkable changes rather than a vibe: (1) one `.btn-retry` replacing `.ai-rerun`,
   `.frail-retry`, `.ob-retry` and `.do-confirm`; (2) one `EMPTY` string table replacing the four
@@ -508,10 +505,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **A warmed folder never fetches its older mail** · high value · effort S — a folder that
-  `warm.warm_tick` touched first (`sync_folder(recent=WARM_RECENT)`) stores only its newest
-  messages, and the watermark is already past the rest, so no later sync fetches them. Pinned by
-  `test_hwf_opening_a_warmed_folder_shows_its_older_mail`.
 - **The page doesn't know the profile** · medium value · effort S — read-only, a move, a flag
   change or a send that waits in its queue looks done. Say `profile` in `/api/digest` and show it
   beside the sync status.
