@@ -309,6 +309,36 @@ def test_hwf_a_dismissed_reply_later_thread_leaves_the_stack(db):
     assert ([r["thread_id"] for r in store.list_replylater(db, A)], store.replylater_count(db, A)) == (["T"], 1)
 
 
+def test_hwf_a_draft_of_a_reply_is_no_reply_to_reply_later(db):
+    import store
+    put(db, "<a@example.test>", thread_id="T", ts=100)
+    put(db, "<b@example.test>", thread_id="T", ts=200, from_addr=A, draft=1)
+    store.set_replylater(db, A, "T", None, "now")
+    store.resolve_followups(db, A)
+    assert store.replylater_count(db, A) == 1
+    put(db, "<c@example.test>", thread_id="T", ts=300, from_addr=A, folder="Sent")
+    store.resolve_followups(db, A)
+    assert store.replylater_count(db, A) == 0
+
+
+def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
+    import store
+    day = 86400
+    asked = put(db, "<a@example.test>", thread_id="T", ts=NOW_TS - 5 * day, seen=1)
+    put(db, "<b@example.test>", thread_id="T", ts=NOW_TS - day, from_addr=A, draft=1)
+    db.execute("INSERT INTO summaries(message_pk, importance, category) VALUES (?, 5, 'action-needed')", (asked,))
+
+    def nudged():
+        store.followup_detect_received(db, NOW_TS, 3, 14)
+        store.resolve_followups(db, A)
+        return [(r["anchor_pk"], r["last_msg_ts"])
+                for r in db.execute("SELECT anchor_pk, last_msg_ts FROM followups WHERE kind='received'")]
+
+    assert nudged() == [(asked, NOW_TS - 5 * day)]     # dated by the mail, not by the draft
+    put(db, "<c@example.test>", thread_id="T", ts=NOW_TS - 1, from_addr=A, folder="Sent")
+    assert nudged() == []
+
+
 # -- the draft-ahead cache's hygiene ------------------------------------------
 
 def _ahead(c, ref, created, body="Sounds good."):
