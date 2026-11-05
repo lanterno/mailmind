@@ -344,8 +344,8 @@ automatically.
   folder's newest 500 messages again, so mail you read on your phone shows read here too. A
   change you make meanwhile, or one still queued offline, keeps its own.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
-  per tick against the server, yields instantly to anything you're doing, and pushes an
-  event so open lists drop messages deleted in another client. It prunes only what it read
+  per tick against the server, every folder MailMind has synced, yields instantly to anything
+  you're doing, and pushes an event so open lists drop messages deleted in another client. It prunes only what it read
   before asking the server, so mail a sync stores while it runs is never taken for a ghost.
 - **Persistent per-account IMAP connections** make repeated reads dramatically faster,
   with connection validation, age/use recycling and extra-conservative handling for

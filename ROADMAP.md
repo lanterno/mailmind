@@ -508,15 +508,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **Prune what sync never prunes** · high value · effort M — three gaps, each pinned by a strict
-  xfail in `tests/test_hwf_mailio.py`:
-  - an INBOX emptied in another client is never pruned, because no route passes `force` to
-    `reconcile_account` (`test_hwf_an_inbox_emptied_elsewhere_can_be_pruned`);
-  - only INBOX is reconciled, so mail deleted from any other folder stays listed
-    (`test_hwf_mail_deleted_from_another_folder_leaves_the_list`);
-  - a folder that `warm.warm_tick` touched first (`sync_folder(recent=WARM_RECENT)`) never fetches
-    its older mail, since the watermark is already past it
-    (`test_hwf_opening_a_warmed_folder_shows_its_older_mail`).
+- **A warmed folder never fetches its older mail** · high value · effort S — a folder that
+  `warm.warm_tick` touched first (`sync_folder(recent=WARM_RECENT)`) stores only its newest
+  messages, and the watermark is already past the rest, so no later sync fetches them. Pinned by
+  `test_hwf_opening_a_warmed_folder_shows_its_older_mail`.
 - **The page doesn't know the profile** · medium value · effort S — read-only, a move, a flag
   change or a send that waits in its queue looks done. Say `profile` in `/api/digest` and show it
   beside the sync status.

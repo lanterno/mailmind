@@ -366,8 +366,10 @@ again for it as it ends.
   caller's variables.
 - Each names its account (a message's through `mailops.account_of`), or `gates.EVERY_ACCOUNT`
   for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
-  MAINTENANCE. A run over every account is not work across accounts: `/api/reconcile` and
-  `/api/sweep` go through `server._each_account`, one job per account on its own gate, in turn.
+  MAINTENANCE. A run over every account is not work across accounts: `/api/sweep` goes through
+  `server._each_account`, one job per account on its own gate, in turn. Reconcile
+  (`server._reconcile_folders`) goes further: one job per folder with a `sync_state` row
+  (`ingest.reconciled_folders`), so it never holds a gate across folders.
 - Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
   the user. `deadline=` (seconds) raises `Busy` for a job not let in by then, and it never runs.
   A job that waits on a gate from inside a job raises `RuntimeError` instead of hanging; one that
