@@ -52,11 +52,18 @@ def _trim(text):
     return "\n".join(out).strip()[:CAP_PER_MSG]
 
 
+def lone_key(row):
+    """What a message with no thread goes by here: its Message-ID, or if it has none, its pk."""
+    return f"m:{row['message_id']}" if row["message_id"] else f"pk:{row['pk']}"
+
+
 def _rows(c, account, thread_id):
+    kind, _, value = str(thread_id).partition(":")
+    column, value = {"m": ("message_id", value), "pk": ("pk", value)}.get(kind, ("thread_id", thread_id))
     rows = c.execute(
-        """SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
-           FROM messages WHERE account=? AND thread_id=? ORDER BY ts ASC, pk ASC""",
-        (account, thread_id)).fetchall()
+        f"""SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
+           FROM messages WHERE account=? AND {column}=? ORDER BY ts ASC, pk ASC""",
+        (account, value)).fetchall()
     seen, out = set(), []
     for r in rows:
         k = (r["message_id"] or "").strip() or f"pk:{r['pk']}"

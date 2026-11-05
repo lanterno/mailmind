@@ -3308,7 +3308,7 @@ def ai_summarize(body):
         if not row:
             return {"ok": False, "error": "not found"}, 404
         account = row["account"]
-        thread_id = row["thread_id"] or f"pk:{row['pk']}"
+        thread_id = row["thread_id"] or summarize_thread.lone_key(row)
         scope = "message" if not row["thread_id"] else "thread"
     if not account or account not in {a["email"] for a in accounts.accounts()} or not thread_id:
         return {"ok": False, "error": "bad request"}, 400
