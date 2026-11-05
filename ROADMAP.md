@@ -455,13 +455,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     MATCH ?)`;
   - `-category:x` builds `s.category <> ?`, which is NULL for mail without a summary, so it hides
     every unsummarized message. Use `s.category IS NOT ?`.
-- **Give up at once on a refusal that won't change** · medium value · effort S —
-  `outbox.send_one` backs off and retries every failure up to `MAX_ATTEMPTS`. A 550 for a
-  recipient or a 554 for the message is sent four more times over about half an hour. A 535 logs in
-  with a refused password five times, which some providers count toward a lockout. Make a 5xx reply
-  (`smtplib.SMTPResponseException.smtp_code >= 500`, and each code in an `SMTPRecipientsRefused`)
-  terminal on the first try. Keep backing off on 4xx and on connection errors. Today's behaviour
-  is pinned in `tests/golden/http_send/a_refused_login_and_a_rejected_message.json`.
 - **Let a resubmitted RSVP dedupe** · low value · effort S — `do_invite_rsvp` keys the outbox row
   `rsvp:<account>:<uid>:<partstat>:` plus a random suffix, so the same POST sent twice (a retry, a
   second click before the row redraws) queues two replies to the organizer. The suffix lets a

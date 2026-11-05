@@ -417,7 +417,9 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
   goes to `error`, where a person's retry (`requeue`) starts the count again. The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
-  outbox publishes `outbox.Failed` for an attempt that failed, as it does `outbox.Sent`. The gate column (`applied`, `delivered`) is set the instant the one
+  outbox publishes `outbox.Failed` for an attempt that failed, as it does `outbox.Sent`. A send the
+  server refuses for good (`smtpsend.permanent`: a 5xx, or every recipient refused with one) goes
+  to `error` on its first try (`give_up`). The gate column (`applied`, `delivered`) is set the instant the one
   irreversible step returns, so the boot-time reset of running rows never repeats it. A row's
   state changes go through `QUEUE`, not the store. The move is itself an IMAP op, so it runs
   as a job on the account's IMAP gate; the outbox's SMTP send holds none.
