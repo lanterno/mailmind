@@ -494,9 +494,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     messages than its pks hold.
 - **Threads, Reply Later and the classifier: smaller bugs** · low value · effort S — each pinned by a
   strict xfail in `tests/test_hwf_domain.py`:
-  - a mute is left behind when its thread joins a Gmail thread, or when every copy is stored again
-    and the thread mints a new id (`test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute`,
-    `test_hwf_a_thread_stored_again_whole_keeps_its_mute`);
   - `store.list_replylater` has no state filter, so a dismissed thread stays in the stack
     (`test_hwf_a_dismissed_reply_later_thread_leaves_the_stack`);
   - the ESP marker `"sg."` matches by substring, so `msg.` and `nsg.` domains count as bulk

@@ -497,6 +497,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
   moved stored thread summaries onto it.
+- **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
+  union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
+  Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
+  that gained a Gmail id), `threads._rekey` moves what was kept under the id no row holds any
+  more, in the same transaction: `muted`, `followups`, `thread_summaries` and `draft_ahead`'s
+  `t:` keys. A new table keyed on a thread id joins `_rekey`.
 
 ### Security model
 
