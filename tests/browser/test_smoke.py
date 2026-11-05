@@ -592,8 +592,6 @@ def test_a_draft_replaced_or_discarded_leaves_the_list_at_once(page, world):
     clean(page)
 
 
-@pytest.mark.xfail(strict=True, reason="two copies of one draft share a Message-ID, so the Drafts row "
-                                       "opens as a conversation, whose reader has no Edit")
 def test_a_draft_with_an_older_copy_still_opens_for_editing(page, world):
     opened(page)
     folder(page, "Drafts").click()
