@@ -521,11 +521,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   prunes local rows by live UID, where expiry and the AI sweep prune by Message-ID. Across a
   UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The next sync's reset heals
   them.
-- **The rail's counts go stale after a snooze** · medium value · effort S — `loadFolders` bumps
-  `state.cseq` and, with the folders cached, calls `loadCMessages`, which bumps it again. The
-  folder answer then reads as superseded and is dropped, so the Snoozed count, unread counts and
-  badges keep their old values until a refresh-only `loadFolders(true)`. Give the rail its own
-  sequence. Pinned by `test_the_rail_counts_a_message_just_snoozed` (tests/browser).
 - **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
   `tests/test_hwf_ai.py`:
   - a cached brief keeps the pks it was built with, so a renumbered folder shrinks its chips
