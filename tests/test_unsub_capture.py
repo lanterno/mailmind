@@ -72,6 +72,15 @@ def test_a_header_folded_across_lines_is_read_whole(world):
     assert r["list_unsub_method"] == "one-click"
 
 
+def test_a_url_folded_in_the_middle_comes_back_whole():
+    # RFC 2369 says whitespace within one is ignored; a space or a line break left in it can't be requested.
+    import server
+    r = server._parse_list_unsub(b"List-Unsubscribe: <https://list.example.test/u?t=abc\r\n def>,\r\n"
+                                 b" <mailto:out@list.example.test?subject=\r\n stop>\r\n\r\nHello.\r\n")
+    assert (r["https_uri"], r["mailto_to"], r["mailto_subject"]) == (
+        "https://list.example.test/u?t=abcdef", "out@list.example.test", "stop")
+
+
 def test_a_sender_with_no_stored_body_can_be_unsubscribed_from(app, world):
     import store
     c = store.conn()
