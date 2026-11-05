@@ -2372,7 +2372,7 @@ def cleanup_execute(body):
                 status = "no_method"
             if status in _UNSUB_TERMINAL:              # record ONLY terminal success; leave failures retryable
                 c = store.conn()
-                store.unsub_log_put(c, from_addr, method, status, http_status, now_iso(), key)
+                store.unsub_log_put(c, from_addr, method, status, http_status, now_iso(), key, accts)
                 c.commit()
                 c.close()
     elif do_unsub and not token_ok:

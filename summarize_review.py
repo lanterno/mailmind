@@ -121,8 +121,11 @@ def _aggregate(c, accounts_set, since_ts):
         fap).fetchone()[0]
 
     since_iso = datetime.fromtimestamp(since_ts, timezone.utc).isoformat()
+    jac, jap = _acct_clause(accounts_set, "value")
     try:
-        cleaned = c.execute("SELECT COUNT(*) FROM unsub_log WHERE ts>=?", (since_iso,)).fetchone()[0]
+        cleaned = c.execute("SELECT COUNT(*) FROM unsub_log WHERE ts>=? AND (accounts IS NULL OR EXISTS "
+                            "(SELECT 1 FROM json_each(unsub_log.accounts) WHERE 1=1" + jac + "))",
+                            [since_iso, *jap]).fetchone()[0]
     except Exception:
         cleaned = 0
 

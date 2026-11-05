@@ -25,10 +25,11 @@ def unsub_log_get(c, key):
     return c.execute("SELECT * FROM unsub_log WHERE idempotency_key=?", (key,)).fetchone()
 
 
-def unsub_log_put(c, from_addr, method, status, http_status, ts, key):
-    """Idempotent insert; returns the row (existing on dupe key, so a repeat never re-fires)."""
-    c.execute("""INSERT OR IGNORE INTO unsub_log(from_addr,method,status,http_status,ts,idempotency_key)
-                 VALUES(?,?,?,?,?,?)""", (from_addr, method, status, http_status, ts, key))
+def unsub_log_put(c, from_addr, method, status, http_status, ts, key, accounts):
+    """Idempotent insert; returns the row (existing on dupe key, so a repeat never re-fires).
+    `accounts` are those the sender wrote to."""
+    c.execute("""INSERT OR IGNORE INTO unsub_log(from_addr,method,status,http_status,ts,idempotency_key,accounts)
+                 VALUES(?,?,?,?,?,?,?)""", (from_addr, method, status, http_status, ts, key, json.dumps(accounts)))
     return c.execute("SELECT * FROM unsub_log WHERE idempotency_key=?", (key,)).fetchone()
 
 
