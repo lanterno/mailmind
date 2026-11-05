@@ -744,7 +744,13 @@ through `rules.sets()`.
 
 A rule change classifies again the stored mail it covers (`ingest.reclassify`, called by whatever calls
 `rules.add` or `rules.remove`): each row a rule decides now or decided before. A row no rule had a say in
-stays as ingest judged it, since `List-Unsubscribe` isn't kept. An edit of the file by hand reaches only new mail.
+stays as ingest judged it, since not all it read then is kept. An edit of the file by hand reaches only new mail.
+
+Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `list_unsub_method`, through
+`mailparse.list_unsub`), `none` included. `server._resolve_unsub` answers for a sender from the newest message
+that can say: those columns, a stored body, or for older mail the two headers read off the server, within
+`UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
+so a second try after a cleanup's sweep still knows the way.
 
 ## Conventions
 

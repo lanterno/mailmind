@@ -174,7 +174,8 @@ and the Claude API.
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
   sender offers it, else a mailto from each account that got the mail, else the sender's page,
-  opened in the browser.
+  opened in the browser. The way out comes from the headers ingest keeps, so a sender whose mail
+  was never opened can still be left, and a second try after the sweep still knows it.
 - **Expiry rules.** Give a sender or domain a shelf life — `python3 rules.py expire
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
   server checks hourly; `manage.py expire --dry` previews. Expiry is independent of

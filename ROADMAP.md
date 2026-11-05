@@ -128,14 +128,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   per account, so there is no all-accounts Snoozed to match the shipped all-inboxes ✉ dot. Saved
   lanes already work cross-account because they ride `/api/search`'s `scope` param — the four helpers
   and their `store.list_*` counterparts need the same branch.
-- **Unsubscribe coverage for senders whose bodies were never fetched** · medium value · effort M —
-  Cleanup can only offer an unsubscribe where a body happens to be cached: `_resolve_unsub` does
-  `raw = store.get_body(...); if raw is None: continue`, and `ingest.py` has zero references to
-  `list_unsub_raw` / `list_unsub_method`, so those columns are populated lazily from the reader and
-  never at ingest. Fix both ends: capture the List-Unsubscribe headers during ingest for all future
-  mail, and add an on-demand header-only IMAP fetch for the backlog. The same gap breaks a retry:
-  once a cleanup's sweep has moved all the sender's mail, the rows it read from are gone, so
-  running the cleanup again after a failed send finds `no_method`.
 - **Batch cleanup with a stated rationale** · medium value · effort M — Cleaning ten noisy senders
   means ten preview-and-confirm cycles: flood rows are strictly one-at-a-time (`#floodList` delegate
   → `openCleanupPreview`), with no marked set. Wanted: multi-select executing one batched block+sweep
