@@ -1,12 +1,12 @@
 """The offline mutation queue (readmutq): an archive, trash, junk or move asked for while IMAP is
-unreachable is queued, its local row dropped at once, and the worker applies it when the server
-is back. That happens exactly once, even across a crash, with backoff while the server stays
-away, and Undo cancels a queued move that hasn't shipped. The worker doesn't run here: each test
-calls readmutq.drain() itself and moves the frozen clock past the backoff.
+unreachable is queued, its message left out of the lists at once (the row stays, marked
+pending_removal), and the worker applies it when the server is back. That happens exactly once,
+even across a crash, with backoff while the server stays away. A move the server refuses, or one
+the queue gives up on, lists its message again, and Undo cancels a queued move that hasn't
+shipped without asking the server. The worker doesn't run here: each test calls
+readmutq.drain() itself and moves the frozen clock past the backoff.
 """
 from datetime import timedelta
-
-import pytest
 
 from fixtures import world as w
 
@@ -146,6 +146,7 @@ def test_undo_cancels_a_queued_move_that_hasnt_shipped(app, world):
     queue(app, world)
     since = world.mark()
     assert app.post("/api/undo", {}).json["ok"]
+    assert world.server.commands[since:] == []                         # nothing asked of the server
     assert rows() == []                                                # cancelled
     drain()
     assert world.writes(since) == []
@@ -162,9 +163,40 @@ def test_undo_after_the_queue_shipped_moves_it_back(app, world):
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
 
 
-# ── known bugs ───────────────────────────────────────────────────────────
+def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, world):
+    import store
+    pk, thread = world.pk(RECEIPT), world.row(RECEIPT)["thread_id"]
+    queue(app, world)
+    listed = app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]
+    assert pk not in [m["pk"] for m in listed]
+    assert app.get("/api/search?scope=all&q=receipt+1042").json["items"] == []
+    assert app.get(f"/api/thread?account={w.ADA}&thread_id={thread}").json["items"] == []
+    [r] = rows()
+    c = store.conn()
+    assert store.pending_removal_pks(c, r["id"]) == [pk]                # kept, for a move that doesn't happen
+    c.close()
+    drain()
+    c = store.conn()
+    assert store.pending_removal_pks(c, r["id"]) == [] and store.get_message(c, pk) is None
+    c.close()
 
-@pytest.mark.xfail(strict=True, reason="known bug: a queued move the server refuses still drops the local row")
+
+def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, monkeypatch):
+    import accounts
+    import ingest
+    import readmutq
+    ingest.sync_folder(accounts.get(w.ADA), "Archive", full=True)
+    queue(app, world)
+    mirror = readmutq._local_mirror
+
+    def archive_synced_first(row):
+        ingest.sync_new(accounts.get(w.ADA), "Archive")                # the moved copy is stored before
+        return mirror(row)
+    monkeypatch.setattr(readmutq, "_local_mirror", archive_synced_first)
+    drain()
+    assert boxes(world, RECEIPT) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
+
+
 def test_a_queued_move_the_server_refuses_comes_back(app, world):
     queue(app, world)
     world.server.fail("UID MOVE", user=w.ADA)
@@ -174,7 +206,6 @@ def test_a_queued_move_the_server_refuses_comes_back(app, world):
     assert rows()[0]["state"] == "error"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a queued move given up on leaves the message out of the list")
 def test_a_queued_move_given_up_on_comes_back(app, world):
     import readmutq
     queue(app, world)

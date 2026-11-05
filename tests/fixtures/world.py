@@ -192,7 +192,8 @@ class World:
 
     def where(self, name):
         """Where the corpus message `name` is now, found by its Message-ID: on the server (account,
-        mailbox, UID, flags) and in the database (account, folder, UID and the flag columns)."""
+        mailbox, UID, flags) and in the database (account, folder, UID and the flag columns). A row
+        a queued move is taking away (pending_removal) is listed nowhere, so it isn't here either."""
         import store
         mid = message_id(name)
         server = []
@@ -206,7 +207,7 @@ class World:
         try:
             db = [dict(r) for r in c.execute(
                 "SELECT account, folder, uid, seen, flagged, answered, draft, is_junk FROM messages "
-                "WHERE message_id=? ORDER BY account, folder, uid", (mid,))]
+                "WHERE message_id=? AND pending_removal IS NULL ORDER BY account, folder, uid", (mid,))]
         finally:
             c.close()
         return {"server": sorted(server), "db": db}

@@ -55,8 +55,9 @@ def _msg(folder, thread_id, ts, account=ACCT):
 
 
 def _left():
+    """The messages still listed: a queued move's row stays, marked, until the move settles."""
     c = store.conn()
-    pks = {r["pk"] for r in c.execute("SELECT pk FROM messages")}
+    pks = {r["pk"] for r in c.execute("SELECT pk FROM messages WHERE pending_removal IS NULL")}
     c.close()
     return pks
 

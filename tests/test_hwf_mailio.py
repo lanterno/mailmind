@@ -333,6 +333,18 @@ def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ship
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
 
 
+def test_hwf_an_offline_trash_undone_while_offline_comes_back(app, world):
+    import ingest
+    name = "ada-inbox-09-rfc2047-folded.eml"
+    queue(app, world, op="trash", name=name)
+    world.server.drop("LOGIN", user=w.ADA, times=None)           # still unreachable when Undo is pressed
+    app.post("/api/undo", {})
+    world.server.clear_faults()
+    app.post("/api/undo", {})                                    # back online: Undo again, then a sync
+    ingest.sync_new(acct())
+    assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
+
+
 # -- sweep, expiry and the AI sweep ----------------------------------------
 
 def audit(world):
@@ -698,19 +710,6 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_here_only(app, world):
 
 
 # -- known bugs ------------------------------------------------------------
-
-@pytest.mark.xfail(strict=True, reason="known bug: undoing an offline trash while still offline loses the message")
-def test_hwf_an_offline_trash_undone_while_offline_comes_back(app, world):
-    import ingest
-    name = "ada-inbox-09-rfc2047-folded.eml"
-    queue(app, world, op="trash", name=name)
-    world.server.drop("LOGIN", user=w.ADA, times=None)           # still unreachable when Undo is pressed
-    app.post("/api/undo", {})
-    world.server.clear_faults()
-    app.post("/api/undo", {})                                    # back online: Undo again, then a sync
-    ingest.sync_new(acct())
-    assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
-
 
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
     import config
