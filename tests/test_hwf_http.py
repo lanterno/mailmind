@@ -225,6 +225,40 @@ def test_marking_read_while_the_server_is_away_is_queued(app, world):
     assert (r.status, r.json.get("status"), world.row(LUNCH_CONFIRM)["seen"]) == (200, "queued", 1)
 
 
+def archived_pair(app, world):
+    for name in (RECEIPT, FOLDED):
+        assert app.post("/api/archive", {"pk": world.pk(name), "undo_group": "g1"}).json["ok"]
+
+
+def test_a_partly_failed_group_undo_keeps_what_it_couldnt_reverse(app, world):
+    archived_pair(app, world)
+    world.server.fail("UID SEARCH", user=w.ADA)              # the first child reversed (FOLDED) isn't found
+    r = app.post("/api/undo", {}).json
+    assert (r["ok"], r["reversed"], r["failed"]) == (True, 1, 1)
+    assert app.post("/api/undo", {}).json["ok"]
+    assert server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
+
+
+def test_a_refusal_partway_through_a_group_undo_still_reports_what_it_reversed(app, world):
+    archived_pair(app, world)
+    [uid] = world.server.find(w.ADA, "Archive", w.message_id(RECEIPT))
+    for cmd in ("UID MOVE", "UID COPY"):                     # RECEIPT, reversed second, can't move back
+        world.server.fail(cmd, when=lambda args, uid=uid: str(args[0]) == str(uid), user=w.ADA)
+    r = app.post("/api/undo", {}).json
+    assert server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
+    assert (r["ok"], r.get("reversed"), r.get("failed")) == (True, 1, 1)
+
+
+def test_a_group_undo_that_reverses_nothing_keeps_the_whole_group(app, world):
+    archived_pair(app, world)
+    world.server.drop("LOGIN", user=w.ADA, times=2)          # neither member can reach the server
+    r = app.post("/api/undo", {}).json
+    assert r["ok"] is False
+    r = app.post("/api/undo", {}).json
+    assert (r["ok"], r["reversed"], r["failed"]) == (True, 2, 0)
+    assert server_boxes(world, RECEIPT) == server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
+
+
 # -- snooze presets at the week's edges ------------------------------------
 
 @pytest.mark.parametrize("now, preset, wake", [
@@ -458,32 +492,6 @@ def test_a_refused_folder_list_keeps_the_last_list(app, world):
 def test_a_json_body_that_isnt_an_object_is_a_bad_request(app):
     r = app.post("/api/seen", b"[1, 2]")
     assert (r.status, r.json) == (400, {"ok": False, "error": "bad request"})
-
-
-def archived_pair(app, world):
-    for name in (RECEIPT, FOLDED):
-        assert app.post("/api/archive", {"pk": world.pk(name), "undo_group": "g1"}).json["ok"]
-
-
-@pytest.mark.xfail(strict=True, reason="known bug: a group undo drops the children it couldn't reverse")
-def test_a_partly_failed_group_undo_keeps_what_it_couldnt_reverse(app, world):
-    archived_pair(app, world)
-    world.server.fail("UID SEARCH", user=w.ADA)              # the first child reversed (FOLDED) isn't found
-    r = app.post("/api/undo", {}).json
-    assert (r["ok"], r["reversed"], r["failed"]) == (True, 1, 1)
-    assert app.post("/api/undo", {}).json["ok"]
-    assert server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
-
-
-@pytest.mark.xfail(strict=True, reason="known bug: a refusal partway through a group undo aborts it and re-pushes all of it")
-def test_a_refusal_partway_through_a_group_undo_still_reports_what_it_reversed(app, world):
-    archived_pair(app, world)
-    [uid] = world.server.find(w.ADA, "Archive", w.message_id(RECEIPT))
-    for cmd in ("UID MOVE", "UID COPY"):                     # RECEIPT, reversed second, can't move back
-        world.server.fail(cmd, when=lambda args, uid=uid: str(args[0]) == str(uid), user=w.ADA)
-    r = app.post("/api/undo", {}).json
-    assert server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
-    assert (r["ok"], r.get("reversed"), r.get("failed")) == (True, 1, 1)
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: \\Answered is set by pk, so archiving the original first skips it")

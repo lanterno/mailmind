@@ -278,6 +278,25 @@ def test_hwf_a_refused_select_keeps_the_message(app, world):
         assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), path
 
 
+def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
+    name = "cy-inbox-03-unrelated.eml"
+    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
+    world.server.fail("UID STORE", user=w.CY)
+    assert app.post("/api/undo", {}).json["ok"] is False
+    assert app.post("/api/undo", {}).json["ok"]                  # kept for a retry, which works
+    assert (w.CY, "INBOX") in boxes(world, name)[0]
+
+
+def test_hwf_a_refused_move_back_is_not_reported_as_undone(app, world):
+    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    world.server.fail("UID MOVE", user=w.ADA)
+    world.server.fail("UID COPY", user=w.ADA)
+    assert app.post("/api/undo", {}).json["ok"] is False
+    assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
+    assert app.post("/api/undo", {}).json["ok"]
+    assert boxes(world, RECEIPT)[0] == [(w.ADA, "INBOX")]
+
+
 def test_hwf_a_refused_login_queues_the_move_instead_of_dropping_it(app, world):
     import readmutq
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
@@ -860,15 +879,3 @@ def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkey
     n = len(world.server.commands_for(w.ADA))
     time.sleep(0.25)
     assert len(world.server.commands_for(w.ADA)) == n
-
-
-# -- bugs found while writing these ----------------------------------------
-
-@pytest.mark.xfail(strict=True, reason="known bug: a Gmail Undo the server refuses is reported as done")
-def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
-    name = "cy-inbox-03-unrelated.eml"
-    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
-    world.server.fail("UID STORE", user=w.CY)
-    assert app.post("/api/undo", {}).json["ok"] is False
-
-
