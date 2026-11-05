@@ -843,13 +843,50 @@ def test_hwf_a_tab_in_a_subject_is_not_deleted():
     assert email.message_from_bytes(built["raw"])["Subject"] == "Plans for next week"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: replies carry the reader's quote fold (ROADMAP)")
-def test_hwf_a_reply_carries_no_reader_quote_fold():
-    import compose
-    orig = {"from_name": "Lin Mori", "from_addr": "lin@example.test", "date": "Mon, 2 Nov 2026", "text": None,
+FOLDABLE = {"from_name": "Lin Mori", "from_addr": "lin@example.test", "date": "Mon, 2 Nov 2026", "text": None,
             "html": "<p>Sounds good.</p><blockquote>On Sun, Ada wrote: lunch?</blockquote>"}
-    text, html = compose.reply_bodies("Great", orig)
+
+
+@pytest.mark.parametrize("bodies", ["reply_bodies", "forward_bodies"])
+def test_hwf_mail_going_out_carries_no_reader_quote_fold(bodies):
+    import compose
+    text, html = getattr(compose, bodies)("Great", FOLDABLE)
     assert "<details" not in html and "quoted text" not in text
+    assert "On Sun, Ada wrote: lunch?" in html and "On Sun, Ada wrote: lunch?" in text
+
+
+def test_hwf_the_reader_still_folds_a_quote():
+    import sanitize_html
+    assert '<details class="mm-quote">' in sanitize_html.sanitize(FOLDABLE["html"])[0]
+
+
+def test_hwf_a_quote_stored_with_the_fold_loses_only_the_fold():
+    import sanitize_html
+    folded = sanitize_html.sanitize(FOLDABLE["html"])[0]
+    assert sanitize_html.without_fold(folded) == sanitize_html.sanitize(FOLDABLE["html"], fold=False)[0]
+    assert sanitize_html.without_fold(f"<blockquote>{folded}</blockquote>") == \
+        f'<blockquote>{sanitize_html.sanitize(FOLDABLE["html"], fold=False)[0]}</blockquote>'
+    theirs = "<details><summary>Their own</summary>Kept</details>"
+    assert sanitize_html.without_fold(theirs) == theirs
+
+
+def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
+    import server
+    import store
+    c = store.conn()
+    fold = '<details class="mm-quote"><summary>··· quoted text</summary>'
+    did = store.draft_upsert(c, {"id": None, "account": A, "folder": "Drafts", "uid": 7, "message_id": "<d@example.test>",
+                                 "uidvalidity": 1, "in_reply_to_pk": None, "mode": "reply", "subject": "Re: Lunch",
+                                 "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
+    store.draft_set_resume(c, did, "Great", "\n\nOn Sunday:\n> lunch?\n",
+                           f"<div>On Sunday:</div><blockquote>{fold}<blockquote>lunch?</blockquote></details></blockquote>",
+                           None, "sha")
+    c.commit()
+    c.close()
+    spec, _, _ = server._compose_spec({"account": A, "mode": "reply", "to": ["lin@example.test"], "subject": "Re: Lunch",
+                                       "text": "Great", "draft_id": did,
+                                       "resume": {"tail_text": "\n\nOn Sunday:\n> lunch?\n"}})
+    assert "<details" not in spec["html"] and "lunch?" in spec["html"]
 
 
 # -- calendar recurrence ------------------------------------------------------
