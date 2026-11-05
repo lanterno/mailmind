@@ -656,12 +656,22 @@ def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
     assert manage.plan_account_db(accounts.get(w.ADA))["junk"] == stored["n"]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the Screener treats a domain rule as exact, not covering sub-domains")
 def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):
     import rules
     import server
     rules.add("example.test", "keep")
     assert [i["from_addr"] for i in server.do_screener(w.ADA)["items"]] == []
+
+
+def test_hwf_cleanup_skips_senders_a_parent_domain_rule_decided(world):
+    import rules
+    import server
+    for n in range(4):                                       # enough unread issues to rank as noise
+        world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
+                                                Date=f"Sun, 0{n + 1} Nov 2026 07:00:00 +0000"))
+    assert "news@loom.example.test" in [s["from_addr"] for s in server.cleanup_senders({})["senders"]]
+    rules.add("example.test", "block")                       # every sender in the world is under it
+    assert server.cleanup_senders({})["senders"] == []
 
 
 # -- saved views and the rules file on disk -----------------------------------
