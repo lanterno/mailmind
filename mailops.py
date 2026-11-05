@@ -226,6 +226,44 @@ _FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
          "draft": "\\Draft", "deleted": "\\Deleted"}
 
 
+def mark_answered(pk, account, message_id):
+    """\\Answered on the message a send replied to, wherever it is by now: where its row says, or
+    with no row left (archiving right after replying deletes it), in the inbox and the folders filing
+    moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does."""
+    c = store.conn()
+    try:
+        row = store.get_message_by_msgid(c, account, message_id) or (store.get_message(c, pk) if pk else None)
+    finally:
+        c.close()
+    if row:
+        return set_flags(row["pk"], {"answered": True})
+    if not (account and message_id):
+        return False, "not found"
+    profile.refuse_writes("a flag change")
+    s = mailbox.open_session(accounts.get(account))
+    try:
+        for role in ("inbox", "archive", "all", "trash", "junk"):
+            folder = mail_session.find_role(s, role)
+            if not folder:
+                continue
+            try:
+                s.select(folder, readonly=False)
+                uid = _uid_by_msgid(s, message_id)
+                if uid:
+                    s.add_flags([uid], ["\\Answered"])
+                    return True, "ok"
+            except imaplib.IMAP4.abort:
+                raise
+            except imaplib.IMAP4.error:
+                continue
+        return False, "not found"
+    finally:
+        try:
+            s.logout()
+        except Exception:
+            pass
+
+
 def set_flags(pk, flags):
     """flags: {'seen':True,'flagged':False,...} -> UID STORE +/-FLAGS, mirrored locally once the
     server took it. A refusal (the UID gone, a read-only folder) leaves the local row as the server

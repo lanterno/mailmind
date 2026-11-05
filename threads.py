@@ -125,6 +125,7 @@ def _rekey(c, account, old, surv):
         c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
                   ("t:" + surv, account, "t:" + old))
         c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + old))
+        c.execute("UPDATE outbox SET orig_thread_id=? WHERE orig_account=? AND orig_thread_id=?", (surv, account, old))
     except Exception:
         pass
 

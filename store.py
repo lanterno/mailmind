@@ -393,10 +393,12 @@ def outbox_insert(c, row):
     try:
         cur = c.execute(
             """INSERT INTO outbox(account,idempotency_key,message_id,in_reply_to_pk,
+                 orig_account,orig_message_id,orig_thread_id,
                  envelope,recipients,subject,raw,state,next_attempt_at,draft_id,created_at)
                VALUES(:account,:idempotency_key,:message_id,:in_reply_to_pk,
+                 :orig_account,:orig_message_id,:orig_thread_id,
                  :envelope,:recipients,:subject,:raw,'queued',:next_attempt_at,:draft_id,:created_at)
-               RETURNING id""", row)
+               RETURNING id""", {"orig_account": None, "orig_message_id": None, "orig_thread_id": None, **row})
         return cur.fetchone()["id"], True
     except sqlite3.IntegrityError:   # someone inserted the same key between our SELECT and INSERT
         r = c.execute("SELECT id FROM outbox WHERE idempotency_key=?",

@@ -76,13 +76,17 @@ def _now():
 
 def enqueue(built, meta):
     """Persist a queued send. `built` = compose.build_message(...) output; `meta` =
-    {account, idempotency_key, in_reply_to_pk, subject, to, cc, bcc}. Returns
+    {account, idempotency_key, in_reply_to_pk, orig_message_id, subject, to, cc, bcc}. Returns
     (outbox_id, created). Kicks the worker."""
+    orig = _original(meta.get("in_reply_to_pk"))         # its row may be gone by the time this goes out
     row = {
         "account": meta["account"],
         "idempotency_key": meta["idempotency_key"],
         "message_id": built["message_id"],
         "in_reply_to_pk": meta.get("in_reply_to_pk"),
+        "orig_account": orig["account"] if orig else meta["account"] if meta.get("orig_message_id") else None,
+        "orig_message_id": orig["message_id"] if orig else meta.get("orig_message_id"),
+        "orig_thread_id": orig["thread_id"] if orig else None,
         "envelope": json.dumps(built["envelope"]),
         "recipients": json.dumps({"to": built["to_disp"], "cc": built["cc_disp"],
                                   "bcc": built["bcc_disp"]}),
@@ -102,6 +106,16 @@ def enqueue(built, meta):
         c.close()
     kick()
     return oid, created
+
+
+def _original(pk, account=None, message_id=None):
+    """The row of the message a send replies to: by Message-ID, since a pk may have been renumbered,
+    else by the pk it was queued with. None once mail has moved out of every folder stored."""
+    c = store.conn()
+    try:
+        return store.get_message_by_msgid(c, account, message_id) or (store.get_message(c, pk) if pk else None)
+    finally:
+        c.close()
 
 
 def cancel(oid):
@@ -190,24 +204,25 @@ def _side_effects(oid, row, acct):
         except Exception as e:
             unfiled = f"sent copy failed: {type(e).__name__}"
             print(f"[outbox] Sent-copy failed for #{oid}: {smtpsend.sanitize_smtp_error(e)}", flush=True)
-    if row["in_reply_to_pk"] and not row["answered_set"]:
+    replied_to = row["in_reply_to_pk"] or row["orig_message_id"]
+    if replied_to and not row["answered_set"]:
         try:
             import mailops
-            gates.run(mailops.account_of(row["in_reply_to_pk"]) or gates.EVERY_ACCOUNT,
-                      lambda: mailops.set_flags(row["in_reply_to_pk"], {"answered": True}),
+            gates.run(row["orig_account"] or mailops.account_of(row["in_reply_to_pk"]) or gates.EVERY_ACCOUNT,
+                      lambda: mailops.mark_answered(row["in_reply_to_pk"], row["orig_account"], row["orig_message_id"]),
                       priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, answered_set=1))
         except Exception as e:
             print(f"[outbox] \\Answered failed for #{oid}: {type(e).__name__}", flush=True)
     # sent-no-reply: seed a follow-up on the replied-to thread (replies only — a brand-new compose
     # has no local thread_id until its Sent copy syncs). Best-effort, done-once, never fails the send.
-    if row["in_reply_to_pk"] and not row["followup_recorded"]:
+    if replied_to and not row["followup_recorded"]:
         try:
+            orig = _original(row["in_reply_to_pk"], row["orig_account"], row["orig_message_id"])
+            tid = (orig["thread_id"] if orig else None) or row["orig_thread_id"]
             c = store.conn()
-            orig = store.get_message(c, row["in_reply_to_pk"])
-            tid = (orig["thread_id"] if orig else None)
             if tid:
-                store.followup_record_sent(c, row["account"], tid, row["in_reply_to_pk"],
+                store.followup_record_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
                                            _now(), datetime.now(timezone.utc).isoformat())
             c.commit(); c.close()
             _commit(lambda c: store.outbox_set(c, oid, followup_recorded=1))

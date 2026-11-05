@@ -2610,8 +2610,8 @@ def do_send(body):
             c.close()
         draft_id = found["id"] if found else None
     meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
-            "in_reply_to_pk": in_reply_to_pk, "subject": spec["subject"], "draft_id": draft_id,
-            "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
+            "in_reply_to_pk": in_reply_to_pk, "orig_message_id": spec["in_reply_to"],
+            "subject": spec["subject"], "draft_id": draft_id, "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
     oid, created = outbox.enqueue(built, meta)
     return {"ok": True, "outbox_id": oid, "queued": created, "scheduled": bool(send_after),
             "recipients": len(built["envelope"])}, 200

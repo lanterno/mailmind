@@ -6,7 +6,8 @@ Migrations 1 to 20 are frozen in `m0001_m0020`. Each later one has a module of i
 `m<NNNN>_<what>.py`, with a `migrate(c)` that is idempotent and never commits.
 """
 from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_fingerprints, m0023_pending_removal,
-                                             m0024_scan_state, m0025_undo_entries, m0026_draft_key)
+                                             m0024_scan_state, m0025_undo_entries, m0026_draft_key,
+                                             m0027_reply_original)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
@@ -22,4 +23,5 @@ MIGRATIONS = [
     (24, m0024_scan_state.migrate),
     (25, m0025_undo_entries.migrate),
     (26, m0026_draft_key.migrate),
+    (27, m0027_reply_original.migrate),
 ]
