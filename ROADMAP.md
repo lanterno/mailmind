@@ -465,13 +465,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
-- **Don't let reconcile prune mail a sync just stored** · high value · effort S —
-  `ingest.reconcile_account` runs under the IMAP gate, but `sync_accounts` (the 300 s loop and the
-  IDLE dispatcher) does not take it. Mail a sync stores between reconcile's `UID SEARCH` and
-  `store.reconcile` isn't in the live set, so it is pruned. The watermark has already passed it,
-  so incremental sync never brings it back. Prune only UIDs at or below the highest UID the SEARCH
-  returned, or only the UIDs read before it. Pinned by
-  `test_mail_a_sync_stores_while_reconcile_runs_survives_it`.
 - **Bring back a queued move that doesn't happen** · high value · effort S — `_readmut_enqueue`
   drops the local row when it queues. If the server then refuses the move,
   `mailops.apply_queued_mutation` reads the `IMAP4.error` as done, and `readmutq.apply_one` never
