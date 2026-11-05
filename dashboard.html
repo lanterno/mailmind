@@ -1544,7 +1544,7 @@
 const BVAR={"spam/scam":"--scam","blocked":"--block","newsletters/marketing":"--mkt","automated-notifications":"--notif","receipts/transactional":"--txn","personal/protected":"--keep","other/personal-ish":"--personal"};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={all:[],q:"",account:"",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
-  folder:"INBOX",folders:[],cmsgs:[],cSyncing:false,cSyncFailed:false,csel:null,cseq:0,fseq:0,rseq:0,cmarked:new Set(),
+  folder:"INBOX",folders:[],cmsgs:[],cSyncing:false,cSyncFailed:false,cCatching:false,csel:null,cseq:0,fseq:0,rseq:0,cmarked:new Set(),
   compose:null,myAddrs:new Set(),outbox:[],failedSend:null,
   threadView:true,thread:null,searching:false,searchItems:[],searchSeq:0,searchScope:"all",sseLive:false,allInbox:false,
   views:[],viewId:null,screener:[],screenerCount:0,replylaterCount:0,
@@ -2005,6 +2005,7 @@ async function loadCMessages(){
   if(seq!==state.cseq||acct!==state.account||fol!==state.folder)return;  // superseded
   state.cmsgs=d.items||[]; state.cHasMore=!!d.has_more; state.cmarked.clear();
   state.cSyncing=!!d.syncing; state.cSyncFailed=!!d.sync_failed;   // a first scan still reading, or one that failed
+  state.cCatching=!!d.catching_up;                                  // a folder read before, still checking for more
   renderClientList();
   if((state.folder||"").toUpperCase()==="INBOX"){ touchLastLook(); clearNewPill(); }   // looking at the inbox now → reset watermark + drop the stale "N new" pill
   // desktop: preview the first message in the reader pane. Mobile (single pane): stay on the list.
@@ -4594,11 +4595,14 @@ function onReconcile(d){
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=0; bumpTitle(); } });   // refocus alone ≠ "looked at new mail" (the inbox isn't reloaded) → don't advance the watermark here
 function onFolderSynced(d){
-  // the first scan of d.folder ended. A list that answered while it was still reading loads what it
-  // read; one it failed for says so (opening it again tries again, so this never retries by itself).
-  loadFolders(true);
-  if(state.allInbox||state.account!==d.account||state.folder!==d.folder||!state.cSyncing)return;
-  if(!d.ok){ state.cSyncing=false; state.cSyncFailed=true; renderClientList(); return; }
+  // a sync of d.folder that its opening started ended: its first scan, or a catch-up of a folder
+  // read before. A list that answered while its first scan was still reading loads what it read;
+  // one it failed for says so (opening it again tries again, so this never retries by itself). A
+  // list that answered during a catch-up loads again only if the catch-up brought mail.
+  if(d.new)loadFolders(true);
+  if(state.allInbox||state.account!==d.account||state.folder!==d.folder)return;
+  if(state.cSyncing){ if(!d.ok){ state.cSyncing=false; state.cSyncFailed=true; renderClientList(); return; } }
+  else if(!(state.cCatching&&d.ok&&d.new))return;
   if(!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages();
 }
 function onSnoozeWake(d){
