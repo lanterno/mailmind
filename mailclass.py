@@ -22,10 +22,8 @@ Buckets:
   other/personal-ish        -> KEEP, but the only bucket that still wants a human glance
 """
 import re
-import os
-import json
 
-from mailmind.platform import settings
+import rules as rules_file
 
 SPAM = "spam/scam"
 BLOCKED = "blocked"                     # user said "always trash this sender/domain"
@@ -38,26 +36,10 @@ PERSONAL = "other/personal-ish"
 JUNK_BUCKETS = {SPAM, BLOCKED, MKT, NOTIF}
 
 # --- learned overrides (a sender/domain allow- & block-list the user grows) ---
-_rules_cache = {}
-
-
 def _rules():
-    """Lazy-load mailmind_rules.json (cached by path and mtime so edits are picked up)."""
-    path = settings.current().rules
-    try:
-        mtime = os.path.getmtime(path)
-    except OSError:
-        return {"keep_senders": set(), "block_senders": set(),
-                "keep_domains": set(), "block_domains": set()}
-    if _rules_cache.get("mtime") != mtime or _rules_cache.get("path") != path:
-        with open(path) as f:
-            raw = json.load(f)
-        _rules_cache.clear()
-        _rules_cache["path"] = path
-        _rules_cache["mtime"] = mtime
-        for k in ("keep_senders", "block_senders", "keep_domains", "block_domains"):
-            _rules_cache[k] = set(x.lower() for x in raw.get(k, []))
-    return _rules_cache
+    """mailmind_rules.json's keep and block lists, read again only when the file changes. A file
+    that can't be read leaves the last rules read well (rules.sets), so it never stops a sync."""
+    return rules_file.sets()
 
 
 def _domain_listed(domain, listed):
