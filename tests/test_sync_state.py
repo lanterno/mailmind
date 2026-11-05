@@ -1,5 +1,5 @@
-"""Sync's bookkeeping against the world's fake server: the per-folder watermark, the UIDVALIDITY
-reset, the flags of stored mail read again, ingest_message (Undo's one-message re-ingest), and the
+"""Sync's bookkeeping against the world's fake server: the per-folder watermark, how much of a
+folder its scans have read, the UIDVALIDITY reset, the flags of stored mail read again, ingest_message (Undo's one-message re-ingest), and the
 guards that keep reconcile from
 pruning live mail. Reconcile prunes INBOX rows whose UID the server no longer has; every guard
 here exists because a wrong prune deletes real mail from the local view, and incremental sync,
@@ -89,6 +89,72 @@ def test_ingest_message_for_a_message_the_server_lacks_stores_nothing(world):
     assert ingest.ingest_message(acct(), "INBOX", "<nowhere@example.test>") == 0
     assert ingest.ingest_message(acct(), "INBOX", "") == 0
     assert inbox() == before
+
+
+# ── how much a scan has read ────────────────────────────────────────────
+
+def scan_state(folder, email=w.ADA):
+    return [r["scan_state"] for r in q("SELECT scan_state FROM sync_state WHERE account=? AND folder=?",
+                                       email, folder)]
+
+
+def junk(message_id):
+    return w.variant("ada-inbox-12-scam.eml", Message_ID=message_id)
+
+
+def junk_mail(world, n):
+    """n more messages in Ada's Junk, which the world never opened."""
+    for i in range(n):
+        world.server.deliver(w.ADA, "Junk", junk(f"<junk-{i}@example.test>"))
+
+
+def test_each_folder_the_world_synced_counts_as_read_whole(world):
+    import ingest
+    for email, folder in w.synced_folders():
+        assert ingest.folder_synced(email, folder), (email, folder)
+
+
+def test_a_first_scan_that_fails_leaves_the_folder_to_scan_again(world):
+    import imaplib
+    import ingest
+    junk_mail(world, 1)
+    world.server.fail("UID SEARCH", user=w.ADA)
+    with pytest.raises(imaplib.IMAP4.error):
+        ingest.sync_folder(acct(), "Junk", full=True)
+    assert scan_state("Junk") == ["never"]                  # its UIDVALIDITY is known, nothing else
+    assert not ingest.folder_synced(w.ADA, "Junk")
+
+
+def test_a_warmed_folder_counts_as_read_whole_only_after_a_whole_scan(world):
+    import ingest
+    junk_mail(world, 3)
+    ingest.sync_folder(acct(), "Junk", recent=2)            # warming's first touch: the newest two
+    assert scan_state("Junk") == ["recent"] and not ingest.folder_synced(w.ADA, "Junk")
+    world.server.deliver(w.ADA, "Junk", junk("<junk-new@example.test>"))
+    ingest.sync_folder(acct(), "Junk", recent=2)            # warming again: what came since, and no more
+    assert scan_state("Junk") == ["recent"]
+    assert len(q("SELECT pk FROM messages WHERE account=? AND folder='Junk'", w.ADA)) == 3
+    ingest.sync_folder(acct(), "Junk", full=True)           # the first open
+    assert scan_state("Junk") == ["synced"]
+    assert len(q("SELECT pk FROM messages WHERE account=? AND folder='Junk'", w.ADA)) == 4
+
+
+def test_a_warm_scan_that_reads_every_message_counts_the_folder_read(world):
+    import ingest
+    junk_mail(world, 2)
+    ingest.sync_folder(acct(), "Junk", recent=5)
+    assert ingest.folder_synced(w.ADA, "Junk")
+
+
+def test_a_uidvalidity_change_whose_scan_fails_leaves_the_folder_to_scan_again(world):
+    import imaplib
+    import ingest
+    world.server.renumber(w.ADA, "Archive")
+    world.server.fail("UID SEARCH", user=w.ADA)
+    with pytest.raises(imaplib.IMAP4.error):
+        ingest.sync_folder(acct(), "Archive")
+    assert q("SELECT pk FROM messages WHERE account=? AND folder='Archive'", w.ADA) == []
+    assert not ingest.folder_synced(w.ADA, "Archive")       # so opening it brings its mail back
 
 
 # ── flags changed elsewhere ─────────────────────────────────────────────

@@ -159,3 +159,19 @@ def test_an_upgrade_from_before_m5_threads_the_reply_with_what_it_answers(tmp_pa
     thread = dict(query(path, "SELECT pk, thread_id FROM messages"))
     assert thread[1] and thread[3]
     assert thread[1] == thread[2] != thread[3]
+
+
+def test_a_folder_synced_before_m24_still_counts_as_synced(tmp_path):
+    """m24 can't tell a folder warming read in part from one read whole, so a folder that has
+    finished a sync counts as synced, as it did before; one that never has doesn't."""
+    path = str(tmp_path / "m24.db")
+    migrate.init(path, migrations.MIGRATIONS[:23])
+    c = sqlite3.connect(path)
+    c.execute("INSERT INTO sync_state(account, folder, last_sync, last_uid) "
+              "VALUES (?, 'INBOX', '2026-11-01T09:00:00+00:00', 12)", (ACCOUNT,))
+    c.execute("INSERT INTO sync_state(account, folder, uidvalidity) VALUES (?, 'Junk', 7)", (ACCOUNT,))
+    c.commit()
+    c.close()
+    migrate.init(path)
+    assert query(path, "SELECT folder, scan_state FROM sync_state ORDER BY folder") == [
+        ("INBOX", "synced"), ("Junk", "never")]

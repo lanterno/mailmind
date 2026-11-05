@@ -848,7 +848,6 @@ def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
     assert {r["pk"] for r in fetched} & set(older)
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a first folder sync that fails still marks the folder synced")
 def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, world):
     world.server.deliver(w.ADA, "Junk", late())
     world.server.fail("UID SEARCH", user=w.ADA)
@@ -856,7 +855,6 @@ def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, wo
     assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a folder warmed first only ever holds its newest WARM_RECENT messages")
 def test_hwf_opening_a_warmed_folder_shows_its_older_mail(app, world):
     import ingest
     for n in range(3):
