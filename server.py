@@ -1167,10 +1167,14 @@ def _folder_sync(account, folder, full):
 
 def _catch_up_due(account, folder):
     """Whether opening a folder read before should catch it up: not INBOX, which the background
-    sync keeps, and not again within CATCH_UP_EVERY seconds, unless MailMind put mail in it since."""
+    sync keeps, and not again within CATCH_UP_EVERY seconds, unless MailMind put mail in it since.
+    An open while one runs waits for it too, or it would answer with what that one is about to
+    change, and nothing would say so."""
     if folder.upper() == "INBOX":
         return False
     with _folder_syncs_lock:
+        if (account, folder) in _folder_syncs:
+            return True
         last = _caught_up.get((account, folder))
     return last is None or time.monotonic() - last >= CATCH_UP_EVERY
 
