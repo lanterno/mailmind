@@ -2121,7 +2121,8 @@ function setThreadView(on){ state.threadView=on; state.csel=null;
   const b=$("#threadToggle"); if(b){b.classList.toggle("on",on); b.innerHTML=on?ico("chat")+" Conversations":ico("list")+" Messages";}
   loadCMessages(); }
 function convoRow(it){   // a list row that stands for a whole conversation (it opens in the thread reader)
-  return !!(it && !state.searching && state.threadView && (it.count||1)>1 && it.thread_id);
+  return !!(it && !state.searching && state.threadView && (it.count||1)>1 && it.thread_id
+    && !draftsOnScreen());   // a draft's older copies are no conversation: the newest opens alone, with its Edit
 }
 function openConversation(it,scroll){
   if(it){ announce(`${it.seen?"":"unread, "}${it.from_name||it.from_addr||""}: ${it.subject||""}`); }
