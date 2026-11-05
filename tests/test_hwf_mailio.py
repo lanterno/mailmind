@@ -1028,6 +1028,17 @@ def test_hwf_a_folder_opened_again_soon_is_caught_up_once(app, world):
     assert len(catch_ups(world, "Archive")) == 1
 
 
+def test_hwf_a_folder_opened_during_its_catch_up_says_so_too(app, world, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "CATCH_UP_WAIT", 0.05)
+    with gate.held_elsewhere(w.ADA):
+        assert app.get(f"/api/messages?account={w.ADA}&folder=Archive").json["catching_up"]
+        assert app.get(f"/api/messages?account={w.ADA}&folder=Archive").json["catching_up"]
+    assert wait_until(lambda: not server._folder_syncs)
+    assert "catching_up" not in app.get(f"/api/messages?account={w.ADA}&folder=Archive").json
+    assert len(catch_ups(world, "Archive")) == 1
+
+
 def test_hwf_opening_the_inbox_leaves_it_to_the_background_sync(app, world):
     app.get(f"/api/messages?account={w.ADA}")
     assert catch_ups(world, "INBOX") == []
