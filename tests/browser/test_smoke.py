@@ -166,6 +166,21 @@ def test_archive_a_conversation_files_every_message_then_undo(page, world):
     clean(page)
 
 
+def test_an_undo_that_restores_only_part_says_so_and_z_tries_the_rest(page, world):
+    opened(page)
+    convo = rows_titled(page, "Lunch on Thursday?")
+    convo.click()
+    page.keyboard.press("e")
+    until(page, lambda: mailboxes(world, LUNCH) == ["Archive", "Archive"], "both archived on the server")
+    world.server.fail("UID SEARCH", user=w.ADA)                 # the first one undo looks for isn't found
+    page.keyboard.press("z")
+    expect(page.locator("#toast")).to_have_text("1 couldn’t be restored — press z to try again")
+    until(page, lambda: sorted(mailboxes(world, LUNCH)) == ["Archive", "INBOX"], "one back on the server")
+    page.keyboard.press("z")
+    until(page, lambda: mailboxes(world, LUNCH) == ["INBOX", "INBOX"], "both back on the server")
+    expect(convo).to_have_count(1)
+    clean(page)
+
 def test_snooze_hides_the_message_until_it_is_due(page, world):
     import store
     opened(page)
