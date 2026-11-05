@@ -1762,7 +1762,8 @@ async function archiveSel(pk){ const it=state.all.find(x=>x.pk===pk); if(!it)ret
   catch(e){ toast("Archive failed"); } }
 // importance filter (1-5) — keeps aria-checked in sync (the keyboard path used to desync it from the radios)
 function openIt(pk){ const it=state.all.find(x=>x.pk===pk); if(it&&typeof it.link==="string"&&/^https:\/\//.test(it.link)) window.open(it.link,"_blank","noopener"); }
-async function postRule(token,verdict,pk){ try{ const d=await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,verdict,pk})}); loadRules(); refreshStats(); return d; }catch(e){ toast("Rule failed"); } }
+async function postRule(token,verdict,pk){ try{ const d=await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,verdict,pk})}); loadRules(); refreshStats(); onReclassified(d); return d; }catch(e){ toast("Rule failed"); } }
+function onReclassified(d){ if(d&&d.reclassified){ loadDigest(true); if(state.account)onReconcile({account:state.account}); } }   // a rule changed how stored mail reads
 
 /* ---------- curate drawer ---------- */
 // the #scrim backdrop is shared by the curate drawer, settings, compose, and the mobile rail —
@@ -4480,6 +4481,7 @@ async function screenerDecide(addr, verdict){
   state.screener=state.screener.filter(s=>s.from_addr!==addr); state.screenerCount=state.screener.length;
   renderFolders(); healNode(node).then(()=>renderScreener());   // optimistic + heal
   try{ const d=await cpost("/api/rules",{token:addr,verdict}); if(!d.ok)throw new Error(d.msg||"err");
+    onReclassified(d);
     toast(verdict==="keep"?("Allowed "+short(addr)):("Screened out "+short(addr)+(d.trashed?" · trashed":""))); }
   catch(e){ toast("Couldn’t apply"); loadScreener(); }
 }
