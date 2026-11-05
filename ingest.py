@@ -329,6 +329,8 @@ def reconcile_account(acct, force=False, dry_run=False):
     Pure prune — preserves summaries of survivors and never lowers the watermark.
     SAFETY: never deletes on an IMAP error, and treats an OK-but-empty SEARCH
     against a non-empty stored set as 'unknown' (prunes nothing) unless force.
+    Only rows stored before the SEARCH may go: the 300 s sync passes no IMAP gate, so
+    it can store mail while this runs, and that mail is missing from the SEARCH's answer.
     dry_run computes the ghost count without changing anything."""
     from datetime import datetime as _dt
     res = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
@@ -370,7 +372,7 @@ def reconcile_account(acct, force=False, dry_run=False):
         return res
     when = _dt.now(timezone.utc).isoformat()
     c = store.conn()
-    pruned, kept = store.reconcile(c, acct["email"], "INBOX", live, when)
+    pruned, kept = store.reconcile(c, acct["email"], "INBOX", live, when, among=set(stored_uids))
     c.commit()
     c.close()
     res["pruned"] = pruned

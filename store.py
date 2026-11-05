@@ -747,14 +747,16 @@ def mark_verified(c, account, folder, live_uids, when):
                   [when, account, folder, *live])
 
 
-def reconcile(c, account, folder, live_uids, when):
+def reconcile(c, account, folder, live_uids, when, among=None):
     """Prune INBOX rows whose UID is no longer live; stamp survivors verified.
     Returns (pruned, kept). Caller MUST guarantee live_uids came from a real,
-    successful SEARCH (never call with an empty set on an errored fetch)."""
+    successful SEARCH (never call with an empty set on an errored fetch).
+    `among`, when given, holds the UIDs stored before that SEARCH, and only they may be pruned:
+    a row a sync stored after it isn't in the SEARCH's answer, but isn't gone."""
     live = set(int(u) for u in live_uids)
     rows = c.execute("SELECT pk, uid FROM messages WHERE account=? AND folder=?",
                      (account, folder)).fetchall()
-    pruned_pks = [r["pk"] for r in rows if r["uid"] not in live]
+    pruned_pks = [r["pk"] for r in rows if r["uid"] not in live and (among is None or r["uid"] in among)]
     for pk in pruned_pks:
         delete_message(c, pk)
     mark_verified(c, account, folder, live, when)
