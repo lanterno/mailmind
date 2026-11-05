@@ -13,6 +13,21 @@ import email
 from email import policy
 from email.header import decode_header
 
+def dec(value):
+    """A header's text, with its encoded words decoded."""
+    if not value:
+        return ""
+    out = []
+    for part, enc in decode_header(value):
+        if isinstance(part, bytes):
+            try:
+                out.append(part.decode(enc or "utf-8", "replace"))
+            except (LookupError, Exception):  # unknown/invalid charset -> safe fallback
+                out.append(part.decode("utf-8", "replace"))
+        else:
+            out.append(part)
+    return "".join(out).replace("\r", " ").replace("\n", " ").strip()
+
 
 def walk(msg):
     """Like Message.walk, but an attached email is one part: what it holds isn't this message's."""
@@ -42,18 +57,7 @@ def _hdr(msg, name):
         v = msg.get(name)
     except ValueError:     # policy.default refuses a value whose encoded words decode to a line break
         v = next((raw for key, raw in msg.raw_items() if key.lower() == name.lower()), None)
-    if not v:
-        return ""
-    out = []
-    for part, enc in decode_header(v):
-        if isinstance(part, bytes):
-            try:
-                out.append(part.decode(enc or "utf-8", "replace"))
-            except (LookupError, Exception):
-                out.append(part.decode("utf-8", "replace"))
-        else:
-            out.append(part)
-    return "".join(out).replace("\r", " ").replace("\n", " ").strip()
+    return dec(v)
 
 
 def _decode(part):

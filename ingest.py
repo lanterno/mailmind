@@ -8,7 +8,6 @@ import re
 import email
 import html
 import imaplib
-from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from datetime import datetime, timezone, timedelta
 
@@ -16,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import mailclass
 import mailparse
+from mailparse import dec
 import pool
 import store
 import threads
@@ -26,21 +26,6 @@ CUTOFF_DAYS = 90
 BODY_CHARS = 3000
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-ID")
-
-
-def dec(s):
-    if not s:
-        return ""
-    out = []
-    for part, enc in decode_header(s):
-        if isinstance(part, bytes):
-            try:
-                out.append(part.decode(enc or "utf-8", "replace"))
-            except (LookupError, Exception):  # unknown/invalid charset -> safe fallback
-                out.append(part.decode("utf-8", "replace"))
-        else:
-            out.append(part)
-    return "".join(out).replace("\n", " ").replace("\r", " ").strip()
 
 
 def text_body(msg):

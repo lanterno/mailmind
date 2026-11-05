@@ -26,13 +26,13 @@ import email
 import time
 import imaplib
 from datetime import datetime, timezone
-from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
 import mailclass
+from mailparse import dec
 import pool
 import rules
 from mailmind.accounts.domain import provider
@@ -42,21 +42,6 @@ from mailmind.platform import settings
 MOVE_BATCH = 200
 HDR_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "LIST-UNSUBSCRIBE", "LIST-ID")
 EXP_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "DATE")
-
-
-def dec(s):
-    if not s:
-        return ""
-    out = []
-    for part, enc in decode_header(s):
-        if isinstance(part, bytes):
-            try:
-                out.append(part.decode(enc or "utf-8", "replace"))
-            except (LookupError, Exception):
-                out.append(part.decode("utf-8", "replace"))
-        else:
-            out.append(part)
-    return "".join(out).replace("\n", " ").replace("\r", " ").strip()
 
 
 def fetch_headers(s):
