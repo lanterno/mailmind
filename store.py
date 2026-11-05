@@ -570,11 +570,12 @@ def set_replylater(c, account, thread_id, anchor_pk, when):
     """Pin a thread to the Reply-Later stack. Supersedes any auto-nudge already on the thread
     (an explicit 'I'll reply' beats an aging guess), and re-activates a prior dismissal."""
     c.execute("""INSERT INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,created_at)
-                   VALUES(?,?,'replylater','due',?,?,?)
+                   VALUES(?,?,'replylater','due',?,
+                          (SELECT MAX(ts) FROM messages WHERE account=? AND thread_id=? AND draft=0),?)
                  ON CONFLICT(account,thread_id) DO UPDATE SET
                    kind='replylater', state='due', anchor_pk=excluded.anchor_pk,
                    last_msg_ts=excluded.last_msg_ts, created_at=excluded.created_at, resolved_at=NULL""",
-              (account, thread_id, anchor_pk, anchor_pk, when))
+              (account, thread_id, anchor_pk, account, thread_id, when))
 
 
 def clear_replylater(c, account, thread_id):
