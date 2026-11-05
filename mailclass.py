@@ -88,10 +88,13 @@ ESP_MARKERS = (
     "iterable", "customer.io", "customeriomail", "braze", "mandrillapp",
     "cmail19", "cmail20", "createsend", "exct.net", "responsys", "marketo",
     "pardot", "salesforce", "constantcontact", "ccsend", "icontact", "mailjet",
-    "postmarkapp", "sparkpostmail", "sg.", "everestengagement", "convertkit",
+    "postmarkapp", "sparkpostmail", "everestengagement", "convertkit",
     "ck.page", "drip.com", "activecampaign", "getresponse", "aweber", "emarsys",
     "bluecore", "cordial", "movableink", "narvar", "shopifyemail",
 )
+# ESP markers too short to match inside a word: each must be a whole dot-label, and not the last
+# one (.sg is Singapore's top-level domain)
+ESP_LABELS = {"sg"}
 # first dot-label of the domain that signals a bulk stream
 BULK_SUBDOMAINS = {
     "e", "em", "email", "emails", "mail", "mailing", "mailings", "news",
@@ -234,7 +237,7 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
     # 4) newsletters / marketing — the big leak we now close
     if has_list_unsub:
         return MKT, "high", "List-Unsubscribe header"
-    if any(m in domain for m in ESP_MARKERS):
+    if any(m in domain for m in ESP_MARKERS) or ESP_LABELS & set(domain.split(".")[:-1]):
         return MKT, "high", "bulk email-service-provider domain"
     if nlabels >= 3 and label0 in BULK_SUBDOMAINS:
         return MKT, "med", f"bulk sub-domain ({label0}.)"
