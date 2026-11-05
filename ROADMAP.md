@@ -214,7 +214,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `raw = store.get_body(...); if raw is None: continue`, and `ingest.py` has zero references to
   `list_unsub_raw` / `list_unsub_method`, so those columns are populated lazily from the reader and
   never at ingest. Fix both ends: capture the List-Unsubscribe headers during ingest for all future
-  mail, and add an on-demand header-only IMAP fetch for the backlog.
+  mail, and add an on-demand header-only IMAP fetch for the backlog. The same gap breaks a retry:
+  once a cleanup's sweep has moved all the sender's mail, the rows it read from are gone, so
+  running the cleanup again after a failed send finds `no_method`.
 - **Batch cleanup with a stated rationale** · medium value · effort M — Cleaning ten noisy senders
   means ten preview-and-confirm cycles: flood rows are strictly one-at-a-time (`#floodList` delegate
   → `openCleanupPreview`), with no marked set. Wanted: multi-select executing one batched block+sweep
@@ -453,18 +455,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     MATCH ?)`;
   - `-category:x` builds `s.category <> ?`, which is NULL for mail without a summary, so it hides
     every unsummarized message. Use `s.category IS NOT ?`.
-- **Make cleanup's unsubscribe fire** · high value · effort S — three bugs, each pinned by a strict
-  xfail in `tests/test_http_cleanup.py`. Together they mean the unsubscribe almost never goes out:
-  - `cleanup_execute` sweeps the sender's INBOX mail to Trash before it calls `_resolve_unsub`.
-    The moves delete the local rows that `_resolve_unsub` reads, so a sender whose mail is all in
-    the INBOX gets `no_method`. Resolve the method before the sweep.
-  - `_parse_list_unsub` takes one-click only when `List-Unsubscribe-Post` reads `List=One-Click`.
-    RFC 8058's value is `List-Unsubscribe=One-Click`, so a compliant sender falls back to mailto
-    or the landing page.
-  - `_unsub_mailto_send` passes `{"from": …, "to": [...]}` as the envelope. `smtplib.sendmail`
-    iterates the dict's keys, so it sends `RCPT TO:<from>` and `RCPT TO:<to>`. It also sends
-    `m.as_bytes()` with bare LF line ends, which RFC 5321 forbids. Pass `[to]` and use
-    `policy=email.policy.SMTP`.
 - **Give up at once on a refusal that won't change** · medium value · effort S —
   `outbox.send_one` backs off and retries every failure up to `MAX_ATTEMPTS`. A 550 for a
   recipient or a 554 for the message is sent four more times over about half an hour. A 535 logs in

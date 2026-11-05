@@ -171,7 +171,9 @@ and the Claude API.
   click-through to the source email, with the same file synced to two accounts merged.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
-  both) and fires one standards-compliant unsubscribe.
+  both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
+  sender offers it, else a mailto from each account that got the mail, else the sender's page,
+  opened in the browser.
 - **Expiry rules.** Give a sender or domain a shelf life — `python3 rules.py expire
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
   server checks hourly; `manage.py expire --dry` previews. Expiry is independent of
