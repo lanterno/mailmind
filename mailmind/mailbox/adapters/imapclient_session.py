@@ -74,7 +74,8 @@ class ImapClientSession:
 
     def select(self, folder, *, readonly=True):
         got = self._c.select_folder(unescaped(folder), readonly=readonly)
-        return Selected(int(got.get(b"EXISTS", 0)), got.get(b"UIDVALIDITY"), got.get(b"UIDNEXT"))
+        return Selected(int(got.get(b"EXISTS", 0)), got.get(b"UIDVALIDITY"), got.get(b"UIDNEXT"),
+                        got.get(b"HIGHESTMODSEQ"))
 
     def uids(self, *criteria):
         return sorted(int(u) for u in self._c.search(" ".join(criteria) if criteria else "ALL"))
@@ -89,6 +90,19 @@ class ImapClientSession:
         if not uids:
             return {}
         return {int(u): frozenset(_text(f) for f in fs) for u, fs in self._c.get_flags(list(uids)).items()}
+
+    def enable_condstore(self):
+        if not {"CONDSTORE", "ENABLE"} <= self.capabilities:
+            return False
+        try:
+            return any(_text(c).upper() == "CONDSTORE" for c in self._c.enable("CONDSTORE"))
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return False
+
+    def uids_changed_since(self, modseq):
+        return sorted(int(u) for u in self._c.search(["MODSEQ", str(int(modseq) + 1)]))
 
     def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
         items = ["UID", "FLAGS"] + (["X-GM-THRID"] if gmail_thread else []) + \

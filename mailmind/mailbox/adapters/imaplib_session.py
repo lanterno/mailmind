@@ -41,6 +41,20 @@ def _arrived(meta):
     return datetime.fromtimestamp(time.mktime(when), timezone.utc) if when else None
 
 
+_SEARCH_MODSEQ = re.compile(rb"\(.*?\)")
+
+
+def _flags_of(data):
+    """UID -> flags, from a FETCH of FLAGS's answer."""
+    out = {}
+    for item in data:
+        line = item[0] if isinstance(item, tuple) else item
+        uid, flags = _UID.search(line or b""), _FLAGS.search(line or b"")
+        if uid and flags:
+            out[int(uid.group(1))] = frozenset(f.decode() for f in flags.group(1).split())
+    return out
+
+
 def _number(M, name):
     _, data = M.response(name)
     try:
@@ -66,7 +80,8 @@ class ImaplibSession:
     def select(self, folder, *, readonly=True):
         data = _ok("SELECT", *self._M.select(mailbox_arg(folder), readonly=readonly))
         exists = int(data[0]) if data and data[0] else 0
-        return Selected(exists, _number(self._M, "UIDVALIDITY"), _number(self._M, "UIDNEXT"))
+        return Selected(exists, _number(self._M, "UIDVALIDITY"), _number(self._M, "UIDNEXT"),
+                        _number(self._M, "HIGHESTMODSEQ"))
 
     def uids(self, *criteria):
         data = _ok("SEARCH", *self._M.uid("SEARCH", None, *criteria))
@@ -81,14 +96,21 @@ class ImaplibSession:
     def flags(self, uids):
         if not uids:
             return {}
-        data = _ok("FETCH", *self._M.uid("FETCH", _uid_set(uids), "(FLAGS)"))
-        out = {}
-        for item in data:
-            line = item[0] if isinstance(item, tuple) else item
-            uid, flags = _UID.search(line or b""), _FLAGS.search(line or b"")
-            if uid and flags:
-                out[int(uid.group(1))] = frozenset(f.decode() for f in flags.group(1).split())
-        return out
+        return _flags_of(_ok("FETCH", *self._M.uid("FETCH", _uid_set(uids), "(FLAGS)")))
+
+    def enable_condstore(self):
+        if not {"CONDSTORE", "ENABLE"} <= self.capabilities:
+            return False
+        try:
+            return self._M.enable("CONDSTORE")[0] == "OK"
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return False
+
+    def uids_changed_since(self, modseq):
+        data = _ok("SEARCH", *self._M.uid("SEARCH", None, "MODSEQ", str(int(modseq) + 1)))
+        return [int(u) for u in _SEARCH_MODSEQ.sub(b"", data[0] or b"").split()]     # "1 2 (MODSEQ 9)"
 
     def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
         items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "") + ("INTERNALDATE " if internaldate else "")

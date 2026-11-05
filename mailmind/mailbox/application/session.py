@@ -29,6 +29,7 @@ class Selected:
     exists: int
     uidvalidity: int | None
     uidnext: int | None
+    highest_modseq: int | None = None   # once enable_condstore said yes, if the server keeps one for the folder
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,8 @@ class MailSession(Protocol):
     def uids(self, *criteria: str) -> list[int]: ...                        # UID SEARCH, in order
     def by_message_id(self, message_id: str) -> int | None: ...             # the newest match
     def flags(self, uids) -> dict[int, frozenset]: ...
+    def enable_condstore(self) -> bool: ...                     # before any select; False: it won't
+    def uids_changed_since(self, modseq: int) -> list[int]: ...  # after enable_condstore
     def headers(self, uids, fields, *, gmail_thread: bool = False,
                 internaldate: bool = False) -> list[Headers]: ...                  # in UID order
     def body(self, uid: int) -> bytes | None: ...                           # BODY.PEEK[]
