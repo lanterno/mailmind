@@ -372,8 +372,20 @@ def _keep_body(c, pk, raw, parsed):
     store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
 
 
-def reconcile_account(acct, force=False, dry_run=False):
-    """Prune INBOX rows whose UID is no longer live, and stamp survivors verified.
+def reconciled_folders(email):
+    """The folders reconcile looks at for an account: each one a sync has stored (it has a
+    sync_state row), INBOX first."""
+    c = store.conn()
+    try:
+        folders = [r["folder"] for r in c.execute(
+            "SELECT folder FROM sync_state WHERE account=? ORDER BY folder <> 'INBOX', folder", (email,))]
+    finally:
+        c.close()
+    return folders or ["INBOX"]
+
+
+def reconcile_account(acct, force=False, dry_run=False, folder="INBOX"):
+    """Prune `folder`'s rows whose UID is no longer live, and stamp survivors verified.
     Pure prune — preserves summaries of survivors and never lowers the watermark.
     SAFETY: never deletes on an IMAP error, and treats an OK-but-empty SEARCH
     against a non-empty stored set as 'unknown' (prunes nothing) unless force.
@@ -385,13 +397,13 @@ def reconcile_account(acct, force=False, dry_run=False):
            "pruned": 0, "error": None}
     c = store.conn()
     stored_uids = [r["uid"] for r in c.execute(
-        "SELECT uid FROM messages WHERE account=? AND folder='INBOX'", (acct["email"],))]
+        "SELECT uid FROM messages WHERE account=? AND folder=?", (acct["email"], folder))]
     c.close()
     res["stored"] = len(stored_uids)
     try:
         s = mailbox.open_session(acct, timeout=15)   # background/maintenance path: a hung account must
         try:                                          # not pin the IMAP gate for the interactive 60s
-            uidv = s.select("INBOX").uidvalidity
+            uidv = s.select(folder).uidvalidity
             live = set(s.uids("ALL"))                 # a refused SEARCH raises: nothing is pruned
         finally:
             try:
@@ -406,7 +418,7 @@ def reconcile_account(acct, force=False, dry_run=False):
     # them would prune the ENTIRE real INBOX as "ghosts". Never prune here; sync_folder
     # detects the change and does the reset + full re-sync on its own pass.
     c = store.conn()
-    stored_uidv = store.get_uidvalidity(c, acct["email"], "INBOX")
+    stored_uidv = store.get_uidvalidity(c, acct["email"], folder)
     c.close()
     if uidv and stored_uidv and uidv != stored_uidv:
         res["error"] = f"UIDVALIDITY changed ({stored_uidv}->{uidv}) — prune skipped"
@@ -420,7 +432,7 @@ def reconcile_account(acct, force=False, dry_run=False):
         return res
     when = _dt.now(timezone.utc).isoformat()
     c = store.conn()
-    pruned, kept = store.reconcile(c, acct["email"], "INBOX", live, when, among=set(stored_uids))
+    pruned, kept = store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
     c.commit()
     c.close()
     res["pruned"] = pruned

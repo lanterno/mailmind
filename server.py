@@ -251,16 +251,37 @@ def _reconcile_secs():
 _RECONCILE_INTERVAL = _reconcile_secs()
 
 
+def _reconcile_folders(acct, dry_run=False, force=False, priority=gates.Priority.INTERACTIVE, wait=True):
+    """Reconcile each folder a sync has stored for `acct`, each as a job of its own on the
+    account's gate, so a long run never holds it across folders. Returns one result for the
+    account: the counts added up, the first folder's error, and how many folders it reached. With
+    wait=False it stops at the first folder whose gate is busy (gates.Busy if that's the first)."""
+    out = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0, "pruned": 0,
+           "error": None, "folders": 0}
+    for folder in ingest.reconciled_folders(acct["email"]):
+        try:
+            res = gates.run(acct["email"], lambda f=folder: ingest.reconcile_account(
+                acct, force=force, dry_run=dry_run, folder=f), priority=priority, wait=wait)
+        except gates.Busy:
+            if not out["folders"]:
+                raise
+            break                                     # a user op came: the rest wait for next time
+        out["folders"] += 1
+        for k in ("live", "stored", "ghosts", "pruned"):
+            out[k] += res[k]
+        out["error"] = out["error"] or res["error"]
+    return out
+
+
 def _auto_reconcile_one(acct):
-    """Prune one account's INBOX ghosts, yielding to any live user op: its IMAP gate is taken
-    without waiting (skip this tick if a user op holds it — caught next cycle), then publish so
-    open lists drop the pruned phantoms."""
+    """Prune one account's ghosts, folder by folder, yielding to any live user op: its IMAP gate
+    is taken without waiting (skip this tick if a user op holds it — caught next cycle), then
+    publish so open lists drop the pruned phantoms."""
     try:
-        res = gates.run(acct["email"], lambda: ingest.reconcile_account(acct, dry_run=False),
-                        priority=gates.Priority.MAINTENANCE, wait=False)
+        res = _reconcile_folders(acct, priority=gates.Priority.MAINTENANCE, wait=False)
     except gates.Busy:
         return                                        # user op live — yield, retry next cycle
-    if res.get("error") or not res.get("pruned"):
+    if not res.get("pruned"):
         return
     with open(settings.current().reconcile_audit, "a") as f:
         f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
@@ -584,9 +605,12 @@ def _each_account(account, job):
             for a in accounts.accounts()]
 
 
-def do_reconcile(account, dry_run):
+def do_reconcile(account, dry_run, force=False):
+    """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
+    force prunes even where the server's SEARCH came back empty against stored mail."""
     accounts.preload_creds()
-    results = _each_account(account, lambda a: ingest.reconcile_account(a, dry_run=dry_run))
+    accts = [accounts.get(account)] if account and account != "all" else accounts.accounts()
+    results = [_reconcile_folders(a, dry_run=dry_run, force=force) for a in accts]
     if not dry_run:
         stamp = now_iso()
         with open(settings.current().reconcile_audit, "a") as f:
@@ -4112,7 +4136,8 @@ class H(BaseHTTPRequestHandler):
                 threading.Thread(target=sync_once, daemon=True).start()
                 self._json({"ok": True, "msg": "sync started"})
             elif u.path == "/api/reconcile":
-                self._json(do_reconcile(b.get("account", "all"), bool(b.get("dry_run", False))))
+                self._json(do_reconcile(b.get("account", "all"), bool(b.get("dry_run", False)),
+                                        force=b.get("force") is True))
             elif u.path == "/api/sweep":
                 self._json(do_sweep(b.get("account", "all"), bool(b.get("dry_run", False))))
             elif u.path == "/api/rules":
