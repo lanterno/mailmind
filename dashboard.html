@@ -3807,7 +3807,8 @@ async function composeSend(sendAfter){
   cmp.dirty=false; state.failedSend=null; composeClose(true);
   showSendFloat("sending", scheduled?(ico("clock")+" Scheduling for "+fmtWhen(sendAfter)+"…"):"↑ Sending…");
   try{
-    if(saving){ await saving; payload.draft_id=cmp.draftId||null; snap.draftId=cmp.draftId; }
+    if(saving){ await saving; payload.draft_id=cmp.draftId||null; namesItself(payload,cmp);
+      Object.assign(snap,{draftId:cmp.draftId,resume:cmp.resume,attachments:cmp.attachments,fwdAttach:cmp.fwdAttach}); }
     const r=await cpost("/api/send",payload);
     if(!r.ok)throw new Error(r.error||"send failed");
     if(scheduled){ showSendFloat("sent",ico("clock")+" Scheduled · "+fmtWhen(sendAfter)); setTimeout(hideSendFloat,2600); }
@@ -4518,6 +4519,18 @@ function resumeNotice(n){ n=n||{}; const o=[];
   return o.join(" "); }
 /* draft-resume:pure:end */
 /* ---------- drafts ---------- */
+function adoptResume(cmp,r){   // a reply's or forward's first save: from now on it names its quote, threading and files itself, so the original's row can go
+  if(!r.resume||cmp.resume)return;
+  cmp.resume=r.resume;
+  if(!cmp.fwdAttach)return;
+  cmp.attachments=cmp.attachments.concat(r.files||[]); cmp.fwdAttach=0;   // the server no longer adds them: they are this composer's files now
+  if(state.compose===cmp){ renderAttach(); renderQuote(); }
+}
+function namesItself(payload,cmp){   // a payload built before the save it waited for: that save may have switched the composer over
+  if(!cmp.resume||payload.resume)return;
+  Object.assign(payload,resumeFields(cmp.resume));
+  payload.attachments=cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64}));
+}
 function composePayload(){
   const cmp=state.compose; if(!cmp)return null;
   ["to","cc","bcc"].forEach(f=>{ const inp=fieldEl(f).querySelector(".ci"); if(inp&&inp.value.trim()){ commitChip(f,inp.value); inp.value=""; } });
@@ -4539,9 +4552,9 @@ async function composeSaveDraft(silent){   // → true once saved, false if it w
   const at=cmp.edits||0, prior=cmp._saving;
   const mine=(async()=>{
     if(prior)await prior;   // one composer's saves go in turn, so each names the copy the last one left
-    payload.draft_id=cmp.draftId||null;
+    payload.draft_id=cmp.draftId||null; namesItself(payload,cmp);
     try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
-      cmp.draftId=r.draft_id; if((cmp.edits||0)===at)cmp.dirty=false;   // an edit since this save began stays to save
+      cmp.draftId=r.draft_id; adoptResume(cmp,r); if((cmp.edits||0)===at)cmp.dirty=false;   // an edit since this save began stays to save
       cmp._lastSaveHash=_draftHash(payload);
       mark("Saved "+new Date().toTimeString().slice(0,5)); if(!silent)toast("Draft saved");
       return true; }
