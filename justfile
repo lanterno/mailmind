@@ -61,7 +61,7 @@ test-expire:
 
 # Whole-conversation archive/trash: membership, one undo group, partial failure, offline queue
 test-thread-file:
-    {{py}} test_thread_file.py
+    uv run pytest tests/test_thread_filing.py
 
 # The language model's contract, through the SDK and through urllib, against the fake Claude API:
 # request shape, refusals, retries, the key, AI off without one
