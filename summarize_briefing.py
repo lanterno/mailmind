@@ -53,7 +53,7 @@ def _now():
 
 
 def _top_rows(c, accounts_set, n=TOP_N):
-    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.message_id, "
+    sql = ("SELECT m.pk, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
            "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
@@ -130,6 +130,37 @@ def _clean(obj, valid_pks):
             count = len(pks)
         groups.append({"label": str(g.get("label") or "")[:40], "count": count, "pks": pks[:80]})
     return narrative, groups
+
+
+def _keyed(groups, rows):
+    """The groups as stored: each names its messages by Message-ID as well, since a pk doesn't last."""
+    where = {r["pk"]: [r["account"], r["folder"], r["message_id"]] for r in rows}
+    return [{**g, "keys": [where[p] for p in g["pks"]]} for g in groups]
+
+
+def _pk_now(c, pk, key):
+    """The pk a stored brief's message has now, or None if it has gone. One with no Message-ID has
+    only the pk it had. Among its copies, the one in the folder it was read from."""
+    account, folder, message_id = key
+    if not message_id:
+        return pk
+    row = c.execute("SELECT pk FROM messages WHERE account=? AND message_id=? "
+                    "ORDER BY folder=? DESC, pk DESC LIMIT 1", (account, message_id, folder)).fetchone()
+    return row["pk"] if row else None
+
+
+def _groups_now(groups_json):
+    """A stored brief's groups, as the page reads them: by the pks their messages have now."""
+    groups = json.loads(groups_json or "[]")
+    c = store.conn()
+    try:
+        for g in groups:
+            keys = g.pop("keys", None)
+            if keys is not None:              # a brief stored before keys keeps its pks till it is rewritten
+                g["pks"] = [p for p in (_pk_now(c, pk, k) for pk, k in zip(g["pks"], keys)) if p is not None]
+    finally:
+        c.close()
+    return groups
 
 
 def _result(account_label, narrative, groups, model, created_at, cached, stale):
@@ -292,7 +323,7 @@ def build(accounts_set, force=False, generate=True):
     c.close()
     fp = _fingerprint(rows)
     if cached and not force:
-        return _result(key, cached["narrative"], json.loads(cached["groups_json"] or "[]"),
+        return _result(key, cached["narrative"], _groups_now(cached["groups_json"]),
                        cached["model"], cached["created_at"], True,
                        cached["fingerprint"] != fp), 200
     if not rows:
@@ -309,7 +340,7 @@ def build(accounts_set, force=False, generate=True):
             c.close()
         if row is None:
             return None
-        return _result(key, row["narrative"], json.loads(row["groups_json"] or "[]"),
+        return _result(key, row["narrative"], _groups_now(row["groups_json"]),
                        row["model"], row["created_at"], True, row["fingerprint"] != fp), 200
 
     def make():
@@ -338,7 +369,7 @@ def build(accounts_set, force=False, generate=True):
             narrative, groups, model = fb["narrative"], fb["groups"], "fallback"
         created = _now()
         c = store.conn()
-        store.save_briefing(c, key, fp, narrative, json.dumps(groups), model, created)
+        store.save_briefing(c, key, fp, narrative, json.dumps(_keyed(groups, rows)), model, created)
         c.commit()
         c.close()
         return _result(key, narrative, groups, model, created, False, False), 200
