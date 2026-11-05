@@ -4443,7 +4443,8 @@ def schedule(jobs):
 
 
 def _after_send(_sent):
-    """outbox.Sent: a queued send went out."""
+    """outbox.Sent or outbox.Failed: a queued send went out, or an attempt at one failed (with
+    SSE live the page doesn't poll the outbox, so a send given up on would still look pending)."""
     invalidate_stats()
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 

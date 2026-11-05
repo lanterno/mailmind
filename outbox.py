@@ -53,6 +53,15 @@ class Sent:
     account: str
 
 
+@dataclass(frozen=True)
+class Failed:
+    """An attempt at a queued send failed: it waits for its next try, or, `gave_up`, in error for
+    a person to retry it (published on mailmind.platform.bus)."""
+    outbox_id: int
+    account: str
+    gave_up: bool
+
+
 def _now():
     return int(time.time())
 
@@ -222,6 +231,7 @@ def send_one(oid):
         acct = accounts.get(row["account"])  # host/port/creds ONLY from config (no SSRF)
     except KeyError:
         _commit(lambda c: QUEUE.give_up(c, row, "account removed"))
+        bus.publish(Failed(oid, row["account"], True))
         return
     # Deliver exactly once. A recovered row (delivered=1, requeued by reset_stuck) skips
     # the wire send and only finishes bookkeeping — so a crash after send never re-sends.
@@ -233,6 +243,7 @@ def send_one(oid):
             terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
             print(f"[outbox] send #{oid} failed ({err}); "
                   f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
+            bus.publish(Failed(oid, row["account"], terminal))
             return
         _commit(lambda c: QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
     # delivered — side effects, then mark sent (all guarded so a DB hiccup can't strand a
