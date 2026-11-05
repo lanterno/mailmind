@@ -99,6 +99,52 @@ def _flags_of(flags):
             "deleted": int("\\deleted" in f)}
 
 
+FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sync reads again
+_FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
+
+
+def _refresh_flags(session, acct, folder):
+    """Read the flags of the folder's newest stored mail again (its FLAG_REFRESH highest UIDs) and
+    store what changed, so mail read, starred or answered in another client shows so here. A row
+    whose flags changed here since they were read (a click, under the IMAP gate this sync doesn't
+    take) keeps its own, and so does one with a flag change still queued, or on its way out by a
+    queued move. Returns how many rows changed."""
+    c = store.conn()
+    try:
+        rows = c.execute("SELECT pk, uid, message_id, " + ", ".join(_FLAG_COLS) + " FROM messages "
+                         "WHERE account=? AND folder=? AND pending_removal IS NULL "
+                         "ORDER BY uid DESC LIMIT ?", (acct["email"], folder, FLAG_REFRESH)).fetchall()
+        waiting = {r["message_id"] for r in c.execute(
+            "SELECT message_id FROM read_mutations WHERE account=? AND op='flag' AND applied=0 "
+            "AND state IN ('queued', 'running') AND message_id != ''", (acct["email"],))}
+    finally:
+        c.close()
+    if not rows:
+        return 0
+    try:
+        now = session.flags([r["uid"] for r in rows])
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:                      # a refused FETCH changes nothing here
+        return 0
+    moved = [(r, new) for r in rows if r["uid"] in now and r["message_id"] not in waiting
+             for new in [_flags_of(now[r["uid"]])] if any(new[k] != r[k] for k in _FLAG_COLS)]
+    if not moved:
+        return 0
+    changed = 0
+    c = store.conn()
+    try:
+        for r, new in moved:                         # each only if it still holds what was read
+            changed += c.execute(
+                "UPDATE messages SET " + ", ".join(f"{k}=?" for k in _FLAG_COLS) + " WHERE pk=? AND "
+                + " AND ".join(f"{k} IS ?" for k in _FLAG_COLS),
+                [*(new[k] for k in _FLAG_COLS), r["pk"], *(r[k] for k in _FLAG_COLS)]).rowcount
+        c.commit()
+    finally:
+        c.close()
+    return changed
+
+
 def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True):
     """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
     has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
@@ -204,6 +250,8 @@ def sync_folder(acct, folder, full=False, recent=None):
         else:
             uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
         result = _process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"))
+        if not full and wm:                            # a full scan has just read every flag
+            _refresh_flags(s, acct, folder)
         c = store.conn()
         threads.recompute_threads(c, acct["email"])   # regroup conversations for new mail
         store.apply_mute_on_ingest(c, acct["email"])  # keep new members of muted threads silent
