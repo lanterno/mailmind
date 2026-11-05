@@ -73,12 +73,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   which the `resume` branch re-sends without sanitizing. The fix is a `fold=False` switch on
   `sanitize` for the three compose callers, a strip of the wrapper from stored `tail_html`, and a
   compose test that neither MIME part contains `<details`.
-- **A draft with an older copy can't be edited** · medium value · effort S — When another client
-  leaves an old copy of a draft behind, the two copies share a Message-ID. The Drafts row then
-  stands for a two-message conversation (`convoRow`), which opens in the thread reader. That reader
-  offers Reply and Forward but no Edit, so the draft can't be reopened from the list. In Drafts,
-  open the newest copy in the single-message reader. Pinned by
-  `test_a_draft_with_an_older_copy_still_opens_for_editing` (tests/browser).
 
 ## AI that acts, not just describes
 
