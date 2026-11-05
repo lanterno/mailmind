@@ -4583,14 +4583,14 @@ function onNewMail(d){
   if(!document.hidden){ const n=d.count||1; announce(`${n} new message${n===1?"":"s"} arrived${d.account?" in "+nameOf(d.account):""}`); }   // realtime → screen readers too
 }
 function onReconcile(d){
-  // server pruned ghost rows (mail gone from the server) for d.account. Refresh badges,
-  // and if an open INBOX list for that account is showing them, re-pull it — but only
-  // when idle, so nothing in-flight (compose/search/selection) is disrupted.
+  // server pruned ghost rows (mail gone from the server) for d.account, in any folder it has
+  // synced. Refresh badges, and if an open list for that account may be showing them, re-pull
+  // it — but only when idle, so nothing in-flight (compose/search/selection) is disrupted.
   loadFolders && loadFolders(true);
   const idle = !state.compose && !state.searching && !state.asking && state.cmarked.size===0 && !document.hidden;
   if(!idle) return;
   if(state.allInbox){ loadAllInboxes(); }
-  else if(state.account===d.account && state.folder.toUpperCase()==="INBOX"){ loadCMessages(); }
+  else if(state.account===d.account){ loadCMessages(); }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=0; bumpTitle(); } });   // refocus alone ≠ "looked at new mail" (the inbox isn't reloaded) → don't advance the watermark here
 function onFolderSynced(d){
