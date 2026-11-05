@@ -277,6 +277,134 @@ def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
     assert world.row(name)["seen"] == 1
 
 
+def modseq(folder="INBOX", email=w.ADA):
+    return q("SELECT highest_modseq FROM sync_state WHERE account=? AND folder=?", email, folder)[0]["highest_modseq"]
+
+
+def flag_fetches(world, since, email=w.ADA):
+    """The UID FETCHes of flags alone sent since `since`, as their arguments."""
+    return [c["args"] for c in world.server.commands[since:]
+            if c["user"] == email and c["command"] == "UID FETCH" and c["args"][1] == ["FLAGS"]]
+
+
+def elsewhere(world, name, folder="INBOX", email=w.ADA):
+    with world.server.lock:
+        world.server.mailbox(email, folder).messages[world.uid(name)].flags.add("\\Flagged")
+
+
+def test_hwf_a_sync_with_nothing_changed_reads_no_flags(world):
+    import ingest
+    assert modseq()                                   # the first sync, a whole scan, left the mark
+    since = len(world.server.commands)
+    ingest.sync_new(acct())
+    assert flag_fetches(world, since) == []
+
+
+def test_hwf_a_sync_asks_only_for_what_changed_since_its_mark(world):
+    import ingest
+    name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
+    elsewhere(world, name)
+    since = len(world.server.commands)
+    ingest.sync_new(acct())
+    [fetch] = flag_fetches(world, since)
+    assert fetch == [str(world.uid(name)), ["FLAGS"]]
+    assert world.row(name)["flagged"] == 1
+    assert modseq() > mark
+
+
+def test_hwf_a_change_to_mail_older_than_the_newest_is_seen_too(world, monkeypatch):
+    import ingest
+    monkeypatch.setattr(ingest, "FLAG_REFRESH", 1)
+    oldest = min(((world.row(n)["uid"], n) for n, acct_, folder, *_ in w.MAIL if acct_ == w.ADA and folder == "INBOX"))[1]
+    elsewhere(world, oldest)
+    ingest.sync_new(acct())
+    assert world.row(oldest)["flagged"] == 1
+
+
+def test_hwf_a_server_with_no_condstore_has_its_newest_read_each_time(world):
+    import ingest
+    world.server.without.add("CONDSTORE")
+    name = "ada-inbox-02-lunch-confirm.eml"
+    elsewhere(world, name)
+    since = len(world.server.commands)
+    ingest.sync_new(acct())
+    [fetch] = flag_fetches(world, since)
+    assert str(world.uid(name)) in str(fetch[0]).split(",") and "," in str(fetch[0])    # all the newest
+    assert world.row(name)["flagged"] == 1
+
+
+def test_hwf_a_refused_modseq_search_falls_back_to_the_newest(world):
+    import ingest
+    name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
+    elsewhere(world, name)
+    world.server.fail("UID SEARCH", "BAD [scripted] no such key", user=w.ADA,
+                      when=lambda a: str(a[0]).upper() == "MODSEQ")
+    ingest.sync_new(acct())
+    assert world.row(name)["flagged"] == 1
+    assert modseq() == mark                           # what's older than the newest is still to ask
+
+
+def test_hwf_a_refused_flag_read_leaves_the_mark_so_the_next_sync_asks_again(world):
+    import ingest
+    name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
+    elsewhere(world, name)
+    world.server.fail("UID SEARCH", user=w.ADA, when=lambda a: str(a[0]).upper() == "MODSEQ")
+    world.server.fail("UID FETCH", user=w.ADA, when=lambda a: a[1] == ["FLAGS"])
+    ingest.sync_new(acct())
+    assert (world.row(name)["flagged"], modseq()) == (0, mark)
+    ingest.sync_new(acct())
+    assert world.row(name)["flagged"] == 1
+
+
+def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said_what_changed(world, monkeypatch):
+    import ingest
+    import store
+    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    name = "ada-inbox-02-lunch-confirm.eml"
+    elsewhere(world, name)                            # flagged elsewhere; here it's marked read meanwhile
+    real, clicked = ImaplibSession.flags, []
+
+    def click_lands_first(self, uids):
+        if not clicked:
+            clicked.append(True)
+            c = store.conn()
+            c.execute("UPDATE messages SET seen=1 WHERE pk=?", (world.pk(name),))
+            c.commit()
+            c.close()
+        return real(self, uids)
+    monkeypatch.setattr(ImaplibSession, "flags", click_lands_first)
+    ingest.sync_new(acct())
+    assert clicked and (world.row(name)["seen"], world.row(name)["flagged"]) == (1, 0)
+
+
+def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(app, world):
+    import ingest
+    import store
+    name = "ada-inbox-02-lunch-confirm.eml"
+    world.server.fail("LOGIN", user=w.ADA)            # so this one queues
+    assert app.post("/api/flag", {"pk": world.pk(name), "flag": "flagged", "on": True}).json["status"] == "queued"
+    mark = modseq()
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags.add("\\Seen")
+    ingest.sync_new(acct())
+    assert modseq() == mark
+    c = store.conn()
+    c.execute("UPDATE read_mutations SET state='error' WHERE account=? AND op='flag'", (w.ADA,))
+    c.commit()
+    c.close()
+    ingest.sync_new(acct())
+    assert world.row(name)["seen"] == 1 and modseq() > mark
+
+
+def test_hwf_a_new_uidvalidity_starts_the_mark_again(world):
+    import ingest
+    old = modseq()
+    assert old
+    world.server.renumber(w.ADA, "INBOX")
+    ingest.sync_new(acct())
+    assert modseq() == world.server.mailbox(w.ADA, "INBOX").highest_modseq
+
+
 def test_hwf_a_sync_tells_an_open_list_of_mail_read_elsewhere(app, world, monkeypatch):
     import ingest
     from mailmind.platform import sse

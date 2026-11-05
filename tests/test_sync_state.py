@@ -48,6 +48,7 @@ def searches(world, since):
 
 def test_an_incremental_sync_asks_only_above_the_watermark_then_moves_it(world):
     import ingest
+    world.server.without.add("CONDSTORE")               # which would ask what changed, besides
     wm = watermark()
     uid = world.server.deliver(w.ADA, "INBOX", late())
     n = len(world.server.commands_for(w.ADA, "UID SEARCH"))
@@ -210,8 +211,9 @@ def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
     assert local_flags(world, RECEIPT) == {"seen": 0, "flagged": 1, "answered": 0}
 
 
-def test_only_the_newest_stored_mail_is_read_again(world, monkeypatch):
+def test_with_no_condstore_only_the_newest_stored_mail_is_read_again(world, monkeypatch):
     import ingest
+    world.server.without.add("CONDSTORE")
     monkeypatch.setattr(ingest, "FLAG_REFRESH", 1)
     since = len(world.server.commands_for(w.ADA, "UID FETCH"))
     ingest.sync_new(acct())

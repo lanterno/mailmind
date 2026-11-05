@@ -352,6 +352,7 @@ def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
 def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
     import ingest
     import store
+    srv.without.add("CONDSTORE")
     for n in range(3):
         srv.deliver(ADA, "INBOX", _mail(n), flags=["\\Seen"] if n == 0 else [])
     assert ingest.sync_folder(app, "INBOX", full=True)[0] == 3
