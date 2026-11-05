@@ -84,9 +84,9 @@ class DurableQueue:
         c.execute(f"UPDATE {self.table} SET state=? WHERE state=?", (QUEUED, self.running))
 
     def requeue(self, c, id_):
-        """A person retries a row in error: back to the queue at once, its error cleared. False
-        when it isn't in error."""
-        return c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=0, last_error=NULL "
+        """A person retries a row in error: back to the queue at once, its error cleared and its
+        attempts counted afresh. False when it isn't in error."""
+        return c.execute(f"UPDATE {self.table} SET state=?, attempts=0, next_attempt_at=0, last_error=NULL "
                          f"WHERE id=? AND state=?", (QUEUED, id_, ERROR)).rowcount == 1
 
     def cancel_queued(self, c, id_):
