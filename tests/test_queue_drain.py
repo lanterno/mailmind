@@ -242,6 +242,18 @@ def test_a_queued_flag_change_given_up_on_is_put_back(app, world):
     assert flags_here(world) == (0, 0)
 
 
+def test_a_copy_flagged_deleted_in_the_destination_isnt_the_copy_a_retry_looks_for(app, world):
+    """A refused EXPUNGE left it there. Taken for an earlier try's COPY, the live original would be
+    removed, and the next expunge from any client would leave nothing."""
+    import readmutq
+    world.server.without.add("MOVE")
+    world.server.deliver(w.ADA, "Archive", w.raw(RECEIPT), flags=("\\Deleted",))
+    queue(app, world)
+    readmutq.drain()
+    live = [box for _, box, _, flags in world.where(RECEIPT)["server"] if "\\Deleted" not in flags]
+    assert live == ["Archive"]
+
+
 def test_a_move_that_landed_says_so_before_the_imap_gate_lets_anyone_in(app, world, monkeypatch):
     """A Discard or an Undo waiting for the gate must find the move marked, or it would cancel a
     move that has already happened and list a message the server has moved."""

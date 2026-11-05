@@ -277,6 +277,19 @@ def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
     assert world.row(name)["seen"] == 1
 
 
+def test_hwf_a_sent_copy_flagged_deleted_doesnt_count_as_filed(world):
+    import smtpsend
+    raw = w.raw("ada-sent-01-lunch-reply.eml")
+    mid = w.message_id("ada-sent-01-lunch-reply.eml")
+    with world.server.lock:
+        box = world.server.mailbox(w.ADA, "Sent")
+        box.messages[world.uid("ada-sent-01-lunch-reply.eml")].flags.add("\\Deleted")
+    assert smtpsend.append_to_sent(acct(), raw, mid) == "Sent"
+    with world.server.lock:
+        flags = [m.flags for m in box.messages.values()]
+    assert sorted("\\Deleted" in f for f in flags) == [False, True]
+
+
 def modseq(folder="INBOX", email=w.ADA):
     return q("SELECT highest_modseq FROM sync_state WHERE account=? AND folder=?", email, folder)[0]["highest_modseq"]
 
