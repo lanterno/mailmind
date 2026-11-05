@@ -275,6 +275,23 @@ def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, 
     assert timeouts == [15, 15, 15]
 
 
+def test_hwf_an_inbox_emptied_elsewhere_can_be_pruned(app, world):
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "INBOX").messages.clear()
+    app.post("/api/reconcile", {"account": w.ADA})
+    assert stored() != {}                                        # an empty answer may be the server's fault
+    app.post("/api/reconcile", {"account": w.ADA, "force": True})
+    assert stored() == {}
+
+
+def test_hwf_mail_deleted_from_another_folder_leaves_the_list(app, world):
+    name = "ada-archive-01-old-thread.eml"
+    world.deliver(w.ADA, "Archive", late())                      # so the folder isn't left empty
+    gone(world, name)
+    r = app.post("/api/reconcile", {"account": w.ADA}).json
+    assert world.where(name)["db"] == [] and r["total_pruned"] == 1
+
+
 # -- when the server says no, or can't be reached --------------------------
 
 def test_hwf_a_refused_select_keeps_the_message(app, world):
@@ -829,24 +846,6 @@ def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
         server.backfill_round()
     fetched = q("SELECT pk FROM messages WHERE body_text IS NOT NULL")
     assert {r["pk"] for r in fetched} & set(older)
-
-
-@pytest.mark.xfail(strict=True, reason="known bug: no route passes force, so an INBOX emptied elsewhere is never pruned")
-def test_hwf_an_inbox_emptied_elsewhere_can_be_pruned(app, world):
-    with world.server.lock:
-        world.server.mailbox(w.ADA, "INBOX").messages.clear()
-    app.post("/api/reconcile", {"account": w.ADA, "force": True})
-    assert stored() == {}
-
-
-@pytest.mark.xfail(strict=True, reason="known bug: only INBOX is reconciled, so mail gone from other folders lingers")
-def test_hwf_mail_deleted_from_another_folder_leaves_the_list(app, world):
-    import ingest
-    name = "ada-archive-01-old-thread.eml"
-    gone(world, name)
-    app.post("/api/reconcile", {"account": w.ADA})
-    ingest.sync_folder(acct(), "Archive")
-    assert world.where(name)["db"] == []
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: a first folder sync that fails still marks the folder synced")

@@ -8,10 +8,11 @@
     {
      "account": "ada@example.test",
      "error": null,
+     "folders": 5,
      "ghosts": 1,
-     "live": 11,
+     "live": 16,
      "pruned": 0,
-     "stored": 12
+     "stored": 17
     }
    ],
    "total_ghosts": 1,
@@ -57,26 +58,29 @@
     {
      "account": "ada@example.test",
      "error": null,
+     "folders": 5,
      "ghosts": 1,
-     "live": 11,
+     "live": 16,
      "pruned": 1,
-     "stored": 12
+     "stored": 17
     },
     {
      "account": "bea@example.test",
      "error": null,
+     "folders": 3,
      "ghosts": 0,
-     "live": 2,
+     "live": 4,
      "pruned": 0,
-     "stored": 2
+     "stored": 4
     },
     {
      "account": "cy@example.test",
      "error": null,
+     "folders": 2,
      "ghosts": 0,
-     "live": 3,
+     "live": 4,
      "pruned": 0,
-     "stored": 3
+     "stored": 4
     }
    ],
    "total_ghosts": 1,
@@ -108,7 +112,7 @@
     {
      "account": "ada@example.test",
      "kind": "reconcile",
-     "live": 11,
+     "live": 16,
      "pruned": 1,
      "ts": "2026-11-02T12:00:00+00:00"
     }
