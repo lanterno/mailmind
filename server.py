@@ -394,7 +394,7 @@ def followups_tick():
             store.resolve_followups(c, acct)              # resolve FIRST (answered flips clear before re-detect)
         store.expire_followups(c, now, FOLLOWUP_EXPIRE_DAYS)
         store.followup_promote_due(c, now, FOLLOWUP_DAYS)
-        store.followup_detect_received(c, now, FOLLOWUP_DAYS)
+        store.followup_detect_received(c, now, FOLLOWUP_DAYS, FOLLOWUP_EXPIRE_DAYS)
         c.commit()
         after = store.due_followup_keys(c)
     finally:

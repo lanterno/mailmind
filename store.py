@@ -527,9 +527,10 @@ def followup_promote_due(c, now_ts, days):
                        AND mu.thread_id=followups.thread_id)""", (now_ts, cutoff))
 
 
-def followup_detect_received(c, now_ts, days, max_age_days=30):
+def followup_detect_received(c, now_ts, days, max_age_days):
     """Inbound, seen, unanswered, important threads aging past the window with no reply from
-    me, not muted/snoozed/already-tracked, within the max-age floor (avoids a first-run flood)."""
+    me, not muted/snoozed/already-tracked, within the max-age floor: a nudge expire_followups ended
+    must not come straight back, and a first run mustn't flood."""
     cutoff = now_ts - days * 86400
     floor = now_ts - max_age_days * 86400
     c.execute("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,due_ts,created_at)
