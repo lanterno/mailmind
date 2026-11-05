@@ -360,6 +360,16 @@ def expire_round():
                 print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
 
 
+def forget_round():
+    """What's kept of a message no copy of has come back to in a month goes."""
+    c = store.conn()
+    try:
+        store.forget_gone_messages(c, int(time.time()))
+        c.commit()
+    finally:
+        c.close()
+
+
 def wake_snoozed():
     """Resurface messages whose snooze time has passed: clear the snooze, mark unread,
     and push a realtime event so they pop back into the inbox view. Pure-local, no IMAP."""
@@ -4586,6 +4596,7 @@ def schedule(jobs):
                  first=min(120, _RECONCILE_INTERVAL))
     if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
         jobs.add("expire", expire_round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
+    jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
 
 
 def _after_send(_sent):
