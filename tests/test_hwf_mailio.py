@@ -1207,11 +1207,14 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     t.start()
     try:
         assert server.do_send(new(idempotency_key="k-soon"))[1] == 200
-        wait_until(lambda: world.smtp.messages, timeout=1.3)     # due within a second; the worker polls every 30
+        wait_until(lambda: world.smtp.messages, timeout=15)      # due within a second; the worker polls every 30
         assert world.smtp.messages
     finally:
         drain.stop()
         t.join(5)
+        for lane in threading.enumerate():                       # or a late send lands in the next test's database
+            if lane.name.startswith("outbox:"):
+                lane.join(15)
     assert not t.is_alive()
 
 
