@@ -100,6 +100,9 @@ CREATE TABLE outbox ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NUL
 -- table read_mutations
 CREATE TABLE read_mutations ( -- offline-safe read-side mutation queue (mirrors outbox); keyed on message_id, NEVER pk id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, -- one logical mutation per key (dedupes double-submit) op TEXT NOT NULL, -- trash | archive | junk | move | flag message_id TEXT, -- RFC822 Message-ID: the DURABLE key (survives reconcile re-pk) src_folder TEXT NOT NULL, -- folder the message lived in at enqueue dest TEXT, -- move/junk/archive target (NULL for flag / gmail label-remove) payload TEXT NOT NULL, -- JSON {pk,uid,kind,flags?,is_gmail,undo_label,subject,thread_id} state TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, applied INTEGER NOT NULL DEFAULT 0, -- EXACTLY-ONCE flag (mirrors outbox.delivered): set the instant the IMAP op lands last_error TEXT, -- SCRUBBED code only created_at TEXT NOT NULL, done_at TEXT );
 
+-- table sender_unsub
+CREATE TABLE sender_unsub( from_addr TEXT PRIMARY KEY, raw TEXT NOT NULL, accounts TEXT NOT NULL, updated_at TEXT NOT NULL);
+
 -- table snoozes
 CREATE TABLE snoozes( message_key INTEGER NOT NULL REFERENCES message_identity(key) ON DELETE CASCADE, folder TEXT NOT NULL, until INTEGER NOT NULL, PRIMARY KEY(message_key, folder));
 
@@ -118,4 +121,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=33;
+PRAGMA user_version=34;

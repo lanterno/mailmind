@@ -9,7 +9,7 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
                                              m0024_scan_state, m0025_undo_entries, m0026_draft_key,
                                              m0027_reply_original, m0028_attached_email_parts, m0029_unsub_accounts,
                                              m0030_message_identity, m0031_highest_modseq,
-                                             m0032_outbox_wire_begun, m0033_snoozes)
+                                             m0032_outbox_wire_begun, m0033_snoozes, m0034_sender_unsub)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
@@ -32,4 +32,5 @@ MIGRATIONS = [
     (31, m0031_highest_modseq.migrate),
     (32, m0032_outbox_wire_begun.migrate),
     (33, m0033_snoozes.migrate),
+    (34, m0034_sender_unsub.migrate),
 ]
