@@ -508,8 +508,9 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   "is this copy still there" probe, is a stateless 10-second connection outside the IMAP gate.
   Under the gate `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
   so `do_draft` and the outbox's draft cleanup also change that row only under the gate. Edit
-  answers 423 while a queued or sending outbox row holds the draft. A copy in another account
-  or folder is removed only after the new APPEND succeeds.
+  answers 423 while a queued or sending outbox row holds the draft. A save appends the new copy
+  first and only then removes the old one (`smtpsend.append_to_drafts`), wherever it was, so one that
+  fails or a crash leaves the old copy, at worst beside the new.
 - A message is a draft if the server flags it `\Draft` or its folder is the account's Drafts
   (`server._is_draft`): the role the last LIST gave it, else `roles.names_drafts`, the whole name
   at the top of the tree or under INBOX or Gmail's parent. A name that merely holds "draft" counts
@@ -549,6 +550,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `needs_summary` offers one copy of each. A key with no copy left waits 30 days (`gone_at`) for one to
   come back, then the `forget` job ends it. `store.init` gives a key to a row an older commit wrote. Message
   rows in the API carry it as `key`, beside `pk`. New durable state about a message keys on it.
+- **A snooze outlives its row.** `store.set_snooze` writes `messages.snoozed_until` and a `snoozes` row
+  (migration 33, by key and folder), and `upsert_message` gives it to a copy that arrives in that folder, so a
+  resync keeps it and a copy filed elsewhere isn't hidden. An Undo of filing brings it back; one come due with
+  no copy in its folder ends at `store.due_snoozes`. The undo entry names rows by key and folder too (`where`).
+  A message that wakes is unread on the server as well: `server.wake_snoozed` queues the mark for read mail
+  (`_readmut_enqueue_flags`), or the next sync that read its flags would take it back.
 - **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
   union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
   Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
