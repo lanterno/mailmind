@@ -150,6 +150,27 @@ def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
     clean(page)
 
 
+def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
+    import accounts
+    import server
+    gone = "ada-archive-01-old-thread.eml"
+    opened(page)
+    folder(page, "Archive").click()
+    listed = row(page, world, gone)
+    expect(listed).to_have_count(1)
+    world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml",
+                                                     Message_ID="<issue-219@example.test>"))
+    with world.server.lock:                                      # deleted in another client
+        world.server.mailbox(w.ADA, "Archive").messages.pop(world.uid(gone))
+
+    def pruned():                         # the ghost pruner's round, which yields while the page reads
+        server._auto_reconcile_one(accounts.get(w.ADA))
+        return world.pk(gone) is None
+    until(page, pruned, "the ghost pruned")
+    expect(listed).to_have_count(0)
+    clean(page)
+
+
 def test_archive_a_conversation_files_every_message_then_undo(page, world):
     opened(page)
     convo = rows_titled(page, "Lunch on Thursday?")
