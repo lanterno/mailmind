@@ -441,7 +441,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
   creates a folder's `sync_state` row; only a sync that saw every UID may.
 - Undo is an in-memory LIFO `_undo_stack` — **lost on restart**, by design. Bulk actions
-  push one grouped entry with children. A group id must be unique for the process's life:
+  push one grouped entry with children. `do_undo` tries every child, newest first; the ones it
+  couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
+  the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
+  (`mailops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the process's life:
   the frontend's `undoGroup()` is a UUID, since the stack outlives a page load.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files

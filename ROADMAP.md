@@ -517,17 +517,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - a folder that `warm.warm_tick` touched first (`sync_folder(recent=WARM_RECENT)`) never fetches
     its older mail, since the watermark is already past it
     (`test_hwf_opening_a_warmed_folder_shows_its_older_mail`).
-- **Undo that fails partway, or says it worked** · high value · effort S —
-  - In `do_undo` a group child that can't be found is skipped, and the group still answers
-    `ok`. A child that raises aborts the loop and pushes the whole entry back, including children
-    it already reversed, without invalidating the stats or folder caches. Report what was
-    reversed, and keep only what wasn't. Pinned by
-    `test_a_partly_failed_group_undo_keeps_what_it_couldnt_reverse` and
-    `test_a_refusal_partway_through_a_group_undo_still_reports_what_it_reversed`.
-  - Undoing a Gmail archive: `mailops.relabel_by_msgid` ignores the STORE answer, and the undo path
-    ignores `ingest_message` returning 0. A refused unarchive therefore reports success, uses up
-    the entry, and leaves the message out of the list. Pinned by
-    `test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone`.
 - **The page doesn't know the profile** · medium value · effort S — read-only, a move, a flag
   change or a send that waits in its queue looks done. Say `profile` in `/api/digest` and show it
   beside the sync status.
