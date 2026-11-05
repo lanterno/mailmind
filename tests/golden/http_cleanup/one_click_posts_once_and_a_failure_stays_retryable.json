@@ -145,6 +145,7 @@
   "note": "the unsubscribe ledger",
   "value": [
    {
+    "accounts": "[\"ada@example.test\"]",
     "from_addr": "news@loom.example.test",
     "http_status": 200,
     "id": 1,
