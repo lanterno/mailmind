@@ -197,13 +197,15 @@ def main():
         t, h = set_expiry(sys.argv[2], sys.argv[3])
         print(f"  {t} -> {'expires after ' + str(h) + 'h' if h else 'no expiry'}")
     elif cmd in ("keep", "block") and len(sys.argv) > 2:
+        import ingest                  # it reads the rules through the classifier
         for tok in sys.argv[2:]:
             t, where = add(tok, cmd)
-            print(f"  {t} -> {where}")
+            print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
     elif cmd == "remove" and len(sys.argv) > 2:
+        import ingest
         for tok in sys.argv[2:]:
             remove(tok)
-            print(f"  removed {tok}")
+            print(f"  removed {tok}; {ingest.reclassify(tok)} stored messages classified again")
     else:
         print(__doc__)
 

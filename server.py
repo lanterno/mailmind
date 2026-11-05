@@ -1734,6 +1734,7 @@ def _reverse_held(d):
     if kind == "unblock":                           # pure-local: drop the block rule (sender cleanup)
         try:
             rules.remove(d["token"])
+            ingest.reclassify(d["token"])
         except Exception:
             return False, d.get("account"), None
         return True, d.get("account"), None
@@ -2424,6 +2425,7 @@ def cleanup_execute(body):
                 fail += 1
         except Exception:
             fail += 1
+    ingest.reclassify(block_token)               # what stays, in other folders, reads as blocked too
     invalidate_stats()
 
     # 3) UNSUBSCRIBE (irreversible, best-effort) — only with a valid confirm_token; idempotent on
@@ -4637,8 +4639,9 @@ class H(BaseHTTPRequestHandler):
                                           priority=gates.Priority.INTERACTIVE)   # block-sender is NOT undoable
             except Exception:
                 trashed = False
+        reclassified = ingest.reclassify(token)
         invalidate_stats()
-        return {"ok": True, "token": token, "placed_in": placed,
+        return {"ok": True, "token": token, "placed_in": placed, "reclassified": reclassified,
                 "trashed": trashed, "rules": rules.load()}
 
     def _views_post(self, b):

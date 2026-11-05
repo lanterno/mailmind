@@ -266,5 +266,10 @@ NOTIF_RE = re.compile(r"(no-?reply|do-?not-?reply|notification|notify|mailer-dae
 RE_FWD = re.compile(r"^\s*(re|fwd|fw|aw|wg|tr|rv|r[ée]f)\s*:", re.I)  # reply/forward prefixes (multi-lingual)
 
 
+def by_rule(reason):
+    """Whether `reason`, as classify gave it, says one of the person's rules decided."""
+    return "by rule" in (reason or "")
+
+
 def is_junk(bucket_name):
     return bucket_name in JUNK_BUCKETS

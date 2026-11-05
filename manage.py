@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
+import ingest
 import mailclass
 import mailparse
 from mailparse import dec
@@ -512,7 +513,7 @@ def main():
     if cmd in ("keep", "block") and len(sys.argv) > 2:
         for tok in sys.argv[2:]:
             t, where = rules.add(tok, cmd)
-            print(f"  {t} -> {where}")
+            print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
         return
     if cmd == "rules":
         r = rules.load()

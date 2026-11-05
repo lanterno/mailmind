@@ -259,6 +259,36 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
     return kept, junk, max_uid
 
 
+def reclassify(token):
+    """A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers, as
+    mail arriving now would be. Only a row a rule decides now or decided before: what else the
+    classifier read at ingest wasn't all kept (List-Unsubscribe), so one that no rule had a say in is
+    left as ingest judged it. Returns how many rows changed."""
+    token = token.strip().lower()
+    c = store.conn()
+    try:
+        cols = "pk, from_addr, from_name, subject, bucket, reason"
+        if "@" in token:
+            rows = c.execute(f"SELECT {cols} FROM messages WHERE lower(from_addr)=?", (token,)).fetchall()
+        else:                                        # the domain and its sub-domains; the classifier decides
+            rows = c.execute(f"SELECT {cols} FROM messages WHERE lower(from_addr) LIKE ? OR lower(from_addr) LIKE ?",
+                             (f"%@{token}", f"%.{token}")).fetchall()
+        changed = 0
+        for r in rows:
+            bucket, confidence, reason = mailclass.classify((r["from_addr"] or "").lower(), r["subject"] or "",
+                                                            r["from_name"] or "")
+            if not (mailclass.by_rule(reason) or mailclass.by_rule(r["reason"])):
+                continue
+            if (bucket, reason) != (r["bucket"], r["reason"]):
+                c.execute("UPDATE messages SET bucket=?, confidence=?, reason=?, is_junk=? WHERE pk=?",
+                          (bucket, confidence, reason, int(mailclass.is_junk(bucket)), r["pk"]))
+                changed += 1
+        c.commit()
+        return changed
+    finally:
+        c.close()
+
+
 def sync_folder(acct, folder, full=False, recent=None):
     """Sync one folder (UIDVALIDITY-checked). full=True re-scans the whole folder;
     otherwise pulls only UIDs above the per-folder watermark. Stores everything.
