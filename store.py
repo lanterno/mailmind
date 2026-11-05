@@ -582,12 +582,13 @@ def clear_replylater(c, account, thread_id):
 
 
 def list_replylater(c, account):
-    """One representative (latest) message per reply-later thread, most-recently-pinned first (a stack)."""
+    """One representative (latest) message per reply-later thread, most-recently-pinned first (a stack).
+    A dismissed one has left it, until it is pinned again."""
     return c.execute(
         """SELECT m.*, f.created_at AS f_created,
                   (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account AND mm.thread_id=m.thread_id) AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
-           WHERE f.account=? AND f.kind='replylater'
+           WHERE f.account=? AND f.kind='replylater' AND f.state='due'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
                        ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
            ORDER BY f.created_at DESC""", (account,)).fetchall()
@@ -596,7 +597,7 @@ def list_replylater(c, account):
 def replylater_count(c, account):
     # match list_replylater's messages JOIN, so the badge can't exceed the list (a reply-later row
     # whose thread has no surviving message rows after reconcile is not shown, so don't count it)
-    return c.execute("SELECT COUNT(*) FROM followups f WHERE f.account=? AND f.kind='replylater' "
+    return c.execute("SELECT COUNT(*) FROM followups f WHERE f.account=? AND f.kind='replylater' AND f.state='due' "
                      "AND EXISTS(SELECT 1 FROM messages m WHERE m.account=f.account AND m.thread_id=f.thread_id)",
                      (account,)).fetchone()[0]
 
