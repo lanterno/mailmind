@@ -3504,8 +3504,11 @@ def _tick_backoff_active(da, now):
 
 
 def _draft_eligible(row):
-    """Replyable to a real human + not already handled. (The client pre-filters action/importance.)"""
+    """Replyable to a real human + not already handled. (The client pre-filters action/importance.)
+    Your own message isn't: draft_ahead_gc drops as moot a draft for a thread ending in a Sent copy."""
     if not row or row["is_junk"] or row["answered"] or row["snoozed_until"]:
+        return False
+    if (row["from_addr"] or "").lower() == row["account"].lower() or "sent" in (row["folder"] or "").lower():
         return False
     local = (row["from_addr"] or "").split("@")[0].lower()
     if not local or not mailclass._looks_human(local):   # excludes no-reply/notifications/role senders
@@ -3674,7 +3677,7 @@ def ai_draft_ahead_get(qs, kick_ok=False):
 
 
 _DRAFT_CAND_SQL = """
-SELECT m.pk, m.account, m.thread_id, m.message_id, m.from_addr,
+SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
        m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
 FROM messages m
 JOIN summaries s ON s.message_pk = m.pk
