@@ -8,6 +8,7 @@ thread, atomic claim (queued→running), the `applied` flag as the exactly-once 
 outbox: the primary op here IS an IMAP op, so it runs as a job on the account's IMAP gate (the
 outbox's SMTP send holds none).
 """
+import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,8 +40,9 @@ class Applied:
 
 @dataclass(frozen=True)
 class Restored:
-    """A queued move won't happen (the server refused it, the queue gave up on it, or its account
-    is gone), and its message is listed again (published on mailmind.platform.bus)."""
+    """A queued move or flag change won't happen (the server refused it, the queue gave up on it,
+    or its account is gone), and the local row is as the server has it again: a move's message
+    listed, a flag change's flags put back (published on mailmind.platform.bus)."""
     mutation_id: int
     account: str
 
@@ -81,8 +83,7 @@ def _local_mirror(row):
     c = store.conn()
     try:
         if row["op"] == "flag":
-            import json
-            r = store.get_message_by_msgid(c, row["account"], row["message_id"]) if row["message_id"] else None
+            r = _flagged_row(c, row)
             if r is None:
                 return
             flags = (json.loads(row["payload"] or "{}").get("flags") or {})
@@ -101,10 +102,32 @@ def _local_mirror(row):
         c.close()
 
 
-def _restore(c, row, error):
-    """The queued move `row` won't happen: to error, and its message listed again."""
-    QUEUE.give_up(c, row, error)
+def _flagged_row(c, row):
+    """The local row a queued flag change is for: the one in the folder it was asked in, else the
+    newest with its Message-ID, else the row it was asked on."""
+    if row["message_id"]:
+        r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                      "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+        return r or store.get_message_by_msgid(c, row["account"], row["message_id"])
+    pk = json.loads(row["payload"] or "{}").get("pk")
+    return store.get_message(c, pk) if pk else None
+
+
+def _give_back(c, row):
+    """The queued change `row` won't happen: a move's message is listed again, and a flag change's
+    row gets back the flags it had when the change was asked for."""
     store.restore_pending(c, row["id"])
+    if row["op"] == "flag":
+        r = _flagged_row(c, row)
+        was = json.loads(row["payload"] or "{}").get("was") or {}
+        if r is not None and was:
+            store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in was.items()})
+
+
+def _restore(c, row, error):
+    """The queued change `row` won't happen: to error, and the local row as the server has it."""
+    QUEUE.give_up(c, row, error)
+    _give_back(c, row)
 
 
 def apply_one(mid):
@@ -137,8 +160,8 @@ def apply_one(mid):
 
             def later(c):
                 terminal, delay = QUEUE.retry_later(c, row, err, _now())
-                if terminal:                                 # given up: the message is still where it was
-                    store.restore_pending(c, mid)
+                if terminal:                                 # given up: the message is still as it was
+                    _give_back(c, row)
                 return terminal, delay
             terminal, delay = _commit(later)
             if terminal:

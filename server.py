@@ -1256,9 +1256,37 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
 
 
+def _readmut_enqueue_flags(pk, flags, mutation_id):
+    """IMAP was unreachable (or the process is read-only) — durably queue this flag change, show it
+    on the local row at once, and report it queued. The row records the flags as they were, so a
+    change the server refuses, or one the queue gives up on, puts them back."""
+    c = store.conn()
+    row = store.get_message(c, pk)
+    if not row:
+        c.close()
+        return {"ok": False, "msg": "not found"}
+    acct, mid = row["account"], (row["message_id"] or "").strip()
+    if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
+        mutation_id = secrets.token_hex(16)
+    payload = {"pk": pk, "uid": row["uid"], "flags": flags,
+               "was": {k: bool(row[k]) for k in flags}}
+    _id, created = store.read_mut_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or pk}:{mutation_id}",
+                                             "op": "flag", "message_id": mid, "src_folder": row["folder"],
+                                             "dest": None, "payload": json.dumps(payload),
+                                             "next_attempt_at": 0, "created_at": now_iso()})
+    if created:
+        store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items()})
+    c.commit()
+    c.close()
+    if created:
+        readmutq.kick()
+        invalidate_stats()
+    return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+
+
 def do_write(path, body):
-    """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Move-type ops
-    fall back to the durable offline queue if IMAP is unreachable; seen/flag stay local-only as before."""
+    """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Each falls
+    back to the durable offline queue if IMAP is unreachable, or the process is read-only."""
     try:
         pk = int(body.get("pk"))
     except (TypeError, ValueError):
@@ -1273,10 +1301,13 @@ def do_write(path, body):
     def write():
         """(ok, msg, undo, queued): queued is the answer when IMAP was down and the move waits in
         the offline queue instead."""
-        if path == "/api/seen":
-            return (*mailops.set_flags(pk, {"seen": bool(body.get("seen", True))}), None, None)
-        if path == "/api/flag":
-            return (*mailops.set_flags(pk, {body.get("flag", "flagged"): bool(body.get("on", True))}), None, None)
+        if path in ("/api/seen", "/api/flag"):
+            flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
+                     else {body.get("flag", "flagged"): bool(body.get("on", True))})
+            try:
+                return (*mailops.set_flags(pk, flags), None, None)
+            except mailops._UNREACHABLE:           # IMAP down → queue it, as a move is (no IMAP here)
+                return None, None, None, _readmut_enqueue_flags(pk, flags, body.get("mutation_id"))
         if path in _Q:
             op, dest = _Q[path]
             try:
