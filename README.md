@@ -276,7 +276,8 @@ automatically.
   goes out in a lane of its own, so one account's unreachable server holds up no other's. Where
   the server doesn't file sent mail itself, a Sent copy that fails is tried again with the same
   backoff, never sending the message twice or filing it twice, and the outbox says so if it
-  never lands.
+  never lands. If the connection drops, or MailMind stops, just as the whole message has gone out, no one can
+  say whether the server took it: the outbox says it may have gone out and sends it again only if you ask.
 - **Undo Send** — a 10-second grace window with a live countdown that pulls the
   message back before it hits the wire and restores everything you'd written. If you're
   writing another message by then, it is saved to Drafts before the undone one takes its
@@ -621,7 +622,6 @@ python3 tests.py               # behavioral classifier suite
 python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py  # CSS sanitizer unit tests
 python3 test_expire.py         # expiry rules: storage, matching, age selection
-python3 test_thread_file.py    # whole-conversation archive/delete: membership, undo, failures
 python3 test_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
 python3 test_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
 python3 test_send_after.py     # send-later times: passed or far-off ones are refused

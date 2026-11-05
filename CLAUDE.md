@@ -40,7 +40,6 @@ python3 tests.py                  # classifier behaviour (27 assertions)
 python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
-python3 test_thread_file.py       # whole-conversation archive/trash (10)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
 python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
@@ -52,8 +51,8 @@ python3 test_hardening.py         # security and data-loss fixes, one test or mo
 
 `just test -k hardening` picks suites by file name; within a suite there is no single-test
 flag. `tests.py` and `tests_sanitize.py` are linear scripts —
-comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py` and
-`test_thread_file.py`, `test_upcoming.py`, `test_contacts_known.py`,
+comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py`,
+`test_upcoming.py`, `test_contacts_known.py`,
 `test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
 `test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
 renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
@@ -98,6 +97,10 @@ The fixtures, from the bottom up:
 A known bug is a `xfail(strict=True)` test that states the right behaviour, so fixing the bug
 fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
 `test_hwf_*.py` hold the hard-won fixes, one file per layer.
+
+`tests/test_queue_state_machine.py` runs Hypothesis over the offline queue and Undo: random moves, flag
+changes, outages, refusals, crashes, syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
+`MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
 `tests/browser/` drives `dashboard.html` in Chromium (Playwright) on the `app` fixture:
 
@@ -436,6 +439,11 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - The outbox's queue has a lane for each account (`DurableQueue(lane="account")`): its drain
   runs each account's rows in turn on a thread of their own. The worker's drain doesn't wait
   for them; any other caller's (a test's `outbox.drain()`) waits for every lane it ran.
+- `smtpsend.send` tells apart the two sides of a message's last bytes. `before_dot` sets `outbox.wire_begun`
+  (migration 32) just before they go, and with no answer after them it raises `smtpsend.Unanswered`: the row goes
+  to `error` as `outbox.UNSURE`, listed `unsure`, and only a person's retry sends it again. Any answer clears the
+  mark, and so does a failure before them. `DurableQueue(unsure=...)` makes `reset_stuck` do the same for a
+  row a crash left with the mark set.
 - A Sent copy that fails puts the delivered row back in the queue, its tries counted from the
   delivery, until it is filed or goes to `error`. The retry looks for the copy by Message-ID
   first (`smtpsend.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as
