@@ -503,10 +503,16 @@ def test_a_refused_folder_list_keeps_the_last_list(app, world):
 
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a JSON body that isn't an object answers 500")
-def test_a_json_body_that_isnt_an_object_is_a_bad_request(app):
-    r = app.post("/api/seen", b"[1, 2]")
+@pytest.mark.parametrize("body", [b"[1, 2]", b'"pk"', b"7", b"null", b"{not json"])
+def test_a_json_body_that_isnt_an_object_is_a_bad_request(app, body):
+    r = app.post("/api/seen", body)
     assert (r.status, r.json) == (400, {"ok": False, "error": "bad request"})
+
+
+def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):
+    r = app.post("/api/seen", b"[1, 2]", headers={"X-CSRF-Token": None})
+    assert r.status == 403
+    assert app.post("/api/undo", b"").status == 200             # no body at all is still {}
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: \\Answered is set by pk, so archiving the original first skips it")

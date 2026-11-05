@@ -16,15 +16,15 @@
  {
   "note": "a body that isn't JSON",
   "value": {
-   "body": "{\"ok\": false, \"msg\": \"bad pk\"}",
-   "status": 200
+   "body": "{\"ok\": false, \"error\": \"bad request\"}",
+   "status": 400
   }
  },
  {
   "note": "a JSON body that isn't an object",
   "value": {
-   "body": "{\"ok\": false, \"error\": \"request failed\"}",
-   "status": 500
+   "body": "{\"ok\": false, \"error\": \"bad request\"}",
+   "status": 400
   }
  },
  {
