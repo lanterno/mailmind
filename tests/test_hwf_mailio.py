@@ -277,6 +277,20 @@ def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
     assert world.row(name)["seen"] == 1
 
 
+def test_hwf_a_sync_tells_an_open_list_of_mail_read_elsewhere(app, world, monkeypatch):
+    import ingest
+    from mailmind.platform import sse
+    told = []
+    real = sse.publish
+    monkeypatch.setattr(sse, "publish", lambda topic, data=None: (told.append((topic, data)), real(topic, data))[1])
+    ingest.sync_new(acct())
+    assert [t for t, _ in told if t == "flags-changed"] == []         # nothing changed, nothing said
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "INBOX").messages[world.uid("ada-inbox-02-lunch-confirm.eml")].flags.add(w.SEEN)
+    ingest.sync_new(acct())
+    assert [d for t, d in told if t == "flags-changed"] == [{"account": w.ADA, "folder": "INBOX", "count": 1}]
+
+
 # -- reconcile -------------------------------------------------------------
 
 def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, monkeypatch):
