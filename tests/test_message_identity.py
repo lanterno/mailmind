@@ -274,5 +274,6 @@ def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
     store.mute_thread(c, w.ADA, row["thread_id"], "now")
     c.commit()
     c.close()
-    assert [i["key"] for i in app.get(f"/api/messages?account={w.ADA}&folder=__muted__&limit=100").json["items"]
-            if i["thread_id"] == row["thread_id"]] != [None]
+    muted = [i["key"] for i in app.get(f"/api/messages?account={w.ADA}&folder=__muted__&limit=100").json["items"]
+             if i["thread_id"] == row["thread_id"]]
+    assert muted and None not in muted                # the conversation's row, by its newest message
