@@ -1153,7 +1153,7 @@ def _folder_sync(account, folder, full):
         except Exception as e:
             if full:
                 _first_sync_failed[key] = _classify_sync_error(e)
-            print(f"[folder-sync] {account}/{folder}: {type(e).__name__}: {e}", flush=True)
+            print(f"[folder-sync] {account}/{folder!r}: {e!r}", flush=True)     # a name a request gave us
         finally:
             with _folder_syncs_lock:
                 _folder_syncs.pop(key, None)
