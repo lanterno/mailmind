@@ -128,6 +128,8 @@ def test_the_wait_until_the_next_row_comes_due_is_at_most_the_poll(laned):
     assert run(laned, lambda c: laned.until_due(c, NOW)) == 30
     add(laned, "soon", next_attempt_at=NOW + 8)
     assert run(laned, lambda c: laned.until_due(c, NOW)) == 8
+    assert run(laned, lambda c: laned.until_due(c, NOW + 9, NOW)) == 0          # due since the drain began to look
+    assert run(laned, lambda c: laned.until_due(c, NOW + 9, NOW + 8)) == 30     # it looked at it then
 
 
 def test_cancelling_before_the_claim_or_before_the_irreversible_step(q):
@@ -231,6 +233,65 @@ def test_the_worker_wakes_when_a_row_comes_due_not_at_its_next_poll(laned):
         laned.kick()
         worker.join(5)
     assert not worker.is_alive()
+
+
+def test_a_row_that_comes_due_as_a_drain_ends_is_not_left_for_the_next_poll(laned):
+    # The drain looks just before the row is due and is still going when it comes due. It didn't take
+    # the row, and nothing will kick the queue for it.
+    due = int(time.time()) + 2
+    add(laned, "soon", next_attempt_at=due)
+    stop, drains = threading.Event(), []
+
+    def drain():
+        now = int(time.time())
+        drains.append(now)
+        laned.drain(lambda id_: None, now)
+        while time.time() < due + 0.2 and len(drains) == 1:      # still busy as it comes due
+            time.sleep(0.01)
+
+    worker = threading.Thread(target=lambda: laned.run_forever(drain, stop), daemon=True)
+    worker.start()
+    laned.kick()
+    try:
+        assert wait_until(lambda: len(drains) >= 2, timeout=10), "the row waited for the 30 s poll"
+    finally:
+        stop.set()
+        laned.kick()
+        worker.join(5)
+
+
+def test_a_row_a_drain_wont_take_doesnt_spin_the_worker(laned):
+    # Read-only's drain takes nothing, so a due row stays queued: the worker must not go round for it.
+    add(laned, "due", next_attempt_at=int(time.time()) - 5)
+    stop, drains = threading.Event(), []
+    worker = threading.Thread(target=lambda: laned.run_forever(lambda: drains.append(1), stop), daemon=True)
+    worker.start()
+    laned.kick()
+    try:
+        assert wait_until(lambda: drains)
+        time.sleep(0.3)
+        assert len(drains) == 1
+    finally:
+        stop.set()
+        laned.kick()
+        worker.join(5)
+
+
+def test_a_row_coming_due_just_after_a_drain_that_wont_take_it_gets_one_more_look_and_no_more(laned):
+    due = int(time.time()) + 1
+    add(laned, "soon", next_attempt_at=due)
+    stop, drains = threading.Event(), []
+    worker = threading.Thread(target=lambda: laned.run_forever(lambda: drains.append(time.time()), stop), daemon=True)
+    worker.start()
+    laned.kick()
+    try:
+        assert wait_until(lambda: drains and drains[-1] >= due, timeout=5)
+        time.sleep(0.3)
+        assert sum(1 for t in drains if t >= due) == 1
+    finally:
+        stop.set()
+        laned.kick()
+        worker.join(5)
 
 
 def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):
