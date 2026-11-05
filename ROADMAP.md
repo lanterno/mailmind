@@ -503,11 +503,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - a multipart with no boundary loses its text, in the snippet and when opened;
   - a forwarded `message/rfc822` attachment downloads empty with size 0
     (`mailparse.extract_part` uses `get_payload(decode=True)`, which is None for that type).
-- **Refresh the flags of mail already stored** · medium value · effort M — FLAGS are read once,
-  in `ingest._process`'s FETCH of new mail. Nothing reads them again, so mail read, starred or
-  answered in another client keeps its old state here. Fetch FLAGS for the stored INBOX UIDs
-  during reconcile. CONDSTORE/QRESYNC, which nothing references yet, would make that cheap later.
-  Pinned by `test_hwf_mail_read_in_another_client_shows_read_after_a_sync`.
+- **Flags changed elsewhere: cheaper, and live** · low value · effort M —
+  `ingest._refresh_flags` reads the flags of a folder's `FLAG_REFRESH` newest UIDs on every
+  incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
+  folder) it could ask only for what changed, and reach older mail too. What it changes isn't
+  pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
 - **Prune what sync never prunes** · high value · effort M — three gaps, each pinned by a strict
   xfail in `tests/test_hwf_mailio.py`:
   - an INBOX emptied in another client is never pruned, because no route passes `force` to

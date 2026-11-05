@@ -340,6 +340,9 @@ automatically.
   copy landed, then removes only that message, never expunging the rest of the folder. A star
   or a read mark the server refuses is taken back on the page too, instead of showing until the
   next sync.
+- **Flags follow other clients.** Each sync reads the read, star and answered marks of a
+  folder's newest 500 messages again, so mail you read on your phone shows read here too. A
+  change you make meanwhile, or one still queued offline, keeps its own.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
   per tick against the server, yields instantly to anything you're doing, and pushes an
   event so open lists drop messages deleted in another client. It prunes only what it read
