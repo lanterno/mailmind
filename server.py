@@ -2575,8 +2575,16 @@ def do_send(body):
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
+    draft_id = body.get("draft_id")
+    if not draft_id and _composer_key(body):    # a first save whose answer the composer never heard
+        c = store.conn()
+        try:
+            found = store.draft_by_key(c, _composer_key(body))
+        finally:
+            c.close()
+        draft_id = found["id"] if found else None
     meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
-            "in_reply_to_pk": in_reply_to_pk, "subject": spec["subject"], "draft_id": body.get("draft_id"),
+            "in_reply_to_pk": in_reply_to_pk, "subject": spec["subject"], "draft_id": draft_id,
             "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
     oid, created = outbox.enqueue(built, meta)
     return {"ok": True, "outbox_id": oid, "queued": created, "scheduled": bool(send_after),
@@ -2684,14 +2692,31 @@ def do_draft(body):
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
-    did = body.get("draft_id")
-    c = store.conn()
-    prev = store.draft_get(c, int(did)) if did else None
-    c.close()
-    same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
-    def save():
+    did = int(body["draft_id"]) if body.get("draft_id") else None
+    key = _composer_key(body)
+
+    def replaces():
+        """The row this save takes over: the one it names, or for a first save the one an earlier
+        save under the composer's key made, whose answer the composer never got."""
+        c = store.conn()
+        try:
+            if did:
+                return store.draft_get(c, did)
+            return store.draft_by_key(c, key) if key else None
+        finally:
+            c.close()
+
+    def scope_for(row):
+        # an old copy in another account (From changed) is removed there too: the job spans both
+        return acct["email"] if row is None or row["account"] == acct["email"] else gates.EVERY_ACCOUNT
+
+    def save(scope):
         """APPEND the new copy, drop the old one, and move the row with them. Returns the row's id
-        and the new copy's UID."""
+        and the new copy's UID, or None if the row now needs a wider gate than `scope`."""
+        prev = replaces()    # under the gate: a save this one waited for has moved the row on
+        if scope != gates.EVERY_ACCOUNT and scope_for(prev) != scope:
+            return None
+        same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
         folder, uid, uidv = smtpsend.append_to_drafts(
             acct, built["raw"],
             prev_uid=(prev["uid"] if same else None),
@@ -2714,7 +2739,7 @@ def do_draft(body):
                 print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
         # the row moves with the copy, under the same gate: Edit re-checks it under the gate
         now = now_iso()
-        row = {"id": int(did) if did else None, "account": acct["email"], "folder": folder, "uid": uid,
+        row = {"id": prev["id"] if prev else None, "account": acct["email"], "folder": folder, "uid": uid,
                "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
                "mode": body.get("mode", "new"), "subject": spec["subject"],
                "created_at": now, "updated_at": now}
@@ -2726,14 +2751,19 @@ def do_draft(body):
                                    compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
                                    spec["tail"]["html"], json.dumps(bcc) if bcc else None,
                                    hashlib.sha256(built["raw"]).hexdigest())
+            if key and not did:
+                store.draft_set_key(c, new_id, key)
             c.commit()
         finally:
             c.close()
         return new_id, uid
-    # an old copy in another account (From changed) is removed there too: the job spans both
-    scope = acct["email"] if prev is None or same else gates.EVERY_ACCOUNT
     try:
-        new_id, uid = gates.run(scope, save, priority=gates.Priority.INTERACTIVE)
+        scope = scope_for(replaces())
+        saved = gates.run(scope, lambda: save(scope), priority=gates.Priority.INTERACTIVE)
+        if saved is None:    # another save moved the row to another account while this one waited
+            saved = gates.run(gates.EVERY_ACCOUNT, lambda: save(gates.EVERY_ACCOUNT),
+                              priority=gates.Priority.INTERACTIVE)
+        new_id, uid = saved
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     except Exception as e:
@@ -2741,6 +2771,11 @@ def do_draft(body):
         return {"ok": False, "error": "could not save draft"}, 502
     invalidate_stats()
     return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
+
+
+def _composer_key(body):
+    """The composer's idempotency key, as a save or a send gives it."""
+    return str(body.get("idempotency_key") or "").strip()[:200] or None
 
 
 def _flagged_draft(d):

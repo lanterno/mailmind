@@ -746,6 +746,15 @@ def draft_get(c, did):
     return c.execute("SELECT * FROM drafts WHERE id=?", (did,)).fetchone()
 
 
+def draft_by_key(c, key):
+    """The draft a composer's first save made, by the composer's key; the newest if there are two."""
+    return c.execute("SELECT * FROM drafts WHERE idempotency_key=? ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+
+
+def draft_set_key(c, did, key):
+    c.execute("UPDATE drafts SET idempotency_key=? WHERE id=?", (key, did))
+
+
 def draft_by_msgid(c, account, message_id):
     if not message_id:
         return None
