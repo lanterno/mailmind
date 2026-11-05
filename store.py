@@ -163,6 +163,9 @@ def repair_keys(c):
                                                        created_at)
                      SELECT ?, summary, importance, category, action, model, created_at
                      FROM summaries WHERE message_pk=?""", (key, r["pk"]))
+        c.execute("""INSERT OR IGNORE INTO snoozes(message_key, folder, until)
+                     SELECT message_key, folder, snoozed_until FROM messages
+                     WHERE pk=? AND snoozed_until IS NOT NULL""", (r["pk"],))
 
 
 def forget_gone_messages(c, now_ts, days=30):
@@ -475,6 +478,9 @@ def upsert_message(c, m):
     c.execute("""INSERT OR IGNORE INTO summaries(message_pk, summary, importance, category, action, model, created_at)
                  SELECT ?, summary, importance, category, action, model, created_at
                  FROM assessments WHERE message_key=?""", (pk, key))
+    # And one that was snoozed in this folder, on a row since gone (a resync, a renumber), still is.
+    c.execute("""UPDATE messages SET snoozed_until=s.until FROM snoozes s
+                 WHERE messages.pk=? AND s.message_key=? AND s.folder=?""", (pk, key, m["folder"]))
     return pk
 
 
@@ -534,16 +540,35 @@ def outbox_list(c, limit=50):
 
 # ------------------------------------------------------------------- snooze
 def set_snooze(c, pk, until):
+    """Hide message `pk` until `until`. It's kept under the message's key and folder too, so it outlives
+    the row: a copy that arrives in that folder takes it up (upsert_message)."""
     c.execute("UPDATE messages SET snoozed_until=? WHERE pk=?", (int(until), pk))
+    c.execute("""INSERT OR REPLACE INTO snoozes(message_key, folder, until)
+                 SELECT message_key, folder, snoozed_until FROM messages WHERE pk=? AND message_key IS NOT NULL""",
+              (pk,))
 
 
 def clear_snooze(c, pk):
+    c.execute("""DELETE FROM snoozes WHERE (message_key, folder) IN
+                 (SELECT message_key, folder FROM messages WHERE pk=?)""", (pk,))
     c.execute("UPDATE messages SET snoozed_until=NULL WHERE pk=?", (pk,))
 
 
 def due_snoozes(c, now_ts):
+    """The rows to wake. A snooze come due with no copy left in its folder ends here: the message
+    was filed, and bringing it back later isn't waking it."""
+    c.execute("""DELETE FROM snoozes WHERE until<=? AND NOT EXISTS
+                 (SELECT 1 FROM messages m WHERE m.message_key=snoozes.message_key AND m.folder=snoozes.folder)""",
+              (now_ts,))
     return c.execute("SELECT pk, account, folder FROM messages "
                      "WHERE snoozed_until IS NOT NULL AND snoozed_until<=?", (now_ts,)).fetchall()
+
+
+def copy_in_folder(c, message_key, folder):
+    """The pk the message with this key has now in `folder`, or None."""
+    r = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? ORDER BY pk DESC LIMIT 1",
+                  (message_key, folder)).fetchone()
+    return r["pk"] if r else None
 
 
 # ----------------------------------------------------------- mute (silence a thread)

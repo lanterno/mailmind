@@ -1688,8 +1688,13 @@ def _reverse_held(d):
         return True, d["account"], "INBOX"
     if kind == "snooze":
         c = store.conn()
+        where = d.get("where") or []
         for i, pk in enumerate(d["pks"]):
             pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
+            if i < len(where):                      # an entry from before `where` names the row by pk alone
+                pk = store.copy_in_folder(c, *where[i]) if where[i] else None
+                if pk is None:
+                    continue
             if pu:
                 store.set_snooze(c, pk, pu)
             else:
@@ -3247,15 +3252,16 @@ def do_snooze(body):
         return {"ok": False, "error": "bad snooze time"}, 400
     c = store.conn()
     pks = _snooze_pks(c, body)
-    prev = []
+    prev, where = [], []
     for pk in pks:
         r = store.get_message(c, pk)
         prev.append(r["snoozed_until"] if r else None)
+        where.append([r["message_key"], r["folder"]] if r else None)   # pk isn't stable: the stack outlives it
         store.set_snooze(c, pk, until)
     c.commit()
     c.close()
     if pks:
-        undo_push({"kind": "snooze", "pks": pks, "prev_until": prev, "label": "Snoozed"},
+        undo_push({"kind": "snooze", "pks": pks, "where": where, "prev_until": prev, "label": "Snoozed"},
                   body.get("undo_group"))
     invalidate_stats()
     return {"ok": True, "count": len(pks), "until": until}, 200
