@@ -85,6 +85,7 @@ _sync_asked = []                          # syncs asked for while one ran: each 
 _stats_cache = {"data": None, "exp": 0}
 _undo_lock = threading.Lock()            # the undo stack is in the database (undo_entries): it outlives the process
 UNDO_MAX = 25
+PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
 
 
 def now_iso():
@@ -1411,6 +1412,7 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
         undo_push(undo, undo_group)
     readmutq.kick()                             # drain ASAP once IMAP returns
     invalidate_stats()
+    sse.publish("outbox", {})                   # the tray shows it
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
 
 
@@ -1439,7 +1441,49 @@ def _readmut_enqueue_flags(pk, flags, mutation_id):
     if created:
         readmutq.kick()
         invalidate_stats()
+        sse.publish("outbox", {})               # the tray shows it
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+
+
+def do_pending_retry(mid):
+    """The tray's Retry: a change the queue gave up on goes back in. Returns (result, code)."""
+    if not readmutq.retry(mid):
+        return {"ok": False}, 404
+    _after_readmut(None)
+    return {"ok": True}, 200
+
+
+def do_pending_discard(mid):
+    """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
+    migration 23 kept them, is read back. Returns (result, code)."""
+    c = store.conn()
+    row = store.read_mut_get(c, mid)
+    c.close()
+    if row is None:
+        return {"ok": False}, 404
+
+    def job():
+        gone = readmutq.discard(mid)
+        if gone is None or gone["op"] == "flag" or not gone["message_id"]:
+            return gone is not None
+        cc = store.conn()
+        listed = cc.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=?",
+                            (gone["account"], gone["src_folder"], gone["message_id"])).fetchone()
+        cc.close()
+        if not listed:
+            try:
+                ingest.ingest_message(accounts.get(gone["account"]), gone["src_folder"], gone["message_id"])
+            except Exception as e:                # the next open of the folder has another chance
+                print(f"[pending] reading a discarded move's message back: {_sanitize_conn_error(e)}", flush=True)
+        return True
+    try:
+        ok = gates.run(row["account"], job, priority=gates.Priority.INTERACTIVE, deadline=PENDING_WAIT)
+    except gates.Busy:
+        return {"ok": False, "busy": True}, 409
+    if not ok:
+        return {"ok": False}, 404
+    _after_readmut(None)
+    return {"ok": True}, 200
 
 
 def do_write(path, body):
@@ -3470,7 +3514,7 @@ def post_body_cap(path):
     return MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
 
 
-_UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/stats",
+_UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/stats",
              "/api/ai/draft-ahead"}   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
                                       # or the tick's own events would hold the vacation gate open forever
 
@@ -4254,6 +4298,8 @@ class H(BaseHTTPRequestHandler):
                 self._json(search_json(q))
             elif u.path == "/api/outbox":
                 self._json(outbox.list_recent(int(q.get("limit", ["50"])[0])))
+            elif u.path == "/api/pending":
+                self._json(readmutq.list_open())
             elif u.path == "/api/contacts":
                 self._json(do_contacts(q.get("q", [""])[0]))
             elif u.path == "/api/contact":
@@ -4346,6 +4392,10 @@ class H(BaseHTTPRequestHandler):
                     print(f"[rsvp] error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "RSVP failed"}, 500
                 self._json(res, code)
+            elif u.path == "/api/pending/retry":
+                self._json(*do_pending_retry(int(b.get("id"))))
+            elif u.path == "/api/pending/discard":
+                self._json(*do_pending_discard(int(b.get("id"))))
             elif u.path == "/api/outbox/retry":
                 ok = outbox.retry(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
@@ -4624,8 +4674,8 @@ def _after_draft_removed(gone):
 
 
 def _after_readmut(_settled):
-    """readmutq.Applied or Restored: a queued move reached the server, or won't, and its message
-    is listed again."""
+    """readmutq.Applied or Restored, or the tray's Retry or Discard: a queued change reached the
+    server or won't, and its message is listed again; or a person asked it again or dropped it."""
     invalidate_stats()
     sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 

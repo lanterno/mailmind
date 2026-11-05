@@ -33,9 +33,9 @@ TOPICS = frozenset({
     "followup",           # the follow-ups changed
     "mute",               # a conversation was muted or unmuted
     "draft-ready",        # a reply draft written ahead is ready
-    "outbox",             # a send went out
+    "outbox",             # a send went out, or a change was queued: what the outbox panel shows
     "undo-done",          # an undo finished
-    "commands-changed",   # a queued move or flag change was applied
+    "commands-changed",   # a queued move or flag change was applied or refused, retried or discarded
 })
 RESYNC = "resync"         # this tab missed events it can't be told: fetch afresh
 RING = 512                # the events kept for tabs that reconnect

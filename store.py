@@ -69,6 +69,23 @@ def read_mut_set_dest(c, mid, dest):
     c.execute("UPDATE read_mutations SET dest=? WHERE id=?", (dest, mid))
 
 
+def read_mut_set_payload(c, mid, payload):
+    c.execute("UPDATE read_mutations SET payload=? WHERE id=?", (payload, mid))
+
+
+def read_mut_open(c, limit):
+    """The changes that haven't reached a server, newest first: waiting, being tried or given up."""
+    return c.execute("SELECT * FROM read_mutations WHERE applied=0 AND state IN ('queued', 'running', 'error') "
+                     "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def read_mut_open_counts(c):
+    """{state: how many} of the changes that haven't reached a server."""
+    return {r["state"]: r["n"] for r in c.execute(
+        "SELECT state, COUNT(*) n FROM read_mutations WHERE applied=0 "
+        "AND state IN ('queued', 'running', 'error') GROUP BY state")}
+
+
 def read_mut_latest_by_msgid(c, account, message_id):
     """The most recent read-mutation row for a message (any state) — undo uses it to decide
     cancel-vs-counter-move and to recover the resolved destination folder."""
@@ -245,6 +262,31 @@ def undo_pop(c):
         return None
     c.execute("DELETE FROM undo_entries WHERE id=?", (top["id"],))
     return json.loads(top["entry"])
+
+
+def undo_forget_move(c, account, message_id, src_folder):
+    """A queued move was dropped, so there is nothing to reverse: take the newest entry for it off
+    the stack, or out of its group."""
+    def names(e):
+        return (e.get("kind") in ("move", "gmail_archive") and e.get("account") == account
+                and e.get("message_id") == message_id and e.get("src_folder") == src_folder)
+    for r in c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC").fetchall():
+        held = json.loads(r["entry"])
+        if held.get("kind") != "bulk":
+            if names(held):
+                c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
+                return
+            continue
+        children = held["children"]
+        hit = next((i for i in range(len(children) - 1, -1, -1) if names(children[i])), None)
+        if hit is None:
+            continue
+        del children[hit]
+        if children:
+            c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps(held), r["id"]))
+        else:
+            c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
+        return
 
 
 def undo_entries(c):

@@ -130,6 +130,82 @@ def _restore(c, row, error):
     _give_back(c, row)
 
 
+def _take_up(c, row):
+    """The given-up change `row` is asked for again: as when it was queued, a move's message leaves
+    the lists and a flag change shows, its `was` now the flags it replaces this time."""
+    payload = json.loads(row["payload"] or "{}")
+    if row["op"] == "flag":
+        r = _flagged_row(c, row)
+        r = store.get_message(c, r["pk"]) if r is not None else None
+        if r is None:
+            return
+        flags = payload.get("flags") or {}
+        payload["was"] = {k: bool(r[k]) for k in flags}
+        store.read_mut_set_payload(c, row["id"], json.dumps(payload))
+        store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+        return
+    if row["message_id"]:
+        r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                      "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+    else:
+        r = store.get_message(c, payload.get("pk")) if payload.get("pk") else None
+    if r is not None:
+        store.mark_pending_removal(c, r["pk"], row["id"])
+
+
+def list_open(limit=100):
+    """What the pending-changes tray shows: the changes that haven't reached a server, and how many
+    wait and how many were given up on. A subject the row doesn't hold comes from its message."""
+    c = store.conn()
+    try:
+        items = []
+        for r in store.read_mut_open(c, limit):
+            payload = json.loads(r["payload"] or "{}")
+            subject = payload.get("subject")
+            if subject is None:
+                found = _flagged_row(c, r)
+                found = store.get_message(c, found["pk"]) if found is not None else None
+                subject = found["subject"] if found is not None else ""
+            items.append({"id": r["id"], "account": r["account"], "op": r["op"], "folder": r["src_folder"],
+                          "dest": r["dest"], "flags": payload.get("flags"), "state": r["state"],
+                          "attempts": r["attempts"], "error": r["last_error"], "subject": subject,
+                          "next_attempt_at": r["next_attempt_at"], "created_at": r["created_at"]})
+        counts = store.read_mut_open_counts(c)
+    finally:
+        c.close()
+    return {"items": items, "waiting": counts.get("queued", 0) + counts.get("running", 0),
+            "stuck": counts.get("error", 0)}
+
+
+def retry(mid):
+    """Ask again for a change the queue gave up on. False when it isn't one."""
+    def go(c):
+        row = store.read_mut_get(c, mid)
+        if row is None or not QUEUE.requeue(c, mid):
+            return False
+        _take_up(c, row)
+        return True
+    ok = _commit(go)
+    if ok:
+        kick()
+    return ok
+
+
+def discard(mid):
+    """Drop a change that hasn't reached a server: its message is as the server has it again, and
+    there is nothing for Undo to reverse. Returns the row, or None when it had reached one or is gone.
+    The caller holds the account's IMAP gate, so a try at it is over or hasn't begun."""
+    def go(c):
+        row = store.read_mut_get(c, mid)
+        if row is None or not QUEUE.cancel_unapplied(c, mid):
+            return None
+        _give_back(c, row)
+        if row["op"] != "flag" and row["message_id"]:
+            store.undo_forget_move(c, row["account"], row["message_id"], row["src_folder"])
+        return row
+    return _commit(go)
+
+
 def apply_one(mid):
     row = _commit(lambda c: QUEUE.claim(c, mid))
     if row is None:
