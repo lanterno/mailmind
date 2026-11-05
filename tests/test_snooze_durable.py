@@ -1,9 +1,11 @@
-"""A snooze is kept by message key and folder, so it outlives the row it was set on."""
+"""A snooze is kept by message key and folder, so it outlives the row it was set on. And a message
+that wakes is unread on the server too, or the next sync that read its flags would take that back."""
 from datetime import datetime, timedelta, timezone
 
 from fixtures import world as w
 
 RECEIPT = "ada-inbox-05-receipt.eml"
+CI = "ada-inbox-04-ci.eml"                               # already read
 
 
 def acct():
@@ -142,3 +144,77 @@ def test_a_forgotten_message_takes_its_snooze_with_it(world):
     assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
     c.commit()
     c.close()
+
+
+def test_waking_marks_read_mail_unread_on_the_server(app, world):
+    import readmutq
+    import server
+    snooze(app, world, CI)
+    app.clock.shift(timedelta(hours=7))
+    server.wake_snoozed()
+    assert copy(world, CI)["seen"] == 0
+    readmutq.drain()
+    [(_, _, _, flags)] = world.where(CI)["server"]
+    assert "\\Seen" not in flags and copy(world, CI)["seen"] == 0
+
+
+def test_a_sync_before_the_mark_lands_keeps_it_unread(app, world):
+    import ingest
+    import server
+    world.server.without.add("CONDSTORE")                       # so the sync reads the newest's flags
+    snooze(app, world, CI)
+    app.clock.shift(timedelta(hours=7))
+    server.wake_snoozed()
+    ingest.sync_new(acct())
+    assert copy(world, CI)["seen"] == 0
+
+
+def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
+    import readmutq
+    import server
+    snooze(app, world, CI)
+    app.clock.shift(timedelta(hours=7))
+    server.wake_snoozed()
+    world.server.fail("UID STORE", user=w.ADA)
+    readmutq.drain()
+    assert copy(world, CI)["seen"] == 1                         # as the server has it
+    assert app.get("/api/pending").json["stuck"] == 1
+    assert world.row(CI)["subject"] in listed(app)
+
+
+def test_waking_unread_mail_asks_nothing_of_the_server(app, world):
+    import server
+    snooze(app, world)
+    app.clock.shift(timedelta(hours=7))
+    server.wake_snoozed()
+    assert app.get("/api/pending").json["items"] == []
+
+
+def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
+    import readmutq
+    import server
+    monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+    snooze(app, world, CI)
+    app.clock.shift(timedelta(hours=7))
+    since = world.mark()
+    server.wake_snoozed()
+    readmutq.drain()
+    assert world.writes(since) == []
+    assert copy(world, CI)["seen"] == 0
+    assert app.get("/api/pending").json["waiting"] == 1
+
+
+def test_two_copies_waking_together_each_get_the_mark(app, world):
+    import server
+    import store
+    snooze(app, world, CI)
+    c = store.conn()
+    row = dict(c.execute("SELECT * FROM messages WHERE pk=?", (world.pk(CI),)).fetchone())
+    other = {k: v for k, v in row.items() if k != "pk"}
+    other.update(folder="Archive", uid=row["uid"] + 900)
+    c.execute(f"INSERT INTO messages({','.join(other)}) VALUES({','.join('?' * len(other))})", tuple(other.values()))
+    c.commit()
+    c.close()
+    app.clock.shift(timedelta(hours=7))
+    server.wake_snoozed()
+    assert copy(world, CI)["seen"] == 0 and copy(world, CI, "Archive")["seen"] == 0
