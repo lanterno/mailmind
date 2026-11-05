@@ -323,14 +323,16 @@ automatically.
 - **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill
   beside the sync status reads "Studio sync in 8 min"; it opens the invite or dismisses,
   and turns into one desktop notification when the tab is in the background.
-- **Triage survives an outage.** Archive, trash, junk and move queue durably with an
-  optimistic local update and an undo, then re-apply exactly once when IMAP returns. The
+- **Triage survives an outage.** Archive, trash, junk, move, read marks and stars queue
+  durably with an optimistic local update (and an undo for the moves), then re-apply exactly
+  once when IMAP returns. The
   message leaves the list at once but MailMind keeps it until the move lands, so a move the
   server refuses, or one the queue gives up on, puts it back where it is, and Undo of a move
   that hasn't gone out restores it without asking the server.
 - **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
   mail when you open it, but writes nothing to a mail server. Its connections can only read,
-  sends and moves wait in their queues for a normal run, and what can't wait is refused.
+  sends, moves, read marks and stars wait in their queues for a normal run, and what can't wait
+  is refused.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder. A star
@@ -513,8 +515,8 @@ back, and the startup line `[imap] …` says how many accounts asked.
 `python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs every 5 minutes
 and at once when IDLE hears new mail, and triages what arrived on a schedule of its own, so a
 slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one serves
-read-only: it writes nothing to a mail server, so sends and moves wait in their queues until a
-full run, and it syncs nothing in the background. `just dev` does that.
+read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
+queues until a full run, and it syncs nothing in the background. `just dev` does that.
 
 **CLI curation** (`manage.py`) — works across every account:
 
@@ -541,7 +543,7 @@ python3 manage.py expire all --dry         # preview what the expiry rules would
 | Variable | Effect |
 |---|---|
 | `MAILMIND_HOME` | The data directory: the database, config, rules, saved views and audit trails. Unset, the repo folder, where they have always lived. It must already exist; MailMind never creates it. Every command reads it: the server, `ingest.py`, `summarize.py`, `manage.py`, `config.py check`, `export.py`. |
-| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends and moves wait in their queues, flags, drafts, sweeps and unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves and flag changes wait in their queues, drafts, sweeps and unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |

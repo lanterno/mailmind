@@ -406,7 +406,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   inputs leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too.
   The queue deletes the rows it marked once the move lands. A refusal (`apply_queued_mutation`
   returns `refused` or `no_folder`), a give-up or a removed account puts the row in `error` and
-  clears the mark (`store.restore_pending`), and so does Undo of a move not yet applied.
+  clears the mark (`store.restore_pending`), and so does Undo of a move not yet applied. A read
+  mark or star queues the same way (`_readmut_enqueue_flags`): the local row shows it at once,
+  and the queue row's payload keeps the flags it replaced (`was`), which a refusal or a give-up
+  puts back.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It and `outbox.py` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
@@ -425,8 +428,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
   which refuses any command not known to only read. `smtpsend.smtp_connect` and `_unsub_oneclick_post` refuse too. `ReadOnlyError` is a
-  member of `mailops._UNREACHABLE`, so a move queues as it does offline, and both queues' drains
-  wait for a full run. What nothing queues (a flag, a draft, a sweep) answers 409 through
+  member of `mailops._UNREACHABLE`, so a move or a flag change queues as it does offline, and
+  both queues' drains wait for a full run. What nothing queues (a draft, a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
   `_imap_mutate` returns `(False, None)`, and trash, archive, junk and move answer `ok: false`

@@ -528,13 +528,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     ignores `ingest_message` returning 0. A refused unarchive therefore reports success, uses up
     the entry, and leaves the message out of the list. Pinned by
     `test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone`.
-- **The offline queue's remaining gaps** · medium value · effort S —
-  - Marking read or starring while IMAP is away answers 500. `read_mutations.op` allows `flag` and
-    `apply_queued_mutation` handles it, but `do_write` never queues one. Pinned by
-    `test_marking_read_while_the_server_is_away_is_queued`. The read-only profile refuses the same
-    change with a 409 for the same reason; queueing it fixes both.
-  - The page doesn't know the profile. Read-only, a move or a send that waits in its queue looks
-    done. Say `profile` in `/api/digest` and show it beside the sync status.
+- **The page doesn't know the profile** · medium value · effort S — read-only, a move, a flag
+  change or a send that waits in its queue looks done. Say `profile` in `/api/digest` and show it
+  beside the sync status.
 - **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
   - `outbox.send_one` returns from a failed attempt before it publishes `outbox.Sent`, so no
     `outbox` event goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
