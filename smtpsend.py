@@ -150,6 +150,18 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
             pass
 
 
+def permanent(e):
+    """Whether the server refused for good: a 5xx reply, or every recipient refused with one. Sent
+    again it gets the same answer, and a refused login sent again counts toward a lockout. A 4xx
+    reply, a dropped connection or a timeout may pass."""
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        codes = [v[0] for v in (e.recipients or {}).values() if isinstance(v, tuple) and v]
+        return bool(codes) and all(isinstance(k, int) and 500 <= k < 600 for k in codes)
+    if isinstance(e, smtplib.SMTPResponseException):
+        return isinstance(e.smtp_code, int) and 500 <= e.smtp_code < 600
+    return False
+
+
 def sanitize_smtp_error(e):
     """Fixed, secret-free vocabulary — never echoes recipients, banner, or AUTH state."""
     if isinstance(e, smtplib.SMTPAuthenticationError):

@@ -240,7 +240,11 @@ def send_one(oid):
             smtpsend.send(acct, row["raw"], json.loads(row["envelope"]))  # lock-free: SMTP != IMAP ops
         except Exception as e:
             err = smtpsend.sanitize_smtp_error(e)
-            terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
+            if smtpsend.permanent(e):          # a 5xx: the same answer again, so no retry
+                _commit(lambda c: QUEUE.give_up(c, row, err))
+                terminal, delay = True, 0
+            else:
+                terminal, delay = _commit(lambda c: QUEUE.retry_later(c, row, err, _now()))
             print(f"[outbox] send #{oid} failed ({err}); "
                   f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
             bus.publish(Failed(oid, row["account"], terminal))
