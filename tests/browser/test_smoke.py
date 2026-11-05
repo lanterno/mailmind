@@ -937,3 +937,24 @@ def test_accessibility_does_not_get_worse(page, world, request):
               for s in got}
     assert not any(worse.values()), f"new accessibility findings: {worse}"
     assert not any(better.values()), f"fewer findings than the baseline, so lower it with --update-golden: {better}"
+
+
+def test_the_page_takes_what_a_verdict_asks_from_the_server(page, world, anthropic_api):
+    import store
+    c = store.conn()
+    try:
+        for name, importance, category, action in (
+                (LUNCH[1], 5, "action-needed", "Reply to Lin"),         # needs you, and on the agenda
+                ("ada-inbox-09-rfc2047-folded.eml", 1, "info", ""),     # safe to file
+                ("ada-inbox-05-receipt.eml", 3, "finance", "")):        # neither
+            store.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
+                               "2026-11-02T11:00:00+00:00")
+        c.commit()
+    finally:
+        c.close()
+    page.goto("/")
+    expect(page.locator('.bf-tally[data-brief="needs"]')).to_contain_text("1 needs you")
+    expect(page.locator('.bf-tally[data-brief="commits"]')).to_contain_text("1 commitment")
+    expect(page.locator(".bf-tidy")).to_contain_text("1 low-priority message the AI rates as safe to file")
+    expect(page.locator("#rows .row")).to_have_count(1)                 # the Needs you tab
+    clean(page)

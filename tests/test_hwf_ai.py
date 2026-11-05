@@ -401,13 +401,20 @@ def test_hwf_the_tick_drafts_by_the_same_bar(app, world, ai, monkeypatch, presen
     assert got == [want for _, want in KICK_BAR]
 
 
-def test_hwf_the_client_kick_bar_mirrors_the_server(tmp_path):
+def test_hwf_the_client_kick_bar_is_what_the_server_says(app, world, tmp_path):
+    # The page has no copy of the rule. It reads `reply_worthy` off the row the server listed, and
+    # that is the bar the kick route holds to, tested above.
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
     with open(os.path.join(os.path.dirname(__file__), "..", "dashboard.html"), encoding="utf-8") as f:
         fn = re.search(r"function _draftEligibleClient\(it\)\{[^{}]*\}", f.read()).group(0)
-    items = [{"importance": i, "category": c, "action": a} for (i, c, a), _ in KICK_BAR]
+    pk = world.pk(QUILT)
+    items = []
+    for (importance, category, action), _ in KICK_BAR:
+        summarize_as(pk, importance, category, action)
+        [row] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"] if i["pk"] == pk]
+        items.append(row)
     out = subprocess.run([node, "-e", fn + f"\nconsole.log(JSON.stringify({json.dumps(items)}"
                                            ".map(it => !!_draftEligibleClient(it))));"],
                          capture_output=True, text=True, timeout=20, cwd=tmp_path)
