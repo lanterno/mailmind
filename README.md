@@ -138,7 +138,7 @@ and the Claude API.
   destructive verbs live on `#`/Delete/Backspace, and `z` — or a floating Undo
   button — reverses archive, delete, junk, move, snooze and mute, server-side. A reversal the
   server refuses is never reported as done, and when a group comes back only in part, what
-  couldn't be restored stays for the next `z`.
+  couldn't be restored stays for the next `z`. Undo survives a restart.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
   without opening it.
 - **Conversations file whole.** On a conversation — its row, the thread reader, `e`/`d`

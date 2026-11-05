@@ -458,12 +458,14 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   (`ingest._refresh_flags`) and writes each change only where the row still holds the flags it
   read (a click may land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag
   change still queued or a move pending.
-- Undo is an in-memory LIFO `_undo_stack` — **lost on restart**, by design. Bulk actions
-  push one grouped entry with children. `do_undo` tries every child, newest first; the ones it
+- Undo is a LIFO stack in the database (`undo_entries`, migration 25; `store.undo_push`,
+  `undo_pop`, `undo_put_back`), so it outlives a restart and is the same through either door
+  (decision D3). It keeps the newest `UNDO_MAX` entries, and an entry leaves it, committed, before
+  any server is asked to reverse it. Bulk actions push one grouped entry with children. `do_undo` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
   the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
-  (`mailops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the process's life:
-  the frontend's `undoGroup()` is a UUID, since the stack outlives a page load.
+  (`mailops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
+  life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
