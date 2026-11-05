@@ -155,9 +155,8 @@ def test_reply_later_pins_and_unpins(app, golden, world):
     post(app, golden, "reply later to nothing", "/api/replylater", {})
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: set_replylater stores the anchor pk as last_msg_ts")
 def test_reply_later_records_when_the_thread_last_moved(app, world):
-    client = world.row("bea-inbox-01-client.eml")
+    client = world.row("bea-inbox-01-client.eml")           # its thread also holds a later draft of Bea's
     app.post("/api/replylater", {"pk": client["pk"]})
     [row] = rows("SELECT last_msg_ts FROM followups")
     assert row["last_msg_ts"] == client["ts"]
