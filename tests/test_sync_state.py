@@ -186,15 +186,14 @@ def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
     assert inbox() == []
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: reconcile prunes mail a sync stored after its SEARCH")
 def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
     import ingest
     import store
     real = store.reconcile
 
-    def sync_lands_first(c, account, folder, live, when):
+    def sync_lands_first(c, account, folder, live, when, **kw):
         world.deliver(w.ADA, "INBOX", late())       # the 300 s sync passes no IMAP gate
-        return real(c, account, folder, live, when)
+        return real(c, account, folder, live, when, **kw)
 
     monkeypatch.setattr(store, "reconcile", sync_lands_first)
     ingest.reconcile_account(acct())
