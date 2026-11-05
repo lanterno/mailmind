@@ -566,6 +566,15 @@ def rel_time_future(ts):
         return ""
 
 
+def _attention(r):
+    """What the verdict on row `r` asks of you. The page reads these and never works them out."""
+    imp, cat, act = r["importance"], r["category"], r["action"]
+    return {"needs_you": attention.needs_you(imp, cat, act),
+            "reply_worthy": attention.reply_worthy(imp, cat),
+            "commitment_worthy": attention.commitment_worthy(imp, cat, act),
+            "safe_to_file": attention.safe_to_file(imp, cat, act)}
+
+
 def digest_json(qs):
     min_imp = int(qs.get("min", ["1"])[0])
     account = qs.get("account", [None])[0] or None
@@ -579,7 +588,7 @@ def digest_json(qs):
         "alias": amap.get(r["account"]),
         "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-        "summary": r["summary"], "importance": r["importance"],
+        "summary": r["summary"], "importance": r["importance"], **_attention(r),
         "category": r["category"], "action": r["action"] or "", "link": deep_link(r, wmap),
         "bucket": (r["bucket"] if "bucket" in keys else None),
         "confidence": (r["confidence"] if "confidence" in keys else None),
@@ -966,7 +975,7 @@ def snoozed_in(account, offset, limit):
     rows = c.execute(
         """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
-                  m.snoozed_until, s.importance
+                  m.snoozed_until, s.importance, s.category, s.action
            FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
            WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
            ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
@@ -981,7 +990,7 @@ def snoozed_in(account, offset, limit):
         "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
         "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"], "thread_id": r["thread_id"],
+        "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
     } for r in rows]
     return {"ok": True, "account": account, "folder": "__snoozed__", "items": items, "snoozed": True,
             "total": total, "offset": offset, "has_more": offset + len(items) < total}
@@ -1268,7 +1277,7 @@ def messages_in(account, folder, offset, limit, group=False):
             "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
             "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
             "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-            "importance": r["importance"], "thread_id": r["thread_id"],
+            "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
             "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
             "ts": r["ts"], "account": account,
         }
@@ -1333,7 +1342,7 @@ def search_json(qs):
     try:
         if match is not None:
             sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
-                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,
+                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action,
                           bm25(msg_fts,8.0,4.0,4.0,2.0,1.0) AS score
                    FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid
                    LEFT JOIN summaries s ON s.message_pk=m.pk
@@ -1343,7 +1352,7 @@ def search_json(qs):
             args = [match, *params, limit + 1, offset]
         else:
             sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
-                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance
+                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action
                    FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
                    WHERE 1=1{where_sql} ORDER BY m.ts DESC LIMIT ? OFFSET ?""")
             args = [*params, limit + 1, offset]
@@ -1362,7 +1371,7 @@ def search_json(qs):
         "date": (r["date_iso"] or "")[:10],
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
         "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"],
+        "importance": r["importance"], **_attention(r),
     } for r in rows]
     return {"ok": True, "query": q, "scope": scope, "items": items,
             "offset": offset, "has_more": has_more, "generated": now_iso()}
