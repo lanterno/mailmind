@@ -218,6 +218,28 @@ def cmd_inventory(accts):
                 pass
 
 
+def _prune_moved(acct, moved, stragglers):
+    """The local rows of what a sweep moved, found by Message-ID: a UIDVALIDITY change no sync has
+    seen yet leaves that good, where a UID may be another row's. A message with none goes by UID."""
+    import store
+    left = set(stragglers)
+    c = store.conn()
+    try:
+        for r in moved:
+            if r["uid"] in left:
+                continue
+            if not r["mid"]:
+                store.delete_by_uids(c, acct["email"], "INBOX", [r["uid"]])
+                continue
+            row = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
+                            (acct["email"], r["mid"])).fetchone()
+            if row:
+                store.delete_message(c, row["pk"])
+        c.commit()
+    finally:
+        c.close()
+
+
 def sweep_account(acct, dry=False):
     """Dry-run plan or verified move of an account's junk buckets to Trash.
     Prunes matching local DB rows on a real run. Returns a result dict."""
@@ -244,12 +266,7 @@ def sweep_account(acct, dry=False):
         out["error"] = f"{type(e).__name__}: {e}"
         return out
     out["moved"], out["stragglers"] = moved, stragglers
-    moved_uids = [r["uid"] for r in junk_rows if r["uid"] not in set(stragglers)]
-    import store
-    c = store.conn()
-    store.delete_by_uids(c, acct["email"], "INBOX", moved_uids)  # don't re-ghost swept mail
-    c.commit()
-    c.close()
+    _prune_moved(acct, junk_rows, stragglers)        # don't re-ghost swept mail
     return out
 
 
@@ -306,17 +323,7 @@ def sweep_account_ai(acct, dry=False):
         except Exception:
             pass
     out["moved"], out["stragglers"] = moved, stragglers
-    strag = set(stragglers)
-    c = store.conn()
-    for t in targets:                       # prune by Message-ID (validity-independent)
-        if t["uid"] in strag:
-            continue
-        row = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
-                        (acct["email"], t["mid"])).fetchone()
-        if row:
-            store.delete_message(c, row["pk"])
-    c.commit()
-    c.close()
+    _prune_moved(acct, targets, stragglers)
     return out
 
 
