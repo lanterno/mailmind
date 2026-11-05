@@ -121,9 +121,12 @@ def _resolve_dest(s, op, acct):
 def apply_queued_mutation(row):
     """Worker entry for the offline read-mutation queue. Re-applies a queued mutation against the
     live server, resolving the message by Message-ID (NOT the stale pk/uid — reconcile may have
-    re-numbered it). Returns (applied_ok, scrubbed_err). Raises a _UNREACHABLE member on connection
-    failure (worker backs off + retries). A command-level IMAP4.error, or a message already moved/
-    gone, counts as DONE (exactly-once — never retried forever). Used ONLY by readmutq.py."""
+    re-numbered it). Returns None once the server holds the change, or when the message had
+    already left its folder (exactly-once: never retried forever). Returns a fixed reason when the
+    change didn't happen and no retry will make it: "refused" (the server answered NO or BAD) or
+    "no_folder" (the account has no folder to move it to); the message is still where it was.
+    Raises a _UNREACHABLE member on connection failure (worker backs off + retries). Used ONLY by
+    readmutq.py."""
     acct = accounts.get(row["account"])
     op, src, dest = row["op"], row["src_folder"], row["dest"]
     mid = (row["message_id"] or "").strip()
@@ -133,35 +136,35 @@ def apply_queued_mutation(row):
         s.select(src, readonly=False)
         uid = _uid_by_msgid(s, mid) or (int(payload["uid"]) if payload.get("uid") else None)
         if not uid:
-            return (True, None)                       # already gone → exactly-once done
-        if op == "flag":
+            return None                               # already gone → exactly-once done
+        if op == "flag":                              # a refusal raises IMAP4.error: refused, below
             for k, v in (payload.get("flags") or {}).items():
                 if k in _FLAG:
-                    _ignoring_refusal(s.add_flags if v else s.remove_flags, [uid], [_FLAG[k]])
+                    (s.add_flags if v else s.remove_flags)([uid], [_FLAG[k]])
         elif op == "archive" and payload.get("is_gmail"):
-            _ignoring_refusal(s.remove_labels, [uid], ["\\Inbox"])   # Gmail archive = drop the Inbox label
+            s.remove_labels([uid], ["\\Inbox"])       # Gmail archive = drop the Inbox label
         else:                                          # trash / junk / move / non-Gmail archive
             d = dest or _resolve_dest(s, op, acct)     # resolve junk/archive folder online if not stored
             if not d:
-                return (True, "no dest folder")        # no target → logical done (don't loop forever)
+                return "no_folder"                     # no target: it stays (don't loop forever)
             if d != dest and row["id"]:                # persist the resolved dest so undo can find it later
                 cc = store.conn()
                 store.read_mut_set_dest(cc, row["id"], d)
                 cc.commit()
                 cc.close()
             if _already_in(s, d, mid, src):            # an earlier try's COPY landed, then its connection
-                _ignoring_refusal(s.add_flags, [uid], ["\\Deleted"])   # dropped: only the original is left
-                _ignoring_refusal(s.expunge, [uid])                    # to remove
+                s.add_flags([uid], ["\\Deleted"])        # dropped: only the original is left
+                s.expunge([uid])                       # to remove
             else:
                 s.move([uid], d)
-        return (True, None)
+        return None
 
     try:
         return _do_imap(acct, run)
     except _UNREACHABLE:
         raise                                          # connection-level → worker retries with backoff
-    except imaplib.IMAP4.error as e:                   # command NO/BAD (folder/UID gone, auth) → logical, done
-        return (True, type(e).__name__)
+    except imaplib.IMAP4.error:                        # command NO/BAD: it didn't happen, and won't
+        return "refused"
 
 
 def _mk_move_undo(row, dest, label):

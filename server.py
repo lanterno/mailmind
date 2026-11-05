@@ -430,7 +430,7 @@ def backfill_round():
     c = store.conn()
     try:
         rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
-                         "ORDER BY ts DESC LIMIT 12").fetchall()
+                         "AND pending_removal IS NULL ORDER BY ts DESC LIMIT 12").fetchall()
     finally:
         c.close()                        # always close, even if the SELECT raises
     if not rows:
@@ -797,7 +797,7 @@ def _stored_folder_list(account):
     try:
         counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
             "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
-            "GROUP BY folder", (account,))}
+            "AND pending_removal IS NULL GROUP BY folder", (account,))}
         for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
             counts.setdefault(r["folder"], (0, 0))
     finally:
@@ -858,7 +858,8 @@ def folders_for(account):
     acct = accounts.get(account)
     out = _folders_list_cached(account, acct)
     c = store.conn()
-    snoozed = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL",
+    snoozed = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
+                        "AND pending_removal IS NULL",
                         (account,)).fetchone()[0]
     muted = store.muted_count(c, account)
     waiting = store.waiting_count(c, account)
@@ -876,9 +877,10 @@ def snoozed_in(account, offset, limit):
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   m.snoozed_until, s.importance
            FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-           WHERE m.account=? AND m.snoozed_until IS NOT NULL
+           WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
            ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
-    total = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL",
+    total = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
+                        "AND pending_removal IS NULL",
                       (account,)).fetchone()[0]
     c.close()
     items = [{
@@ -929,7 +931,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
     rows = c.execute(
         """SELECT m.pk, m.account, m.folder, m.thread_id, a.part_id
            FROM attachments a JOIN messages m ON m.pk=a.message_pk
-           WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?)
+           WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?) AND m.pending_removal IS NULL
              AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
            ORDER BY m.ts DESC, m.pk DESC""",
         (int(now.timestamp()) - days * 86400, account, account)).fetchall()
@@ -1072,12 +1074,12 @@ def messages_in(account, folder, offset, limit, group=False):
                    MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
                    MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
                  FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                 WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL """
+                 WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
             + _MUTED_EXCL.format(t="m") + """)
                SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
             (account, folder, limit, offset)).fetchall()
         total = c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
-                          "WHERE account=? AND folder=? AND snoozed_until IS NULL "
+                          "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
                           + _MUTED_EXCL.format(t="messages"),
                           (account, folder)).fetchone()[0]
     else:
@@ -1086,12 +1088,12 @@ def messages_in(account, folder, offset, limit, group=False):
                       m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                       s.summary, s.action, s.category
                FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-               WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL """
+               WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
             + _MUTED_EXCL.format(t="m") + """
                ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
             (account, folder, limit, offset)).fetchall()
         total = c.execute("SELECT COUNT(*) FROM messages "
-                          "WHERE account=? AND folder=? AND snoozed_until IS NULL "
+                          "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
                           + _MUTED_EXCL.format(t="messages"),
                           (account, folder)).fetchone()[0]
     c.close()
@@ -1123,7 +1125,8 @@ def thread_json(account, thread_id):
     rows = c.execute(
         """SELECT pk, folder, from_addr, from_name, subject, date_iso, ts, snippet,
                   seen, flagged, answered, has_attach, is_junk, message_id
-           FROM messages WHERE account=? AND thread_id=? ORDER BY ts ASC, pk ASC""",
+           FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
+           ORDER BY ts ASC, pk ASC""",
         (account, thread_id)).fetchall()
     c.close()
     items, seen_ids = [], set()
@@ -1155,6 +1158,7 @@ def search_json(qs):
     limit = max(1, min(200, int(qs.get("limit", ["80"])[0])))
     offset = max(0, int(qs.get("offset", ["0"])[0]))
     match, where, params = search.build(q)
+    where = where + ["m.pending_removal IS NULL"]      # on its way out by a queued move
     if scope != "all" and account:
         where = where + ["m.account = ?"]
         params = params + [account]
@@ -1202,9 +1206,10 @@ _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk",
 
 
 def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
-    """IMAP was unreachable — durably queue this move-type mutation, apply the optimistic local
-    mirror (drop the row, like the online path), push the undo descriptor, and report it queued.
-    readmutq re-applies it (resolving dest online) once the server is reachable again."""
+    """IMAP was unreachable — durably queue this move-type mutation, take the message out of the
+    lists (its row stays, marked pending_removal, until the move settles), push the undo
+    descriptor, and report it queued. readmutq re-applies it (resolving dest online) once the
+    server is reachable again, and lists the message again if the move doesn't happen."""
     c = store.conn()
     row = store.get_message(c, pk)
     if not row:
@@ -1241,7 +1246,7 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
                 "account": acct, "src_folder": row["folder"], "dest_folder": dest or "",
                 "message_id": mid, "label": _UNDO_LABEL.get(op, "Updated"),
                 "subject": row["subject"], "thread_id": row["thread_id"]}
-    store.delete_message(c, pk)                 # optimistic local mirror — same as the online path
+    store.mark_pending_removal(c, pk, _id)      # out of the lists, as the online path's move takes it
     c.commit()
     c.close()
     if undo:
@@ -1338,7 +1343,7 @@ def do_thread_file(path, body):
     elif (row["thread_id"] or "").strip():
         pks = [r["pk"] for r in c.execute(
             "SELECT pk FROM messages WHERE account=? AND folder=? AND thread_id=? "
-            "ORDER BY ts DESC, pk DESC", (row["account"], row["folder"], row["thread_id"]))]
+            "AND pending_removal IS NULL ORDER BY ts DESC, pk DESC", (row["account"], row["folder"], row["thread_id"]))]
     else:
         pks = [pk]
     c.close()
@@ -1388,18 +1393,26 @@ def _reverse_one(d):
 def _reverse_held(d):
     kind = d.get("kind")
     if kind in ("move", "gmail_archive") and d.get("message_id"):
-        # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued or
-        # claimed-but-not-applied), CANCEL it and restore the optimistically-removed local row —
-        # no counter-move. If it already shipped, recover the dest the worker resolved online so
-        # the counter-move searches the RIGHT folder (the enqueued desc had an empty dest_folder
-        # for junk/archive).
+        # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued,
+        # claimed-but-not-applied, or given up), CANCEL it and list its message again: its row
+        # waited, marked, for the move to settle, so no server is asked. A row queued before
+        # migration 23 was dropped instead, and is re-ingested. If it already shipped, recover the
+        # dest the worker resolved online so the counter-move searches the RIGHT folder (the
+        # enqueued desc had an empty dest_folder for junk/archive).
         c = store.conn()
         q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
         if q is not None and not q["applied"]:
+            src = d.get("src_folder") or "INBOX"
             cancelled = readmutq.QUEUE.cancel_unapplied(c, q["id"])
-            c.commit(); c.close()
             if cancelled:
-                src = d.get("src_folder") or "INBOX"
+                store.restore_pending(c, q["id"])
+            listed = cancelled and c.execute(
+                "SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=? "
+                "AND pending_removal IS NULL", (d["account"], src, d["message_id"])).fetchone()
+            c.commit(); c.close()
+            if listed:
+                return True, d["account"], src
+            if cancelled:
                 try:
                     n = ingest.ingest_message(accounts.get(d["account"]), src, d["message_id"])
                 except Exception:
@@ -1699,7 +1712,7 @@ def documents_json(qs):
         "SELECT a.message_pk pk, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
         "       m.account, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, m.folder "
         "FROM attachments a JOIN messages m ON m.pk=a.message_pk "
-        "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' "
+        "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
         f"  AND m.account IN ({ph}) "
         "ORDER BY m.ts DESC", list(enabled)).fetchall()
     c.close()
@@ -1962,7 +1975,7 @@ def _cleanup_sweep_targets(c, from_addr):
     it is — already filtered. Capped so a huge sender can't trigger a minutes-long IMAP-move burst."""
     return c.execute(
         "SELECT pk, account, folder, subject, seen FROM messages "
-        "WHERE lower(from_addr)=? AND folder='INBOX' ORDER BY ts DESC LIMIT ?",
+        "WHERE lower(from_addr)=? AND folder='INBOX' AND pending_removal IS NULL ORDER BY ts DESC LIMIT ?",
         (from_addr, _CLEANUP_SWEEP_CAP + 1)).fetchall()
 
 
@@ -2186,6 +2199,7 @@ def do_screener(account):
         """SELECT lower(from_addr) addr, MAX(from_name) name, COUNT(*) n,
                   MAX(ts) last, MAX(date_iso) iso
            FROM messages WHERE account=? AND folder='INBOX' AND from_addr!='' AND is_junk=0
+             AND pending_removal IS NULL
            GROUP BY lower(from_addr) ORDER BY last DESC""", (account,)).fetchall()
     c.close()
     items = []
@@ -2887,7 +2901,7 @@ def _snooze_until(body):
 def _snooze_pks(c, body):
     if body.get("thread_id") and body.get("account"):
         return [r["pk"] for r in c.execute(
-            "SELECT pk FROM messages WHERE account=? AND thread_id=?",
+            "SELECT pk FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL",
             (body["account"], body["thread_id"]))]
     if isinstance(body.get("pks"), list):
         return [int(x) for x in body["pks"]][:_DO_CAP]   # cap the one bulk-array endpoint server-side, not just at plan time
@@ -3614,11 +3628,11 @@ def _do_resolve(match, where, params, cap):
         if match is not None:
             base = ("FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
                     "LEFT JOIN summaries s ON s.message_pk=m.pk "
-                    f"WHERE msg_fts MATCH ?{where_sql}")
+                    f"WHERE msg_fts MATCH ? AND m.pending_removal IS NULL{where_sql}")
             bargs = [match, *params]
         else:
             base = ("FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
-                    f"WHERE 1=1{where_sql}")
+                    f"WHERE m.pending_removal IS NULL{where_sql}")
             bargs = [*params]
         try:
             count = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
@@ -4300,8 +4314,9 @@ def _after_send(_sent):
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 
 
-def _after_readmut(_applied):
-    """readmutq.Applied: a queued move reached the server."""
+def _after_readmut(_settled):
+    """readmutq.Applied or Restored: a queued move reached the server, or won't, and its message
+    is listed again."""
     invalidate_stats()
     sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 

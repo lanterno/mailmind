@@ -23,7 +23,8 @@ _wired = []                             # wire()'s subscriptions, each a functio
 
 def wire(server):
     """Subscribe the server to what the legacy workers publish on mailmind.platform.bus: a send
-    that went out and a queued move applied refresh the stats and tell the open tabs, and IDLE's
+    that went out, a queued move applied and one that won't be refresh the stats and tell the open
+    tabs, and IDLE's
     news syncs those accounts. An account added, changed or removed brings IDLE's workers in line
     (realtime.reconcile, which does nothing until IDLE starts). Wiring again replaces the last
     wiring. Starts nothing.
@@ -33,6 +34,7 @@ def wire(server):
     unwire()
     _wired.extend([bus.subscribe(outbox.Sent, server._after_send),
                    bus.subscribe(readmutq.Applied, server._after_readmut),
+                   bus.subscribe(readmutq.Restored, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle)])
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
                   (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))

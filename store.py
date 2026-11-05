@@ -114,6 +114,24 @@ def delete_message(c, pk):
     c.execute("DELETE FROM messages WHERE pk=?", (pk,))
 
 
+def mark_pending_removal(c, pk, mutation_id):
+    """Leave message `pk` out of every list while the queued move `mutation_id` (a read_mutations
+    id) takes it away. The row stays, so a move that doesn't happen can list it again."""
+    c.execute("UPDATE messages SET pending_removal=? WHERE pk=?", (mutation_id, pk))
+
+
+def restore_pending(c, mutation_id):
+    """The queued move `mutation_id` won't happen: list its message again. Returns how many rows
+    it brought back."""
+    return c.execute("UPDATE messages SET pending_removal=NULL WHERE pending_removal=?",
+                     (mutation_id,)).rowcount
+
+
+def pending_removal_pks(c, mutation_id):
+    """The rows the queued move `mutation_id` is taking away."""
+    return [r["pk"] for r in c.execute("SELECT pk FROM messages WHERE pending_removal=?", (mutation_id,))]
+
+
 def get_watermark(c, account, folder="INBOX"):
     r = c.execute("SELECT last_uid FROM sync_state WHERE account=? AND folder=?",
                   (account, folder)).fetchone()
@@ -768,7 +786,7 @@ def needs_summary(c, limit=200):
     return c.execute(
         """SELECT m.* FROM messages m
            LEFT JOIN summaries s ON s.message_pk = m.pk
-           WHERE m.is_junk = 0 AND s.message_pk IS NULL
+           WHERE m.is_junk = 0 AND s.message_pk IS NULL AND m.pending_removal IS NULL
            ORDER BY m.ts DESC LIMIT ?""", (limit,)
     ).fetchall()
 
@@ -788,7 +806,7 @@ def save_summary(c, pk, summary, importance, category, action, model, created_at
 def digest(c, min_importance=1, account=None, limit=300):
     q = """SELECT m.*, s.summary, s.importance, s.category, s.action
            FROM messages m JOIN summaries s ON s.message_pk = m.pk
-           WHERE m.is_junk = 0 AND m.snoozed_until IS NULL AND s.importance >= ?
+           WHERE m.is_junk = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance >= ?
              AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)"""
     args = [min_importance]
     if account:

@@ -97,12 +97,12 @@ def ask(account, question):
         sql = (f"SELECT {cols}, bm25(msg_fts,6.0,3.0,3.0,2.0,2.0,4.0) AS score "
                "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
                "LEFT JOIN summaries s ON s.message_pk=m.pk "
-               f"WHERE msg_fts MATCH ? AND {acct_clause} "
+               f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
                "ORDER BY score ASC, m.ts DESC LIMIT ?")
         args = [match, *acct_params, CAND_LIMIT]
     else:                                                 # no content terms → recent mail
         sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
-               f"WHERE {acct_clause} ORDER BY m.ts DESC LIMIT ?")
+               f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
         args = [*acct_params, CAND_LIMIT]
     c = store.conn()
     try:                                                  # finally-close: release the conn on ANY error, not just OperationalError

@@ -56,7 +56,7 @@ def _top_rows(c, accounts_set, n=TOP_N):
     sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
-           "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND s.importance>=2 "
+           "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = []
     if accounts_set:
@@ -183,7 +183,7 @@ def _delta_rows(c, accounts_set, since_ts, n=DELTA_TOP_N):
            # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
            # so it matches the pill count; only drop spam/blocked and snoozed/muted.
            "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
-           "AND m.snoozed_until IS NULL AND m.ts > ? "
+           "AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND m.ts > ? "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = [since_ts]
     if accounts_set:
