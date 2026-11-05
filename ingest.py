@@ -64,7 +64,8 @@ def text_body(msg):
     body = plain
     if body is None and htmltxt is not None:
         body = _html_to_snippet_text(htmltxt)
-    body = re.sub(r"[ \t]+", " ", (body or "")).strip()
+    body = store._INVIS.sub("", (body or "").replace("\r\n", "\n").replace("\r", "\n"))
+    body = re.sub(r"[ \t\u00a0]+", " ", body).strip()
     body = re.sub(r"\n\s*\n+", "\n\n", body)
     return body[:BODY_CHARS]
 

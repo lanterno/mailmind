@@ -369,7 +369,7 @@ def upsert_message(c, m):
            VALUES (:account,:kind,:folder,:uid,:message_id,:gmail_thread,:from_addr,
             :from_name,:subject,:date_iso,:ts,:snippet,:bucket,:confidence,:reason,:is_junk)
            ON CONFLICT(account,folder,uid) DO UPDATE SET
-            subject=excluded.subject, snippet=excluded.snippet,
+            subject=excluded.subject, snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet),
             bucket=excluded.bucket, confidence=excluded.confidence,
             reason=excluded.reason, is_junk=excluded.is_junk
            RETURNING pk""",
