@@ -8,7 +8,7 @@ Grammar (tokenized with shlex so "quoted phrases" stay intact):
   bucket:VALUE  category:VALUE                     -> exact-match lane filters (bound)
   has:attachment                                  -> structured
   in:FOLDER  account:EMAIL                         -> structured exact
-  before:YYYY-MM-DD  after:YYYY-MM-DD              -> structured ts bound
+  before:YYYY-MM-DD  after:YYYY-MM-DD              -> structured ts bound, at local midnight
   -TOKEN                                           -> negation (FTS NOT / negated clause; mail with
                                                      no value for a negated field isn't excluded)
 
@@ -17,7 +17,7 @@ Injection-safe: FTS column specs are FIXED literals; every user value is FTS-quo
 structured values are bound `?` params. The parser is TOTAL — no input can raise.
 """
 import shlex
-from datetime import datetime, timezone
+from datetime import datetime
 
 _FTS_FIELDS = {"from": "{from_name from_addr}", "subject": "subject",
                "body": "body_text", "to": "recipients", "cc": "recipients"}   # To/Cc are indexed
@@ -40,11 +40,10 @@ def _q(v):
 
 
 def _ts(v):
+    """A date or time as seconds. With no zone it means this machine's, as the person typing it does:
+    before:2026-11-02 ends at that midnight here, not at UTC's."""
     try:
-        d = datetime.fromisoformat(v)
-        if d.tzinfo is None:
-            d = d.replace(tzinfo=timezone.utc)
-        return int(d.timestamp())
+        return int(datetime.fromisoformat(v).timestamp())
     except Exception:
         return None
 
