@@ -489,16 +489,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **Outbox: say when a send fails, retry afresh, send on time** · medium value · effort S —
-  - `outbox.send_one` returns from a failed attempt before it publishes `outbox.Sent`, so no
-    `outbox` event goes out. With SSE live, `loadOutbox`'s 20-second poll is off, so a send the outbox has given up
-    on still shows as pending. Pinned by `test_the_page_hears_when_the_outbox_gives_up`
-    (tests/browser).
-  - `/api/outbox/retry` keeps `attempts`, so one more failure gives up again. Pinned by
-    `test_hwf_a_manual_retry_gets_a_fresh_set_of_attempts`.
-  - The worker wakes on a 30-second poll, so a send goes out up to 30 s after its Undo window
-    ends. Wait until the next `next_attempt_at` instead. Pinned by
-    `test_hwf_a_send_goes_out_when_its_undo_window_ends`.
 - **The rules file can stop the app** · high value · effort S — `rules.save` writes
   `mailmind_rules.json` in place with default permissions. A failed write leaves it truncated.
   From then on every `rules.load` raises, so `/api/rules` answers 500, and the classifier's own

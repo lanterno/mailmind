@@ -266,8 +266,9 @@ automatically.
 
 ### Compose & send
 
-- **A durable outbox.** Queued mail survives a restart, retries with backoff, and
-  surfaces failures with a Retry button that reopens the composer intact. Each account's mail
+- **A durable outbox.** Queued mail survives a restart, goes out the moment its Undo
+  window ends, retries with backoff, and surfaces failures at once with a Retry button
+  that reopens the composer intact and starts the tries afresh. Each account's mail
   goes out in a lane of its own, so one account's unreachable server holds up no other's. Where
   the server doesn't file sent mail itself, a Sent copy that fails is tried again with the same
   backoff, never sending the message twice or filing it twice, and the outbox says so if it
