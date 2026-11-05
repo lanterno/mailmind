@@ -22,7 +22,7 @@ ACCOUNT = "ada@example.test"
 # (table, column): the version whose migration derives it; an upgrade from below that one may
 # change it.
 DERIVED = {("messages", "thread_id"): 5, ("messages", "body_text"): 6, ("messages", "recipients"): 10,
-           ("thread_summaries", "fingerprint"): 22}
+           ("thread_summaries", "fingerprint"): 22, ("messages", "message_key"): 30}
 DROPPED = {"notes": 18}                 # m18 retired the private notes, and their table
 
 
@@ -72,7 +72,7 @@ def seed(path):
     c.row_factory = sqlite3.Row             # as fts_index reads its rows
     c.execute("PRAGMA foreign_keys=ON")
     try:
-        for t in sorted(tables(c), key=lambda t: t != "messages"):    # what the rest refer to first
+        for t in sorted(tables(c), key=lambda t: (t != "messages", t != "message_identity")):    # what the rest refer to first
             columns = [(r["name"], r["type"]) for r in c.execute(f'PRAGMA table_info("{t}")')]
             for i in range(ROWS):
                 row = {name: made_up(t, name, kind, i) for name, kind in columns}
