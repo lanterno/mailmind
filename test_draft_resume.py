@@ -376,7 +376,9 @@ def test_copy_in_another_drafts_folder_is_removed_there():
     assert CALLS["append"][-1]["prev_folder"] == "Drafts" and len(CALLS["delete"]) == 1, CALLS
 
 
-def test_received_mail_in_a_drafts_named_folder_is_never_removed():
+def test_received_mail_a_row_points_at_is_never_removed():
+    """Until 2026-11 Edit registered a row for anything in a folder whose name held "draft", so old
+    rows may name received mail."""
     _fresh()
     c = store.conn()
     store.set_uidvalidity(c, ACCT, "Bank drafts", 912)
@@ -386,7 +388,14 @@ def test_received_mail_in_a_drafts_named_folder_is_never_removed():
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Bank drafts'").fetchone()
     c.close()
-    did = server._draft_info(row)["draft_id"]
+    assert server._draft_info(row) == {}                         # no Edit for it today
+    c = store.conn()
+    did = store.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
+                                 "message_id": "<stmt@bank.example.test>", "uidvalidity": 912,
+                                 "in_reply_to_pk": None, "mode": "new", "subject": "Your statement",
+                                 "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
+    c.commit()
+    c.close()
     _save(draft_id=did, text="Forwarding this to Bo.")
     assert CALLS["delete"] == [], CALLS["delete"]                # the statement stays where it is
     saved = _row(did)

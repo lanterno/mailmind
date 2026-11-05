@@ -35,6 +35,15 @@ def test_the_attribute_wins_over_the_name():
     assert roles.find(fs, "junk") == "Bulk orders"          # the server said so
 
 
+@pytest.mark.parametrize("name, says", [
+    ("Drafts", True), ("Draft", True), ("drafts", True), ("INBOX.Drafts", True), ("INBOX/Drafts", True),
+    ("[Gmail]/Drafts", True), ("[Google Mail]/Drafts", True),
+    ("Contract drafts", False), ("Clients/Draft", False), ("Folders/Drafts", False), ("INBOX/Clients/Drafts", False),
+    ("Sent", False), ("INBOX", False), ("", False), (None, False)])
+def test_a_name_alone_says_drafts_only_where_a_server_keeps_them(name, says):
+    assert roles.names_drafts(name) is says
+
+
 def test_a_shallower_folder_wins_over_a_deeper_one_of_the_same_name():
     fs = folders(("Folders/Archive",), ("Archive",), ("Folders", "\\Noselect"))
     assert roles.find(fs, "archive") == "Archive"

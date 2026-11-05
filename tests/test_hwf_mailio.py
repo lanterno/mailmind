@@ -623,6 +623,86 @@ def test_hwf_a_draft_delete_declines_when_uidvalidity_rolled(app, world):
     assert world.server.find(w.ADA, "Drafts", "<other-draft@example.test>") == [other]
 
 
+def filed(world, folder, name="<filed@example.test>", flags=(w.SEEN,), special="", email=w.ADA):
+    """A message in a folder of its own, on the server and synced. Returns its pk and UID."""
+    import accounts
+    import ingest
+    from fakes.imap_server import Mailbox
+    a = world.server.accounts[email]
+    with world.server.lock:
+        a.mailboxes[folder] = Mailbox(folder, special, uidvalidity=1_700_000_998)
+    uid = world.server.deliver(email, folder, w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID=name),
+                               flags=flags)
+    ingest.sync_folder(accounts.get(email), folder, full=True)
+    return q("SELECT pk FROM messages WHERE account=? AND folder=? AND uid=?", email, folder, uid)[0]["pk"], uid
+
+
+def old_row(folder, uid, name="<filed@example.test>", email=w.ADA):
+    """The `drafts` row Edit left, until 2026-11, on anything in a folder whose name held "draft"."""
+    import store
+    c = store.conn()
+    try:
+        did = store.draft_upsert(c, {"id": None, "account": email, "folder": folder, "uid": uid, "message_id": name,
+                                     "uidvalidity": store.get_uidvalidity(c, email, folder), "in_reply_to_pk": None,
+                                     "mode": "new", "subject": "Filed", "created_at": "2026-10-01T09:00:00",
+                                     "updated_at": "2026-10-01T09:00:00"})
+        c.commit()
+    finally:
+        c.close()
+    return did
+
+
+@pytest.mark.parametrize("folder", ["Contract drafts", "Clients/Draft"])
+def test_hwf_received_mail_in_a_folder_named_for_drafts_is_no_draft(app, world, folder):
+    pk, _ = filed(world, folder)
+    assert "is_draft" not in app.get(f"/api/message/{pk}/body").json
+    since = world.mark()
+    refused = app.post("/api/draft/resume", {"pk": pk})
+    assert (refused.status, refused.json["ok"]) == (400, False)
+    assert world.writes(since) == [] and q("SELECT id FROM drafts WHERE folder=?", folder) == []
+
+
+def test_hwf_discard_forgets_an_old_row_on_received_mail_and_keeps_the_mail(app, world):
+    _, uid = filed(world, "Contract drafts")
+    did = old_row("Contract drafts", uid)
+    since = world.mark()
+    assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"]
+    assert world.writes(since) == []
+    assert world.server.find(w.ADA, "Contract drafts", "<filed@example.test>") == [uid]
+    assert q("SELECT id FROM drafts WHERE id=?", did) == []
+
+
+def test_hwf_sending_keeps_received_mail_an_old_row_points_at(app, world):
+    import outbox
+    _, uid = filed(world, "Contract drafts")
+    did = old_row("Contract drafts", uid)
+    assert app.post("/api/send", new(idempotency_key="k-filed", draft_id=did)).json["ok"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+    assert world.server.find(w.ADA, "Contract drafts", "<filed@example.test>") == [uid]
+    assert q("SELECT id FROM drafts WHERE id=?", did) == []
+
+
+def test_hwf_a_drafts_folder_the_server_names_in_another_language_offers_edit(app, world):
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes["Drafts"].special = ""
+    pk, _ = filed(world, "Brouillons", name="<brouillon@example.test>", special="\\Drafts")
+    assert "is_draft" not in app.get(f"/api/message/{pk}/body").json     # no list yet: the name says nothing
+    assert app.get(f"/api/folders?account={w.ADA}").json["folders"]
+    assert app.get(f"/api/message/{pk}/body").json["is_draft"]
+    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+
+
+def test_hwf_a_message_the_server_flags_a_draft_offers_edit_in_any_folder(app, world):
+    pk, uid = filed(world, "Half written", name="<half@example.test>", flags=(w.SEEN, w.DRAFT))
+    assert app.get(f"/api/message/{pk}/body").json["is_draft"]
+    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+    did = q("SELECT id FROM drafts WHERE folder='Half written'")[0]["id"]
+    assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"]
+    assert world.server.find(w.ADA, "Half written", "<half@example.test>") == []
+
+
 # -- the folder rail -------------------------------------------------------
 
 def folders(app):
