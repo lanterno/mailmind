@@ -807,7 +807,6 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     assert not t.is_alive()
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: Retry keeps the attempt count, so one more failure gives up")
 def test_hwf_a_manual_retry_gets_a_fresh_set_of_attempts(app, world):
     import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)

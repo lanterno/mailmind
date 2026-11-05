@@ -242,7 +242,7 @@
    {
     "account": "ada@example.test",
     "answered_set": 0,
-    "attempts": 5,
+    "attempts": 0,
     "delivered": 1,
     "draft_deleted": 0,
     "envelope": "[\"lin@example.test\"]",

@@ -112,10 +112,10 @@ def test_a_crash_puts_a_running_row_back_with_its_gate_kept(q):
 
 
 def test_only_a_row_in_error_can_be_retried_and_it_goes_at_once(q):
-    failed, queued = add(q, "failed", state="error", next_attempt_at=NOW + 900, last_error="x"), add(q, "queued")
+    failed, queued = add(q, "failed", state="error", attempts=5, next_attempt_at=NOW + 900, last_error="x"), add(q, "queued")
     assert run(q, lambda c: q.requeue(c, failed)) is True
-    assert {k: row(q, failed)[k] for k in ("state", "next_attempt_at", "last_error")} == {
-        "state": "queued", "next_attempt_at": 0, "last_error": None}
+    assert {k: row(q, failed)[k] for k in ("state", "attempts", "next_attempt_at", "last_error")} == {
+        "state": "queued", "attempts": 0, "next_attempt_at": 0, "last_error": None}
     assert run(q, lambda c: q.requeue(c, queued)) is False
 
 
