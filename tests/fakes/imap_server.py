@@ -117,8 +117,8 @@ class Mailbox:
         return "\\Noselect" not in self.special
 
     def modseq_now(self):
-        """HIGHESTMODSEQ, with each message's own brought up to date. A test may change flags directly
-        and a client through STORE, so a change counts when someone next asks."""
+        """HIGHESTMODSEQ, with each message's own brought up to date. A STORE calls this, and a change
+        a test made directly counts when someone next asks."""
         for uid, msg in self.messages.items():
             flags = frozenset(msg.flags)
             if uid not in self.modseqs or self.modseqs[uid][1] != flags:
@@ -672,6 +672,7 @@ class Session:
         if op not in ("FLAGS", "+FLAGS", "-FLAGS"):
             raise _No(f"bad STORE item {op}", "BAD")
         flags = {_norm_flag(f) for f in values}
+        self.box.modseq_now()                           # so a change and its reversal count as two
         for uid, msg in list(self.box.messages.items()):
             if not want(uid):
                 continue
@@ -683,6 +684,7 @@ class Session:
                 msg.flags -= flags
             if not silent:
                 self.line(f"* {self.box.seq_of(uid)} FETCH (UID {uid} FLAGS (" + " ".join(sorted(msg.flags)) + "))")
+        self.box.modseq_now()
         self.ok(tag)
 
     def _copy(self, args):
