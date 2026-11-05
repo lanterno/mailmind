@@ -249,6 +249,15 @@ def test_hwf_rows_commit_one_by_one_and_the_watermark_moves_only_after_all(world
     assert [u for u in uids if u in stored()] == uids and watermark() == uids[-1]
 
 
+def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
+    import ingest
+    name = "ada-inbox-02-lunch-confirm.eml"
+    with world.server.lock:
+        world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags.add(w.SEEN)
+    ingest.sync_new(acct())
+    assert world.row(name)["seen"] == 1
+
+
 # -- reconcile -------------------------------------------------------------
 
 def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, monkeypatch):
@@ -828,17 +837,6 @@ def test_hwf_an_inbox_emptied_elsewhere_can_be_pruned(app, world):
         world.server.mailbox(w.ADA, "INBOX").messages.clear()
     app.post("/api/reconcile", {"account": w.ADA, "force": True})
     assert stored() == {}
-
-
-@pytest.mark.xfail(strict=True, reason="known bug: sync never re-reads flags, so mail read elsewhere stays unread")
-def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
-    import ingest
-    name = "ada-inbox-02-lunch-confirm.eml"
-    with world.server.lock:
-        world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags.add(w.SEEN)
-    ingest.sync_new(acct())
-    app.post("/api/reconcile", {"account": w.ADA})
-    assert world.row(name)["seen"] == 1
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: only INBOX is reconciled, so mail gone from other folders lingers")

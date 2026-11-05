@@ -1,5 +1,6 @@
 """Sync's bookkeeping against the world's fake server: the per-folder watermark, the UIDVALIDITY
-reset, ingest_message (Undo's one-message re-ingest), and the guards that keep reconcile from
+reset, the flags of stored mail read again, ingest_message (Undo's one-message re-ingest), and the
+guards that keep reconcile from
 pruning live mail. Reconcile prunes INBOX rows whose UID the server no longer has; every guard
 here exists because a wrong prune deletes real mail from the local view, and incremental sync,
 which only looks above the watermark, never brings it back.
@@ -88,6 +89,68 @@ def test_ingest_message_for_a_message_the_server_lacks_stores_nothing(world):
     assert ingest.ingest_message(acct(), "INBOX", "<nowhere@example.test>") == 0
     assert ingest.ingest_message(acct(), "INBOX", "") == 0
     assert inbox() == before
+
+
+# ── flags changed elsewhere ─────────────────────────────────────────────
+
+LUNCH = "ada-inbox-02-lunch-confirm.eml"
+RECEIPT = "ada-inbox-05-receipt.eml"
+
+
+def server_flags(world, name, add=(), drop=()):
+    """Change `name`'s flags on the server, as another client would."""
+    with world.server.lock:
+        flags = world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags
+        flags.update(add)
+        flags.difference_update(drop)
+
+
+def local_flags(world, name):
+    r = world.row(name)
+    return {k: r[k] for k in ("seen", "flagged", "answered")}
+
+
+def test_a_sync_reads_the_flags_of_stored_mail_again(world):
+    import ingest
+    server_flags(world, LUNCH, add=(w.FLAGGED, w.ANSWERED), drop=(w.SEEN,))
+    server_flags(world, RECEIPT, add=(w.SEEN,))
+    ingest.sync_new(acct())
+    assert local_flags(world, LUNCH) == {"seen": 0, "flagged": 1, "answered": 1}
+    assert local_flags(world, RECEIPT)["seen"] == 1
+
+
+def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, world):
+    import ingest
+    world.server.drop("SELECT", user=w.ADA)
+    assert app.post("/api/flag", {"pk": world.pk(RECEIPT), "flag": "flagged", "on": True}).json["status"] == "queued"
+    ingest.sync_new(acct())                                     # the server hasn't heard of the star yet
+    assert local_flags(world, RECEIPT)["flagged"] == 1
+
+
+def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
+    import ingest
+    import store
+    server_flags(world, RECEIPT, add=(w.SEEN,))
+    real = ingest._flags_of
+
+    def click_lands_first(flags):
+        c = store.conn()
+        store.set_local_flags(c, world.pk(RECEIPT), flagged=1)  # a star, under the gate the sync doesn't take
+        c.commit()
+        c.close()
+        return real(flags)
+    monkeypatch.setattr(ingest, "_flags_of", click_lands_first)
+    ingest.sync_new(acct())
+    assert local_flags(world, RECEIPT) == {"seen": 0, "flagged": 1, "answered": 0}
+
+
+def test_only_the_newest_stored_mail_is_read_again(world, monkeypatch):
+    import ingest
+    monkeypatch.setattr(ingest, "FLAG_REFRESH", 1)
+    since = len(world.server.commands_for(w.ADA, "UID FETCH"))
+    ingest.sync_new(acct())
+    [read] = [c["args"] for c in world.server.commands_for(w.ADA, "UID FETCH")[since:]]
+    assert read == [str(max(uid for uid, _ in inbox())), ["FLAGS"]]
 
 
 # ── UIDVALIDITY ─────────────────────────────────────────────────────────

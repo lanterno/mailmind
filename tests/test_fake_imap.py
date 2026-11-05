@@ -359,7 +359,9 @@ def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
     before = len(srv.commands_for(ADA, "UID FETCH"))
     ingest.sync_folder(app, "INBOX")
     fetched = srv.commands_for(ADA, "UID FETCH")[before:]
-    assert fetched and {str(c["args"][0]) for c in fetched} == {str(new)}   # headers, then the body
+    content = [c for c in fetched if c["args"][1] != ["FLAGS"]]
+    assert content and {str(c["args"][0]) for c in content} == {str(new)}   # headers, then the body
+    assert [c["args"] for c in fetched if c not in content] == [[f"{new},3,2,1", ["FLAGS"]]]   # and every flag again
     c = store.conn()
     rows = {r["subject"]: r for r in c.execute("SELECT subject, seen FROM messages ORDER BY uid")}
     c.close()
