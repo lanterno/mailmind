@@ -263,10 +263,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a
   persistence story (launcher script, or derive the account list from `mailmind.config.json`).
-- **Background folder first-sync** · medium value · effort M — First open of a big folder still runs
-  `ingest.sync_folder(..., full=True)` synchronously inside the HTTP request while holding the global
-  lock, swallowing failures with a print. The stored-first + SSE-refresh progressive fill was never
-  built; no thread is spawned for it anywhere.
 - **Cache the last message list per account** · medium value · effort M — `loadFolders()` keeps
   `state.foldersByAcct` and renders the rail instantly from cache, so the rail no longer blanks on
   account switch. There is no equivalent for messages — `loadCMessages()` always refetches
@@ -434,10 +430,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   signal. And the string is fixed — `sync()` polls `/api/digest` every 3s but reads only
   `d.sync.running`, ignoring the message count already in `d.stats`, so "read N messages so far…" is
   two lines inside the existing loop.
-- **Say when a folder's first sync failed** · medium value · effort S — a first scan that fails
-  leaves the folder's `scan_state` at `never`, so the next open tries again, but this open shows
-  "Nothing here." as if the folder were empty: `messages_in` only prints the error. Return it, so
-  the empty state can offer "Couldn't sync this folder — Retry."
 - **Consistency sweep: buttons, empty-state strings, toast vs. persistent** · low value · effort M —
   Three concrete, checkable changes rather than a vibe: (1) one `.btn-retry` replacing `.ai-rerun`,
   `.frail-retry`, `.ob-retry` and `.do-confirm`; (2) one `EMPTY` string table replacing the four

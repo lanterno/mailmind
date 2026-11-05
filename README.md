@@ -95,6 +95,10 @@ and the Claude API.
   Inbox by **Needs you** (the default, the brief's to-do test), **Everything** and
   **Unread**, each with its count; `j`/`k` walk the tab you're on, and the choice is
   remembered.
+- **A big folder opens at once.** The first time you open a folder, MailMind reads it
+  whole in the background. The list waits a few seconds for it, then says "Reading this
+  folder for the first time…" and fills in when the scan ends; a folder it couldn't read
+  says so, with a Retry.
 - **Messages open instantly.** The reader paints subject, sender and folder from the
   list immediately behind a shimmer skeleton, and escalates to an honest "first open
   of an older message can take a minute" hint if the server is slow.
