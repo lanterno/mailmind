@@ -367,18 +367,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
   `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
   see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
-- **Negation in search** · medium value · effort S — two gaps in `search.build`, each pinned by a
-  strict xfail in `tests/test_search_build.py`:
-  - a negated FTS term with nothing positive (`-from:lin`) is dropped, so the query matches all
-    mail, the named sender's included. Use `m.pk NOT IN (SELECT rowid FROM msg_fts WHERE msg_fts
-    MATCH ?)`;
-  - `-category:x` builds `s.category <> ?`, which is NULL for mail without a summary, so it hides
-    every unsummarized message. Use `s.category IS NOT ?`.
-- **Let a resubmitted RSVP dedupe** · low value · effort S — `do_invite_rsvp` keys the outbox row
-  `rsvp:<account>:<uid>:<partstat>:` plus a random suffix, so the same POST sent twice (a retry, a
-  second click before the row redraws) queues two replies to the organizer. The suffix lets a
-  changed mind send again. Take the key from the request instead, as `do_send` does, and have
-  `inviteRsvp()` in the frontend draw one per click. Pinned by `test_a_double_submitted_rsvp_queues_once`.
 - **Parse the messages the corpus shows going wrong** · medium value · effort M — four strict
   xfails in `tests/test_world.py`, each on a fictional message:
   - a raw UTF-8 display name in From empties `from_name` and `from_addr`;
