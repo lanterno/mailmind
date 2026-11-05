@@ -373,16 +373,19 @@ def forget_round():
 
 def wake_snoozed():
     """Resurface messages whose snooze time has passed: clear the snooze, mark unread,
-    and push a realtime event so they pop back into the inbox view. Pure-local, no IMAP."""
+    and push a realtime event so they pop back into the inbox view. Database only: the unread mark
+    reaches the server through the queue, or the next sync that read the flags would take it back."""
     now = int(time.time())
     c = store.conn()
     due = store.due_snoozes(c, now)
     for r in due:
         store.clear_snooze(c, r["pk"])
-        store.set_local_flags(c, r["pk"], seen=0)
         store.fts_index(c, r["pk"])
     c.commit()
     c.close()
+    for r in due:
+        if r["seen"]:
+            _readmut_enqueue_flags(r["pk"], {"seen": False}, f"wake:{r['pk']}:{now}")
     if due:
         invalidate_stats()
         sse.publish("snooze-wake", {"count": len(due),

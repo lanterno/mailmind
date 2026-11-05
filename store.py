@@ -560,7 +560,7 @@ def due_snoozes(c, now_ts):
     c.execute("""DELETE FROM snoozes WHERE until<=? AND NOT EXISTS
                  (SELECT 1 FROM messages m WHERE m.message_key=snoozes.message_key AND m.folder=snoozes.folder)""",
               (now_ts,))
-    return c.execute("SELECT pk, account, folder FROM messages "
+    return c.execute("SELECT pk, account, folder, seen FROM messages "
                      "WHERE snoozed_until IS NOT NULL AND snoozed_until<=?", (now_ts,)).fetchall()
 
 
