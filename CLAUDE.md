@@ -162,6 +162,10 @@ Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbo
 `sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
+`search.build` reads a date with no zone at this machine's midnight. `search.visible` leaves snoozed mail out of
+a search and of what a command acts on, unless the query says `is:snoozed`. `search.BM25` is the one table of
+ranking weights, which Ask uses too.
+
 `mailparse.dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
 it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mailparse.walk` takes an
 attached email as one part of its message, as a reader does; what it holds isn't the outer message's.
@@ -737,6 +741,10 @@ holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 again only when it changed; one that won't parse leaves the last rules read well, so a bad edit
 never stops a sync, and the next save moves it to `backups/` first. The classifier reads
 through `rules.sets()`.
+
+A rule change classifies again the stored mail it covers (`ingest.reclassify`, called by whatever calls
+`rules.add` or `rules.remove`): each row a rule decides now or decided before. A row no rule had a say in
+stays as ingest judged it, since `List-Unsubscribe` isn't kept. An edit of the file by hand reaches only new mail.
 
 ## Conventions
 

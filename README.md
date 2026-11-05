@@ -191,11 +191,12 @@ and the Claude API.
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
   any the server won't give — so search covers the whole mailbox, not just recent mail.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:`,
-  `is:unread|read|flagged|answered|junk|newsletter|receipt|notification`,
+  `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
   `before:`/`after:`, `"phrases"` and `-exclusion`. `to:`/`cc:` hit real indexed
-  recipients rather than the body text. The grammar is advertised in the search
-  placeholder and documented in the `?` legend.
+  recipients rather than the body text. A date means midnight where you are. Snoozed
+  mail stays out of sight until it wakes, unless you ask for `is:snoozed`. The grammar
+  is advertised in the search placeholder and documented in the `?` legend.
 - **Search that persists.** Opening a result keeps the results as your working list —
   archive, snooze, mute, star, bulk and swipe all heal the results in place and
   auto-advance to the next hit.
