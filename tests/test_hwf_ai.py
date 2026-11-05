@@ -728,10 +728,7 @@ def test_an_ai_spending_get_the_page_didnt_make_spends_nothing(app, world, ai):
     assert [r.prompt[:40] for r in ai.requests] == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: a kick on a thread that ends in your own Sent copy pays for a draft its own "
-                          "GC then drops as moot, so every open pays again")
-def test_bug_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted(app, world, ai):
+def test_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted(app, world, ai):
     world.deliver(w.ADA, "Sent", w.variant("ada-sent-01-lunch-reply.eml", Message_ID="<lunch-4@ada.example.test>",
                                            Date="Mon, 02 Nov 2026 11:00:00 +0000"))
     mine = pk_of("<lunch-4@ada.example.test>", folder="Sent")
