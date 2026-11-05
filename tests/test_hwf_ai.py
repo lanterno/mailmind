@@ -672,10 +672,7 @@ def test_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
 
 # -- known bugs -----------------------------------------------------------------------------------
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: a cached brief keeps the pks it was built with, which a renumbered folder "
-                          "no longer has, so its topic chips shrink")
-def test_bug_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai):
+def test_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai):
     anchor = world.pk(LUNCH)
     summarize_as(anchor, 5, "action-needed", "Reply")
     ai.queue(fa.answer({"narrative": "Lin is waiting on lunch plans for Thursday, so reply today.",
