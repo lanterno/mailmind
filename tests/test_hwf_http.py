@@ -219,6 +219,12 @@ def test_hwf_undo_keeps_the_last_25_actions(app, world):
     assert answers[-1] == {"ok": False, "empty": True}
 
 
+def test_marking_read_while_the_server_is_away_is_queued(app, world):
+    world.server.drop("SELECT", user=w.ADA)
+    r = app.post("/api/seen", {"pk": world.pk(LUNCH_CONFIRM), "seen": True})
+    assert (r.status, r.json.get("status"), world.row(LUNCH_CONFIRM)["seen"]) == (200, "queued", 1)
+
+
 # -- snooze presets at the week's edges ------------------------------------
 
 @pytest.mark.parametrize("now, preset, wake", [
@@ -446,12 +452,6 @@ def test_a_refused_folder_list_keeps_the_last_list(app, world):
     world.server.fail("LIST", "NO [UNAVAILABLE] busy", user=w.ADA)
     assert app.get(f"/api/folders?account={w.ADA}").json["folders"] == first
 
-
-@pytest.mark.xfail(strict=True, reason="known bug: marking read while IMAP is unreachable isn't queued")
-def test_marking_read_while_the_server_is_away_is_queued(app, world):
-    world.server.drop("SELECT", user=w.ADA)
-    r = app.post("/api/seen", {"pk": world.pk(LUNCH_CONFIRM), "seen": True})
-    assert (r.status, r.json.get("status"), world.row(LUNCH_CONFIRM)["seen"]) == (200, "queued", 1)
 
 
 @pytest.mark.xfail(strict=True, reason="known bug: a JSON body that isn't an object answers 500")

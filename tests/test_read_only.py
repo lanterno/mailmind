@@ -1,7 +1,7 @@
 """The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
 
-Moves and sends wait in their queues, and a full run applies them. What can't wait there (a flag,
-a draft, a sweep, an unsubscribe) is refused, with a 409 that says why. Below that, a read-only
+Moves, flag changes and sends wait in their queues, and a full run applies them. What can't wait
+there (a draft, a sweep, an unsubscribe) is refused, with a 409 that says why. Below that, a read-only
 process's IMAP connections open every mailbox with EXAMINE and refuse any command that could
 change mail before it is sent, and it opens no SMTP session. Each test runs read-only through
 MAILMIND_PROFILE until it calls `read_only.end()`, and checks what the fake servers saw.
@@ -155,15 +155,24 @@ def test_a_send_waits_in_the_outbox_until_a_full_run_sends_it(app, world, read_o
     assert [m.rcpts for m in world.smtp.messages] == [["lin@example.test"]]
 
 
-# -- what is refused ----------------------------------------------------------
-
-def test_a_flag_change_is_refused(app, world, read_only):
+def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world, read_only):
+    import readmutq
     since = world.mark()
     for path, body in (("/api/seen", {"seen": True}), ("/api/flag", {"flag": "flagged", "on": True})):
         r = app.post(path, {"pk": world.pk(RECEIPT), **body})
-        assert (r.status, r.json) == (409, REFUSED), path
+        assert (r.status, r.json["status"]) == (200, "queued"), path
+    readmutq.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
-    assert world.where(RECEIPT)["db"][0]["seen"] == 0
+    assert {k: world.where(RECEIPT)["db"][0][k] for k in ("seen", "flagged")} == {"seen": 1, "flagged": 1}
+
+    read_only.end()
+    readmutq.drain()
+    assert {r["state"] for r in q("SELECT state FROM read_mutations")} == {"done"}
+    [(_, _, _, flags)] = world.where(RECEIPT)["server"]
+    assert {w.SEEN, "\\Flagged"} <= set(flags)
+
+
+# -- what is refused ----------------------------------------------------------
 
 
 def test_a_draft_is_neither_saved_nor_deleted(app, world, read_only):

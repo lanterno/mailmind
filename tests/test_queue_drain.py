@@ -197,6 +197,51 @@ def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, 
     assert boxes(world, RECEIPT) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
 
 
+def flag_queued(app, world, path="/api/seen", body=None, name=RECEIPT, mutation_id="f-1"):
+    """Ask for a flag change on `name` while the server drops the connection."""
+    world.server.drop("SELECT", user=w.ADA)
+    r = app.post(path, {"pk": world.pk(name), "mutation_id": mutation_id, **(body or {"seen": True})}).json
+    assert r["status"] == "queued", r
+    return r
+
+
+def flags_here(world, name=RECEIPT):
+    """(seen, flagged) on the message's local row."""
+    r = world.row(name)
+    return r["seen"], r["flagged"]
+
+
+def test_a_queued_flag_change_shows_at_once_and_applies_once_the_server_is_back(app, world):
+    flag_queued(app, world, "/api/flag", {"flag": "flagged", "on": True})
+    assert flags_here(world) == (0, 1)
+    since = world.mark()
+    drain()
+    assert world.writes(since) == [f"{w.ADA} [INBOX] UID STORE {world.uid(RECEIPT)} +FLAGS (\\Flagged)"]
+    assert (rows()[0]["state"], rows()[0]["applied"]) == ("done", 1)
+    assert flags_here(world) == (0, 1)
+
+
+def test_a_queued_flag_change_the_server_refuses_is_put_back(app, world):
+    flag_queued(app, world)
+    assert flags_here(world) == (1, 0)
+    world.server.fail("UID STORE", user=w.ADA)
+    drain()
+    assert rows()[0]["state"] == "error"
+    assert flags_here(world) == (0, 0)                                      # as the server still has it
+    assert w.SEEN not in world.server.messages(w.ADA, "INBOX")[world.uid(RECEIPT)].flags
+
+
+def test_a_queued_flag_change_given_up_on_is_put_back(app, world):
+    import readmutq
+    flag_queued(app, world)
+    world.server.drop("SELECT", user=w.ADA, times=readmutq.MAX_ATTEMPTS)
+    for _ in range(readmutq.MAX_ATTEMPTS):
+        drain()
+        app.clock.shift(timedelta(seconds=readmutq._BACKOFF_CAP + 1))
+    assert rows()[0]["state"] == "error"
+    assert flags_here(world) == (0, 0)
+
+
 def test_a_queued_move_the_server_refuses_comes_back(app, world):
     queue(app, world)
     world.server.fail("UID MOVE", user=w.ADA)
