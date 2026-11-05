@@ -672,6 +672,15 @@ def test_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
 
 # -- known bugs -----------------------------------------------------------------------------------
 
+def test_a_brief_chip_counts_the_messages_it_holds(app, world, ai):
+    anchor = world.pk(LUNCH)
+    summarize_as(anchor, 5, "action-needed", "Reply")
+    ai.queue(fa.answer({"narrative": "Lin is waiting on lunch plans for Thursday, so reply today.",
+                        "groups": [{"label": "Lunch", "count": 9, "pks": [anchor, 999999]}]}))
+    [group] = app.post("/api/briefing", {}).json["groups"]
+    assert (group["count"], group["pks"]) == (1, [anchor])
+
+
 def test_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai):
     anchor = world.pk(LUNCH)
     summarize_as(anchor, 5, "action-needed", "Reply")
