@@ -7,6 +7,9 @@ CREATE INDEX idx_draft_ahead_created ON draft_ahead(created_ts);
 -- index idx_followups_state
 CREATE INDEX idx_followups_state ON followups(account, state);
 
+-- index idx_messages_key
+CREATE INDEX idx_messages_key ON messages(message_key);
+
 -- index idx_msg_acct_folder
 CREATE INDEX idx_msg_acct_folder ON messages(account, folder, ts);
 
@@ -43,6 +46,9 @@ CREATE INDEX idx_unsub_log_addr ON unsub_log(from_addr);
 -- table ai_usage
 CREATE TABLE ai_usage( day TEXT NOT NULL, feature TEXT NOT NULL, model TEXT NOT NULL, served TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL, calls INTEGER NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cost_micros INTEGER NOT NULL DEFAULT 0, last_ts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, feature, model, served, outcome));
 
+-- table assessments
+CREATE TABLE assessments( message_key INTEGER PRIMARY KEY REFERENCES message_identity(key) ON DELETE CASCADE, summary TEXT, importance INTEGER, category TEXT, action TEXT, model TEXT, created_at TEXT);
+
 -- table attachments
 CREATE TABLE attachments ( id INTEGER PRIMARY KEY AUTOINCREMENT, message_pk INTEGER REFERENCES messages(pk) ON DELETE CASCADE, part_id TEXT, filename TEXT, content_type TEXT, size INTEGER, sha256 TEXT, -- content-addressed file under attachments/ is_inline INTEGER DEFAULT 0, content_id TEXT );
 
@@ -61,8 +67,11 @@ CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NUL
 -- table followups
 CREATE TABLE followups ( -- commitment tracking; keyed on (account,thread_id), NEVER pk account TEXT NOT NULL, thread_id TEXT NOT NULL, kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', anchor_pk INTEGER, first_sent_ts INTEGER, last_msg_ts INTEGER, due_ts INTEGER, created_at TEXT, resolved_at TEXT, PRIMARY KEY(account, thread_id) );
 
+-- table message_identity
+CREATE TABLE message_identity( key INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, identity TEXT NOT NULL, gone_at INTEGER, UNIQUE(account, identity));
+
 -- table messages
-CREATE TABLE messages ( pk INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, kind TEXT NOT NULL, -- gmail | proton | imap folder TEXT NOT NULL, uid INTEGER NOT NULL, message_id TEXT, -- RFC822 Message-ID gmail_thread TEXT, -- X-GM-THRID (gmail) for threading thread_id TEXT, -- cross-provider computed thread id in_reply_to TEXT, refs TEXT, -- In-Reply-To / References for threading from_addr TEXT, from_name TEXT, subject TEXT, date_iso TEXT, ts INTEGER, snippet TEXT, -- plain-text body, truncated (list + AI) bucket TEXT, confidence TEXT, reason TEXT, is_junk INTEGER DEFAULT 0, -- a BADGE now (Mailbox shows junk too) verified INTEGER DEFAULT 0, last_seen TEXT, seen INTEGER DEFAULT 0, -- \Seen flagged INTEGER DEFAULT 0, -- \Flagged (star) answered INTEGER DEFAULT 0, -- \Answered draft INTEGER DEFAULT 0, -- \Draft deleted INTEGER DEFAULT 0, -- \Deleted has_attach INTEGER DEFAULT 0, body_fetched INTEGER DEFAULT 0, -- 1 once raw RFC822 is in bodies body_text TEXT, -- plain-text body for FTS (NULL until fetched) snoozed_until INTEGER, recipients TEXT, list_unsub_raw TEXT, list_unsub_method TEXT, pending_removal INTEGER, -- unix secs; NULL = not snoozed (hidden from lists until due) UNIQUE(account, folder, uid) );
+CREATE TABLE messages ( pk INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, kind TEXT NOT NULL, -- gmail | proton | imap folder TEXT NOT NULL, uid INTEGER NOT NULL, message_id TEXT, -- RFC822 Message-ID gmail_thread TEXT, -- X-GM-THRID (gmail) for threading thread_id TEXT, -- cross-provider computed thread id in_reply_to TEXT, refs TEXT, -- In-Reply-To / References for threading from_addr TEXT, from_name TEXT, subject TEXT, date_iso TEXT, ts INTEGER, snippet TEXT, -- plain-text body, truncated (list + AI) bucket TEXT, confidence TEXT, reason TEXT, is_junk INTEGER DEFAULT 0, -- a BADGE now (Mailbox shows junk too) verified INTEGER DEFAULT 0, last_seen TEXT, seen INTEGER DEFAULT 0, -- \Seen flagged INTEGER DEFAULT 0, -- \Flagged (star) answered INTEGER DEFAULT 0, -- \Answered draft INTEGER DEFAULT 0, -- \Draft deleted INTEGER DEFAULT 0, -- \Deleted has_attach INTEGER DEFAULT 0, body_fetched INTEGER DEFAULT 0, -- 1 once raw RFC822 is in bodies body_text TEXT, -- plain-text body for FTS (NULL until fetched) snoozed_until INTEGER, recipients TEXT, list_unsub_raw TEXT, list_unsub_method TEXT, pending_removal INTEGER, message_key INTEGER, -- unix secs; NULL = not snoozed (hidden from lists until due) UNIQUE(account, folder, uid) );
 
 -- table msg_fts
 CREATE VIRTUAL TABLE msg_fts USING fts5(subject, from_name, from_addr, recipients, snippet, body_text, tokenize='unicode61 remove_diacritics 2');
@@ -106,4 +115,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=29;
+PRAGMA user_version=30;
