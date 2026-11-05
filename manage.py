@@ -26,12 +26,13 @@ import email
 import time
 import imaplib
 from datetime import datetime, timezone
-from email.utils import parseaddr, parsedate_to_datetime
+from email.utils import parsedate_to_datetime
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
 import mailclass
+import mailparse
 from mailparse import dec
 import pool
 import rules
@@ -50,7 +51,7 @@ def fetch_headers(s):
     rows = []
     for h in s.headers(s.uids("ALL"), HDR_FIELDS):
         msg = email.message_from_bytes(h.raw)
-        name, addr = parseaddr(msg.get("From", ""))
+        name, addr = mailparse.sender_of(msg)
         rows.append({"uid": str(h.uid), "from": addr.lower(), "name": dec(name),
                      "subject": dec(msg.get("Subject", "")),
                      "mid": (msg.get("Message-ID", "") or "").strip(),
@@ -369,7 +370,7 @@ def expire_account(acct, dry=False, now=None):
         rows = []
         for h in s.headers(sorted(uids), EXP_FIELDS, internaldate=True):
             msg = email.message_from_bytes(h.raw)
-            rows.append({"uid": str(h.uid), "from": parseaddr(msg.get("From", ""))[1].lower(),
+            rows.append({"uid": str(h.uid), "from": mailparse.sender_of(msg)[1].lower(),
                          "subject": dec(msg.get("Subject", "")),
                          "mid": (msg.get("Message-ID", "") or "").strip(),
                          "ts": _arrival_ts(h.internaldate, msg)})

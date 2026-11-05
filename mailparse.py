@@ -10,15 +10,26 @@ The body is chosen from multipart/alternative the way a client does (prefer html
 cid: inline images are surfaced so the sanitizer/UI can resolve them later.
 """
 import email
+import re
 from email import policy
 from email.header import decode_header
+from email.utils import parseaddr
+
+_FOLD = re.compile(r"\r?\n[ \t]+")
+
+
+def _unfold(value):
+    """A header value as one line. decode_header drops the space a fold leaves next to an encoded
+    word, and parseaddr can't read an address across one. A raw 8-bit value is a Header: not a str."""
+    return _FOLD.sub(" ", value) if isinstance(value, str) else value
+
 
 def dec(value):
     """A header's text, with its encoded words decoded."""
     if not value:
         return ""
     out = []
-    for part, enc in decode_header(value):
+    for part, enc in decode_header(_unfold(value)):
         if isinstance(part, bytes):
             try:
                 out.append(part.decode(enc or "utf-8", "replace"))
@@ -27,6 +38,12 @@ def dec(value):
         else:
             out.append(part)
     return "".join(out).replace("\r", " ").replace("\n", " ").strip()
+
+
+def sender_of(msg):
+    """(name, address) from a compat32 message's From. The name still holds its encoded words."""
+    sender = msg.get("From", "")
+    return parseaddr(_unfold(sender) if isinstance(sender, str) else dec(sender))
 
 
 def walk(msg):

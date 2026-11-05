@@ -8,7 +8,7 @@ import re
 import email
 import html
 import imaplib
-from email.utils import parseaddr, parsedate_to_datetime
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -146,8 +146,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             max_uid = max(max_uid, uid)
             flags = _flags_of(h.flags)
             msg = email.message_from_bytes(h.raw)
-            sender = msg.get("From", "")                  # raw 8-bit bytes arrive as a Header
-            name, addr = parseaddr(sender if isinstance(sender, str) else dec(sender))
+            name, addr = mailparse.sender_of(msg)
             has_lu = bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))
             subj = dec(msg.get("Subject", ""))
             b, conf, reason = mailclass.classify(addr.lower(), subj, dec(name), has_lu)
