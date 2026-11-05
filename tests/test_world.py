@@ -5,7 +5,6 @@ These pin today's behaviour. Where today's behaviour is a bug, the test states t
 behaviour and is marked xfail(strict=True): fixing the bug makes it pass, and strict makes that
 an error until the marker is removed.
 """
-import pytest
 
 from fixtures import world as w
 
@@ -96,7 +95,6 @@ def test_encoded_and_folded_headers_are_decoded(world):
     assert world.row("ada-inbox-10-raw-utf8.eml")["subject"] == "Menu d’août — nouveautés ☕"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a raw UTF-8 display name empties the sender")
 def test_a_raw_utf8_sender_keeps_its_name_and_address(world):
     row = world.row("ada-inbox-10-raw-utf8.eml")
     assert (row["from_name"], row["from_addr"]) == ("Café Lumière", "hello@cafe.example.test")
