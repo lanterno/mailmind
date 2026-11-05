@@ -1544,7 +1544,7 @@
 const BVAR={"spam/scam":"--scam","blocked":"--block","newsletters/marketing":"--mkt","automated-notifications":"--notif","receipts/transactional":"--txn","personal/protected":"--keep","other/personal-ish":"--personal"};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={all:[],q:"",account:"",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
-  folder:"INBOX",folders:[],cmsgs:[],cSyncing:false,cSyncFailed:false,csel:null,cseq:0,cmarked:new Set(),
+  folder:"INBOX",folders:[],cmsgs:[],cSyncing:false,cSyncFailed:false,csel:null,cseq:0,fseq:0,rseq:0,cmarked:new Set(),
   compose:null,myAddrs:new Set(),outbox:[],failedSend:null,
   threadView:true,thread:null,searching:false,searchItems:[],searchSeq:0,searchScope:"all",sseLive:false,allInbox:false,
   views:[],viewId:null,screener:[],screenerCount:0,replylaterCount:0,
@@ -1921,7 +1921,7 @@ async function loadFolders(refreshOnly){
   if(!state.account)return;   // no account yet (first run) → /api/folders?account= would 500
   // refreshOnly = update rail counts + re-render WITHOUT reloading the message list (used by
   // background SSE ticks so they never yank the reader / clear a selection / disrupt a search).
-  const seq=++state.cseq, acct=state.account;
+  const seq=++state.fseq, acct=state.account;   // the rail's own sequence: a list or reader load never drops it, nor it them
   state.foldersByAcct=state.foldersByAcct||{};
   const cached=state.foldersByAcct[acct];
   if(cached){                                  // render instantly from cache, refresh in the background
@@ -1930,8 +1930,8 @@ async function loadFolders(refreshOnly){
     renderFolders(); if(!refreshOnly)loadCMessages();
   } else if(!refreshOnly) $("#folderrail").innerHTML='<div class="frail-acct">loading…</div>';
   let d; try{ d=await api("/api/folders?account="+encodeURIComponent(acct)); }
-  catch(e){ if(!cached&&seq===state.cseq){ $("#folderrail").innerHTML='<div class="frail-acct">Couldn’t list folders</div><button class="frail-retry" id="frRetry">↻ Retry</button>'; const b=$("#frRetry"); if(b)b.onclick=loadFolders; } return; }
-  if(seq!==state.cseq||acct!==state.account)return;  // a newer account switch superseded this
+  catch(e){ if(!cached&&seq===state.fseq){ $("#folderrail").innerHTML='<div class="frail-acct">Couldn’t list folders</div><button class="frail-retry" id="frRetry">↻ Retry</button>'; const b=$("#frRetry"); if(b)b.onclick=loadFolders; } return; }
+  if(seq!==state.fseq||acct!==state.account)return;  // a newer rail load, or an account switch, superseded this
   state.foldersByAcct[acct]=d.folders||[]; state.snoozedCount=d.snoozed||0; state.mutedCount=d.muted||0; state.waitingCount=d.waiting||0; state.replylaterCount=d.replylater||0;
   state.folders=d.folders||[];
   if(!state.folders.some(f=>f.name===state.folder)) state.folder=(state.folders[0]||{}).name||"INBOX";
@@ -2616,10 +2616,10 @@ async function openThread(tid, latestPk, scroll, acct){
   const rd=$("#reader"); rd.className="reader"; document.body.classList.add("reading");
   setLoading(rd, "Loading conversation…", "Still fetching — the first open can be slow.");
   rd.insertAdjacentHTML("afterbegin", readerBarSkel());
-  const seq=++state.cseq;
+  const seq=++state.rseq;   // the reader's own sequence, apart from the list's and the rail's
   let d; try{ d=await api(`/api/thread?account=${encodeURIComponent(acct)}&thread_id=${encodeURIComponent(tid)}`); }
-  catch(e){ if(seq===state.cseq&&state.csel===latestPk)rd.innerHTML='<div class="nores">Couldn’t load.</div>'; return; }
-  if(seq!==state.cseq||state.csel!==latestPk)return;   // superseded — another conversation or a single message opened meanwhile
+  catch(e){ if(seq===state.rseq&&state.csel===latestPk)rd.innerHTML='<div class="nores">Couldn’t load.</div>'; return; }
+  if(seq!==state.rseq||state.csel!==latestPk)return;   // superseded — another conversation or a single message opened meanwhile
   if(!d.ok){ rd.innerHTML='<div class="nores">'+esc(d.error||"error")+'</div>'; return; }
   state.thread=d;
   const subj=(d.items[0]||{}).subject||"(no subject)";
@@ -4596,9 +4596,8 @@ document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=
 function onFolderSynced(d){
   // the first scan of d.folder ended. A list that answered while it was still reading loads what it
   // read; one it failed for says so (opening it again tries again, so this never retries by itself).
-  // The open folder's list refreshes only itself: loadFolders would supersede a load still in flight.
-  if(state.allInbox||state.account!==d.account||state.folder!==d.folder){ loadFolders(true); return; }
-  if(!state.cSyncing)return;
+  loadFolders(true);
+  if(state.allInbox||state.account!==d.account||state.folder!==d.folder||!state.cSyncing)return;
   if(!d.ok){ state.cSyncing=false; state.cSyncFailed=true; renderClientList(); return; }
   if(!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages();
 }
