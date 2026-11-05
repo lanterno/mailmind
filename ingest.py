@@ -27,7 +27,7 @@ from mailmind.platform import bus
 CUTOFF_DAYS = 90
 BODY_CHARS = 3000
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
-                 "LIST-UNSUBSCRIBE", "LIST-ID")
+                 "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
 
 
 def text_body(msg):
@@ -210,6 +210,8 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             except Exception:
                 iso, ts = None, 0
             rows.append({"uid": uid, "from_addr": addr.lower(), "from_name": dec(name),
+                         "unsub": mailparse.list_unsub(dec(msg.get("List-Unsubscribe")),
+                                                       dec(msg.get("List-Unsubscribe-Post"))),
                          "subject": subj, "date_iso": iso, "ts": ts, "bucket": b,
                          "confidence": conf, "reason": reason, "is_junk": isj, "flags": flags,
                          "message_id": (msg.get("Message-ID") or "").strip(),
@@ -243,6 +245,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             "is_junk": r["is_junk"],
         })
         store.set_local_flags(c, pk, **r["flags"])
+        store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
         c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
                   (r["in_reply_to"], r["refs"], r["recipients"], pk))
         store.fts_index(c, pk)               # refresh FTS so recipients is searchable immediately
