@@ -427,7 +427,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   goes to `error`, where a person's retry (`requeue`) starts the count again. `/api/pending` lists the
   move queue's unapplied rows for the panel the outbox button opens; its Retry (`readmutq.retry`) marks the message or
   shows the flags again, and its Discard (`readmutq.discard`, on the account's gate) gives them back and
-  takes the entry off the undo stack (`store.undo_forget_move`). The worker wakes
+  takes the entry off the undo stack (`store.undo_forget_move`). The `forget` job removes rows finished a month
+  ago (`store.read_mut_forget_finished`). The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
   outbox publishes `outbox.Failed` for an attempt that failed, as it does `outbox.Sent`. A send the
   server refuses for good (`smtpsend.permanent`: a 5xx, or every recipient refused with one) goes
@@ -555,7 +556,11 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   resync keeps it and a copy filed elsewhere isn't hidden. An Undo of filing brings it back; one come due with
   no copy in its folder ends at `store.due_snoozes`. The undo entry names rows by key and folder too (`where`).
   A message that wakes is unread on the server as well: `server.wake_snoozed` queues the mark for read mail
-  (`_readmut_enqueue_flags`), or the next sync that read its flags would take it back.
+  (`store.queue_flags`), or the next sync that read its flags would take it back.
+- **Muting tells the server too** (decision D6). `store.muted_thread_seen` queues `\\Seen` for the thread's
+  unread members and `apply_mute_on_ingest` for mail that arrives later, skipping one with a mark still open
+  (a refused one waits in the tray). The undo entry names those members by key and folder, and Undo marks
+  unread again only them.
 - **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
   union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
   Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
