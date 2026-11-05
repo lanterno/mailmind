@@ -387,6 +387,17 @@ def test_reopen_a_saved_draft(page, world):
     clean(page)
 
 
+def test_opening_the_composer_focuses_at_once_and_never_takes_focus_back(page, world):
+    opened(page)
+    page.evaluate("composeOpen({mode: 'new'})")
+    assert page.evaluate("document.activeElement.classList.contains('ci')")   # keys typed now land in To
+    page.keyboard.press("Escape")
+    expect(page.get_by_role("textbox", name="subject")).to_be_hidden()
+    assert page.evaluate("""() => { composeOpen({mode: 'new'}); document.querySelector('#cmpSubject').focus();
+                                    return new Promise(done => setTimeout(() => done(document.activeElement.id), 120)); }""") == "cmpSubject"
+    clean(page)
+
+
 def test_a_folder_whose_first_sync_fails_says_so_and_retry_reads_it(page, world):
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
