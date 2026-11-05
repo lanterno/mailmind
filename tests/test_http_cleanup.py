@@ -5,14 +5,9 @@ golden files are in tests/golden/http_cleanup/.
 
 The one-click POST would leave the machine, so `_unsub_oneclick_post` is replaced here by a
 recorder; tests/test_unsub_post.py covers the real one against a local HTTPS server. The method
-is resolved from a stored body only, so each test opens a message first.
-
-Two known bugs shape these tests. The sweep deletes the local rows the unsubscribe is resolved
-from, so a sender whose mail is all in the INBOX gets no unsubscribe at all; and one-click is
-recognised only by `List=One-Click`, not RFC 8058's `List-Unsubscribe=One-Click`. To reach the
-unsubscribe paths, the tests put the issue that carries the header in the Archive, which the
-sweep leaves alone, and spell one-click the way the app looks for it. Strict xfails at the end
-state the fixes.
+is resolved from a stored body only, so each test opens a message first. It is resolved before
+the sweep, which deletes the rows it moves; most tests put the issue that carries the header in
+the Archive, which the sweep leaves alone, and the ones at the end keep it in the INBOX.
 """
 import pytest
 
@@ -58,7 +53,7 @@ def archived_issue(world, app, **headers):
     assert app.get(f"/api/message/{pk_of(mid)}/body").status == 200
 
 
-ONE_CLICK = {"List_Unsubscribe_Post": "List=One-Click"}          # the spelling the app accepts today
+ONE_CLICK = {"List_Unsubscribe_Post": "List-Unsubscribe=One-Click"}    # RFC 8058's, the one spelling
 MAILTO = {"List_Unsubscribe": "<mailto:unsubscribe@loom.example.test?subject=unsubscribe%20ada>"}
 
 
@@ -118,6 +113,9 @@ def test_a_mailto_unsubscribe_goes_out_by_smtp(app, golden, world, posts):
     token = preview(app, golden, LOOM)["confirm_token"]
     execute(app, golden, "clean up the Loom by mail", {"from_addr": LOOM, "do_unsubscribe": True,
                                                        "confirm_token": token})
+    import email
+    for d in world.smtp.messages:
+        golden.alias(email.message_from_bytes(d.data)["Message-ID"], "<message id>")
     golden.note("on the wire", [{"login": d.user, "mail_from": d.mail_from, "rcpts": d.rcpts,
                                  "data": d.data.decode("utf-8", "replace")} for d in world.smtp.messages])
     golden.note("one-click POSTs", list(posts))
@@ -160,15 +158,13 @@ def rows(sql):
         c.close()
 
 
-# ── known bugs ───────────────────────────────────────────────────────────
+# ── the unsubscribe goes out ─────────────────────────────────────────────
 
-@pytest.mark.xfail(strict=True, reason="known bug: RFC 8058's List-Unsubscribe=One-Click isn't recognised")
 def test_an_rfc_8058_sender_is_offered_one_click(app, world):
     app.get(f"/api/message/{world.pk(NEWSLETTER)}/body")
     assert app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]["method"] == "one-click"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the sweep deletes the rows the unsubscribe is resolved from")
 def test_a_sender_whose_mail_is_in_the_inbox_is_still_unsubscribed(app, world, posts):
     world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID="<issue-219@loom.example.test>",
                                             Date="Mon, 02 Nov 2026 07:00:00 +0000", **MAILTO))
@@ -178,7 +174,6 @@ def test_a_sender_whose_mail_is_in_the_inbox_is_still_unsubscribed(app, world, p
     assert (r["swept"], r["status"]) == (2, "mailto_sent")
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the mailto unsubscribe passes a dict as the envelope")
 def test_a_mailto_unsubscribe_reaches_the_list(app, world, posts):
     archived_issue(world, app, **MAILTO)
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
@@ -186,10 +181,39 @@ def test_a_mailto_unsubscribe_reaches_the_list(app, world, posts):
     assert [d.rcpts for d in world.smtp.messages] == [["unsubscribe@loom.example.test"]]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the mailto unsubscribe is sent with bare LF line ends")
 def test_a_mailto_unsubscribe_ends_its_lines_with_crlf(app, world, posts):
     archived_issue(world, app, **MAILTO)
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
     [d] = world.smtp.messages
     assert b"\n" not in d.data.replace(b"\r\n", b"")
+
+
+def test_one_click_spelled_any_other_way_is_never_posted(app, world, posts):
+    archived_issue(world, app, List_Unsubscribe_Post="List=One-Click")      # the issue offers mailto too
+    assert app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]["method"] == "mailto"
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["status"], posts) == ("mailto_sent", [])
+
+
+def test_a_mailto_unsubscribe_is_a_whole_message_from_the_account(app, world, posts):
+    archived_issue(world, app, **MAILTO)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
+    [d] = world.smtp.messages
+    import email
+    m = email.message_from_bytes(d.data)
+    assert (d.mail_from, m["From"], m["To"], m["Subject"]) == (w.ADA, w.ADA, "unsubscribe@loom.example.test",
+                                                                "unsubscribe ada")
+    assert m["Date"] and m["Message-ID"].endswith(f"@{w.ADA.rpartition('@')[2]}>")
+
+
+@pytest.mark.parametrize("target", ["unsubscribe@loom.example.test,ada@example.test",
+                                    "unsubscribe@loom.example.test%0d%0aBcc:ada@example.test",
+                                    "not-an-address"])
+def test_a_mailto_unsubscribe_goes_to_one_plain_address_or_nowhere(app, world, posts, target):
+    archived_issue(world, app, List_Unsubscribe=f"<mailto:{target}>")
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["status"], world.smtp.messages) == ("failed", [])

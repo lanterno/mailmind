@@ -72,12 +72,11 @@
   "note": "on the wire",
   "value": [
    {
-    "data": "From: ada@example.test\nTo: unsubscribe@loom.example.test\nSubject: unsubscribe ada\nAuto-Submitted: auto-generated\nContent-Type: text/plain; charset=\"utf-8\"\nContent-Transfer-Encoding: 7bit\nMIME-Version: 1.0\n\nPlease unsubscribe me.\n\r\n",
+    "data": "From: ada@example.test\r\nTo: unsubscribe@loom.example.test\r\nSubject: unsubscribe ada\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <message id>\r\nAuto-Submitted: auto-generated\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nPlease unsubscribe me.\r\n",
     "login": "ada@example.test",
     "mail_from": "ada@example.test",
     "rcpts": [
-     "from",
-     "to"
+     "unsubscribe@loom.example.test"
     ]
    }
   ]

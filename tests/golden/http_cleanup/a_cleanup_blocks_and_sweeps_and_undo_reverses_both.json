@@ -18,8 +18,8 @@
    "sweep_count": 3,
    "unseen": 3,
    "unsub": {
-    "mailto_to": "unsubscribe@loom.example.test",
-    "method": "mailto"
+    "https_host": "loom.example.test",
+    "method": "one-click"
    }
   },
   "headers": {
@@ -40,15 +40,15 @@
    "block_scope": "sender",
    "blocked_token": "news@loom.example.test",
    "browser_url": null,
-   "http_status": null,
-   "method": "none",
+   "http_status": 200,
+   "method": "one-click",
    "ok": true,
    "reversible": {
     "block": true,
     "sweep": true,
     "unsubscribe": false
    },
-   "status": "no_method",
+   "status": "unsubscribed_oneclick",
    "sweep_capped": false,
    "sweep_failed": 0,
    "sweep_queued": 0,
@@ -70,7 +70,9 @@
  },
  {
   "note": "one-click POSTs",
-  "value": []
+  "value": [
+   "https://loom.example.test/u/ada-218"
+  ]
  },
  {
   "note": "SMTP messages",
@@ -113,7 +115,7 @@
     {
      "from": "news@loom.example.test",
      "kind": "sender_cleanup",
-     "status": "no_method",
+     "status": "unsubscribed_oneclick",
      "swept": 3,
      "token": "news@loom.example.test",
      "ts": "2026-11-02T12:00:00+00:00"

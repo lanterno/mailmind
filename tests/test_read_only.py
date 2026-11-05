@@ -198,7 +198,7 @@ def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, wor
     posts = []
     monkeypatch.setattr(server, "_unsub_oneclick_post", lambda url, _redirects=1: posts.append(url))
     mid = "<issue-219@loom.example.test>"                             # one-click, filed where the sweep can't reach
-    world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, List_Unsubscribe_Post="List=One-Click",
+    world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, List_Unsubscribe_Post="List-Unsubscribe=One-Click",
                                               Date="Mon, 02 Nov 2026 07:00:00 +0000"), (w.SEEN,))
     [archived] = q("SELECT pk FROM messages WHERE message_id=?", mid)
     assert app.get(f"/api/message/{archived['pk']}/body").status == 200
