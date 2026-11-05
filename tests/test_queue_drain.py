@@ -242,6 +242,23 @@ def test_a_queued_flag_change_given_up_on_is_put_back(app, world):
     assert flags_here(world) == (0, 0)
 
 
+def test_a_move_that_landed_says_so_before_the_imap_gate_lets_anyone_in(app, world, monkeypatch):
+    """A Discard or an Undo waiting for the gate must find the move marked, or it would cancel a
+    move that has already happened and list a message the server has moved."""
+    import readmutq
+    from mailmind.platform.workers import gates
+    queue(app, world)
+    real, at_release = gates.run, []
+
+    def noting(account, fn, **kw):
+        out = real(account, fn, **kw)
+        at_release.append(rows()[0]["applied"])
+        return out
+    monkeypatch.setattr(gates, "run", noting)
+    readmutq.drain()
+    assert at_release == [1]
+
+
 def test_a_queued_move_the_server_refuses_comes_back(app, world):
     queue(app, world)
     world.server.fail("UID MOVE", user=w.ADA)
