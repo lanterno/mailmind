@@ -38,7 +38,10 @@ def holds_no_parts(part):
 
 
 def _hdr(msg, name):
-    v = msg.get(name)
+    try:
+        v = msg.get(name)
+    except ValueError:     # policy.default refuses a value whose encoded words decode to a line break
+        v = next((raw for key, raw in msg.raw_items() if key.lower() == name.lower()), None)
     if not v:
         return ""
     out = []
@@ -50,7 +53,7 @@ def _hdr(msg, name):
                 out.append(part.decode("utf-8", "replace"))
         else:
             out.append(part)
-    return "".join(out).strip()
+    return "".join(out).replace("\r", " ").replace("\n", " ").strip()
 
 
 def _decode(part):
@@ -80,7 +83,7 @@ def parse(raw_bytes):
         ctype = (part.get_content_type() or "").lower()
         disp = (part.get_content_disposition() or "").lower()
         filename = part.get_filename()
-        cid = (part.get("Content-ID") or "").strip().strip("<>")
+        cid = _hdr(part, "Content-ID").strip("<>")
         is_attachment = disp == "attachment" or (filename and disp != "inline") or ctype == "message/rfc822"
         if is_attachment or (filename and not cid):
             payload = part_bytes(part)
@@ -168,7 +171,7 @@ def inline_parts(raw_bytes):
     for part in walk(msg):
         if part.get_content_maintype() == "multipart":
             continue
-        cid = (part.get("Content-ID") or "").strip().strip("<>")
+        cid = _hdr(part, "Content-ID").strip("<>")
         if cid:
             out[cid] = ((part.get_content_type() or "").lower(),
                         part.get_payload(decode=True) or b"")
