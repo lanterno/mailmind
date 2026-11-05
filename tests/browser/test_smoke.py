@@ -387,6 +387,39 @@ def test_reopen_a_saved_draft(page, world):
     clean(page)
 
 
+def writing(page, to, subject, body):
+    page.keyboard.press("c")
+    page.get_by_role("textbox", name="name@example.com").fill(to)
+    page.get_by_role("textbox", name="subject").fill(subject)
+    page.get_by_role("textbox", name="message body").fill(body)
+
+
+def copies(world, subject):
+    """The copies in Ada's Drafts whose bytes carry `subject`."""
+    with world.server.lock:
+        return [m.raw for m in world.server.mailbox(w.ADA, "Drafts").messages.values() if subject.encode() in m.raw]
+
+
+class Held:
+    """The page's requests to `path` wait here until let go, as they would on a slow server."""
+
+    def __init__(self, page, path):
+        self.routes, self.holding = [], True
+        page.route(f"**{path}", self._arrived)
+
+    def _arrived(self, route):
+        if self.holding:
+            self.routes.append(route)
+        else:
+            route.fallback()
+
+    def let_go(self):
+        self.holding = False
+        for r in self.routes:
+            r.fallback()
+        self.routes.clear()
+
+
 def test_opening_the_composer_focuses_at_once_and_never_takes_focus_back(page, world):
     opened(page)
     page.evaluate("composeOpen({mode: 'new'})")
@@ -395,6 +428,107 @@ def test_opening_the_composer_focuses_at_once_and_never_takes_focus_back(page, w
     expect(page.get_by_role("textbox", name="subject")).to_be_hidden()
     assert page.evaluate("""() => { composeOpen({mode: 'new'}); document.querySelector('#cmpSubject').focus();
                                     return new Promise(done => setTimeout(() => done(document.activeElement.id), 120)); }""") == "cmpSubject"
+    clean(page)
+
+
+def test_a_message_whose_closing_save_fails_stays_a_click_away(page, world):
+    opened(page)
+    writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    world.server.fail("APPEND", user=w.ADA)
+    page.keyboard.press("Escape")
+    box, float_ = page.get_by_role("textbox", name="message body"), page.locator("#sendFloat")
+    expect(float_).to_contain_text("Your message couldn’t be saved")
+    expect(box).to_be_hidden()
+    expect(page.locator("#srLive")).to_have_text("Your message couldn’t be saved")
+    assert page.problems and all("502" in x for x in page.problems)   # the save's answer, as the console logs it
+    page.problems.clear()
+    float_.get_by_role("button", name="Edit").click()
+    expect(box).to_have_value("Which blue did you mean?")
+    expect(page.get_by_role("textbox", name="subject")).to_have_value("Thread colours")
+    expect(float_).to_be_hidden()
+    page.keyboard.press("Escape")                         # nothing else holds it, so closing it saves it
+    until(page, lambda: len(copies(world, "Thread colours")) == 1, "the reopened message saved")
+    clean(page)
+
+
+def test_typing_during_a_save_is_saved_when_the_composer_closes(page, world):
+    opened(page)
+    writing(page, "lin@example.test", "Thread colours", "Which blue")
+    held = Held(page, "/api/draft")
+    page.keyboard.press("Control+s")
+    until(page, lambda: held.routes, "the save reached the network")
+    page.get_by_role("textbox", name="message body").press_sequentially(" did you mean?")
+    held.let_go()
+    expect(page.locator("#cmpSaved")).to_contain_text("Saved")
+    until(page, lambda: len(copies(world, "Thread colours")) == 1, "the first save landed")
+    page.keyboard.press("Escape")
+    until(page, lambda: any(b"did you mean?" in c for c in copies(world, "Thread colours")), "the typing saved")
+    assert len(copies(world, "Thread colours")) == 1
+    clean(page)
+
+
+def test_removing_a_recipient_is_an_edit_a_close_saves(page, world):
+    opened(page)
+    writing(page, "lin@example.test, noor@example.test", "Thread colours", "Which blue did you mean?")
+    page.keyboard.press("Control+s")
+    until(page, lambda: len(copies(world, "Thread colours")) == 1, "the save landed")
+    expect(page.locator("#cmpSaved")).to_contain_text("Saved")
+    page.get_by_role("button", name=re.compile("^Remove noor@example.test")).click()
+    page.keyboard.press("Escape")
+    until(page, lambda: all(b"noor@" not in c for c in copies(world, "Thread colours")), "the removal saved")
+    assert len(copies(world, "Thread colours")) == 1
+    clean(page)
+
+
+def test_saves_of_one_composer_go_in_turn(page, world):
+    opened(page)
+    writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    held = Held(page, "/api/draft")
+    page.keyboard.press("Control+s")
+    until(page, lambda: held.routes, "the first save reached the network")
+    page.get_by_role("textbox", name="message body").press_sequentially(" The dark one?")
+    page.keyboard.press("Control+s")
+    page.wait_for_timeout(200)
+    assert len(held.routes) == 1                          # the second waits for the first's answer
+    asked = []
+    page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/draft") else None)
+    held.let_go()
+    until(page, lambda: asked, "the second save went")
+    assert asked[0]["draft_id"]                           # and names the copy the first left
+    until(page, lambda: any(b"The dark one?" in c for c in copies(world, "Thread colours")), "the second save landed")
+    assert len(copies(world, "Thread colours")) == 1
+    clean(page)
+
+
+def test_a_send_during_a_first_save_leaves_no_copy_behind(page, app, world):
+    opened(page)
+    writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    held = Held(page, "/api/draft")
+    page.keyboard.press("Control+s")
+    until(page, lambda: held.routes, "the save reached the network")
+    asked = []
+    page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/send") else None)
+    page.get_by_role("button", name="Send ▸").click()
+    page.wait_for_timeout(200)
+    assert asked == []                                    # the send waits to learn which copy it replaces
+    held.let_go()
+    until(page, lambda: asked, "the send went")
+    assert asked[0]["draft_id"]
+    let_undo_pass(page)
+    due(app)
+    assert copies(world, "Thread colours") == []
+    assert [m.rcpts for m in world.smtp.messages] == [["lin@example.test"]]
+    clean(page)
+
+
+def test_a_message_reopened_by_undo_send_is_saved_when_closed(page, world):
+    opened(page)
+    compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    page.locator("#sfUndo").click()
+    box = page.get_by_role("textbox", name="message body")
+    expect(box).to_have_value("Which blue did you mean?")
+    page.keyboard.press("Escape")
+    until(page, lambda: len(copies(world, "Thread colours")) == 1, "the reopened message saved")
     clean(page)
 
 
