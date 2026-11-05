@@ -1544,7 +1544,7 @@
 const BVAR={"spam/scam":"--scam","blocked":"--block","newsletters/marketing":"--mkt","automated-notifications":"--notif","receipts/transactional":"--txn","personal/protected":"--keep","other/personal-ish":"--personal"};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const state={all:[],q:"",account:"",live:null,lastSync:null,armed:null,liveStats:null,aliases:{},
-  folder:"INBOX",folders:[],cmsgs:[],csel:null,cseq:0,cmarked:new Set(),
+  folder:"INBOX",folders:[],cmsgs:[],cSyncing:false,cSyncFailed:false,csel:null,cseq:0,cmarked:new Set(),
   compose:null,myAddrs:new Set(),outbox:[],failedSend:null,
   threadView:true,thread:null,searching:false,searchItems:[],searchSeq:0,searchScope:"all",sseLive:false,allInbox:false,
   views:[],viewId:null,screener:[],screenerCount:0,replylaterCount:0,
@@ -2004,6 +2004,7 @@ async function loadCMessages(){
   catch(e){ if(seq===state.cseq){ $("#rows").innerHTML='<div class="nores">Couldn’t load messages. <button class="ai-rerun" id="cmRetry">Retry</button></div>'; const b=$("#cmRetry"); if(b)b.onclick=()=>{state.folder=fol0;loadCMessages();}; } return; }
   if(seq!==state.cseq||acct!==state.account||fol!==state.folder)return;  // superseded
   state.cmsgs=d.items||[]; state.cHasMore=!!d.has_more; state.cmarked.clear();
+  state.cSyncing=!!d.syncing; state.cSyncFailed=!!d.sync_failed;   // a first scan still reading, or one that failed
   renderClientList();
   if((state.folder||"").toUpperCase()==="INBOX"){ touchLastLook(); clearNewPill(); }   // looking at the inbox now → reset watermark + drop the stale "N new" pill
   // desktop: preview the first message in the reader pane. Mobile (single pane): stay on the list.
@@ -2013,7 +2014,7 @@ async function loadCMessages(){
     if(briefHere()) showBrief(false);   // the Inbox opens on today's brief, not its first message
     else if(listInView().length && !isMobile()) openConversation(listInView()[0],false);
     else if(state.cmsgs.length){ document.body.classList.remove("reading"); }
-    else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent="No messages in this folder."; document.body.classList.remove("reading"); }
+    else { state.thread=null; const r=$("#reader"); r.className="reader empty-pane"; r.textContent=state.cSyncing?"Reading this folder for the first time…":"No messages in this folder."; document.body.classList.remove("reading"); }
   }
 }
 const avHue=a=>{let h=0;for(const c of(a||""))h=(h*31+c.charCodeAt(0))%360;return h;};   // full wheel at low saturation — amber stays the needs-you signal
@@ -2078,12 +2079,14 @@ function renderClientList(){
   if(q) v=v.filter(it=>(it.from_name+" "+it.from_addr+" "+it.subject+" "+it.snippet).toLowerCase().includes(q));
   const noun=state.threadView?"conversation":"message";
   const more=(state.cHasMore&&!q)?"+":"";   // server has more than the loaded page
-  $("#count").textContent=`${v.length}${more} ${noun}${v.length===1&&!more?"":"s"}`;
+  $("#count").textContent=`${v.length}${more} ${noun}${v.length===1&&!more?"":"s"}`+(state.cSyncing?" · reading the rest…":"");
   renderTabs(v,more); v=tabFilter(v);
   renderBulk();
   const br=briefHere()&&!q?briefRowHtml():"";
   if(!v.length){ $("#rows").innerHTML=br+(briefHere()&&state.inboxTab!=="all"&&state.cmsgs.length
       ?`<div class="nores">${state.inboxTab==="needs"?"Nothing needs you.":"Nothing unread."} Everything else is in <button class="linkbtn" data-tab="all">Everything</button>.</div>`
+      :state.cSyncing?'<div class="nores" role="status">Reading this folder for the first time…</div>'
+      :state.cSyncFailed?'<div class="nores" role="status">Couldn’t sync this folder. <button class="ai-rerun" data-resync>Retry</button></div>'
       :'<div class="nores">Nothing here.</div>'); return; }
   // day sections only for real folders listed newest-first (virtual folders sort by their own clock)
   const byDay=!(state.folder||"").startsWith("__") && v.every((it,i)=>it.ts && (i===0||v[i-1].ts>=it.ts));
@@ -4549,7 +4552,8 @@ function connectEvents(){
   es.addEventListener("sync-done", onSyncDone);
   es.addEventListener("snooze-wake", e=>onSnoozeWake(JSON.parse(e.data)));
   es.addEventListener("mute", e=>onMute(JSON.parse(e.data)));
-  es.addEventListener("reconcile", e=>onReconcile(JSON.parse(e.data)));   // ghosts pruned server-side → refresh the open list
+  es.addEventListener("reconcile", e=>onReconcile(JSON.parse(e.data)));
+  es.addEventListener("folder-synced", e=>onFolderSynced(JSON.parse(e.data)));   // a folder's first scan ended   // ghosts pruned server-side → refresh the open list
   es.addEventListener("followup", ()=>{ loadFolders(true);   // badge only — never disrupt the reader
     if(state.folder==="__waiting__"&&!state.compose&&!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages(); });
   es.addEventListener("outbox", ()=>loadOutbox());
@@ -4589,6 +4593,15 @@ function onReconcile(d){
   else if(state.account===d.account && state.folder.toUpperCase()==="INBOX"){ loadCMessages(); }
 }
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ _bgNew=0; bumpTitle(); } });   // refocus alone ≠ "looked at new mail" (the inbox isn't reloaded) → don't advance the watermark here
+function onFolderSynced(d){
+  // the first scan of d.folder ended. A list that answered while it was still reading loads what it
+  // read; one it failed for says so (opening it again tries again, so this never retries by itself).
+  // The open folder's list refreshes only itself: loadFolders would supersede a load still in flight.
+  if(state.allInbox||state.account!==d.account||state.folder!==d.folder){ loadFolders(true); return; }
+  if(!state.cSyncing)return;
+  if(!d.ok){ state.cSyncing=false; state.cSyncFailed=true; renderClientList(); return; }
+  if(!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages();
+}
 function onSnoozeWake(d){
   if(d.accounts && d.accounts.includes(state.account)
      && !state.compose && !state.searching && !state.asking && state.cmarked.size===0){ loadCMessages(); }
@@ -4966,6 +4979,7 @@ $("#rows").addEventListener("click",e=>{
   const pt=e.target.closest(".pt-row"); if(pt){ $$("#rows .pt-row.reading").forEach(n=>n.classList.remove("reading")); pt.classList.add("reading"); openClientMsg(+pt.dataset.pk,false); return; }
   if(e.target.closest("[data-askrerun]")){ runAsk(); return; }
   const asrc=e.target.closest("[data-asksrc]"); if(asrc){ $$("#rows .ask-src.reading").forEach(n=>n.classList.remove("reading")); asrc.classList.add("reading"); openClientMsg(+asrc.dataset.asksrc,false); return; }
+  if(e.target.closest("[data-resync]")){ loadCMessages(); return; }   // a folder whose first scan failed: open it again
   const lm=e.target.closest("[data-loadmore]");
   if(lm){ lm.textContent="Loading…"; (lm.dataset.loadmore==="search"?loadMoreSearch():loadMoreClient()); return; }
   const cb=e.target.closest("[data-mark]");
