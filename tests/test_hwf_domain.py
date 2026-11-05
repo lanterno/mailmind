@@ -588,11 +588,17 @@ def test_hwf_classifier_precedence(rules_file, addr, subject, listed, bucket, co
     assert mailclass.classify(addr, subject, "", listed)[:2] == (bucket, conf)
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the ESP marker 'sg.' matches any domain containing it")
-@pytest.mark.parametrize("addr", ["lin@msg.example.test", "ivo@nsg.example.test"])
+@pytest.mark.parametrize("addr", ["lin@msg.example.test", "ivo@nsg.example.test", "lin@studio.sg"])
 def test_hwf_a_domain_merely_containing_an_esp_marker_is_not_bulk(data_dir, addr):
     import mailclass
     assert mailclass.classify(addr, "Lunch on Thursday?", "", False)[0] != "newsletters/marketing"
+
+
+@pytest.mark.parametrize("addr", ["deals@sg.example.test", "deals@em.sg.example.test"])
+def test_hwf_the_short_esp_marker_still_counts_as_a_whole_label(data_dir, addr):
+    import mailclass
+    assert mailclass.classify(addr, "Lunch on Thursday?", "", False)[:3] == (
+        "newsletters/marketing", "high", "bulk email-service-provider domain")
 
 
 def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
