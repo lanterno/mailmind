@@ -378,14 +378,15 @@ def wake_snoozed():
     now = int(time.time())
     c = store.conn()
     due = store.due_snoozes(c, now)
+    marked = False
     for r in due:
         store.clear_snooze(c, r["pk"])
-        store.fts_index(c, r["pk"])
+        if r["seen"]:
+            marked = store.queue_flags(c, r, {"seen": False}, f"wake:{r['pk']}:{now}", now_iso()) or marked
     c.commit()
     c.close()
-    for r in due:
-        if r["seen"]:
-            _readmut_enqueue_flags(r["pk"], {"seen": False}, f"wake:{r['pk']}:{now}")
+    if marked:
+        _flags_queued()
     if due:
         invalidate_stats()
         sse.publish("snooze-wake", {"count": len(due),
@@ -1428,24 +1429,20 @@ def _readmut_enqueue_flags(pk, flags, mutation_id):
     if not row:
         c.close()
         return {"ok": False, "msg": "not found"}
-    acct, mid = row["account"], (row["message_id"] or "").strip()
     if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
         mutation_id = secrets.token_hex(16)
-    payload = {"pk": pk, "uid": row["uid"], "flags": flags,
-               "was": {k: bool(row[k]) for k in flags}}
-    _id, created = store.read_mut_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or pk}:{mutation_id}",
-                                             "op": "flag", "message_id": mid, "src_folder": row["folder"],
-                                             "dest": None, "payload": json.dumps(payload),
-                                             "next_attempt_at": 0, "created_at": now_iso()})
-    if created:
-        store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items()})
+    created = store.queue_flags(c, row, flags, mutation_id, now_iso())
     c.commit()
     c.close()
     if created:
-        readmutq.kick()
-        invalidate_stats()
-        sse.publish("outbox", {})               # the tray shows it
+        _flags_queued()
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+
+
+def _flags_queued():
+    readmutq.kick()
+    invalidate_stats()
+    sse.publish("outbox", {})                   # the tray shows it
 
 
 def do_pending_retry(mid):

@@ -41,6 +41,22 @@ def unsub_log_put(c, from_addr, method, status, http_status, ts, key, accounts):
 
 
 # ---- offline read-mutation queue: the rows; readmutq.QUEUE moves them through their states ----
+def queue_flags(c, row, flags, mutation_id, when):
+    """Queue a flag change on message `row` for the server and show it on the row at once, in the
+    caller's transaction. The queue's row keeps the flags it replaced, which a change the server
+    refuses, or one the queue gives up on, puts back. False if that id was queued already."""
+    acct, mid = row["account"], (row["message_id"] or "").strip()
+    payload = {"pk": row["pk"], "uid": row["uid"], "flags": flags,
+               "was": {k: bool(row[k]) for k in flags}}
+    _id, created = read_mut_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
+                                       "op": "flag", "message_id": mid, "src_folder": row["folder"],
+                                       "dest": None, "payload": json.dumps(payload),
+                                       "next_attempt_at": 0, "created_at": when})
+    if created:
+        set_local_flags(c, row["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+    return created
+
+
 def read_mut_insert(c, row):
     """Insert a queued mutation; (id, created) — created=False on idempotency_key dupe. Race-safe."""
     existing = c.execute("SELECT id FROM read_mutations WHERE idempotency_key=?",
@@ -560,8 +576,8 @@ def due_snoozes(c, now_ts):
     c.execute("""DELETE FROM snoozes WHERE until<=? AND NOT EXISTS
                  (SELECT 1 FROM messages m WHERE m.message_key=snoozes.message_key AND m.folder=snoozes.folder)""",
               (now_ts,))
-    return c.execute("SELECT pk, account, folder, seen FROM messages "
-                     "WHERE snoozed_until IS NOT NULL AND snoozed_until<=?", (now_ts,)).fetchall()
+    return c.execute("SELECT * FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until<=?",
+                     (now_ts,)).fetchall()
 
 
 def copy_in_folder(c, message_key, folder):
