@@ -2630,7 +2630,6 @@ def do_invite_rsvp(body):
     """iMIP RSVP: reply to a calendar invite's organizer with a METHOD:REPLY .ics carrying the
     responder's PARTSTAT. Goes through the durable outbox (so it's Undo-Send-able), behind the
     same mutation + strict-origin guards as /api/send."""
-    import uuid
     try:
         pk = int(body.get("pk"))
     except (TypeError, ValueError):
@@ -2687,12 +2686,27 @@ def do_invite_rsvp(body):
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     meta = {"account": acct["email"],
-            "idempotency_key": f"rsvp:{row['account']}:{invite.get('uid') or pk}:{partstat}:{uuid.uuid4().hex[:8]}",
+            "idempotency_key": _rsvp_key(row["account"], invite.get("uid") or pk, partstat),
             "in_reply_to_pk": pk, "subject": subject,
             "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": 0}
     oid, created = outbox.enqueue(built, meta)
     return {"ok": True, "outbox_id": oid, "queued": created, "decision": decision,
             "organizer": organizer, "summary": summary}, 200
+
+
+def _rsvp_key(account, invite, partstat):
+    """The same answer again, a double click or a retry, finds the send already queued for it. A
+    changed mind is a new send, even back to an earlier answer, since that one went out long ago."""
+    prefix = f"rsvp:{account}:{invite}:"
+    c = store.conn()
+    try:
+        sent = [r[0] for r in c.execute("SELECT idempotency_key FROM outbox WHERE substr(idempotency_key, 1, ?) = ? "
+                                        "ORDER BY id DESC", (len(prefix), prefix))]
+    finally:
+        c.close()
+    if sent and sent[0].rsplit(":", 2)[1] == partstat:
+        return sent[0]
+    return f"{prefix}{partstat}:{len(sent)}"
 
 
 def do_draft(body):
