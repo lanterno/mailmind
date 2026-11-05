@@ -4613,6 +4613,11 @@ def _after_send(_sent):
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 
 
+def _after_flags_changed(changed):
+    """ingest.FlagsChanged: mail read or starred elsewhere shows on a list that's open."""
+    sse.publish("flags-changed", {"account": changed.account, "folder": changed.folder, "count": changed.count})
+
+
 def _after_draft_removed(gone):
     """outbox.DraftCopyRemoved: a send's draft left the server."""
     _draft_list_changed(gone.account, gone.folder)

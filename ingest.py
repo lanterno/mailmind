@@ -9,6 +9,7 @@ import email
 import html
 import imaplib
 from email.utils import parsedate_to_datetime
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -21,6 +22,7 @@ import store
 import threads
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
+from mailmind.platform import bus
 
 CUTOFF_DAYS = 90
 BODY_CHARS = 3000
@@ -90,6 +92,14 @@ FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sy
 _FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
 
 
+@dataclass(frozen=True)
+class FlagsChanged:
+    """A sync found mail read, starred or answered elsewhere (published on mailmind.platform.bus)."""
+    account: str
+    folder: str
+    count: int
+
+
 def _refresh_flags(session, acct, folder):
     """Read the flags of the folder's newest stored mail again (its FLAG_REFRESH highest UIDs) and
     store what changed, so mail read, starred or answered in another client shows so here. A row
@@ -129,6 +139,8 @@ def _refresh_flags(session, acct, folder):
         c.commit()
     finally:
         c.close()
+    if changed:
+        bus.publish(FlagsChanged(acct["email"], folder, changed))
     return changed
 
 

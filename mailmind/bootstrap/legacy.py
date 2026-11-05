@@ -37,7 +37,8 @@ def wire(server):
                    bus.subscribe(outbox.DraftCopyRemoved, server._after_draft_removed),
                    bus.subscribe(readmutq.Applied, server._after_readmut),
                    bus.subscribe(readmutq.Restored, server._after_readmut),
-                   bus.subscribe(realtime.InboxChanged, server._after_idle)])
+                   bus.subscribe(realtime.InboxChanged, server._after_idle),
+                   bus.subscribe(server.ingest.FlagsChanged, server._after_flags_changed)])
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
                   (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))
 
