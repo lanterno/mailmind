@@ -1603,6 +1603,7 @@ async function loadDigest(silent){
   state.aliases=d.aliases||{};
   state.signatures=d.signatures||{}; state.signatureDefault=d.signature_default||"";
   state.accountsList=d.accounts||[]; if(d.sync)state.lastSync=d.sync;
+  state.profile=d.profile||"full";   // read-only: nothing is written to a mail server; moves and sends wait
   // sendable identities come from the configured-account list (works even before sync / under NOSYNC)
   state.sendAccounts=(d.send_accounts&&d.send_accounts.length)?d.send_accounts:(d.accounts||[]);
   state.myAddrs=new Set([...(d.send_accounts||[]),...(d.accounts||[])].map(e=>(e||"").toLowerCase()));
@@ -1630,10 +1631,12 @@ function syncLabel(){
   if(bad.length) return {cls:"err", txt:bad.length===1?`${nameOf(bad[0])} can’t connect`:`${bad.length} accounts can’t connect`};
   if(reconciling) return {cls:"busy", txt:"Reconciling…"};
   if(_manualSync||sy.running||Object.values(state.statusMap||{}).some(st=>st&&st.health==="syncing")) return {cls:"busy", txt:"Syncing…"};
+  if(readOnly()) return {cls:"", txt:"Read-only"};   // no background sync, and nothing it files reaches the server yet
   if(sy.last){ const d=new Date(sy.last), today=d.toDateString()===new Date().toDateString();
     return {cls:"ok", txt:"Synced "+(today?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):d.toLocaleDateString([],{month:"short",day:"numeric"}))}; }
   return {cls:"", txt:"Not synced yet"};
 }
+function readOnly(){ return state.profile==="read-only"; }
 function renderStatus(){
   const L=syncLabel(), b=$("#statusBtn"); if(!b)return;
   b.querySelector(".sdot").className="sdot "+L.cls; $("#statusTxt").textContent=L.txt;
@@ -1650,6 +1653,7 @@ function statusInfoHtml(L){
     return `<div class="sm-acct"><i class="sdot ${h==="error"?"err":h==="syncing"?"busy":h==="ok"?"ok":""}" aria-hidden="true"></i><span>${esc(nameOf(a))}</span>`
       +`<small${h==="error"?' class="err"':""}>${h==="error"?"can’t connect":h==="syncing"?"syncing…":h==="ok"?"connected":""}</small></div>`; }).join("");
   return `<div class="sm-hd"><i class="sdot ${L.cls}" aria-hidden="true"></i>${esc(L.txt)}</div>
+    ${readOnly()?'<div class="sm-sub">MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. What you file, star or send waits for a full run.</div>':""}
     ${sy.last&&sy.result?`<div class="sm-sub">Last sync: ${esc(sy.result)}</div>`:""}
     <div class="sm-sub">${live} · <b>${(s.summarized||0).toLocaleString()}</b> summarized</div>
     ${aiLineHtml()}
@@ -3322,7 +3326,8 @@ async function cremoveAction(pk,path,obj,verb,act){ if(!cfindAny(pk))return;   /
   try{ const r=await cpost(path,obj); if(!r.ok)throw new Error(r.msg||r.error||"err");
     if(r.pks)cForget(r.pks);
     const n=r.count||1;   // a conversation route reports how many messages it filed, and how many it couldn't
-    toast(r.failed?`${verb} ${n} of ${n+r.failed} — the rest stayed`:n>1?`${verb} ${n} messages`:verb);
+    const later=(r.status==="queued"||r.queued)?(readOnly()?" · waits for a full run":" · once the server is back"):"";
+    toast((r.failed?`${verb} ${n} of ${n+r.failed} — the rest stayed`:n>1?`${verb} ${n} messages`:verb)+later);
     if(r.undoable)showUndoFloat(n>1?`${verb} ${n}`:verb);
     if(r.failed)loadCMessages(); }
   catch(e){ state.cmsgs=snap; state.searchItems=ssnap; state.csel=wasSel; renderClientList(); if(wasSel===pk)openClientMsg(pk,false); toast("Couldn’t "+act); } }
