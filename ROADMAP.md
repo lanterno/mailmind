@@ -288,25 +288,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   indexes stable. Then lift the refusal. Pinned by
   `test_hwf_an_attached_emails_files_are_not_listed_as_the_outers` and
   `test_hwf_an_attached_emails_text_is_not_taken_for_the_outers`.
-- **Folded subjects and senders** · medium value · effort S — `ingest._process` reads headers with
-  compat32 and `ingest.dec` turns a fold's CR/LF into spaces. "…items⏎ for next week" is stored
-  with three spaces. HTML hides the run, but Reply and Forward put it into the subject box and the
-  reply goes out with it. A fold next to an encoded-word loses its whitespace in `decode_header`
-  instead ("Re:مرحبا", "Café menufor next week"), and that shows everywhere: the list, the
-  reader, search tokens and AI prompts. A fold inside a quoted From display name makes
-  `parseaddr` return `('', 'Bo')`, losing the sender's address. `manage.py` carries its own copy
-  of `dec`. The fix is to unfold `\r?\n[ \t]+` to a single space before decoding, in both copies of
-  `dec` and before `parseaddr`, not merely drop the CRLF: a kept tab is later deleted by
-  `compose._clean`, gluing the words. Existing rows heal on a full resync.
-- **An encoded CR or LF in To, Cc or Reply-To** · medium value · effort S — Under
-  `policy.default` an encoded-word that decodes to CR or LF in an address header makes
-  `headerregistry` raise, and `mailparse._hdr` doesn't guard `msg.get`. So `parse()` raises for
-  the whole message. `ingest.fetch_body` never stores the body, `message_body` returns 500, and
-  the reader's Retry fails the same way. Reply and Forward can't load it and its body is never
-  indexed. `server.backfill_round` re-downloads it every round under the IMAP gate, and twelve
-  such messages among the newest unfetched bodies starve everything older. From is safe, since ingest
-  reads it with compat32. The fix: fall back in `_hdr` to the raw value from `raw_items()`,
-  unfolded, decoded and with CR/LF turned to spaces, the idea `server._hdr_text` already uses.
 - **format=flowed is read as hard breaks** · low value · effort S — Nothing reads the `format` or
   `DelSp` parameters. A text-only flowed message shows in the reader's `<pre>` hard-wrapped at
   about 72 columns, with a stray space on each space-stuffed line, and DelSp=yes splits words.
@@ -353,61 +334,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Correctness and hardening
 
-- **Keep request text out of log lines** · low value · effort S — `messages_in` prints
-  `[folder-sync] {account}/{folder}` with the folder as the query string decoded it, so a name
-  holding `%0A` writes extra lines into the server's output. Only the local terminal reads it, but
-  a forged line could pass for a real one. Print request-supplied values with `!r`.
-- **Let a received nudge expire** · medium value · effort S — `followups_tick` runs
-  `store.expire_followups` (older than `FOLLOWUP_EXPIRE_DAYS`, 14) and then
-  `store.followup_detect_received`, whose floor is 30 days and which only skips threads that
-  already have a row. The expired row is gone, so the same tick inserts it again with a fresh
-  `due_ts`, and the nudge keeps nagging until day 30. Keep expired rows (state `expired`) or bound
-  detection by the expiry window. Pinned by `test_a_received_nudge_stops_after_the_expiry_window`.
-- **Store a time, not a pk, in Reply Later's `last_msg_ts`** · low value · effort S —
-  `store.set_replylater` binds `anchor_pk` to both `anchor_pk` and `last_msg_ts`. Nothing reads
-  `last_msg_ts` for `replylater` rows yet, so the harm is latent: code that ages them by it would
-  see a 1970 timestamp. Pinned by `test_reply_later_records_when_the_thread_last_moved`.
-- **Parse the messages the corpus shows going wrong** · medium value · effort M — four strict
-  xfails in `tests/test_world.py`, each on a fictional message:
-  - a raw UTF-8 display name in From empties `from_name` and `from_addr`;
-  - snippets keep the wire's carriage returns;
-  - a multipart with no boundary loses its text, in the snippet and when opened;
-  - a forwarded `message/rfc822` attachment downloads empty with size 0
-    (`mailparse.extract_part` uses `get_payload(decode=True)`, which is None for that type).
 - **Flags changed elsewhere: cheaper, and live** · low value · effort M —
   `ingest._refresh_flags` reads the flags of a folder's `FLAG_REFRESH` newest UIDs on every
   incremental sync. With CONDSTORE (`FETCH … CHANGEDSINCE` and a `highest_modseq` kept per
   folder) it could ask only for what changed, and reach older mail too. What it changes isn't
   pushed: the open list shows it on its next load, since `sync-done` redraws only the digest.
-- **Prune a sweep's local rows by Message-ID** · low value · effort S — `manage.sweep_account`
-  prunes local rows by live UID, where expiry and the AI sweep prune by Message-ID. Across a
-  UIDVALIDITY change sync hasn't seen yet, it deletes the wrong rows. The next sync's reset heals
-  them.
-- **AI spend and cache keys** · medium value · effort M — each pinned by a strict xfail in
-  `tests/test_hwf_ai.py`:
-  - a cached brief keeps the pks it was built with, so a renumbered folder shrinks its chips
-    (`test_bug_a_cached_brief_still_names_its_messages_after_a_renumber`);
-  - opening your own reply in Sent kicks a pre-draft that `_gen_draft_ahead`'s GC then drops as
-    moot, so every open pays again. Check the anchor's folder in `_draft_eligible`
-    (`test_bug_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted`);
-  - with From switched to another account, Draft looks the thread up under that account and
-    answers 404 (`test_bug_a_draft_survives_switching_the_from_account`);
-  - the review's `cleaned` count ignores the account it is scoped to, because `unsub_log` has no
-    account column (`test_bug_the_review_counts_only_this_accounts_cleanups`);
-  - a message without a thread id is summarized as thread `pk:N`, which matches nothing (404). Sync
-    gives every row a thread id, so this path is dead in practice
-    (`test_bug_a_message_without_a_thread_id_can_be_summarized`);
-  - the brief's `_clean` keeps the model's group `count` unclamped, so a chip can claim more
-    messages than its pks hold.
-- **Stats and snippets: smaller bugs** · low value · effort S — each pinned by a
-  strict xfail in `tests/test_hwf_domain.py`:
-  - `manage.plan_account_db`, behind `/api/stats`, reads `list_unsub_raw`, which is filled only at
-    preview time, so mail that is junk only by its List headers counts as kept
-    (`test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored`);
-  - a full re-scan of a folder blanks the snippets that fetched bodies filled, and INBOX snippets
-    taken at sync keep invisible preheader padding, because `_html_to_snippet_text` never strips
-    what it unescapes (`test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message`,
-    `test_hwf_an_inbox_snippet_drops_invisible_preheader_padding`).
 
 ## Open decisions
 

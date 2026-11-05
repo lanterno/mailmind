@@ -151,7 +151,7 @@ and the Claude API.
   stack; thread mute that silences future replies at ingest and drops the thread out of
   the inbox while keeping it searchable; and a **Waiting** folder that tracks what you
   owe and are owed ("Sent 3d ago · no reply", "Awaiting your reply") and auto-resolves
-  when a reply lands.
+  when a reply lands. A draft of your reply doesn't count: a pin stays until it goes out.
 - **The Screener.** First-contact senders are gated one decision at a time — Allow
   keeps, Screen-out blocks — and each decision becomes a rule, so the same sender is
   never re-litigated.

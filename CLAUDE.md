@@ -159,6 +159,10 @@ Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbo
 `sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
+`mailparse.dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
+it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mailparse.walk` takes an
+attached email as one part of its message, as a reader does; what it holds isn't the outer message's.
+
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
 (`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative; its
 side column, `briefSideHtml`, from `/api/upcoming` and the `__waiting__` view).
@@ -517,7 +521,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `(account, message_id)` — see `store.get_message_by_msgid`. A stored AI answer is checked
   against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
-  moved stored thread summaries onto it.
+  moved stored thread summaries onto it. A stored brief keeps each group's messages by Message-ID
+  too, and a read gives the pks they have now (`summarize_briefing._groups_now`).
 - **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
   union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
   Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
