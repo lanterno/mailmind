@@ -63,13 +63,14 @@ def append_to_sent(acct, raw, message_id=None):
     """IMAP APPEND the exact sent bytes to the account's Sent folder, flagged \\Seen.
     Returns the resolved folder name. Raises if no Sent folder or the APPEND fails.
     Given `message_id`, a copy already filed under it is kept and nothing is appended: a retry
-    can't tell whether the last try's APPEND landed before its connection went."""
+    can't tell whether the last try's APPEND landed before its connection went. One flagged
+    \\Deleted is as good as gone, so it doesn't count."""
     s = mailbox.open_session(acct)
     try:
         sent = mail_session.find_role(s, "sent") or "Sent"
         if message_id:
             s.select(sent)
-            if s.by_message_id(message_id) is not None:
+            if s.uids("UNDELETED", "HEADER", "Message-ID", accounts.imap_quote(message_id)):
                 return sent
         s.append(sent, raw, flags=["\\Seen"], when=datetime.now().astimezone())
         return sent

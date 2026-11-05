@@ -75,7 +75,9 @@ def _uid_by_msgid(s, mid):
 def _already_in(s, folder, mid, back_to):
     """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
     again after. A queued move asks before it moves: on a server without MOVE, a connection that
-    dropped after the COPY landed left the original behind, and moving it again would copy twice."""
+    dropped after the COPY landed left the original behind, and moving it again would copy twice.
+    A copy flagged \\Deleted doesn't count: a refused EXPUNGE left it, and the next expunge from any
+    client takes it, so removing the original on its word would leave nothing."""
     if not mid:
         return False
     try:
@@ -85,7 +87,12 @@ def _already_in(s, folder, mid, back_to):
             raise
         except imaplib.IMAP4.error:
             return False
-        return _uid_by_msgid(s, mid) is not None
+        try:
+            return bool(s.uids("UNDELETED", "HEADER", "Message-ID", accounts.imap_quote(mid)))
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return False
     finally:
         s.select(back_to, readonly=False)
 
