@@ -200,8 +200,6 @@ def test_snooze_hides_the_message_until_it_is_due(page, world):
     clean(page)
 
 
-@pytest.mark.xfail(strict=True, reason="loadFolders bumps state.cseq, then loadCMessages bumps it again, "
-                                       "so the folder counts loadFolders fetched are thrown away")
 def test_the_rail_counts_a_message_just_snoozed(page, world):
     opened(page)
     expect(folder(page, "__snoozed__").locator(".unread")).to_have_count(0)
