@@ -30,7 +30,7 @@ TABLE = [
     ("to:lin cc:noor", ('recipients : "lin" recipients : "noor"', [], [])),
     ("lunch -from:ada", (f'"lunch" NOT ({FROM} : "ada")', [], [])),
     ("lunch -from:ada -quilt", (f'"lunch" NOT ({FROM} : "ada" OR "quilt")', [], [])),
-    ("-from:lin", (None, [], [])),                                 # negation alone is dropped (see below)
+    ("-from:lin", (None, ["m.pk NOT IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)"], [f'{FROM} : "lin"'])),
     # flags, buckets, categories
     ("is:unread", (None, ["m.seen = ?"], [0])),
     ("Is:Unread", (None, ["m.seen = ?"], [0])),
@@ -40,11 +40,11 @@ TABLE = [
     ("is:answered", (None, ["m.answered = ?"], [1])),
     ("is:junk", (None, ["m.is_junk = ?"], [1])),
     ("is:newsletter", (None, ["m.bucket = ?"], ["newsletters/marketing"])),
-    ("-is:receipt", (None, ["m.bucket <> ?"], ["receipts/transactional"])),
+    ("-is:receipt", (None, ["m.bucket IS NOT ?"], ["receipts/transactional"])),
     ("bucket:receipt", (None, ["m.bucket = ?"], ["receipts/transactional"])),
     ("bucket:weird", (None, ["m.bucket = ?"], ["weird"])),
     ("category:Finance", (None, ["s.category = ?"], ["finance"])),
-    ("-category:info", (None, ["s.category <> ?"], ["info"])),
+    ("-category:info", (None, ["s.category IS NOT ?"], ["info"])),
     ("has:attachment", (None, ["m.has_attach = ?"], [1])),
     ("-has:attachment", (None, ["m.has_attach = ?"], [0])),
     # scope and time
@@ -98,20 +98,23 @@ def test_a_nul_in_the_query_is_a_bad_query_not_a_server_error(app):
     assert (r.status, r.json) == (200, {"ok": False, "error": "bad query"})
 
 
-# ── known bugs ───────────────────────────────────────────────────────────
-
 def senders(app, q):
     r = app.get(f"/api/search?scope=all&q={q}").json
     return {i["from_addr"] for i in r["items"]}, len(r["items"])
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a negation-only query matches everything, the excluded mail too")
 def test_a_negation_alone_excludes_what_it_names(app, world):
     found, n = senders(app, "-from:lin")
     assert n > 0 and "lin@example.test" not in found
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: -category: drops every message without a summary")
+def test_a_negation_alone_is_still_too_wide_for_a_bulk_action():
+    import search
+    import server
+    match, _, _ = search.build("-from:lin")
+    assert server._do_is_whole_inbox("-from:lin", match)
+
+
 def test_excluding_a_category_keeps_mail_that_has_none(app, world):
     _, everything = senders(app, "in:INBOX")
     assert senders(app, "in:INBOX%20-category:info")[1] == everything     # nothing is summarized here
