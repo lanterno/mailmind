@@ -785,10 +785,31 @@ def message_body(pk, load_images, prefetch=False):
     }
 
 
+def _plays_drafts(account, folder):
+    """Whether `folder` is this account's Drafts: what the last LIST said (its SPECIAL-USE attribute
+    first, and one folder a role), else what its name says on its own. Part of a name never counts:
+    "Contract drafts" holds whatever was filed there."""
+    with _folder_list_lock:
+        hit = _folder_list_cache.get(account)
+    if hit:
+        return any(f["name"] == folder and f["role"] == "drafts" for f in hit["folders"])
+    return folder_roles.names_drafts(folder)
+
+
+def _is_draft(row):
+    """A message is a draft if the server flags it \\Draft, or it sits in the account's Drafts."""
+    return bool(row["draft"]) or _plays_drafts(row["account"], row["folder"])
+
+
+def _draft_copy_ours_to_remove(d):
+    """outbox.draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
+    return outbox.draft_copy_is_ours(d) or _plays_drafts(d["account"], d["folder"])
+
+
 def _draft_info(row):
-    """For a message in the Drafts folder, expose its draft_id + mode so the client can
-    open it back into the composer. Lazily registers a drafts row if one isn't tracked yet."""
-    if "draft" not in (row["folder"] or "").lower():
+    """For a draft, expose its draft_id + mode so the client can open it back into the composer.
+    Lazily registers a drafts row if one isn't tracked yet."""
+    if not _is_draft(row):
         return {}
     c = store.conn()
     d = store.draft_by_msgid(c, row["account"], row["message_id"])
@@ -2672,13 +2693,14 @@ def do_draft(body):
         row = store.draft_get(c, int(body["draft_id"]))
         c.close()
         if row:
-            try:
-                acct = accounts.get(row["account"])
-                gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(acct, row["folder"], row["uid"],
-                                                                           row["uidvalidity"]),
-                          priority=gates.Priority.INTERACTIVE)
-            except Exception as e:
-                print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
+            if _draft_copy_ours_to_remove(row):
+                try:
+                    acct = accounts.get(row["account"])
+                    gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(acct, row["folder"], row["uid"],
+                                                                               row["uidvalidity"]),
+                              priority=gates.Priority.INTERACTIVE)
+                except Exception as e:
+                    print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
             c = store.conn(); store.draft_delete(c, int(body["draft_id"])); c.commit(); c.close()
         return {"ok": True, "deleted": True}, 200
     try:
@@ -2727,11 +2749,10 @@ def do_draft(body):
         # The old copy is in another mailbox (From changed) or another folder (a draft reopened
         # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
         # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
-        # does a message that isn't a draft at all (MailMind didn't save it, the server doesn't
-        # flag it \Draft): Edit is offered in any folder whose name holds "draft".
+        # does a message that isn't a draft at all.
         if (prev and prev["uid"] and prev["uidvalidity"] is not None
                 and (not same or (prev["folder"] and prev["folder"] != folder))
-                and (prev["raw_sha"] or _flagged_draft(prev))):
+                and _draft_copy_ours_to_remove(prev)):
             try:
                 smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
                                           prev["uidvalidity"])
@@ -2776,14 +2797,6 @@ def do_draft(body):
 def _composer_key(body):
     """The composer's idempotency key, as a save or a send gives it."""
     return str(body.get("idempotency_key") or "").strip()[:200] or None
-
-
-def _flagged_draft(d):
-    c = store.conn()
-    try:
-        return store.flagged_draft(c, d["account"], d["folder"], d["uid"])
-    finally:
-        c.close()
 
 
 _RESUME_MODES = ("new", "reply", "replyall", "forward")
@@ -2940,7 +2953,7 @@ def draft_resume(body):
     c.close()
     if not row:
         return {"ok": False, "error": "That draft is no longer in Drafts."}, 404
-    if "draft" not in (row["folder"] or "").lower():
+    if not _is_draft(row):
         return {"ok": False, "error": "That message isn’t a draft."}, 400
     try:
         acct = accounts.get(row["account"])

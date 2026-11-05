@@ -24,6 +24,7 @@ import store
 import accounts
 import smtpsend
 from mailmind.accounts.domain import provider
+from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
@@ -213,14 +214,30 @@ def _side_effects(oid, row, acct):
             c = store.conn(); dr = store.draft_get(c, row["draft_id"]); c.close()
             if dr:
                 def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
-                    smtpsend.delete_draft_uid(accounts.get(dr["account"]), dr["folder"],
-                                              dr["uid"], dr["uidvalidity"])
+                    if draft_copy_is_ours(dr):
+                        smtpsend.delete_draft_uid(accounts.get(dr["account"]), dr["folder"],
+                                                  dr["uid"], dr["uidvalidity"])
                     _commit(lambda c: store.draft_delete(c, row["draft_id"]))
                 gates.run(dr["account"], cleanup, priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, draft_deleted=1))
         except Exception as e:
             print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
     return unfiled
+
+
+def draft_copy_is_ours(d):
+    """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
+    MailMind saved (the row holds its hash, and a save that never synced has no `messages` row to
+    be flagged), one the server flags \\Draft, or one in a folder named Drafts. Received mail
+    filed under "Contract drafts" stays, and a `drafts` row may well point at it: until now Edit
+    was offered in any folder whose name held "draft"."""
+    if d["raw_sha"] or folder_roles.names_drafts(d["folder"]):
+        return True
+    c = store.conn()
+    try:
+        return store.flagged_draft(c, d["account"], d["folder"], d["uid"])
+    finally:
+        c.close()
 
 
 def send_one(oid):

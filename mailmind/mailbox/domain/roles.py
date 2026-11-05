@@ -68,6 +68,19 @@ def role_by_name(name, delimiter=None):
     return "custom"
 
 
+_DRAFTS_PARENTS = {"inbox", "[gmail]", "[google mail]"}
+
+
+def names_drafts(name):
+    """Whether a folder's name alone says it is the account's Drafts, with no LIST to ask: at the
+    top of the tree, or under the parents servers keep it in. "Clients/Draft" is a folder someone
+    made, so what it holds may be anything."""
+    if role_by_name(name) != "drafts":
+        return False
+    path = re.split(r"[/.]", name)
+    return len(path) == 1 or (len(path) == 2 and path[0].strip().lower() in _DRAFTS_PARENTS)
+
+
 def _by_attribute(folder):
     for a in folder.attributes:
         if a in _ATTRIBUTES:

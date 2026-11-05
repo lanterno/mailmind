@@ -786,8 +786,8 @@ def draft_set_resume(c, did, own_text, tail_text, tail_html, bcc, raw_sha):
 
 
 def flagged_draft(c, account, folder, uid):
-    """Does the server flag this message \\Draft (as last synced)? A folder whose name merely
-    contains "draft" can hold received mail, which must never be removed as a replaced draft."""
+    """Does the server flag this message \\Draft (as last synced)? A folder can hold received mail
+    whatever it is called, and that must never be removed as a replaced draft."""
     r = c.execute("SELECT draft FROM messages WHERE account=? AND folder=? AND uid=?", (account, folder, uid)).fetchone()
     return bool(r and r["draft"])
 
