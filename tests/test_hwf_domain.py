@@ -300,13 +300,15 @@ def test_hwf_a_listed_thread_shows_its_latest_message_the_higher_pk_on_a_tie(db)
     assert [(r["pk"], r["thread_count"]) for r in store.list_waiting(db, A)] == [(waiting, 2)]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a dismissed Reply Later thread stays in the stack")
 def test_hwf_a_dismissed_reply_later_thread_leaves_the_stack(db):
     import store
     put(db, "<a@example.test>", thread_id="T")
     store.set_replylater(db, A, "T", None, "now")
     store.dismiss_followup(db, A, "T", "now")          # what POST /api/followups/dismiss does
     assert [r["thread_id"] for r in store.list_replylater(db, A)] == []
+    assert store.replylater_count(db, A) == 0           # nor counted on the rail
+    store.set_replylater(db, A, "T", None, "later")     # pinned again, it's back
+    assert ([r["thread_id"] for r in store.list_replylater(db, A)], store.replylater_count(db, A)) == (["T"], 1)
 
 
 # -- the draft-ahead cache's hygiene ------------------------------------------
