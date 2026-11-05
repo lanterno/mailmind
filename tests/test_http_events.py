@@ -204,6 +204,21 @@ def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
     subscribers(quick, 0)
 
 
+def test_a_send_that_fails_tells_the_open_tabs(app, world, quick):
+    from datetime import timedelta
+    import outbox
+    s = Stream(app)
+    s.frame()
+    world.smtp.fail("RCPT", "451 4.3.0 try again later")
+    app.post("/api/send", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Linen",
+                           "text": "Half is yours.", "idempotency_key": "k-fails"})
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]
+    s.close()
+    subscribers(quick, 0)
+
+
 def test_a_queued_move_the_server_refuses_tells_the_open_tabs(app, world, quick):
     import readmutq
     s = Stream(app)
