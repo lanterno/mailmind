@@ -7,7 +7,7 @@ Migrations 1 to 20 are frozen in `m0001_m0020`. Each later one has a module of i
 """
 from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_fingerprints, m0023_pending_removal,
                                              m0024_scan_state, m0025_undo_entries, m0026_draft_key,
-                                             m0027_reply_original, m0028_attached_email_parts)
+                                             m0027_reply_original, m0028_attached_email_parts, m0029_unsub_accounts)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
@@ -25,4 +25,5 @@ MIGRATIONS = [
     (26, m0026_draft_key.migrate),
     (27, m0027_reply_original.migrate),
     (28, m0028_attached_email_parts.migrate),
+    (29, m0029_unsub_accounts.migrate),
 ]

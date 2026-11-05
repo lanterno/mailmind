@@ -104,6 +104,6 @@ CREATE TABLE thread_summaries ( account TEXT NOT NULL, thread_id TEXT NOT NULL, 
 CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- the undo group the entry gathers; NULL for a single action entry TEXT NOT NULL, -- JSON: kind, label and what to reverse, or a group's children created_at TEXT NOT NULL );
 
 -- table unsub_log
-CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE);
+CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=28;
+PRAGMA user_version=29;
