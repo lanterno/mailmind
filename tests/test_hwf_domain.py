@@ -418,6 +418,51 @@ def test_hwf_a_new_thread_id_is_the_sha1_of_its_smallest_message_id(db):
     assert tid(db, root) == tid(db, reply) == f"rf:{A}:" + hashlib.sha1(b"<m@example.test>").hexdigest()[:16]
 
 
+def test_hwf_a_reply_stored_before_its_original_takes_the_threads_id_at_once(db):
+    # The smallest id the thread names, not the smallest of the rows stored so far: the reply
+    # alone already holds the id the whole thread would mint.
+    reply = put(db, "<r@example.test>", irt="<m@example.test>")
+    recompute(db)
+    assert tid(db, reply) == f"rf:{A}:" + hashlib.sha1(b"<m@example.test>").hexdigest()[:16]
+
+
+def test_hwf_a_thread_that_joins_a_gmail_thread_takes_its_state_along(db):
+    import store
+    old = put(db, "<p@example.test>")
+    recompute(db)
+    was = tid(db, old)
+    store.set_replylater(db, A, was, None, "now")
+    db.execute("INSERT INTO thread_summaries(account, thread_id, scope, fingerprint, tldr) VALUES(?,?,?,?,?)",
+               (A, was, "thread", "fp", "Lunch on Friday."))
+    _ahead(db, "t:" + was, NOW_TS - 60)
+    put(db, "<q@example.test>", gm="1781", irt="<p@example.test>")
+    recompute(db)
+    now = f"gm:{A}:1781"
+    assert [r["thread_id"] for r in db.execute("SELECT thread_id FROM followups")] == [now]
+    assert [r["tldr"] for r in db.execute("SELECT tldr FROM thread_summaries WHERE thread_id=?", (now,))] == \
+        ["Lunch on Friday."]
+    assert _ahead_keys(db) == ["t:" + now]
+    assert db.execute("SELECT count(*) FROM thread_summaries WHERE thread_id=?", (was,)).fetchone()[0] == 0
+
+
+def test_hwf_a_merge_keeps_the_survivors_own_state_over_the_absorbed_threads(db):
+    import store
+    a = put(db, "<a@example.test>")
+    b = put(db, "<b@example.test>")
+    recompute(db)
+    ta, tb = tid(db, a), tid(db, b)
+    _ahead(db, "t:" + ta, NOW_TS - 60, body="From the first thread.")
+    _ahead(db, "t:" + tb, NOW_TS - 60, body="From the second thread.")
+    store.mute_thread(db, A, tb, "now")
+    put(db, "<c@example.test>", refs="<a@example.test> <b@example.test>")      # joins the two
+    recompute(db)
+    surv = min(ta, tb)
+    assert tid(db, a) == tid(db, b) == surv
+    assert store.is_muted(db, A, surv)
+    assert [r["body"] for r in db.execute("SELECT body FROM draft_ahead")] == [
+        "From the first thread." if surv == ta else "From the second thread."]
+
+
 def test_hwf_a_message_without_an_id_keeps_a_thread_of_its_own_row(db):
     import store
     pk = put(db, "")
@@ -438,7 +483,6 @@ def test_hwf_two_gmail_threads_joined_by_headers_take_the_later_rows_id(db):
     assert tid(db, a) == tid(db, b) == f"gm:{A}:1799"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a thread that joins a Gmail thread leaves its mute behind")
 def test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute(db):
     import store
     old = put(db, "<p@example.test>")                      # stored before Gmail's thread id was seen
@@ -450,7 +494,6 @@ def test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute(db):
     assert store.is_muted(db, A, f"gm:{A}:1781")
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a thread re-ingested whole can mint a new id and lose its mute")
 def test_hwf_a_thread_stored_again_whole_keeps_its_mute(db):
     import store
     reply = put(db, "<r@example.test>", irt="<m@example.test>")     # the reply synced before its original
