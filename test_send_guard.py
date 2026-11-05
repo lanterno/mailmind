@@ -60,7 +60,7 @@ REPLY_NEVER = ["Thanks, I can't open the attachment.", "Merci pour la pièce joi
                "Grazie per i tuoi allegati.", "شكرا على المرفقات"]
 # Long runs with no spaces: a pasted base64 blob, minified JSON, a line of dashes. They run in a
 # node process of their own, which stops at the first that takes SLOW_MS or more.
-SLOW_MS = 250
+SLOW_MS = 1000     # about 120 ms on a quiet machine, 320 ms seen on a busy one, and it was 2-5 s when it was wrong
 SLOW = ["'QUJD'.repeat(12500)", "'-'.repeat(50000)", "'_'.repeat(50000)", "'a-'.repeat(25000)", "'.'.repeat(50000)",
         "'@'.repeat(50000)", "'ال'.repeat(25000)", "', '.repeat(25000)", "'a'+' '.repeat(49998)+'b'",
         "JSON.stringify(Array.from({length:4000},(_,i)=>({k:i,v:'x'+i}))).slice(0,50000)"]
