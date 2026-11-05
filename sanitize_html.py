@@ -552,11 +552,16 @@ def _safe_url(val):
     return val if SAFE_URL.match(v) else None
 
 
+_FOLD_OPEN = '<details class="mm-quote"><summary>··· quoted text</summary>'
+_FOLD_CLOSE = "</details>"
+
+
 class _San(HTMLParser):
-    def __init__(self, load_images):
+    def __init__(self, load_images, fold=True):
         super().__init__(convert_charrefs=True)
         self.out = []
         self.load_images = load_images
+        self.fold = fold
         self.blocked_images = 0
         self.blocked_links = 0
         self._skip = 0          # nesting depth inside a dropped-with-content subtree
@@ -589,8 +594,8 @@ class _San(HTMLParser):
         # Reading comfort: fold the quoted reply chain. Replies put the quote at the end, so the
         # FIRST top-level <blockquote> (+ everything after) goes behind a pure-CSS <details> toggle.
         # Only fold when real content precedes it (don't fold a message that's ALL quote).
-        if tag == "blockquote" and self._bq_depth == 0 and not self._folded and self._has_content:
-            self.out.append('<details class="mm-quote"><summary>··· quoted text</summary>')
+        if tag == "blockquote" and self.fold and self._bq_depth == 0 and not self._folded and self._has_content:
+            self.out.append(_FOLD_OPEN)
             self._folded = True
         if tag == "blockquote":
             self._bq_depth += 1
@@ -691,9 +696,20 @@ class _San(HTMLParser):
         return (" " + " ".join(parts)) if parts else ""
 
 
-def sanitize(html, load_images=False):
-    """Return (clean_html, info). Never raises on malformed input."""
-    p = _San(load_images)
+def without_fold(html):
+    """`html`, sanitized before replies stopped carrying the fold, without it: a draft's stored
+    quote. sanitize closes the fold at the very end of what it returns."""
+    head, opened, rest = html.partition(_FOLD_OPEN)
+    if not opened:
+        return html
+    body, closed, after = rest.rpartition(_FOLD_CLOSE)
+    return head + (body + after if closed else rest)
+
+
+def sanitize(html, load_images=False, fold=True):
+    """Return (clean_html, info). Never raises on malformed input. `fold` is for reading: it puts a
+    quoted chain behind a toggle the reader's stylesheet draws, which mail going out must not carry."""
+    p = _San(load_images, fold)
     try:
         p.feed(html or "")
         p.close()
@@ -706,6 +722,6 @@ def sanitize(html, load_images=False):
             p.out.append("<style>" + css + "</style>")
     out = "".join(p.out)
     if p._folded:
-        out += "</details>"          # the fold wrapper opened mid-stream; close it at the end
+        out += _FOLD_CLOSE           # the fold wrapper opened mid-stream; close it at the end
     return out, {"blocked_images": p.blocked_images, "blocked_links": p.blocked_links,
                  "blocked_css_urls": getattr(p, "blocked_css_urls", 0)}

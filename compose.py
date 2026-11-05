@@ -253,7 +253,7 @@ def _html_escape(s):
 
 def _plain_from_html(html_str):
     """Crude HTML->text fallback when an original has no text/plain part."""
-    safe, _ = sanitize_html.sanitize(html_str or "", load_images=False)
+    safe, _ = sanitize_html.sanitize(html_str or "", load_images=False, fold=False)
     txt = re.sub(r"(?is)<br\s*/?>", "\n", safe)
     txt = re.sub(r"(?is)</p\s*>", "\n\n", txt)
     txt = re.sub(r"(?s)<[^>]+>", "", txt)
@@ -272,7 +272,7 @@ def reply_bodies(new_text, orig):
     o_text = orig.get("text") or (_plain_from_html(orig.get("html")) if orig.get("html") else "")
     text = f"{new_text or ''}\n\n{attr}\n{_quote_plain(o_text)}\n"
     if orig.get("html"):
-        safe, _ = sanitize_html.sanitize(orig["html"], load_images=False)
+        safe, _ = sanitize_html.sanitize(orig["html"], load_images=False, fold=False)
         html_body = (
             own_html(new_text) + f"<div>{_html_escape(attr)}</div>"
             f'<blockquote type="cite" style="margin:0 0 0 .8ex;'
@@ -293,7 +293,7 @@ def forward_bodies(new_text, orig):
     o_text = orig.get("text") or (_plain_from_html(orig.get("html")) if orig.get("html") else "")
     text = f"{new_text or ''}\n\n{banner}\n\n{o_text}"
     if orig.get("html"):
-        safe, _ = sanitize_html.sanitize(orig["html"], load_images=False)
+        safe, _ = sanitize_html.sanitize(orig["html"], load_images=False, fold=False)
         banner_html = "<br>".join(_html_escape(f"{k}: {v}") for k, v in rows if v)
         html_body = (
             own_html(new_text) + f"<div>---------- Forwarded message ----------<br>{banner_html}</div><hr>{safe}")

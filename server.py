@@ -1801,7 +1801,8 @@ def _compose_spec(body):
             dr = store.draft_get(c, did) if did else None
             c.close()
             if dr and dr["tail_html"] and compose.lf(dr["tail_text"] or "") == tail:
-                tail_html = dr["tail_html"]           # built and sanitized by us at that save; never re-sanitized
+                # built and sanitized by us at that save; never re-sanitized
+                tail_html = sanitize_html.without_fold(dr["tail_html"])
                 html = compose.own_html(own) + tail_html
         tail_text = tail or None
         in_reply_to, references = compose.thread_ids(resume.get("in_reply_to"), resume.get("references"))
