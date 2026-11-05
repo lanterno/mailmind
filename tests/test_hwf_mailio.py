@@ -831,10 +831,10 @@ def test_hwf_junk_goes_to_the_special_use_junk_folder(app, world):
     assert boxes(world, name)[0] == [(w.ADA, "Junk")]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: backfill retries the same 12 bodies forever and never reaches older mail")
 def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
     import server
     monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))   # no real pacing between fetches
+    monkeypatch.setattr(server, "_backfill_missed", {})          # world alone resets no module state
     waiting = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL ORDER BY ts DESC, pk DESC")
     stuck, older = waiting[:12], [r["pk"] for r in waiting[12:]]
     with world.server.lock:                                      # deleted elsewhere, not yet pruned here
@@ -844,6 +844,42 @@ def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
         server.backfill_round()
     fetched = q("SELECT pk FROM messages WHERE body_text IS NOT NULL")
     assert {r["pk"] for r in fetched} & set(older)
+    missed = dict(server._backfill_missed)
+    assert set(missed) == {r["pk"] for r in stuck}               # each waits its turn, once
+    assert all(at >= time.time() + server.BACKFILL_RETRY - 60 for at in missed.values())
+
+
+def test_hwf_backfill_asks_again_for_a_missed_body_once_its_wait_is_over(world, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))
+    monkeypatch.setattr(server, "_backfill_missed", {})
+    [newest] = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL "
+                 "ORDER BY ts DESC, pk DESC LIMIT 1")
+    with world.server.lock:
+        kept = world.server.mailbox(newest["account"], newest["folder"]).messages.pop(newest["uid"])
+    server.backfill_round()
+    assert newest["pk"] in server._backfill_missed
+    with world.server.lock:                                      # it comes back, as a flaky server's would
+        world.server.mailbox(newest["account"], newest["folder"]).messages[newest["uid"]] = kept
+    server._backfill_missed[newest["pk"]] = 0                    # its wait is over
+    while q("SELECT 1 FROM messages WHERE pk=? AND body_text IS NULL", newest["pk"]):
+        assert server.backfill_round() == 8
+    assert newest["pk"] not in server._backfill_missed
+
+
+def test_hwf_backfill_stops_its_round_when_the_server_cant_be_reached(world, monkeypatch):
+    import ingest
+    import server
+    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))
+    monkeypatch.setattr(server, "_backfill_missed", {})
+    asked = []
+
+    def down(pk):
+        asked.append(pk)
+        raise ConnectionRefusedError()
+    monkeypatch.setattr(ingest, "fetch_body", down)
+    assert server.backfill_round() == server.BACKFILL_UNREACHABLE
+    assert len(asked) == 1 and server._backfill_missed == {}     # nothing set aside: it wasn't the message
 
 
 def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, world):
