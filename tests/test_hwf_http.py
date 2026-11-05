@@ -13,6 +13,7 @@ import email
 import email.policy
 import json
 import socket
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -537,7 +538,6 @@ def test_a_saved_draft_shows_in_an_open_drafts_list(app, world):
     assert "Swatch order" in subjects
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: do_draft ignores the composer's idempotency_key")
 def test_a_first_save_sent_twice_makes_one_draft(app, world):
     body = {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Swatch order",
             "text": "Two of each.", "idempotency_key": "cmp-1"}
@@ -545,6 +545,90 @@ def test_a_first_save_sent_twice_makes_one_draft(app, world):
     assert a["draft_id"] == b["draft_id"]
     assert len(world.server.find(w.ADA, "Drafts", a["message_id"]) + world.server.find(
         w.ADA, "Drafts", b["message_id"])) == 1
+
+
+def _swatch(key, **kw):
+    return {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Swatch order",
+            "text": "Two of each.", "idempotency_key": key, **kw}
+
+
+def _draft_row(did):
+    import store
+    c = store.conn()
+    try:
+        return dict(store.draft_get(c, did))
+    finally:
+        c.close()
+
+
+def test_saves_that_overlap_leave_one_copy_and_the_row_on_it(app, world, monkeypatch):
+    # Both read the row they replace, so a read taken before the gate would expunge the UID the
+    # first had already replaced, and leave the first's copy in Drafts with nothing tracking it.
+    import server
+    drafts = world.server.mailbox(w.ADA, "Drafts")
+    before = len(drafts.messages)
+    did = app.post("/api/draft", _swatch("cmp-2")).json["draft_id"]
+    real, waiting = server.gates.run, []
+
+    def run(scope, job, **kw):
+        waiting.append(scope)
+        return real(scope, job, **kw)
+    monkeypatch.setattr(server.gates, "run", run)
+    with gate.held_elsewhere(w.ADA):
+        waiting.clear()
+        saves = [threading.Thread(target=app.post, args=("/api/draft", _swatch("cmp-2", draft_id=did, text=text)))
+                 for text in ("One of each.", "Three of each.")]
+        for t in saves:
+            t.start()
+        end = time.monotonic() + 10
+        while len(waiting) < 2 and time.monotonic() < end:     # both are at the gate
+            threading.Event().wait(0.01)
+        assert len(waiting) == 2
+    for t in saves:
+        t.join(10)
+    assert len(drafts.messages) == before + 1
+    assert _draft_row(did)["uid"] in drafts.messages
+
+
+def test_a_send_that_never_heard_its_first_save_still_removes_the_copy(app, world):
+    import outbox
+    saved = app.post("/api/draft", _swatch("cmp-3")).json          # its answer is lost: no id in the composer
+    assert world.server.find(w.ADA, "Drafts", saved["message_id"])
+    assert app.post("/api/send", _swatch("cmp-3")).json["ok"]
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+    assert not world.server.find(w.ADA, "Drafts", saved["message_id"])
+
+
+def test_a_first_save_retried_from_another_account_moves_the_copy_there(app, world):
+    a = app.post("/api/draft", _swatch("cmp-4")).json
+    b = app.post("/api/draft", _swatch("cmp-4", account=w.BEA)).json
+    assert a["draft_id"] == b["draft_id"]
+    assert not world.server.find(w.ADA, "Drafts", a["message_id"])
+    assert world.server.find(w.BEA, "Drafts", b["message_id"])
+    assert _draft_row(b["draft_id"])["account"] == w.BEA
+
+
+def test_a_save_whose_row_moved_accounts_while_it_waited_takes_the_wider_gate(app, world, monkeypatch):
+    # It asked for its own account's gate, and by its turn the row is in another account, whose
+    # copy it must remove: it goes round again holding them all.
+    import server
+    a = app.post("/api/draft", _swatch("cmp-5")).json
+    real, scopes = server.gates.run, []
+    b = {}
+
+    def run(scope, job, **kw):
+        scopes.append(scope)
+        if len(scopes) == 1:                                       # another tab's save gets in first
+            b.update(app.post("/api/draft", _swatch("cmp-5", account=w.BEA, draft_id=a["draft_id"])).json)
+        return real(scope, job, **kw)
+    monkeypatch.setattr(server.gates, "run", run)
+    r = app.post("/api/draft", _swatch("cmp-5", draft_id=a["draft_id"], text="Back from Ada.")).json
+    assert r["ok"] and r["draft_id"] == a["draft_id"]
+    assert scopes[0] == w.ADA and scopes[-1] == server.gates.EVERY_ACCOUNT
+    assert not world.server.find(w.BEA, "Drafts", b["message_id"])
+    assert world.server.find(w.ADA, "Drafts", r["message_id"])
 
 
 def test_a_failed_rules_write_keeps_the_rules(app, world, monkeypatch):
