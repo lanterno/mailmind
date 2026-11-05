@@ -445,10 +445,13 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A folder counts as synced (`ingest.folder_synced`) only when its `scan_state` (migration 24)
   is `synced`: a whole scan sets it, one cut to warming's newest messages sets `recent`, and an
   incremental sync, a failed scan or a one-message re-ingest leaves it be. Anything else, the
-  first open scans the folder whole, as a job of its own (`server._first_sync`, one per folder at
+  first open scans the folder whole, as a job of its own (`server._folder_sync`, one per folder at
   a time) that the list request waits for up to `FIRST_SYNC_WAIT` seconds. Past that it answers
-  with what is stored and `syncing: true`; a scan that failed answers `sync_failed: true`. Each
-  scan ends by publishing `folder-synced`.
+  with what is stored and `syncing: true`; a scan that failed answers `sync_failed: true`.
+  Opening a folder already read, other than INBOX, catches it up the same way, an incremental
+  sync waited for up to `CATCH_UP_WAIT` seconds (`catching_up: true` past that), at most once
+  every `CATCH_UP_EVERY` seconds unless `server._folder_touched` says MailMind put mail in it.
+  Each sync ends by publishing `folder-synced` with how many it stored.
 - An incremental sync reads the flags of the folder's `FLAG_REFRESH` newest stored UIDs again
   (`ingest._refresh_flags`) and writes each change only where the row still holds the flags it
   read (a click may land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag

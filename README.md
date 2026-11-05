@@ -99,6 +99,9 @@ and the Claude API.
   whole in the background. The list waits a few seconds for it, then says "Reading this
   folder for the first time…" and fills in when the scan ends; a folder it couldn't read
   says so, with a Retry.
+- **Folders stay current, not only the Inbox.** Opening a folder read before catches it
+  up — mail another client filed there, a draft just saved, flags changed elsewhere — at
+  most once a minute, and the list fills in if that takes more than a moment.
 - **Messages open instantly.** The reader paints subject, sender and folder from the
   list immediately behind a shimmer skeleton, and escalates to an honest "first open
   of an older message can take a minute" hint if the server is slow.

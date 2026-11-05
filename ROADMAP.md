@@ -88,22 +88,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `mailops.find_role`, or by the message's own `\Draft` flag. Give Discard and the outbox cleanup the guard `do_draft` uses for a
   copy elsewhere, `raw_sha` or `_flagged_draft`. Keep both checks, because a MailMind save that
   never synced has no `messages` row to be flagged.
-- **The Drafts list never updates** · high value · effort M — `messages_in` syncs a folder only
-  when it has no `sync_state` row, i.e. the first time it is ever opened against this database.
-  `do_draft`, Discard and the outbox's draft cleanup change IMAP and `drafts` but never
-  `messages`. So after a save, a re-save, a Send or a Discard the old copy stays listed and the
-  new one never appears; a brand-new message's draft doesn't show at all. `MAILMIND_WARM_FOLDERS`
-  makes it worse: `sync_folder(full=False)` only adds, so one draft piles up as several rows. No
-  sync prunes Drafts, because `reconcile_account` is INBOX-only. A ghost row goes only when Edit
-  gets its 409, or the user trashes or moves it. The fix, under the IMAP gate:
-  - delete each replaced row by `(account, folder, uid)`, including the copy `append_to_drafts`
-    finds by Message-ID and removes without returning it;
-  - pick up the new copy from APPENDUID, or an incremental sync when there is none;
-  - prune Drafts on open with a folder-parameterised reconcile that keeps its UIDVALIDITY and
-    empty-SEARCH guards.
-
-  Then reload a Drafts list that is on screen, since `composeDiscard` refreshes only the rail.
-  Pinned by `test_a_saved_draft_shows_in_an_open_drafts_list`.
+- **A replaced or discarded draft stays listed** · high value · effort M — a save's new copy shows
+  on the Drafts list's next open (its catch-up), but `do_draft`, Discard and the outbox's draft
+  cleanup change IMAP and `drafts`, never `messages`, so the copy a re-save, a Send or a Discard
+  removed stays listed until reconcile's next pass over Drafts, or Edit's 409. Under the IMAP
+  gate, delete each replaced row by `(account, folder, uid)`, including the copy
+  `append_to_drafts` finds by Message-ID and removes without returning it, and store the new copy
+  from APPENDUID. Then reload a Drafts list that is on screen, since `composeDiscard` refreshes
+  only the rail.
 - **Fresh replies name their original by pk** · medium value · effort M — A reply or forward that
   wasn't reopened from Drafts sends `in_reply_to_pk` on every save and send, and `_compose_spec`
   resolves it with `store.get_message`. pks are AUTOINCREMENT and never reused, so it can't hit
