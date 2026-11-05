@@ -4607,6 +4607,7 @@ function connectEvents(){
   es.addEventListener("snooze-wake", e=>onSnoozeWake(JSON.parse(e.data)));
   es.addEventListener("mute", e=>onMute(JSON.parse(e.data)));
   es.addEventListener("reconcile", e=>onReconcile(JSON.parse(e.data)));
+  es.addEventListener("flags-changed", e=>onReconcile(JSON.parse(e.data)));   // read or starred elsewhere: same refresh
   es.addEventListener("folder-synced", e=>onFolderSynced(JSON.parse(e.data)));   // a folder's first scan ended   // ghosts pruned server-side → refresh the open list
   es.addEventListener("followup", ()=>{ loadFolders(true);   // badge only — never disrupt the reader
     if(state.folder==="__waiting__"&&!state.compose&&!state.searching&&!state.asking&&state.cmarked.size===0)loadCMessages(); });
@@ -4637,13 +4638,14 @@ function onNewMail(d){
   if(!document.hidden){ const n=d.count||1; announce(`${n} new message${n===1?"":"s"} arrived${d.account?" in "+nameOf(d.account):""}`); }   // realtime → screen readers too
 }
 function onReconcile(d){
-  // server pruned ghost rows (mail gone from the server) for d.account, in any folder it has
-  // synced, or just d.folder. Refresh badges, and if an open list for that account may be showing
-  // them, re-pull it — but only when idle, so nothing in-flight (compose/search/selection) is disrupted.
+  // what the server holds changed for d.account, in any folder it has synced, or just d.folder: rows
+  // pruned (mail gone from it), or flags changed elsewhere. Refresh badges, and if an open list for that account
+  // may be showing them, re-pull it — but only when idle, so nothing in-flight (compose/search/selection) is disrupted.
   loadFolders && loadFolders(true);
   const idle = !state.compose && !state.searching && !state.asking && state.cmarked.size===0 && !document.hidden;
   if(!idle) return;
-  if(d.folder){ if(!state.allInbox&&state.account===d.account&&state.folder===d.folder)loadCMessages(); }
+  if(d.folder&&state.allInbox){ if(d.folder==="INBOX")loadAllInboxes(); }
+  else if(d.folder){ if(state.account===d.account&&state.folder===d.folder)loadCMessages(); }
   else if(state.allInbox){ loadAllInboxes(); }
   else if(state.account===d.account){ loadCMessages(); }
 }
