@@ -958,3 +958,15 @@ def test_the_page_takes_what_a_verdict_asks_from_the_server(page, world, anthrop
     expect(page.locator(".bf-tidy")).to_contain_text("1 low-priority message the AI rates as safe to file")
     expect(page.locator("#rows .row")).to_have_count(1)                 # the Needs you tab
     clean(page)
+
+
+def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
+    news = "ada-inbox-03-newsletter.eml"
+    opened(page)
+    r = row(page, world, news)
+    expect(r.locator(".jb")).to_be_visible()
+    page.evaluate("openDrawer(true)")
+    page.locator("#ruleInput").fill(world.row(news)["from_addr"])
+    page.locator("#ruleInput").press("Enter")
+    expect(r.locator(".jb")).to_have_count(0)
+    clean(page)
