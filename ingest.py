@@ -228,7 +228,10 @@ def sync_folder(acct, folder, full=False, recent=None):
     otherwise pulls only UIDs above the per-folder watermark. Stores everything.
     recent=N bounds a first/full scan to the most recent N UIDs (used by background folder
     warming so a huge Sent/Archive doesn't pull thousands in one pass); incremental syncs
-    are already watermark-bounded and ignore it."""
+    are already watermark-bounded and ignore it.
+    The folder's scan_state says what the scans so far have read: a whole scan makes it
+    'synced', one cut to the newest N 'recent', and an incremental sync keeps it as it was.
+    A scan that fails leaves it as it was too, so a first open that failed scans again."""
     s = mailbox.open_session(acct)
     try:
         uidv = s.select(folder).uidvalidity
@@ -243,13 +246,21 @@ def sync_folder(acct, folder, full=False, recent=None):
             c.commit()
         wm = store.get_watermark(c, acct["email"], folder)
         c.close()
+        scan = None                                    # the scan_state this sync leaves
         if full or wm == 0:
             uids = s.uids("ALL")
+            scan = "synced"
             if recent and len(uids) > recent:
                 uids = uids[-recent:]      # the most recent N only
+                scan = "recent"
         else:
             uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
         result = _process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"))
+        if scan:
+            c = store.conn()
+            store.set_scan_state(c, acct["email"], folder, scan)
+            c.commit()
+            c.close()
         if not full and wm:                            # a full scan has just read every flag
             _refresh_flags(s, acct, folder)
         c = store.conn()
@@ -302,11 +313,12 @@ def ingest_message(acct, folder, message_id):
 
 
 def folder_synced(acct_email, folder):
+    """Whether a scan has read the whole folder, so its first open needn't."""
     c = store.conn()
-    r = c.execute("SELECT 1 FROM sync_state WHERE account=? AND folder=?",
-                  (acct_email, folder)).fetchone()
-    c.close()
-    return bool(r)
+    try:
+        return store.get_scan_state(c, acct_email, folder) == "synced"
+    finally:
+        c.close()
 
 
 def ingest_account(acct, days=CUTOFF_DAYS):
@@ -317,7 +329,12 @@ def ingest_account(acct, days=CUTOFF_DAYS):
             uids = s.uids("ALL")
         else:
             uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
-        return _process(s, acct, uids, "INBOX", with_body=True)
+        result = _process(s, acct, uids, "INBOX", with_body=True)
+        c = store.conn()                       # the owner chose how far back: INBOX counts as read
+        store.set_scan_state(c, acct["email"], "INBOX", "synced")
+        c.commit()
+        c.close()
+        return result
     finally:
         s.logout()
 

@@ -161,6 +161,22 @@ def set_uidvalidity(c, account, folder, uidvalidity):
     )
 
 
+def get_scan_state(c, account, folder):
+    """How much of the folder a scan has read: 'never', 'recent' (its newest messages only) or
+    'synced' (every message up to the watermark)."""
+    r = c.execute("SELECT scan_state FROM sync_state WHERE account=? AND folder=?",
+                  (account, folder)).fetchone()
+    return r["scan_state"] if r else "never"
+
+
+def set_scan_state(c, account, folder, state):
+    c.execute(
+        """INSERT INTO sync_state(account,folder,scan_state) VALUES(?,?,?)
+           ON CONFLICT(account,folder) DO UPDATE SET scan_state=excluded.scan_state""",
+        (account, folder, state),
+    )
+
+
 def reset_folder(c, account, folder):
     """UIDVALIDITY changed (or forced refresh): drop this folder's rows + watermark
     so it re-syncs from scratch. Summaries cascade with the messages."""
@@ -168,7 +184,8 @@ def reset_folder(c, account, folder):
         "SELECT pk FROM messages WHERE account=? AND folder=?", (account, folder))]
     for pk in pks:
         delete_message(c, pk)
-    c.execute("UPDATE sync_state SET last_uid=0 WHERE account=? AND folder=?", (account, folder))
+    c.execute("UPDATE sync_state SET last_uid=0, scan_state='never' WHERE account=? AND folder=?",
+              (account, folder))
     return len(pks)
 
 
