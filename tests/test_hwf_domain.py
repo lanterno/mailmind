@@ -222,7 +222,6 @@ def test_hwf_a_fetched_body_fills_only_an_empty_snippet(db):
     assert hits(db, '"heron"') == [kept, empty]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a full re-scan of a folder blanks the snippets bodies filled")
 def test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message(world):
     import accounts
     import ingest
@@ -234,7 +233,6 @@ def test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message(world):
     assert world.row("ada-sent-01-lunch-reply.eml")["snippet"] == before
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: INBOX snippets taken at sync keep invisible preheader padding")
 def test_hwf_an_inbox_snippet_drops_invisible_preheader_padding(world):
     raw = (b"From: Noor Haddad <noor@studio.example.test>\r\nTo: ada@example.test\r\nSubject: Studio hours\r\n"
            b"Date: Mon, 02 Nov 2026 09:00:00 +0000\r\nMessage-ID: <hours-1@studio.example.test>\r\n"

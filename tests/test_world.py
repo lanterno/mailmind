@@ -111,7 +111,6 @@ def test_inbox_mail_gets_a_snippet_and_junk_does_not(world):
     assert world.row("ada-inbox-11-html-cid.eml")["snippet"] == "It's done!"     # from the HTML part
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: snippets keep the wire's carriage returns")
 def test_snippets_hold_no_carriage_returns(world):
     assert "\r" not in world.row("ada-inbox-01-lunch.eml")["snippet"]
 
