@@ -241,8 +241,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
   `python3 server.py` uses it.
-- `mailmind.kernel` is empty so far. It stays standard library only and imports nothing else
-  from `mailmind`.
+- `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
+  holds `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
+  each answer, and the page reads those and never works them out.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `domain` what it knows
   about the models and the features, and
