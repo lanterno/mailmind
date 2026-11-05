@@ -541,7 +541,6 @@ def test_a_first_save_sent_twice_makes_one_draft(app, world):
         w.ADA, "Drafts", b["message_id"])) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: rules.save writes in place, so a failed write loses every rule")
 def test_a_failed_rules_write_keeps_the_rules(app, world, monkeypatch):
     import rules
     assert app.post("/api/rules", {"token": "lin@example.test", "verdict": "keep"}).json["ok"]

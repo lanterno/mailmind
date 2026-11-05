@@ -566,7 +566,6 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
     assert mailclass.classify("lin@studio.example.test", "hi")[0] == "blocked"
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: a malformed rules file stops every sync")
 def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
     import accounts
     import ingest
@@ -636,7 +635,31 @@ def test_hwf_saved_views_are_written_owner_only_and_without_builtins(data_dir):
         assert [v["name"] for v in json.load(f)] == ["From Lin"]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: the rules file is written with default permissions")
+def test_hwf_a_bad_edit_of_the_rules_keeps_the_rules_last_read(data_dir, capsys):
+    import mailclass
+    import rules
+    rules.add("lin@example.test", "keep")
+    assert mailclass.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
+    with open(data_dir / "mailmind_rules.json", "w") as f:
+        f.write('{"keep_senders": ["lin@example.test",]')         # a hand edit with a stray comma
+    assert rules.load()["keep_senders"] == ["lin@example.test"]
+    assert mailclass.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
+    rules.load()
+    assert capsys.readouterr().out.count("can't be read") == 1     # said once, not at every read
+
+
+def test_hwf_a_save_over_an_unreadable_rules_file_keeps_it_in_backups(data_dir):
+    import rules
+    bad = '{"keep_senders": ["lin@example.test",]'
+    with open(data_dir / "mailmind_rules.json", "w") as f:
+        f.write(bad)
+    assert rules.load()["keep_senders"] == []                     # never read well: no rules apply
+    rules.add("prizes.example.test", "block")
+    assert rules.load()["block_domains"] == ["prizes.example.test"]
+    [aside] = (data_dir / "backups").iterdir()
+    assert aside.read_text() == bad and aside.stat().st_mode & 0o777 == 0o600
+
+
 def test_hwf_the_rules_file_is_written_owner_only(data_dir):
     import rules
     old = os.umask(0o022)                                  # the usual umask, whatever the test runner's
