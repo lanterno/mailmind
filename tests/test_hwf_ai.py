@@ -683,12 +683,18 @@ def test_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai
     assert [m["message_id"] for p in pks for m in q("SELECT message_id FROM messages WHERE pk=?", p)] == [LUNCH_MID]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: a message with no thread id is summarized as thread 'pk:N', which "
-                          "matches no rows (404)")
-def test_bug_a_message_without_a_thread_id_can_be_summarized(app, world, ai):
+def test_a_message_without_a_thread_id_can_be_summarized(app, world, ai):
     pk = world.pk(QUILT)
     execute("UPDATE messages SET thread_id=NULL WHERE pk=?", pk)
+    first = app.post("/api/ai/summarize", {"pk": pk})
+    assert first.status == 200 and first.json["scope"] == "message" and len(ai.requests) == 1
+    assert app.post("/api/ai/summarize", {"pk": pk}).json["cached"] is True     # and it finds its summary again
+    assert len(ai.requests) == 1
+
+
+def test_a_message_with_neither_thread_nor_message_id_can_be_summarized(app, world, ai):
+    pk = world.pk(QUILT)
+    execute("UPDATE messages SET thread_id=NULL, message_id='' WHERE pk=?", pk)
     assert app.post("/api/ai/summarize", {"pk": pk}).status == 200
 
 
