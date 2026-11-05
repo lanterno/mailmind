@@ -112,11 +112,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   layer. Ship the local-action subset (auto-star / auto-read / auto-label) well before any IMAP
   MOVE, and re-scope first: "+ Save view", the Screener and `/api/cleanup/execute` already cover the
   "this sender floods me" case filters usually serve.
-- **Document Hub v2** · high value · effort M — The Hub silently caps at 400: `documents_json`
-  accepts a `limit` but has no `offset`, and the client never passes either. Four follow-ons in
-  value order: an inline PDF/image preview so you needn't download to check (`docOpen` only opens the
-  source email; no preview modal exists), a load-more, group-by-sender/type sections in place of the
-  flat row list, and a persistent rail lane so the Hub is a place rather than a ⌘K command.
+- **Document Hub v2** · high value · effort M — Three follow-ons in value order: an inline PDF/image
+  preview so you needn't download to check (`docOpen` only opens the source email; no preview modal
+  exists), group-by-sender/type sections in place of the flat row list, and a persistent rail lane so
+  the Hub is a place rather than a ⌘K command.
 - **Prose search without the `!` prefix** · medium value · effort S — The hard part is built and
   proven: `ai_do_plan()` calls the model with `DO_PLAN_SCHEMA`, re-parses the returned filter through
   `search.build()` (the AI never touches SQL), and `runDo()` drops the translated operators into the
