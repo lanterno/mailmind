@@ -176,7 +176,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   directory; unset, it is the repo root. It must exist, and nothing creates it.
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
-  what the legacy workers publish: `outbox.Sent`, `readmutq.Applied` and `realtime.InboxChanged`.
+  what the legacy workers publish: `outbox.Sent`, `outbox.DraftCopyRemoved`, `readmutq.Applied` and
+  `realtime.InboxChanged`.
   It also hands each account event (below) to `realtime.reconcile`. `readmutq.Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
   `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
@@ -493,6 +494,9 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   for nothing, and a removal has no Undo, so Discard, a Send and a replacing save remove a copy only
   if MailMind saved it, the server flags it or its folder is Drafts (`outbox.draft_copy_is_ours`).
   Older `drafts` rows may name received mail: those are forgotten and the mail stays.
+- A copy that leaves the server takes its `messages` row with it, in the step that records the save,
+  discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
+  catch-up brings the new copy). A copy the server wouldn't remove stays listed.
 - A composer's saves go in turn. `composeSaveDraft` chains on `cmp._saving` and names the copy the
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
   It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at

@@ -47,14 +47,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (prefilled recipients no longer dirty the compose, signature-only bodies are never saved), but
   `composeClose` still silently auto-saves and toasts. The specified Keep editing / Save draft /
   Discard prompt was never built.
-- **A replaced or discarded draft stays listed** · high value · effort M — a save's new copy shows
-  on the Drafts list's next open (its catch-up), but `do_draft`, Discard and the outbox's draft
-  cleanup change IMAP and `drafts`, never `messages`, so the copy a re-save, a Send or a Discard
-  removed stays listed until reconcile's next pass over Drafts, or Edit's 409. Under the IMAP
-  gate, delete each replaced row by `(account, folder, uid)`, including the copy
-  `append_to_drafts` finds by Message-ID and removes without returning it, and store the new copy
-  from APPENDUID. Then reload a Drafts list that is on screen, since `composeDiscard` refreshes
-  only the rail.
 - **Fresh replies name their original by pk** · medium value · effort M — A reply or forward that
   wasn't reopened from Drafts sends `in_reply_to_pk` on every save and send, and `_compose_spec`
   resolves it with `store.get_message`. pks are AUTOINCREMENT and never reused, so it can't hit

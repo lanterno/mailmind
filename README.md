@@ -305,7 +305,8 @@ automatically.
   and live-swapped when you change the From account, without clobbering your edits.
 - **Drafts that don't litter.** A compose is only "dirty" once you actually edit it,
   autosave runs every 8 seconds, and a signature-only body is never saved to your Drafts
-  folder. Saves of one message go in turn and leave one copy, whatever overlaps them.
+  folder. Saves of one message go in turn and leave one copy, whatever overlaps them, and the
+  Drafts list follows at once: a replaced, discarded or sent draft leaves it, on the server first.
 - **Drafts that don't lose your words.** What you type during a save is saved next. If the
   save that closes a message fails, the message stays a click away, and reopening it there
   (or by Undo Send) saves it when you close it again.
