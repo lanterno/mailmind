@@ -851,8 +851,10 @@ def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
 def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, world):
     world.server.deliver(w.ADA, "Junk", late())
     world.server.fail("UID SEARCH", user=w.ADA)
-    app.get(f"/api/messages?account={w.ADA}&folder=Junk")
-    assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 1
+    r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
+    assert (r["items"], r.get("sync_failed")) == ([], True)          # said, not shown as an empty folder
+    r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
+    assert len(r["items"]) == 1 and "sync_failed" not in r
 
 
 def test_hwf_opening_a_warmed_folder_shows_its_older_mail(app, world):
@@ -861,6 +863,33 @@ def test_hwf_opening_a_warmed_folder_shows_its_older_mail(app, world):
         world.server.deliver(w.ADA, "Junk", late(n))
     ingest.sync_folder(acct(), "Junk", recent=2)                 # warm.warm_tick's first touch, WARM_RECENT=2
     assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 3
+
+
+def junk_scans(world):
+    """How many times Ada's Junk has been scanned whole."""
+    return sum(1 for c in world.server.commands_for(w.ADA, "UID SEARCH")
+               if c["mailbox"] == "Junk" and c["args"] == ["ALL"])
+
+
+def test_hwf_a_first_open_slower_than_the_wait_answers_then_lists_the_rest(app, world, monkeypatch):
+    import server
+    from gate import held_elsewhere
+    monkeypatch.setattr(server, "FIRST_SYNC_WAIT", 0.2)
+    world.server.deliver(w.ADA, "Junk", late())
+    with held_elsewhere(w.ADA):                                  # a long mail operation holds the gate
+        for _ in range(2):                                       # a second open joins the first's scan
+            r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
+            assert (r["items"], r.get("syncing")) == ([], True)
+    assert wait_until(lambda: not server._first_syncs)
+    r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
+    assert len(r["items"]) == 1 and "syncing" not in r
+    assert junk_scans(world) == 1
+
+
+def test_hwf_an_open_past_the_first_page_starts_no_scan(app, world):
+    world.server.deliver(w.ADA, "Junk", late())
+    assert app.get(f"/api/messages?account={w.ADA}&folder=Junk&offset=50").json["items"] == []
+    assert junk_scans(world) == 0
 
 
 def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkeypatch):

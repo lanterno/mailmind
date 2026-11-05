@@ -353,6 +353,30 @@ def test_reopen_a_saved_draft(page, world):
     clean(page)
 
 
+def test_a_folder_whose_first_sync_fails_says_so_and_retry_reads_it(page, world):
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    world.server.fail("UID SEARCH", user=w.ADA)
+    folder(page, "Junk").click()
+    expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
+    page.get_by_role("button", name="Retry").click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    clean(page)
+
+
+def test_a_folder_still_reading_fills_in_when_its_first_scan_ends(page, app, world, monkeypatch):
+    import server
+    from gate import held_elsewhere
+    monkeypatch.setattr(server, "FIRST_SYNC_WAIT", 0.2)
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    with held_elsewhere(w.ADA):
+        folder(page, "Junk").click()
+        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    clean(page)
+
+
 @pytest.mark.xfail(strict=True, reason="two copies of one draft share a Message-ID, so the Drafts row "
                                        "opens as a conversation, whose reader has no Edit")
 def test_a_draft_with_an_older_copy_still_opens_for_editing(page, world):

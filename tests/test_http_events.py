@@ -230,3 +230,20 @@ def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
     assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
     s.close()
     subscribers(quick, 0)
+
+
+def test_the_end_of_a_folders_first_scan_tells_the_open_tabs(app, world, quick):
+    import json
+    s = Stream(app)
+    s.frame()
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    assert len(app.get(f"/api/messages?account={w.ADA}&folder=Junk").json["items"]) == 1
+    head, data = s.event().split("\n")[1:]
+    assert head == "event: folder-synced"
+    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Junk", "ok": True}
+    world.server.fail("SELECT", user=w.ADA)
+    assert app.get(f"/api/messages?account={w.ADA}&folder=Spam").json["sync_failed"] is True
+    head, data = s.event().split("\n")[1:]
+    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Spam", "ok": False}
+    s.close()
+    subscribers(quick, 0)

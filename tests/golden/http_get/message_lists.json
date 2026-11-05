@@ -881,6 +881,7 @@
    "items": [],
    "offset": 0,
    "ok": true,
+   "sync_failed": true,
    "total": 0
   },
   "headers": {
