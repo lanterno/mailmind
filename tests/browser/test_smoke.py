@@ -138,6 +138,23 @@ def test_archive_from_the_list_then_undo(page, world):
     clean(page)
 
 
+def test_read_only_says_so_and_what_it_files_waits(page, world, monkeypatch):
+    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
+    monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+    opened(page)
+    expect(page.locator("#statusTxt")).to_have_text("Read-only")
+    since = world.mark()
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    expect(page.locator("#toast")).to_have_text("Archived · waits for a full run")
+    assert world.writes(since) == [] and mailbox(world, RECEIPT) == "INBOX"
+    page.locator("#statusBtn").click()
+    expect(page.locator("#statusMenu")).to_contain_text("MailMind is running read-only")
+    clean(page)
+
+
 def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
