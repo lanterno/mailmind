@@ -106,13 +106,13 @@ def _aggregate(c, accounts_set, since_ts):
     # resolve subject/recipients via the thread's LATEST message on the STABLE (account,thread_id) key —
     # anchor_pk is advisory and doesn't survive a reconcile/reset_folder re-pk (would blank the row).
     waiting_rows = c.execute(
-        "SELECT f.account, f.thread_id, f.anchor_pk, f.first_sent_ts, m.subject, m.recipients "
+        "SELECT f.account, f.thread_id, m.pk, f.first_sent_ts, m.subject, m.recipients "
         "FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
         "  AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id "
         "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "
         "WHERE f.state='due' AND f.kind='sent'" + fac
         + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, TOP_OPEN]).fetchall()
-    waiting = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["anchor_pk"],
+    waiting = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["pk"],
                 "subject": r["subject"] or "(no subject)",
                 "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
                 "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
