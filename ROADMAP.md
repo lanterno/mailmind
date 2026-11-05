@@ -492,15 +492,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     (`test_bug_a_message_without_a_thread_id_can_be_summarized`);
   - the brief's `_clean` keeps the model's group `count` unclamped, so a chip can claim more
     messages than its pks hold.
-- **Threads, Reply Later and the classifier: smaller bugs** · low value · effort S — each pinned by a
+- **Stats, snippets and the body backfill: smaller bugs** · low value · effort S — each pinned by a
   strict xfail in `tests/test_hwf_domain.py`:
-  - `store.list_replylater` has no state filter, so a dismissed thread stays in the stack
-    (`test_hwf_a_dismissed_reply_later_thread_leaves_the_stack`);
-  - the ESP marker `"sg."` matches by substring, so `msg.` and `nsg.` domains count as bulk
-    (`test_hwf_a_domain_merely_containing_an_esp_marker_is_not_bulk`);
-  - the Screener's decided-domain check is exact, so a rule for a parent domain doesn't cover its
-    sub-domains (`test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided`).
-    `server.cleanup_senders` repeats the same check;
   - `manage.plan_account_db`, behind `/api/stats`, reads `list_unsub_raw`, which is filled only at
     preview time, so mail that is junk only by its List headers counts as kept
     (`test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored`);
