@@ -48,9 +48,9 @@
  {
   "note": "server writes for the resave",
   "value": [
+   "ada@example.test [Drafts] APPEND \"Drafts\" (\\Draft) \"02-Nov-2026 12:00:00 +0000\" {literal}",
    "ada@example.test [Drafts] UID STORE 3 +FLAGS (\\Deleted)",
-   "ada@example.test [Drafts] UID EXPUNGE 3",
-   "ada@example.test [Drafts] APPEND \"Drafts\" (\\Draft) \"02-Nov-2026 12:00:00 +0000\" {literal}"
+   "ada@example.test [Drafts] UID EXPUNGE 3"
   ]
  },
  {

@@ -704,6 +704,47 @@ def test_hwf_the_ai_sweep_finds_its_targets_in_the_live_inbox_by_message_id(worl
         assert boxes(world, name)[0] == [(w.ADA, "INBOX")], name
 
 
+# -- drafts ----------------------------------------------------------------
+
+def drafts_on_server(world):
+    """The live copies in Drafts of the subject "Fabric order", as (uid, body)."""
+    with world.server.lock:
+        return [uid for uid, m in world.server.mailbox(w.ADA, "Drafts").messages.items()
+                if "\\Deleted" not in m.flags and b"Fabric order" in m.raw]
+
+
+def test_hwf_a_draft_save_that_fails_keeps_the_last_copy(app, world):
+    first = app.post("/api/draft", new(idempotency_key="d-1")).json
+    assert first["ok"] and drafts_on_server(world) == [first["uid"]]
+    world.server.fail("APPEND", user=w.ADA)
+    second = app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]})
+    assert second.status == 502
+    assert drafts_on_server(world) == [first["uid"]]
+
+
+def test_hwf_a_lost_connection_during_a_draft_save_keeps_the_last_copy(app, world):
+    first = app.post("/api/draft", new(idempotency_key="d-1")).json
+    world.server.drop("APPEND", user=w.ADA)
+    assert app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]}).status == 502
+    assert drafts_on_server(world) == [first["uid"]]
+
+
+def test_hwf_a_draft_whose_old_copy_wont_go_is_saved_all_the_same(app, world):
+    first = app.post("/api/draft", new(idempotency_key="d-1")).json
+    world.server.fail("UID STORE", user=w.ADA)
+    second = app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]}).json
+    assert second["ok"] and second["uid"] != first["uid"]
+    assert sorted(drafts_on_server(world)) == sorted([first["uid"], second["uid"]])
+
+
+def test_hwf_a_new_draft_copy_replaces_the_old_with_no_uid_to_go_by(app, world):
+    world.server.without.add("UIDPLUS")               # no APPENDUID: the old copy goes by its Message-ID
+    first = app.post("/api/draft", new(idempotency_key="d-1")).json
+    assert first["uid"] is None and len(drafts_on_server(world)) == 1
+    second = app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]}).json
+    assert second["ok"] and len(drafts_on_server(world)) == 1
+
+
 # -- the outbox ------------------------------------------------------------
 
 def test_hwf_a_crash_after_delivery_never_sends_twice(app, world, monkeypatch):
