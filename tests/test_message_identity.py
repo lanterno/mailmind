@@ -191,6 +191,19 @@ def test_a_key_with_a_copy_left_isnt_gone(world):
     assert gone_since(row["message_key"]) is None
 
 
+def test_the_forget_job_ends_a_key_long_gone(world):
+    import server
+    import store
+    row = world.row(LUNCH)
+    c = store.conn()
+    store.delete_message(c, row["pk"])
+    c.execute("UPDATE message_identity SET gone_at=1 WHERE key=?", (row["message_key"],))
+    c.commit()
+    c.close()
+    server.forget_round()
+    assert q("SELECT 1 FROM message_identity WHERE key=?", row["message_key"]) == []
+
+
 # -- a row an older commit wrote --------------------------------------------------------------------------
 
 def test_a_start_gives_a_key_to_a_row_an_older_commit_wrote(world):
