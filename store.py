@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
+from mailmind.mailbox.domain import identity
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
 
@@ -14,6 +15,12 @@ def conn():
 def init():
     """Bring the data directory's database to the newest schema (see mailmind.platform.db)."""
     migrate.init(settings.current().db)
+    c = conn()
+    try:
+        repair_keys(c)
+        c.commit()
+    finally:
+        c.close()
 
 
 # ---- unsubscribe / sender-cleanup helpers ----
@@ -111,9 +118,40 @@ def get_message_by_msgid(c, account, message_id):
 
 
 def delete_message(c, pk):
+    row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
     fts_delete(c, pk)                       # drop the FTS row first (single delete chokepoint)
     c.execute("DELETE FROM summaries WHERE message_pk=?", (pk,))
     c.execute("DELETE FROM messages WHERE pk=?", (pk,))
+    if row and row["message_key"] is not None:
+        c.execute("UPDATE message_identity SET gone_at=? WHERE key=? "
+                  "AND NOT EXISTS (SELECT 1 FROM messages WHERE message_key=?)",
+                  (int(datetime.now(timezone.utc).timestamp()), row["message_key"], row["message_key"]))
+
+
+def mint_key(c, account, message_id, from_addr, date_iso, subject):
+    """The message's key, minted the first time any copy of it is seen."""
+    who = (account, identity.of(message_id, from_addr, date_iso, subject))
+    c.execute("INSERT OR IGNORE INTO message_identity(account, identity) VALUES(?,?)", who)
+    return c.execute("SELECT key FROM message_identity WHERE account=? AND identity=?", who).fetchone()[0]
+
+
+def repair_keys(c):
+    """Give a key to each row that has none: only a run of an older commit writes one."""
+    rows = c.execute("SELECT pk, account, message_id, from_addr, date_iso, subject FROM messages "
+                     "WHERE message_key IS NULL").fetchall()
+    for r in rows:
+        key = mint_key(c, r["account"], r["message_id"], r["from_addr"], r["date_iso"], r["subject"])
+        c.execute("UPDATE messages SET message_key=? WHERE pk=?", (key, r["pk"]))
+        c.execute("""INSERT OR IGNORE INTO assessments(message_key, summary, importance, category, action, model,
+                                                       created_at)
+                     SELECT ?, summary, importance, category, action, model, created_at
+                     FROM summaries WHERE message_pk=?""", (key, r["pk"]))
+
+
+def forget_gone_messages(c, now_ts, days=30):
+    """A message with no copy left for `days` goes, and what the AI said of it. Until then a copy
+    that comes back (a move, an Undo, a resync) finds its key and its assessment."""
+    return c.execute("DELETE FROM message_identity WHERE gone_at < ?", (now_ts - days * 86400,)).rowcount
 
 
 def mark_pending_removal(c, pk, mutation_id):
@@ -363,21 +401,28 @@ def set_local_flags(c, pk, **flags):
 
 def upsert_message(c, m):
     m = {"confidence": None, "reason": None, **m}  # tolerate callers that omit them
+    key = mint_key(c, m["account"], m["message_id"], m["from_addr"], m["date_iso"], m["subject"])
+    c.execute("UPDATE message_identity SET gone_at=NULL WHERE key=? AND gone_at IS NOT NULL", (key,))
     cur = c.execute(
         """INSERT INTO messages
            (account,kind,folder,uid,message_id,gmail_thread,from_addr,from_name,
-            subject,date_iso,ts,snippet,bucket,confidence,reason,is_junk)
+            subject,date_iso,ts,snippet,bucket,confidence,reason,is_junk,message_key)
            VALUES (:account,:kind,:folder,:uid,:message_id,:gmail_thread,:from_addr,
-            :from_name,:subject,:date_iso,:ts,:snippet,:bucket,:confidence,:reason,:is_junk)
+            :from_name,:subject,:date_iso,:ts,:snippet,:bucket,:confidence,:reason,:is_junk,:message_key)
            ON CONFLICT(account,folder,uid) DO UPDATE SET
             subject=excluded.subject, snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet),
             bucket=excluded.bucket, confidence=excluded.confidence,
-            reason=excluded.reason, is_junk=excluded.is_junk
+            reason=excluded.reason, is_junk=excluded.is_junk,
+            message_key=COALESCE(message_key, excluded.message_key)
            RETURNING pk""",
-        m,
+        {**m, "message_key": key},
     )
     pk = cur.fetchone()[0]
     fts_index(c, pk)                        # keep the search index in sync on insert + update
+    # A copy of a message already assessed needs no second call: moved, moved back or a second folder's.
+    c.execute("""INSERT OR IGNORE INTO summaries(message_pk, summary, importance, category, action, model, created_at)
+                 SELECT ?, summary, importance, category, action, model, created_at
+                 FROM assessments WHERE message_key=?""", (pk, key))
     return pk
 
 
@@ -859,25 +904,44 @@ def reconcile(c, account, folder, live_uids, when, among=None):
 
 
 def needs_summary(c, limit=200):
-    """Non-junk messages without a summary yet, newest first."""
+    """Non-junk messages without a summary yet, newest first: one copy of each, since save_summary
+    gives what the AI says of it to them all."""
     return c.execute(
         """SELECT m.* FROM messages m
            LEFT JOIN summaries s ON s.message_pk = m.pk
            WHERE m.is_junk = 0 AND s.message_pk IS NULL AND m.pending_removal IS NULL
+           GROUP BY COALESCE(m.message_key, -m.pk)
            ORDER BY m.ts DESC LIMIT ?""", (limit,)
     ).fetchall()
 
 
 def save_summary(c, pk, summary, importance, category, action, model, created_at):
-    c.execute(
-        """INSERT INTO summaries (message_pk,summary,importance,category,action,model,created_at)
-           VALUES (?,?,?,?,?,?,?)
-           ON CONFLICT(message_pk) DO UPDATE SET
-            summary=excluded.summary, importance=excluded.importance,
-            category=excluded.category, action=excluded.action,
-            model=excluded.model, created_at=excluded.created_at""",
-        (pk, summary, importance, category, action, model, created_at),
-    )
+    """What the AI said of a message, for this copy, the others and any that comes later."""
+    said = (summary, importance, category, action, model, created_at)
+    row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
+    key = row["message_key"] if row else None
+    copies = [pk] if key is None else [r["pk"] for r in
+                                       c.execute("SELECT pk FROM messages WHERE message_key=?", (key,))]
+    for copy in copies:
+        c.execute(
+            """INSERT INTO summaries (message_pk,summary,importance,category,action,model,created_at)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(message_pk) DO UPDATE SET
+                summary=excluded.summary, importance=excluded.importance,
+                category=excluded.category, action=excluded.action,
+                model=excluded.model, created_at=excluded.created_at""",
+            (copy, *said),
+        )
+    if key is not None:
+        c.execute(
+            """INSERT INTO assessments (message_key,summary,importance,category,action,model,created_at)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(message_key) DO UPDATE SET
+                summary=excluded.summary, importance=excluded.importance,
+                category=excluded.category, action=excluded.action,
+                model=excluded.model, created_at=excluded.created_at""",
+            (key, *said),
+        )
 
 
 def digest(c, min_importance=1, account=None, limit=300):
