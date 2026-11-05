@@ -46,7 +46,8 @@ def dec(s):
 def text_body(msg):
     plain, htmltxt = None, None
     for part in mailparse.walk(msg):
-        if part.get_content_maintype() == "multipart" or part.get_filename():
+        container = part.get_content_maintype() == "multipart" and not mailparse.holds_no_parts(part)
+        if container or part.get_filename():
             continue
         try:
             payload = part.get_payload(decode=True)
@@ -55,7 +56,7 @@ def text_body(msg):
             text = payload.decode(part.get_content_charset() or "utf-8", "replace")
         except Exception:
             continue
-        ct = part.get_content_type()
+        ct = "text/plain" if mailparse.holds_no_parts(part) else part.get_content_type()
         if ct == "text/plain" and plain is None:
             plain = text
         elif ct == "text/html" and htmltxt is None:

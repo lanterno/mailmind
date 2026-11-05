@@ -32,6 +32,11 @@ def part_bytes(part):
     return part.get_payload(decode=True) or b""
 
 
+def holds_no_parts(part):
+    """A multipart that named no boundary: what it holds is plain text, and no reader lists it."""
+    return part.get_content_maintype() == "multipart" and not part.is_multipart()
+
+
 def _hdr(msg, name):
     v = msg.get(name)
     if not v:
@@ -68,6 +73,8 @@ def parse(raw_bytes):
     idx = 0
     for part in walk(msg):
         if part.get_content_maintype() == "multipart":
+            if holds_no_parts(part) and text is None:
+                text = _decode(part)
             continue
         idx += 1
         ctype = (part.get_content_type() or "").lower()
