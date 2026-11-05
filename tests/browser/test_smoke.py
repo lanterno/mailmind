@@ -970,3 +970,135 @@ def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
     page.locator("#ruleInput").press("Enter")
     expect(r.locator(".jb")).to_have_count(0)
     clean(page)
+
+
+def _hub_files(world, n):
+    import store
+    c = store.conn()
+    try:
+        for i in range(n):
+            c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
+                      "VALUES (?,?,?,'application/pdf',1000,0)", (world.pk(RECEIPT), f"f.{i}", f"report-{i:03}.pdf"))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_the_document_hub_shows_more_and_keeps_your_place(page, world):
+    _hub_files(world, 450)
+    opened(page)
+    page.evaluate("openDocs()")
+    rows = page.locator("#docList .doc-row")
+    expect(rows).to_have_count(200)
+    more = page.get_by_role("button", name=re.compile(r"Show more · \d+ left"))
+    more.click()
+    expect(rows).to_have_count(400)
+    expect(page.locator("#docList [data-doc-dl]").nth(200)).to_be_focused()
+    more.click()
+    expect(rows).to_have_count(page.evaluate("_docMatched"))
+    expect(more).to_have_count(0)
+    names = rows.locator(".doc-fn").all_text_contents()
+    assert len(names) == len(set(names))
+    clean(page)
+
+
+def test_the_document_hub_searches_files_it_has_not_loaded(page, world):
+    _hub_files(world, 450)
+    import store
+    c = store.conn()
+    try:
+        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
+                  "VALUES (?,'late','needle.pdf','application/pdf',1000,0)", (world.pk("ada-inbox-09-rfc2047-folded.eml"),))
+        c.commit()
+    finally:
+        c.close()
+    opened(page)
+    page.evaluate("openDocs()")
+    expect(page.locator("#docList .doc-row")).to_have_count(200)
+    page.locator("#docSearch").fill("needle")
+    expect(page.locator("#docList .doc-fn")).to_have_text(["needle.pdf"])
+    expect(page.locator("#docCount")).to_have_text("· 1")
+    page.locator("#docSearch").fill("nothing-is-called-this")
+    expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
+    clean(page)
+
+
+def test_the_document_hub_shows_a_file_once_when_new_mail_moves_the_list(page, world):
+    _hub_files(world, 250)
+    opened(page)
+    page.evaluate("openDocs()")
+    rows = page.locator("#docList .doc-row")
+    expect(rows).to_have_count(200)
+    every = page.evaluate("_docMatched")
+    import store
+    c = store.conn()
+    try:
+        newer = c.execute("SELECT pk FROM messages WHERE ts > (SELECT ts FROM messages WHERE pk=?) ORDER BY ts DESC LIMIT 1",
+                          (world.pk(RECEIPT),)).fetchone()["pk"]
+        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
+                  "VALUES (?,'new','arrived.pdf','application/pdf',1000,0)", (newer,))
+        c.commit()
+    finally:
+        c.close()
+    page.get_by_role("button", name=re.compile(r"Show more")).click()
+    expect(rows).to_have_count(every)                                   # all it had, each once
+    expect(page.get_by_role("button", name=re.compile(r"Show more|Loading"))).to_have_count(0)
+    names = rows.locator(".doc-fn").all_text_contents()
+    assert len(names) == len(set(names))
+    clean(page)
+
+
+def test_a_slow_answer_does_not_overwrite_a_newer_search(page, world):
+    _hub_files(world, 3)
+    opened(page)
+    page.evaluate("openDocs()")
+    expect(page.locator("#docList .doc-fn").first).to_be_visible()
+    held = []
+    slow = re.compile(r"/api/documents\?.*q=report")
+    page.pw.route(slow, lambda route: held.append(route))
+    page.locator("#docSearch").fill("report")
+    while not held:
+        page.wait_for_timeout(50)
+    page.locator("#docSearch").fill("nothing-is-called-this")
+    expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
+    with page.pw.expect_response(slow):
+        held[0].continue_()
+    page.wait_for_timeout(100)
+    expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
+    clean(page)
+
+
+def test_when_showing_more_fails_the_hub_keeps_what_it_has(page, world):
+    _hub_files(world, 250)
+    opened(page)
+    page.evaluate("openDocs()")
+    rows = page.locator("#docList .doc-row")
+    expect(rows).to_have_count(200)
+    page.pw.route(re.compile(r"/api/documents\?.*offset=200"), lambda route: route.fulfill(status=500, body="{}"))
+    page.get_by_role("button", name=re.compile(r"Show more")).click()
+    expect(page.locator("#toast")).to_have_text("Couldn’t load more files.")
+    expect(rows).to_have_count(200)
+    every = page.evaluate("_docMatched")
+    page.pw.unroute(re.compile(r"/api/documents\?.*offset=200"))
+    page.get_by_role("button", name=re.compile(r"Show more")).click()
+    expect(rows).to_have_count(every)
+
+
+def test_the_document_hub_filters_by_kind(page, world):
+    _hub_files(world, 3)
+    import store
+    c = store.conn()
+    try:
+        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
+                  "VALUES (?,'pic','photo.png','image/png',1000,0)", (world.pk(RECEIPT),))
+        c.commit()
+    finally:
+        c.close()
+    opened(page)
+    page.evaluate("openDocs()")
+    expect(page.locator("#docList .doc-fn").first).to_be_visible()
+    page.locator('#docFilters [data-dk="image"]').click()
+    expect(page.locator("#docList .doc-fn")).to_have_text(["photo.png"])
+    page.locator('#docFilters [data-dk="all"]').click()
+    expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(3)
+    clean(page)
