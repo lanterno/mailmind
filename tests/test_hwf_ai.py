@@ -704,14 +704,12 @@ def test_a_draft_survives_switching_the_from_account(app, world, ai):
     assert w.ADA in asked.prompt and "Contract draft v2" in asked.prompt     # Ada answers Bea's mail
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: the review's 'cleaned' count ignores the account it is scoped to")
-def test_bug_the_review_counts_only_this_accounts_cleanups(app, world, ai):
+def test_the_review_counts_only_this_accounts_cleanups(app, world, ai):
     import store
     c = store.conn()
     try:
         store.unsub_log_put(c, "news@loom.example.test", "post", "ok", 200,
-                            datetime.now(timezone.utc).isoformat(), "unsub-loom-1")
+                            datetime.now(timezone.utc).isoformat(), "unsub-loom-1", [w.ADA])
         c.commit()
     finally:
         c.close()
