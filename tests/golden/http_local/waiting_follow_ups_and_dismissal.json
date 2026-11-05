@@ -12,13 +12,6 @@
     "kind": "received",
     "state": "due",
     "thread_id": "rf:ada@example.test:c5862e0831764395"
-   },
-   {
-    "account": "bea@example.test",
-    "due_ts": 1793620800,
-    "kind": "received",
-    "state": "due",
-    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
    }
   ]
  },
@@ -26,37 +19,18 @@
   "note": "follow-ups four days later",
   "value": [
    {
-    "account": "ada@example.test",
-    "due_ts": 1793966400,
-    "kind": "received",
-    "state": "due",
-    "thread_id": "rf:ada@example.test:c5862e0831764395"
-   },
-   {
     "account": "bea@example.test",
     "due_ts": 1793966400,
     "kind": "received",
     "state": "due",
     "thread_id": "rf:bea@example.test:b3330a7a33c000ec"
-   },
-   {
-    "account": "bea@example.test",
-    "due_ts": 1793966400,
-    "kind": "received",
-    "state": "due",
-    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
    }
   ]
  },
  {
   "note": "ada@example.test's Waiting",
   "value": {
-   "rows": [
-    [
-     "Quilt pattern ideas",
-     true
-    ]
-   ],
+   "rows": [],
    "status": 200
   }
  },
@@ -64,10 +38,6 @@
   "note": "bea@example.test's Waiting",
   "value": {
    "rows": [
-    [
-     "Kickoff notes",
-     true
-    ],
     [
      "New sign-in to your account",
      true
@@ -86,7 +56,7 @@
  {
   "body": {
    "ok": true,
-   "thread_id": "rf:ada@example.test:c5862e0831764395"
+   "thread_id": "rf:bea@example.test:b3330a7a33c000ec"
   },
   "headers": {
    "cache-control": "no-store",
@@ -123,22 +93,10 @@
   "note": "follow-ups after dismissal",
   "value": [
    {
-    "account": "ada@example.test",
+    "account": "bea@example.test",
     "kind": "received",
     "state": "dismissed",
-    "thread_id": "rf:ada@example.test:c5862e0831764395"
-   },
-   {
-    "account": "bea@example.test",
-    "kind": "received",
-    "state": "due",
     "thread_id": "rf:bea@example.test:b3330a7a33c000ec"
-   },
-   {
-    "account": "bea@example.test",
-    "kind": "received",
-    "state": "due",
-    "thread_id": "rf:bea@example.test:b8304c2862f5ab91"
    }
   ]
  }
