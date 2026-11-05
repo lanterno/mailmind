@@ -3969,6 +3969,8 @@ async function undo(){
   if(d&&d.empty){ toast("Nothing to undo"); return; }
   hideUndoFloat();
   if(!d||!d.ok){ toast((d&&d.error)||"Couldn’t undo"); announce&&announce("Undo failed"); }
+  else if(d.failed){ const m=`${d.failed} couldn’t be restored — press z to try again`;
+    toast(m); announce&&announce(m); }
   else { toast((d.label||"Action")+" undone"); announce&&announce((d.label||"Action")+" undone"); }
   if(state.allInbox)loadAllInboxes();   // refresh whichever view shows the restored item
   else if(state.searching)runSearch();
