@@ -162,7 +162,6 @@ def test_reply_later_records_when_the_thread_last_moved(app, world):
     assert row["last_msg_ts"] == client["ts"]
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an expired received nudge is re-detected on the same tick")
 def test_a_received_nudge_stops_after_the_expiry_window(app, world, ai):
     import server
     import summarize
