@@ -1511,26 +1511,37 @@ def do_undo():
         if not _undo_stack:
             return {"ok": False, "empty": True}, 200
         entry = _undo_stack.pop()
+    kept = False                              # what couldn't be reversed is back on the stack
     try:
         if entry.get("kind") == "bulk":
             acct = folder = None
-            done = fail = 0
+            left = []                             # newest first, as they were tried
             for child in reversed(entry["children"]):
-                ok, a, f = _reverse_one(child)
+                try:
+                    ok, a, f = _reverse_one(child)
+                except Exception as e:            # one member's trouble never stops the rest
+                    print(f"[undo] a group member: {_sanitize_conn_error(e)}", flush=True)
+                    ok = False
                 if ok:
-                    done += 1; acct = a; folder = f
+                    acct, folder = a, f
                 else:
-                    fail += 1
+                    left.append(child)
+            done = len(entry["children"]) - len(left)
+            if left:                              # a smaller group of what's left, for a retry
+                with _undo_lock:
+                    _undo_stack.append({**entry, "children": left[::-1]})
+                kept = True
             okk = done > 0
             res = {"ok": okk, "label": entry.get("label"), "account": acct, "folder": folder,
-                   "reversed": done, "failed": fail}
+                   "reversed": done, "failed": len(left)}
         else:
             ok, acct, folder = _reverse_one(entry)
             okk = ok
             res = {"ok": ok, "label": entry.get("label"), "account": acct, "folder": folder}
         if not okk:
-            with _undo_lock:                  # couldn't reverse -> keep it so the user can retry
-                _undo_stack.append(entry)
+            if not kept:
+                with _undo_lock:              # couldn't reverse -> keep it so the user can retry
+                    _undo_stack.append(entry)
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
         invalidate_stats()
         _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
@@ -1538,8 +1549,9 @@ def do_undo():
         res["remaining"] = len(_undo_stack)
         return res, 200
     except Exception as e:
-        with _undo_lock:
-            _undo_stack.append(entry)
+        if not kept:
+            with _undo_lock:
+                _undo_stack.append(entry)
         print(f"[undo] error: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "couldn’t undo"}, 200
 

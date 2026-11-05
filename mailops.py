@@ -362,7 +362,12 @@ def move_by_msgid(account, search_folder, dest_folder, message_id, unseen=False)
         uid = _uid_by_msgid(s, message_id)              # the most recent copy if several
         if uid is None:
             return False, "message not found"
-        s.move([uid], dest_folder)
+        try:
+            s.move([uid], dest_folder)
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:                     # a NO or BAD: it stays where it is
+            return False, "the server refused the move"
         if unseen:
             s.select(dest_folder, readonly=False)
             back = _uid_by_msgid(s, message_id)
@@ -378,7 +383,7 @@ def move_by_msgid(account, search_folder, dest_folder, message_id, unseen=False)
 
 def relabel_by_msgid(account, search_folder, message_id, label="\\Inbox"):
     """Gmail-archive reverse: re-add a label (default \\Inbox) to the message found by
-    Message-ID in search_folder (All Mail)."""
+    Message-ID in search_folder (All Mail). A refusal answers (False, why): the label isn't there."""
     acct = accounts.get(account)
     s = mailbox.open_session(acct)
     try:
@@ -386,7 +391,12 @@ def relabel_by_msgid(account, search_folder, message_id, label="\\Inbox"):
         uid = _uid_by_msgid(s, message_id)
         if uid is None:
             return False, "message not found"
-        _ignoring_refusal(s.add_labels, [uid], [label])
+        try:
+            s.add_labels([uid], [label])
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return False, "the server refused the label"
         return True, "relabeled"
     finally:
         try:
