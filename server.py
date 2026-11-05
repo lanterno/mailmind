@@ -3398,7 +3398,8 @@ def ai_draft_reply(body):
             pk = None
     if not account or account not in {a["email"] for a in accounts.accounts()}:
         return {"ok": False, "error": "bad request"}, 400
-    res, code = draft_reply.draft(account, thread_id=thread_id, pk=pk,
+    # The mail is in its own account's rows. `account` is who's replying: From may name another.
+    res, code = draft_reply.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
                                   instruction=instruction, tone=tone, me=account)
     # Bank a default-shaped success into the draft-ahead cache (the user already paid for
     # this call; a closed-and-reopened composer or same-thread revisit is then free).
