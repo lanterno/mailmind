@@ -31,7 +31,7 @@ _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
 
 def _clean(s):
     """Strip dangerous codepoints from a free-text header value (subject/display name)."""
-    return _DANGER.sub("", s or "").strip()
+    return _DANGER.sub("", (s or "").replace("\t", " ")).strip()
 
 
 def _idna_domain(domain):
