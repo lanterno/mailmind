@@ -226,6 +226,7 @@ def test_a_queued_move_the_server_refuses_tells_the_open_tabs(app, world, quick)
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"),
                                      "mutation_id": "m-no"}).json["status"] == "queued"
+    assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
     readmutq.drain()
@@ -241,6 +242,7 @@ def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
     assert r["status"] == "queued"
+    assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
     readmutq.drain()
     assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
     s.close()
