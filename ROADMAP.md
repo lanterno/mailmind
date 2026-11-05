@@ -62,17 +62,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `\Answered` by Message-ID in whatever folder it moved to (the `mailops._uid_by_msgid` pattern
   `apply_queued_mutation` uses). Pinned by
   `test_a_reply_marks_its_original_answered_after_the_original_is_archived`.
-- **Outgoing replies carry the reader's quote fold** · medium value · effort S —
-  `compose.reply_bodies` and `forward_bodies` run the original's HTML through
-  `sanitize_html.sanitize`. That function wraps the first top-level blockquote that follows text
-  in the reader-only `<details class="mm-quote"><summary>··· quoted text</summary>`, so it goes
-  out in the HTML part of replies to Gmail, Apple Mail and Thunderbird threads. Recipients see
-  either an unstyled collapsed toggle or a stray "··· quoted text" line, and with Gmail's
-  `gmail_quote` wrapper the element is mis-nested. `_plain_from_html` leaks the same words into
-  the plain part when the original was HTML-only. Saved drafts keep it in `drafts.tail_html`,
-  which the `resume` branch re-sends without sanitizing. The fix is a `fold=False` switch on
-  `sanitize` for the three compose callers, a strip of the wrapper from stored `tail_html`, and a
-  compose test that neither MIME part contains `<details`.
 
 ## AI that acts, not just describes
 
