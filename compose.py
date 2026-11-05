@@ -183,8 +183,11 @@ def build_message(spec, draft=False):
         extra = {}
         if att.get("params"):                # e.g. iMIP text/calendar; method=REPLY
             extra["params"] = {str(k): str(v) for k, v in att["params"].items()}
-        m.add_attachment(att["data"], maintype=maintype, subtype=subtype,
-                         filename=_clean(att.get("filename") or "attachment"), **extra)
+        filename = _clean(att.get("filename") or "attachment")
+        if (maintype, subtype) == ("message", "rfc822"):     # an attached email may not be base64 (RFC 2046)
+            m.add_attachment(email.message_from_bytes(att["data"], policy=email.policy.default), filename=filename)
+            continue
+        m.add_attachment(att["data"], maintype=maintype, subtype=subtype, filename=filename, **extra)
 
     raw = m.as_bytes(policy=email.policy.SMTP)
     # A raise, not an assert: python -O strips asserts. Header names are case-insensitive.

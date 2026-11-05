@@ -45,7 +45,7 @@ def dec(s):
 
 def text_body(msg):
     plain, htmltxt = None, None
-    for part in msg.walk():
+    for part in mailparse.walk(msg):
         if part.get_content_maintype() == "multipart" or part.get_filename():
             continue
         try:
@@ -86,7 +86,7 @@ def _has_invite(msg):
     """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
     try:
         return any(p.get_content_type() in ("text/calendar", "application/ics")
-                   or (p.get_filename() or "").lower().endswith(".ics") for p in msg.walk())
+                   or (p.get_filename() or "").lower().endswith(".ics") for p in mailparse.walk(msg))
     except Exception:
         return False
 
@@ -370,7 +370,30 @@ def fetch_body(pk):
         c.commit()
         c.close()
         return parsed
-    return mailparse.parse(raw)
+    parsed = mailparse.parse(raw)
+    _record_parts(pk, parsed)
+    return parsed
+
+
+def _record_parts(pk, parsed):
+    """Rows a parsing change took away (migration 28) come back as the message is opened."""
+    if not parsed["attachments"]:
+        return
+    c = store.conn()
+    try:
+        if not c.execute("SELECT 1 FROM attachments WHERE message_pk=?", (pk,)).fetchone():
+            _insert_parts(c, pk, parsed)
+            c.commit()
+    finally:
+        c.close()
+
+
+def _insert_parts(c, pk, parsed):
+    for a in parsed["attachments"]:
+        c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
+                     VALUES(?,?,?,?,?,?,?)""",
+                  (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
+                   a["content_id"], a["is_inline"]))
 
 
 def _keep_body(c, pk, raw, parsed):
@@ -378,11 +401,7 @@ def _keep_body(c, pk, raw, parsed):
     parsed recipients and the full-text body. The caller commits."""
     store.store_body(c, pk, raw, datetime.now(timezone.utc).isoformat())
     c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
-    for a in parsed["attachments"]:
-        c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
-                     VALUES(?,?,?,?,?,?,?)""",
-                  (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
-                   a["content_id"], a["is_inline"]))
+    _insert_parts(c, pk, parsed)
     if parsed["attachments"]:
         c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
     c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))

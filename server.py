@@ -1744,18 +1744,19 @@ def _extract_attachments(raw):
     except Exception:
         return []
     out, total = [], 0
-    for part in msg.walk():
+    for part in mailparse.walk(msg):
         if part.get_content_maintype() == "multipart":
             continue
         disp = (part.get_content_disposition() or "").lower()
         fn = part.get_filename()
         cid = (part.get("Content-ID") or "").strip()
-        if disp == "attachment" or (fn and disp != "inline" and not cid):
-            data = part.get_payload(decode=True) or b""
+        attached_email = part.get_content_type() == "message/rfc822"
+        if disp == "attachment" or (fn and disp != "inline" and not cid) or attached_email:
+            data = mailparse.part_bytes(part)
             total += len(data)
             if total > MAX_ATTACH_BYTES:
                 break
-            out.append({"filename": fn or "attachment",
+            out.append({"filename": fn or ("message.eml" if attached_email else "attachment"),
                         "content_type": part.get_content_type(), "data": data})
     return out
 

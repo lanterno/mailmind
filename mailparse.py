@@ -14,6 +14,24 @@ from email import policy
 from email.header import decode_header
 
 
+def walk(msg):
+    """Like Message.walk, but an attached email is one part: what it holds isn't this message's."""
+    yield msg
+    if msg.is_multipart() and msg.get_content_maintype() != "message":
+        for sub in msg.get_payload():
+            yield from walk(sub)
+
+
+def part_bytes(part):
+    """A part's bytes. An attached email is parsed, with no encoded body of its own to decode."""
+    if part.get_content_maintype() == "message" and part.is_multipart():
+        try:
+            return part.get_payload(0).as_bytes()
+        except Exception:
+            return b""
+    return part.get_payload(decode=True) or b""
+
+
 def _hdr(msg, name):
     v = msg.get(name)
     if not v:
@@ -48,7 +66,7 @@ def parse(raw_bytes):
     text, html, cal = None, None, None
     attachments = []
     idx = 0
-    for part in msg.walk():
+    for part in walk(msg):
         if part.get_content_maintype() == "multipart":
             continue
         idx += 1
@@ -56,11 +74,12 @@ def parse(raw_bytes):
         disp = (part.get_content_disposition() or "").lower()
         filename = part.get_filename()
         cid = (part.get("Content-ID") or "").strip().strip("<>")
-        is_attachment = disp == "attachment" or (filename and disp != "inline")
+        is_attachment = disp == "attachment" or (filename and disp != "inline") or ctype == "message/rfc822"
         if is_attachment or (filename and not cid):
-            payload = part.get_payload(decode=True) or b""
+            payload = part_bytes(part)
             attachments.append({
-                "part_id": str(idx), "filename": _decode_fn(filename) or f"part-{idx}",
+                "part_id": str(idx),
+                "filename": _decode_fn(filename) or ("message.eml" if ctype == "message/rfc822" else f"part-{idx}"),
                 "content_type": ctype, "size": len(payload),
                 "content_id": cid or None, "is_inline": int(disp == "inline" or bool(cid)),
             })
@@ -119,12 +138,12 @@ def extract_part(raw_bytes, part_id):
     except Exception:
         msg = email.message_from_bytes(raw_bytes or b"")
     idx = 0
-    for part in msg.walk():
+    for part in walk(msg):
         if part.get_content_maintype() == "multipart":
             continue                       # IDENTICAL skip to parse(): multiparts never increment idx
         idx += 1
         if idx == want:
-            data = part.get_payload(decode=True) or b""
+            data = part_bytes(part)
             ctype = (part.get_content_type() or "application/octet-stream").lower()
             return data, ctype
     return None, None
@@ -139,7 +158,7 @@ def inline_parts(raw_bytes):
         msg = email.message_from_bytes(raw_bytes, policy=policy.default)
     except Exception:
         return out
-    for part in msg.walk():
+    for part in walk(msg):
         if part.get_content_maintype() == "multipart":
             continue
         cid = (part.get("Content-ID") or "").strip().strip("<>")
