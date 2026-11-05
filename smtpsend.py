@@ -114,11 +114,12 @@ def append_to_sent(acct, raw, message_id=None):
 
 
 def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
-    """APPEND a draft (flagged \\Draft) to the account's Drafts folder, after deleting the
-    previous copy (single-UID expunge — NEVER a bulk expunge). Returns
-    (folder, new_uid|None, uidvalidity|None, removed_uid|None). Delete-then-append so a crash
-    leaves 0 drafts. prev_folder: where the previous copy is; when that isn't this Drafts folder,
-    nothing is deleted here (its UID means nothing in this one), and the caller removes it there."""
+    """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
+    copy (single-UID expunge — NEVER a bulk expunge). Returns
+    (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
+    a crash never leaves none: at worst the old copy stays beside the new one. prev_folder: where the
+    previous copy is; when that isn't this Drafts folder, nothing is deleted here (its UID means
+    nothing in this one), and the caller removes it there."""
     s = mailbox.open_session(acct)
     try:
         drafts = mail_session.find_role(s, "drafts") or "Drafts"
@@ -130,7 +131,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
             raise
         except imaplib.IMAP4.error:          # refused: no copy is deleted, but the APPEND still goes
             uidv = None
-        # delete the prior draft copy, if we can safely identify it
+        # the prior draft copy, if we can safely identify it: asked before the new copy can answer too
         del_uid = removed = None
         if prev_uid and (prev_uidvalidity is None or prev_uidvalidity == uidv):
             del_uid = int(prev_uid)
@@ -140,6 +141,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
                 del_uid = ids[0] if ids else None
             except Exception:
                 del_uid = None
+        new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
         if del_uid:
             try:
                 s.add_flags([del_uid], ["\\Deleted"])
@@ -147,7 +149,6 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
                 removed = del_uid
             except Exception:
                 pass
-        new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
         return drafts, new_uid, uidv, removed
     finally:
         try:
