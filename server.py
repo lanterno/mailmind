@@ -553,7 +553,8 @@ def digest_json(qs):
     return {"items": items, "stats": st, "accounts": accts, "send_accounts": send_accounts,
             "aliases": amap, "signatures": config.signature_map(),
             "signature_default": config.signature_default(),
-            "status": _status, "sync": _sync, "ai": summarize.status(), "generated": now_iso()}
+            "status": _status, "sync": _sync, "ai": summarize.status(), "profile": profile.current().value,
+            "generated": now_iso()}
 
 
 # ----------------------------------------------------------------------------- live stats
