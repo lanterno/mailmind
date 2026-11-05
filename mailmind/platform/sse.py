@@ -27,6 +27,7 @@ TOPICS = frozenset({
     "sync-done",          # a sync finished for an account
     "new-mail",           # it brought new mail into INBOX
     "reconcile",          # rows of mail gone from the server were pruned, or expiry moved some
+    "folder-synced",      # the first scan of a folder ended (ok: whether it read the folder)
     "snooze-wake",        # snoozed mail came back
     "followup",           # the follow-ups changed
     "mute",               # a conversation was muted or unmuted

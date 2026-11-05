@@ -1070,6 +1070,43 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
                "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
 
 
+FIRST_SYNC_WAIT = 8.0      # seconds a list request waits for a folder's first scan before it answers
+_first_syncs = {}          # (account, folder) -> threading.Event, set when that folder's first scan ends
+_first_sync_failed = {}    # (account, folder) -> the error kind of its last first scan, while it failed
+_first_syncs_lock = threading.Lock()
+
+
+def _first_sync(account, folder):
+    """Start the first scan of a folder never read whole, unless one is running, as a job on the
+    account's gate; return the Event set when it ends. It ends by publishing folder-synced, so a
+    list that answered before the scan was done loads again."""
+    key = (account, folder)
+    with _first_syncs_lock:
+        done = _first_syncs.get(key)
+        if done is not None:
+            return done
+        done = _first_syncs[key] = threading.Event()
+
+    def scan():
+        ok = False
+        try:
+            gates.run(account, lambda: ingest.sync_folder(accounts.get(account), folder, full=True),
+                      priority=gates.Priority.INTERACTIVE)
+            ok = True
+            _first_sync_failed.pop(key, None)
+        except Exception as e:
+            _first_sync_failed[key] = _classify_sync_error(e)
+            print(f"[folder-sync] {account}/{folder}: {type(e).__name__}: {e}", flush=True)
+        finally:
+            with _first_syncs_lock:
+                _first_syncs.pop(key, None)
+            done.set()
+        _invalidate_folders(account)
+        sse.publish("folder-synced", {"account": account, "folder": folder, "ok": ok})
+    threading.Thread(target=scan, name="first-sync", daemon=True).start()
+    return done
+
+
 def messages_in(account, folder, offset, limit, group=False):
     if folder == "__snoozed__":
         return snoozed_in(account, offset, limit)
@@ -1079,13 +1116,12 @@ def messages_in(account, folder, offset, limit, group=False):
         return waiting_in(account, offset, limit)
     if folder == "__replylater__":
         return replylater_in(account, offset, limit)
+    scan = {}          # how the folder's first scan went, when this open started one
     if offset == 0 and not ingest.folder_synced(account, folder):
-        def first_sync():   # first open of a folder: pull it (UIDVALIDITY-checked, stores all)
-            try:
-                ingest.sync_folder(accounts.get(account), folder, full=True)
-            except Exception as e:
-                print(f"[folder-sync] {account}/{folder}: {type(e).__name__}: {e}", flush=True)
-        gates.run(account, first_sync, priority=gates.Priority.INTERACTIVE)
+        if not _first_sync(account, folder).wait(FIRST_SYNC_WAIT):
+            scan = {"syncing": True}               # still reading: what's stored now, then folder-synced
+        elif (account, folder) in _first_sync_failed:
+            scan = {"sync_failed": True}
     c = store.conn()
     if group:
         # collapse to conversations: one row per thread (the latest message) + rollups
@@ -1137,7 +1173,7 @@ def messages_in(account, folder, offset, limit, group=False):
                        "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
         items.append(it)
     return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total}
+            "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
 
 
 def thread_json(account, thread_id):
