@@ -1154,7 +1154,7 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock():
     store.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
     try:
         did = _save()["draft_id"]
-        server.outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "answered_set": 1,
+        server.outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
                                         "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                                     {"email": ACCT})
     finally:

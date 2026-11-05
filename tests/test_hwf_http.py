@@ -516,7 +516,6 @@ def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):
     assert app.post("/api/undo", b"").status == 200             # no body at all is still {}
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: \\Answered is set by pk, so archiving the original first skips it")
 def test_a_reply_marks_its_original_answered_after_the_original_is_archived(app, world):
     import outbox
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk(LUNCH_CONFIRM),

@@ -521,6 +521,39 @@ def test_a_send_during_a_first_save_leaves_no_copy_behind(page, app, world):
     clean(page)
 
 
+def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, world):
+    import store
+    opened(page)
+    pk = world.pk(LUNCH[1])
+    page.evaluate(f"replyTo({pk},false)")
+    box = page.get_by_role("textbox", name="message body")
+    box.fill("See you there.")
+    assert page.evaluate("composeSaveDraft(true)") is True
+    assert page.evaluate("!!state.compose.resume")              # it names its quote and threading itself now
+    c = store.conn()
+    store.delete_message(c, pk)
+    c.commit()
+    c.close()
+    page.get_by_role("button", name="Send ▸").click()
+    let_undo_pass(page)
+    due(app)
+    [sent] = world.smtp.messages
+    assert b"In-Reply-To:" in sent.data and b"See you there." in sent.data
+    clean(page)
+
+
+def test_a_forward_saved_once_shows_its_files_as_its_own(page, world):
+    opened(page)
+    page.evaluate(f"forwardMsg({world.pk('ada-inbox-07-forward-rfc822.eml')})")
+    quote = page.locator("#cmpQToggle")
+    expect(quote).to_contain_text("attachment")
+    page.get_by_role("textbox", name="message body").fill("For you.")
+    assert page.evaluate("composeSaveDraft(true)") is True
+    expect(page.locator("#cmpAttach .cmp-att")).to_have_count(1)
+    expect(quote).not_to_contain_text("attachment")
+    clean(page)
+
+
 def test_a_message_reopened_by_undo_send_is_saved_when_closed(page, world):
     opened(page)
     compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")

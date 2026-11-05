@@ -465,6 +465,21 @@ def test_hwf_a_merge_keeps_the_survivors_own_state_over_the_absorbed_threads(db)
         "From the first thread." if surv == ta else "From the second thread."]
 
 
+def test_hwf_a_queued_reply_follows_its_thread_when_the_thread_takes_another_id(db):
+    a = put(db, "<a@example.test>")
+    b = put(db, "<b@example.test>")
+    recompute(db)
+    ta, tb = tid(db, a), tid(db, b)
+    gone = max(ta, tb)
+    db.execute("INSERT INTO outbox (account, idempotency_key, message_id, envelope, recipients, subject, raw, "
+               "state, next_attempt_at, created_at, orig_account, orig_message_id, orig_thread_id) "
+               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (A, "k", "<m@example.test>", "[]", "{}", "Re", b"x", "queued", 0,
+                                                       "now", A, "<a@example.test>", gone))
+    put(db, "<c@example.test>", refs="<a@example.test> <b@example.test>")      # joins the two
+    recompute(db)
+    assert db.execute("SELECT orig_thread_id FROM outbox").fetchone()[0] == min(ta, tb)
+
+
 def test_hwf_a_message_without_an_id_keeps_a_thread_of_its_own_row(db):
     import store
     pk = put(db, "")
