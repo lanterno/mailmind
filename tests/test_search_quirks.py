@@ -1,5 +1,7 @@
-"""Things decision D11 had fixed in search: a date means midnight where you are, and snoozed mail is
-out of sight until it wakes."""
+"""Three things decision D11 had fixed in search: a date means midnight where you are, snoozed mail
+is out of sight until it wakes, and Search and Ask rank by one table of weights."""
+import glob
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
@@ -8,8 +10,10 @@ import pytest
 
 import search
 from fakes import anthropic_api as fa
+from fixtures import world as w
 
 RECEIPT = "ada-inbox-05-receipt.eml"
+ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
 @pytest.fixture
@@ -110,3 +114,33 @@ def test_the_grammar_says_where_snoozed_mail_went():
     assert search.visible(["m.seen = ?"]) == ["m.seen = ?", "m.snoozed_until IS NULL"]
     where = search.build("is:snoozed")[1]
     assert search.visible(where) == where
+
+
+# -- ranking --------------------------------------------------------------
+
+def test_search_and_ask_rank_by_one_table():
+    named = {os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "*.py"))
+             if "bm25(" in open(p, encoding="utf-8").read()}
+    assert named == {"search.py"}
+
+
+def test_the_table_covers_every_indexed_column_and_ranks_them(world):
+    import store
+    c = store.conn()
+    columns = [r[1] for r in c.execute("PRAGMA table_info(msg_fts)")]
+    c.close()
+    assert columns == ["subject", "from_name", "from_addr", "recipients", "snippet", "body_text"]
+    weights = [float(x) for x in search.BM25.removeprefix("bm25(msg_fts,").removesuffix(")").split(",")]
+    assert len(weights) == len(columns)
+    by = dict(zip(columns, weights))
+    assert by["subject"] > by["from_addr"] == by["from_name"] > by["body_text"] > by["recipients"] > by["snippet"]
+
+
+def test_a_hit_in_the_subject_ranks_above_one_in_the_body(app, world):
+    world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-05-receipt.eml", Message_ID="<rank-1@example.test>",
+                                            Subject="A zanzibar mention"))
+    world.deliver(w.ADA, "INBOX", (b"From: Lin <lin@example.test>\r\nTo: ada@example.test\r\nSubject: Plans\r\n"
+                                   b"Message-ID: <rank-2@example.test>\r\nDate: Mon, 02 Nov 2026 09:00:00 +0000\r\n"
+                                   b"Content-Type: text/plain\r\n\r\nNothing here but one zanzibar in a few words.\r\n"))
+    items = app.get("/api/search?scope=all&q=zanzibar&limit=10").json["items"]
+    assert [i["subject"] for i in items] == ["A zanzibar mention", "Plans"]
