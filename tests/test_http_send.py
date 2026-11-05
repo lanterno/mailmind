@@ -321,12 +321,18 @@ def test_rsvp_to_an_invite(send):
     send.post("no message", "/api/invite/rsvp", {"decision": "accept"})
 
 
-@pytest.mark.xfail(strict=True, reason="known bug: an RSVP's idempotency key has a random suffix")
 def test_a_double_submitted_rsvp_queues_once(app, world):
     pk = world.pk("ada-inbox-06-outlook-invite.eml")
     a = app.post("/api/invite/rsvp", {"pk": pk, "decision": "accept"}).json
     b = app.post("/api/invite/rsvp", {"pk": pk, "decision": "accept"}).json
     assert (a["outbox_id"], b["queued"]) == (b["outbox_id"], False)
+
+
+def test_a_changed_mind_about_an_invite_sends_each_answer(app, world):
+    pk = world.pk("ada-inbox-06-outlook-invite.eml")
+    ids = [app.post("/api/invite/rsvp", {"pk": pk, "decision": d}).json["outbox_id"]
+           for d in ("accept", "decline", "accept", "accept")]
+    assert len(set(ids[:3])) == 3 and ids[3] == ids[2]
 
 
 def test_wire_dates_follow_the_frozen_clock(send):
