@@ -83,9 +83,9 @@ def append_to_sent(acct, raw, message_id=None):
 def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
     """APPEND a draft (flagged \\Draft) to the account's Drafts folder, after deleting the
     previous copy (single-UID expunge — NEVER a bulk expunge). Returns
-    (folder, new_uid|None, uidvalidity|None). Delete-then-append so a crash leaves 0 drafts.
-    prev_folder: where the previous copy is; when that isn't this Drafts folder, nothing is
-    deleted here (its UID means nothing in this one), and the caller removes it there."""
+    (folder, new_uid|None, uidvalidity|None, removed_uid|None). Delete-then-append so a crash
+    leaves 0 drafts. prev_folder: where the previous copy is; when that isn't this Drafts folder,
+    nothing is deleted here (its UID means nothing in this one), and the caller removes it there."""
     s = mailbox.open_session(acct)
     try:
         drafts = mail_session.find_role(s, "drafts") or "Drafts"
@@ -98,7 +98,7 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
         except imaplib.IMAP4.error:          # refused: no copy is deleted, but the APPEND still goes
             uidv = None
         # delete the prior draft copy, if we can safely identify it
-        del_uid = None
+        del_uid = removed = None
         if prev_uid and (prev_uidvalidity is None or prev_uidvalidity == uidv):
             del_uid = int(prev_uid)
         elif prev_msgid:
@@ -111,10 +111,11 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
             try:
                 s.add_flags([del_uid], ["\\Deleted"])
                 s.expunge([del_uid])         # this UID alone, never a bulk EXPUNGE
+                removed = del_uid
             except Exception:
                 pass
         new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
-        return drafts, new_uid, uidv
+        return drafts, new_uid, uidv, removed
     finally:
         try:
             s.logout()
@@ -123,9 +124,9 @@ def append_to_drafts(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid
 
 
 def delete_draft_uid(acct, folder, uid, uidvalidity=None):
-    """Remove one draft message by UID (single-UID expunge). Best-effort."""
+    """Remove one draft message by UID (single-UID expunge). Best-effort: True if it went."""
     if not uid:
-        return
+        return False
     s = mailbox.open_session(acct)
     try:
         try:
@@ -133,16 +134,17 @@ def delete_draft_uid(acct, folder, uid, uidvalidity=None):
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:
-            return                                     # refused: nothing to delete from
+            return False                               # refused: nothing to delete from
         if uidvalidity is not None and uidvalidity != cur:
-            return                                     # UIDs rolled (or unsaid) — don't risk the wrong one
+            return False                               # UIDs rolled (or unsaid) — don't risk the wrong one
         try:
             s.add_flags([int(uid)], ["\\Deleted"])
             s.expunge([int(uid)])                      # this UID alone, never a bulk EXPUNGE
+            return True
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:
-            pass
+            return False
     finally:
         try:
             s.logout()

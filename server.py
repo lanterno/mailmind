@@ -2697,15 +2697,24 @@ def do_draft(body):
         row = store.draft_get(c, int(body["draft_id"]))
         c.close()
         if row:
+            removed = False
             if _draft_copy_ours_to_remove(row):
                 try:
                     acct = accounts.get(row["account"])
-                    gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(acct, row["folder"], row["uid"],
-                                                                               row["uidvalidity"]),
-                              priority=gates.Priority.INTERACTIVE)
+                    removed = gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(
+                        acct, row["folder"], row["uid"], row["uidvalidity"]), priority=gates.Priority.INTERACTIVE)
                 except Exception as e:
                     print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
-            c = store.conn(); store.draft_delete(c, int(body["draft_id"])); c.commit(); c.close()
+            c = store.conn()
+            try:
+                store.draft_delete(c, int(body["draft_id"]))
+                if removed:
+                    store.delete_by_uids(c, row["account"], row["folder"], [row["uid"]])
+                c.commit()
+            finally:
+                c.close()
+            if removed:
+                _draft_list_changed(row["account"], row["folder"])
         return {"ok": True, "deleted": True}, 200
     try:
         spec, in_reply_to_pk, acct = _compose_spec(body)
@@ -2743,13 +2752,14 @@ def do_draft(body):
         if scope != gates.EVERY_ACCOUNT and scope_for(prev) != scope:
             return None
         same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
-        folder, uid, uidv = smtpsend.append_to_drafts(
+        folder, uid, uidv, replaced = smtpsend.append_to_drafts(
             acct, built["raw"],
             prev_uid=(prev["uid"] if same else None),
             prev_uidvalidity=(prev["uidvalidity"] if same else None),
             prev_msgid=(prev["message_id"] if same else None),
             prev_folder=(prev["folder"] if same else None))
         _folder_touched(acct["email"], folder)       # its list shows the new copy on its next open
+        gone = [(acct["email"], folder, replaced)] if replaced else []   # and no longer the copies it replaced
         # The old copy is in another mailbox (From changed) or another folder (a draft reopened
         # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
         # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
@@ -2758,8 +2768,9 @@ def do_draft(body):
                 and (not same or (prev["folder"] and prev["folder"] != folder))
                 and _draft_copy_ours_to_remove(prev)):
             try:
-                smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
-                                          prev["uidvalidity"])
+                if smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
+                                             prev["uidvalidity"]):
+                    gone.append((prev["account"], prev["folder"], prev["uid"]))
             except Exception as e:
                 print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
         # the row moves with the copy, under the same gate: Edit re-checks it under the gate
@@ -2778,9 +2789,13 @@ def do_draft(body):
                                    hashlib.sha256(built["raw"]).hexdigest())
             if key and not did:
                 store.draft_set_key(c, new_id, key)
+            for account, in_folder, old_uid in gone:
+                store.delete_by_uids(c, account, in_folder, [old_uid])
             c.commit()
         finally:
             c.close()
+        for account, in_folder, _ in gone:
+            _draft_list_changed(account, in_folder)
         return new_id, uid
     try:
         scope = scope_for(replaces())
@@ -2796,6 +2811,12 @@ def do_draft(body):
         return {"ok": False, "error": "could not save draft"}, 502
     invalidate_stats()
     return {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}, 200
+
+
+def _draft_list_changed(account, folder):
+    """A copy left `folder` and its row went with it: a list of that folder on screen loads again,
+    and through its catch-up shows the copy that replaced it."""
+    sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
 def _composer_key(body):
@@ -4540,6 +4561,11 @@ def _after_send(_sent):
     SSE live the page doesn't poll the outbox, so a send given up on would still look pending)."""
     invalidate_stats()
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
+
+
+def _after_draft_removed(gone):
+    """outbox.DraftCopyRemoved: a send's draft left the server."""
+    _draft_list_changed(gone.account, gone.folder)
 
 
 def _after_readmut(_settled):

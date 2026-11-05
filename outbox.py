@@ -55,6 +55,13 @@ class Sent:
 
 
 @dataclass(frozen=True)
+class DraftCopyRemoved:
+    """A sent message's draft left the server and the list (published on mailmind.platform.bus)."""
+    account: str
+    folder: str
+
+
+@dataclass(frozen=True)
 class Failed:
     """An attempt at a queued send failed: it waits for its next try, or, `gave_up`, in error for
     a person to retry it (published on mailmind.platform.bus)."""
@@ -214,10 +221,16 @@ def _side_effects(oid, row, acct):
             c = store.conn(); dr = store.draft_get(c, row["draft_id"]); c.close()
             if dr:
                 def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
-                    if draft_copy_is_ours(dr):
-                        smtpsend.delete_draft_uid(accounts.get(dr["account"]), dr["folder"],
-                                                  dr["uid"], dr["uidvalidity"])
-                    _commit(lambda c: store.draft_delete(c, row["draft_id"]))
+                    removed = draft_copy_is_ours(dr) and smtpsend.delete_draft_uid(
+                        accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
+
+                    def forget(c):
+                        store.draft_delete(c, row["draft_id"])
+                        if removed:
+                            store.delete_by_uids(c, dr["account"], dr["folder"], [dr["uid"]])
+                    _commit(forget)
+                    if removed:
+                        bus.publish(DraftCopyRemoved(dr["account"], dr["folder"]))
                 gates.run(dr["account"], cleanup, priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, draft_deleted=1))
         except Exception as e:

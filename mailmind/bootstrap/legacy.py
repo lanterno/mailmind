@@ -34,6 +34,7 @@ def wire(server):
     unwire()
     _wired.extend([bus.subscribe(outbox.Sent, server._after_send),
                    bus.subscribe(outbox.Failed, server._after_send),
+                   bus.subscribe(outbox.DraftCopyRemoved, server._after_draft_removed),
                    bus.subscribe(readmutq.Applied, server._after_readmut),
                    bus.subscribe(readmutq.Restored, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle)])
