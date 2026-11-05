@@ -1293,6 +1293,8 @@
   .doc-dl{flex:none;color:var(--mute);font-size:16px;padding:2px 6px;border-radius:var(--r-xs);text-decoration:none}
   .doc-dl:hover{background:var(--raise-hi);color:var(--primary-ink)}
   .doc-empty{color:var(--faint);font-size:13px;font-style:italic;padding:24px 4px;text-align:center}
+  .doc-more{display:block;width:100%;background:none;border:1px solid var(--line);border-radius:var(--r-md);color:var(--soft);font:inherit;font-size:13px;padding:9px;cursor:pointer}
+  .doc-more:hover:not(:disabled){background:var(--panel-hi);border-color:var(--line-hi)}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -4296,36 +4298,50 @@ function reviewOpen(pk, acct, tid){
 }
 
 /* ── Document Hub: one findable place for every attachment across accounts ── */
-let _docs=null, _docKind="all", _docQ="";
+let _docs=null, _docKind="all", _docQ="", _docMatched=0, _docRead=0, _docAsked=0, _docTyping=null;
+const DOC_PAGE=200;
 const _DOC_ICON={pdf:"file",image:"image",doc:"file",sheet:"table",slide:"slides",archive:"archive",text:"file",other:"clip"};
 const _DOC_LABEL={pdf:"PDFs",image:"Images",doc:"Docs",sheet:"Sheets",slide:"Slides",archive:"Archives",text:"Text",other:"Other"};
 function openDocs(){ $("#docsPanel").classList.add("show"); if(_docs===null)loadDocs(); else renderDocs();
   setTimeout(()=>{ const s=$("#docSearch"); if(s)s.focus(); },40); }
 function closeDocs(){ const o=$("#docsPanel"); if(o)o.classList.remove("show"); }
-async function loadDocs(){
-  const list=$("#docList"); if(list)list.innerHTML=`<div class="doc-empty"><span class="spin">↻</span> Gathering your files…</div>`;
-  let d; try{ d=await api("/api/documents"); }catch(e){ if(list)list.innerHTML=`<div class="doc-empty">Couldn’t load documents.</div>`; return; }
-  _docs=(d&&d.docs)||[]; _docFacets=(d&&d.facets)||{}; _docTotal=(d&&d.total)||_docs.length; renderDocs();
+/* The server filters and pages, so a search reaches every file and not only those loaded. */
+async function loadDocs(more){
+  const list=$("#docList"), asked=++_docAsked;
+  if(_docs===null&&list)list.innerHTML=`<div class="doc-empty"><span class="spin">↻</span> Gathering your files…</div>`;
+  const p=new URLSearchParams({limit:DOC_PAGE, offset:more?_docRead:0});
+  if(_docKind!=="all")p.set("kind",_docKind);
+  if(_docQ.trim())p.set("q",_docQ.trim());
+  let d; try{ d=await api(`/api/documents?${p}`); }catch(e){
+    if(asked!==_docAsked)return;
+    if(more){ toast("Couldn’t load more files."); renderDocs(); return; }
+    if(list)list.innerHTML=`<div class="doc-empty">Couldn’t load documents.</div>`; return; }
+  if(asked!==_docAsked)return;                                          // a newer search or filter took over
+  const got=(d&&d.docs)||[], first=more?_docs.length:0;
+  if(more){ const id=x=>`${x.pk}/${x.part_id}/${x.filename}`, have=new Set(_docs.map(id));   // new mail moves the rest along
+    _docs=_docs.concat(got.filter(x=>!have.has(id(x)))); }
+  else _docs=got;
+  _docRead=(more?_docRead:0)+got.length;                                // how far through the server's list, not how many rows are held
+  _docMatched=(d&&d.matched)||0; _docFacets=(d&&d.facets)||{}; _docTotal=(d&&d.total)||0; renderDocs();
+  if(more){ const next=list&&list.querySelectorAll(".doc-row")[first]; if(next)next.querySelector("[data-doc-dl]").focus({preventScroll:true}); }
 }
 let _docFacets={}, _docTotal=0;
 function renderDocs(){
   const list=$("#docList"), filt=$("#docFilters"); if(!list)return;
-  const q=_docQ.trim().toLowerCase();
-  const match=x=>(_docKind==="all"||x.kind===_docKind) &&
-    (!q || (x.filename+" "+x.from+" "+x.subject).toLowerCase().includes(q));
-  const shown=_docs.filter(match);
-  $("#docCount").textContent=`· ${shown.length}${shown.length!==_docs.length?" of "+_docs.length:""}`;
+  const shown=_docs, left=_docMatched-_docRead;
+  $("#docCount").textContent=`· ${shown.length}${left>0?" of "+_docMatched:""}`;
   // filter chips (All + each kind that exists), from the full-corpus facet counts
   const kinds=Object.keys(_DOC_LABEL).filter(k=>_docFacets[k]);
-  filt.innerHTML=[`<button class="doc-fchip${_docKind==="all"?" on":""}" data-dk="all">All <span class="c">${_docTotal}${_docTotal>_docs.length?" (showing "+_docs.length+")":""}</span></button>`]
+  filt.innerHTML=[`<button class="doc-fchip${_docKind==="all"?" on":""}" data-dk="all">All <span class="c">${_docTotal}</span></button>`]
     .concat(kinds.map(k=>`<button class="doc-fchip${_docKind===k?" on":""}" data-dk="${k}">${esc(_DOC_LABEL[k])} <span class="c">${_docFacets[k]}</span></button>`)).join("");
-  if(!shown.length){ list.innerHTML=`<div class="doc-empty">${_docs.length?"No files match.":"No documents found in your synced mail."}</div>`; return; }
+  if(!shown.length){ list.innerHTML=`<div class="doc-empty">${_docTotal?"No files match.":"No documents found in your synced mail."}</div>`; return; }
   list.innerHTML=shown.map(x=>`<div class="doc-row" data-doc-pk="${x.pk}" data-doc-acct="${esc(x.account)}">
     <div class="doc-ic">${ico(_DOC_ICON[x.kind]||"clip")}</div>
     <div class="doc-body"><div class="doc-fn">${esc(x.filename)}</div>
       <div class="doc-meta"><span class="who">${esc(x.from)}</span> · ${esc(x.subject)} · ${esc(x.when||"")}</div></div>
     <span class="doc-sz">${fmtSize(x.size)}</span>
-    <a class="doc-dl" href="${esc(x.url)}" download="${esc(x.filename)}" title="Download" data-doc-dl>${ico("download")}</a></div>`).join("");
+    <a class="doc-dl" href="${esc(x.url)}" download="${esc(x.filename)}" title="Download" data-doc-dl>${ico("download")}</a></div>`).join("")
+    +(left>0?`<button class="doc-more" data-doc-more>Show more · ${left} left</button>`:"");
 }
 function docOpen(pk, acct){
   closeDocs();
@@ -5012,10 +5028,11 @@ $("#reviewPanel").addEventListener("click",e=>{
 $("#docsPanel").addEventListener("click",e=>{
   if(e.target===$("#docsPanel")){ closeDocs(); return; }                // backdrop dismiss
   if(e.target.closest("[data-doc-dl]")) return;                          // let the download link do its thing
-  const fc=e.target.closest("[data-dk]"); if(fc){ _docKind=fc.dataset.dk; renderDocs(); return; }
+  const fc=e.target.closest("[data-dk]"); if(fc){ _docKind=fc.dataset.dk; clearTimeout(_docTyping); loadDocs(); return; }
+  const more=e.target.closest("[data-doc-more]"); if(more){ more.disabled=true; more.textContent="Loading…"; loadDocs(true); return; }
   const row=e.target.closest("[data-doc-pk]"); if(row)docOpen(+row.dataset.docPk, row.dataset.docAcct);
 });
-$("#docSearch").addEventListener("input",e=>{ _docQ=e.target.value; renderDocs(); });
+$("#docSearch").addEventListener("input",e=>{ _docQ=e.target.value; clearTimeout(_docTyping); _docTyping=setTimeout(loadDocs,120); });
 $("#commitPanel").addEventListener("click",e=>{
   if(e.target===$("#commitPanel")){ closeCommitments(); return; }      // backdrop dismiss
   const row=e.target.closest(".commit-row"); if(!row)return; const pk=+row.dataset.pk;
