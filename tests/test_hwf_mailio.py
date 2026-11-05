@@ -703,6 +703,69 @@ def test_hwf_a_message_the_server_flags_a_draft_offers_edit_in_any_folder(app, w
     assert world.server.find(w.ADA, "Half written", "<half@example.test>") == []
 
 
+def listed(app, folder="Drafts", email=w.ADA):
+    return {i["subject"]: i["pk"] for i in app.get(
+        f"/api/messages?account={email}&folder={folder}&limit=200").json["items"]}
+
+
+@pytest.fixture
+def published(monkeypatch):
+    """Every event the live stream is asked to send, as (topic, data)."""
+    from mailmind.platform import sse
+    seen, real = [], sse.publish
+    monkeypatch.setattr(sse, "publish", lambda topic, data=None: (seen.append((topic, data)), real(topic, data))[1])
+    return seen
+
+
+def test_hwf_a_resaved_draft_leaves_one_row_at_once(app, world, published):
+    first = app.post("/api/draft", new(subject="Fabric order")).json
+    assert "Fabric order" in listed(app)                        # the catch-up brought the copy in
+    del published[:]
+    second = app.post("/api/draft", new(subject="Fabric order, again", draft_id=first["draft_id"])).json
+    assert q("SELECT uid FROM messages WHERE account=? AND folder='Drafts' AND uid=?", w.ADA, first["uid"]) == []
+    assert ("reconcile", {"account": w.ADA, "folder": "Drafts", "pruned": 1}) in published
+    shown = listed(app)
+    assert "Fabric order" not in shown and "Fabric order, again" in shown
+    assert q("SELECT uid FROM messages WHERE account=? AND folder='Drafts' AND uid=?", w.ADA,
+             second["uid"])[0]["uid"] == second["uid"]
+
+
+def test_hwf_a_discarded_draft_leaves_the_list_at_once(app, world):
+    saved = app.post("/api/draft", new(subject="Fabric order")).json
+    assert "Fabric order" in listed(app)
+    assert app.post("/api/draft", {"delete": True, "draft_id": saved["draft_id"]}).json["deleted"]
+    assert "Fabric order" not in listed(app)
+
+
+def test_hwf_a_sent_draft_leaves_the_list_at_once(app, world, published):
+    import outbox
+    saved = app.post("/api/draft", new(subject="Fabric order")).json
+    assert "Fabric order" in listed(app)
+    del published[:]
+    app.post("/api/send", new(subject="Fabric order", draft_id=saved["draft_id"], idempotency_key="k-listed"))
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1 and "Fabric order" not in listed(app)
+    assert ("reconcile", {"account": w.ADA, "folder": "Drafts", "pruned": 1}) in published
+
+
+def test_hwf_a_draft_the_server_would_not_remove_stays_listed(app, world):
+    saved = app.post("/api/draft", new(subject="Fabric order")).json
+    assert "Fabric order" in listed(app)
+    world.server.fail("UID STORE", user=w.ADA)
+    assert app.post("/api/draft", {"delete": True, "draft_id": saved["draft_id"]}).json["deleted"]
+    assert "Fabric order" in listed(app)
+
+
+def test_hwf_a_draft_moved_between_folders_leaves_the_old_list(app, world):
+    pk, uid = filed(world, "Half written", name="<half@example.test>", flags=(w.SEEN, w.DRAFT))
+    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+    did = q("SELECT id FROM drafts WHERE folder='Half written'")[0]["id"]
+    assert app.post("/api/draft", new(subject="Half done", draft_id=did)).json["ok"]
+    assert q("SELECT pk FROM messages WHERE pk=?", pk) == []
+    assert world.server.find(w.ADA, "Half written", "<half@example.test>") == []
+
+
 # -- the folder rail -------------------------------------------------------
 
 def folders(app):

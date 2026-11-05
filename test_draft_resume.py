@@ -58,7 +58,7 @@ def _fresh(uidv=777, appenduid=True):
         CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
                                 "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
                                 "prev_folder": prev_folder})
-        return "Drafts", (_uid[0] if appenduid else None), uidv
+        return "Drafts", (_uid[0] if appenduid else None), uidv, None
 
     def delete(acct, folder, uid, uidvalidity=None):
         CALLS["delete"].append((acct["email"], folder, uid, uidvalidity))
@@ -447,7 +447,7 @@ def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
             server.smtpsend.accounts.connect = lambda acct, **kw: fake
             got = _real_append({"email": ACCT}, b"Subject: x\r\n\r\nhi\r\n", prev_uid=5, prev_uidvalidity=777,
                                prev_msgid="<old@example.test>", prev_folder=prev_folder)
-            assert got == ("Drafts", 9, 777), got
+            assert got[:3] == ("Drafts", 9, 777), got
             uids = [c for c in fake.calls if c[0] == "uid"]
             assert bool(uids) is touched, (prev_folder, fake.calls)
             if prev_folder == "Old drafts":                     # not even searched for by Message-ID

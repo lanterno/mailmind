@@ -222,7 +222,7 @@ def test_replacing_a_draft_copy_never_bulk_expunges():
     M = _ScriptedIMAP(EXPUNGE=_BAD)
     out = _with_connection(M, lambda: smtpsend.append_to_drafts(
         {"email": "ada@example.test"}, b"Subject: hi\r\n\r\nbody", prev_uid=41, prev_uidvalidity=7))
-    assert out == ("Drafts", 42, 7)
+    assert out == ("Drafts", 42, 7, None)                        # the EXPUNGE was refused: it is still there
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert "EXPUNGE-ALL" not in M.cmds()
 

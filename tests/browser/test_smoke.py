@@ -574,6 +574,24 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
     clean(page)
 
 
+def test_a_draft_replaced_or_discarded_leaves_the_list_at_once(page, world):
+    opened(page)
+    switch_account(page, w.BEA)
+    folder(page, "Drafts").click()
+    row(page, world, "bea-drafts-01-apple-mail.eml").click()
+    page.locator('#reader [data-ca="edit"]').click()
+    page.get_by_role("textbox", name="subject").fill("Re: Contract draft v3")
+    page.keyboard.press("Escape")
+    rows = page.locator("#rows")
+    expect(rows).to_contain_text("Re: Contract draft v3")
+    expect(rows).not_to_contain_text("Re: Contract draft v2")
+    expect(page.locator("#reader")).to_contain_text("Re: Contract draft v3")   # no reader left on the copy that went
+    page.locator('#reader [data-ca="edit"]').click()
+    page.get_by_role("button", name="Discard").click()
+    expect(rows).not_to_contain_text("Re: Contract draft")
+    clean(page)
+
+
 @pytest.mark.xfail(strict=True, reason="two copies of one draft share a Message-ID, so the Drafts row "
                                        "opens as a conversation, whose reader has no Edit")
 def test_a_draft_with_an_older_copy_still_opens_for_editing(page, world):

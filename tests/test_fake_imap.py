@@ -176,7 +176,7 @@ def test_without_uidplus_the_message_is_left_flagged_deleted(app):
 
 def test_append_reports_the_new_uid(srv, app):
     import smtpsend
-    folder, uid, uidv = smtpsend.append_to_drafts(app, _mail(9, subject="Draft"))
+    folder, uid, uidv, _ = smtpsend.append_to_drafts(app, _mail(9, subject="Draft"))
     assert folder == "Drafts" and uidv == srv.mailbox(ADA, "Drafts").uidvalidity
     assert srv.messages(ADA, "Drafts")[uid].flags == {"\\Draft"}
 
