@@ -698,11 +698,10 @@ def test_a_message_with_neither_thread_nor_message_id_can_be_summarized(app, wor
     assert app.post("/api/ai/summarize", {"pk": pk}).status == 200
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="known bug: with From switched to another account, the draft looks the thread up "
-                          "under that account (404 'nothing to reply to')")
-def test_bug_a_draft_survives_switching_the_from_account(app, world, ai):
+def test_a_draft_survives_switching_the_from_account(app, world, ai):
     assert app.post("/api/ai/draft-reply", {"pk": world.pk(CLIENT), "account": w.ADA}).status == 200
+    [asked] = ai.requests
+    assert w.ADA in asked.prompt and "Contract draft v2" in asked.prompt     # Ada answers Bea's mail
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError,
