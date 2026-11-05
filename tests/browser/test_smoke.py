@@ -366,6 +366,62 @@ def give_up_on_a_send(page, app, world):
     return page.locator("#outboxBtn")
 
 
+def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_it_back(page, app, world):
+    import readmutq
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    world.server.fail("UID MOVE", user=w.ADA, times=None)
+    world.server.fail("UID COPY", user=w.ADA, times=None)
+    world.server.drop("SELECT", user=w.ADA, times=None)
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    button = page.locator("#outboxBtn")
+    expect(button).to_be_visible()                        # the queueing told this tab
+    button.click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("Archive: Your receipt for order 1042")
+    expect(fly).to_contain_text("waiting")
+    world.server.clear_faults()
+    world.server.fail("UID MOVE", user=w.ADA, times=None)
+    world.server.fail("UID COPY", user=w.ADA, times=None)
+    readmutq.drain()
+    expect(fly).to_contain_text("stuck")                  # told by the event, with the panel open
+    expect(fly).to_contain_text("the server refused it")
+    expect(receipt).to_have_count(1)                      # it's listed again, as the server has it
+    world.server.clear_faults()
+    fly.get_by_role("button", name="Discard").click()
+    expect(button).to_be_hidden()
+    expect(receipt).to_have_count(1)
+    assert app.get("/api/pending").json["items"] == []
+    assert mailbox(world, RECEIPT) == "INBOX"
+    clean(page)
+
+
+def test_retry_in_the_tray_sends_the_change_again(page, app, world):
+    import readmutq
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    world.server.drop("SELECT", user=w.ADA, times=None)
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    world.server.clear_faults()
+    world.server.fail("UID MOVE", user=w.ADA, times=1)
+    world.server.fail("UID COPY", user=w.ADA, times=1)
+    readmutq.drain()
+    page.locator("#outboxBtn").click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("stuck")
+    fly.get_by_role("button", name="Retry").click()
+    expect(fly).to_contain_text("waiting")
+    expect(receipt).to_have_count(0)
+    readmutq.drain()
+    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "archived on the server")
+    expect(page.locator("#outboxBtn")).to_be_hidden()
+    clean(page)
+
+
 def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
     import outbox
     button = give_up_on_a_send(page, app, world)
