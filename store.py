@@ -1032,16 +1032,84 @@ def reconcile(c, account, folder, live_uids, when, among=None):
     return len(pruned_pks), len(rows) - len(pruned_pks)
 
 
-def needs_summary(c, limit=200):
+def needs_summary(c, limit=200, newer_than=None):
     """Non-junk messages without a summary yet, newest first: one copy of each, since save_summary
-    gives what the AI says of it to them all."""
+    gives what the AI says of it to them all. A message a batch holds isn't one of them. With
+    `newer_than`, only what came after that moment: while a batch is out the rest of the backlog
+    waits for the next, or it would go at full price."""
     return c.execute(
         """SELECT m.* FROM messages m
            LEFT JOIN summaries s ON s.message_pk = m.pk
            WHERE m.is_junk = 0 AND s.message_pk IS NULL AND m.pending_removal IS NULL
+             AND COALESCE(m.message_key, 0) NOT IN (SELECT message_key FROM ai_batch_items)
+             AND COALESCE(m.ts, 0) > ?
            GROUP BY COALESCE(m.message_key, -m.pk)
-           ORDER BY m.ts DESC LIMIT ?""", (limit,)
+           ORDER BY m.ts DESC LIMIT ?""", (-1 if newer_than is None else newer_than, limit)
     ).fetchall()
+
+
+_BATCH_OUT = "('submitting', 'running')"
+
+
+def batch_open(c):
+    """The batch that is out, if any: there is one at a time."""
+    return c.execute(f"SELECT * FROM ai_batches WHERE state IN {_BATCH_OUT} ORDER BY id DESC LIMIT 1").fetchone()
+
+
+def batch_begin(c, feature, model, keys, estimate_micros, cutoff_ts, now):
+    """Record a batch about to be sent and hold its messages, so nothing triages them meanwhile, and
+    commit, since sending it is a network call. None if another is out already."""
+    cur = c.execute(
+        "INSERT INTO ai_batches(feature, model, state, requests, estimate_micros, cutoff_ts, created_at) "
+        f"SELECT ?, ?, 'submitting', ?, ?, ?, ? WHERE NOT EXISTS(SELECT 1 FROM ai_batches WHERE state IN {_BATCH_OUT})",
+        (feature, model, len(keys), estimate_micros, cutoff_ts, now))
+    if cur.rowcount != 1:
+        c.rollback()
+        return None
+    batch_id = cur.lastrowid
+    c.executemany("INSERT INTO ai_batch_items(message_key, batch_id) VALUES (?,?)", [(k, batch_id) for k in keys])
+    c.commit()
+    return batch_id
+
+
+def batch_sent(c, batch_id, remote_id, now):
+    c.execute("UPDATE ai_batches SET state='running', remote_id=?, polled_at=? WHERE id=?", (remote_id, now, batch_id))
+
+
+def batch_drop(c, batch_id):
+    """It never went, or the API no longer has it: its messages are waiting again."""
+    c.execute("DELETE FROM ai_batches WHERE id=?", (batch_id,))
+
+
+def batch_polled(c, batch_id, now):
+    c.execute("UPDATE ai_batches SET polled_at=? WHERE id=?", (now, batch_id))
+
+
+def batch_keys(c, batch_id):
+    return {r[0] for r in c.execute("SELECT message_key FROM ai_batch_items WHERE batch_id=?", (batch_id,))}
+
+
+def batch_collected(c, batch_id, now):
+    """Its answers are stored. A message without one is waiting again; the API still holds a copy."""
+    c.execute("DELETE FROM ai_batch_items WHERE batch_id=?", (batch_id,))
+    c.execute("UPDATE ai_batches SET state='collected', ended_at=? WHERE id=?", (now, batch_id))
+
+
+def batch_discarded(c, batch_id):
+    c.execute("UPDATE ai_batches SET state='done' WHERE id=?", (batch_id,))
+
+
+def batches_in_state(c, state):
+    return c.execute("SELECT * FROM ai_batches WHERE state=? ORDER BY id", (state,)).fetchall()
+
+
+def batch_waiting(c):
+    """How many messages are out in a batch."""
+    return c.execute("SELECT COUNT(*) FROM ai_batch_items").fetchone()[0]
+
+
+def batch_forget_finished(c, now_ts, days=30):
+    c.execute("DELETE FROM ai_batches WHERE state='done' AND ended_at < ?", (now_ts - days * 86400,))
 
 
 def save_summary(c, pk, summary, importance, category, action, model, created_at):
@@ -1062,15 +1130,20 @@ def save_summary(c, pk, summary, importance, category, action, model, created_at
             (copy, *said),
         )
     if key is not None:
-        c.execute(
-            """INSERT INTO assessments (message_key,summary,importance,category,action,model,created_at)
-               VALUES (?,?,?,?,?,?,?)
-               ON CONFLICT(message_key) DO UPDATE SET
-                summary=excluded.summary, importance=excluded.importance,
-                category=excluded.category, action=excluded.action,
-                model=excluded.model, created_at=excluded.created_at""",
-            (key, *said),
-        )
+        save_assessment(c, key, *said)
+
+
+def save_assessment(c, key, summary, importance, category, action, model, created_at):
+    """What the AI said of a message, under its key, for a copy that comes later."""
+    c.execute(
+        """INSERT INTO assessments (message_key,summary,importance,category,action,model,created_at)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(message_key) DO UPDATE SET
+            summary=excluded.summary, importance=excluded.importance,
+            category=excluded.category, action=excluded.action,
+            model=excluded.model, created_at=excluded.created_at""",
+        (key, summary, importance, category, action, model, created_at),
+    )
 
 
 def digest(c, min_importance=1, account=None, limit=300):

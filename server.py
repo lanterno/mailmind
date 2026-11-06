@@ -369,6 +369,7 @@ def forget_round():
     try:
         store.forget_gone_messages(c, int(time.time()))
         store.read_mut_forget_finished(c, int(time.time()))
+        store.batch_forget_finished(c, int(time.time()))
         c.commit()
     finally:
         c.close()
@@ -446,10 +447,15 @@ def assess_round():
     on its own lane, so a slow model never holds up a sync, and with AI off it tries nothing. A full
     batch means more are waiting, so the next round follows at once. While the user is using AI the
     round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
-    waits its interval."""
+    waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
+    backlog goes out in the next batch rather than through this round's calls."""
+    log = lambda m: print(f"[assess] {m}", flush=True)     # noqa: E731
+    summarize.batch_collect(log)
     why = assistant.gateway().held_back("triage", summarize.MODEL)
     if why:
         return ASSESS_YIELD if why == "yielding" else None
+    if not os.environ.get("MAILMIND_NO_BATCHES"):
+        summarize.batch_submit(log=log)
     done = summarize.summarize_pending(limit=ASSESS_BATCH, workers=summarize.WORKERS)
     if done:
         print(f"[assess] {done} summarized", flush=True)
@@ -4360,6 +4366,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/debug/ai":      # what AI cost each local day, by feature
                 days = max(1, min(366, int(q.get("days", ["30"])[0])))
                 self._json({"ok": True, "days": summarize.usage(days), "governor": assistant.governor().snapshot(),
+                            "batch": summarize.batch_status(),
                             "generated": now_iso()})
             elif u.path == "/api/export/plan":
                 import export
