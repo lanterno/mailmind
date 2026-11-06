@@ -1,6 +1,6 @@
 // The composer, on the page's own classes: what you see of the machine in compose.ts. Each control asks the machine, and
 // what it shows is the copy the machine published.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import { fileSize, shortAddress } from "../../lib/text";
@@ -311,17 +311,19 @@ function Foot({ c, ai }: { c: Composer; ai: boolean }) {
 
 function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string[]; aliases: Record<string, string | null>; ai: boolean }) {
   // The first keys land here, not on the list's shortcuts: a new message starts at To, anything else in the text.
-  useEffect(() => {
+  const placeCursor = useEffectEvent(() => {
     if (c.mode === "new" && !c.draftId && !c.to.length) document.querySelector<HTMLInputElement>("#cmpTo .ci")?.focus();
     else {
       const box = document.querySelector<HTMLTextAreaElement>("#cmpBody");
       box?.focus();
       if (!c.note) box?.setSelectionRange(0, 0);
     }
-  }, [c.id]);
+  });
+  useEffect(() => placeCursor(), [c.id]);   // once, as this composer opens: an edit must not move the cursor
+  const guardShownAt = c.guard?.shownAt;
   useEffect(() => {
-    if (c.guard) document.querySelector<HTMLElement>("#cmpGuard")?.focus();
-  }, [c.guard?.shownAt]);
+    if (guardShownAt !== undefined) document.querySelector<HTMLElement>("#cmpGuard")?.focus();
+  }, [guardShownAt]);
   return (
     <div className="set-box cmp-box" id="composeModal">
       <div className="set-head">
@@ -387,8 +389,9 @@ export function ComposerModal({ senders, aliases, ai }: { senders: string[]; ali
     composing.dismissGuard();
     return false;
   });
+  const isOpen = Boolean(c);
   useEffect(() => {
-    if (!c) return;
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element | null)?.closest?.(".ai-limit")) return;   // the question over the composer answers its own keys
       const held = composing.view.get();
@@ -411,7 +414,7 @@ export function ComposerModal({ senders, aliases, ai }: { senders: string[]; ali
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [Boolean(c)]);
+  }, [isOpen]);
   if (!c) return null;
   return (
     <ModalOverlay className="settings show" isOpen isKeyboardDismissDisabled>

@@ -1,6 +1,6 @@
 // The pill names the one thing that matters about syncing; its popover has the rest. Beside it: an account that can't
 // connect says so across the top, and a meeting about to start gets a reminder.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
@@ -178,7 +178,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
   const when = minutes > 0 ? `in ${minutes} min` : "now";
   const title = event?.summary || "(no title)";
   const message = `${title} starts ${when}`;
-  useEffect(() => {
+  const tell = useEffectEvent(() => {
     if (!key || told.has(key)) return;
     told.add(key);
     if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -190,7 +190,8 @@ export function SoonPill({ m }: { m: Mailbox }) {
         };
       } catch { /* the pill still shows */ }
     } else announce(message);
-  }, [key]);
+  });
+  useEffect(() => tell(), [key]);   // once per event: the message itself changes each minute as the time left falls
   if (!event) return null;
   return (
     <span className="soon-pill" id="soonPill">

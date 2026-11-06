@@ -1,5 +1,5 @@
 // The app's one view: the rail, the list and the reader, and the keys that work across them.
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { post } from "../lib/api/client";
 import { composing } from "../features/compose/compose";
 import { asking, stopAsking } from "../features/assistant/ask";
@@ -168,23 +168,27 @@ export function App() {
   const asked = asking.useValue();
 
   // /next on its own opens the first account's Inbox.
+  const firstAccount = accounts[0];
   useEffect(() => {
-    if (!source && accounts[0]) go({ source: { kind: "folder", account: accounts[0], folder: "INBOX" }, opened: null }, { replace: true });
-  }, [source, accounts[0]]);
+    if (!source && firstAccount) go({ source: { kind: "folder", account: firstAccount, folder: "INBOX" }, opened: null }, { replace: true });
+  }, [source, firstAccount]);
   const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
   useEffect(() => clearMarks(), [source]);
+  const sourceKind = source?.kind, where = sourceWhere(source);
   useEffect(() => {
-    if (source?.kind === "search") return;
+    if (sourceKind === "search") return;
     stopAsking();
-  }, [sourceWhere(source)]);
+  }, [sourceKind, where]);
+  const accountsNow = accounts.join();   // by value: the array itself is new each render
+  const look = useEffectEvent(() => { if (!document.hidden) lookedAt(source, accounts); });
   useEffect(() => {
-    const look = () => { if (!document.hidden) lookedAt(source, accounts); };
+    const onVisibility = () => look();
     look();
-    document.addEventListener("visibilitychange", look);
-    return () => document.removeEventListener("visibilitychange", look);
-  }, [source, accounts.join()]);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [source, accountsNow]);
   useEffect(() => document.body.style.setProperty("--measure", `${WIDTHS[prefs.width]}px`), [prefs.width]);
 
   useSwipe(

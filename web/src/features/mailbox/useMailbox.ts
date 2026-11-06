@@ -1,6 +1,6 @@
 // The mailbox as the app's parts see it: where you are, what the list shows now, and each thing you can do from here.
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
@@ -61,13 +61,15 @@ export function useMailbox() {
   // The next two rows' bodies, so moving down shows them at once. The server skips one it would have to wait for.
   const at = rows.findIndex((r) => r.pk === openPk);
   const nextTwo = openPk === null || at < 0 ? [] : rows.slice(at + 1, at + 3).map((r) => r.pk);
-  useEffect(() => {
+  const nextTwoNow = nextTwo.join();   // by value: the array itself is new each render
+  const prefetchNext = useEffectEvent(() => {
     for (const pk of nextTwo) {
       if (prefetched.has(pk)) continue;
       prefetched.add(pk);
       get(`/api/message/${pk}/body?prefetch=1`).catch(() => prefetched.delete(pk));
     }
-  }, [nextTwo.join()]);
+  });
+  useEffect(() => prefetchNext(), [nextTwoNow]);
 
   const isWhole = (r: Row) => !searching && isConversation(r, grouped, r.folder);
   const opening = (r: Row): Opened =>
@@ -87,8 +89,9 @@ export function useMailbox() {
   const inDrafts = folderData?.folders?.some((f) => f.name === folder && f.role === "drafts") ?? false;
   const settled = list.isSuccess && !list.isFetching;
   const copyGone = inDrafts && settled && opened?.kind === "message" && !all.some((r) => r.pk === opened.pk);
+  const moveOffGoneCopy = useEffectEvent(() => go({ source, opened: rows[0] ? opening(rows[0]) : null }, { replace: true }));
   useEffect(() => {
-    if (copyGone) go({ source, opened: rows[0] ? opening(rows[0]) : null }, { replace: true });
+    if (copyGone) moveOffGoneCopy();   // once, as it goes: a list refreshing after that must not send you anywhere
   }, [copyGone]);
 
   // Where to go once `pks` leave the list: on to the next, if what you were reading is among them.
