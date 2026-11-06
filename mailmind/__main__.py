@@ -6,6 +6,8 @@
                          only row counts and integrity checks
   ai usage [--days N]    what the Claude API cost each local day of the last N (default 7), by
                          feature, from the usage ledger; it migrates nothing and calls nothing
+  assess --batch         send the mail with no summary yet as a batch, at half price, within today's
+                         limit, and bring in the answers of one that has ended
 """
 import argparse
 import os
@@ -24,7 +26,13 @@ def main(argv=None):
     ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
+    assess = commands.add_parser("assess", help="triage the mail with no summary yet")
+    assess.add_argument("--batch", action="store_true", required=True,
+                        help="through the Message Batches API, at half price")
     args = parser.parse_args(argv)
+    if args.command == "assess":
+        from mailmind.bootstrap import legacy
+        sys.exit(legacy.assess_batch())
     if args.command == "ai":
         sys.exit(ai_usage(args.days))
     if args.command == "db":

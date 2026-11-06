@@ -145,9 +145,9 @@ ingest target="all" days="90":
 summarize limit="2000" workers="3":
     {{py}} summarize.py {{limit}} {{workers}}
 
-# Keep summarizing until nothing is pending, backing off on rate limits
+# Send the mail with no summary yet as a batch, at half price; run again to bring in its answers
 backfill:
-    scripts/backfill.sh
+    {{py}} -m mailmind assess --batch
 
 # INBOX + Trash counts
 status target="all":

@@ -84,3 +84,24 @@ def start(server, spawn=_daemon):
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {summarize.describe_engine()}", flush=True)
     print(f"[imap] {mailbox.describe()}", flush=True)
+
+
+def assess_batch() -> int:
+    """`python -m mailmind assess --batch`: bring in a batch that has ended, and send what's waiting as the
+    next. The app's assess job does the same for a backlog; this asks for any size. 0 when it could."""
+    if not profile.writes_allowed():
+        print("The read-only profile sends nothing out, so nothing was sent.")
+        return 1
+    store.init()
+    if summarize.engine() == "none":
+        print("AI is off: there is no API key, so nothing was sent.")
+        return 1
+    summarize.batch_collect(print)
+    sent = summarize.batch_submit(at_least=1, keep=0, log=print)
+    status = summarize.batch_status()
+    if status["waiting"]:
+        print(f"{status['waiting']} messages are out in a batch. Most end within the hour, and all within a day; "
+              "the app brings the answers in when it next runs, or run this again.")
+    elif not sent:
+        print("Nothing was sent: no message is waiting, or today's AI limit has no room.")
+    return 0
