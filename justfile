@@ -36,6 +36,7 @@ test *args:
 # The first run downloads Playwright's Chromium; later runs find it cached.
 test-full *args:
     uv run playwright install chromium
+    cd web && (test -d node_modules || npm ci --no-audit --no-fund)
     uv run pytest --browser {{args}}
 
 # The MailSession contract against a real IMAP server, Dovecot in Docker, through each adapter.
