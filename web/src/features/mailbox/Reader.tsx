@@ -326,7 +326,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
       {d && !d.ok && <div className="nores">error</div>}
       {items.length > 0 && (
         <>
-          <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d!.count} messages</span></div>
+          <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d!.count} message{d!.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />
           <div className="thread" id="thread">
             {items.map((x, i) => <Member key={x.pk} m={x} startsOpen={i === items.length - 1} />)}
