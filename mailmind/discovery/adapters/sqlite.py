@@ -3,6 +3,7 @@ which folder plays which role comes through `folders`."""
 import sqlite3
 
 from mailmind.discovery.adapters import fts
+from mailmind.discovery.domain import known
 from mailmind.platform import settings
 from mailmind.platform.db import database
 
@@ -123,3 +124,56 @@ class StoredMail:
                 "ORDER BY m.ts DESC, a.id", accounts).fetchall()   # one order, or a page could repeat or skip a file
         finally:
             c.close()
+
+    def senders_like(self, q):
+        c = _conn()
+        try:
+            base = ("SELECT from_addr AS addr, MAX(from_name) AS name, COUNT(*) AS n, MAX(ts) AS last "
+                    "FROM messages WHERE from_addr IS NOT NULL AND from_addr != '' ")
+            params = []
+            if q:
+                base += "AND (lower(from_addr) LIKE ? OR lower(from_name) LIKE ?) "
+                params += [f"%{q}%", f"%{q}%"]
+            base += "GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8"
+            return c.execute(base, params).fetchall()
+        finally:
+            c.close()
+
+    def card(self, a):
+        c = _conn()
+        try:
+            agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
+                            "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
+                            "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
+            accts = [r[0] for r in c.execute(
+                "SELECT account, COUNT(*) k FROM messages WHERE lower(from_addr)=? GROUP BY account "
+                "ORDER BY k DESC", (a,)).fetchall()]
+            recent = c.execute(
+                "SELECT pk, account, subject, thread_id, ts, date_iso, seen FROM messages "
+                "WHERE lower(from_addr)=? ORDER BY ts DESC LIMIT 6", (a,)).fetchall()
+        finally:
+            c.close()
+        return agg, accts, recent
+
+    def known_facts(self, forms, min_history):
+        c = _conn()
+        try:
+            holding = [r[0] for r in c.execute("SELECT DISTINCT account FROM messages") if r[0]]
+            senders, synced, draft_folders, copies, envelopes = [], [], set(), [], []
+            if forms:
+                ph = ",".join("?" * len(forms))
+                senders = [(r[0], r[1]) for r in c.execute(
+                    f"SELECT DISTINCT lower(from_addr), folder FROM messages WHERE lower(from_addr) IN ({ph}) "
+                    "AND is_junk=0", forms)]
+                synced = [(r[0], r[1]) for r in c.execute("SELECT account, folder FROM sync_state")]
+                draft_folders = {r[0] for r in c.execute(
+                    "SELECT DISTINCT folder FROM drafts WHERE folder IS NOT NULL")}
+                copies = c.execute(
+                    "SELECT r.addr, m.account, m.folder, m.is_junk, lower(m.from_addr) sender FROM message_recipients r "
+                    f"JOIN messages m ON m.pk=r.message_pk WHERE r.addr IN ({ph}) AND COALESCE(m.draft,0)=0", forms).fetchall()
+                envelopes = [r[0] for r in c.execute("SELECT envelope FROM outbox WHERE delivered=1")]
+            thin = c.execute("SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE is_junk=0 LIMIT ?)",
+                             (min_history,)).fetchone()[0] < min_history
+        finally:
+            c.close()
+        return known.Facts(holding, senders, synced, draft_folders, copies, envelopes, thin)

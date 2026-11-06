@@ -8,12 +8,14 @@ from mailmind.discovery.adapters import fts, views_file
 from mailmind.discovery.adapters.fts import BM25, forget_message, index_message, to_sql, visible
 from mailmind.discovery.adapters.sqlite import StoredMail
 from mailmind.discovery.api import QuerySpec
+from mailmind.discovery.application.contacts import Contacts, KnownContacts
 from mailmind.discovery.application.documents import DocumentHub
 from mailmind.discovery.application.search import Search
 from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
 
-__all__ = ["BM25", "attach", "build", "documents", "forget_message", "fts", "index_message", "search", "views", "visible"]
+__all__ = ["BM25", "attach", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "views",
+           "visible"]
 
 _server = None
 
@@ -49,7 +51,33 @@ class _Accounts:
         return config.alias_map()
 
 
+class _Addresses:
+    """The composer's parser, until Compose holds it."""
+    def parse(self, raws):
+        import compose
+        return compose.parse_addr_list(raws)
+
+    def idna(self, domain):
+        import compose
+        return compose._idna_domain(domain)
+
+    def most(self):
+        import compose
+        return compose.MAX_RECIPIENTS
+
+
+class _KeptSenders:
+    def kept(self):
+        from mailmind.bootstrap import curation
+        try:                                           # a domain rule isn't knowing a person
+            return set(curation.rules.load().get("keep_senders", []))
+        except (OSError, ValueError):
+            return set()
+
+
 _mail = StoredMail(_Folders())
 views = SavedViews(views_file)
 search = Search(_mail, _Accounts())
 documents = DocumentHub(_mail, _Accounts())
+contacts = Contacts(_mail)
+known = KnownContacts(_mail, _Addresses(), _Accounts(), _Folders(), _KeptSenders())

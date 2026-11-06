@@ -52,7 +52,7 @@ from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention
-from mailmind.kernel.when import now_iso, rel_time
+from mailmind.kernel.when import ago, now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
@@ -1002,7 +1002,7 @@ def waiting_in(account, offset, limit):
     items = []
     for r in rows:
         if r["f_kind"] == "sent":
-            label = "Sent " + _ago(r["f_first_sent"]) + " ago · no reply"
+            label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
         else:
             label = "Awaiting your reply · " + rel_time(r["date_iso"])
         items.append({
@@ -1039,18 +1039,6 @@ def replylater_in(account, offset, limit):
     } for r in rows]
     return {"ok": True, "account": account, "folder": "__replylater__", "items": items, "replylater": True,
             "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-def _ago(ts):
-    """'3 days'/'5 hours' since a unix ts (for the Waiting 'Sent N ago' label)."""
-    if not ts:
-        return "a while"
-    s = max(0, int(time.time()) - int(ts))
-    if s < 3600:
-        return f"{s // 60}m"
-    if s < 86400:
-        return f"{s // 3600}h"
-    return f"{s // 86400}d"
 
 
 _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.account "
@@ -1798,174 +1786,6 @@ def _compose_spec(body):
         "forwarded": forwarded,
     }
     return spec, in_reply_to_pk, acct
-
-
-def do_contacts(q):
-    """Autocomplete contacts from your own mail history — everyone who has emailed you,
-    ranked by frequency then recency. Pure local SQL over the messages table (zero new
-    ingestion); never leaves 127.0.0.1. Used for recipient autocomplete + first-contact nudges."""
-    q = (q or "").strip().lower()[:64]
-    c = store.conn()
-    try:
-        base = ("SELECT from_addr AS addr, MAX(from_name) AS name, COUNT(*) AS n, MAX(ts) AS last "
-                "FROM messages WHERE from_addr IS NOT NULL AND from_addr != '' ")
-        params = []
-        if q:
-            base += "AND (lower(from_addr) LIKE ? OR lower(from_name) LIKE ?) "
-            params += [f"%{q}%", f"%{q}%"]
-        base += "GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8"
-        rows = c.execute(base, params).fetchall()
-    finally:
-        c.close()
-    return {"ok": True, "items": [{"addr": r["addr"], "name": r["name"] or "", "n": r["n"]} for r in rows]}
-
-
-def contact_card(addr):
-    """Relationship memory for one sender — pure SQL over existing mail (no enrichment, no network).
-    Returns interaction stats + which accounts they write to + recent threads. (result, code)."""
-    a = (addr or "").strip().lower()
-    if not a or "@" not in a:
-        return {"ok": False, "error": "bad address"}, 400
-    c = store.conn()
-    try:
-        agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
-                        "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
-                        "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
-        accts = [r[0] for r in c.execute(
-            "SELECT account, COUNT(*) k FROM messages WHERE lower(from_addr)=? GROUP BY account "
-            "ORDER BY k DESC", (a,)).fetchall()]
-        recent = c.execute(
-            "SELECT pk, account, subject, thread_id, ts, date_iso, seen FROM messages "
-            "WHERE lower(from_addr)=? ORDER BY ts DESC LIMIT 6", (a,)).fetchall()
-    finally:
-        c.close()
-    n = agg["n"] or 0
-    return {"ok": True, "addr": a, "name": (agg["name"] or ""), "count": n,
-            "replied": agg["replied"] or 0, "known": n > 0,
-            "last_ago": (_ago(agg["last"]) if agg["last"] else None),
-            "first_ago": (_ago(agg["first"]) if agg["first"] else None),
-            "accounts": accts,                         # raw emails; client renders via nameOf()
-            "recent": [{"pk": r["pk"], "account": r["account"], "subject": r["subject"] or "(no subject)",
-                        "thread_id": r["thread_id"], "when": rel_time(r["date_iso"]), "seen": bool(r["seen"])}
-                       for r in recent]}, 200
-
-
-KNOWN_MIN_HISTORY = 50     # fewer non-junk messages than this → too little history to call anyone new
-
-
-def _norm_addr(raw):
-    """The address mail to `raw` would actually go to, by compose's own parser, so a display
-    name holding someone else's address can't stand in for it. None unless exactly one."""
-    try:
-        pairs = compose.parse_addr_list([str(raw or "")[:320]])
-    except ValueError:
-        return None
-    if len(pairs) != 1:
-        return None
-    a = pairs[0][1].lower()
-    return a if len(a) <= 254 else None
-
-
-def _addr_forms(a):
-    """a plus its IDNA twin: the outbox envelope stores punycode domains, received mail may not."""
-    local, dom = a.split("@")
-    out = {a}
-    try:
-        out.add(f"{local}@{compose._idna_domain(dom).lower()}")
-    except ValueError:
-        pass
-    if "xn--" in dom:
-        try:
-            out.add(f"{local}@{dom.encode('ascii').decode('idna').lower()}")
-        except UnicodeError:
-            pass
-    return out
-
-
-def _is_sent_folder(folder):
-    """A stored folder named as Sent is (mailmind.mailbox.domain.roles): "Sent", "INBOX.Sent"."""
-    return folder_roles.role_by_name(folder) == "sent"
-
-
-def _is_junk_folder(folder):
-    """Spam the provider filed, by the folder's name: Spam, Junk, Junk E-mail — not "Bulk orders"."""
-    return folder_roles.role_by_name(folder) == "junk"
-
-
-def _own_addrs(c):
-    """Your addresses, as the dashboard's state.myAddrs sees them."""
-    own = {a["email"].lower() for a in accounts.accounts()}
-    own |= {e.lower() for e in config.alias_map()}
-    own |= {r[0].lower() for r in c.execute("SELECT DISTINCT account FROM messages") if r[0]}
-    return own
-
-
-def contacts_known(addrs, own=None, min_history=KNOWN_MIN_HISTORY):
-    """Which of these addresses you've exchanged mail with — the composer's "new to you" marks.
-    Known: non-junk mail from them, synced non-draft mail you sent them, a delivered outbox
-    envelope (Bcc included), or a keep_senders rule. Pure SQL, no IMAP, no IMAP gate; the answer
-    carries no subjects, counts or dates. `thin` means too little history to call anyone new.
-    (result, code), like contact_card."""
-    if not isinstance(addrs, list):
-        return {"ok": False, "error": "addrs must be a list"}, 400
-    if len(addrs) > compose.MAX_RECIPIENTS:
-        return {"ok": False, "error": "too many addresses"}, 400
-    items, bad, want = {}, [], {}
-    for raw in addrs:
-        key = str(raw or "").strip().lower()[:320]
-        a = _norm_addr(raw)
-        if a is None:
-            bad.append(key[:200])
-            continue
-        items[key] = {"known": False, "self": False}
-        for f in _addr_forms(a):
-            want.setdefault(f, set()).add(key)
-    c = store.conn()
-    try:
-        own = {o.lower() for o in own} if own is not None else _own_addrs(c)
-        forms = list(want)
-        wanted = set(forms)
-        self_hit = wanted & own
-        hit = set()
-        if forms:
-            ph = ",".join("?" * len(forms))
-            hit |= {r[0] for r in c.execute(       # junk excluded: one phishing mail can't vouch,
-                f"SELECT DISTINCT lower(from_addr), folder FROM messages WHERE lower(from_addr) IN ({ph}) "
-                "AND is_junk=0", forms) if not _is_junk_folder(r[1])}   # whether we or the provider filed it
-            sent = {(r[0], r[1]) for r in c.execute("SELECT account, folder FROM sync_state") if _is_sent_folder(r[1])}
-            # the autosaved copy of the message being written must not vouch for its own recipient
-            draft_folders = {r[0] for r in c.execute(
-                "SELECT DISTINCT folder FROM drafts WHERE folder IS NOT NULL")}
-            for r in c.execute(
-                    "SELECT r.addr, m.account, m.folder, m.is_junk, lower(m.from_addr) sender FROM message_recipients r "
-                    f"JOIN messages m ON m.pk=r.message_pk WHERE r.addr IN ({ph}) AND COALESCE(m.draft,0)=0", forms):
-                if r["folder"] in draft_folders:
-                    continue
-                yours = (r["sender"] in own and not r["is_junk"] and "draft" not in (r["folder"] or "").lower()
-                         and not _is_junk_folder(r["folder"]))    # spam forging your From: vouches for no one
-                if yours or (r["account"], r["folder"]) in sent:  # a Sent folder: send-as identities that aren't accounts
-                    hit.add(r["addr"])
-            for (env,) in c.execute("SELECT envelope FROM outbox WHERE delivered=1"):
-                try:                               # queued rows may still be undone, or be the typo
-                    hit |= {str(x).lower() for x in json.loads(env or "[]")} & wanted
-                except (ValueError, TypeError):
-                    continue
-        thin = c.execute("SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE is_junk=0 LIMIT ?)",
-                         (min_history,)).fetchone()[0] < min_history
-    finally:
-        c.close()
-    try:                                           # a domain rule isn't knowing a person
-        keep = set(rules.load().get("keep_senders", []))
-    except (OSError, ValueError):
-        keep = set()
-    hit |= keep & wanted
-    for f, keys in want.items():
-        for k in keys:
-            if f in self_hit:
-                items[k]["self"] = items[k]["known"] = True
-            elif f in hit:
-                items[k]["known"] = True
-    return {"ok": True, "items": items, "bad": bad, "thin": thin}, 200
 
 
 def do_send(body):
@@ -3570,9 +3390,9 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/pending":
                 self._json(readmutq.list_open())
             elif u.path == "/api/contacts":
-                self._json(do_contacts(q.get("q", [""])[0]))
+                self._json(discovery.contacts.autocomplete(q.get("q", [""])[0]))
             elif u.path == "/api/contact":
-                self._json(*contact_card(q.get("addr", [""])[0]))
+                self._json(*discovery.contacts.card(q.get("addr", [""])[0]))
             elif u.path == "/api/screener":
                 self._json(curation.screener.queue(q.get("account", [None])[0]))
             elif u.path == "/api/documents":
@@ -3778,7 +3598,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(res, code)
             elif u.path == "/api/contacts/known":   # read-only: which recipients you've exchanged mail with
                 try:
-                    res, code = contacts_known(b.get("addrs") if isinstance(b, dict) else None)
+                    res, code = discovery.known.ask(b.get("addrs") if isinstance(b, dict) else None)
                 except Exception as ex:             # class only: the payload is a list of addresses
                     print(f"[contacts] known error: {type(ex).__name__}", flush=True)
                     res, code = {"ok": False, "error": "lookup failed"}, 500

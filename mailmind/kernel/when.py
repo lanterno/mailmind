@@ -1,4 +1,5 @@
 """When something happened, as the app says it."""
+import time
 from datetime import datetime, timezone
 
 
@@ -26,3 +27,15 @@ def rel_time(iso):
         return dt.strftime("%b %d")
     except Exception:
         return iso[:10]
+
+
+def ago(ts):
+    """'3d'/'5h' since a unix ts."""
+    if not ts:
+        return "a while"
+    s = max(0, int(time.time()) - int(ts))
+    if s < 3600:
+        return f"{s // 60}m"
+    if s < 86400:
+        return f"{s // 3600}h"
+    return f"{s // 86400}d"
