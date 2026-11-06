@@ -5,7 +5,7 @@ module it names is on tests/legacy_ratchet.txt until that code moves into its co
 import imaplib
 
 from mailmind.accounts.domain import provider
-from mailmind.bootstrap import curation, mailbox
+from mailmind.bootstrap import curation, discovery, mailbox
 
 
 def check():
@@ -247,19 +247,16 @@ def rules_expire(token, hours):
 
 
 def views_list():
-    import views
-    for v in views.merged():
+    for v in discovery.views.merged():
         print(f"  {'*' if v['builtin'] else ' '} {v['id']:18} {v['name']:24} {v['q']}")
 
 
 def views_add(name, query):
-    import views
-    print(views.add(name, query))
+    print(discovery.views.add(name, query))
 
 
 def views_remove(view_id):
-    import views
-    print("removed" if views.remove(view_id) else "not removed (builtin or missing)")
+    print("removed" if discovery.views.remove(view_id) else "not removed (builtin or missing)")
 
 
 def export(fmt, out, account, attachments):

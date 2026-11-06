@@ -1,0 +1,57 @@
+"""Saved searches ("Views"): named, pinned search-grammar queries shown in the folder rail.
+
+A view is just {id, name, q} where q is a raw search-grammar string (the same grammar /api/search parses), so a saved
+search and an auto-label "lane" are the same thing. Built-in DEFAULTS and LANES are merged in read-only at load time:
+they always appear, can't be deleted, and are never written to disk.
+"""
+import secrets
+
+# Built-in smart defaults (always present, non-deletable). q uses the live search grammar; the
+# __LAST7__ sentinel is expanded to after:<date> client-side so the FIXED grammar stays untouched.
+DEFAULTS = (
+    {"id": "__unread__", "name": "Unread", "q": "is:unread"},
+    {"id": "__flagged__", "name": "Flagged", "q": "is:flagged"},
+    {"id": "__attach__", "name": "Has attachments", "q": "has:attachment"},
+    {"id": "__last7__", "name": "Last 7 days", "q": "__LAST7__", "dynamic": "last7"},
+)
+# Auto-label lanes (registered by the lanes feature) — also built-in, non-deletable, non-persisted.
+LANES = (
+    {"id": "__lane_feed__", "name": "Feed", "q": "is:newsletter"},
+    {"id": "__lane_papertrail__", "name": "Paper trail", "q": "is:receipt"},
+    {"id": "__lane_notifications__", "name": "Notifications", "q": "is:notification"},
+    {"id": "__lane_action__", "name": "Action needed", "q": "category:action-needed"},
+    {"id": "__lane_finance__", "name": "Finance", "q": "category:finance"},
+)
+BUILTIN_IDS = {v["id"] for v in DEFAULTS} | {v["id"] for v in LANES}
+
+
+def clean(raw):
+    """User views out of whatever a file held (no builtins). TOTAL: never raises, drops malformed entries."""
+    out = []
+    for v in (raw if isinstance(raw, list) else []):
+        if not isinstance(v, dict):
+            continue
+        vid, name, q = str(v.get("id", "")), str(v.get("name", "")).strip(), str(v.get("q", "")).strip()
+        if not vid or not name or not q or vid in BUILTIN_IDS:
+            continue
+        out.append({"id": vid, "name": name[:60], "q": q[:512]})
+    return out
+
+
+def merged(user_views, include_lanes=True):
+    """What the API + client see: DEFAULTS, then lanes, then user views — builtins flagged."""
+    builtins = list(DEFAULTS) + (list(LANES) if include_lanes else [])
+    return [dict(v, builtin=True) for v in builtins] + [dict(v, builtin=False) for v in user_views]
+
+
+def new(name, q):
+    """A user view, or None without a name and a query."""
+    name, q = (name or "").strip()[:60], (q or "").strip()[:512]
+    if not name or not q:
+        return None
+    return {"id": "v" + secrets.token_hex(4), "name": name, "q": q}
+
+
+def reordered(user_views, ids):
+    cur = {v["id"]: v for v in user_views}
+    return [cur[i] for i in ids if i in cur] + [v for k, v in cur.items() if k not in ids]

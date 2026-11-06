@@ -74,9 +74,9 @@ type = "layers"
 layers = ["mailmind.mailbox.adapters", "(mailmind.mailbox.application)", "(mailmind.mailbox.domain)"]
 
 [[tool.importlinter.contracts]]
-name = "within Discovery, adapters, then domain"
+name = "within Discovery, adapters, then application, then domain"
 type = "layers"
-layers = ["mailmind.discovery.adapters", "mailmind.discovery.domain"]
+layers = ["mailmind.discovery.adapters", "mailmind.discovery.application", "mailmind.discovery.domain"]
 
 [[tool.importlinter.contracts]]
 name = "within Curation, adapters, then application, then domain"
@@ -110,7 +110,7 @@ allow_indirect_imports = true
 name = "only the IMAPClient adapter reaches IMAPClient"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.content", "mailmind.kernel", "mailmind.assistant",
-                  "mailmind.accounts", "mailmind.curation", "mailmind.mailbox.application", "mailmind.mailbox.domain",
+                  "mailmind.accounts", "mailmind.curation", "mailmind.discovery", "mailmind.mailbox.application", "mailmind.mailbox.domain",
                   "mailmind.mailbox.adapters.imap_list", "mailmind.mailbox.adapters.imap_names",
                   "mailmind.mailbox.adapters.imaplib_session"]
 forbidden_modules = ["imapclient"]

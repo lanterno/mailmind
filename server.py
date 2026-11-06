@@ -35,9 +35,8 @@ import warm
 import readmutq
 import summarize
 import mailops
-from mailmind.bootstrap import curation
+from mailmind.bootstrap import curation, discovery
 from mailmind.bootstrap.curation import rules
-import views
 from mailmind.content import sanitize
 import compose
 import smtpsend
@@ -3770,7 +3769,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/rules":
                 self._json({"rules": rules.load()})
             elif u.path == "/api/views":
-                self._json({"ok": True, "views": views.merged()})
+                self._json({"ok": True, "views": discovery.views.merged()})
             elif u.path == "/api/audit":
                 self._json(curation.AUDIT.read(q.get("kind", ["all"])[0], int(q.get("limit", ["120"])[0])))
             elif u.path == "/api/folders":
@@ -3923,7 +3922,7 @@ class H(BaseHTTPRequestHandler):
                     res, code = {"ok": False, "error": "cleanup failed"}, 500
                 self._json(res, code)
             elif u.path == "/api/views":
-                self._json(self._views_post(b))
+                self._json(discovery.views.post(b))
             elif u.path in ("/api/flag", "/api/seen", "/api/archive", "/api/move", "/api/junk"):
                 self._json(do_write(u.path, b))
             elif u.path == "/api/draft":
@@ -4086,20 +4085,6 @@ class H(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "request failed"}, 500)
         finally:
             over.__exit__(None, None, None)
-
-    def _views_post(self, b):
-        verb = b.get("verb")
-        if verb == "create":
-            v = views.add(b.get("name"), b.get("q"))
-            if not v:
-                return {"ok": False, "msg": "need a name and a query", "views": views.merged()}
-        elif verb == "delete":
-            views.remove(b.get("id"))           # no-op (returns False) for a builtin/lane
-        elif verb == "reorder" and isinstance(b.get("ids"), list):
-            views.reorder([str(x) for x in b["ids"]])
-        else:
-            return {"ok": False, "msg": "verb must be create|delete|reorder", "views": views.merged()}
-        return {"ok": True, "views": views.merged()}
 
 
 # ----------------------------------------------------------------------------- boot
