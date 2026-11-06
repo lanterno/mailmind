@@ -500,6 +500,7 @@ export interface GetAnswers {
       error: string | null;
       id: number;
       next_attempt_at: number;
+      retrying: boolean;
       scheduled: boolean;
       sent_at: string | null;
       state: string;
@@ -1011,6 +1012,7 @@ export interface PostAnswers {
     ok: boolean;
   };
   "/api/outbox/retry": {
+    gone?: boolean;
     ok: boolean;
   };
   "/api/outbox/sendnow": {
