@@ -1,4 +1,4 @@
-"""The composer's "new to you" lookup (server.contacts_known and POST /api/contacts/known): who
+"""The composer's "new to you" lookup (discovery.known and POST /api/contacts/known): who
 counts as known, exact address matching, drafts never vouching, the thin-history flag, input
 limits, the CSRF guard, and that it never waits on the IMAP lock. Hermetic — the database,
 config and rules are temp files. All addresses are fictional.
@@ -28,6 +28,7 @@ _home()                                               # before anything opens a 
 from mailmind.content import mime
 import outbox
 import server
+from mailmind.bootstrap import discovery
 
 ACCT = "ada@example.test"
 _uid = [0]
@@ -72,7 +73,7 @@ def _outbox(envelope, delivered):
 
 
 def _known(addrs, **kw):
-    res, code = server.contacts_known(addrs, **kw)
+    res, code = discovery.known.ask(addrs, **kw)
     assert code == 200, (code, res)
     return {k: v["known"] for k, v in res["items"].items()}
 
@@ -161,23 +162,23 @@ def test_keep_senders_count_keep_domains_do_not():
 
 def test_own_addresses_are_self():
     _fresh()
-    res, _ = server.contacts_known(["ADA@example.test", "lio@example.test"])
+    res, _ = discovery.known.ask(["ADA@example.test", "lio@example.test"])
     assert res["items"]["ada@example.test"] == {"known": True, "self": True}, res
     assert res["items"]["lio@example.test"] == {"known": False, "self": False}, res
-    res, _ = server.contacts_known(["lio@example.test", "ada@example.test"], own=["Lio@example.test"])
+    res, _ = discovery.known.ask(["lio@example.test", "ada@example.test"], own=["Lio@example.test"])
     assert res["items"]["lio@example.test"]["self"] is True, res
     assert res["items"]["ada@example.test"]["self"] is False, res
 
 
 def test_input_shape_and_limits():
     _fresh()
-    assert server.contacts_known("lio@example.test")[1] == 400
-    assert server.contacts_known(None)[1] == 400
+    assert discovery.known.ask("lio@example.test")[1] == 400
+    assert discovery.known.ask(None)[1] == 400
     over = [f"p{i}@example.test" for i in range(101)]
-    res, code = server.contacts_known(over)
+    res, code = discovery.known.ask(over)
     assert code == 400 and res["error"] == "too many addresses", res
     _msg("lio@example.test")
-    res, code = server.contacts_known(["nobody", "a@b@c", "Lio <LIO@Example.test>",
+    res, code = discovery.known.ask(["nobody", "a@b@c", "Lio <LIO@Example.test>",
                                        "LIO@example.test", "lio@example.test"])
     assert code == 200 and res["bad"] == ["nobody", "a@b@c"], res
     assert res["items"]["lio <lio@example.test>"]["known"] is True, res
@@ -189,10 +190,10 @@ def test_thin_history_flag():
     for i in range(2):
         _msg(f"p{i}@example.test")
     _msg("junk@example.test", is_junk=1)
-    res, _ = server.contacts_known(["p0@example.test"], min_history=3)
+    res, _ = discovery.known.ask(["p0@example.test"], min_history=3)
     assert res["thin"] is True, res
     _msg("p2@example.test")
-    res, _ = server.contacts_known(["p0@example.test"], min_history=3)
+    res, _ = discovery.known.ask(["p0@example.test"], min_history=3)
     assert res["thin"] is False, res
 
 
@@ -200,21 +201,21 @@ def test_the_delivered_address_is_judged_not_the_display_name():
     _fresh()
     _msg("bob@company.example")
     _msg("ann@example.test")
-    res, _ = server.contacts_known(['"bob@company.example" <bob@evil.example>',
+    res, _ = discovery.known.ask(['"bob@company.example" <bob@evil.example>',
                                     "Bob (bob@company.example) <bob@evil.example>",
                                     "'ann@example.test", ".ann@example.test"])
     items = {k: v["known"] for k, v in res["items"].items()}
     assert items == {'"bob@company.example" <bob@evil.example>': False,
                      "bob (bob@company.example) <bob@evil.example>": False,
                      "'ann@example.test": False, ".ann@example.test": False}, res
-    res, _ = server.contacts_known(["a@example.test, b@example.test"])
+    res, _ = discovery.known.ask(["a@example.test, b@example.test"])
     assert res["bad"] == ["a@example.test, b@example.test"] and not res["items"], res
 
 
 def test_items_carry_only_known_and_self():
     _fresh()
     _msg("lio@example.test")
-    res, _ = server.contacts_known(["lio@example.test", "new@example.test"])
+    res, _ = discovery.known.ask(["lio@example.test", "new@example.test"])
     assert set(res) == {"ok", "items", "bad", "thin"}, res
     assert all(set(v) == {"known", "self"} for v in res["items"].values()), res
 
@@ -256,7 +257,7 @@ def test_never_waits_on_the_imap_lock():
     holder.start()                                       # a long mail operation holds the gate
     assert holding.wait(5)
     try:
-        t = threading.Thread(target=lambda: done.append(server.contacts_known(["lio@example.test"])),
+        t = threading.Thread(target=lambda: done.append(discovery.known.ask(["lio@example.test"])),
                              daemon=True)
         t.start()
         t.join(5)
