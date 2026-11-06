@@ -161,8 +161,10 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
-  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. So far it reads, searches, files, snoozes, mutes, summarizes, marks, saves views, writes mail
-  and shows the outbox tray; it has no brief, Ask, Do or settings yet, and links back to `/` for those. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
+  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/brief` is today's brief, the lists the digest answers (`/next/brief/needs`, `tidy`, `topic/<label>`),
+  Commitments, Your week and the new-mail pill, `features/ask` Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
+  So far it does what the page does but for the Screener, the contact card, the Document Hub, the Feed and Paper Trail lanes, curation and cleanup, and swipe, and links back to `/` for those. Unlike the page's,
+  its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
