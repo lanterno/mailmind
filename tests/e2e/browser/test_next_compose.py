@@ -319,8 +319,11 @@ def test_a_draft_the_server_wont_take_waits_in_the_tray_and_opens_from_it(page, 
     page.keyboard.press("Escape")
     world.server.clear_faults()
     app.clock.shift(timedelta(minutes=2))
-    drafts.push_round()
-    assert len(copies(world, "Thread colours")) == 1
+
+    def pushed():                                          # the closing save may still be on its way
+        drafts.push_round()
+        return len(copies(world, "Thread colours")) == 1
+    until(page, pushed, "the job pushed it")
     expect(button).to_be_hidden()
     clean(page)
 
