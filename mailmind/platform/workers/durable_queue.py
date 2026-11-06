@@ -21,15 +21,18 @@ python3 server.py uses it.
 """
 import threading
 import time
+from collections.abc import Callable
 
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform.logging import get_logger
 
 QUEUED, ERROR = "queued", "error"
 
 
 class DurableQueue:
-    def __init__(self, name, table, *, running, finished, finished_at, gate, connect,
-                 max_attempts=5, backoff_base=20, backoff_cap=900, poll=30, lane=None, unsure=None):
+    def __init__(self, name: str, table: str, *, running: str, finished: str, finished_at: str, gate: str,
+                 connect: Callable[[], Connection], max_attempts: int = 5, backoff_base: int = 20,
+                 backoff_cap: int = 900, poll: int = 30, lane: str | None = None, unsure: tuple[str, str] | None = None):
         """`name` labels its log lines and threads; `running` and `finished` are the table's own
         names for those states; `connect` opens a connection to the database for drain and
         run_forever; `lane`, a column, splits drain's rows into lanes; `unsure`, (a column, why),
@@ -45,7 +48,7 @@ class DurableQueue:
         self._lanes_lock = threading.Lock()
         self._worker = threading.local()        # .on in run_forever's thread
 
-    def counts(self):
+    def counts(self) -> dict[str, int]:
         """How many rows stand in each state, on a connection of its own."""
         c = self._connect()
         try:
@@ -53,29 +56,29 @@ class DurableQueue:
         finally:
             c.close()
 
-    def due(self, c, now):
+    def due(self, c: Connection, now: float) -> list[int]:
         """The ids of queued rows whose time has come, oldest first."""
         return [r[0] for r in c.execute(
             f"SELECT id FROM {self.table} WHERE state=? AND next_attempt_at<=? ORDER BY id", (QUEUED, now))]
 
-    def claim(self, c, id_):
+    def claim(self, c: Connection, id_: int) -> Row | None:
         """Flip a queued row to running and return it, as it is now. None for every caller but
         the one that wins it, and for a row that's gone or not queued."""
         rows = c.execute(f"UPDATE {self.table} SET state=? WHERE id=? AND state=? RETURNING *",
                          (self.running, id_, QUEUED)).fetchall()
         return rows[0] if rows else None
 
-    def put_back(self, c, id_):
+    def put_back(self, c: Connection, id_: int) -> None:
         """A claimed row wasn't tried, or its try says nothing against it: back in the queue, due now, with no
         attempt counted."""
         c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=0 WHERE id=? AND state=?",
                   (QUEUED, id_, self.running))
 
-    def backoff(self, attempts):
+    def backoff(self, attempts: int) -> int:
         """Seconds to wait after the `attempts`-th attempt failed."""
         return min(self.backoff_cap, self.backoff_base * (2 ** (attempts - 1)))
 
-    def retry_later(self, c, row, error, now):
+    def retry_later(self, c: Connection, row: Row, error: str | None, now: int) -> tuple[bool, int]:
         """An attempt at `row` failed with `error` (scrubbed: it is stored and shown). Back to the
         queue after the backoff, or to error once it was the last attempt allowed. Returns
         (terminal, delay)."""
@@ -85,20 +88,20 @@ class DurableQueue:
                   (ERROR if terminal else QUEUED, attempts, now + delay, error, row["id"]))
         return terminal, delay
 
-    def give_up(self, c, row, error):
+    def give_up(self, c: Connection, row: Row, error: str | None) -> None:
         """An attempt at `row` failed in a way no retry can fix: to error at once."""
         c.execute(f"UPDATE {self.table} SET state=?, attempts=?, next_attempt_at=0, last_error=? WHERE id=?",
                   (ERROR, row["attempts"] + 1, error, row["id"]))
 
-    def mark_gate(self, c, id_):
+    def mark_gate(self, c: Connection, id_: int) -> None:
         """The row's irreversible step happened: it never runs again."""
         c.execute(f"UPDATE {self.table} SET {self.gate}=1 WHERE id=?", (id_,))
 
-    def finish(self, c, id_, at):
+    def finish(self, c: Connection, id_: int, at: str) -> None:
         c.execute(f"UPDATE {self.table} SET state=?, {self.finished_at}=?, last_error=NULL WHERE id=?",
                   (self.finished, at, id_))
 
-    def reset_stuck(self, c):
+    def reset_stuck(self, c: Connection) -> None:
         """At boot: rows a crash left running go back to the queue, but one that may have done its
         irreversible step goes to error, for a person to decide."""
         if self.unsure:
@@ -107,28 +110,28 @@ class DurableQueue:
                       f"WHERE state=? AND {column}=1 AND {self.gate}=0", (ERROR, why, self.running))
         c.execute(f"UPDATE {self.table} SET state=? WHERE state=?", (QUEUED, self.running))
 
-    def requeue(self, c, id_):
+    def requeue(self, c: Connection, id_: int) -> bool:
         """A person retries a row in error: back to the queue at once, its error cleared and its
         attempts counted afresh. False when it isn't in error."""
         return c.execute(f"UPDATE {self.table} SET state=?, attempts=0, next_attempt_at=0, last_error=NULL "
                          f"WHERE id=? AND state=?", (QUEUED, id_, ERROR)).rowcount == 1
 
-    def cancel_queued(self, c, id_):
+    def cancel_queued(self, c: Connection, id_: int) -> bool:
         """Delete a row no worker has claimed. False once one has, and for a row back in the
         queue after its irreversible step (a crash's, or one whose bookkeeping failed)."""
         return c.execute(f"DELETE FROM {self.table} WHERE id=? AND state=? AND {self.gate}=0",
                          (id_, QUEUED)).rowcount == 1
 
-    def cancel_unapplied(self, c, id_):
+    def cancel_unapplied(self, c: Connection, id_: int) -> bool:
         """Delete a row whose irreversible step hasn't happened, claimed or not: its worker
         re-reads the row before that step and stops when it's gone. False once it happened."""
         return c.execute(f"DELETE FROM {self.table} WHERE id=? AND {self.gate}=0", (id_,)).rowcount == 1
 
-    def kick(self):
+    def kick(self) -> None:
         """Wake run_forever now rather than at its next poll."""
         self._kick.set()
 
-    def drain(self, handle, now):
+    def drain(self, handle: Callable[[int], object], now: float) -> None:
         """Run handle(id) for each row due at `now`, oldest first. One that raises is logged,
         and the rest still run.
 
@@ -191,7 +194,7 @@ class DurableQueue:
             if missed:
                 self.kick()
 
-    def until_due(self, c, now, looked=None):
+    def until_due(self, c: Connection, now: float, looked: float | None = None) -> float:
         """Seconds from `now` until the next queued row comes due, at most `poll`, and none if one
         has come due since the last drain began to look (`looked`, by default `now`). That drain may
         have missed it, and no kick is coming. A row due before it looked isn't waited for: a kick
@@ -213,7 +216,7 @@ class DurableQueue:
             self._log.warning("next due", exc_info=e)
             return self.poll
 
-    def run_forever(self, drain, stop=None):
+    def run_forever(self, drain: Callable[[], object], stop: threading.Event | None = None) -> None:
         """The worker: put back what a crash left running, then call drain() whenever kicked,
         and when the next queued row comes due (a send's Undo window ending, a retry's backoff),
         at least every `poll` seconds. drain is the worker's own, which calls self.drain with its

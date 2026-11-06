@@ -1,4 +1,5 @@
-"""A stored row, as a use case reads it."""
+"""A stored row, as a use case reads it, and the connection it came through."""
+from collections.abc import Iterator
 from typing import Any, Protocol
 
 
@@ -6,3 +7,19 @@ class Row(Protocol):
     """One row, read by column name: sqlite3.Row is one, and so is a test's dict. What a column holds is the
     schema's word for it, so Any on purpose."""
     def __getitem__(self, key: str, /) -> Any: ...
+
+
+class Cursor(Protocol):
+    """What running a statement gives. A row's columns are the schema's word for them, so Any on purpose."""
+    @property
+    def rowcount(self) -> int: ...
+    def fetchone(self) -> Any: ...
+    def fetchall(self) -> list[Any]: ...
+    def __iter__(self) -> Iterator[Any]: ...
+
+
+class Connection(Protocol):
+    """A database connection, as far as a use case or a queue asks of one: sqlite3.Connection is one."""
+    def execute(self, sql: str, parameters: Any = ..., /) -> Cursor: ...
+    def commit(self) -> None: ...
+    def close(self) -> None: ...

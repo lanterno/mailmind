@@ -10,3 +10,11 @@ def is_list(held: object) -> TypeIs[list[Any]]:
 def is_object(held: object) -> TypeIs[dict[str, Any]]:
     """A JSON object, whose keys are strings."""
     return isinstance(held, dict)
+
+
+def as_int(held: Any) -> int | None:
+    """A number as a request may give it, or None for what doesn't read as one."""
+    try:
+        return int(held)
+    except (TypeError, ValueError):
+        return None
