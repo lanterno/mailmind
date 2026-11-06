@@ -15,8 +15,7 @@ import pytest
 
 SANDBOX_REFUSAL = ("Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed "
                    "and the 'allow-scripts' permission is not set.")
-# What Chromium says of anything a content security policy refuses, or would refuse: a report-only
-# policy's violations come at the info level, not as errors.
+# What Chromium says of anything a content security policy refuses.
 CSP_VIOLATION = "violates the following Content Security Policy directive"
 
 

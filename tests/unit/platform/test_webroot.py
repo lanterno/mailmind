@@ -152,7 +152,7 @@ def test_next_and_every_path_under_it_is_the_app_holding_this_runs_token(app, wi
     r = app.get(path)
     assert r.status == 200 and r.headers["cache-control"] == "no-store"
     assert "__CSRF_TOKEN__" not in r.body.decode() and "__BUILD__" not in r.body.decode()
-    assert "content-security-policy-report-only" in r.headers
+    assert "content-security-policy" in r.headers
 
 
 def test_a_path_that_only_starts_like_next_isnt_it(app, with_next):

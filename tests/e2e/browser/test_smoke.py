@@ -117,14 +117,28 @@ def test_the_inbox_loads_without_errors(page, world):
 
 def test_a_script_the_page_didnt_ship_breaks_its_policy(page, world):
     """The page's own scripts run under its content security policy without a word; an event
-    handler that gets in later is reported. The policy is report-only for now, so it still runs."""
+    handler that gets in later doesn't run, and the browser says so."""
     opened(page)
     clean(page)
     page.evaluate("""() => document.body.insertAdjacentHTML("beforeend",
         '<img hidden src="data:," onerror="document.body.dataset.injected = 1">')""")
-    expect(page.locator("body")).to_have_attribute("data-injected", "1")
-    assert page.problems, "the policy said nothing"             # Chromium may say it more than once
+    until(page, lambda: page.problems, "the policy said nothing")   # Chromium may say it more than once
     assert all("inline event handler violates" in m and "script-src" in m for m in page.problems), page.problems
+    assert page.evaluate("() => document.body.dataset.injected") is None
+    page.problems.clear()
+
+
+def test_a_script_block_the_page_didnt_ship_doesnt_run_either(page, world):
+    opened(page)
+    clean(page)
+    page.evaluate("""() => {
+        const s = document.createElement("script");
+        s.textContent = "document.body.dataset.injected = 1";
+        document.body.appendChild(s);
+    }""")
+    until(page, lambda: page.problems, "the policy said nothing")
+    assert page.evaluate("() => document.body.dataset.injected") is None
+    page.problems.clear()
 
 
 def test_archive_from_the_list_then_undo(page, world):
