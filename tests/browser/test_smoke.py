@@ -1102,3 +1102,15 @@ def test_the_document_hub_filters_by_kind(page, world):
     page.locator('#docFilters [data-dk="all"]').click()
     expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(3)
     clean(page)
+
+
+def test_the_sync_menu_says_when_mail_is_out_in_a_batch(page, world, ai):
+    import store
+    c = store.conn()
+    keys = [r["message_key"] for r in store.needs_summary(c, 3)]
+    store.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, 1)
+    c.close()
+    page.goto("/")
+    expect(page.locator("body")).to_be_visible()
+    assert "3 out in a batch" in page.evaluate("""async()=>{ while(!state.ai)await new Promise(r=>setTimeout(r,20)); return aiLineHtml(); }""")
+    clean(page)
