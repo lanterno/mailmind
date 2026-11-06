@@ -869,6 +869,25 @@ def _draft_info(row):
 #     We now TTL-cache just that expensive IMAP part per account and reuse the
 #     connection pool; the DB-derived counts below stay always-fresh. ---
 _folder_list_cache = {}          # account -> {"folders": [...], "ts": epoch}
+def _folder_role(account, folder):
+    """The part `folder` plays on this account: what the last LIST said, else what its name says."""
+    with _folder_list_lock:
+        hit = _folder_list_cache.get(account)
+    for f in (hit["folders"] if hit else ()):
+        if f["name"] == folder:
+            return f["role"]
+    return folder_roles.role_by_name(folder)
+
+
+def _in_folders_playing(c, roles):
+    """SQL and params for: a row's folder plays one of these roles."""
+    pairs = [(r["account"], r["folder"]) for r in c.execute("SELECT DISTINCT account, folder FROM messages")
+             if _folder_role(r["account"], r["folder"]) in roles]
+    if not pairs:
+        return "0=1", []                # a bare 0 in an ORDER BY would name a column
+    return "(m.account, m.folder) IN (VALUES " + ",".join("(?,?)" for _ in pairs) + ")", [x for p in pairs for x in p]
+
+
 _folder_list_lock = threading.Lock()
 _FOLDER_LIST_TTL = 25.0          # folder unread/total badges may be this stale (ambient counts)
 
@@ -3898,6 +3917,8 @@ _DO_CAP = 500            # hard ceiling on how many messages ONE command may tou
 _DO_TRASH_CAP = 200      # trash/junk are extra-dangerous → a lower ceiling
 _DO_SAMPLE = 8
 _DO_PLANS = plans.PlanBook()
+_DO_APART = {"sent", "drafts", "trash", "junk"}      # a command reaches these only if its filter names a folder
+_DO_ALREADY = {"archive": {"archive", "all"}, "trash": {"trash"}, "junk": {"junk"}}     # a verb's own home: nothing to do
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -3960,10 +3981,15 @@ def _do_total_messages():
         c.close()
 
 
-def _do_resolve(match, where, params, cap):
+def _do_resolve(match, where, params, cap, verb, names_folder):
     """Exact COUNT + a capped set of (message key, folder) + an 8-row sample for a validated filter.
     Mirrors search_json's FROM/JOINs exactly. Read-only; the messages come from OUR db, never the model.
-    Returns (count, messages, sample) or (None, [], []) on a bad query."""
+
+    A person who says "archive what Lin sent" means the mail that is around, not the copy already
+    archived, one in Trash or their own in Sent, so a filter reaches those only by naming a folder, and
+    a verb never reaches its own home. Each message counts once: its copy in the Inbox, else any but
+    the one in All Mail. `matched` is how many rows the filter says, whatever it may reach, for the
+    blast-radius check. Returns (count, messages, sample, matched) or (None, [], [], 0) on a bad query."""
     where_sql = (" AND " + " AND ".join(where)) if where else ""
     c = store.conn()
     try:
@@ -3976,20 +4002,26 @@ def _do_resolve(match, where, params, cap):
             base = ("FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
                     f"WHERE m.pending_removal IS NULL{where_sql}")
             bargs = [*params]
+        apart, apart_args = _in_folders_playing(c, _DO_ALREADY.get(verb, set()) | (set() if names_folder else _DO_APART))
+        in_all, in_all_args = _in_folders_playing(c, {"all"})
         try:
-            count = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
+            matched = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
+            count = c.execute(f"SELECT COUNT(DISTINCT m.message_key) {base} AND NOT {apart}",
+                              [*bargs, *apart_args]).fetchone()[0]
             rows = c.execute(
-                f"SELECT m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso {base} "
-                "ORDER BY m.ts DESC LIMIT ?", [*bargs, cap]).fetchall()
+                "SELECT * FROM (SELECT m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, "
+                f"ROW_NUMBER() OVER (PARTITION BY m.message_key ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth "
+                f"{base} AND NOT {apart}) WHERE nth=1 ORDER BY ts DESC LIMIT ?",
+                [*in_all_args, *bargs, *apart_args, cap]).fetchall()
         except sqlite3.OperationalError:
-            return None, [], []
+            return None, [], [], 0
     finally:
         c.close()
     messages = [(r["message_key"], r["folder"]) for r in rows]
     sample = [{"from": (r["from_name"] or r["from_addr"] or ""),
                "subject": r["subject"] or "(no subject)",
                "when": rel_time(r["date_iso"])} for r in rows[:_DO_SAMPLE]]
-    return count, messages, sample
+    return count, messages, sample, matched
 
 
 def ai_do_plan(body):
@@ -4015,16 +4047,17 @@ def ai_do_plan(body):
     # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
     match, where, params = search.build(filt)
     where = search.visible(where)
-    if not QuerySpec.parse(filt).narrows():            # empty / scope-only / negation-only → not a scoped action
+    spec = QuerySpec.parse(filt)
+    if not spec.narrows():                             # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP
-    count, messages, sample = _do_resolve(match, where, params, cap)
+    count, messages, sample, matched = _do_resolve(match, where, params, cap, verb, spec.names_folder())
     if count is None:                                  # unparseable resolved query → degrade
         return {"ok": True, "intent": "search", "filter": filt}, 200
     if not messages:                                   # nothing matches → nothing to confirm
         return {"ok": True, "intent": "search", "filter": filt, "empty": True}, 200
     total = _do_total_messages()                       # blast-radius backstop: refuse a filter that
-    if total and count >= _DO_BROAD_FRACTION * total:  # still resolves to most of the whole mailbox
+    if total and matched >= _DO_BROAD_FRACTION * total:   # still resolves to most of the whole mailbox
         return {"ok": True, "intent": "search", "filter": filt}, 200
     preset = (plan.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
     frozen = _DO_PLANS.open(verb, preset, messages)
