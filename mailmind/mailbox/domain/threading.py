@@ -10,10 +10,13 @@ lexicographically-smallest id in it, the ids its rows only refer to included), N
 member set, so a thread keeps the SAME id as replies arrive, and mints the same one again when
 it is synced whole after every copy went: its root is the same whichever rows were there first.
 
-Two ways in, and for mail that only arrives they end with the same threads under the same ids:
+Two ways in, and for mail that only arrives they end with the same threads:
   `conversations` and `place` take what just arrived and the ids of the threads it touches, which
   is all a sync has to read: everything a thread holds is one thread already.
   `regroup` takes every copy the account holds. It is the repair.
+They give the same ids too, but for a thread holding two Gmail threads: `regroup` decides between
+them whenever it runs, and `place` only when a new Gmail id comes to it. And mail that goes can
+leave a thread unconnected: `regroup` lets the parts part at their next merge, `place` keeps them one.
 
 An id is sticky once given, and goes only when a merge absorbs it (two threads joined, or a thread
 that gained a Gmail thread id). The survivor is a Gmail id over an rf: id, the smallest of several
