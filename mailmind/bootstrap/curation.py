@@ -144,7 +144,7 @@ class _Mailboxes:
         return mailbox.open_session(acct)
 
     def borrow(self, acct):
-        import pool
+        from mailmind.bootstrap.mailbox import pool
         return pool.borrow(acct)
 
     def trash_folder(self, acct):

@@ -17,7 +17,7 @@ from mailmind.bootstrap import curation
 from mailmind.content import mime
 from mailmind.content.mime import dec
 from mailmind.content.text import body_text_of, text_body
-import pool
+from mailmind.bootstrap.mailbox import pool
 from mailmind.bootstrap.mailbox import store
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox

@@ -655,7 +655,7 @@ _FOLDER_LIST_TTL = 25.0          # folder unread/total badges may be this stale 
 def _live_folder_list(acct):
     """The expensive part: live IMAP LIST + per-folder UNSEEN/MESSAGES status,
     over a POOLED connection (reused — no per-call login/logout churn)."""
-    import pool
+    from mailmind.bootstrap.mailbox import pool
     out = []
     with pool.borrow(acct) as s:
         folders = [f for f in s.folders() if f.selectable]
@@ -2405,7 +2405,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/account-health":
                 self._json(account_health_json())
             elif u.path == "/api/debug/pool":
-                import pool
+                from mailmind.bootstrap.mailbox import pool
                 self._json({"ok": True, **pool.stats()})
             elif u.path == "/api/debug/jobs":    # the background jobs' timing and last outcomes
                 self._json({"ok": True, "profile": profile.current().value, "jobs": JOBS.snapshot(),
