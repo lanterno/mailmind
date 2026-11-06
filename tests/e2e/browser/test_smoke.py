@@ -366,6 +366,23 @@ def give_up_on_a_send(page, app, world):
     return page.locator("#outboxBtn")
 
 
+def test_a_send_that_failed_says_its_retrying_and_the_tray_tries_it_now(page, app, world):
+    from mailmind.bootstrap.compose import outbox
+    opened(page)
+    compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    let_undo_pass(page)
+    world.smtp.fail("MAIL")
+    due(app)
+    page.locator("#outboxBtn").click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("retrying")
+    expect(fly.get_by_role("button", name="Cancel")).to_be_visible()
+    fly.get_by_role("button", name="Try now").click()
+    until(page, lambda: not app.get("/api/outbox").json["items"][0]["retrying"], "it's asked for now")
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+
+
 def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_again(page, app, world):
     from mailmind.bootstrap.compose import outbox
     world.smtp.drop_after_data()

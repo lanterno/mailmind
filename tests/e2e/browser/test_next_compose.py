@@ -513,6 +513,26 @@ def test_a_mention_of_an_attachment_with_none_is_asked_about_and_an_edit_retires
 
 # ── later ───────────────────────────────────────────────────────────────
 
+def test_a_send_that_failed_says_its_retrying_and_the_tray_tries_it_now(page, app, world):
+    from mailmind.bootstrap.compose import outbox
+    opened(page)
+    writing(page, LIN, "Fabric order", "Hi Lin")
+    send_button(page).click()
+    until(page, lambda: app.get("/api/outbox").json["items"], "it's queued")
+    world.smtp.fail("MAIL")
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    page.locator("#outboxBtn").click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("retrying")
+    expect(fly.get_by_role("button", name="Cancel")).to_be_visible()
+    fly.get_by_role("button", name="Try now").click()
+    until(page, lambda: not app.get("/api/outbox").json["items"][0]["retrying"], "it's asked for now")
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+    clean(page)
+
+
 def test_send_later_schedules_and_the_tray_cancels_it(page, app, world):
     opened(page)
     writing(page, LIN, "Fabric order", "Hi Lin")
@@ -527,7 +547,7 @@ def test_send_later_schedules_and_the_tray_cancels_it(page, app, world):
     expect(fly).to_contain_text("scheduled")
     expect(fly).to_contain_text("Fabric order")
     fly.get_by_role("button", name="Cancel").click()
-    expect(page.locator("#toast")).to_contain_text("Scheduled send cancelled")
+    expect(page.locator("#toast")).to_contain_text("Send cancelled")
     until(page, lambda: app.get("/api/outbox").json["items"] == [], "the row went")
     clean(page)
 
