@@ -550,8 +550,8 @@ def thread_stored(c, account, pks=()):
 
 
 def recompute_threads(c, account):
-    """The repair: regroup every message of the account from what each names, and write what each names again. No sync
-    comes this way (thread_stored), and nothing has to."""
+    """The repair (`python3 -m mailmind db rethread`): regroup every message of the account from what each names, and
+    write what each names again. No sync comes this way (thread_stored), and nothing has to."""
     if not c.in_transaction:
         c.execute("BEGIN IMMEDIATE")
     copies = [_copy(r) for r in c.execute(f"SELECT {_THREADING} FROM messages WHERE account=?", (account,))]

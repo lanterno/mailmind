@@ -26,6 +26,8 @@
   db check-upgrade             try the next start's migrations on a copy of the database, and report
                                only row counts and integrity checks
   db compact                   give back the room freed in the database file, with MailMind stopped
+  db rethread [WHO]            the repair: regroup the mail into threads from what each message names,
+                               whole; no sync needs it, and what it changes moves as a merge does
   ai usage [--days N]          what the Claude API cost each local day of the last N (default 7), by
                                feature, from the usage ledger; it migrates nothing and calls nothing
 """
@@ -88,6 +90,7 @@ def parser():
     check.add_argument("--db", help="the database to check (default: the data directory's)")
     shrink = db.add_parser("compact", help="give back the room freed in the file, with MailMind stopped")
     shrink.add_argument("--db", help="the database to compact (default: the data directory's)")
+    db.add_parser("rethread", help="regroup the mail into threads, whole").add_argument("who", nargs="?", default="all", help="an account's address, or all")
     ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
@@ -101,6 +104,9 @@ def main(argv=None):
         sys.exit(wiring.assess_batch())
     if args.command == "ai":
         sys.exit(ai_usage(args.days))
+    if args.command == "db" and args.db_command == "rethread":
+        from mailmind.bootstrap import cli
+        return cli.rethread(args.who)
     if args.command == "db":
         from mailmind.platform import settings
         path = args.db or settings.current().db

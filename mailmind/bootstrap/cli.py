@@ -46,6 +46,21 @@ def sync(who, days):
     print("stats:", store.stats(store.conn()))
 
 
+def rethread(who):
+    """Regroup `who`'s mail into threads from what each message names, and write down what each names again."""
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import store
+    store.init()
+    c = store.conn()
+    try:
+        for a in accounts.accounts() if who == "all" else [accounts.get(who)]:
+            store.recompute_threads(c, a["email"])
+            c.commit()
+            print(f"{a['email']:<32} regrouped", flush=True)
+    finally:
+        c.close()
+
+
 def assess(limit, workers):
     """Summarize up to `limit` messages with no summary yet, now, at full price."""
     from mailmind.bootstrap import assistant
