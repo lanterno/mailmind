@@ -1,7 +1,7 @@
 """The fake IMAP server answers the way the app's imaplib code expects, and its scripted trouble
 reaches the app the way a real server's would.
 
-Most tests drive it through MailMind's own accounts.connect, mailops and ingest, so a fake that
+Most tests drive it through MailMind's own accounts.connect, mail commands and ingest, so a fake that
 drifted from what the app relies on fails here first.
 """
 import imaplib
@@ -205,7 +205,7 @@ def test_a_folder_name_with_spaces_and_quotes_round_trips(srv, data_dir):
 # ── scripted trouble ────────────────────────────────────────────────────────────────────────────
 
 def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
-    import mailops
+    from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap.mailbox import store
     uid = srv.deliver(ADA, "INBOX", _mail(1))
     c = store.conn()
@@ -218,18 +218,18 @@ def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
     c.close()
     srv.fail("UID MOVE", "NO [CANNOT] not today")
     srv.fail("UID COPY", "NO [OVERQUOTA] full")
-    ok, msg, undo = mailops.trash_message(pk)
+    ok, msg, undo = commands.trash_message(pk)
     assert (ok, undo) == (False, None)
     assert list(srv.messages(ADA, "INBOX")) == [uid]
 
 
 def test_a_dropped_connection_is_an_abort_the_app_can_queue(srv, app):
-    import mailops
+    from mailmind.bootstrap.mailbox import commands
     srv.deliver(ADA, "INBOX", _mail(1))
     srv.drop("UID MOVE")
     M = _connect(app)
     M.select('"INBOX"')
-    with pytest.raises(mailops._UNREACHABLE):
+    with pytest.raises(commands.UNREACHABLE):
         M.uid("MOVE", "1", '"Archive"')
 
 
@@ -316,8 +316,8 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
         M.logout()
         assert list(srv.messages(ADA, "INBOX")) == [b]
         assert len(srv.messages(ADA, "[Gmail]/All Mail")) == 2
-        import mailops
-        assert mailops.relabel_by_msgid(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == (True, "relabeled")
+        from mailmind.bootstrap.mailbox import commands
+        assert commands.relabel_by_msgid(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == (True, "relabeled")
         assert list(srv.messages(ADA, "INBOX")) == [a, b]
 
 

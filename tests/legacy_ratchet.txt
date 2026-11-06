@@ -10,9 +10,7 @@ mailmind.bootstrap.cli export
 mailmind.bootstrap.cli ingest
 mailmind.bootstrap.cli summarize
 mailmind.bootstrap.compose ingest
-mailmind.bootstrap.compose mailops
 mailmind.bootstrap.curation ingest
-mailmind.bootstrap.curation mailops
 mailmind.bootstrap.curation pool
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime

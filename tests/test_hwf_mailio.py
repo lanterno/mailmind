@@ -1,4 +1,4 @@
-"""Mail I/O behaviour a rewrite could silently lose: the hard-won fixes in ingest, mailops, the
+"""Mail I/O behaviour a rewrite could silently lose: the hard-won fixes in ingest, the mail commands, the
 offline queue, the outbox, drafts, sweep and expiry, the folder rail, the connection pool and the
 IDLE worker, each pinned against the world's fake IMAP and SMTP servers. The fixes the older
 suites already pin (test_sync_state, test_queue_drain, test_http_mail, test_http_send,

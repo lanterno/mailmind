@@ -204,25 +204,25 @@ class Machine(RuleBasedStateMachine):
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_before_the_server_is_asked(self, which):
-        import mailops
+        from mailmind.bootstrap.mailbox import commands
 
         def effect(_real):
             def die(_row):
                 raise Crash
             return die
-        self.crash_during(which, mailops, "apply_queued_mutation", effect)
+        self.crash_during(which, commands, "apply_queued_mutation", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_after_the_server_answered(self, which):
-        import mailops
+        from mailmind.bootstrap.mailbox import commands
 
         def effect(real):
             def die(row):
                 real(row)
                 raise Crash
             return die
-        self.crash_during(which, mailops, "apply_queued_mutation", effect)
+        self.crash_during(which, commands, "apply_queued_mutation", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())

@@ -436,16 +436,16 @@ def test_idle_with_nothing_new_ends_when_its_time_is_up(world, session):
 
 
 def test_a_connection_dropped_in_idle_raises_at_once(world, session):
-    import mailops
+    from mailmind.bootstrap.mailbox import commands
     session.select("INBOX", readonly=False)
     world.server.drop("IDLE", user=w.ADA)
     t = idling(session, 60)
     t.join(5)
-    assert not t.is_alive() and isinstance(t.got, mailops._UNREACHABLE), t.got
+    assert not t.is_alive() and isinstance(t.got, commands.UNREACHABLE), t.got
 
 
 def test_an_interrupt_ends_an_idle_at_once(world, kind):
-    import mailops
+    from mailmind.bootstrap.mailbox import commands
     s = open_session()
     try:
         s.select("INBOX", readonly=False)
@@ -454,7 +454,7 @@ def test_an_interrupt_ends_an_idle_at_once(world, kind):
         s.interrupt()
         t.join(5)
         assert not t.is_alive()
-        assert t.got is False or isinstance(t.got, mailops._UNREACHABLE), t.got
+        assert t.got is False or isinstance(t.got, commands.UNREACHABLE), t.got
     finally:
         s.shutdown()
 
@@ -469,10 +469,10 @@ def test_a_refused_command_raises_imaplibs_error(world, session):
 
 
 def test_a_dropped_connection_raises_abort_or_oserror(world, session):
-    import mailops
+    from mailmind.bootstrap.mailbox import commands
     session.select("INBOX")
     world.server.drop("UID FETCH")
-    with pytest.raises(mailops._UNREACHABLE):
+    with pytest.raises(commands.UNREACHABLE):
         session.body(uid_of(world, RECEIPT))
 
 
