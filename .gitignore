@@ -44,4 +44,5 @@ __pycache__/
 
 # the frontend's build
 web/node_modules/
+web/lint/node_modules/
 mailmind/http/dist/

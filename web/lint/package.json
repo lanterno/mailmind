@@ -1,0 +1,10 @@
+{
+  "name": "mailmind-typescript-eslint",
+  "private": true,
+  "type": "module",
+  "exports": "./index.js",
+  "dependencies": {
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0"
+  }
+}
