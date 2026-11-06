@@ -44,8 +44,8 @@ def to_sql(spec):
         elif c.kind is Kind.ATTACHMENT:
             where.append("m.has_attach = ?")
             params.append(0 if c.negated else 1)
-        else:                               # a time: a negated one reads as the time itself, as it always has
-            where.append("m.ts < ?" if c.kind is Kind.BEFORE else "m.ts >= ?")
+        else:                               # a time: not after it is before it
+            where.append("m.ts < ?" if (c.kind is Kind.BEFORE) != c.negated else "m.ts >= ?")
             params.append(c.value)
     if positive and negative:
         match = " ".join(positive) + " NOT (" + " OR ".join(negative) + ")"
