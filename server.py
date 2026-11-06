@@ -20,10 +20,6 @@ import email.utils
 import secrets
 import hmac
 import hashlib
-import socket
-import ssl
-import ipaddress
-import http.client
 import imaplib
 import sqlite3
 import threading
@@ -43,7 +39,7 @@ import summarize
 import mailops
 from mailmind.bootstrap import curation
 import manage
-from mailmind.bootstrap.curation import rules
+from mailmind.bootstrap.curation import rules, safe_http
 import views
 from mailmind.content import sanitize
 import compose
@@ -62,10 +58,10 @@ from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
+from mailmind.kernel.when import now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
-from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -90,10 +86,6 @@ _stats_cache = {"data": None, "exp": 0}
 _undo_lock = threading.Lock()            # the undo stack is in the database (undo_entries): it outlives the process
 UNDO_MAX = 25
 PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
-
-
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
 
 
 # ----------------------------------------------------------------------------- sync
@@ -530,28 +522,6 @@ def deep_link(row, wmap=None):
     return provider.resolve({"kind": row["kind"]}).deep_link(
         account=row["account"], message_id=row["message_id"], subject=row["subject"],
         webmail=(wmap or {}).get(row["account"]))
-
-
-def rel_time(iso):
-    if not iso:
-        return ""
-    try:
-        dt = datetime.fromisoformat(iso)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - dt
-        if delta.days == 0:
-            h = delta.seconds // 3600
-            return "just now" if h == 0 else f"{h}h ago"
-        if delta.days == 1:
-            return "yesterday"
-        if delta.days < 7:
-            return f"{delta.days}d ago"
-        if delta.days < 30:
-            return f"{delta.days // 7}w ago"
-        return dt.strftime("%b %d")
-    except Exception:
-        return iso[:10]
 
 
 def rel_time_future(ts):
@@ -2105,9 +2075,6 @@ _CLEANUP_MIN_COUNT = 3
 _CLEANUP_MIN_SCORE = 1.5
 _CLEANUP_LIMIT = 40
 _CLEANUP_SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
-_UNSUB_UA = "MailMind-Unsub/1.0 (+list-unsubscribe one-click)"
-_UNSUB_TIMEOUT = 10
-_UNSUB_READ_CAP = 65536
 _UNSUB_MIN_GAP = 3.0              # >= 3s between ANY two outbound unsubscribes (politeness)
 _unsub_rate = {"last": 0.0, "lock": threading.Lock()}
 
@@ -2125,83 +2092,6 @@ def _parse_list_unsub(raw_bytes):
     except Exception:
         return {"method": "none", "raw": ""}
     return mime.list_unsub(mime.dec(msg.get("List-Unsubscribe")), mime.dec(msg.get("List-Unsubscribe-Post")))
-
-
-def _ip_is_forbidden(ip):
-    """Reject anything that could reach the local network / metadata endpoints (SSRF)."""
-    try:
-        a = ipaddress.ip_address(ip)
-    except Exception:
-        return True
-    if (a.is_private or a.is_loopback or a.is_link_local or a.is_multicast
-            or a.is_reserved or a.is_unspecified):
-        return True
-    if a.version == 4 and a in ipaddress.ip_network("100.64.0.0/10"):   # CGNAT
-        return True
-    if isinstance(a, ipaddress.IPv6Address) and a.ipv4_mapped and _ip_is_forbidden(str(a.ipv4_mapped)):
-        return True
-    return False
-
-
-def _unsub_oneclick_post(url, _redirects=1):
-    """SSRF-hardened RFC 8058 one-click POST. https-only; every resolved A/AAAA vetted; connect to the
-    vetted IP with SNI/Host pinned to the hostname (defeats DNS-rebind between check and connect);
-    <=1 re-vetted redirect; hard timeout; read cap; no cookies/creds/ambient auth. Returns
-    (ok, http_status, reason). Runs OUTSIDE the IMAP gate so a hanging remote can't stall IMAP."""
-    profile.refuse_writes("an unsubscribe request")
-    txguard.refuse_network("an unsubscribe request")     # its DNS lookup included
-    p = urllib.parse.urlparse(url or "")
-    if p.scheme != "https" or not p.hostname:
-        return False, 0, "bad_scheme"
-    host, port = p.hostname, (p.port or 443)
-    try:
-        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except Exception:
-        return False, 0, "dns"
-    vetted = None
-    for family, _t, _pr, _cn, sa in infos:
-        ip = sa[0]
-        if _ip_is_forbidden(ip):
-            return False, 0, "ssrf_blocked"        # ANY resolved IP private → refuse the whole host
-        vetted = (ip, family)
-    if not vetted:
-        return False, 0, "dns"
-    ip, family = vetted
-    body = b"List-Unsubscribe=One-Click"
-    path = (p.path or "/") + (("?" + p.query) if p.query else "")
-    ctx = ssl.create_default_context()
-    raw_sock = None
-    try:
-        raw_sock = socket.socket(family, socket.SOCK_STREAM)
-        raw_sock.settimeout(_UNSUB_TIMEOUT)
-        raw_sock.connect((ip, port))
-        tls = ctx.wrap_socket(raw_sock, server_hostname=host)      # SNI = hostname, socket = vetted IP
-        conn = http.client.HTTPSConnection(host, port, timeout=_UNSUB_TIMEOUT)
-        conn.sock = tls
-        conn.request("POST", path, body=body, headers={
-            "Host": host, "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": str(len(body)), "User-Agent": _UNSUB_UA, "Connection": "close"})
-        resp = conn.getresponse()
-        status = resp.status
-        loc = resp.getheader("Location") if status in (301, 302, 303, 307, 308) else None
-        try:
-            resp.read(_UNSUB_READ_CAP)
-        except Exception:
-            pass
-        conn.close()
-    except Exception:
-        return False, 0, "timeout"
-    finally:
-        try:
-            if raw_sock is not None:
-                raw_sock.close()
-        except Exception:
-            pass
-    if 200 <= status < 300:
-        return True, status, "ok"
-    if loc and _redirects > 0:
-        return _unsub_oneclick_post(urllib.parse.urljoin(url, loc), _redirects - 1)   # re-vetted
-    return False, status, "bad_status"
 
 
 def _unsub_rate_gate():
@@ -2508,7 +2398,7 @@ def cleanup_execute(body):
             method = info["method"]
             if method == "one-click":
                 _unsub_rate_gate()
-                ok, http_status, _reason = _unsub_oneclick_post(info["https_uri"])
+                ok, http_status, _reason = safe_http.one_click_post(info["https_uri"])
                 status = "unsubscribed_oneclick" if ok else "failed"
             elif method == "mailto":
                 _unsub_rate_gate()
