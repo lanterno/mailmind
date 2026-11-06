@@ -133,11 +133,20 @@ then `lint-imports` (import-linter) on the `mailmind` package's layers, then `py
 and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New tests are pytest-native, in the folder of `tests/` they belong to;
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
-`just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
+`just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint, runs its Vitest suites and checks that
 `web/assets/legacy/pure.js` is what `web/src/features/compose` gives; it installs `web/node_modules` from the lockfile if they
 are missing. `just gen-web` writes `pure.js`. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
 writes `web/src/lib/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
 have no schema to generate from: run it when an answer's shape changes, and review the diff.
+
+`web/eslint.config.js` covers `web/src` only: typescript-eslint, `react-hooks` and `jsx-a11y`, each finding an error. A disable sits on its
+line with a reason. Three rules are our own:
+
+- Only `features/mailbox/MailFrame.tsx` may write HTML into the DOM (`innerHTML`, `srcDoc`, `dangerouslySetInnerHTML` and their like).
+- A feature imports another only through its `index.ts`, which holds what the others use (`lint/slices.js`). `app/` and `main.tsx` compose the features and may import any file. A barrel that grows can close a cycle: nothing at a module's top level may read another feature's binding.
+- `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
+
+Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7.
 
 `just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
 brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
