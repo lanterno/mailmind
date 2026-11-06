@@ -441,6 +441,17 @@ def _body_text_of(parsed):
     return _strip_jsonld(t or "")[:_FTS_CAP]
 
 
+RECIPIENT_ROWS_MAX = 5000
+
+
+def set_recipients(c, pk, addrs):
+    """Who this copy of a message went to, one row each (`mailparse.recipient_addrs`). Bounded, since a
+    forged To can be as long as it likes."""
+    c.execute("DELETE FROM message_recipients WHERE message_pk=?", (pk,))
+    c.executemany("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)",
+                  [(pk, a) for a in addrs[:RECIPIENT_ROWS_MAX]])
+
+
 def _recipients_of(parsed):
     """To + Cc as one searchable string (names + addresses), for the to:/cc: operators."""
     return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:2000]

@@ -8,6 +8,7 @@ import re
 import email
 import html
 import imaplib
+from email.parser import BytesHeaderParser
 from email.utils import parsedate_to_datetime
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
@@ -218,6 +219,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
                          "gmail_thread": h.gmail_thread,
                          "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
                          "refs": (msg.get("References") or "").replace("\n", " ").strip(),
+                         "recipient_addrs": mailparse.recipient_addrs(msg),
                          "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:2000]})
     c = store.conn()
     for r in rows:
@@ -246,6 +248,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
         })
         store.set_local_flags(c, pk, **r["flags"])
         store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
+        store.set_recipients(c, pk, r["recipient_addrs"])
         c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
                   (r["in_reply_to"], r["refs"], r["recipients"], pk))
         store.fts_index(c, pk)               # refresh FTS so recipients is searchable immediately
@@ -480,6 +483,7 @@ def _keep_body(c, pk, raw, parsed):
     if parsed["attachments"]:
         c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
     c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))
+    store.set_recipients(c, pk, mailparse.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
     store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
 
 

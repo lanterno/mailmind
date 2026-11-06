@@ -14,7 +14,7 @@ import re
 import urllib.parse
 from email import policy
 from email.header import decode_header
-from email.utils import parseaddr
+from email.utils import getaddresses, parseaddr
 
 _FOLD = re.compile(r"\r?\n[ \t]+")
 
@@ -81,6 +81,13 @@ def dec(value):
         else:
             out.append(part)
     return "".join(out).replace("\r", " ").replace("\n", " ").strip()
+
+
+def recipient_addrs(msg):
+    """Who a compat32 message went to, To and Cc, as bare lowercase addresses. Read before any encoded word
+    is decoded, so a display name can't pass for an address, and a malformed entry costs only itself."""
+    values = [str(_unfold(v)) for field in ("To", "Cc") for v in msg.get_all(field) or []]
+    return sorted({a.strip(".'").lower() for _, a in getaddresses(values, strict=False) if "@" in a})
 
 
 def sender_of(msg):
