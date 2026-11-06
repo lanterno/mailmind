@@ -183,14 +183,13 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
 Pipeline, roughly in data-flow order:
 
 ```
-mailmind.config.json → config.py/accounts.py → ingest.py → mailclass.py → store.py (SQLite)
+mailmind.config.json → config.py/accounts.py → ingest.py → curation's classifier → store.py (SQLite)
                                                                 ↓
                                               summarize.py (Claude API) → server.py + web/
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
-(send), `search.py` (FTS + operator grammar), `threads.py`, `mailparse.py`,
-`sanitize_html.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
+(send), `search.py` (FTS + operator grammar), `threads.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 `search.build` reads a date with no zone at this machine's midnight. `search.visible` leaves snoozed mail out of
@@ -199,10 +198,10 @@ ranking weights, which Ask uses too. All three come from `mailmind.discovery`, b
 however many folders hold it: among the copies the query found, the one in the Inbox, else any but All Mail's
 (`server._in_folders_playing`, by what the last LIST said and else by name).
 
-`mailparse.dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
-it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mailparse.walk` takes an
+`mailmind.content.mime`'s `dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
+it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mime.walk` takes an
 attached email as one part of its message, as a reader does; what it holds isn't the outer message's.
-`mailparse.recipient_addrs` reads To and Cc as bare addresses before any encoded word is decoded, so a name
+`mime.recipient_addrs` reads To and Cc as bare addresses before any encoded word is decoded, so a name
 can't pass for one.
 
 `messages.recipients` is the decoded To and Cc as text, for search. `message_recipients` (migration 35,
@@ -286,8 +285,12 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
   `python3 server.py` uses it.
+- `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
+  mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
+  `text` (what a list shows and what search indexes), `headers` and `quote` (the part of a reply you typed, and the
+  quote after it). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `when` (`now_iso`, `rel_time`) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
@@ -346,8 +349,17 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
   account alone spans nearly everything, and a negation never narrows by itself. `adapters.fts.to_sql` turns one into
   a MATCH and bound SQL, and `search.py` is what the legacy callers ask it through. It is standard library only.
+- `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
+  matcher for the classifier, the Screener and expiry), `expiry`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
+  `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
+  `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
+  `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
+  binds them, and it's how the legacy modules and the command line reach Curation (`curation.cleanup.execute(body)`,
+  `curation.sweeps.sweep(acct)`). Filing still goes through the server's own functions, which `curation.attach` names,
+  since the server may run as `__main__`, and a message's rows through `store`, until the Mailbox holds them. A sweep's
+  `move_verified` is `mailbox.application.filing`. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
-  bootstrap, then http, then the contexts, then platform, then kernel; within each context,
+  bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
   every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
@@ -436,7 +448,7 @@ again for it as it ends.
 - Each names its account (a message's through `mailops.account_of`), or `gates.EVERY_ACCOUNT`
   for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
   MAINTENANCE. A run over every account is not work across accounts: `/api/sweep` goes through
-  `server._each_account`, one job per account on its own gate, in turn. Reconcile
+  `Sweeps._each_account`, one job per account on its own gate, in turn. Reconcile
   (`server._reconcile_folders`) goes further: one job per folder with a `sync_state` row
   (`ingest.reconciled_folders`), so it never holds a gate across folders.
 - Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
@@ -512,7 +524,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
-  which refuses any command not known to only read. `smtpsend.smtp_connect` and `_unsub_oneclick_post` refuse too. `ReadOnlyError` is a
+  which refuses any command not known to only read. `smtpsend.smtp_connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
   member of `mailops._UNREACHABLE`, so a move or a flag change queues as it does offline, and
   both queues' drains wait for a full run. What nothing queues (a draft, a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
@@ -686,7 +698,7 @@ header so the ID stored holds a line break.
 `<meta>` tag that `server.py` substitutes at serve time; the frontend's `api()` helper
 attaches it to every request, GETs included.
 
-Mail bodies render in a sandboxed iframe with a deny-all CSP. `sanitize_html.py` is
+Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.sanitize` is
 defense in depth — **the iframe sandbox is the actual boundary**, so a sanitizer miss
 alone cannot execute script. Preserve that ordering when touching either.
 
@@ -813,24 +825,25 @@ which needs the CSRF token.
 
 ### Classification
 
-`mailclass.py` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
-`RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops.
-`rules.py` layers a learned per-sender/domain keep/block list on top, persisted to
+`curation.domain.classifier` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
+`RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops. It's a pure function of a
+message's headers and the rule book's lists, and `bootstrap.curation.classify` calls it with the rules as they stand.
+`curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, persisted to
 `mailmind_rules.json` — that file is personal data and stays gitignored. The same file
 holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
-`manage.expire_account` from the CLI and by the server's `expire` job hourly (not read-only).
+`Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
-`rules.save` writes the file whole (a temp file, owner-only, renamed over it). A read parses it
-again only when it changed; one that won't parse leaves the last rules read well, so a bad edit
-never stops a sync, and the next save moves it to `backups/` first. The classifier reads
-through `rules.sets()`.
+`curation.adapters.rules_file` (`bootstrap.curation.rules`, the file's one reader) writes it whole (a temp file,
+owner-only, renamed over it). A read parses it again only when it changed; one that won't parse leaves the last
+rules read well, so a bad edit never stops a sync, and the next save moves it to `backups/` first. The classifier
+reads through `rules.sets()`.
 
 A rule change classifies again the stored mail it covers (`ingest.reclassify`, called by whatever calls
 `rules.add` or `rules.remove`): each row a rule decides now or decided before. A row no rule had a say in
 stays as ingest judged it, since not all it read then is kept. An edit of the file by hand reaches only new mail.
 
 Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `list_unsub_method`, through
-`mailparse.list_unsub`), `none` included. `server._resolve_unsub` answers for a sender from the newest message
+`mime.list_unsub`), `none` included. `Unsubscribing.resolve` answers for a sender from the newest message
 that can say: those columns, a stored body, or for older mail the two headers read off the server, within
 `UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
 so a second try after a cleanup's sweep still knows the way.

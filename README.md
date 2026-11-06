@@ -36,7 +36,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    ingest.py                   pull INBOX headers + bodies, skip obvious junk
         │
-   mailclass.py                classify each message (spam / marketing /
+   mailmind/curation/          classify each message (spam / marketing /
         │                      notifications / receipts / personal / protected)
    store.py  →  SQLite (mailmind.db)
         │
@@ -48,7 +48,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
 
 Around that spine sit the client modules: `mailops.py` (IMAP writes),
 `compose.py` + `smtpsend.py` + `outbox.py` (send), `search.py` (FTS + operator
-grammar), `threads.py`, `mailparse.py`, `sanitize_html.py` (the reader's
+grammar), `threads.py`, `mailmind/content/` (reading a message, and the reader's
 whitelist sanitizer), `ics.py` (invites), `realtime.py` (IMAP IDLE), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 

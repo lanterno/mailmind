@@ -24,7 +24,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Markdown body → clean HTML + text multipart** · high value · effort L — New messages still go
   out text/plain only: `compose.build_message` supports `add_alternative(spec["html"])`, but the
   caller sets `html = None` and fills it only for replies/forwards whose original had HTML. Needs
-  a ~120-line stdlib markdown renderer run back through `sanitize_html` (already battle-tested, so
+  a ~120-line stdlib markdown renderer run back through `content.sanitize` (already battle-tested, so
   the safety half is free) plus a Write/Preview toggle over `#cmpBody`. Blocker for inline images.
 - **Inline `cid:` images in outgoing mail** · medium value · effort M — `cid:` handling is inbound
   only (`_CID_IMG` / `_resolve_cids` rewrite to data: URIs when rendering received mail). Outbound,
@@ -33,7 +33,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   body for a cid to reference.
 - **Templates / snippets with `;trigger` expansion** · medium value · effort M — Completely absent:
   no storage file, no route, no compose-time expansion. The pattern to copy exists twice —
-  `views.py` and `rules.py` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
+  `views.py` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
   this is a snippets store plus a keyup expander and `{{placeholder}}` tab-through in `#cmpBody`.
 - **Smart-paste link cleaning** · low value · effort S — No `paste` listener exists in
   the page and no tracking-parameter stripper exists in any module. A pure-client handler
@@ -64,7 +64,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   (BYSETPOS, BYMONTH, BYWEEKNO, BYHOUR, HOURLY) makes `_occurrences` return None and
   `server.upcoming` shows only the series' first date. Ingest keeps an invite's body only for the
   Inbox (`ingest._process` with `with_body`), so an invite filed elsewhere by a server rule is
-  listed once opened. Bodies stored before `mailparse.parse` recorded inline-only calendar parts
+  listed once opened. Bodies stored before `mime.parse` recorded inline-only calendar parts
   keep attachment rows without one; a one-off re-parse of stored bodies containing
   `text/calendar` would list them.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
@@ -102,11 +102,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   senders/domains from the same source `/api/contacts` indexes plus operator names from `search.py`'s
   fixed grammar, and a "this conversation only" scope chip. The `#plist` palette combobox is the
   working precedent for the dropdown mechanics — it is a nav finder, not this.
-- **Incoming rules engine, and create-filter-from-search** · high value · effort L — `rules.py` is a
+- **Incoming rules engine, and create-filter-from-search** · high value · effort L — `curation.domain.rulebook` is a
   one-dimensional verdict list, not an engine: `KEYS = (keep_senders, block_senders, keep_domains,
   block_domains)` and `add(token, verdict)`. There is no condition language, no action verb, no
-  rules table, and no ingest-time evaluation beyond `mailclass.is_junk`. Where v1 hooks in:
-  **evaluate in `ingest.py` immediately after `isj = 1 if mailclass.is_junk(b) else 0`, and express
+  rules table, and no ingest-time evaluation beyond `curation.is_junk`. Where v1 hooks in:
+  **evaluate in `ingest.py` immediately after `isj = 1 if curation.is_junk(b) else 0`, and express
   conditions by reusing `search.build()`'s existing operator grammar** rather than inventing a
   second one — that keeps "create filter from search" a serialization step instead of a translation
   layer. Ship the local-action subset (auto-star / auto-read / auto-label) well before any IMAP
@@ -131,7 +131,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   means ten preview-and-confirm cycles: flood rows are strictly one-at-a-time (`#floodList` delegate
   → `openCleanupPreview`), with no marked set. Wanted: multi-select executing one batched block+sweep
   under a single undo group, and a per-sender AI rationale ("you have never opened one of these 47 in
-  6 months") — `cleanup_senders` is pure SQL `noise_score` today, with no claude call and no
+  6 months") — `Cleanup.senders` is pure SQL `noise_score` today, with no claude call and no
   rationale field.
 - **Gmail multi-label views** · low value · effort M — Carried over from the original phase plan and
   never built. `X-GM-LABELS` is used for **writes** only (archive drops `\Inbox`; the relabel path
@@ -149,7 +149,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 - **Turn the connection pool on by default** · high value · effort M — `pool.py` is complete,
   safety-reviewed and wired into three read call sites (`ingest.fetch_body`, `_live_folder_list`
-  backing the folder rail, and `manage.plan_account` backing `/api/stats`), but `_targets()` reads
+  backing the folder rail, and `Sweeps.plan_stored` backing `/api/stats`), but `_targets()` reads
   `MAILMIND_POOL`, which is unset by default, so every op falls through to a fresh
   `accounts.connect()` + logout — today's ~37s cold open. Remaining: validate against Proton Bridge
   (a bridge branch exists in `pool._take` with its own max-age/max-uses, but `_is_bridge()` excludes
@@ -257,7 +257,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   priority now that the base palette passes AA, but the light theme proved the pattern — one
   body-class override of the `:root` token block is the whole feature.
 - **An email attached to an email** · medium value · effort M — To the `email` package a
-  message/rfc822 part is a container, so `mailparse.extract_part`'s `get_payload(decode=True) or
+  message/rfc822 part is a container, so `mime.extract_part`'s `get_payload(decode=True) or
   b""` gives 0 bytes. The chip shows no size and the download is an empty .eml. `export_eml`
   skips it. Forwarding with files (`server._extract_attachments`) sends it as an empty base64
   message/rfc822 part, which RFC 2046 forbids, and a .eml attached in the composer goes out the
@@ -276,7 +276,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   about 72 columns, with a stray space on each space-stuffed line, and DelSp=yes splits words.
   Search and summaries are barely touched. Another app's flowed draft reopens whole with its soft
   breaks fixed in, then goes out without `format=flowed`. The fix is an RFC 3676 decoder in
-  `mailparse._decode` and `ingest.text_body`. Per line: count the quote depth, then drop one
+  `mime`'s `_decode` and `content.text.text_body`. Per line: count the quote depth, then drop one
   stuffing space, then join a line ending in a space to the next one at the same depth (deleting
   the space when `delsp=yes`). Never join the `-- ` signature line.
 
