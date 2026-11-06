@@ -112,6 +112,8 @@ changes, outages, refusals, crashes, syncs, Undo, Retry and Discard. It runs 12 
 - Console errors fail the test, and so does any content security policy violation, which a
   report-only policy logs at the info level.
 - axe's findings are compared with `tests/golden/browser/axe_baseline.json`, which may only go down.
+- `page.pw.evaluate` has no timeout, so a promise that never settles hangs the run for good. A test waiting on animations leaves out
+  the looping ones (`FADES_DONE`).
 
 These tests are marked `browser` and skipped unless pytest runs with `--browser`.
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
@@ -163,7 +165,7 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/brief` is today's brief, the lists the digest answers (`/next/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week and the new-mail pill, `features/ask` Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
-  So far it does what the page does but for the Screener, the contact card, the Document Hub, the Feed and Paper Trail lanes, curation and cleanup, and swipe, and links back to `/` for those. Unlike the page's,
+  `features/lanes` is the Feed and the Paper Trail, `features/senders` the Screener and the contact card, `features/docs` the Document Hub and `features/curate` the drawer and a sender's cleanup. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. It does what the page does now, and the top bar links to `/` until it takes the page's place. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
   its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
