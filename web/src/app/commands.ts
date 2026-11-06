@@ -9,6 +9,8 @@ import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
 import { snoozeAsk } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, type Mailbox } from "../features/mailbox/useMailbox";
+import { helpOpen } from "../features/status/Help";
+import { reconcile, syncNow } from "../features/status/Status";
 import { shortAddress } from "../lib/text";
 import { setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
@@ -113,6 +115,10 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
       else go({ source: m.account ? { kind: "folder", account: m.account, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
     },
   });
+  add({ id: "help", group: "Commands", label: "Keyboard help", keys: ["?"], hint: "?", run: () => helpOpen.set(true) });
+  add({ id: "settings", group: "Commands", label: "Settings", keys: [","], hint: ",", run: m.openSettings });
+  add({ id: "sync", group: "Commands", label: "Sync now", run: () => void syncNow(m.qc) });
+  add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
   add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
   add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });

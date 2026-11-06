@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { ask, doing, runDo, stopAsking } from "../features/ask/ask";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
+import type { Mailbox } from "../features/mailbox/useMailbox";
+import { helpOpen } from "../features/status/Help";
+import { SoonPill, StatusPill } from "../features/status/Status";
 import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { Icon } from "../lib/ui/Icon";
@@ -59,7 +62,8 @@ export function RailScrim() {
 const searchText = createStore("");
 export const clearSearchBox = () => searchText.set("");
 
-export function TopBar({ source, readOnly }: { source: ListSource | null; readOnly: boolean }) {
+export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
+  const { source } = m;
   const current = theme.useValue();
   const input = useRef<HTMLInputElement>(null);
   const query = source?.kind === "search" ? source.q : "";
@@ -133,9 +137,13 @@ export function TopBar({ source, readOnly }: { source: ListSource | null; readOn
           <Icon name="search" />
         </button>
         <div className="tools">
+          <SoonPill m={m} />
+          <StatusPill m={m} />
           <button className="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose" onClick={() => composing.open({ mode: "new" })}><Icon name="pen" /><span className="tb-lbl"> Compose</span><kbd className="tb-kbd">c</kbd></button>
           <OutboxButton readOnly={readOnly} />
           <a className="tbtn" href="/" title="The current app, with everything this one doesn't do yet">Current app</a>
+          <button className="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help" onClick={() => helpOpen.set(true)}><Icon name="keyboard" /></button>
+          <button className="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings" onClick={m.openSettings}><Icon name="sliders" /></button>
           <button className="tbtn icon" id="themeBtn" aria-label={`Theme: ${THEME_LABEL[current]} — switch to ${THEME_LABEL[nextTheme(current)]}`} title="Day, Dusk or Night" onClick={() => setTheme(nextTheme(current))}>
             <Icon name={current === "day" ? "sun" : current === "dusk" ? "dusk" : "moon"} />
           </button>

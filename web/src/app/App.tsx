@@ -17,6 +17,9 @@ import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { Settings } from "../features/settings/Settings";
+import { Help } from "../features/status/Help";
+import { AccountAlert } from "../features/status/Status";
 import { ConfirmDialog } from "../lib/confirm";
 import { OverLimitDialog } from "../lib/overLimit";
 import { stored } from "../lib/store";
@@ -204,7 +207,8 @@ export function App() {
   };
   return (
     <>
-      <TopBar source={source} readOnly={m.digest?.profile === "read-only"} />
+      <TopBar m={m} readOnly={m.digest?.profile === "read-only"} />
+      <AccountAlert m={m} />
       <main className="split">
         <FolderRail accounts={accounts} aliases={aliases} source={source} />
         <Splitter />
@@ -288,6 +292,8 @@ export function App() {
       />
       <Panels m={m} />
       <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
+      <Help />
+      <Settings />
       <OverLimitDialog />
       <ConfirmDialog />
       <Floats />

@@ -38,3 +38,14 @@ export function usd(micros: number): string {
   const cents = Math.ceil(micros / 10000);
   return `$${Math.floor(cents / 100).toLocaleString("en-US")}.${String(cents % 100).padStart(2, "0")}`;
 }
+
+// How long ago, in the fewest words.
+export function relWhen(iso: string, now = Date.now()): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return "";
+  const s = Math.max(0, (now - at) / 1000);
+  if (s < 90) return "just now";
+  if (s < 5400) return `${Math.round(s / 60)}m ago`;
+  if (s < 172800) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
