@@ -12,7 +12,6 @@ import re
 import dataclasses
 import json
 import time
-import base64
 import secrets
 import threading
 import urllib.parse
@@ -31,7 +30,6 @@ import summarize
 from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
-from mailmind.content import sanitize
 from mailmind.compose.domain import limits
 from mailmind.content import mime
 import summarize_thread
@@ -42,7 +40,7 @@ from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention as verdict
-from mailmind.kernel.when import ago, now_iso, rel_time
+from mailmind.kernel.when import now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import perimeter, profile, settings, sse, webroot
@@ -400,27 +398,6 @@ def deep_link(row, wmap=None):
         webmail=(wmap or {}).get(row["account"]))
 
 
-def rel_time_future(ts):
-    """Human 'wakes ...' label for a future unix timestamp."""
-    try:
-        dt = datetime.fromtimestamp(int(ts)).astimezone()
-        now = datetime.now().astimezone()
-        secs = (dt - now).total_seconds()
-        if secs < 0:
-            return "soon"
-        if secs < 3600:
-            return f"in {int(secs // 60)}m"
-        if dt.date() == now.date():
-            return dt.strftime("today %-I:%M %p")
-        if (dt.date() - now.date()).days == 1:
-            return dt.strftime("tomorrow %-I:%M %p")
-        if (dt.date() - now.date()).days < 7:
-            return dt.strftime("%a %-I:%M %p")
-        return dt.strftime("%b %-d")
-    except Exception:
-        return ""
-
-
 def _attention(r):
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
     return verdict.answers(r["importance"], r["category"], r["action"])
@@ -482,281 +459,6 @@ def do_reconcile(account, dry_run, force=False):
     return {"ok": True, "dry_run": dry_run, "results": results,
             "total_ghosts": sum(r["ghosts"] for r in results),
             "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}
-
-
-# --------------------------------------------------------------------- mailbox mode
-_CID_IMG = re.compile(r"""src\s*=\s*(['"])cid:([^'"]+)\1""", re.I)
-_RASTER = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
-_CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
-
-
-def _resolve_cids(pk, safe_html):
-    """Rewrite src="cid:<id>" -> a data: URI for embedded RASTER images only, so the
-    sandboxed iframe (CSP img-src allows data:) renders logos without any network.
-    Active types (svg/html) are never embedded; oversized sets are left as cid (broken)."""
-    c = store.conn(); raw = store.get_body(c, pk); c.close()
-    if not raw:
-        return safe_html
-    parts = mime.inline_parts(raw)        # {content_id: (content_type, bytes)}
-    if not parts:
-        return safe_html
-    used = [0]
-
-    def sub(m):
-        cid = m.group(2).strip().strip("<>")
-        ent = parts.get(cid)
-        if not ent:
-            return m.group(0)
-        ctype, data = ent
-        if ctype not in _RASTER or used[0] + len(data) > _CID_BUDGET:
-            return m.group(0)
-        used[0] += len(data)
-        b64 = base64.b64encode(data).decode("ascii")
-        return f'src={m.group(1)}data:{ctype};base64,{b64}{m.group(1)}'
-    return _CID_IMG.sub(sub, safe_html)
-
-
-def message_body(pk, load_images, prefetch=False):
-    c = store.conn()
-    row = store.get_message(c, pk)
-    c.close()
-    if not row:
-        return {"ok": False, "error": "not found"}
-    if prefetch:
-        # background cache-warm: NEVER block a foreground op. If the lock is busy or the
-        # body still needs a (slow) IMAP fetch, just skip — the real open will fetch later.
-        if row["body_fetched"]:
-            return {"ok": True, "prefetched": True}     # already warm
-        try:
-            gates.run(row["account"], lambda: ingest.fetch_body(pk),
-                      priority=gates.Priority.MAINTENANCE, wait=False)
-        except gates.Busy:
-            return {"ok": False, "busy": True}
-        return {"ok": True, "prefetched": True}
-    parsed = gates.run(row["account"], lambda: ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
-    if parsed is None:
-        return {"ok": False, "error": "not found"}
-    html, text = parsed.get("html"), parsed.get("text")
-    if html and len(html) > 2_000_000:        # hard body cap before sanitize (DoS)
-        html = html[:2_000_000]
-    safe_html, info = (sanitize.sanitize(html, load_images=load_images)
-                       if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
-    if safe_html and "cid:" in safe_html:
-        safe_html = _resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
-    invite, invite_part = calendar.invites.of(pk, parsed)
-    return {
-        "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": text,
-        "has_html": bool(html), "attachments": parsed["attachments"],
-        "invite": invite, "invite_part": invite_part,
-        "blocked_images": info.get("blocked_images", 0),
-        "blocked_css_urls": info.get("blocked_css_urls", 0),
-        "to": parsed.get("to"), "cc": parsed.get("cc"), "date": parsed.get("date"),
-        "reply_to": parsed.get("reply_to"),
-        "from_name": row["from_name"], "from_addr": row["from_addr"],
-        "subject": row["subject"], "account": row["account"], "thread_id": row["thread_id"],
-        # threading identifiers (from the stored row) so the client can build a reply
-        "message_id": row["message_id"], "in_reply_to": row["in_reply_to"],
-        "references": row["refs"],
-        **compose.drafts.info(row),
-    }
-
-
-def snoozed_in(account, offset, limit):
-    """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
-    c = store.conn()
-    rows = c.execute(
-        """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
-                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
-                  m.snoozed_until, s.importance, s.category, s.action
-           FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-           WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
-           ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
-    total = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
-                        "AND pending_removal IS NULL",
-                      (account,)).fetchone()[0]
-    c.close()
-    items = [{
-        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-        "from_name": r["from_name"] or r["from_addr"],
-        "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-        "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
-        "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
-    } for r in rows]
-    return {"ok": True, "account": account, "folder": "__snoozed__", "items": items, "snoozed": True,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-def muted_in(account, offset, limit):
-    """The 'Muted' virtual view: one row per muted thread (its latest message), so the user
-    can find + unmute. Pure-local read (no IMAP)."""
-    c = store.conn()
-    all_rows = attention.book.list_muted(c, account)
-    c.close()
-    total = len(all_rows)
-    rows = all_rows[offset:offset + limit]
-    items = [{
-        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-        "from_name": r["from_name"] or r["from_addr"],
-        "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-        "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-        "seen": True, "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-        "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-        "ts": r["ts"], "count": r["thread_count"], "muted": True,
-    } for r in rows]
-    return {"ok": True, "account": account, "folder": "__muted__", "items": items, "muted": True,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-def waiting_in(account, offset, limit):
-    """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
-    c = store.conn()
-    all_rows = attention.book.list_waiting(c, account)
-    c.close()
-    total = len(all_rows)
-    rows = all_rows[offset:offset + limit]
-    items = []
-    for r in rows:
-        if r["f_kind"] == "sent":
-            label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
-        else:
-            label = "Awaiting your reply · " + rel_time(r["date_iso"])
-        items.append({
-            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-        "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-            "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-            "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-            "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-            "ts": r["ts"], "count": r["thread_count"], "waiting": True,
-            "waiting_label": label, "kind": r["f_kind"],
-            "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
-        })
-    return {"ok": True, "account": account, "folder": "__waiting__", "items": items, "waiting": True,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-def replylater_in(account, offset, limit):
-    """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
-    c = store.conn()
-    all_rows = attention.book.list_replylater(c, account)
-    c.close()
-    total = len(all_rows)
-    rows = all_rows[offset:offset + limit]
-    items = [{
-        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-        "from_name": r["from_name"] or r["from_addr"],
-        "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-        "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-        "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-        "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-        "ts": r["ts"], "count": r["thread_count"], "replylater": True,
-        "waiting_label": "Reply later",
-    } for r in rows]
-    return {"ok": True, "account": account, "folder": "__replylater__", "items": items, "replylater": True,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-_MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.account "
-               "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
-
-
-def messages_in(account, folder, offset, limit, group=False):
-    if folder == "__snoozed__":
-        return snoozed_in(account, offset, limit)
-    if folder == "__muted__":
-        return muted_in(account, offset, limit)
-    if folder == "__waiting__":
-        return waiting_in(account, offset, limit)
-    if folder == "__replylater__":
-        return replylater_in(account, offset, limit)
-    scan = mailbox.folders.on_open(account, folder) if offset == 0 else {}
-    c = store.conn()
-    if group:
-        # collapse to conversations: one row per thread (the latest message) + rollups
-        rows = c.execute(
-            """WITH fm AS (
-                 SELECT m.*, s.importance, s.summary, s.action, s.category,
-                   ROW_NUMBER() OVER (PARTITION BY m.thread_id ORDER BY m.ts DESC, m.pk DESC) rn,
-                   COUNT(*)        OVER (PARTITION BY m.thread_id) cnt,
-                   SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
-                   MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
-                   MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
-                 FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                 WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
-            + _MUTED_EXCL.format(t="m") + """)
-               SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
-            (account, folder, limit, offset)).fetchall()
-        total = c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
-                          "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
-                          + _MUTED_EXCL.format(t="messages"),
-                          (account, folder)).fetchone()[0]
-    else:
-        rows = c.execute(
-            """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
-                      m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
-                      s.summary, s.action, s.category
-               FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-               WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
-            + _MUTED_EXCL.format(t="m") + """
-               ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
-            (account, folder, limit, offset)).fetchall()
-        total = c.execute("SELECT COUNT(*) FROM messages "
-                          "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
-                          + _MUTED_EXCL.format(t="messages"),
-                          (account, folder)).fetchone()[0]
-    c.close()
-    items = []
-    for r in rows:
-        it = {
-            "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"],
-            "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-            "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-            "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-            "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
-            "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
-            "ts": r["ts"], "account": account,
-        }
-        if group:
-            it.update({"count": r["cnt"], "seen": not r["unread"],
-                       "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
-        items.append(it)
-    return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
-            "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
-
-
-def thread_json(account, thread_id):
-    """All messages in a conversation within an account, oldest->newest, de-duped by
-    Message-ID (so a Gmail INBOX+All-Mail copy shows once)."""
-    if not account or not thread_id:
-        return {"ok": False, "error": "missing account/thread"}
-    c = store.conn()
-    rows = c.execute(
-        """SELECT pk, message_key, folder, from_addr, from_name, subject, date_iso, ts, snippet,
-                  seen, flagged, answered, has_attach, is_junk, message_id
-           FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
-           ORDER BY ts ASC, pk ASC""",
-        (account, thread_id)).fetchall()
-    c.close()
-    items, seen_ids = [], set()
-    for r in rows:
-        key = (r["message_id"] or "").strip() or f"pk:{r['pk']}"
-        if key in seen_ids:
-            continue
-        seen_ids.add(key)
-        items.append({
-            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-        "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-            "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-            "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "answered": bool(r["answered"]),
-            "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]),
-        })
-    reply_pk = items[-1]["pk"] if items else None
-    return {"ok": True, "account": account, "thread_id": thread_id,
-            "items": items, "count": len(items), "reply_pk": reply_pk}
 
 
 _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
@@ -2102,13 +1804,13 @@ class H(BaseHTTPRequestHandler):
                 else:
                     self._json(mailbox.folders.of_account(_fa))
             elif u.path == "/api/messages":
-                self._json(messages_in(q.get("account", [None])[0], q.get("folder", ["INBOX"])[0],
+                self._json(mailbox.queries.messages_in(q.get("account", [None])[0], q.get("folder", ["INBOX"])[0],
                                        int(q.get("offset", ["0"])[0]), int(q.get("limit", ["80"])[0]),
                                        group=(q.get("group", [""])[0] == "thread")))
             elif u.path == "/api/upcoming":     # read-only: invites in fetched mail, nothing fetched
                 self._json(calendar.agenda.upcoming(q.get("account", [None])[0] or None))
             elif u.path == "/api/thread":
-                self._json(thread_json(q.get("account", [None])[0], q.get("thread_id", [None])[0]))
+                self._json(mailbox.queries.thread_json(q.get("account", [None])[0], q.get("thread_id", [None])[0]))
             elif u.path == "/api/search":
                 self._json(discovery.search.answer(q))
             elif u.path == "/api/outbox":
@@ -2151,7 +1853,7 @@ class H(BaseHTTPRequestHandler):
                 parts = u.path.split("/")     # ['', 'api', 'message', '<pk>', 'attachment', '<part_id>']
                 self._serve_attachment(int(parts[3]), parts[5])
             elif u.path.startswith("/api/message/") and u.path.endswith("/body"):
-                self._json(message_body(int(u.path.split("/")[3]), q.get("images", ["0"])[0] == "1",
+                self._json(mailbox.bodies.message_body(int(u.path.split("/")[3]), q.get("images", ["0"])[0] == "1",
                                         prefetch=(q.get("prefetch", ["0"])[0] == "1")))
             elif u.path == "/api/accounts":
                 em = q.get("email", [None])[0]

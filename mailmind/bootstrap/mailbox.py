@@ -20,11 +20,13 @@ from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.imap_names import imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.accounts.domain import provider
+from mailmind.mailbox.application.bodies import Bodies
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
+from mailmind.mailbox.application.queries import Queries
 from mailmind.mailbox.application.realtime import Realtime
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
@@ -190,6 +192,17 @@ class _Attention:
         return attention.snoozing.wake_due()
 
 
+class _Reader:
+    """What another context adds to a message as it opens."""
+    def invite_of(self, pk, parsed):
+        from mailmind.bootstrap import calendar
+        return calendar.invites.of(pk, parsed)
+
+    def draft_info(self, row):
+        from mailmind.bootstrap import compose
+        return compose.drafts.info(row)
+
+
 _directory = _Accounts()
 _attention = _Attention()
 copies = Copies(_open, imap_quote)
@@ -201,3 +214,5 @@ warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
 stats = LiveStats(_directory, _Curation())
 folders = Folders(store, _directory, pool, ingest, _attention)
+queries = Queries(store, _attention, folders)
+bodies = Bodies(store, ingest, _Reader())

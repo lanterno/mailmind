@@ -39,3 +39,24 @@ def ago(ts):
     if s < 86400:
         return f"{s // 3600}h"
     return f"{s // 86400}d"
+
+
+def rel_time_future(ts):
+    """Human 'wakes ...' label for a future unix timestamp."""
+    try:
+        dt = datetime.fromtimestamp(int(ts)).astimezone()
+        now = datetime.now().astimezone()
+        secs = (dt - now).total_seconds()
+        if secs < 0:
+            return "soon"
+        if secs < 3600:
+            return f"in {int(secs // 60)}m"
+        if dt.date() == now.date():
+            return dt.strftime("today %-I:%M %p")
+        if (dt.date() - now.date()).days == 1:
+            return dt.strftime("tomorrow %-I:%M %p")
+        if (dt.date() - now.date()).days < 7:
+            return dt.strftime("%a %-I:%M %p")
+        return dt.strftime("%b %-d")
+    except Exception:
+        return ""
