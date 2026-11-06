@@ -1,4 +1,4 @@
-"""What a queued send is waiting for."""
+"""What a queued send is waiting for, and what's still owed once it has gone out."""
 from datetime import timedelta
 import time
 
@@ -123,3 +123,56 @@ def test_the_upgrade_reads_what_is_already_queued(data_dir):
     kinds = {r["id"]: r["wait_kind"] for r in c.execute("SELECT id, wait_kind FROM outbox")}
     c.close()
     assert kinds == {in_window: "grace", scheduled: "scheduled", backing_off: "backoff", done: "grace"}
+
+
+# -- what it still owes once it has gone out --------------------------------------
+
+def reply(app, world):
+    pk = world.pk("ada-inbox-03-newsletter.eml")
+    return app.post("/api/send", new(mode="reply", in_reply_to_pk=pk)).json["outbox_id"]
+
+
+def test_a_reply_whose_answered_mark_failed_gets_it_on_a_later_try(app, world):
+    oid = reply(app, world)
+    world.server.drop("UID STORE", user=w.ADA)
+    out(app)
+    assert (row(oid)["answered_set"], row(oid)["delivered"], listed(app, oid)["state"]) == (0, 1, "sent")
+    assert listed(app, oid)["error"] is None                   # nothing a person need do
+    later(app)
+    assert (row(oid)["answered_set"], row(oid)["state"]) == (1, "sent")
+    assert len(world.smtp.messages) == 1
+
+
+def test_a_mark_the_server_refuses_isnt_asked_for_again(app, world):
+    oid = reply(app, world)
+    world.server.fail("UID STORE", "NO [CANNOT] not today", user=w.ADA)
+    out(app)
+    assert row(oid)["state"] == "sent"
+
+
+def test_a_draft_copy_that_wouldnt_go_goes_on_a_later_try(app, world, monkeypatch):
+    from mailmind.bootstrap.compose import outbox
+    saved = app.post("/api/draft", new(subject="Held")).json
+    oid = app.post("/api/send", new("k-2", subject="Held", draft_id=saved["draft_id"])).json["outbox_id"]
+
+    def refuses(*a, **kw):
+        raise OSError("gone away")
+    with monkeypatch.context() as m:
+        m.setattr(outbox._copies, "delete_draft_uid", refuses)
+        out(app)
+    assert (row(oid)["draft_deleted"], row(oid)["state"], listed(app, oid)["state"]) == (0, "queued", "sent")
+    later(app)
+    assert (row(oid)["draft_deleted"], row(oid)["state"]) == (1, "sent")
+    assert len(world.smtp.messages) == 1
+
+
+def test_what_gives_up_after_going_out_leaves_it_listed_as_sent(app, world):
+    oid = reply(app, world)
+    world.server.drop("UID STORE", user=w.ADA, times=50)
+    out(app)
+    for _ in range(6):
+        later(app)
+    item = listed(app, oid)
+    assert row(oid)["state"] == "error"
+    assert (item["state"], item["error"], item["unsure"], waits(item)) == ("sent", None, False, (False, False))
+    assert len(world.smtp.messages) == 1
