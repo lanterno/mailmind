@@ -344,6 +344,6 @@ guarded became the checks that with no key AI is off and nothing is sent.
 
 A linear script, now tables: `test_classify`, `test_is_junk` and `test_a_non_ascii_subject_does_not_crash`.
 
-## `tests_sanitize.py`: `tests/security/script_sanitize.py`
+## `tests_sanitize.py`: `tests/security/test_sanitize.py`
 
-A linear script, moved whole. Its assertions keep their order.
+A linear script, now tables: `test_nothing_dangerous_survives`, `test_safe_content_is_kept`, `test_a_raster_data_image_is_kept_when_images_load` and `test_junk_does_not_raise`.
