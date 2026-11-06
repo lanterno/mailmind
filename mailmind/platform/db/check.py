@@ -10,6 +10,8 @@ copy is deleted afterwards.
 A row that points at a row that's gone (a body or summary whose message was deleted while an
 older MailMind left foreign keys off) is the database's, not the upgrade's: the foreign-key check
 counts what was there before the migrations too, and fails only on what they add.
+
+A table a migration retires on purpose (`migrations.RETIRED`) is no loss, and the report says so.
 """
 import collections
 import os
@@ -17,15 +19,15 @@ import pathlib
 import sqlite3
 import tempfile
 
-from mailmind.platform.db import migrate
+from mailmind.platform.db import migrate, migrations
 
 OK, PROBLEM, CANNOT_RUN = 0, 1, 2
 
 
 def check_upgrade(path, say=print):
     """Check the database at `path` and report through `say`. Returns OK when every check passes
-    and every table that was there keeps its row count, PROBLEM otherwise, and CANNOT_RUN when
-    there is no database to check."""
+    and every table that was there keeps its row count (a table the migrations retire aside),
+    PROBLEM otherwise, and CANNOT_RUN when there is no database to check."""
     if not os.path.isfile(path):
         say(f"No database at {path}.")
         return CANNOT_RUN
@@ -44,8 +46,9 @@ def check_upgrade(path, say=print):
     changed = []
     for table in sorted(set(before) | set(after)):
         b, a = before.get(table), after.get(table)
-        note = "" if a == b else ("  new" if b is None else "  CHANGED")
-        if b is not None and a != b:
+        retired = a is None and migrations.RETIRED.get(table, 0) > v_before
+        note = "" if a == b else ("  new" if b is None else "  retired" if retired else "  CHANGED")
+        if b is not None and a != b and not retired:
             changed.append(table)
         say(f"  {table:<{width}}  {_n(b):>10}  {_n(a):>10}{note}")
     say("")

@@ -14,7 +14,7 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
-__all__ = ["BASE_SCHEMA", "LEGACY_COLS", "MIGRATIONS", "add_column"]
+__all__ = ["BASE_SCHEMA", "LEGACY_COLS", "MIGRATIONS", "RETIRED", "add_column"]
 
 add_column = _addcol
 
@@ -37,3 +37,5 @@ MIGRATIONS = [
     (35, m0035_message_recipients.migrate),
     (36, m0036_ai_batches.migrate),
 ]
+
+RETIRED = {"notes": 18}     # a table a migration ended, and that migration's version
