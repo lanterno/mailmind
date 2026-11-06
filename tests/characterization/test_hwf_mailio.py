@@ -837,7 +837,7 @@ def test_hwf_only_a_send_past_the_undo_window_is_listed_as_scheduled(app):
     from mailmind.bootstrap.compose import outbox
     now = int(time.time())                                       # frozen
     ids = [app.post("/api/send", new(idempotency_key=f"k-{n}", **kw)).json["outbox_id"] for n, kw in enumerate((
-        {}, {"send_after": now + outbox.SEND_DELAY + 5}, {"send_after": now + outbox.SEND_DELAY + 6}))]
+        {}, {"send_after": now + outbox.SEND_DELAY}, {"send_after": now + outbox.SEND_DELAY + 1}))]
     listed = {i["id"]: i["scheduled"] for i in app.get("/api/outbox").json["items"]}
     assert [listed[i] for i in ids] == [False, False, True]
 
