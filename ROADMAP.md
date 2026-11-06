@@ -85,7 +85,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     stamp it in the `/api/archive` handler, and **clear it on the undo path** — otherwise the
     column lies after every undo.
   - **Meetings and deadlines in the retrospective** · medium value · effort M — feed `Invites.of()`'s
-    parsed VEVENTs into `summarize_review.py`, which has zero calendar/ics references today.
+    parsed VEVENTs into `Reviews` (`mailmind/assistant/application/review.py`), which has zero calendar/ics references today.
   - **Scheduled delivery of the review** · needs a decision first, not a sub-bullet — it would be the
     first time the server sends mail with no human in the loop.
 - **Tidy that runs itself, with review** · medium value · effort M — `doTidy()` is reachable only
@@ -117,7 +117,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   exists), group-by-sender/type sections in place of the flat row list, and a persistent rail lane so
   the Hub is a place rather than a ⌘K command.
 - **Prose search without the `!` prefix** · medium value · effort S — The hard part is built and
-  proven: `ai_do_plan()` calls the model with `DO_PLAN_SCHEMA`, re-parses the returned filter through
+  proven: `BulkCommands.plan` calls the model with `DO_PLAN_SCHEMA`, re-parses the returned filter through
   `QuerySpec.parse` (the AI never touches SQL), and `runDo()` drops the translated operators into the
   real, editable search box. Missing is the search-shaped front door — bare prose with no prefix
   still goes to `/api/search` as literal FTS — plus a labelled, dismissible "translated" chip so you
@@ -289,7 +289,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   notification preferences and quiet hours — and for the nine `mm_*` localStorage keys that
   currently hold every preference and die with a browser-data clear. Needs the tab strip, a
   preferences block in `mailmind.config.json`, and a read/write route.
-- **Standard-format export from the UI** · medium value · effort S — `export.py` implements
+- **Standard-format export from the UI** · medium value · effort S — `mailmind/platform/db/export.py` implements
   `export_eml()` and `export_mbox()` (the latter with proper mboxrd `From `-escaping), but the only
   HTTP route is `/api/export` → `_serve_db_export()`, a `.db` snapshot, and Settings exposes exactly
   one control, the ⤓ Backup (.db) link. No route references `export_eml`/`export_mbox`. Since `.db`

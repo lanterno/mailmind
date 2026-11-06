@@ -185,12 +185,12 @@ Pipeline, roughly in data-flow order:
 ```
 mailmind.config.json → mailmind.accounts → the Mailbox's Ingest → curation's classifier → mailmind.mailbox's store (SQLite)
                                                                 ↓
-                                              summarize.py (Claude API) → server.py + web/
+                                              mailmind.assistant (Claude API) → server.py + web/
 ```
 
 Around that spine: `mailmind.mailbox` (IMAP writes, IDLE), `mailmind.compose`
-(send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), and the AI modules
-(`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
+(send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), and `mailmind.assistant`
+(everything asked of Claude).
 
 `discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
 a search and of what a command acts on, unless the query says `is:snoozed`. `discovery.BM25` is the one table of
@@ -218,8 +218,8 @@ survives as a CSS specificity hook, not a mode.
 
 ### The `mailmind` package
 
-The refactor's new code grows in `mailmind/`, beside the legacy modules at the repo root. The
-legacy modules may import from it freely; the reverse goes only through `mailmind.bootstrap`.
+The app lives in `mailmind/`, and `server.py` is the one legacy module left at the repo root. It may import from the
+package freely; the reverse goes only through `mailmind.bootstrap`.
 
 - `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
@@ -258,8 +258,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`server._kick`). With AI off, or triage held back
-  by the cost governor (see AI calls), it tries nothing: `summarize.summarize_pending` returns 0
-  at once, and a round that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
+  by the cost governor (see AI calls), it tries nothing: `assistant.triage.summarize_pending` returns 0
+  at once, and a round (`assistant.triage.round`) that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`mailbox.syncing.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
@@ -280,7 +280,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   run goes at a time for each key. A caller that finds one going waits, then reads what it
   stored. The leader reads again before it makes, unless `recheck=False` asks for a fresh one.
   The brief and delta, the review and thread summaries each hold one (`_FLIGHTS`), and so does
-  drafting ahead (`server.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
+  drafting ahead (`assistant.drafting.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
   library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations). It is standard library only, since
@@ -294,10 +294,14 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
-  `application` holds the ports, the `Gateway` and the `CostGovernor`, `domain` what it knows
-  about the models and the features, and
+  `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes),
+  `triage` (`Triage`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
+  `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `draft_ahead` (`DraftAhead`) and
+  `bulk` (`BulkCommands`, a command in words, planned then confirmed). `domain` holds what it knows about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
-  and `DisabledModel`. `mailmind.bootstrap.assistant` binds one and resolves the key.
+  and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how `server.py`, the other
+  contexts and the tests reach the Assistant (`assistant.calls`, `.triage`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
+  The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
 - `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. So far it
   holds `adapters.config_file`, which `application.directory.Directory` reads and writes `mailmind.config.json`
   through. `ConfigFile.read` parses the file again only when its inode, size or modification
@@ -737,7 +741,7 @@ alone cannot execute script. Preserve that ordering when touching either.
 
 ### AI calls
 
-Everything routes through `summarize.call_claude_json(prompt, schema)` (or
+Everything routes through `assistant.calls.call_claude_json(prompt, schema)` (or
 `call_claude` for plain text), which call `mailmind.bootstrap.assistant.gateway()`. The
 Claude API is the only engine (decision D8). The `Gateway` builds each request from
 `mailmind.assistant.domain`: effort where the model takes one (`models.takes_effort`), the
@@ -755,8 +759,8 @@ it. The two share the wire format (`adapters.wire`) and must behave the same:
 `assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
 means no key, never a fall-through to the environment's. With no key the model is
-`DisabledModel`: `summarize.engine()` is `"none"`, and a call raises `AIOff` (re-exported as
-`summarize.AIOff`) before anything is sent.
+`DisabledModel`: `assistant.calls.engine()` is `"none"`, and a call raises `AIOff` (from
+`application.ports`) before anything is sent.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
 
@@ -771,11 +775,11 @@ later, nothing is cached); a successful but unusable reply returns `{}` (the cal
 stores its fallback). No key degrades to no summaries, with nothing sent, rather than
 failing; keep that property. A call that was never sent raises a `NotSent`: `AIOff`, or a
 `HeldBack` from the cost governor (`OverLimit`, `Deferred`). A caller lets `NotSent` through
-(`except _sz.NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
-catch for `summarize.OverLimit` and `summarize.AIOff`, so `H.do_GET` and `H.do_POST` can answer
+(`except NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
+catch for `OverLimit` and `AIOff`, so `H.do_GET` and `H.do_POST` can answer
 them: `OverLimit` as a 402 (below), `AIOff` as a 409 with `ai_off: true`, which the page shows as
 "AI is off" rather than an error to retry. `call_claude` and `call_claude_json` are wrapped by `_noted`,
-which records each call's outcome for `summarize.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
+which records each call's outcome for `assistant.calls.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
 
@@ -791,7 +795,7 @@ pass it on, `other` when the caller names none. With AI off nothing is counted. 
 that fails is logged by class name and never fails the call.
 
 What the ledger holds is read back in three places:
-- `summarize.status()` carries `spent_today_micros`, which the sync menu's AI line shows.
+- `assistant.calls.status()` carries `spent_today_micros`, which the sync menu's AI line shows.
 - `/api/debug/ai?days=N` (30 by default) lists each day by feature.
 - `python3 -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
 
@@ -823,7 +827,7 @@ tests start each one afresh with `forget()`.
 
 A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7): `BATCH_MIN`
 messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
-`summarize.batch_submit` sends it and `batch_collect` brings the answers in, both from `assess_round`, which
+`assistant.triage.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
 collects first since that sends no mail and the answers are paid for. `python3 -m mailmind assess --batch` does
 the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
 did; a batch already out is still brought in.

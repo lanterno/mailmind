@@ -40,7 +40,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │                      notifications / receipts / personal / protected)
    mailmind/mailbox/ store  →  SQLite (mailmind.db)
         │
-   summarize.py                summarize + score importance 1–5 with Claude
+   mailmind/assistant/         summarize + score importance 1–5 with Claude
         │
    server.py  +  web/ (the page)        the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
@@ -50,7 +50,7 @@ Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP
 `mailmind/compose/` (send), `mailmind.discovery` (FTS + operator
 grammar), `mailmind/content/` (reading a message, and the reader's
 whitelist sanitizer), `mailmind/calendar/` (invites), and
-the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
+`mailmind/assistant/` (everything asked of Claude).
 
 The app is one view: a real folder-and-account client whose Inbox opens on
 today's AI brief. Curation tools (sweep junk, keep/block rules, reconcile, audit)
