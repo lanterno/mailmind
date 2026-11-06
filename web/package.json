@@ -1,0 +1,11 @@
+{
+  "name": "mailmind-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "8.3.6"
+  }
+}
