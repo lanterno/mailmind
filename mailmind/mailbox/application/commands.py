@@ -42,7 +42,7 @@ def _request_id(mutation_id):
 
 class MailCommands:
     UNREACHABLE = UNREACHABLE
-    MAX_ATTEMPTS = 5
+    MAX_ATTEMPTS = 101      # about a day of tries, as the backoff goes: an outage isn't a reason to put mail back
     FILE_WAIT = 2.5         # seconds a click waits for the account's gate before the worker takes it over
     _BACKOFF_BASE = 20      # secs; doubles per attempt
     _BACKOFF_CAP = 900
