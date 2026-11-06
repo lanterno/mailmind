@@ -6,14 +6,16 @@ threads into a short prose retrospective plus up to 3 "start next week with" sug
 `reviews` by (account set + local date), so the cost is paid once a day and the lists are
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.
 """
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 import json
+from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform.workers.singleflight import SingleFlight
 
 WEEK_SECONDS = 7 * 86400
@@ -47,23 +49,64 @@ YOU'RE WAITING ON A REPLY FROM:
 """
 
 
+class Stats(TypedDict):
+    sent: int
+    received: int
+    by_bucket: dict[str, int]
+    needs_you: int
+    waiting_on: int
+    reply_later: int
+    cleaned: int
+
+
+class Needed(TypedDict):
+    """A message that still needs you."""
+    pk: int
+    key: int | None
+    folder: str
+    account: str
+    thread_id: str | None
+    who: str
+    subject: str
+    importance: int
+    action: str
+
+
+class Awaited(TypedDict):
+    """A thread you're waiting on. One whose thread has no row names no message."""
+    account: str
+    thread_id: str
+    pk: int | None
+    key: int | None
+    folder: str | None
+    subject: str
+    to: str
+    sent_ts: int
+
+
+class Retrospective(TypedDict):
+    narrative: str
+    next: list[str]
+
+
 class Reviews:
-    def __init__(self, calls: Calls, answers, connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
         self._calls = calls
         self._answers = answers
         self._connect = connect
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
-    def _now(self):
+    def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _acct_clause(self, accounts_set, col="account"):
+    def _acct_clause(self, accounts_set: Collection[str], col: str = "account") -> tuple[str, list[str]]:
         if not accounts_set:
             return "", []
         return " AND %s IN (%s) " % (col, ",".join("?" for _ in accounts_set)), list(accounts_set)
 
-    def _aggregate(self, c, accounts_set, since_ts):
+    def _aggregate(self, c: Connection, accounts_set: Collection[str],
+                   since_ts: float) -> tuple[Stats, list[Needed], list[Awaited]]:
         """All deterministic — pure local SQL. Returns (stats dict, needs list, waiting list)."""
         ac, ap = self._acct_clause(accounts_set, "m.account")
         ac2, ap2 = self._acct_clause(accounts_set, "account")
@@ -75,7 +118,7 @@ class Reviews:
             "SELECT COUNT(*) FROM messages WHERE folder='INBOX' AND ts>=?" + ac2,
             [since_ts, *ap2]).fetchone()[0]
         # received breakdown by bucket (what kind of mail arrived)
-        by_bucket = {}
+        by_bucket: dict[str, int] = {}
         for r in c.execute(
                 "SELECT bucket, COUNT(*) n FROM messages WHERE folder='INBOX' AND ts>=?" + ac2
                 + " GROUP BY bucket", [since_ts, *ap2]):
@@ -92,11 +135,11 @@ class Reviews:
             f"  AND {attention.needs_you_sql()} "
             "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
             + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, TOP_OPEN]).fetchall()
-        needs = [{"pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-                  "account": r["account"], "thread_id": r["thread_id"],
-                  "who": r["from_name"] or r["from_addr"] or "someone",
-                  "subject": r["subject"] or "(no subject)",
-                  "importance": r["importance"], "action": r["action"] or ""} for r in needs_rows]
+        needs: list[Needed] = [{"pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+                                "account": r["account"], "thread_id": r["thread_id"],
+                                "who": r["from_name"] or r["from_addr"] or "someone",
+                                "subject": r["subject"] or "(no subject)",
+                                "importance": r["importance"], "action": r["action"] or ""} for r in needs_rows]
 
         # who the person is waiting on — SENT-no-reply follow-ups only (kind='sent'; you replied, no answer
         # yet). kind='received' is the inverse (they're waiting on you) and is already in the `needs` list.
@@ -110,11 +153,11 @@ class Reviews:
             "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "
             "WHERE f.state='due' AND f.kind='sent'" + fac
             + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, TOP_OPEN]).fetchall()
-        waiting = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["pk"],
-                    "key": r["message_key"], "folder": r["folder"],
-                    "subject": r["subject"] or "(no subject)",
-                    "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
-                    "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
+        waiting: list[Awaited] = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["pk"],
+                                   "key": r["message_key"], "folder": r["folder"],
+                                   "subject": r["subject"] or "(no subject)",
+                                   "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
+                                   "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
 
         replylater = c.execute(
             "SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='replylater'" + fac,
@@ -129,20 +172,20 @@ class Reviews:
         except Exception:
             cleaned = 0
 
-        stats = {"sent": sent, "received": received, "by_bucket": by_bucket,
-                 "needs_you": len(needs), "waiting_on": len(waiting), "reply_later": replylater,
-                 "cleaned": cleaned}
+        stats: Stats = {"sent": sent, "received": received, "by_bucket": by_bucket,
+                        "needs_you": len(needs), "waiting_on": len(waiting), "reply_later": replylater,
+                        "cleaned": cleaned}
         return stats, needs, waiting
 
-    def _fingerprint(self, stats, needs, waiting):
+    def _fingerprint(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]]) -> str:
         """The week as reviewed: its counts, and the threads that need you or wait on others, named by
         account and thread so a renumbered folder changes nothing."""
-        def threads(items):
+        def threads(items: Iterable[Mapping[str, Any]]) -> str:
             return fingerprint.of(f'{i["account"]}|{i["thread_id"]}' for i in items)
         counts = "%d:%d:%d:%d" % (stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"])
         return f"{counts}|{threads(needs)}|{threads(waiting)}"
 
-    def _fallback(self, stats, needs, waiting):
+    def _fallback(self, stats: Stats, needs: Sequence[Needed], waiting: Sequence[Awaited]) -> Retrospective:
         n = (f"In the last 7 days you sent {stats['sent']} message"
              + ("s" if stats["sent"] != 1 else "")
              + f" and {stats['received']} came in. "
@@ -153,29 +196,32 @@ class Reviews:
         nxt = [f"Reply to {x['who']} — {x['subject']}" for x in needs[:3]]
         return {"narrative": n, "next": nxt}
 
-    def _clean(self, obj):
-        narrative = str((obj or {}).get("narrative") or "")[:1400]
-        nxt = [str(x)[:160] for x in ((obj or {}).get("next") or []) if isinstance(x, str)][:3]
+    def _clean(self, obj: Mapping[str, Any]) -> Retrospective:
+        narrative = str(obj.get("narrative") or "")[:1400]
+        told: list[Any] = obj.get("next") or []
+        nxt = [str(x)[:160] for x in told if isinstance(x, str)][:3]
         return {"narrative": narrative, "next": nxt}
 
-    def _items_now(self, c, items):
+    def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         """A stored list, as the page reads it: each with the pk its message has now. The pk it had says
         nothing after a renumber. One whose message has gone is left out, and one that named no message
         (a follow-up whose thread has no row) stays as it was."""
-        now = []
+        now: list[dict[str, Any]] = []
         for item in items:
             pk = self._mail.pk_now(c, item["key"], item["folder"]) if item["key"] else None
             if pk is not None or not item["key"]:
                 now.append({**item, "pk": pk})
         return now
 
-    def _result(self, stats, needs, waiting, ai, model, created_at, cached, stale, since_ts):
+    def _result(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]],
+                ai: Retrospective, model: str, created_at: str, cached: bool, stale: bool,
+                since_ts: float) -> dict[str, Any]:
         return {"ok": True, "narrative": ai["narrative"], "next": ai["next"],
                 "stats": stats, "needs": needs, "waiting": waiting,
                 "week_start": datetime.fromtimestamp(since_ts, timezone.utc).isoformat(),
                 "model": model, "generated": created_at, "cached": cached, "stale": stale}
 
-    def build(self, accounts_set, force=False, generate=True):
+    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
         """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
@@ -188,7 +234,7 @@ class Reviews:
         c.close()
         fp = self._fingerprint(stats, needs, waiting)
 
-        def stored(row):
+        def stored(row: Row) -> Result:
             c = self._connect()
             try:
                 stored_needs = self._items_now(c, json.loads(row["needs_json"]))
@@ -204,7 +250,7 @@ class Reviews:
         if not generate:
             return {"ok": True, "missing": True}, 200
 
-        def read():
+        def read() -> Result | None:
             c = self._connect()
             try:
                 row = self._answers.get_review(c, accounts, day)
@@ -212,7 +258,7 @@ class Reviews:
                 c.close()
             return stored(row) if row else None
 
-        def make():
+        def make() -> Result:
             bl = ", ".join(f"{k}: {v}" for k, v in sorted(stats["by_bucket"].items(), key=lambda kv: -kv[1])[:5])
             stats_txt = (f"Sent: {stats['sent']}\nReceived in inbox: {stats['received']} ({bl})\n"
                          f"Still need your reply: {stats['needs_you']}\n"
@@ -226,7 +272,7 @@ class Reviews:
             prompt = _PROMPT.format(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
             try:
                 obj = self._calls.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
-                ai = self._clean(obj)
+                ai: Retrospective = self._clean(obj)
                 model = self._calls.model_label()
                 # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is
                 # a few sentences; anything shorter falls back to the deterministic narrative (still useful).

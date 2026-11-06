@@ -5,7 +5,9 @@ feature that made it."""
 import contextlib
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import date, timedelta
+from typing import Any, TypedDict
 
 from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import (BatchResult, LanguageModel, ModelError, NotSent, Prompt,
@@ -14,6 +16,17 @@ from mailmind.assistant.domain import features, models, pricing
 from mailmind.assistant.domain.schema import structured
 
 MAX_TOKENS = 16000                 # a ceiling, not a target; adaptive thinking counts against it
+
+
+class FeatureCost(TypedDict):
+    calls: int
+    cost_micros: int
+
+
+class DayCost(FeatureCost):
+    """One local day: its calls and cost in micro-dollars, in all and by feature."""
+    day: str
+    features: dict[str, FeatureCost]
 
 
 def local_day(ts: float) -> str:
@@ -34,7 +47,7 @@ class Gateway:
         """False when AI is off: there is no key, and every call raises AIOff unsent."""
         return self._model().enabled
 
-    def ask(self, text: str, schema: dict | None = None, *, feature: str, model: str | None = None,
+    def ask(self, text: str, schema: dict[str, Any] | None = None, *, feature: str, model: str | None = None,
             effort: str | None = None) -> Reply:
         """Send `text` as one user turn to `model` (the default one unless named), with structured
         output when `schema` is given, at `effort` (medium unless named) where the model takes
@@ -60,13 +73,13 @@ class Gateway:
         self._count(feature, name, reply.model, "refused" if reply.refused else "ok", reply.usage)
         return reply
 
-    def _prompt(self, text: str, name: str, schema: dict | None, effort: str | None, fallback: bool) -> Prompt:
+    def _prompt(self, text: str, name: str, schema: dict[str, Any] | None, effort: str | None, fallback: bool) -> Prompt:
         return Prompt(text=text, model=name, max_tokens=MAX_TOKENS,
                       schema=None if schema is None else structured(schema),
                       effort=(effort or models.EFFORT) if models.takes_effort(name) else None,
                       fallback=fallback)
 
-    def submit_batch(self, requests: list[tuple[str, str]], schema: dict | None = None, *, feature: str,
+    def submit_batch(self, requests: list[tuple[str, str]], schema: dict[str, Any] | None = None, *, feature: str,
                      model: str | None = None, effort: str | None = None) -> str:
         """Send each (custom id, text) as one request of one batch, and return the batch's id. Never
         with the refusal fallback, which batches reject. Its cost is counted when its answers are in;
@@ -94,7 +107,7 @@ class Gateway:
         name = model or models.DEFAULT
         lm = self._model()
         results = lm.batch_results(batch_id, name)
-        tally: dict[tuple[str, str], list] = {}
+        tally: dict[tuple[str, str], list[int]] = {}
         for r in results:
             reply = r.reply
             if reply is None:
@@ -129,12 +142,12 @@ class Gateway:
         return self._governor.held_back(features.kind(feature), feature, model or models.DEFAULT,
                                         self._model())
 
-    def _admitted(self, feature, name, lm):
+    def _admitted(self, feature: str, name: str, lm: LanguageModel) -> AbstractContextManager[None]:
         if self._governor is None:
             return contextlib.nullcontext()
         return self._governor.call(features.kind(feature), feature, name, lm)
 
-    def _heard(self, feature, name, lm, error):
+    def _heard(self, feature: str, name: str, lm: LanguageModel, error: ModelError | None) -> None:
         if self._governor is not None:
             self._governor.heard(feature, name, lm, error)
 
@@ -158,12 +171,12 @@ class Gateway:
         """What today's calls cost so far, in micro-dollars."""
         return self._ledger.spent(local_day(self._clock())) if self._ledger else 0
 
-    def usage(self, days: int = 30) -> list[dict]:
+    def usage(self, days: int = 30) -> list[DayCost]:
         """Each of the last `days` local days, newest first: its calls and cost, in micro-dollars,
         in all and by feature. A day without calls is there with zeros."""
         today = date.fromtimestamp(self._clock())
         wanted = [(today - timedelta(days=i)).isoformat() for i in range(max(1, days))]
-        out = {d: {"day": d, "calls": 0, "cost_micros": 0, "features": {}} for d in wanted}
+        out: dict[str, DayCost] = {d: {"day": d, "calls": 0, "cost_micros": 0, "features": {}} for d in wanted}
         for row in (self._ledger.days(wanted[-1]) if self._ledger else []):
             day = out.get(row["day"])
             if day is None:

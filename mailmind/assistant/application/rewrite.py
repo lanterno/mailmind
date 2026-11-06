@@ -4,7 +4,7 @@ input is UNTRUSTED data — the prompt forbids following instructions inside it;
 text only.
 """
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import NotSent, Result
 
 REWRITE_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
 _OPS = {
@@ -31,7 +31,7 @@ class Rewriter:
     def __init__(self, calls: Calls):
         self._calls = calls
 
-    def rewrite(self, text, op, lang="English"):
+    def rewrite(self, text: str | None, op: str, lang: str = "English") -> Result:
         """-> (result_dict, http_code)."""
         text = (text or "").strip()
         if not text:
@@ -48,7 +48,7 @@ class Rewriter:
         except Exception as e:
             print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "rewrite unavailable", "retry": True}, 502
-        out = (obj.get("text") or "").strip() if isinstance(obj, dict) else ""
+        out = (obj.get("text") or "").strip()
         if not out:
             return {"ok": False, "error": "no rewrite produced", "retry": True}, 502
         return {"ok": True, "text": out[:12000], "op": op}, 200

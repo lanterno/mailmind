@@ -14,10 +14,12 @@ Read-only: only SELECTs, no IMAP fetch (never blocks), no mutation, no SMTP. Sha
 from datetime import datetime, timezone
 import re
 import sqlite3
+from typing import Any
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import Connect, Mail, NotSent, Result
+from mailmind.kernel.parsed import is_list
+from mailmind.kernel.row import Row
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
 CAND_LIMIT = 40         # FTS rows pulled before body-coverage selection
@@ -54,28 +56,28 @@ _PROMPT = (
 
 
 class Asker:
-    def __init__(self, calls: Calls, connect, mail: Mail, bm25):
+    def __init__(self, calls: Calls, connect: Connect, mail: Mail, bm25: str):
         self._calls = calls
         self._connect = connect
         self._mail = mail
         self._bm25 = bm25
 
-    def _terms(self, question):
+    def _terms(self, question: str) -> list[str]:
         """Content terms of an NL question: trailing punctuation + stopwords dropped, FTS-quoted.
         Returns a list of quoted phrase tokens (each safe to OR into a MATCH)."""
-        out = []
+        out: list[str] = []
         for w in re.findall(r"[^\s]+", question):
             t = re.sub(r"^[^\w@.]+|[^\w@.]+$", "", w)        # trim leading/trailing punctuation
             if len(t) >= 2 and t.lower() not in _STOP and len(out) < 12:
                 out.append('"' + t.replace('"', '""') + '"')
         return out
 
-    def _fts_match(self, question):
+    def _fts_match(self, question: str) -> str:
         """OR-join the content terms into one FTS5 MATCH string (recall-friendly for Q&A — FTS5's
         implicit operator is AND, which is far too strict for a question). '' → no usable terms."""
         return " OR ".join(self._terms(question))
 
-    def _scope(self, account):
+    def _scope(self, account: str | None) -> tuple[str, list[str]]:
         """(clause, params) confining retrieval to the validated mailbox(es). 'all'/empty →
         every enabled account (bound as IN params, never widened by anything in the question)."""
         if account and account != "all":
@@ -85,7 +87,7 @@ class Asker:
             return "1=0", []                                  # no accounts → match nothing
         return "m.account IN (%s)" % ",".join("?" * len(emails)), emails
 
-    def ask(self, account, question):
+    def ask(self, account: str | None, question: str | None) -> Result:
         question = (question or "").strip()[:MAX_QUESTION]
         if not question:
             return {"ok": False, "error": "question required"}, 400
@@ -100,14 +102,14 @@ class Asker:
                    "LEFT JOIN summaries s ON s.message_pk=m.pk "
                    f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
                    "ORDER BY score ASC, m.ts DESC LIMIT ?")
-            args = [match, *acct_params, CAND_LIMIT]
+            args: list[str | int] = [match, *acct_params, CAND_LIMIT]
         else:                                                 # no content terms → recent mail
             sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
                    f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
             args = [*acct_params, CAND_LIMIT]
         c = self._connect()
         try:                                                  # finally-close: release the conn on ANY error, not just OperationalError
-            once = set()                                      # a message counts once, however many folders hold it
+            once: set[int] = set()                            # a message counts once, however many folders hold it
             rows = [r for r in c.execute(sql, args).fetchall()
                     if not ((r["message_key"] or -r["pk"]) in once or once.add(r["message_key"] or -r["pk"]))]
         except sqlite3.OperationalError:
@@ -122,7 +124,9 @@ class Asker:
                     "generated": datetime.now(timezone.utc).isoformat()}, 200
 
         # body-coverage cascade + bounded packing; only packed pks are citable
-        blocks, by_pk, total = [], {}, 0
+        blocks: list[str] = []
+        by_pk: dict[int, Row] = {}
+        total = 0
         for r in rows:
             if len(blocks) >= READ_MAX or total >= CAP_TOTAL:
                 break
@@ -152,16 +156,15 @@ class Asker:
         except Exception:
             return {"ok": False, "error": "ask unavailable", "retry": True}, 502
 
-        answer = (str(obj.get("answer")) if isinstance(obj, dict) and obj.get("answer") else "").strip()[:4000]
+        answer = (str(obj.get("answer")) if obj.get("answer") else "").strip()[:4000]
         if not answer:
             return {"ok": False, "error": "ask unavailable", "retry": True}, 502
 
         # clamp citations to what was both account-scoped AND actually shown to the model
         citable = set(by_pk)
-        raw = obj.get("cited_pks") if isinstance(obj, dict) else None
-        if not isinstance(raw, list):
-            raw = []
-        cited = []
+        held = obj.get("cited_pks")
+        raw: list[Any] = held if is_list(held) else []
+        cited: list[int] = []
         for p in raw:
             try:
                 pk = int(p)

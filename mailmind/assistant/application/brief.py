@@ -5,14 +5,17 @@ caches it keyed on (sorted enabled-account set + local date) so the daily cost i
 and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap. The row
 text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks (never trusted).
 """
+from collections.abc import Collection, Iterable, Mapping
 from datetime import datetime, timezone
 import json
+from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
+from mailmind.kernel.parsed import is_object
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform.workers.singleflight import SingleFlight
 
 TOP_N = 40
@@ -80,24 +83,47 @@ New items (newest first, {count} total):
 """
 
 
+class Group(TypedDict):
+    label: str
+    count: int
+    pks: list[int]
+
+
+class StoredGroup(TypedDict):
+    """A group as a brief keeps it: each message as [its key, the folder it was read from]."""
+    label: str
+    messages: list[list[Any]]
+
+
+class Card(TypedDict):
+    narrative: str
+    groups: list[Group]
+
+
+class DeltaItem(TypedDict):
+    who: str
+    gist: str
+    importance: int
+
+
 class Briefs:
-    def __init__(self, calls: Calls, answers, connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
         self._calls = calls
         self._answers = answers
         self._connect = connect
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
-    def _now(self):
+    def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _top_rows(self, c, accounts_set, n=TOP_N):
+    def _top_rows(self, c: Connection, accounts_set: Collection[str], n: int = TOP_N) -> list[Row]:
         sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
                "s.summary, s.importance, s.category, s.action "
                "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
                "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
                "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
-        params = []
+        params: list[str | int] = []
         if accounts_set:
             sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts_set)
             params += list(accounts_set)
@@ -105,24 +131,24 @@ class Briefs:
         params.append(n)
         return c.execute(sql, params).fetchall()
 
-    def _accounts_key(self, accounts_set):
+    def _accounts_key(self, accounts_set: Iterable[str]) -> str:
         return ",".join(sorted(accounts_set))
 
-    def _today(self):
+    def _today(self) -> str:
         return datetime.now().astimezone().date().isoformat()   # rolls at LOCAL midnight
 
-    def _fingerprint(self, rows):
+    def _fingerprint(self, rows: Iterable[Row]) -> str:
         """The messages a brief or a delta was made from, by Message-ID."""
         return fingerprint.of(r["message_id"] for r in rows)
 
-    def _fallback(self, rows):
+    def _fallback(self, rows: list[Row]) -> Card:
         """Deterministic narrative + groups straight from the rows — used when Claude is flaky,
         so a bad reply is cached once rather than retried forever."""
-        by_cat = {}
+        by_cat: dict[str, list[int]] = {}
         for r in rows:
             by_cat.setdefault(r["category"] or "other", []).append(r["pk"])
         need = [r["pk"] for r in rows if attention.needs_you(r["importance"], r["category"], r["action"])]
-        groups = []
+        groups: list[Group] = []
         if need:
             groups.append({"label": "Needs a reply", "count": len(need), "pks": need[:60]})
         for cat, pks in sorted(by_cat.items(), key=lambda kv: -len(kv[1]))[:5]:
@@ -132,7 +158,7 @@ class Briefs:
                      + f". Grouped into {len(groups)} buckets below.")
         return {"narrative": narrative, "groups": groups}
 
-    def _trim_narrative(self, s, cap=1500):
+    def _trim_narrative(self, s: str | None, cap: int = 1500) -> str:
         """A 3-5 sentence prose brief is ~500-1200 chars; the old hard [:800] cut it mid-word
         ("…mimicking syste"). Keep it whole under a generous cap; only if a runaway reply
         exceeds it, end on the last complete sentence (never mid-word), then ellipsize."""
@@ -146,30 +172,32 @@ class Briefs:
         sp = cut.rfind(" ", int(cap * 0.5))      # a word boundary in the BACK half only (never collapse to a
         return (cut[:sp] if sp > 0 else cut).rstrip() + "…"   # first-half space; else hard-cut at the cap)
 
-    def _clean(self, obj, valid_pks):
+    def _clean(self, obj: Mapping[str, Any], valid_pks: Collection[int]) -> tuple[str, list[Group]]:
         """Validate/clamp the model output; intersect pks with real ids (never trust invented ids)."""
         narrative = self._trim_narrative(str(obj.get("narrative") or ""))
-        groups = []
-        for g in (obj.get("groups") or [])[:6]:
-            if not isinstance(g, dict):
+        groups: list[Group] = []
+        told: list[Any] = obj.get("groups") or []
+        for g in told[:6]:
+            if not is_object(g):
                 continue
-            pks = [p for p in (g.get("pks") or []) if isinstance(p, int) and p in valid_pks][:80]
+            named: list[Any] = g.get("pks") or []
+            pks = [p for p in named if isinstance(p, int) and p in valid_pks][:80]
             if not pks:
                 continue
             groups.append({"label": str(g.get("label") or "")[:40], "count": len(pks), "pks": pks})
         return narrative, groups
 
-    def _stored_groups(self, groups, rows):
+    def _stored_groups(self, groups: Iterable[Group], rows: Iterable[Row]) -> list[StoredGroup]:
         """The groups as stored: each message by its key and the folder it was read from, since a pk
         doesn't last."""
         where = {r["pk"]: [r["message_key"], r["folder"]] for r in rows}
         return [{"label": g["label"], "messages": [where[p] for p in g["pks"]]} for g in groups]
 
-    def _groups_now(self, groups_json):
+    def _groups_now(self, groups_json: str) -> list[Group]:
         """A stored brief's groups, as the page reads them: by the pks their messages have now."""
         c = self._connect()
         try:
-            groups = []
+            groups: list[Group] = []
             for g in json.loads(groups_json):
                 pks = [p for p in (self._mail.pk_now(c, *m) for m in g["messages"]) if p is not None]
                 groups.append({"label": g["label"], "count": len(pks), "pks": pks})
@@ -177,11 +205,13 @@ class Briefs:
             c.close()
         return groups
 
-    def _result(self, narrative, groups, model, created_at, cached, stale):
+    def _result(self, narrative: str, groups: list[Group], model: str, created_at: str, cached: bool,
+                stale: bool) -> dict[str, Any]:
         return {"ok": True, "narrative": narrative, "groups": groups, "model": model,
                 "generated": created_at, "cached": cached, "stale": stale}
 
-    def _delta_rows(self, c, accounts_set, since_ts, n=DELTA_TOP_N):
+    def _delta_rows(self, c: Connection, accounts_set: Collection[str], since_ts: int,
+                    n: int = DELTA_TOP_N) -> list[Row]:
         sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
                "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
                "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
@@ -191,7 +221,7 @@ class Briefs:
                "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
                "AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND m.ts > ? "
                "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
-        params = [since_ts]
+        params: list[str | int] = [since_ts]
         if accounts_set:
             sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts_set)
             params += list(accounts_set)
@@ -199,11 +229,12 @@ class Briefs:
         params.append(n)
         return c.execute(sql, params).fetchall()
 
-    def _clean_delta(self, obj):
+    def _clean_delta(self, obj: Mapping[str, Any]) -> tuple[str, list[DeltaItem]]:
         headline = str(obj.get("headline") or "")[:300]
-        items = []
-        for it in (obj.get("items") or [])[:DELTA_TOP_N]:
-            if not isinstance(it, dict):
+        items: list[DeltaItem] = []
+        told: list[Any] = obj.get("items") or []
+        for it in told[:DELTA_TOP_N]:
+            if not is_object(it):
                 continue
             try:
                 imp = int(it.get("importance") or 2)
@@ -213,14 +244,14 @@ class Briefs:
                           "gist": str(it.get("gist") or "")[:120], "importance": imp})
         return headline, items
 
-    def _delta_fallback(self, rows):
+    def _delta_fallback(self, rows: list[Row]) -> tuple[str, list[DeltaItem]]:
         """Deterministic headline + items — caches a usable card once when Claude's reply is unusable."""
-        items = [{"who": (r["from_name"] or r["from_addr"] or "someone")[:60],
-                  "gist": (r["subject"] or "(no subject)")[:120], "importance": r["importance"]}
-                 for r in rows[:DELTA_TOP_N]]
+        items: list[DeltaItem] = [{"who": (r["from_name"] or r["from_addr"] or "someone")[:60],
+                                   "gist": (r["subject"] or "(no subject)")[:120], "importance": r["importance"]}
+                                  for r in rows[:DELTA_TOP_N]]
         return f"{len(rows)} new since you last looked.", items
 
-    def build_delta(self, accounts_set, since_ts, generate=True):
+    def build_delta(self, accounts_set: Iterable[str] | None, since_ts: int, generate: bool = True) -> Result:
         """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count).
         With generate=False it only reads: nothing stored yet -> {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
@@ -234,7 +265,7 @@ class Briefs:
         # window stays free to read again.
         accounts, since, fp = self._accounts_key(accounts_set), int(since_ts), self._fingerprint(rows)
 
-        def read():
+        def read() -> Result | None:
             c = self._connect()
             try:
                 row = self._answers.get_delta(c, accounts, since, fp)
@@ -245,8 +276,9 @@ class Briefs:
             return {"ok": True, "empty": False, "headline": row["headline"],
                     "items": json.loads(row["items_json"]), "count": len(rows), "cached": True}, 200
 
-        def make():
-            lines, total = [], 0
+        def make() -> Result:
+            lines: list[str] = []
+            total = 0
             for r in rows:
                 who = r["from_name"] or r["from_addr"] or "someone"
                 line = (f'[{r["pk"]}] (imp {r["importance"]}, {r["category"]}) '
@@ -263,7 +295,7 @@ class Briefs:
             except Exception as e:                  # transport: retryable, do NOT cache
                 print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
                 return {"ok": False, "error": "delta unavailable", "retry": True}, 502
-            headline, items = self._clean_delta(obj) if isinstance(obj, dict) else ("", [])
+            headline, items = self._clean_delta(obj)
             model = self._calls.model_label()
             if not headline:                        # replied but unusable -> deterministic, cached once
                 headline, items = self._delta_fallback(rows)
@@ -280,7 +312,7 @@ class Briefs:
         return (read() or self._FLIGHTS.run(("delta", accounts, since, fp), make, read, wait=30)   # another tab may be making it
                 or ({"ok": False, "error": "delta unavailable", "retry": True}, 502))
 
-    def build(self, accounts_set, force=False, generate=True):
+    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
         """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
@@ -291,7 +323,7 @@ class Briefs:
         c.close()
         fp = self._fingerprint(rows)
 
-        def stored(row):
+        def stored(row: Row) -> Result:
             return self._result(row["narrative"], self._groups_now(row["groups_json"]), row["model"], row["created_at"],
                            True, row["fingerprint"] != fp), 200
 
@@ -303,7 +335,7 @@ class Briefs:
         if not generate:
             return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}, 200
 
-        def read():
+        def read() -> Result | None:
             c = self._connect()
             try:
                 row = self._answers.get_brief(c, accounts, day)
@@ -311,9 +343,10 @@ class Briefs:
                 c.close()
             return stored(row) if row else None
 
-        def make():
-            valid = {r["pk"] for r in rows}
-            lines, total = [], 0
+        def make() -> Result:
+            valid: set[int] = {r["pk"] for r in rows}
+            lines: list[str] = []
+            total = 0
             for r in rows:
                 who = r["from_name"] or r["from_addr"] or "someone"
                 line = (f'[{r["pk"]}] (imp {r["importance"]}, {r["category"] or "other"}) '
@@ -330,7 +363,7 @@ class Briefs:
             except Exception as e:                  # transport: retryable, do NOT cache
                 print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
                 return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
-            narrative, groups = self._clean(obj, valid) if isinstance(obj, dict) else ("", [])
+            narrative, groups = self._clean(obj, valid)
             model = self._calls.model_label()
             if not narrative:                       # replied but unusable: cache a deterministic card
                 fb = self._fallback(rows)

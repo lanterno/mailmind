@@ -2,12 +2,19 @@
 price."""
 import os
 import time
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from typing import Any
 
 from mailmind.assistant.application.calls import Calls, object_in
-from mailmind.assistant.application.ports import ModelError, NotSent
+from mailmind.assistant.application.gateway import Gateway
+from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Connect, ModelError, NotSent
 from mailmind.assistant.domain import models, pricing
+from mailmind.kernel.row import Connection, Row
+
+type Log = Callable[[str], None]
+type Assessment = tuple[str, int, str, str, str]    # what's stored of a message: summary, importance, category, action, model
 
 WORKERS = 4
 PROMPT = """You are triaging ONE email for a personal dashboard. Reply with ONLY a JSON object (no prose, no code fence) with these keys:
@@ -57,18 +64,18 @@ class Triage:
     ASSESS_BATCH = 300                        # messages triaged in one round
     ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
 
-    def __init__(self, calls: Calls, gateway, answers, connect):
+    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, connect: Connect):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
         self._connect = connect
 
-    def _triage_prompt(self, row):
+    def _triage_prompt(self, row: Row) -> str:
         frm = f"{row['from_name']} <{row['from_addr']}>" if row["from_name"] else row["from_addr"]
         return self.PROMPT.format(frm=frm, subject=row["subject"] or "(no subject)",
                              date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
 
-    def _assessment(self, row, obj):
+    def _assessment(self, row: Row, obj: Mapping[str, Any]) -> Assessment:
         """What to store for a message from what triage answered. A reply with no usable summary stores a
         fallback, so a message doesn't go round for ever."""
         if obj.get("summary"):
@@ -80,14 +87,14 @@ class Triage:
                     str(obj.get("action", ""))[:200], self._calls.model_label())
         return ((row["subject"] or "(no subject)"), 2, "other", "", "parse-error")
 
-    def summarize_one(self, row):
+    def summarize_one(self, row: Row) -> tuple[int, Assessment | None]:
         try:
             obj = self._calls.call_claude_json(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT, feature="triage")
         except Exception:
             return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
         return row["pk"], self._assessment(row, obj)
 
-    def summarize_pending(self, limit=200, workers=WORKERS, log=lambda *_: None):
+    def summarize_pending(self, limit: int = 200, workers: int = WORKERS, log: Log = lambda _: None) -> int:
         """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
         many were summarized. With AI off, or while the cost governor holds triage back, it returns 0
         at once: not one message is tried."""
@@ -117,12 +124,12 @@ class Triage:
         c.close()
         return done
 
-    def _send_batch(self, requests, name):
+    def _send_batch(self, requests: list[tuple[str, str]], name: str) -> str:
         return self._calls.noting(lambda: self._gateway().submit_batch(
             requests, None if os.environ.get("MAILMIND_NO_SCHEMA") else self.TRIAGE_SCHEMA,
             feature=self.BATCH_FEATURE, model=name, effort=self.TRIAGE_EFFORT))
 
-    def batch_submit(self, at_least=None, keep=None, log=lambda *_: None):
+    def batch_submit(self, at_least: int | None = None, keep: int | None = None, log: Log = lambda _: None) -> int:
         """When a backlog is waiting and no batch is out, send it as one, and return how many it took. It
         takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
         at_least, keep = self.BATCH_MIN if at_least is None else at_least, self.BATCH_KEEP_NEWEST if keep is None else keep
@@ -139,12 +146,14 @@ class Triage:
         if len(rows) < at_least:
             return 0
         name = self._calls.MODEL or models.DEFAULT
-        room = gw.room() // self.BATCH_SHARE
-        requests, keys, estimate, cutoff = [], [], 0, 0
+        room = gw.room()                    # None: no governor, so no limit to keep within
+        requests: list[tuple[str, str]] = []
+        keys: list[int] = []
+        estimate, cutoff = 0, 0
         for r in rows[keep:]:
             text = self._triage_prompt(r)
             cost = pricing.batch_estimate(name, len(text))
-            if estimate + cost > room:
+            if room is not None and estimate + cost > room // self.BATCH_SHARE:
                 break
             requests.append((str(r["message_key"]), text))
             keys.append(r["message_key"])
@@ -171,7 +180,7 @@ class Triage:
         log(f"sent a batch of {len(requests)}, at most about {pricing.usd(estimate)}")
         return len(requests)
 
-    def _store_answers(self, c, batch, results):
+    def _store_answers(self, c: Connection, batch: Row, results: Iterable[BatchResult]) -> int:
         """Each answer a batch brought, for each copy of its message and under its key. How many."""
         keys, stored, when = self._answers.batch_keys(c, batch["id"]), 0, datetime.now(timezone.utc).isoformat()
         for r in results:
@@ -187,7 +196,7 @@ class Triage:
             stored += 1
         return stored
 
-    def batch_collect(self, log=lambda *_: None):
+    def batch_collect(self, log: Log = lambda _: None) -> int:
         """Bring in the answers of a batch that has ended, and return how many it stored. Nothing here sends
         a message, so neither the limit nor someone using AI holds it back: these answers are paid for."""
         if self._calls.engine() == "none":
@@ -240,7 +249,7 @@ class Triage:
             c.close()
         return stored
 
-    def batch_status(self):
+    def batch_status(self) -> BatchStatus:
         """What's out in a batch, with no call made: how many messages, and what it may cost."""
         c = self._connect()
         try:
@@ -250,14 +259,16 @@ class Triage:
         finally:
             c.close()
 
-    def round(self):
+    def round(self) -> int | None:
         """The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. It runs
         on its own lane, so a slow model never holds up a sync, and with AI off it tries nothing. A full
         batch means more are waiting, so the next round follows at once. While the user is using AI the
         round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
         waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
         backlog goes out in the next batch rather than through this round's calls."""
-        log = lambda m: print(f"[assess] {m}", flush=True)     # noqa: E731
+        def log(m: str) -> None:
+            print(f"[assess] {m}", flush=True)
+
         self.batch_collect(log)
         why = self._gateway().held_back("triage", self._calls.MODEL)
         if why:

@@ -7,11 +7,12 @@ the prompt tells the model to treat it as data, not instructions.
 from datetime import datetime, timezone
 import json
 import re
+from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -34,19 +35,26 @@ Subject: {subject}
 """
 
 
+class Digest(TypedDict):
+    tldr: str
+    points: list[str]
+    action: str
+    participants: list[str]
+
+
 class ThreadDigest:
-    def __init__(self, calls: Calls, answers, connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
         self._calls = calls
         self._answers = answers
         self._connect = connect
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
-    def _now(self):
+    def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _trim(self, text):
-        out = []
+    def _trim(self, text: str | None) -> str:
+        out: list[str] = []
         for ln in (text or "").splitlines():
             if _QUOTE.match(ln):
                 continue
@@ -55,18 +63,19 @@ class ThreadDigest:
             out.append(ln)
         return "\n".join(out).strip()[:CAP_PER_MSG]
 
-    def lone_key(self, row):
+    def lone_key(self, row: Row) -> str:
         """What a message with no thread goes by here: its Message-ID, or if it has none, its pk."""
         return f"m:{row['message_id']}" if row["message_id"] else f"pk:{row['pk']}"
 
-    def _rows(self, c, account, thread_id):
+    def rows(self, c: Connection, account: str, thread_id: str) -> list[Row]:
         kind, _, value = str(thread_id).partition(":")
         column, value = {"m": ("message_id", value), "pk": ("pk", value)}.get(kind, ("thread_id", thread_id))
         rows = c.execute(
             f"""SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
                FROM messages WHERE account=? AND {column}=? ORDER BY ts ASC, pk ASC""",
             (account, value)).fetchall()
-        seen, out = set(), []
+        seen: set[str] = set()
+        out: list[Row] = []
         for r in rows:
             k = (r["message_id"] or "").strip() or f"pk:{r['pk']}"
             if k in seen:
@@ -75,24 +84,25 @@ class ThreadDigest:
             out.append(r)
         return out
 
-    def _fingerprint(self, rows):
+    def _fingerprint(self, rows: list[Row]) -> str:
         """The thread as summarized: its messages' Message-IDs and the newest one's time, so a
         renumbered folder leaves its summary fresh."""
         return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
 
-    def _gather(self, rows):
+    def gather(self, rows: list[Row]) -> tuple[list[str], int]:
         omitted = 0
         if len(rows) > CAP_MSGS:                       # keep the first (context) + the most recent
             omitted = len(rows) - CAP_MSGS
             rows = [rows[0]] + rows[-(CAP_MSGS - 1):]
-        blocks, total = [], 0
+        blocks: list[str] = []
+        total = 0
         for i, r in enumerate(rows, 1):
             body = r["body_text"] or r["snippet"] or ""
             if not body and not r["body_fetched"]:     # only hit IMAP for body-less members
                 try:
                     parsed = gates.run(r["account"], lambda: self._mail.fetch_body(r["pk"]),
-                                       priority=gates.Priority.INTERACTIVE) or {}
-                    body = parsed.get("text") or ""
+                                       priority=gates.Priority.INTERACTIVE)
+                    body = (parsed["text"] if parsed else None) or ""
                 except Exception:
                     body = ""
             body = self._trim(body)
@@ -105,7 +115,7 @@ class ThreadDigest:
                 break
         return blocks, omitted
 
-    def _parse(self, out):
+    def _parse(self, out: str | None) -> Digest | None:
         m = re.search(r"\{.*\}", out or "", re.S)
         if not m:
             return None
@@ -113,15 +123,15 @@ class ThreadDigest:
             d = json.loads(m.group(0))
         except Exception:
             return None
-        pts = d.get("points") if isinstance(d.get("points"), list) else []
-        parts = d.get("participants") if isinstance(d.get("participants"), list) else []
+        pts: list[Any] = d.get("points") if isinstance(d.get("points"), list) else []
+        parts: list[Any] = d.get("participants") if isinstance(d.get("participants"), list) else []
         return {"tldr": str(d.get("tldr") or "")[:600],
                 "points": [str(x)[:200] for x in pts][:6],
                 "action": str(d.get("action") or "")[:200],
                 "participants": [str(x)[:80] for x in parts][:12]}
 
-    def _expand(self, row):
-        def _j(s):
+    def _expand(self, row: Row) -> dict[str, Any]:
+        def _j(s: str | None) -> list[Any]:
             try:
                 return json.loads(s) if s else []
             except Exception:
@@ -130,10 +140,10 @@ class ThreadDigest:
                 "participants": _j(row["participants"]), "message_count": row["message_count"],
                 "model": row["model"], "created_at": row["created_at"]}
 
-    def summarize(self, account, thread_id, scope="thread", force=False):
+    def summarize(self, account: str, thread_id: str, scope: str = "thread", force: bool = False) -> Result:
         """-> (result_dict, http_code)."""
         c = self._connect()
-        rows = self._rows(c, account, thread_id)
+        rows = self.rows(c, account, thread_id)
         c.close()
         if not rows:
             return {"ok": False, "error": "nothing to summarize"}, 404
@@ -145,7 +155,7 @@ class ThreadDigest:
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                     "cached": True, "stale": cached["fingerprint"] != fp, **self._expand(cached)}, 200
 
-        def read():                                     # a summary of the thread as it is now
+        def read() -> Result | None:                    # a summary of the thread as it is now
             c = self._connect()
             try:
                 row = self._answers.get_thread_summary(c, account, thread_id, scope)
@@ -156,8 +166,8 @@ class ThreadDigest:
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                     "cached": True, "stale": False, **self._expand(row)}, 200
 
-        def make():
-            blocks, omitted = self._gather(rows)
+        def make() -> Result:
+            blocks, omitted = self.gather(rows)
             subject = rows[0]["subject"] or "(no subject)"
             kind = "MESSAGE" if scope == "message" else "THREAD"
             prompt = _PROMPT.format(kind=kind, label=("Message" if kind == "MESSAGE" else "Messages, oldest first"),
@@ -171,7 +181,7 @@ class ThreadDigest:
             except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
                 print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
                 return {"ok": False, "error": "summary unavailable", "retry": True}, 502
-            parsed = self._parse(out)
+            parsed: Digest | None = self._parse(out)
             model = self._calls.model_label()
             if parsed is None:                          # replied but not JSON: cache a safe fallback, don't loop
                 parsed = {"tldr": subject, "points": [(rows[-1]["snippet"] or "")[:200]],
@@ -179,7 +189,7 @@ class ThreadDigest:
                 model = "parse-error"
             if not parsed["participants"]:
                 parsed["participants"] = sorted({r["from_name"] or r["from_addr"] for r in rows if r["from_addr"]})[:12]
-            row = {"account": account, "thread_id": thread_id, "scope": scope, "fingerprint": fp,
+            row: dict[str, Any] = {"account": account, "thread_id": thread_id, "scope": scope, "fingerprint": fp,
                    "tldr": parsed["tldr"], "points": json.dumps(parsed["points"]),
                    "action": parsed["action"], "participants": json.dumps(parsed["participants"]),
                    "message_count": len(rows), "model": model, "created_at": self._now()}

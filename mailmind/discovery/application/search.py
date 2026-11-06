@@ -44,7 +44,7 @@ class Search:
                 "offset": offset, "has_more": has_more, "generated": now_iso()}
 
     def reach(self, spec: QuerySpec, cap: int, apart: set[str],
-              sample_size: int) -> tuple[int | None, list[tuple[str, str]], list[dict[str, str]], int]:
+              sample_size: int) -> tuple[int | None, list[tuple[int, str]], list[dict[str, str]], int]:
         """Exact COUNT + a capped set of (message key, folder) + a sample for a validated filter, leaving out the
         folders that play the roles in `apart`. Read-only; the messages come from OUR db, never the model.
 

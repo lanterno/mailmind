@@ -5,11 +5,13 @@ through the same injection-safe search grammar and what it resolves to is frozen
 is READ-ONLY: it never mutates. The client shows a mandatory confirm gate, and only an explicit click sends the plan's
 id back to be carried out.
 """
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 from mailmind.assistant.application import plans
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import NotSent, Search
+from mailmind.assistant.application.ports import NotSent, Result, Search
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -71,7 +73,7 @@ class BulkCommands:
         self._search = search
         self._DO_PLANS = plans.PlanBook()
 
-    def plan(self, body):
+    def plan(self, body: Mapping[str, Any]) -> Result:
         """Plan an NL bulk command → a validated, capped PREVIEW with the id of the plan it froze. READ-ONLY:
         generates no mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted,
         safely-scoped action. Returns (result, code)."""
@@ -98,7 +100,7 @@ class BulkCommands:
         cap = self._DO_TRASH_CAP if verb in ("trash", "junk") else self._DO_CAP
         # A person who says "archive what Lin sent" means the mail that is around, not the copy already archived, one in
         # Trash or their own in Sent, so a filter reaches those only by naming a folder, and a verb never reaches its own home.
-        apart = self._DO_ALREADY.get(verb, set()) | (set() if spec.names_folder() else self._DO_APART)
+        apart: set[str] = self._DO_ALREADY.get(verb, set()) | (set() if spec.names_folder() else self._DO_APART)
         count, messages, sample, matched = self._search.reach(spec, cap, apart, self._DO_SAMPLE)
         if count is None:                                  # unparseable resolved query → degrade
             return {"ok": True, "intent": "search", "filter": filt}, 200
@@ -113,7 +115,7 @@ class BulkCommands:
                 "count": count, "cap": cap, "capped": count > cap,
                 "plan": frozen.id, "sample": sample}, 200
 
-    def take(self, plan_id):
+    def take(self, plan_id: str) -> plans.ActionPlan | None:
         """What a preview froze, once, or None when its plan has expired. The Assistant only says what it was: the mail's
         own contexts carry it out."""
         return self._DO_PLANS.take(plan_id)

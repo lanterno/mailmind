@@ -9,12 +9,16 @@ governor decides when it may run; fingerprint = thread state.
 """
 import threading
 import time
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail, NotSent
+from mailmind.assistant.application.gateway import Gateway
+from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -52,7 +56,8 @@ class DraftAhead:
     DRAFT_TICK_TRIP = 3              # consecutive led-generation failures → circuit breaker…
     DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
 
-    def __init__(self, calls: Calls, gateway, answers, connect, mail: Mail, replies: ReplyDrafts, looks_human):
+    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, connect: Connect, mail: Mail,
+                 replies: ReplyDrafts, looks_human: Callable[[str], bool]):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
@@ -62,7 +67,7 @@ class DraftAhead:
         self._looks_human = looks_human
         self.DRAFT_FLIGHTS = SingleFlight()   # one generation at a time for each (account, ref_key)
 
-    def _draft_key(self, row):
+    def _draft_key(self, row: Row) -> tuple[str, str] | None:
         """Natural draft identity (account, ref_key) — survives reconcile/reset_folder
         delete+reinsert; NEVER messages.pk (same rule as muted/followups/mail_commands).
         Thread-scoped ('t:') so two pks in one thread can never double-spend claude.
@@ -75,14 +80,14 @@ class DraftAhead:
             return (row["account"], "m:" + mid)
         return None
 
-    def _tick_backoff_active(self, da, now):
+    def _tick_backoff_active(self, da: Row | None, now: int) -> bool:
         """Persisted per-key exponential backoff (tick only — the GET keeps the flat 60s)."""
         if not da or not da["fail_ts"]:
             return False
         wait = min(self.DRAFT_FAIL_CAP, self.DRAFT_FAIL_BASE * (2 ** max(0, da["fail_count"] - 1)))
         return (now - da["fail_ts"]) < wait
 
-    def _draft_eligible(self, row):
+    def _draft_eligible(self, row: Row | None) -> bool:
         """Replyable to a real human + not already handled. (The client pre-filters action/importance.)
         Your own message isn't: draft_ahead_gc drops as moot a draft for a thread ending in a Sent copy."""
         if not row or row["is_junk"] or row["answered"] or row["snoozed_until"]:
@@ -94,7 +99,7 @@ class DraftAhead:
             return False
         return True
 
-    def _draft_fp(self, c, account, thread_id, pk):
+    def _draft_fp(self, c: Connection, account: str, thread_id: str | None, pk: int) -> str:
         """Thread-state hash. Stable across reconcile/reset_folder (built only from
         message_id/ts/count — never pk); flips when a message arrives, leaves, or is swapped.
         Captured BEFORE generation (load-bearing: the 10-40s TOCTOU window can then only
@@ -110,7 +115,7 @@ class DraftAhead:
         r = c.execute("SELECT message_id, body_fetched FROM messages WHERE pk=?", (pk,)).fetchone()
         return fingerprint.message(r["message_id"] if r else None, r["body_fetched"] if r else 0)
 
-    def _gen_draft_ahead(self, account, pk, source="dwell"):
+    def _gen_draft_ahead(self, account: str | None, pk: int, source: str = "dwell") -> bool | None:
         """Background generation (single-flight per natural key). Writes the durable cache;
         never sends. Returns True on led-success, None on a NEUTRAL bail (follower joined an
         in-flight generation / message became ineligible / already warm), False ONLY when this
@@ -129,7 +134,7 @@ class DraftAhead:
         finally:
             c.close()
 
-        def warm():                                       # a draft for the thread as it is now
+        def warm() -> object | None:                      # a draft for the thread as it is now
             c = self._connect()
             try:
                 da = self._answers.draft_ahead_get(c, key[0], key[1])
@@ -138,7 +143,7 @@ class DraftAhead:
             fresh = da and da["body"] and da["fp"] == fp and (int(time.time()) - da["created_ts"]) < self.DRAFT_DB_TTL
             return _WARM if fresh else None
 
-        def make():
+        def make() -> bool | None:
             ok = False
             try:
                 res, code = self._replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
@@ -180,20 +185,20 @@ class DraftAhead:
         led = self.DRAFT_FLIGHTS.run(key, make, warm, wait=45)
         return led if isinstance(led, bool) else None     # neutral: already warm, or joined another's run
 
-    def _thread_anchor_pk(self, c, account, thread_id):
+    def _thread_anchor_pk(self, c: Connection, account: str, thread_id: str) -> int | None:
         """The thread's latest message — the only pk a thread draft may be served/kicked for
         (never pair the thread-latest draft with a composer quoting an older message)."""
         r = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? "
                       "ORDER BY ts DESC, pk DESC LIMIT 1", (account, thread_id)).fetchone()
         return r["pk"] if r else None
 
-    def _reply_worthy(self, c, pk):
+    def _reply_worthy(self, c: Connection, pk: int) -> bool:
         """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
         opened mail; gates KICKS only, never serving."""
         r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
         return bool(r)
 
-    def get(self, qs, kick_ok=False):
+    def get(self, qs: Mapping[str, Sequence[str]], kick_ok: bool = False) -> Result:
         """GET /api/ai/draft-ahead?pk=[&peek=1] → cached draft (ready) / kicks generation
         (generating) / none. peek=1 is strictly read-only (reports inflight, never kicks).
         kick_ok=False also behaves like peek for the SPAWN decision — the kick spends a real
@@ -242,7 +247,7 @@ class DraftAhead:
         finally:
             c.close()
 
-    def _pick_draft_candidate(self):
+    def _pick_draft_candidate(self) -> Row | None:
         """One tick's worth of work: the single best reply-worthy message that isn't already
         warm/inflight/backing-off (batch=1). Pure SQL + Python — no AI cost. Steady state
         finds nothing (fp dedup) and exits in ~1ms."""
@@ -250,7 +255,10 @@ class DraftAhead:
         c = self._connect()
         try:
             rows = c.execute(_DRAFT_CAND_SQL, (now - self.DRAFT_RECENCY_WINDOW,)).fetchall()
-            picked, seen, warm_total, warm_acct = None, set(), 0, {}
+            picked: Row | None = None
+            seen: set[tuple[str, str]] = set()
+            warm_total = 0
+            warm_acct: dict[str, int] = {}
             for r in rows:
                 if warm_total >= self.DRAFT_TOPK:
                     break                                            # warm set is full — nothing to do
@@ -280,14 +288,14 @@ class DraftAhead:
         finally:
             c.close()
 
-    def rounds(self):
+    def rounds(self) -> Callable[[], None]:
         """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
         drafts at most one reply ahead, only when the cost governor would let it go (nobody is using
         AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it), then
         collects the expired drafts."""
         fails, suspended_until = 0, 0.0
 
-        def draft_ahead_round():
+        def draft_ahead_round() -> None:
             nonlocal fails, suspended_until
             now = time.time()
             if now < suspended_until:
@@ -314,7 +322,7 @@ class DraftAhead:
                     c.close()
         return draft_ahead_round
 
-    def reply(self, body):
+    def reply(self, body: Mapping[str, Any]) -> Result:
         """Draft an editable reply to a thread/message via claude. Returns (result, code)."""
         account = body.get("account")
         thread_id = body.get("thread_id")
@@ -322,7 +330,9 @@ class DraftAhead:
         tone = str(body.get("tone") or "balanced")[:16]
         instruction = str(body.get("instruction") or "")[:400]
         default_shape = (not instruction.strip()) and tone == "balanced"
-        row, fp, key = None, None, None
+        row: Row | None = None
+        fp: str | None = None
+        key: tuple[str, str] | None = None
         if pk is not None:
             c = self._connect()
             try:
@@ -360,7 +370,7 @@ class DraftAhead:
         # this call; a closed-and-reopened composer or same-thread revisit is then free).
         # Custom instruction / non-default tone are personal one-offs — never banked.
         if code == 200 and res.get("ok") and res.get("body") and default_shape \
-                and row is not None and key is not None:
+                and row is not None and key is not None and fp is not None:
             try:
                 c = self._connect()
                 self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),

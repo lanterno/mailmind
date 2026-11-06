@@ -4,7 +4,7 @@ model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft —
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import Connect, NotSent, Result
 from mailmind.assistant.application.thread_digest import ThreadDigest
 
 REPLY_SCHEMA = {
@@ -33,18 +33,19 @@ _MSG_COLS = ("SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,m
 
 
 class ReplyDrafts:
-    def __init__(self, calls: Calls, threads: ThreadDigest, connect):
+    def __init__(self, calls: Calls, threads: ThreadDigest, connect: Connect):
         self._calls = calls
         self._threads = threads
         self._connect = connect
 
-    def draft(self, account, thread_id=None, pk=None, instruction="", tone="balanced", me="", feature="draft"):
+    def draft(self, account: str, thread_id: str | None = None, pk: int | None = None, instruction: str = "",
+              tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
         """-> (result_dict, http_code). Gathers a thread (thread_id) or a single message (pk).
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
         c = self._connect()
         try:
             if thread_id:
-                rows = self._threads._rows(c, account, thread_id)
+                rows = self._threads.rows(c, account, thread_id)
             elif pk is not None:
                 rows = list(c.execute(_MSG_COLS, (int(pk),)).fetchall())
             else:
@@ -54,7 +55,7 @@ class ReplyDrafts:
         if not rows:
             return {"ok": False, "error": "nothing to reply to"}, 404
 
-        blocks, _omitted = self._threads._gather(rows)
+        blocks, _omitted = self._threads.gather(rows)
         subject = rows[0]["subject"] or "(no subject)"
         tone_word = _TONES.get(tone, _TONES["balanced"])
         instr = (f'Follow this instruction for the reply: "{instruction.strip()[:400]}".'
@@ -69,7 +70,7 @@ class ReplyDrafts:
         except Exception as e:                      # timeout / rate-limit: retryable
             print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "draft unavailable", "retry": True}, 502
-        body = (obj.get("body") or "").strip() if isinstance(obj, dict) else ""
+        body = (obj.get("body") or "").strip()
         if not body:
             return {"ok": False, "error": "no draft produced", "retry": True}, 502
         return {"ok": True, "body": body[:6000], "tone": tone, "model": self._calls.model_label()}, 200

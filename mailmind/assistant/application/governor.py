@@ -26,6 +26,7 @@ import threading
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from typing import Any
 
 from mailmind.assistant.application.ports import Deferred, LanguageModel, ModelError, OverLimit
 from mailmind.assistant.domain.features import INTERACTIVE, SPECULATIVE
@@ -36,7 +37,7 @@ TRIP_AFTER = 3                      # permanent rejections in a row, for one fea
 _AUTH = frozenset({401, 403})       # the key itself was refused: no feature will do better
 _EVERY = "*"                        # the breaker's scope for a refused key
 
-_over = contextvars.ContextVar("mailmind_ai_may_go_over", default=False)
+_over: contextvars.ContextVar[bool] = contextvars.ContextVar("mailmind_ai_may_go_over", default=False)
 
 
 @contextmanager
@@ -158,7 +159,7 @@ class CostGovernor:
             self._rejected.clear()
             self._open.clear()
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         """What /api/debug/ai shows: today's spending and limit, the calls in flight, how long since
         the last interactive one and since someone was here, and where the breaker is open."""
         spent, limit = self._today()
