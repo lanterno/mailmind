@@ -133,7 +133,8 @@ the run, and each test logs in as a user of its own, with an empty mailbox.
 There is no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
 the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
 `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
-then `lint-imports` (import-linter) on the `mailmind` package's layers. New pytest-native tests go in `tests/`;
+then `lint-imports` (import-linter) on the `mailmind` package's layers, then `pyright`: basic rules across the package
+and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New pytest-native tests go in `tests/`;
 pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
