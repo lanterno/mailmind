@@ -126,7 +126,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import json
     import config
     import manage
-    import mailclass
+    from mailmind.bootstrap import curation
     from mailmind.bootstrap.curation import rules
     import server
     import store
@@ -145,7 +145,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     manage.audit("ada@example.test", [])
     server._cleanup_audit("lin@example.test", "lin@example.test", 0, "ok")
     (data_dir / "reconcile_audit.jsonl").write_text(json.dumps({"kind": "reconcile", "ts": "t"}) + "\n")
-    assert mailclass.classify("lin@example.test", "hi")[0] == "personal/protected"     # the rules just written
+    assert curation.classify("lin@example.test", "hi")[0] == "personal/protected"     # the rules just written
     assert json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
     assert sorted(e["kind"] for e in server.read_audit()["events"]) == ["reconcile", "sender_cleanup"]
     assert sorted(p.name for p in data_dir.iterdir() if not p.name.startswith("mailmind.db")) == [

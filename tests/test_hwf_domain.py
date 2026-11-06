@@ -624,25 +624,25 @@ def rules_file(data_dir):
 
 @pytest.mark.parametrize("addr,subject,listed,bucket,conf", PRECEDENCE, ids=[f"{a} {s}" for a, s, *_ in PRECEDENCE])
 def test_hwf_classifier_precedence(rules_file, addr, subject, listed, bucket, conf):
-    import mailclass
-    assert mailclass.classify(addr, subject, "", listed)[:2] == (bucket, conf)
+    from mailmind.bootstrap import curation
+    assert curation.classify(addr, subject, "", listed)[:2] == (bucket, conf)
 
 
 @pytest.mark.parametrize("addr", ["lin@msg.example.test", "ivo@nsg.example.test", "lin@studio.sg"])
 def test_hwf_a_domain_merely_containing_an_esp_marker_is_not_bulk(data_dir, addr):
-    import mailclass
-    assert mailclass.classify(addr, "Lunch on Thursday?", "", False)[0] != "newsletters/marketing"
+    from mailmind.bootstrap import curation
+    assert curation.classify(addr, "Lunch on Thursday?", "", False)[0] != "newsletters/marketing"
 
 
 @pytest.mark.parametrize("addr", ["deals@sg.example.test", "deals@em.sg.example.test"])
 def test_hwf_the_short_esp_marker_still_counts_as_a_whole_label(data_dir, addr):
-    import mailclass
-    assert mailclass.classify(addr, "Lunch on Thursday?", "", False)[:3] == (
+    from mailmind.bootstrap import curation
+    assert curation.classify(addr, "Lunch on Thursday?", "", False)[:3] == (
         "newsletters/marketing", "high", "bulk email-service-provider domain")
 
 
 def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
-    import mailclass
+    from mailmind.bootstrap import curation
     from mailmind.bootstrap.curation import rules
 
     def write(data, stamp):
@@ -651,10 +651,10 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
             json.dump(data, f)
         os.utime(path, (stamp, stamp))                   # the classifier caches the file by mtime
     write({"keep_senders": ["Lin@Studio.Example.Test"]}, NOW_TS)
-    assert mailclass.classify("lin@studio.example.test", "hi")[0] == "personal/protected"
+    assert curation.classify("lin@studio.example.test", "hi")[0] == "personal/protected"
     assert rules.load()["keep_senders"] == ["lin@studio.example.test"]
     write({"block_domains": ["STUDIO.example.test"]}, NOW_TS + 1)
-    assert mailclass.classify("lin@studio.example.test", "hi")[0] == "blocked"
+    assert curation.classify("lin@studio.example.test", "hi")[0] == "blocked"
 
 
 def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
@@ -735,14 +735,14 @@ def test_hwf_saved_views_are_written_owner_only_and_without_builtins(data_dir):
 
 
 def test_hwf_a_bad_edit_of_the_rules_keeps_the_rules_last_read(data_dir, capsys):
-    import mailclass
+    from mailmind.bootstrap import curation
     from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "keep")
-    assert mailclass.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
+    assert curation.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
     with open(data_dir / "mailmind_rules.json", "w") as f:
         f.write('{"keep_senders": ["lin@example.test",]')         # a hand edit with a stray comma
     assert rules.load()["keep_senders"] == ["lin@example.test"]
-    assert mailclass.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
+    assert curation.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
     rules.load()
     assert capsys.readouterr().out.count("can't be read") == 1     # said once, not at every read
 

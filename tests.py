@@ -10,10 +10,10 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import mailclass as m
+from mailmind.curation.domain import classifier as m
 
 # Stub the learned rules with a synthetic fixture (tests the MECHANISM only).
-m._rules = lambda: {
+RULES = {
     "keep_senders": set(), "block_senders": set(),
     "keep_domains": {"work-example.test"}, "block_domains": {"spam-platform.test"},
 }
@@ -68,7 +68,7 @@ CASES = [
 def run():
     passed = failed = 0
     for frm, subj, lu, expected, note in CASES:
-        got = m.classify(frm, subj, "", lu)[0]
+        got = m.classify(frm, subj, "", lu, rules=RULES)[0]
         if got == expected:
             passed += 1
         else:
@@ -78,7 +78,7 @@ def run():
     assert m.is_junk(m.BLOCKED) and m.is_junk(m.SPAM) and m.is_junk(m.MKT) and m.is_junk(m.NOTIF)
     assert not m.is_junk(m.PROTECTED) and not m.is_junk(m.RECEIPT) and not m.is_junk(m.PERSONAL)
     # non-ASCII subjects must not crash
-    m.classify("user@example.com", "新年快乐 🎉 здравей", "", False)
+    m.classify("user@example.com", "新年快乐 🎉 здравей", "", False, rules=RULES)
     print(f"\n{passed} passed, {failed} failed (of {len(CASES)})")
     return failed == 0
 
