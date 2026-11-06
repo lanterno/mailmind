@@ -25,6 +25,8 @@ from mailmind.discovery.domain import views as builtin
 from mailmind.bootstrap import discovery
 from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
+from mailmind.bootstrap.compose import composing
+from mailmind.compose.domain import attachments
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -863,8 +865,7 @@ def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
     import email
     from email import policy
     from mailmind.compose import api as compose
-    import server
-    [att] = server._extract_attachments(_forwarded_email(True))
+    [att] = attachments.extract(_forwarded_email(True))
     assert att["content_type"] == "message/rfc822" and b"Subject: Fabric" in att["data"]
     built = compose.build_message({"account": A, "to": ["lin@example.test"], "subject": "Fwd: Fabric", "text": "fyi",
                                    "attachments": [att]})
@@ -964,7 +965,6 @@ def test_hwf_a_quote_stored_with_the_fold_loses_only_the_fold():
 
 
 def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
-    import server
     import store
     c = store.conn()
     fold = '<details class="mm-quote"><summary>··· quoted text</summary>'
@@ -976,7 +976,7 @@ def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
                            None, "sha")
     c.commit()
     c.close()
-    spec, _, _ = server._compose_spec({"account": A, "mode": "reply", "to": ["lin@example.test"], "subject": "Re: Lunch",
+    spec, _, _ = composing.spec({"account": A, "mode": "reply", "to": ["lin@example.test"], "subject": "Re: Lunch",
                                        "text": "Great", "draft_id": did,
                                        "resume": {"tail_text": "\n\nOn Sunday:\n> lunch?\n"}})
     assert "<details" not in spec["html"] and "lunch?" in spec["html"]

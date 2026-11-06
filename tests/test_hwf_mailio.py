@@ -21,6 +21,7 @@ from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.compose.domain import outbox_item
 from mailmind.bootstrap.compose import book
+from mailmind.bootstrap.compose import sending
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
@@ -1229,7 +1230,6 @@ class _StoppableDrain:
 
 def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     from mailmind.bootstrap.compose import outbox
-    import server
     monkeypatch.setattr(outbox, "SEND_DELAY", 1)                 # a one-second Undo Send window, in real time
     drain = _StoppableDrain(outbox.drain)
     monkeypatch.setattr(outbox, "drain", drain)
@@ -1242,7 +1242,7 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     t = threading.Thread(target=worker, name="outbox-worker", daemon=True)
     t.start()
     try:
-        assert server.do_send(new(idempotency_key="k-soon"))[1] == 200
+        assert sending.send(new(idempotency_key="k-soon"))[1] == 200
         wait_until(lambda: world.smtp.messages, timeout=15)      # due within a second; the worker polls every 30
         assert world.smtp.messages
     finally:

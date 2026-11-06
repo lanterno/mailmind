@@ -1,4 +1,4 @@
-"""Send-later times on /api/send (server.do_send): a passed, far-off or malformed send_after is
+"""Send-later times on /api/send (sending.send): a passed, far-off or malformed send_after is
 refused before anything is built, a sane one is scheduled, and none means send now. Hermetic —
 temp database and config, and the outbox is replaced with a recorder, so nothing can leave.
 All addresses are fictional.
@@ -21,11 +21,12 @@ def _home():
 
 
 _home()                                               # before anything opens a file
-import server
 from mailmind.bootstrap.compose import outbox
+from mailmind.bootstrap.compose import composing
+from mailmind.bootstrap.compose import sending
 
 ACCT = "ada@example.test"
-_real_spec = server._compose_spec
+_real_spec = composing.spec
 
 
 def _fresh():
@@ -37,7 +38,7 @@ def _fresh():
         calls.append(meta)
         return 1, True
     outbox.enqueue = enqueue
-    server._compose_spec = _real_spec
+    composing.spec = _real_spec
     return calls
 
 
@@ -51,8 +52,8 @@ def _refuses(send_after, error):
 
     def boom(body):
         raise AssertionError("_compose_spec ran for a refused send time")
-    server._compose_spec = boom
-    res, code = server.do_send(_body(send_after))
+    composing.spec = boom
+    res, code = sending.send(_body(send_after))
     assert (code, res) == (400, {"ok": False, "error": error}), (code, res)
     assert calls == [], calls
 
@@ -72,7 +73,7 @@ def test_malformed_time_is_refused():
 def test_future_time_is_scheduled():
     calls = _fresh()
     sa = int(time.time()) + 3600
-    res, code = server.do_send(_body(sa))
+    res, code = sending.send(_body(sa))
     assert code == 200 and res["ok"] and res["scheduled"] is True, (code, res)
     assert len(calls) == 1 and calls[0]["send_after"] == sa, calls
 
@@ -80,7 +81,7 @@ def test_future_time_is_scheduled():
 def test_no_time_sends_now():
     calls = _fresh()
     for sa in (0, None):
-        res, code = server.do_send(_body(sa))
+        res, code = sending.send(_body(sa))
         assert code == 200 and res["scheduled"] is False, (code, res)
     assert [m["send_after"] for m in calls] == [0, 0], calls
 

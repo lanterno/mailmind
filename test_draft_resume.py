@@ -41,6 +41,8 @@ from mailmind.kernel import addresses
 import accounts
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.compose import book
+from mailmind.bootstrap.compose import sending
+from mailmind.compose.domain import limits
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -909,11 +911,11 @@ def test_files_over_the_cap_are_refused():
     _fresh()
     pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
                                                         "b64": base64.b64encode(b"x" * 64).decode()}])
-    cap, server.MAX_ATTACH_BYTES = server.MAX_ATTACH_BYTES, 32
+    cap, limits.MAX_ATTACH_BYTES = limits.MAX_ATTACH_BYTES, 32
     try:
         r, code = _resume(pk)
     finally:
-        server.MAX_ATTACH_BYTES = cap
+        limits.MAX_ATTACH_BYTES = cap
     assert code == 422 and "more than 25 MB" in r["error"], (code, r)
 
 
@@ -925,14 +927,14 @@ def test_draft_whose_saves_would_be_too_large_is_refused():
     assert code == 200, r
     need = (sum(len(f["b64"]) for f in r["files"]) + len(json.dumps(r["text"])) + len(json.dumps(r["tail_text"]))
             + server._RESUME_HEADROOM)
-    cap = server.MAX_SEND_POST
+    cap = limits.MAX_SEND_POST
     try:
-        server.MAX_SEND_POST = need
+        limits.MAX_SEND_POST = need
         assert _resume(pk)[1] == 200
-        server.MAX_SEND_POST = need - len(r["tail_text"]) // 2      # the files alone would still fit
+        limits.MAX_SEND_POST = need - len(r["tail_text"]) // 2      # the files alone would still fit
         r, code = _resume(pk)
     finally:
-        server.MAX_SEND_POST = cap
+        limits.MAX_SEND_POST = cap
     assert code == 422 and "too large for MailMind to save or send" in r["error"], (code, r)
 
 
@@ -977,7 +979,7 @@ def test_resume_route_requires_csrf():
 def test_resumed_reply_sends_one_quote():
     _fresh()
     opk, r = _reply_resumed(bcc=["dee@example.test"])
-    res, code = server.do_send(_payload(r))
+    res, code = sending.send(_payload(r))
     assert code == 200 and res["ok"], res
     m, meta, built = _sent()
     text, html = _parts(m)
@@ -994,7 +996,7 @@ def test_resumed_forward_sends_each_file_once():
     opk = _original()
     pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, _ = _resume(pk)
-    res, code = server.do_send(_payload(r, to=["dee@example.test"]))
+    res, code = sending.send(_payload(r, to=["dee@example.test"]))
     assert code == 200, res
     m, meta, _ = _sent()
     files = [p.get_filename() for p in m.iter_attachments()]
@@ -1011,7 +1013,7 @@ def test_send_never_fetches_the_original():
     def refuse(pk):
         raise AssertionError(f"fetched pk {pk}")
     server.ingest.fetch_body = refuse
-    res, code = server.do_send(_payload(r))
+    res, code = sending.send(_payload(r))
     assert code == 200 and res["ok"], res
 
 
@@ -1023,7 +1025,7 @@ def test_renumbered_original_still_gets_answered():
     c.commit()
     c.close()
     npk = _original(uid=8)
-    server.do_send(_payload(r))
+    sending.send(_payload(r))
     assert _sent()[1]["in_reply_to_pk"] == npk
 
 
@@ -1034,7 +1036,7 @@ def test_deleted_original_sends_threaded_without_answered():
     store.delete_message(c, opk)
     c.commit()
     c.close()
-    res, code = server.do_send(_payload(r))
+    res, code = sending.send(_payload(r))
     assert code == 200, res
     m, meta, _ = _sent()
     assert str(m["In-Reply-To"]) == "<orig1@example.test>" and meta["in_reply_to_pk"] is None, meta
@@ -1045,7 +1047,7 @@ def test_changed_tail_sends_plain_text():
     _, r = _reply_resumed()
     p = _payload(r)
     p["resume"]["tail_text"] = r["tail_text"].replace("Saturday", "Sunday")
-    server.do_send(p)
+    sending.send(p)
     text, html = _parts(_sent()[0])
     assert html is None and text == OWN + p["resume"]["tail_text"], (text, html)
 
@@ -1056,7 +1058,7 @@ def test_whole_resume_sends_as_typed():
                    [("In-Reply-To", "<orig1@example.test>")])
     r, _ = _resume(_synced(raw, 12))
     assert r["split"] == "whole", r
-    server.do_send(_payload(r, text=r["text"] + "\nSee you."))
+    sending.send(_payload(r, text=r["text"] + "\nSee you."))
     m, _, _ = _sent()
     text, html = _parts(m)
     assert html is None and text == "On my way.\n\n> Shall we meet?\nSee you.\n", repr(text)
@@ -1079,14 +1081,14 @@ def test_resave_three_times_keeps_one_quote_and_the_bcc():
 def test_bad_resume_shape_is_400():
     _fresh()
     _, r = _reply_resumed()
-    res, code = server.do_send(_payload(r, resume="x"))
+    res, code = sending.send(_payload(r, resume="x"))
     assert (code, res["error"]) == (400, "bad draft data"), res
     assert CALLS["sent"] == []
 
 
 def test_unflagged_reply_still_needs_its_original():
     _fresh()
-    res, code = server.do_send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
+    res, code = sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
     assert (code, res["error"]) == (400, "missing original message"), res
 
@@ -1201,7 +1203,7 @@ def test_long_subject_reopens_as_drafted_however_often_it_is_saved():
         assert code == 200 and r["subject"] == subj, (code, r["subject"])
         _save(draft_id=res["draft_id"], subject=r["subject"], text=r["text"])
         pk = _synced(CALLS["append"][-1]["raw"], uid)
-    res, code = server.do_send(_payload(_resume(pk)[0], in_reply_to_pk=None))
+    res, code = sending.send(_payload(_resume(pk)[0], in_reply_to_pk=None))
     assert code == 200 and str(_sent()[0]["Subject"]) == subj, str(_sent()[0]["Subject"])
 
 
@@ -1231,7 +1233,7 @@ def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
     r, code = _resume(_synced(raw, 22))
     assert code == 200 and r["to"] == ["José Ñúñez <jose@bücher.example>", "Bo <bo@example.test>"], r
     assert r["cc"] == ["Zoë <zoe@example.test>"], r["cc"]
-    res, code = server.do_send(_payload(r, in_reply_to_pk=None))
+    res, code = sending.send(_payload(r, in_reply_to_pk=None))
     assert code == 200, res
     m, _, built = _sent()
     assert b"unknown-8bit" not in built["raw"] and b"xn--bcher-kva.example" in built["raw"], built["raw"][:400]
