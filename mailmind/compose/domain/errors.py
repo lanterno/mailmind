@@ -3,7 +3,7 @@
 
 class Refused(Exception):
     """A request that can't be sent or saved as it stands, and the answer that says so."""
-    def __init__(self, code, msg):
+    def __init__(self, code: int, msg: str):
         self.code, self.msg = code, msg
 
 

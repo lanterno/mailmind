@@ -1,12 +1,49 @@
 """An outbox row: what one is written as, and how it's listed."""
 import json
+from typing import Any, NotRequired, TypedDict
+
+from mailmind.compose.domain.builder import Built
+from mailmind.kernel.row import Row
 
 UNSURE = "May have gone out: the server stopped answering once it had the whole message"
 SENT_COPY_PENDING = "Delivered; its copy in Sent is still to be saved"
 SENT_COPY_FAILED = "Delivered, but its copy couldn't be saved in Sent"
 
 
-def new_row(built, meta, orig, due, created_at):
+class SendMeta(TypedDict):
+    """What goes with a built message into the outbox."""
+    account: str
+    idempotency_key: str
+    in_reply_to_pk: NotRequired[int | None]
+    orig_message_id: NotRequired[str | None]
+    subject: NotRequired[str | None]
+    draft_id: NotRequired[int | None]
+    to: NotRequired[list[str]]
+    cc: NotRequired[list[str]]
+    bcc: NotRequired[list[str]]
+    send_after: NotRequired[int]
+
+
+class Listed(TypedDict):
+    """An outbox row as the page sees it."""
+    id: int
+    account: str
+    subject: str
+    to: list[str]
+    cc: list[str]
+    bcc_count: int
+    state: str
+    attempts: int
+    error: str | None
+    unsure: bool
+    created_at: str
+    sent_at: str | None
+    next_attempt_at: int
+    scheduled: bool
+    retrying: bool
+
+
+def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at: str) -> dict[str, Any]:
     """`built` is what build_message gave, `orig` the row of the message it replies to, if any is left.
     `due` is the end of the grace window: a later send_after moves it on. The queue goes by this column,
     so a send scheduled for later needs nothing of the worker, and can be cancelled until it goes."""
@@ -30,9 +67,9 @@ def new_row(built, meta, orig, due, created_at):
     }
 
 
-def listed(r):
+def listed(r: Row) -> Listed:
     """A row as the outbox lists it."""
-    rcpt = {}
+    rcpt: dict[str, Any] = {}
     try:
         rcpt = json.loads(r["recipients"]) or {}
     except Exception:

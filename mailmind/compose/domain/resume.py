@@ -1,21 +1,38 @@
 """A saved draft, opened back up: what you typed, the quote it carries and its files."""
 import base64
+from email.message import EmailMessage
 import mimetypes
 import re
+from typing import TypedDict
 
 from mailmind.compose.domain import limits
 from mailmind.compose.domain.errors import Refused
+from mailmind.content.mime import Parsed, decoded
 
 MODES = ("new", "reply", "replyall", "forward")
 PARTICIPANT = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
 
 
-def lf(s):
+class Record(TypedDict, total=False):
+    """What MailMind's last save of a draft recorded the composer held."""
+    own_text: str | None
+    tail_text: str | None
+
+
+class ResumedFile(TypedDict):
+    """A file as the composer takes it back."""
+    filename: str
+    content_type: str
+    size: int
+    b64: str
+
+
+def lf(s: str | None) -> str:
     """Text with LF line ends only."""
     return (s or "").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def resume_split(text, rec, exact):
+def resume_split(text: str | None, rec: Record | None, exact: bool) -> tuple[str, str, str] | None:
     """Split a saved draft's text/plain into (own, tail, how), or None when that can't be done
     without losing something. rec: {"own_text", "tail_text"} as recorded at MailMind's last
     save of this draft, or None. exact: this is the very copy MailMind saved, so the record is
@@ -24,8 +41,9 @@ def resume_split(text, rec, exact):
     told apart, so all of it is yours to edit). own + tail is the drafted text, give or take
     trailing newlines."""
     rec = rec or {}
-    if exact and rec.get("own_text") is not None:
-        return lf(rec["own_text"]), lf(rec.get("tail_text") or ""), "exact"
+    own = rec.get("own_text")
+    if exact and own is not None:
+        return lf(own), lf(rec.get("tail_text") or ""), "exact"
     if text is None:
         return None
     t, tail = lf(text), lf(rec.get("tail_text") or "")
@@ -35,7 +53,7 @@ def resume_split(text, rec, exact):
     return (t[:-1] if t.endswith("\n") else t), "", "whole"   # set_content's own trailing newline
 
 
-def resume_files(msg, parsed, elsewhere):
+def resume_files(msg: EmailMessage, parsed: Parsed, elsewhere: str) -> tuple[list[ResumedFile], int]:
     """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
     many were pictures in the text: every part must come back as the text or a file, or this
     raises Refused(422). Headers parse as they're read, so a hostile one raises here as well."""
@@ -49,11 +67,11 @@ def resume_files(msg, parsed, elsewhere):
     leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
     listed = {int(a["part_id"]) for a in parsed["attachments"]}
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
-    covered = set()                                      # HTML that the text parse() read is the alternative to
+    covered: set[int] = set()                            # HTML that the text parse() read is the alternative to
     for p in msg.walk():
         if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
             covered |= {id(x) for x in p.walk() if x.get_content_type() == "text/html"}
-    bodies = set()
+    bodies: set[str] = set()
     for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
         ct = p.get_content_type()
         if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
@@ -64,13 +82,14 @@ def resume_files(msg, parsed, elsewhere):
         if ct == "text/html" and body is None and ct not in bodies:
             bodies.add(ct)                               # formatted text only: refused below as such
             continue
-        if not (p.get_payload(decode=True) or b"").strip():
+        if not (decoded(p) or b"").strip():
             continue                                     # nothing in it to lose
         raise Refused(422, lost)
-    files, total, inline = [], 0, 0
+    files: list[ResumedFile] = []
+    total = inline = 0
     for a in parsed["attachments"]:
         part = leaves[int(a["part_id"]) - 1]
-        data = part.get_payload(decode=True) or b""
+        data = decoded(part) or b""
         ct = (part.get_content_type() or "application/octet-stream").lower()
         total += len(data)
         if total > limits.MAX_ATTACH_BYTES:

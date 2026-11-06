@@ -8,37 +8,75 @@ from datetime import datetime, timezone
 from email.headerregistry import Address
 from email.message import EmailMessage
 import re
+from typing import Any, NotRequired, TypedDict
 
+from mailmind.compose.domain.attachments import Attachment
 from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
 
 _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
 
 
-def _addr(name, spec):
+class Tail(TypedDict):
+    """What came after what you typed: the quote or forwarded section."""
+    text: str | None
+    html: str | None
+
+
+class MessageSpec(TypedDict):
+    """What to build. Recipients are as a person typed them. `own`, `tail` and `forwarded` are for a save to record,
+    and building ignores them."""
+    account: str
+    account_name: NotRequired[str]
+    to: NotRequired[str | list[str]]
+    cc: NotRequired[str | list[str]]
+    bcc: NotRequired[str | list[str]]
+    subject: NotRequired[str]
+    text: NotRequired[str]
+    html: NotRequired[str | None]
+    attachments: NotRequired[list[Attachment]]
+    in_reply_to: NotRequired[str | None]
+    references: NotRequired[str | list[str] | None]
+    own: NotRequired[str]
+    tail: NotRequired[Tail]
+    forwarded: NotRequired[list[Attachment]]
+
+
+class Built(TypedDict):
+    """A message built. `raw` holds no Bcc, which rides only in the envelope."""
+    raw: bytes
+    message_id: str
+    envelope: list[str]
+    to_disp: list[str]
+    cc_disp: list[str]
+    bcc_disp: list[str]
+
+
+def _addr(name: str, spec: str) -> Address:
     local, _, domain = spec.rpartition("@")
     return Address(display_name=name or "", username=local, domain=domain)
 
 
-def reference_chain(orig_message_id, orig_refs, orig_in_reply_to):
+def reference_chain(orig_message_id: str | None, orig_refs: str | None, orig_in_reply_to: str | None) -> list[str]:
     """RFC 5322 §3.6.4 References chain for a reply, de-duped, parent appended last."""
-    ids = []
+    ids: list[str] = []
     for blob in (orig_refs or "", orig_in_reply_to or ""):
         ids += re.findall(r"<[^<>\s]+>", blob)
     if orig_message_id:
         ids.append(orig_message_id.strip())
-    out = []
+    out: list[str] = []
     for i in ids:
         if _MSGID.match(i) and i not in out:
             out.append(i)
     return out
 
 
-def thread_ids(in_reply_to, references):
+def thread_ids(in_reply_to: object, references: object) -> tuple[str | None, list[str]]:
     """(in_reply_to|None, [references]) taken from a saved draft's own headers: well-formed
     Message-IDs only, references de-duplicated in order and capped at 50 (the first, which
     names the thread's root, and the last 49)."""
     irt = next((t for t in re.findall(r"<[^<>\s]+>", str(in_reply_to or "")) if _MSGID.match(t)), None)
-    refs, seen = [], set()
+    refs: list[str] = []
+    seen: set[str] = set()
     for t in re.findall(r"<[^<>\s]+>", str(references or "")):
         if _MSGID.match(t) and t not in seen:
             seen.add(t)
@@ -51,7 +89,7 @@ def thread_ids(in_reply_to, references):
 _BCC_HEADER = re.compile(rb"(?im)^bcc[ \t]*:")
 
 
-def build_message(spec, draft=False):
+def build_message(spec: MessageSpec, draft: bool = False) -> Built:
     """spec: {account, account_name, to, cc, bcc (lists of raw tokens or strings),
     subject, text, html|None, attachments [{filename,content_type,data:bytes}],
     in_reply_to|None, references|list|None}.
@@ -95,17 +133,17 @@ def build_message(spec, draft=False):
 
     m.set_content(spec.get("text") or "", subtype="plain", charset="utf-8",
                   cte="quoted-printable")
-    if spec.get("html"):
-        m.add_alternative(spec["html"], subtype="html", charset="utf-8",
+    if html := spec.get("html"):
+        m.add_alternative(html, subtype="html", charset="utf-8",
                           cte="quoted-printable")
     for att in spec.get("attachments") or []:
         ct = (att.get("content_type") or "application/octet-stream").split(";")[0].strip()
         maintype, _, subtype = ct.partition("/")
         if not subtype:
             maintype, subtype = "application", "octet-stream"
-        extra = {}
-        if att.get("params"):                # e.g. iMIP text/calendar; method=REPLY
-            extra["params"] = {str(k): str(v) for k, v in att["params"].items()}
+        extra: dict[str, Any] = {}
+        if params := att.get("params"):      # e.g. iMIP text/calendar; method=REPLY
+            extra["params"] = {str(k): str(v) for k, v in params.items()}
         filename = clean(att.get("filename") or "attachment")
         if (maintype, subtype) == ("message", "rfc822"):     # an attached email may not be base64 (RFC 2046)
             m.add_attachment(email.message_from_bytes(att["data"], policy=email.policy.default), filename=filename)

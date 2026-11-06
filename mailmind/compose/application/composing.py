@@ -4,7 +4,7 @@ from mailmind.compose.domain.attachments import decode as attachments_of, extrac
 from mailmind.compose.domain.builder import reference_chain, thread_ids
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.forward import forward_bodies
-from mailmind.compose.domain.reply import reply_bodies
+from mailmind.compose.domain.reply import Original, reply_bodies
 from mailmind.compose.domain.resume import lf
 from mailmind.content import sanitize
 from mailmind.content.quote import own_html, quote_tail
@@ -81,7 +81,7 @@ class Composing:
             except Exception as e:
                 print(f"[compose] original fetch failed for pk {opk}: {self._screen.quiet_error(e)}", flush=True)
                 raise Refused(502, "could not load the original message")
-            orig = {"from_name": orow["from_name"], "from_addr": orow["from_addr"],
+            orig: Original = {"from_name": orow["from_name"], "from_addr": orow["from_addr"],
                     "subject": orow["subject"], "date": parsed.get("date"),
                     "to": parsed.get("to"), "cc": parsed.get("cc"),
                     "text": parsed.get("text"), "html": parsed.get("html")}

@@ -2,20 +2,31 @@
 import base64
 import email
 import email.policy
+from typing import NotRequired, TypedDict
 
 from mailmind.compose.domain import limits
 from mailmind.content import mime
+from mailmind.kernel.parsed import is_list, is_object
 
 
-def decode(items):
+class Attachment(TypedDict):
+    """A file a message carries. `params` are its own Content-Type parameters, as an iMIP reply's method."""
+    filename: str
+    content_type: str
+    data: bytes
+    params: NotRequired[dict[str, str]]
+
+
+def decode(items: object) -> list[Attachment]:
     """Decode client base64 attachments -> [{filename,content_type,data}], capped."""
     if items is None:
         items = []
-    if not isinstance(items, list):
+    if not is_list(items):
         raise ValueError("bad attachments")
-    out, total = [], 0
+    out: list[Attachment] = []
+    total = 0
     for a in items:
-        if not isinstance(a, dict):
+        if not is_object(a):
             raise ValueError("bad attachment")
         try:
             data = base64.b64decode(a.get("b64") or "", validate=True)
@@ -31,14 +42,15 @@ def decode(items):
     return out
 
 
-def extract(raw):
+def extract(raw: bytes | None) -> list[Attachment]:
     """Pull real attachment parts (filename+bytes) out of a stored RFC822 message,
     for re-attaching on forward. Inline cid images are skipped."""
     try:
         msg = email.message_from_bytes(raw or b"", policy=email.policy.default)
     except Exception:
         return []
-    out, total = [], 0
+    out: list[Attachment] = []
+    total = 0
     for part in mime.walk(msg):
         if part.get_content_maintype() == "multipart":
             continue

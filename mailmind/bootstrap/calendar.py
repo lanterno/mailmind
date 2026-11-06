@@ -8,7 +8,7 @@ from mailmind.calendar.application.invites import Invites
 from mailmind.calendar.application.rsvp import Rsvp
 from mailmind.mailbox.domain import roles
 from mailmind.platform.workers import gates
-from mailmind.compose.api import build_message, reference_chain
+from mailmind.compose.api import Built, MessageSpec, build_message, reference_chain
 from mailmind.bootstrap import accounts
 
 __all__ = ["agenda", "ics", "invites", "rsvp"]
@@ -42,10 +42,10 @@ class _Messages:
 
 class _Send:
     """Through Compose's outbox, until Compose holds it."""
-    def build(self, spec, original):
-        return build_message({
+    def build(self, spec, original) -> Built:
+        return build_message(MessageSpec(**{
             **spec, "in_reply_to": original["message_id"],
-            "references": reference_chain(original["message_id"], original["refs"], original["in_reply_to"])})
+            "references": reference_chain(original["message_id"], original["refs"], original["in_reply_to"])}))
 
     def enqueue(self, built, meta):
         from mailmind.bootstrap import compose
