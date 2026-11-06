@@ -1,3 +1,6 @@
+-- index idx_ai_batch_items_batch
+CREATE INDEX idx_ai_batch_items_batch ON ai_batch_items(batch_id);
+
 -- index idx_att_msg
 CREATE INDEX idx_att_msg ON attachments(message_pk);
 
@@ -45,6 +48,12 @@ CREATE INDEX idx_readmut_state ON read_mutations(state, next_attempt_at);
 
 -- index idx_unsub_log_addr
 CREATE INDEX idx_unsub_log_addr ON unsub_log(from_addr);
+
+-- table ai_batch_items
+CREATE TABLE ai_batch_items( message_key INTEGER PRIMARY KEY REFERENCES message_identity(key) ON DELETE CASCADE, batch_id INTEGER NOT NULL REFERENCES ai_batches(id) ON DELETE CASCADE);
+
+-- table ai_batches
+CREATE TABLE ai_batches( id INTEGER PRIMARY KEY AUTOINCREMENT, remote_id TEXT, feature TEXT NOT NULL, model TEXT NOT NULL, state TEXT NOT NULL, requests INTEGER NOT NULL, estimate_micros INTEGER NOT NULL, cutoff_ts INTEGER NOT NULL, created_at INTEGER NOT NULL, polled_at INTEGER NOT NULL DEFAULT 0, ended_at INTEGER);
 
 -- table ai_usage
 CREATE TABLE ai_usage( day TEXT NOT NULL, feature TEXT NOT NULL, model TEXT NOT NULL, served TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL, calls INTEGER NOT NULL DEFAULT 0, input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cost_micros INTEGER NOT NULL DEFAULT 0, last_ts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, feature, model, served, outcome));
@@ -127,4 +136,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=35;
+PRAGMA user_version=36;
