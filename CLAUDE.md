@@ -183,13 +183,13 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
 Pipeline, roughly in data-flow order:
 
 ```
-mailmind.config.json → config.py/accounts.py → ingest.py → curation's classifier → store.py (SQLite)
+mailmind.config.json → mailmind.accounts → ingest.py → curation's classifier → mailmind.mailbox's store (SQLite)
                                                                 ↓
                                               summarize.py (Claude API) → server.py + web/
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `mailmind.compose`
-(send), `mailmind.discovery` (FTS + operator grammar), `threads.py`, `mailmind.calendar` (invites), `realtime.py` (IMAP IDLE), and the AI modules
+(send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 `discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
@@ -298,13 +298,13 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`. `mailmind.bootstrap.assistant` binds one and resolves the key.
-- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. So far it
-  holds `adapters.config_file`, which `config.py` reads and writes `mailmind.config.json`
+- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. So far it
+  holds `adapters.config_file`, which `application.directory.Directory` reads and writes `mailmind.config.json`
   through. `ConfigFile.read` parses the file again only when its inode, size or modification
   time changed, and hands each caller a copy of its own; `write` replaces it atomically, readable
   by its owner only. `adapters.secrets` resolves a credential in each style the file allows
   (plain, `op`, `env`, the Bridge password), caching an `op` read only when it succeeds.
-  `config.py` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
+  `Directory` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
   both. `domain.provider.ProviderProfile` says what an account's server does on its own and its
   quirks: Gmail files sent mail itself, archives by dropping `\Inbox` and threads by X-GM-THRID;
   Proton Bridge (or any loopback STARTTLS server) is fragile, recycled sooner in the pool and never
@@ -335,6 +335,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   are `adapters.imaplib_session` (what the old door runs on) and `adapters.imapclient_session`
   (only it imports `imapclient`). `adapters.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
+  `adapters.sqlite` holds what is stored of the mail, the offline queue's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.conversations` for thread ids.
   `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
   IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only the new door's
   `front.build` does (`offer`). The old door ignores the ask and never imports `imapclient`.

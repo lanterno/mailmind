@@ -283,7 +283,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 ## Setup, first run and housekeeping
 
 - **A real Settings home with a Preferences tab** · high value · effort M — `#settingsModal` is a
-  single-purpose "Email connections" dialog; there is no tab strip, and `config.py` exposes only
+  single-purpose "Email connections" dialog; there is no tab strip, and `Directory` exposes only
   accounts/alias/signature/webmail. It has become the natural landing zone for several other gaps —
   density, high-contrast, AI model, the 10s undo-send window, the 45s/120s/20s poll intervals,
   notification preferences and quiet hours — and for the nine `mm_*` localStorage keys that

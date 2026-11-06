@@ -32,13 +32,13 @@ See [Features](#features) for what ships today and
 ```
 mailmind.config.json          (your accounts + how to read their passwords)
         │
-   config.py / accounts.py     resolve credentials, open IMAP connections
+   mailmind/accounts/          resolve credentials, open IMAP connections
         │
    ingest.py                   pull INBOX headers + bodies, skip obvious junk
         │
    mailmind/curation/          classify each message (spam / marketing /
         │                      notifications / receipts / personal / protected)
-   store.py  →  SQLite (mailmind.db)
+   mailmind/mailbox/ store  →  SQLite (mailmind.db)
         │
    summarize.py                summarize + score importance 1–5 with Claude
         │
@@ -48,7 +48,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
 
 Around that spine sit the client modules: `mailops.py` (IMAP writes),
 `mailmind/compose/` (send), `mailmind.discovery` (FTS + operator
-grammar), `threads.py`, `mailmind/content/` (reading a message, and the reader's
+grammar), `mailmind/content/` (reading a message, and the reader's
 whitelist sanitizer), `mailmind/calendar/` (invites), `realtime.py` (IMAP IDLE), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
