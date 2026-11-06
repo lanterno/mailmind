@@ -22,6 +22,7 @@ import gate
 from fixtures import world as w
 from mailmind.platform.workers import gates
 from mailmind.curation.application import cleanup
+from mailmind.bootstrap import curation
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -123,10 +124,10 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
     since = len(world.server.commands)
     with gate.held_elsewhere():                              # a user op holds the lock
         server._auto_reconcile_one(ada)
-        server._auto_expire_one(ada)
+        curation.expiry.auto_one(ada)
     assert world.server.commands[since:] == []               # both skipped this cycle
     server._auto_reconcile_one(ada)
-    server._auto_expire_one(ada)
+    curation.expiry.auto_one(ada)
     assert len(world.server.commands_for(w.ADA, "LOGIN")) >= 2   # and run once the lock is free
 
 

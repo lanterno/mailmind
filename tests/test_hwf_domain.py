@@ -683,12 +683,11 @@ def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(worl
 
 def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
     import accounts
-    import manage
     world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", From="Lin Mori <lin@studio.example.test>",
                                             Message_ID="<issue-219@loom.example.test>"))
     [stored] = rows("SELECT count(*) AS n FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1", w.ADA)
     assert stored["n"] == 4
-    assert manage.plan_account_db(accounts.get(w.ADA))["junk"] == stored["n"]
+    assert curation.sweeps.plan_stored(accounts.get(w.ADA))["junk"] == stored["n"]
 
 
 def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):

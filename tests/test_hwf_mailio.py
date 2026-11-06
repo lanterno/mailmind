@@ -18,6 +18,7 @@ import pytest
 
 import gate
 from fixtures import world as w
+from mailmind.bootstrap import curation
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
@@ -573,20 +574,18 @@ def audit(world):
 
 
 def test_hwf_a_sweep_retries_a_move_the_server_said_ok_to_but_didnt_do(world):
-    import manage
     world.server.fail("UID MOVE", "OK [scripted] moved, or so it says", user=w.ADA)
-    res = manage.sweep_account(acct())
+    res = curation.sweeps.sweep(acct())
     assert (res["moved"], res["stragglers"], res["error"]) == (3, [], None)
     for name in JUNK_INBOX:
         assert boxes(world, name) == ([(w.ADA, "Trash")], []), name
 
 
 def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
-    import manage
     uid = str(world.uid("ada-inbox-04-ci.eml"))
     world.server.fail("UID MOVE", "OK [scripted] moved, or so it says", times=None, user=w.ADA,
                       when=lambda a: uid in str(a[0]).split(","))
-    res = manage.sweep_account(acct())
+    res = curation.sweeps.sweep(acct())
     assert (res["moved"], res["stragglers"]) == (2, [uid])
     assert boxes(world, "ada-inbox-04-ci.eml") == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
     assert boxes(world, "ada-inbox-12-scam.eml") == ([(w.ADA, "Trash")], [])
@@ -594,7 +593,6 @@ def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
 
 def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
     """UIDVALIDITY changed and no sync has seen it, so a stored UID may now be another message's."""
-    import manage
     import store
     swept, kept = world.row("ada-inbox-04-ci.eml"), world.row("ada-inbox-01-lunch.eml")
     c = store.conn()
@@ -602,24 +600,22 @@ def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
     c.execute("UPDATE messages SET uid=? WHERE pk=?", (world.uid("ada-inbox-04-ci.eml"), kept["pk"]))
     c.commit()
     c.close()
-    assert manage.sweep_account(acct())["moved"] == 3
+    assert curation.sweeps.sweep(acct())["moved"] == 3
     assert q("SELECT pk FROM messages WHERE pk=?", swept["pk"]) == []
     assert q("SELECT pk FROM messages WHERE pk=?", kept["pk"]) == [{"pk": kept["pk"]}]
 
 
 def test_hwf_a_sweep_prunes_a_message_with_no_message_id_by_uid(world):
-    import manage
     uid = world.deliver(w.ADA, "INBOX", b"From: News <news@loom.example.test>\r\nTo: ada@example.test\r\n"
                                         b"Subject: No id\r\nList-Unsubscribe: <https://loom.example.test/u>\r\n"
                                         b"Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n")
-    assert manage.sweep_account(acct())["moved"] == 4
+    assert curation.sweeps.sweep(acct())["moved"] == 4
     assert q("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid) == []
 
 
 def test_hwf_a_sweep_audits_before_it_moves(world):
-    import manage
     world.server.drop("UID MOVE", user=w.ADA)
-    res = manage.sweep_account(acct())
+    res = curation.sweeps.sweep(acct())
     assert res["error"] and res["moved"] == 0
     assert sorted(int(e["uid"]) for e in audit(world)) == sorted(world.uid(n) for n in JUNK_INBOX)
     for name in JUNK_INBOX:
@@ -630,11 +626,10 @@ FAR = 4_000_000_000                                              # a "now" long 
 
 
 def test_hwf_expiry_audits_before_it_moves(world):
-    import manage
     from mailmind.bootstrap.curation import rules
     rules.set_expiry("loom.example.test", 1)
     world.server.drop("UID MOVE", user=w.ADA)
-    res = manage.expire_account(acct(), now=FAR)
+    res = curation.expiry.account(acct(), now=FAR)
     assert res["error"] and res["moved"] == 0
     assert [(e["uid"], e["bucket"]) for e in audit(world)] == [(str(world.uid("ada-inbox-03-newsletter.eml")),
                                                                 "expired")]
@@ -642,30 +637,27 @@ def test_hwf_expiry_audits_before_it_moves(world):
 
 
 def test_hwf_expiry_prunes_the_local_row_by_message_id(world):
-    import manage
     from mailmind.bootstrap.curation import rules
     rules.set_expiry("thimble.example.test", 1)                 # the receipt's sender
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # the receipt is now UID 4 on the server
-    assert manage.expire_account(acct(), now=FAR)["moved"] == 1
+    assert curation.expiry.account(acct(), now=FAR)["moved"] == 1
     assert boxes(world, RECEIPT) == ([(w.ADA, "Trash")], [])
     assert world.where("ada-inbox-04-ci.eml")["db"][0]["uid"] == 4    # the row stored at UID 4 stays
 
 
 def test_hwf_a_sweep_still_moves_the_junk_when_the_server_refuses_move(world):
-    import manage
     world.server.fail("UID MOVE", "BAD [CANNOT] MOVE not supported", times=None, user=w.ADA)
-    assert manage.sweep_account(acct())["moved"] == 3
+    assert curation.sweeps.sweep(acct())["moved"] == 3
 
 
 def test_hwf_a_sweep_and_expiry_on_a_server_without_move_copy_then_expunge_one_uid(world):
-    import manage
     from mailmind.bootstrap.curation import rules
     world.server.without = {"MOVE"}
     since = world.mark()
-    assert manage.sweep_account(acct())["moved"] == 3
+    assert curation.sweeps.sweep(acct())["moved"] == 3
     rules.set_expiry("thimble.example.test", 1)                 # the receipt's sender
-    assert manage.expire_account(acct(), now=FAR)["moved"] == 1
+    assert curation.expiry.account(acct(), now=FAR)["moved"] == 1
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Trash")]
     kinds = [line.split(" ", 3)[2] + " " + line.split(" ", 3)[3].split(" ", 1)[0]
              for line in world.writes(since)]
@@ -675,7 +667,6 @@ def test_hwf_a_sweep_and_expiry_on_a_server_without_move_copy_then_expunge_one_u
 def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
     import email.utils
     from datetime import datetime, timezone
-    import manage
     from mailmind.bootstrap.curation import rules
     rules.set_expiry("loom.example.test", 72)
     now = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
@@ -687,16 +678,15 @@ def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
         world.server.deliver(w.ADA, "INBOX", raw, when=arrived)
     issue("old-header", month, hour)                            # written long ago, arrived an hour ago: kept
     issue("new-header", hour, month)                            # says an hour old, arrived a month ago: expired
-    manage.expire_account(acct(), now=now.timestamp())
+    curation.expiry.account(acct(), now=now.timestamp())
     assert world.server.find(w.ADA, "INBOX", "<loom-old-header@example.test>")
     assert world.server.find(w.ADA, "Trash", "<loom-new-header@example.test>")
 
 
 def test_hwf_the_ai_sweep_finds_its_targets_in_the_live_inbox_by_message_id(world):
-    import manage
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # every stored UID is now one off
-    res = manage.sweep_account_ai(acct())
+    res = curation.sweeps.sweep_ai(acct())
     assert (res["moved"], res["stragglers"]) == (3, [])
     for name in JUNK_INBOX:
         assert boxes(world, name) == ([(w.ADA, "Trash")], []), name
@@ -1117,7 +1107,7 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
     def background():
         got = {"prefetch": server.message_body(pk, False, prefetch=True)}
         server._auto_reconcile_one(acct())
-        server._auto_expire_one(acct())
+        curation.expiry.auto_one(acct())
         got["backfill"] = server.backfill_round()               # yielded, its backlog left for the next round
         return got
     finished, got = while_locked(background)

@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime, timezone
 
 from mailmind.bootstrap.curation import rules
-import manage
+from mailmind.bootstrap import curation
 from mailmind.platform import settings
 from mailmind.curation.domain import rulebook
 
@@ -47,16 +47,16 @@ def test_selects_only_older_than_limit():
     exp = {"notify-example.test": 72}
     rows = [_row("a@notify-example.test", 100), _row("b@notify-example.test", 10),
             _row("c@person.test", 1000)]
-    hit = manage.select_expired(rows, exp, NOW)
+    hit = curation.select_expired(rows, exp, NOW)
     assert [r["from"] for r in hit] == ["a@notify-example.test"]
     assert hit[0]["hours"] == 72
 
 def test_exactly_at_limit_is_kept():
-    hit = manage.select_expired([_row("a@notify-example.test", 72)], {"notify-example.test": 72}, NOW)
+    hit = curation.select_expired([_row("a@notify-example.test", 72)], {"notify-example.test": 72}, NOW)
     assert hit == []
 
 def test_unknown_age_never_expires():
-    hit = manage.select_expired([_row("a@notify-example.test", None)], {"notify-example.test": 72}, NOW)
+    hit = curation.select_expired([_row("a@notify-example.test", None)], {"notify-example.test": 72}, NOW)
     assert hit == []
 
 
@@ -64,15 +64,15 @@ def test_unknown_age_never_expires():
 def test_arrival_prefers_internaldate():
     arrived = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
     msg = email.message_from_string("Date: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\n")
-    assert manage._arrival_ts(arrived, msg) == 1767268800
+    assert curation.arrival_ts(arrived, msg) == 1767268800
 
 def test_arrival_falls_back_to_date_header():
     msg = email.message_from_string("Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\r\n")
-    assert manage._arrival_ts(None, msg) == 1767268800
+    assert curation.arrival_ts(None, msg) == 1767268800
 
 def test_arrival_unknown_is_none():
     msg = email.message_from_string("Subject: no date\r\n\r\n")
-    assert manage._arrival_ts(None, msg) is None
+    assert curation.arrival_ts(None, msg) is None
 
 
 # ── storage ───────────────────────────────────────────────────────────────────

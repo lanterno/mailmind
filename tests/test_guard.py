@@ -126,7 +126,6 @@ def test_what_tests_need_is_allowed(tmp_path):
 def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import json
     import config
-    import manage
     from mailmind.bootstrap.curation import rules
     import store
     import views
@@ -141,7 +140,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     config.save({"accounts": []})
     rules.add("lin@example.test", "keep")
     views.add("From Lin", "from:lin")
-    manage.audit("ada@example.test", [])
+    curation.AUDIT.swept("ada@example.test", [])
     curation.AUDIT.cleaned_up("lin@example.test", "lin@example.test", 0, "ok")
     (data_dir / "reconcile_audit.jsonl").write_text(json.dumps({"kind": "reconcile", "ts": "t"}) + "\n")
     assert curation.classify("lin@example.test", "hi")[0] == "personal/protected"     # the rules just written
