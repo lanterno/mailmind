@@ -6,19 +6,30 @@ Every function here but Undo's methods takes its caller's connection and leaves 
 """
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from mailmind.platform import sse
 from mailmind.platform.workers import gates
+
+KEEP_FOR = timedelta(hours=24)                # an entry older than this can't be undone (decision D3)
 
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _oldest_kept():
+    return (datetime.now(timezone.utc) - KEEP_FOR).isoformat()
+
+
+def _expire(c):
+    c.execute("DELETE FROM undo_entries WHERE created_at < ?", (_oldest_kept(),))
+
+
 def push(c, entry, group, keep):
     """Put `entry` on top of the undo stack, or, when the top gathers `group`, add it to that
-    group's children. Then keep only the newest `keep` entries."""
+    group's children. Then keep only the newest `keep` entries, none older than KEEP_FOR."""
+    _expire(c)
     top = c.execute("SELECT id, grp, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
     if group and top is not None and top["grp"] == group:
         held = json.loads(top["entry"])
@@ -42,7 +53,8 @@ def put_back(c, entry):
 
 
 def pop(c):
-    """Take the newest entry off the undo stack: the entry, or None when the stack is empty."""
+    """Take the newest entry off the undo stack: the entry, or None when none is left that may be undone."""
+    _expire(c)
     top = c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
     if top is None:
         return None
@@ -74,11 +86,12 @@ def forget(c, names):
 
 def entries(c):
     """The undo stack, oldest first."""
-    return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries ORDER BY id")]
+    return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries WHERE created_at >= ? ORDER BY id",
+                                                      (_oldest_kept(),))]
 
 
 class Undo:
-    UNDO_MAX = 25
+    UNDO_MAX = 50                             # a group counts as one (decision D3)
 
     def __init__(self, connect, reversers, after, quiet_error):
         """`reversers` maps an entry's kind to what reverses it, `after()` runs once something was, and `quiet_error(e)`
