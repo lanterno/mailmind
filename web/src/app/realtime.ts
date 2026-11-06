@@ -2,8 +2,8 @@
 // refetches in place, so it never yanks the reader or the row you're on.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { GetAnswers } from "../api/types.gen";
-import { onNewMail } from "../features/brief/NewMail";
+import type { GetAnswers } from "../lib/api/types.gen";
+import { onNewMail } from "../features/assistant/NewMail";
 import { onDraftReady } from "../features/compose/draftAhead";
 import { createStore } from "../lib/store";
 import { parseRoute } from "./route";

@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { get } from "../../api/client";
+import { get } from "../../lib/api/client";
 import { go } from "../../app/route";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";

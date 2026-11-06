@@ -1,7 +1,7 @@
 // The bar across the top: the rail's control, search, and the way back to the current app. Each keeps its state in the
 // body's classes and the storage keys the current page uses, since the two share a stylesheet and a browser.
 import { useEffect, useRef, useState } from "react";
-import { ask, doing, runDo, stopAsking } from "../features/ask/ask";
+import { ask, doing, runDo, stopAsking } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
 import type { Mailbox } from "../features/mailbox/useMailbox";

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { get } from "../../api/client";
+import { get } from "../../lib/api/client";
 import { useLayer } from "../../lib/backTrap";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";

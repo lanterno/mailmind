@@ -4,10 +4,10 @@ import { Button, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-compone
 import { go, pathOf, type ListSource } from "../../app/route";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
-import { post } from "../../api/client";
+import { post } from "../../lib/api/client";
 import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { useScreener } from "../senders/Screener";
+import { useScreener } from "../curation/Screener";
 import { useFolders, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 

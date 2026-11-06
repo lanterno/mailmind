@@ -1,8 +1,8 @@
 // What you can do to a message from anywhere: the list, the reader, the keyboard. Filing hides the row at once and
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
-import { post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { go, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";

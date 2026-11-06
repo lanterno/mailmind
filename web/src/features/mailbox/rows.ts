@@ -1,6 +1,6 @@
 // What a list shows, the same shape from a folder and from a search. Each list row says what the AI's verdict asks of
 // you (`needsYou`); the page reads that and never works it out.
-import type { GetAnswers } from "../../api/types.gen";
+import type { GetAnswers } from "../../lib/api/types.gen";
 
 export type FolderRow = GetAnswers["/api/messages"]["items"][number];
 export type SearchRow = NonNullable<GetAnswers["/api/search"]["items"]>[number];

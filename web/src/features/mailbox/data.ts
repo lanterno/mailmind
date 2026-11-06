@@ -1,10 +1,10 @@
 // What the mailbox reads, and when it reads it again. The event stream says what changed (app/realtime.ts); a query
 // refetches in place, so the row you are on and what you were reading stay put.
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { get } from "../../api/client";
+import { get } from "../../lib/api/client";
 import { sourceKey, type ListSource } from "../../app/route";
 import { store, stored } from "../../lib/store";
-import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../brief/model";
+import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant/model";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
 const PAGE = 200, ALL_INBOXES_EACH = 40;

@@ -9,7 +9,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
 import { answer, peekCards, useDraftChip } from "../compose/draftAhead";
 import { filing, bulk } from "../mailbox/actions";
-import { snoozeAsk } from "../mailbox/SnoozeMenu";
+import { snoozeAsk } from "../attention/SnoozeMenu";
 import type { Mailbox } from "../mailbox/useMailbox";
 import { LIMIT, useBrief, useSide } from "./data";
 import { BRIEF_CAP, commitments, eventWhen, fromDigest, greeting, nameIn, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";

@@ -1,7 +1,7 @@
 // What a composer is, with no DOM and no server: addresses, the seeds a reply or forward opens with, the requests it makes
 // and the send-time check's input. The machine beside it runs these; the page's own copies live in assets/legacy/app.js.
-import { guardBlocks, guardCheck, guardHard, guardLine, type GuardFix, type GuardSnapshot, type GuardWarning } from "../../compose/sendGuard";
-import { resumeFields, type ResumeFields } from "../../compose/draftResume";
+import { guardBlocks, guardCheck, guardHard, guardLine, type GuardFix, type GuardSnapshot, type GuardWarning } from "./sendGuard";
+import { resumeFields, type ResumeFields } from "./draftResume";
 
 export type Field = "to" | "cc" | "bcc";
 export const FIELDS: Field[] = ["to", "cc", "bcc"];

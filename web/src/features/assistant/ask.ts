@@ -1,8 +1,8 @@
 // Asking and doing, from the search box: "?…" asks your inbox and changes nothing, "!…" plans a bulk action. What a plan
 // would touch is frozen by the server at the preview, and nothing happens until you confirm it, by the plan's id.
 import type { QueryClient } from "@tanstack/react-query";
-import { ApiError, post } from "../../api/client";
-import type { PostAnswers } from "../../api/types.gen";
+import { ApiError, post } from "../../lib/api/client";
+import type { PostAnswers } from "../../lib/api/types.gen";
 import { readAgain, offerUndo, undoGroup } from "../mailbox/actions";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore } from "../../lib/store";

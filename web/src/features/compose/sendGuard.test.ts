@@ -1,6 +1,6 @@
 // The twin of script_send_guard.py, on the same word lists (tests/fixtures/send_guard_words.json) and the exact copy.
 import { describe, expect, it } from "vitest";
-import WORDS from "../../../tests/fixtures/send_guard_words.json";
+import WORDS from "../../../../tests/fixtures/send_guard_words.json";
 import { guardAttachWord as W, guardBlocks, guardCheck, guardHard, guardLine, guardList, guardSubjectEmpty, guardTypedText,
   type GuardSnapshot, type GuardWarning } from "./sendGuard";
 

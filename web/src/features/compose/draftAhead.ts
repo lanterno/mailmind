@@ -1,7 +1,7 @@
 // A reply written ahead, for mail that wants one. Opening a message peeks, which never spends; staying on it a moment asks
 // for one, and the event stream says when it's ready. Nothing goes on while you're writing.
 import { useEffect } from "react";
-import { get } from "../../api/client";
+import { get } from "../../lib/api/client";
 import { createStore } from "../../lib/store";
 import { announce } from "../../lib/toast";
 import { composing, onForgetDraftAhead } from "./compose";

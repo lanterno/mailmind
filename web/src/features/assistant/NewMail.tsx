@@ -1,6 +1,6 @@
 // Mail landed somewhere other than the list you're on. A list you're on refreshes in place, so this says so only for the
 // rest, with a line from the AI on what came in since you last looked. The line never asks at the daily limit.
-import { get, post } from "../../api/client";
+import { get, post } from "../../lib/api/client";
 import { go, type ListSource, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
 

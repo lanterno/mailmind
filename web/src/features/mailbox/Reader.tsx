@@ -1,9 +1,9 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
-import { BriefPane } from "../brief/Brief";
+import { ApiError, post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
+import { BriefPane } from "../assistant/Brief";
 import { composing, myAddresses } from "../compose/compose";
 import { answer, forget, useDraftAhead, useDraftChip } from "../compose/draftAhead";
 import { canQuickReply, QUICK } from "../compose/model";
@@ -17,9 +17,9 @@ import { useBody, useThread } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
-import { snoozeAsk } from "./SnoozeMenu";
+import { snoozeAsk } from "../attention/SnoozeMenu";
 import type { Mailbox } from "./useMailbox";
-import { SenderButton } from "../senders/ContactCard";
+import { SenderButton } from "../discovery/ContactCard";
 
 type Body = GetAnswers["/api/message/{pk}/body"];
 

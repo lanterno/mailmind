@@ -1,17 +1,17 @@
 // Everything you can do from here, in one list: the keys and the palette both read it, so a command means the same either
 // way and neither can drift from the other.
-import { panel } from "../features/brief/Panels";
-import { doing } from "../features/ask/ask";
+import { panel } from "../features/assistant/Panels";
+import { doing } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
-import { curateOpen } from "../features/curate/open";
-import { docsOpen } from "../features/docs/open";
+import { curateOpen } from "../features/curation/open";
+import { docsOpen } from "../features/discovery/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
 import { viewQuery } from "../features/mailbox/FolderRail";
 import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
-import { snoozeAsk } from "../features/mailbox/SnoozeMenu";
+import { snoozeAsk } from "../features/attention/SnoozeMenu";
 import { setGrouping, type Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
 import { reconcile, syncNow } from "../features/status/Status";

@@ -1,8 +1,8 @@
 // The tray the top bar's ↑ opens: changes waiting for a server, and what the outbox holds, each with its way out.
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, get, post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { ApiError, get, post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { toast } from "../../lib/toast";
 import { fmtWhen } from "./model";
 

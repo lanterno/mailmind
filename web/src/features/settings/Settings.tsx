@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { get, post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { get, post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";

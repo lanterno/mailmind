@@ -1,6 +1,6 @@
 // Two looks over the same mail, each its own overlay: the AI's to-dos as one checkable agenda, and the week behind you.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { ApiError } from "../../api/client";
+import { ApiError } from "../../lib/api/client";
 import { createStore } from "../../lib/store";
 import { Icon } from "../../lib/ui/Icon";
 import { filing } from "../mailbox/actions";

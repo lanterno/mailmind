@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 
 const WEB = resolve(import.meta.dirname, "..");
 const OUT = resolve(WEB, "assets/legacy/pure.js");
-const BLOCKS = [["draft-resume", "src/compose/draftResume.ts"], ["send-guard", "src/compose/sendGuard.ts"]];
+const BLOCKS = [["draft-resume", "src/features/compose/draftResume.ts"], ["send-guard", "src/features/compose/sendGuard.ts"]];
 
 function block([name, path]) {
   const js = stripTypeScriptTypes(readFileSync(resolve(WEB, path), "utf-8"), { mode: "strip" })

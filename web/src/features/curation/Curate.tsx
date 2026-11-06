@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { get, post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { get, post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { useLayer } from "../../lib/backTrap";
 import { createStore } from "../../lib/store";
 import { shortAddress } from "../../lib/text";

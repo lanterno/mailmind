@@ -1,7 +1,7 @@
 // The first-contact gate: senders this inbox hasn't decided on. A sender tray, not a message list.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { get, post } from "../../api/client";
+import { get, post } from "../../lib/api/client";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";

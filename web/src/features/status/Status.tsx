@@ -3,20 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { get, post } from "../../api/client";
+import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { createStore } from "../../lib/store";
 import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
-import { AI_PRIVACY } from "../brief/Brief";
-import { eventWhen } from "../brief/model";
+import { AI_PRIVACY } from "../assistant/Brief";
+import { eventWhen } from "../assistant/model";
 import { readAgain } from "../mailbox/actions";
 import { useDigest } from "../mailbox/data";
 import type { Mailbox } from "../mailbox/useMailbox";
 import { badAccounts, healthOf, nameOf, pillLabel, syncOf, type Digest } from "./model";
-import { curateOpen } from "../curate/open";
+import { curateOpen } from "../curation/open";
 
 const syncing = createStore(false);
 const reconciling = createStore(false);

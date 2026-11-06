@@ -2,7 +2,7 @@
 // what it shows is the copy the machine published.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
-import { get } from "../../api/client";
+import { get } from "../../lib/api/client";
 import { theme } from "../../lib/theme";
 import { fileSize, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";

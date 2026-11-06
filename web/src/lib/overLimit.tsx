@@ -1,7 +1,7 @@
 // The daily AI limit: an AI request you started that would go over it asks first. Requests that hit the limit while the
 // question is on screen share its one answer. One the page makes on its own leaves this out, and gets the 402 as an error.
 import { Button, Dialog, Modal, ModalOverlay } from "react-aria-components";
-import type { OverLimit } from "../api/client";
+import type { OverLimit } from "./api/client";
 import { createStore } from "./store";
 import { usd } from "./text";
 

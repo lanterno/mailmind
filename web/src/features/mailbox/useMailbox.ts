@@ -2,8 +2,8 @@
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { get } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { get } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
 import { settingsOpen } from "../settings/open";

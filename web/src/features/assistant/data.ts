@@ -1,8 +1,8 @@
 // The brief's reads. A GET reads only what is stored; a POST writes one. Opening the Inbox writes the day's brief if there
 // is none, and never asks at the daily limit: only a click does.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, get, post } from "../../api/client";
-import type { GetAnswers } from "../../api/types.gen";
+import { ApiError, get, post } from "../../lib/api/client";
+import type { GetAnswers } from "../../lib/api/types.gen";
 import { askOverLimit } from "../../lib/overLimit";
 import type { Brief } from "./model";
 

@@ -2,8 +2,8 @@
 // one left; a save clears `dirty` only if no edit landed while it was in flight; the send-time check runs synchronously, so
 // nothing is awaited before the composer closes and a double submit can't happen; and what is closed with unsaved words
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
-import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "../../compose/sendGuard";
-import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "../../compose/draftResume";
+import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "./sendGuard";
+import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
 import { createStore } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, looksLikeAddr, namesItself, nothingToSave, payloadOf,
