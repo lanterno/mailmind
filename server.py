@@ -4016,17 +4016,17 @@ def _do_resolve(match, where, params, cap):
         try:
             count = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
             rows = c.execute(
-                f"SELECT m.pk, m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso {base} "
+                f"SELECT m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso {base} "
                 "ORDER BY m.ts DESC LIMIT ?", [*bargs, cap]).fetchall()
         except sqlite3.OperationalError:
-            return None, [], [], []
+            return None, [], []
     finally:
         c.close()
     messages = [(r["message_key"], r["folder"]) for r in rows]
     sample = [{"from": (r["from_name"] or r["from_addr"] or ""),
                "subject": r["subject"] or "(no subject)",
                "when": rel_time(r["date_iso"])} for r in rows[:_DO_SAMPLE]]
-    return count, messages, sample, [r["pk"] for r in rows]
+    return count, messages, sample
 
 
 def ai_do_plan(body):
@@ -4055,7 +4055,7 @@ def ai_do_plan(body):
     if _do_is_whole_inbox(filt, match):                # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP
-    count, messages, sample, pks = _do_resolve(match, where, params, cap)
+    count, messages, sample = _do_resolve(match, where, params, cap)
     if count is None:                                  # unparseable resolved query → degrade
         return {"ok": True, "intent": "search", "filter": filt}, 200
     if not messages:                                   # nothing matches → nothing to confirm
@@ -4068,7 +4068,7 @@ def ai_do_plan(body):
     return {"ok": True, "intent": "act", "verb": verb, "filter": filt,
             "snooze_preset": preset,
             "count": count, "cap": cap, "capped": count > cap,
-            "plan": frozen.id, "pks": pks, "sample": sample}, 200
+            "plan": frozen.id, "sample": sample}, 200
 
 
 def _do_one(verb, one):
