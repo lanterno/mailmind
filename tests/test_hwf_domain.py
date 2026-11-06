@@ -18,6 +18,7 @@ from email.message import EmailMessage
 import pytest
 
 from fixtures import world as w
+from mailmind.content.text import body_text_of, html_to_snippet_text, snippet_of, text_body
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -175,11 +176,10 @@ def test_hwf_search_index_helpers_tolerate_a_database_without_the_index(db):
 
 
 def test_hwf_snippet_unescapes_entities_then_drops_invisible_padding():
-    import store
     padding = "&zwnj;&nbsp;&#8203;\u200d\u2060\ufeff\u034f\u00ad\u200e\u200f" * 5
-    assert store._snippet_of("Doors open at nine &amp; close at six" + padding + "\n\nSee   you there.") == \
+    assert snippet_of("Doors open at nine &amp; close at six" + padding + "\n\nSee   you there.") == \
         "Doors open at nine & close at six See you there."
-    assert len(store._snippet_of("word " * 200)) == 280
+    assert len(snippet_of("word " * 200)) == 280
 
 
 HTML_WITH_NOISE = ("<html><head><title>Issue 12</title><style>.ReadMsgBody{width:100%}</style></head>"
@@ -188,26 +188,22 @@ HTML_WITH_NOISE = ("<html><head><title>Issue 12</title><style>.ReadMsgBody{width
 
 
 def test_hwf_body_text_drops_the_contents_of_script_style_head_and_title():
-    import ingest
-    import store
-    for text in (store._body_text_of({"text": None, "html": HTML_WITH_NOISE}),
-                 ingest._html_to_snippet_text(HTML_WITH_NOISE)):
+    for text in (body_text_of({"text": None, "html": HTML_WITH_NOISE}),
+                 html_to_snippet_text(HTML_WITH_NOISE)):
         assert "Hello & welcome" in text
         assert not any(s in text for s in ("ReadMsgBody", "tracking", "Issue 12", "hidden note")), text
-    assert store._body_text_of({"text": "plain wins", "html": HTML_WITH_NOISE}) == "plain wins"
+    assert body_text_of({"text": "plain wins", "html": HTML_WITH_NOISE}) == "plain wins"
 
 
 def test_hwf_body_text_strips_json_ld_blocks_twelve_at_most():
-    import store
     block = '[{"@context": "https://schema.org", "@type": "Order", "items": [{"n": 1}]}]'
-    assert store._body_text_of({"text": f"Order shipped. {block} Thanks."}).split() == ["Order", "shipped.", "Thanks."]
-    many = store._body_text_of({"text": " ".join([block] * 13)})
+    assert body_text_of({"text": f"Order shipped. {block} Thanks."}).split() == ["Order", "shipped.", "Thanks."]
+    many = body_text_of({"text": " ".join([block] * 13)})
     assert many.count("@context") == 1
 
 
 def test_hwf_body_text_is_capped_at_100k_characters():
-    import store
-    assert len(store._body_text_of({"text": "x" * 200_000})) == 100_000
+    assert len(body_text_of({"text": "x" * 200_000})) == 100_000
 
 
 def test_hwf_a_fetched_body_fills_only_an_empty_snippet(db):
@@ -873,8 +869,7 @@ def test_hwf_an_attached_email_with_no_file_name_is_still_listed():
 
 def test_hwf_a_snippet_leaves_an_attached_emails_text_out():
     import email
-    import ingest
-    assert "the inner note" not in ingest.text_body(email.message_from_bytes(_forwarded_email(False)))
+    assert "the inner note" not in text_body(email.message_from_bytes(_forwarded_email(False)))
 
 
 def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
