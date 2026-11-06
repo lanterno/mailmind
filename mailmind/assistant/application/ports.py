@@ -141,3 +141,10 @@ class UsageLedger(Protocol):
     def reserved(self) -> int: ...                       # what batches still out may cost, in micro-dollars
 
     def days(self, since: str) -> list[dict]: ...        # per day and feature, from `since` on
+
+
+class Mail(Protocol):
+    """What the Assistant reads of the mail, which belongs to the Mailbox and to Accounts."""
+    def fetch_body(self, pk: int) -> dict | None: ...
+    def pk_now(self, c, key: str, folder: str) -> int | None: ...
+    def accounts(self) -> list[dict]: ...

@@ -23,13 +23,20 @@ from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
+from mailmind.assistant.application.ask import Asker
+from mailmind.assistant.application.brief import Briefs
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
+from mailmind.assistant.application.reply_draft import ReplyDrafts
+from mailmind.assistant.application.review import Reviews
+from mailmind.assistant.application.rewrite import Rewriter
+from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
+from mailmind.discovery.adapters.fts import BM25
 
-__all__ = ["allowing_over", "answers", "calls", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "triage", "use"]
+__all__ = ["allowing_over", "answers", "asker", "briefs", "calls", "config_key", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -127,3 +134,27 @@ def _connect():
 
 calls = Calls(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status())
 triage = Triage(calls, lambda: gateway(), answers, _connect)
+
+
+class _Mail:
+    """What the Assistant reads of the mail, from the contexts that hold it."""
+    def fetch_body(self, pk):
+        from mailmind.bootstrap.mailbox import ingest
+        return ingest.fetch_body(pk)
+
+    def pk_now(self, c, key, folder):
+        from mailmind.bootstrap.mailbox import store
+        return store.pk_now(c, key, folder)
+
+    def accounts(self):
+        from mailmind.bootstrap import accounts
+        return accounts.accounts()
+
+
+_mail = _Mail()
+threads = ThreadDigest(calls, answers, _connect, _mail)
+briefs = Briefs(calls, answers, _connect, _mail)
+reviews = Reviews(calls, answers, _connect, _mail)
+replies = ReplyDrafts(calls, threads, _connect)
+rewriter = Rewriter(calls)
+asker = Asker(calls, _connect, _mail, BM25)

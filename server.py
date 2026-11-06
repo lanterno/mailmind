@@ -30,9 +30,6 @@ from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.compose.domain import limits
 from mailmind.content import mime
-import summarize_thread
-import summarize_briefing
-import summarize_review
 from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import legacy, mailbox
@@ -193,11 +190,11 @@ def ai_summarize(body):
         if not row:
             return {"ok": False, "error": "not found"}, 404
         account = row["account"]
-        thread_id = row["thread_id"] or summarize_thread.lone_key(row)
+        thread_id = row["thread_id"] or assistant.threads.lone_key(row)
         scope = "message" if not row["thread_id"] else "thread"
     if not account or account not in {a["email"] for a in accounts.accounts()} or not thread_id:
         return {"ok": False, "error": "bad request"}, 400
-    return summarize_thread.summarize(account, thread_id, scope, force=bool(body.get("force")))
+    return assistant.threads.summarize(account, thread_id, scope, force=bool(body.get("force")))
 
 
 def _one(qs_or_body, name):
@@ -217,13 +214,13 @@ def _ai_accounts(qs_or_body):
 def ai_briefing(qs_or_body, force=False, generate=True):
     """The synthesized 'Today' card. GET only reads what is stored (generate=False); POST
     /api/briefing writes it once, and /api/briefing/refresh again (force)."""
-    return summarize_briefing.build(_ai_accounts(qs_or_body), force=force, generate=generate)
+    return assistant.briefs.build(_ai_accounts(qs_or_body), force=force, generate=generate)
 
 
 def ai_review(qs_or_body, force=False, generate=True):
     """The Weekly Review — retrospective over the last 7 days. GET only reads what is stored;
     POST /api/review writes it once, and /api/review/refresh again (force)."""
-    return summarize_review.build(_ai_accounts(qs_or_body), force=force, generate=generate)
+    return assistant.reviews.build(_ai_accounts(qs_or_body), force=force, generate=generate)
 
 
 def ai_delta(qs_or_body, generate=True):
@@ -240,12 +237,11 @@ def ai_delta(qs_or_body, generate=True):
     floor -= floor % 600                  # quantize the 24h floor to a 10-min bucket so a stale watermark
                                           # yields a STABLE cache key (not a fresh claude call every second)
     since = min(max(since, floor), now)   # also cap at now (client/server clock-skew guard)
-    return summarize_briefing.build_delta(accts, since, generate=generate)
+    return assistant.briefs.build_delta(accts, since, generate=generate)
 
 
 def ai_draft_reply(body):
     """Draft an editable reply to a thread/message via claude. Returns (result, code)."""
-    import draft_reply
     account = body.get("account")
     thread_id = body.get("thread_id")
     pk = body.get("pk")
@@ -284,7 +280,7 @@ def ai_draft_reply(body):
     if not account or account not in {a["email"] for a in accounts.accounts()}:
         return {"ok": False, "error": "bad request"}, 400
     # The mail is in its own account's rows. `account` is who's replying: From may name another.
-    res, code = draft_reply.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
+    res, code = assistant.replies.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
                                   instruction=instruction, tone=tone, me=account)
     # Bank a default-shaped success into the draft-ahead cache (the user already paid for
     # this call; a closed-and-reopened composer or same-thread revisit is then free).
@@ -305,8 +301,7 @@ def ai_draft_reply(body):
 
 def ai_rewrite(body):
     """Rewrite/tone/translate the composer text via claude. Returns (result, code)."""
-    import rewrite
-    return rewrite.rewrite(str(body.get("text") or ""), str(body.get("op") or ""),
+    return assistant.rewriter.rewrite(str(body.get("text") or ""), str(body.get("op") or ""),
                            lang=str(body.get("lang") or "English"))
 
 
@@ -449,8 +444,7 @@ def _gen_draft_ahead(account, pk, source="dwell"):
     def make():
         ok = False
         try:
-            import draft_reply
-            res, code = draft_reply.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
+            res, code = assistant.replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
                                           feature="draft-ahead")
             now = int(time.time())
             c = store.conn()
@@ -656,14 +650,13 @@ def ai_ask(body):
     """Ask-your-inbox: answer a natural-language question about the user's mail via claude.
     Pure read (FTS retrieve → bounded claude read), no mutation/SMTP — like ai_summarize/
     ai_rewrite. Account is validated before any mail is touched. Returns (result, code)."""
-    import ask
     account = (body.get("account") or "all").strip() or "all"
     question = str(body.get("question") or "").strip()[:8000]
     if account != "all" and account not in {a["email"] for a in accounts.accounts()}:
         return {"ok": False, "error": "bad request"}, 400
     if not question:
         return {"ok": False, "error": "question required"}, 400
-    return ask.ask(account, question)
+    return assistant.asker.ask(account, question)
 
 
 # -------------------------------------------------- NL bulk actions (plan → preview → confirm)
