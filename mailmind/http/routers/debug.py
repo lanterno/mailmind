@@ -1,11 +1,24 @@
-"""What the app says of its own running: the connection pool, the background jobs, and what AI cost."""
+"""What the app says of its own running: the connection pool, the background jobs, what AI cost, and all
+of that at a glance."""
 from mailmind.http.routing import Routes
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
 
 
-def routes(mailbox, background, assistant):
+def routes(mailbox, compose, background, assistant):
     r = Routes()
+
+    @r.get("/api/debug/health")  # read-only, and it never counts as someone here: ids and counts, never an address
+    def health(req):
+        idle, governor = mailbox.realtime.watching(), assistant.governor().snapshot()
+        return {"ok": True, "profile": profile.current().value, "generated": now_iso(),
+                "jobs": background.JOBS.snapshot(),
+                "idle": {"accounts": len(idle), "running": sum(idle.values())},
+                "queues": {"outbox": compose.outbox.QUEUE.counts(), "commands": mailbox.commands.QUEUE.counts(),
+                           "drafts_waiting": len(compose.drafts.waiting())},
+                "breakers": governor["breaker"],
+                "ai": {"today": assistant.calls.usage(1)[0], "limit_micros": governor["limit_micros"],
+                       "batch": assistant.triage.batch_status()}}
 
     @r.get("/api/debug/pool")
     def pool(req):

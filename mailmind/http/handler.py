@@ -27,8 +27,9 @@ def post_body_cap(path):
 
 
 _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/stats",
-             "/api/ai/draft-ahead"}   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
+             "/api/ai/draft-ahead",   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
                                       # or the tick's own events would hold the vacation gate open forever
+             "/api/debug/health"}     # asking how the app is doing changes nothing, this included
 
 
 AI_OVER_HEADER = "X-MailMind-AI-Over-Limit"   # "allow": the user said this request may go over

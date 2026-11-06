@@ -45,6 +45,14 @@ class DurableQueue:
         self._lanes_lock = threading.Lock()
         self._worker = threading.local()        # .on in run_forever's thread
 
+    def counts(self):
+        """How many rows stand in each state, on a connection of its own."""
+        c = self._connect()
+        try:
+            return {r[0]: r[1] for r in c.execute(f"SELECT state, COUNT(*) FROM {self.table} GROUP BY state")}
+        finally:
+            c.close()
+
     def due(self, c, now):
         """The ids of queued rows whose time has come, oldest first."""
         return [r[0] for r in c.execute(
