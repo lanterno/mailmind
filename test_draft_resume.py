@@ -43,6 +43,7 @@ from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import sending
 from mailmind.compose.domain import limits
+from mailmind.bootstrap.compose import drafts
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -77,18 +78,18 @@ def _fresh(uidv=777, appenduid=True):
     mailbox.copies.delete_draft_uid = delete
     outbox.enqueue = enqueue
     server.ingest.fetch_body = _real_fetch_body
-    server._draft_live = lambda acct, folder, uid: True           # the server still holds the copy
+    drafts._live = lambda acct, folder, uid: True           # the server still holds the copy
 
 
 _real_fetch_body = server.ingest.fetch_body
-_real_draft_live = server._draft_live
+_real_draft_live = drafts._live
 _real_append = mailbox.copies.append_to_drafts
 
 
 def _save(account=ACCT, draft_id=None, **kw):
     body = {"mode": "new", "account": account, "to": ["bo@example.test"], "subject": "Plans",
             "text": "Saturday works.", "draft_id": draft_id, **kw}
-    res, code = server.do_draft(body)
+    res, code = drafts.save(body)
     assert code == 200 and res["ok"], (code, res)
     return res
 
@@ -140,7 +141,7 @@ def _saved_and_synced(**kw):
 
 
 def _resume(pk):
-    return server.draft_resume({"pk": pk})
+    return drafts.resume({"pk": pk})
 
 
 def _foreign(parts, headers=()):
@@ -353,7 +354,7 @@ def test_failed_save_under_a_new_from_keeps_the_old_copy():
     def unreachable(acct, raw, **kw):
         raise OSError("connection refused")
     mailbox.copies.append_to_drafts = unreachable
-    res, code = server.do_draft({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
+    res, code = drafts.save({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
                                  "subject": "Plans", "text": "Saturday works.", "draft_id": did})
     assert code == 502 and not res["ok"], (code, res)
     assert CALLS["delete"] == [], CALLS["delete"]
@@ -370,7 +371,7 @@ def _other_folder_draft(uid=5):
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Old drafts' AND uid=?", (uid,)).fetchone()
     c.close()
-    return server._draft_info(row)["draft_id"]
+    return drafts.info(row)["draft_id"]
 
 
 def test_copy_in_another_drafts_folder_is_removed_there():
@@ -396,7 +397,7 @@ def test_received_mail_a_row_points_at_is_never_removed():
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Bank drafts'").fetchone()
     c.close()
-    assert server._draft_info(row) == {}                         # no Edit for it today
+    assert drafts.info(row) == {}                         # no Edit for it today
     c = store.conn()
     did = book.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
                                  "message_id": "<stmt@bank.example.test>", "uidvalidity": 912,
@@ -482,7 +483,7 @@ def test_other_apps_draft_registers_with_folder_uidvalidity():
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE uid=9").fetchone()
     c.close()
-    info = server._draft_info(row)
+    info = drafts.info(row)
     d = _row(info["draft_id"])
     assert (d["uid"], d["uidvalidity"], d["mode"]) == (9, 4242, "new"), dict(d)
 
@@ -926,7 +927,7 @@ def test_draft_whose_saves_would_be_too_large_is_refused():
     r, code = _resume(pk)
     assert code == 200, r
     need = (sum(len(f["b64"]) for f in r["files"]) + len(json.dumps(r["text"])) + len(json.dumps(r["tail_text"]))
-            + server._RESUME_HEADROOM)
+            + limits.RESUME_HEADROOM)
     cap = limits.MAX_SEND_POST
     try:
         limits.MAX_SEND_POST = need
@@ -941,10 +942,10 @@ def test_draft_whose_saves_would_be_too_large_is_refused():
 def test_bad_pk_unknown_and_not_a_draft():
     _fresh()
     opk = _original()
-    assert server.draft_resume({"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
-    assert server.draft_resume({})[1] == 400
-    assert server.draft_resume({"pk": 99999})[1] == 404
-    r, code = server.draft_resume({"pk": opk})
+    assert drafts.resume({"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
+    assert drafts.resume({})[1] == 400
+    assert drafts.resume({"pk": 99999})[1] == 404
+    r, code = drafts.resume({"pk": opk})
     assert code == 400 and r["error"] == "That message isn’t a draft.", r
 
 
@@ -1069,7 +1070,7 @@ def test_resave_three_times_keeps_one_quote_and_the_bcc():
     _fresh()
     _, r = _reply_resumed(bcc=["dee@example.test"])
     for i in range(3):
-        res, code = server.do_draft(_payload(r, text=r["text"] + f"\nEdit {i}."))
+        res, code = drafts.save(_payload(r, text=r["text"] + f"\nEdit {i}."))
         assert code == 200 and res["ok"], res
         r, code = _resume(_synced(CALLS["append"][-1]["raw"], res["uid"]))
         assert code == 200 and r["split"] == "exact", r
@@ -1099,7 +1100,7 @@ def test_replaced_copy_is_refused_and_drafts_resynced():
     synced = []
     real = server.ingest.sync_folder
     server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full))
-    server._draft_live = lambda acct, folder, uid: False
+    drafts._live = lambda acct, folder, uid: False
     try:
         r, code = _resume(pk)
     finally:
@@ -1144,7 +1145,7 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
             c.commit()
             c.close()
             return True
-        server._draft_live = meanwhile
+        drafts._live = meanwhile
         synced = []
         real = server.ingest.sync_folder
         server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append(full)
@@ -1174,7 +1175,7 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock():
 def test_unreachable_server_opens_the_local_copy():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
-    server._draft_live = lambda acct, folder, uid: None
+    drafts._live = lambda acct, folder, uid: None
     r, code = _resume(pk)
     assert code == 200 and r["text"] == "Mine.", r
 
@@ -1337,7 +1338,7 @@ def test_edit_probes_the_server_without_holding_the_ops_lock():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
     held = []
-    server._draft_live = lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1]
+    drafts._live = lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1]
     r, code = _resume(pk)
     assert code == 200 and held == [False], (code, held)
 
