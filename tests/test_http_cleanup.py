@@ -217,3 +217,41 @@ def test_a_mailto_unsubscribe_goes_to_one_plain_address_or_nowhere(app, world, p
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
     assert (r["status"], world.smtp.messages) == ("failed", [])
+
+
+def test_a_cleanup_refreshes_the_folder_counts_as_trashing_a_message_does(app, world, monkeypatch):
+    import server
+    refreshed = []
+    real = server._invalidate_folders
+    monkeypatch.setattr(server, "_invalidate_folders", lambda *a: (refreshed.append(a), real(*a)))
+    r = _clean_up_the_loom(app)
+    assert r["swept"] > 0 and len(refreshed) >= r["swept"]
+
+
+def _clean_up_the_loom(app):
+    return app.post("/api/cleanup/execute", {"from_addr": LOOM,
+                                             "confirm_token": app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]}).json
+
+
+def test_a_cleanup_with_the_server_away_queues_the_sweep_and_undo_takes_it_back(app, world):
+    import store
+    world.server.stop()
+    r = _clean_up_the_loom(app)
+    assert (r["swept"], r["sweep_queued"], r["sweep_failed"]) == (1, 1, 0)
+    c = store.conn()
+    assert c.execute("SELECT count(*) FROM read_mutations WHERE op='trash' AND applied=0").fetchone()[0] == 1
+    assert c.execute("SELECT pending_removal IS NOT NULL FROM messages WHERE pk=?", (world.pk(NEWSLETTER),)).fetchone()[0]
+    c.close()
+    undone = app.post("/api/undo", {}).json
+    assert undone["ok"]
+    c = store.conn()
+    assert c.execute("SELECT pending_removal FROM messages WHERE pk=?", (world.pk(NEWSLETTER),)).fetchone()[0] is None
+    c.close()
+
+
+def test_a_cleanup_the_server_refuses_counts_as_failed_and_leaves_the_mail(app, world):
+    world.server.fail("UID MOVE", "NO [CANNOT] not today", user=w.ADA)
+    world.server.fail("UID COPY", "NO [CANNOT] not today", user=w.ADA)
+    r = _clean_up_the_loom(app)
+    assert (r["swept"], r["sweep_queued"], r["sweep_failed"]) == (0, 0, 1)
+    assert ["INBOX"] == [box for _user, box, _uid, _flags in world.where(NEWSLETTER)["server"]]
