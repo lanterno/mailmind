@@ -51,7 +51,7 @@ def state_of(mid):
 
 
 def test_a_queued_move_shows_with_what_the_tray_needs_and_leaves_once_it_lands(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     assert tray(app) == {"items": [], "waiting": 0, "stuck": 0}
     queue_archive(app, world)
     got = tray(app)
@@ -59,7 +59,7 @@ def test_a_queued_move_shows_with_what_the_tray_needs_and_leaves_once_it_lands(a
     assert (got["waiting"], got["stuck"]) == (1, 0)
     assert (item["op"], item["folder"], item["account"], item["state"]) == ("archive", "INBOX", w.ADA, "queued")
     assert item["subject"] == world.row(RECEIPT)["subject"]
-    readmutq.drain()
+    offline.drain()
     assert tray(app) == {"items": [], "waiting": 0, "stuck": 0}
 
 
@@ -71,10 +71,10 @@ def test_a_queued_flag_change_names_its_message_and_what_it_asks(app, world):
 
 
 def test_a_change_the_server_refused_stays_in_the_tray_as_stuck(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     mid = queue_archive(app, world)
     refused(world, "UID MOVE", "UID COPY")
-    readmutq.drain()
+    offline.drain()
     got = tray(app)
     assert (got["waiting"], got["stuck"]) == (0, 1)
     assert (got["items"][0]["id"], got["items"][0]["state"], got["items"][0]["error"]) == (mid, "error", "refused")
@@ -82,27 +82,27 @@ def test_a_change_the_server_refused_stays_in_the_tray_as_stuck(app, world):
 
 
 def test_retry_takes_the_message_out_of_the_lists_again_and_the_move_lands(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     pk = world.pk(RECEIPT)
     mid = queue_archive(app, world)
     refused(world, "UID MOVE", "UID COPY")
-    readmutq.drain()
+    offline.drain()
     assert pk in inbox_pks(app)
     assert app.post("/api/pending/retry", {"id": mid}).json == {"ok": True}
     assert pk not in inbox_pks(app)
     assert tray(app)["waiting"] == 1
-    readmutq.drain()
+    offline.drain()
     assert tray(app)["items"] == []
     assert [box for _, box, _, _ in world.where(RECEIPT)["server"]] != ["INBOX"]
 
 
 def test_retry_of_a_flag_change_shows_it_and_a_new_refusal_puts_back_what_it_replaced(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     from mailmind.bootstrap.mailbox import store
     mid = queue_star(app, world)
     assert row_flagged(world) == 1
     refused(world, "UID STORE")
-    readmutq.drain()
+    offline.drain()
     assert row_flagged(world) == 0
     assert app.post("/api/pending/retry", {"id": mid}).json == {"ok": True}
     assert row_flagged(world) == 1
@@ -111,7 +111,7 @@ def test_retry_of_a_flag_change_shows_it_and_a_new_refusal_puts_back_what_it_rep
     c.close()
     assert '"was": {"flagged": false}' in r["payload"]
     refused(world, "UID STORE")
-    readmutq.drain()
+    offline.drain()
     assert row_flagged(world) == 0
     assert state_of(mid) == "error"
 
@@ -123,7 +123,7 @@ def test_retry_answers_404_for_what_isnt_stuck(app, world):
 
 
 def test_discard_lists_a_queued_move_again_and_it_never_reaches_the_server(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     pk = world.pk(RECEIPT)
     mid = queue_archive(app, world)
     uid = world.uid(RECEIPT)
@@ -131,7 +131,7 @@ def test_discard_lists_a_queued_move_again_and_it_never_reaches_the_server(app, 
     assert app.post("/api/pending/discard", {"id": mid}).json == {"ok": True}
     assert pk in inbox_pks(app)
     assert tray(app)["items"] == []
-    readmutq.drain()
+    offline.drain()
     assert uid in world.server.mailbox(w.ADA, "INBOX").messages
 
 
@@ -160,10 +160,10 @@ def test_discard_of_a_flag_change_puts_the_flags_back(app, world):
 
 
 def test_discard_of_a_given_up_move_clears_it_from_the_tray(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     mid = queue_archive(app, world)
     refused(world, "UID MOVE", "UID COPY")
-    readmutq.drain()
+    offline.drain()
     assert app.post("/api/pending/discard", {"id": mid}).json["ok"]
     assert tray(app) == {"items": [], "waiting": 0, "stuck": 0}
 
@@ -185,9 +185,9 @@ def test_discard_reads_back_a_message_whose_row_went_when_it_was_queued(app, wor
 
 
 def test_discard_answers_404_once_the_change_reached_the_server(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     mid = queue_archive(app, world)
-    readmutq.drain()
+    offline.drain()
     assert app.post("/api/pending/discard", {"id": mid}).status == 404
     assert app.post("/api/pending/discard", {"id": 99999}).status == 404
 
@@ -205,7 +205,7 @@ def test_discard_waits_for_a_try_under_the_gate_and_gives_up_as_busy(app, world,
 
 @pytest.mark.parametrize("path", ["/api/pending/retry", "/api/pending/discard"])
 def test_the_tray_routes_tell_the_open_tabs(app, world, path, monkeypatch):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     from mailmind.platform import sse
     told = []
     real = sse.publish
@@ -213,7 +213,7 @@ def test_the_tray_routes_tell_the_open_tabs(app, world, path, monkeypatch):
     mid = queue_archive(app, world)
     assert told == ["outbox"]
     refused(world, "UID MOVE", "UID COPY")
-    readmutq.drain()
+    offline.drain()
     told.clear()
     assert app.post(path, {"id": mid}).json["ok"]
     assert told == ["commands-changed"]

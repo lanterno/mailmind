@@ -502,12 +502,12 @@ def test_hwf_a_refused_move_back_is_not_reported_as_undone(app, world):
 
 
 def test_hwf_a_refused_login_queues_the_move_instead_of_dropping_it(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
     r = app.post("/api/archive", {"pk": world.pk(RECEIPT), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [])
-    readmutq.drain()                                             # the login works again
+    offline.drain()                                             # the login works again
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
 
 
@@ -524,17 +524,17 @@ def test_hwf_a_malformed_message_id_is_quoted_so_undo_finds_it(app, world):
 # -- the offline queue -----------------------------------------------------
 
 def test_hwf_the_queue_finds_its_message_by_message_id_not_its_old_uid(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     queue(app, world)
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # the receipt's old UID now names the invite
-    readmutq.drain()
+    offline.drain()
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
     assert boxes(world, "ada-inbox-06-outlook-invite.eml")[0] == [(w.ADA, "INBOX")]
 
 
 def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ships(app, world, monkeypatch):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     from mailmind.platform.workers import gates
     queue(app, world)
     since, undone = world.mark(), []
@@ -548,8 +548,8 @@ def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ship
         def run(self, account, fn, **kw):
             undone.append(app.post("/api/undo", {}).json["ok"])
             return gates.run(account, fn, **kw)
-    monkeypatch.setattr(readmutq, "gates", TheUndoGetsTheGateFirst())
-    readmutq.drain()                                            # claimed, then cancelled before it got the lock
+    monkeypatch.setattr(offline, "gates", TheUndoGetsTheGateFirst())
+    offline.drain()                                            # claimed, then cancelled before it got the lock
     assert undone == [True]
     assert world.writes(since) == []
     assert queued() == []
@@ -1189,7 +1189,7 @@ def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle,
 def test_hwf_a_reply_in_a_muted_thread_is_marked_read_on_the_server_too(app, world):
     # Decision D6: other clients agree. A reply that lands in a muted thread is read in MailMind at
     # once, and on the server once the queue has told it.
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     lunch = world.row("ada-inbox-02-lunch-confirm.eml")
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
     reply = w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<late-mute@example.test>",
@@ -1198,16 +1198,16 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_on_the_server_too(app, wor
     [r] = q("SELECT seen, thread_id FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid)
     assert (r["seen"], r["thread_id"]) == (1, lunch["thread_id"])
     assert w.SEEN not in world.server.messages(w.ADA, "INBOX")[uid].flags
-    readmutq.drain()
+    offline.drain()
     assert w.SEEN in world.server.messages(w.ADA, "INBOX")[uid].flags
 
 
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
     from mailmind.bootstrap.accounts import config
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     queue(app, world)
     assert config.remove_account(w.ADA)
-    readmutq.drain()
+    offline.drain()
     assert queued()[0]["state"] == "error"
 
 

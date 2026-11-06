@@ -548,7 +548,7 @@ def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
 
 
 def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_it_back(page, app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -567,7 +567,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     world.server.clear_faults()
     world.server.fail("UID MOVE", user=w.ADA, times=None)
     world.server.fail("UID COPY", user=w.ADA, times=None)
-    readmutq.drain()
+    offline.drain()
     expect(fly).to_contain_text("stuck")                  # told by the event, with the panel open
     expect(fly).to_contain_text("the server refused it")
     expect(receipt).to_have_count(1)

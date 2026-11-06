@@ -12,7 +12,6 @@ mailmind.bootstrap.cli summarize
 mailmind.bootstrap.compose ingest
 mailmind.bootstrap.curation ingest
 mailmind.bootstrap.curation pool
-mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime
 mailmind.bootstrap.legacy server
 mailmind.bootstrap.legacy summarize

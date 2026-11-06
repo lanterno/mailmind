@@ -175,29 +175,29 @@ class Machine(RuleBasedStateMachine):
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def worker_tries(self, which):
-        import readmutq
+        from mailmind.bootstrap.mailbox import offline
         rows = self.open_rows()
         row = rows[which % len(rows)]
         self.allow_row(row)
-        readmutq.apply_one(row["id"])
+        offline.apply_one(row["id"])
 
     def crash_during(self, which, target, attribute, effect):
-        import readmutq
+        from mailmind.bootstrap.mailbox import offline
         rows = self.open_rows()
         row = rows[which % len(rows)]
         self.allow_row(row)
         with mock.patch.object(target, attribute, effect(getattr(target, attribute))):
             try:
-                readmutq.apply_one(row["id"])
+                offline.apply_one(row["id"])
             except Crash:
                 pass
         self.restart()
 
     def restart(self):
-        import readmutq
+        from mailmind.bootstrap.mailbox import offline
         from mailmind.bootstrap.mailbox import store
         c = store.conn()
-        readmutq.QUEUE.reset_stuck(c)
+        offline.QUEUE.reset_stuck(c)
         c.commit()
         c.close()
 
@@ -227,13 +227,13 @@ class Machine(RuleBasedStateMachine):
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_before_the_local_copy_is_settled(self, which):
-        import readmutq
+        from mailmind.bootstrap.mailbox import offline
 
         def effect(_real):
             def die(_row):
                 raise Crash
             return die
-        self.crash_during(which, readmutq, "_local_mirror", effect)
+        self.crash_during(which, offline, "_local_mirror", effect)
 
     @rule(folder=st.sampled_from(FOLDERS))
     def sync(self, folder):
@@ -278,7 +278,7 @@ class Machine(RuleBasedStateMachine):
         lists show each message where the server has it, with the flags the server has."""
         from mailmind.bootstrap import accounts
         import ingest
-        import readmutq
+        from mailmind.bootstrap.mailbox import offline
         self.server.clear_faults()
         self.restart()
         for _ in range(8):
@@ -286,7 +286,7 @@ class Machine(RuleBasedStateMachine):
             if not rows:
                 break
             for row in rows:
-                readmutq.apply_one(row["id"])
+                offline.apply_one(row["id"])
         assert not self.open_rows()
         for folder in FOLDERS:
             ingest.sync_folder(accounts.get(w.ADA), folder)

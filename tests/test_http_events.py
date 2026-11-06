@@ -228,7 +228,7 @@ def test_a_send_that_fails_tells_the_open_tabs(app, world, quick):
 
 
 def test_a_queued_move_the_server_refuses_tells_the_open_tabs(app, world, quick):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     s = Stream(app)
     s.frame()
     world.server.drop("SELECT", user=w.ADA)
@@ -237,21 +237,21 @@ def test_a_queued_move_the_server_refuses_tells_the_open_tabs(app, world, quick)
     assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
-    readmutq.drain()
+    offline.drain()
     assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
     s.close()
     subscribers(quick, 0)
 
 
 def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     s = Stream(app)
     s.frame()
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
     assert r["status"] == "queued"
     assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
-    readmutq.drain()
+    offline.drain()
     assert s.event().split("\n")[1:] == ["event: commands-changed", "data: {}"]
     s.close()
     subscribers(quick, 0)

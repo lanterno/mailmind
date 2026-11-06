@@ -27,7 +27,7 @@ with open(settings.current().config, "w") as f:
 from mailmind.bootstrap import accounts
 import ingest
 from mailmind.bootstrap.mailbox import commands
-import readmutq
+from mailmind.bootstrap.mailbox import offline
 import server
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap import mailbox
@@ -658,7 +658,7 @@ def test_trashing_the_same_message_offline_again_queues_it_again():
         first = server.do_trash({"pk": _message(mid=mid)})
         assert first["ok"] and first.get("status") == "queued", first
         c = store.conn()
-        readmutq.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
+        offline.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
         c.commit()
         c.close()
         second = server.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again

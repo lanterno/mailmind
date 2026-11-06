@@ -17,7 +17,7 @@ CSRF = "test-csrf-token"
 
 # Modules whose private globals hold process state between requests.
 STATEFUL = ("server", "summarize", "summarize_briefing", "summarize_review", "summarize_thread",
-            "pool", "warm", "realtime", "readmutq",
+            "pool", "warm", "realtime",
             "mailmind.curation.application.unsubscribe")
 _SIMPLE = (dict, list, set, int, float, str, bool, type(None))
 _pristine = {}

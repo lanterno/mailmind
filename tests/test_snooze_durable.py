@@ -146,12 +146,12 @@ def test_a_forgotten_message_takes_its_snooze_with_it(world):
 
 
 def test_waking_marks_read_mail_unread_on_the_server(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
     attention.snoozing.wake_due()
     assert copy(world, CI)["seen"] == 0
-    readmutq.drain()
+    offline.drain()
     [(_, _, _, flags)] = world.where(CI)["server"]
     assert "\\Seen" not in flags and copy(world, CI)["seen"] == 0
 
@@ -167,12 +167,12 @@ def test_a_sync_before_the_mark_lands_keeps_it_unread(app, world):
 
 
 def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
     attention.snoozing.wake_due()
     world.server.fail("UID STORE", user=w.ADA)
-    readmutq.drain()
+    offline.drain()
     assert copy(world, CI)["seen"] == 1                         # as the server has it
     assert app.get("/api/pending").json["stuck"] == 1
     assert world.row(CI)["subject"] in listed(app)
@@ -186,13 +186,13 @@ def test_waking_unread_mail_asks_nothing_of_the_server(app, world):
 
 
 def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
-    import readmutq
+    from mailmind.bootstrap.mailbox import offline
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
     since = world.mark()
     attention.snoozing.wake_due()
-    readmutq.drain()
+    offline.drain()
     assert world.writes(since) == []
     assert copy(world, CI)["seen"] == 0
     assert app.get("/api/pending").json["waiting"] == 1
