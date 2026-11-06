@@ -1165,3 +1165,24 @@ def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, 
     page.locator("#buildReload").click()
     float_.wait_for(state="hidden")
     clean(page)
+
+
+def test_undo_after_an_rsvp_stops_the_rsvp_and_leaves_what_was_filed(page, app, world):
+    import outbox
+    opened(page)
+    row(page, world, RECEIPT).click()
+    page.keyboard.press("e")
+    until(page, lambda: world.where(RECEIPT)["server"][0][1] != "INBOX", "the receipt was archived")
+    filed = world.where(RECEIPT)["server"][0][1]
+    row(page, world, "ada-inbox-06-outlook-invite.eml").click()
+    page.locator('.inv-rsvp [data-rsvp="accept"]').click()
+    float_ = page.locator("#sendFloat")
+    expect(float_).to_contain_text("Sending in")
+    float_.get_by_role("button", name="Undo").click()
+    expect(page.locator("#toast")).to_contain_text("RSVP not sent")
+    until(page, lambda: app.get("/api/outbox").json["items"] == [], "the row went")
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
+    assert world.smtp.messages == []
+    assert world.where(RECEIPT)["server"][0][1] == filed
+    clean(page)
