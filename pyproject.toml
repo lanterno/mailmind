@@ -81,7 +81,7 @@ layers = ["mailmind.discovery.adapters", "mailmind.discovery.domain"]
 [[tool.importlinter.contracts]]
 name = "within Curation, adapters, then application, then domain"
 type = "layers"
-layers = ["mailmind.curation.adapters", "(mailmind.curation.application)", "mailmind.curation.domain"]
+layers = ["mailmind.curation.adapters", "mailmind.curation.application", "mailmind.curation.domain"]
 
 [[tool.importlinter.contracts]]
 name = "only bootstrap picks an adapter"

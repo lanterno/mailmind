@@ -12,13 +12,11 @@ import re
 import dataclasses
 import json
 import time
-import math
 import base64
 import email.message
 import email.policy
 import email.utils
 import secrets
-import hmac
 import hashlib
 import imaplib
 import sqlite3
@@ -26,7 +24,7 @@ import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, quote
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
@@ -39,7 +37,7 @@ import summarize
 import mailops
 from mailmind.bootstrap import curation
 import manage
-from mailmind.bootstrap.curation import rules, safe_http
+from mailmind.bootstrap.curation import rules
 import views
 from mailmind.content import sanitize
 import compose
@@ -64,6 +62,8 @@ from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
+
+curation.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -670,29 +670,6 @@ def do_sweep(account, dry_run):
     return {"ok": True, "dry_run": dry_run, "results": results,
             "total_planned": sum(r.get("planned", 0) for r in results),
             "total_moved": sum(r.get("moved", 0) for r in results), "generated": now_iso()}
-
-
-def read_audit(kind="all", limit=120):
-    events = []
-    files = []
-    if kind in ("all", "sweep"):
-        files.append(settings.current().sweep_audit)
-    if kind in ("all", "reconcile"):
-        files.append(settings.current().reconcile_audit)
-    for path in files:
-        if not os.path.exists(path):
-            continue
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    events.append(json.loads(line))
-                except Exception:
-                    continue  # skip a torn final line
-    events.sort(key=lambda e: e.get("ts", ""), reverse=True)
-    return {"events": events[:limit], "has_more": len(events) > limit}
 
 
 # --------------------------------------------------------------------- mailbox mode
@@ -2062,392 +2039,6 @@ def do_contacts(q):
     finally:
         c.close()
     return {"ok": True, "items": [{"addr": r["addr"], "name": r["name"] or "", "n": r["n"]} for r in rows]}
-
-
-# ═══════════════════ Unsubscribe & sender cleanup ═══════════════════
-# Surface the senders flooding the inbox and, per sender, block (rule) + sweep INBOX copies to Trash
-# (both reversible via the undo stack) + best-effort ONE standards-compliant unsubscribe (RFC 8058
-# one-click POST, or a mailto send, or hand back a landing-page link). The outbound step is the only
-# irreversible surface and is fenced by: strict-origin + CSRF guards, a confirm_token echoed from the
-# preview, an SSRF-hardened POST helper (below), a rate limit, and an idempotency ledger.
-_CLEANUP_BUCKETS = ("newsletters/marketing", "automated-notifications")
-_CLEANUP_MIN_COUNT = 3
-_CLEANUP_MIN_SCORE = 1.5
-_CLEANUP_LIMIT = 40
-_CLEANUP_SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
-_UNSUB_MIN_GAP = 3.0              # >= 3s between ANY two outbound unsubscribes (politeness)
-_unsub_rate = {"last": 0.0, "lock": threading.Lock()}
-
-
-def _cleanup_confirm_token(from_addr):
-    """Stateless proof the human saw the preview: HMAC(CSRF, addr). Rotates per server start."""
-    return hmac.new(CSRF.encode(), ("cleanup:" + (from_addr or "").lower()).encode(),
-                    hashlib.sha256).hexdigest()[:16]
-
-
-def _parse_list_unsub(raw_bytes):
-    """From a raw RFC822 message → the resolvable unsubscribe method (`mime.list_unsub`)."""
-    try:
-        msg = email.message_from_bytes(raw_bytes or b"")
-    except Exception:
-        return {"method": "none", "raw": ""}
-    return mime.list_unsub(mime.dec(msg.get("List-Unsubscribe")), mime.dec(msg.get("List-Unsubscribe-Post")))
-
-
-def _unsub_rate_gate():
-    """Process-global politeness: >= _UNSUB_MIN_GAP between any two outbound unsubscribes."""
-    with _unsub_rate["lock"]:
-        wait = _UNSUB_MIN_GAP - (time.time() - _unsub_rate["last"])
-        if wait > 0:
-            time.sleep(min(wait, _UNSUB_MIN_GAP))
-        _unsub_rate["last"] = time.time()
-
-
-def _unsub_mailto_send(from_addr, info, acct_emails):
-    """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From).
-    Host/creds come from config keyed by the account email — never the request → no SMTP-SSRF."""
-    to = info.get("mailto_to") or ""
-    if not re.fullmatch(r"[^\s@<>,;:\"()\[\]\\]+@[^\s@<>,;:\"()\[\]\\]+", to):
-        return False                                     # one plain address, or nothing is sent
-    subj = re.sub(r"[\r\n]", " ", (info.get("mailto_subject") or "unsubscribe"))[:200]
-    text = re.sub(r"[\r\n]{3,}", "\n\n", (info.get("mailto_body") or "Please unsubscribe me."))[:1000]
-    sent = 0
-    for em in acct_emails:
-        try:
-            acct = accounts.get(em)                      # inside the try: a removed/stale account raises
-            if not acct:                                 #   KeyError → skip it, don't abort the whole cleanup
-                continue
-            m = email.message.EmailMessage()
-            m["From"] = em
-            m["To"] = to
-            m["Subject"] = subj
-            m["Date"] = email.utils.format_datetime(datetime.now(timezone.utc))
-            m["Message-ID"] = email.utils.make_msgid(domain=em.rpartition("@")[2] or None)
-            m["Auto-Submitted"] = "auto-generated"
-            m.set_content(text)
-            smtpsend.send(acct, m.as_bytes(policy=email.policy.SMTP), [to])   # CRLF, as SMTP wants
-            sent += 1
-        except Exception:
-            pass
-    return sent > 0
-
-
-UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's gate to read one message's headers
-_UNSUB_NONE = {"method": "none", "https_uri": None, "mailto_uri": None, "mailto_to": None,
-               "mailto_subject": None, "mailto_body": None}
-
-
-def _unsub_stored(c, rows):
-    """What the sender's newest message that can say says, newest first through `rows`: from what
-    ingest kept of its headers, else from its stored body. None if no row can say."""
-    for r in rows:
-        m = r["list_unsub_method"]
-        if m == "none":
-            return _UNSUB_NONE                          # cached authoritative none → stop (no re-fetch)
-        if m:
-            parsed = mime.list_unsub_stored(r["list_unsub_raw"])
-            if parsed["method"] != "none":
-                return parsed
-        raw = store.get_body(c, r["pk"])
-        if raw is None:
-            continue                                    # body not fetched yet → can't resolve this row
-        parsed = _parse_list_unsub(raw)
-        if not m:                                       # uncached → cache the resolution
-            store.set_list_unsub(c, r["pk"], parsed.get("raw", ""), parsed["method"])
-            c.commit()
-        return parsed if parsed["method"] != "none" else _UNSUB_NONE    # newest with a body has no header → none
-    return None
-
-
-def _unsub_from_server(r):
-    """Ask the server for one message's unsubscribe headers alone (BODY.PEEK of those fields): mail from
-    before ingest kept them, with no body stored. Caches what it hears; None if it can't say now."""
-    acct = next((a for a in accounts.accounts() if a["email"] == r["account"]), None)
-    if acct is None:
-        return None
-
-    def read():
-        s = mailbox.open_session(acct)
-        try:
-            s.select(r["folder"])
-            return s.headers([r["uid"]], ("LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST"))
-        finally:
-            s.logout()
-    try:
-        got = gates.run(r["account"], read, priority=gates.Priority.INTERACTIVE, deadline=UNSUB_READ_WAIT)
-    except Exception as e:                              # a preview still works: it offers no unsubscribe
-        print(f"[unsub] header read {type(e).__name__}", flush=True)
-        return None
-    if not got:
-        return None
-    parsed = _parse_list_unsub(got[0].raw)
-    c = store.conn()
-    store.set_list_unsub(c, r["pk"], parsed.get("raw", ""), parsed["method"])
-    c.commit()
-    c.close()
-    return parsed if parsed["method"] != "none" else _UNSUB_NONE
-
-
-def _resolve_unsub(from_addr):
-    """Authoritative unsubscribe method for a sender = the newest message's List-Unsubscribe: from what's
-    stored, else from the server for the newest message alone, else (a sweep took the sender's mail, and
-    this is a second try) from what was last read. Returns (method info, the accounts it wrote to)."""
-    c = store.conn()
-    try:
-        rows = c.execute(
-            "SELECT pk, account, folder, uid, list_unsub_raw, list_unsub_method FROM messages "
-            "WHERE lower(from_addr)=? ORDER BY ts DESC", (from_addr,)).fetchall()
-        accts = list(dict.fromkeys(r["account"] for r in rows if r["account"]))
-        info = _unsub_stored(c, rows)
-    finally:
-        c.close()
-    if info is None and rows:
-        info = _unsub_from_server(rows[0])
-    c = store.conn()
-    try:
-        if info is not None:
-            store.sender_unsub_put(c, from_addr, info, accts, now_iso())
-            c.commit()
-            return info, accts
-        kept = store.sender_unsub_get(c, from_addr)
-        if kept is not None:
-            return mime.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
-        return _UNSUB_NONE, accts
-    finally:
-        c.close()
-
-
-def _cleanup_sweep_targets(c, from_addr):
-    """INBOX copies of the sender's mail (the clutter to move to Trash). Junk/Trash mail is left where
-    it is — already filtered. Capped so a huge sender can't trigger a minutes-long IMAP-move burst."""
-    return c.execute(
-        "SELECT pk, account, folder, subject, seen FROM messages "
-        "WHERE lower(from_addr)=? AND folder='INBOX' AND pending_removal IS NULL ORDER BY ts DESC LIMIT ?",
-        (from_addr, _CLEANUP_SWEEP_CAP + 1)).fetchall()
-
-
-def cleanup_senders(qs):
-    """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
-    lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an
-    already-decided sender never reappears."""
-    buckets = [b for b in ((qs.get("buckets") or [",".join(_CLEANUP_BUCKETS)])[0]).split(",") if b]
-    try:
-        min_count = max(1, int((qs.get("min_count") or [_CLEANUP_MIN_COUNT])[0]))
-    except Exception:
-        min_count = _CLEANUP_MIN_COUNT
-    try:
-        limit = max(1, min(200, int((qs.get("limit") or [_CLEANUP_LIMIT])[0])))
-    except Exception:
-        limit = _CLEANUP_LIMIT
-    r = rules.load()
-    decided_addr = set(r.get("keep_senders", [])) | set(r.get("block_senders", []))
-    decided_dom = set(r.get("keep_domains", [])) | set(r.get("block_domains", []))
-    ph = ",".join("?" for _ in buckets)
-    now = time.time()
-    c = store.conn()
-    rows = c.execute(
-        f"""SELECT lower(from_addr) addr, MAX(from_name) name, COUNT(*) n,
-                   SUM(CASE WHEN seen=0 THEN 1 ELSE 0 END) unseen,
-                   MAX(ts) last_ts, MIN(ts) first_ts, MAX(date_iso) last_iso,
-                   MAX(bucket) bucket
-            FROM messages WHERE from_addr!='' AND bucket IN ({ph})
-            GROUP BY lower(from_addr) HAVING n>=?""", (*buckets, min_count)).fetchall()
-    cands = []
-    for row in rows:
-        addr = row["addr"]
-        dom = addr.rpartition("@")[2]
-        if addr in decided_addr or curation.domain_listed(dom, decided_dom):   # a rule covers sub-domains
-            continue
-        n = row["n"] or 0
-        unseen = row["unseen"] or 0
-        ratio = (unseen / n) if n else 0
-        age_days = max(0.0, (now - (row["last_ts"] or now)) / 86400.0)
-        score = n * (0.3 + 0.7 * ratio) * math.exp(-age_days / 30.0)
-        if score < _CLEANUP_MIN_SCORE:
-            continue
-        cands.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
-                      "count": n, "unseen": unseen, "unseen_ratio": round(ratio, 2),
-                      "last_seen": rel_time(row["last_iso"]), "bucket": row["bucket"],
-                      "lu_likely": row["bucket"] == "newsletters/marketing",
-                      "noise_score": round(score, 2)})
-    cands.sort(key=lambda x: -x["noise_score"])
-    cands = cands[:limit]
-    # per-account rollup + sample subjects for just the shown senders
-    addrs = [x["from_addr"] for x in cands]
-    if addrs:
-        aph = ",".join("?" for _ in addrs)
-        by_acct = {}
-        for row in c.execute(
-                f"SELECT lower(from_addr) addr, account, COUNT(*) n FROM messages "
-                f"WHERE lower(from_addr) IN ({aph}) GROUP BY lower(from_addr), account", addrs):
-            by_acct.setdefault(row["addr"], []).append({"email": row["account"], "count": row["n"]})
-        subj = {}
-        for row in c.execute(
-                f"SELECT lower(from_addr) addr, subject, ts FROM messages "
-                f"WHERE lower(from_addr) IN ({aph}) ORDER BY ts DESC", addrs):
-            lst = subj.setdefault(row["addr"], [])
-            if len(lst) < 3 and row["subject"]:
-                lst.append(row["subject"])
-        for x in cands:
-            x["accounts"] = by_acct.get(x["from_addr"], [])
-            x["sample_subjects"] = subj.get(x["from_addr"], [])
-    c.close()
-    return {"ok": True, "generated": now_iso(),
-            "totals": {"candidate_senders": len(cands),
-                       "candidate_messages": sum(x["count"] for x in cands)},
-            "senders": cands}
-
-
-def cleanup_sender(qs):
-    """Mandatory-preview detail for ONE sender: authoritative unsubscribe method + the exact INBOX
-    messages a sweep would move + a confirm_token that the execute route requires."""
-    addr = ((qs.get("addr") or [""])[0]).strip().lower()
-    if not addr or "@" not in addr:
-        return {"ok": False, "error": "bad address"}
-    c = store.conn()
-    n = c.execute("SELECT COUNT(*) k FROM messages WHERE lower(from_addr)=?", (addr,)).fetchone()["k"]
-    if not n:
-        c.close()
-        return {"ok": False, "error": "no such sender"}
-    unseen = c.execute("SELECT COUNT(*) k FROM messages WHERE lower(from_addr)=? AND seen=0", (addr,)).fetchone()["k"]
-    targets = _cleanup_sweep_targets(c, addr)
-    c.close()
-    info, accts = _resolve_unsub(addr)
-    capped = len(targets) > _CLEANUP_SWEEP_CAP
-    affected = [{"pk": t["pk"], "account": t["account"], "folder": t["folder"],
-                 "subject": t["subject"], "seen": t["seen"]} for t in targets[:_CLEANUP_SWEEP_CAP]]
-    unsub = {"method": info["method"]}
-    if info["method"] == "one-click" or info["method"] == "http-page":
-        unsub["https_host"] = urllib.parse.urlparse(info["https_uri"] or "").hostname
-    if info["method"] == "mailto":
-        unsub["mailto_to"] = info.get("mailto_to")
-    return {"ok": True, "from_addr": addr, "count": n, "unseen": unseen,
-            "accounts": accts, "domain": addr.rpartition("@")[2],
-            "unsub": unsub, "sweep_count": len(affected), "sweep_capped": capped,
-            "reversible": {"block": True, "sweep": True, "unsubscribe": False},
-            "confirm_token": _cleanup_confirm_token(addr)}
-
-
-def _cleanup_audit(from_addr, token, swept, status):
-    try:
-        with open(settings.current().sweep_audit, "a") as f:
-            f.write(json.dumps({"kind": "sender_cleanup", "ts": now_iso(), "from": from_addr,
-                                "token": token, "swept": swept, "status": status}) + "\n")
-    except Exception:
-        pass
-
-
-def cleanup_execute(body):
-    """Commit for ONE sender. ALWAYS-FIRST + reversible: rules.add(block) + verified INBOX sweep to
-    Trash (undo_push under one undo_group → a single `z` reverses both). THEN best-effort the chosen
-    unsubscribe (irreversible; idempotent via unsub_log). Requires CSRF + strict-origin (route level)
-    + a confirm_token echoed from the preview before ANY outbound request fires."""
-    from_addr = (body.get("from_addr") or "").strip().lower()
-    if not from_addr or "@" not in from_addr:
-        return {"ok": False, "error": "bad address"}, 400
-    scope = "domain" if body.get("block_scope") == "domain" else "sender"
-    do_unsub = bool(body.get("do_unsubscribe"))
-    token_ok = secrets.compare_digest(str(body.get("confirm_token") or ""),
-                                      _cleanup_confirm_token(from_addr))
-    grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
-    block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
-    # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
-    # the row it moved, and the sender's newest issue is most often one the sweep takes.
-    unsub = _resolve_unsub(from_addr) if do_unsub and token_ok else None
-
-    # 1) BLOCK (reversible) — rule + an unblock descriptor coalesced into the undo group
-    rules.add(block_token, "block")
-    undo_push({"kind": "unblock", "token": block_token, "label": "Cleaned up " + from_addr}, grp)
-
-    # 2) SWEEP INBOX copies to Trash (reversible) — each move pushes a 'move' undo under the same group
-    c = store.conn()
-    targets = _cleanup_sweep_targets(c, from_addr)
-    c.close()
-    swept = fail = queued = 0
-    for t in targets[:_CLEANUP_SWEEP_CAP]:
-        try:
-            res = do_trash({"pk": t["pk"], "undo_group": grp})   # one message at a time, as a click on it would
-        except Exception:
-            res = {}
-        if res.get("status") == "queued":
-            queued += 1
-        elif res.get("ok"):
-            swept += 1
-        else:
-            fail += 1
-    ingest.reclassify(block_token)               # what stays, in other folders, reads as blocked too
-    invalidate_stats()
-
-    # 3) UNSUBSCRIBE (irreversible, best-effort) — only with a valid confirm_token; idempotent on
-    #    TERMINAL outcomes only (a transient failure/no-method is never latched, so it stays retryable).
-    _UNSUB_TERMINAL = ("unsubscribed_oneclick", "mailto_sent", "needs_browser")
-    status, http_status, browser_url, method = "skipped", None, None, "none"
-    if do_unsub and token_ok and not profile.writes_allowed():
-        status = "read_only"                         # sends nothing outside; not latched, so retryable
-    elif do_unsub and token_ok:
-        key = "unsub:" + from_addr
-        c = store.conn()
-        prior = store.unsub_log_get(c, key)
-        c.close()
-        if prior and prior["status"] in _UNSUB_TERMINAL:   # already done → never re-fire
-            status, method = prior["status"], prior["method"]
-            if method == "http-page":
-                browser_url = unsub[0].get("https_uri")
-        else:
-            info, accts = unsub
-            method = info["method"]
-            if method == "one-click":
-                _unsub_rate_gate()
-                ok, http_status, _reason = safe_http.one_click_post(info["https_uri"])
-                status = "unsubscribed_oneclick" if ok else "failed"
-            elif method == "mailto":
-                _unsub_rate_gate()
-                status = "mailto_sent" if _unsub_mailto_send(from_addr, info, accts) else "failed"
-            elif method == "http-page":
-                status, browser_url = "needs_browser", info.get("https_uri")
-            else:
-                status = "no_method"
-            if status in _UNSUB_TERMINAL:              # record ONLY terminal success; leave failures retryable
-                c = store.conn()
-                store.unsub_log_put(c, from_addr, method, status, http_status, now_iso(), key, accts)
-                c.commit()
-                c.close()
-    elif do_unsub and not token_ok:
-        status = "no_token"                          # outbound refused; block+sweep still stand
-
-    _cleanup_audit(from_addr, block_token, swept + queued, status)
-    return {"ok": True, "status": status, "method": method, "blocked_token": block_token,
-            "block_scope": scope, "swept": swept + queued, "sweep_failed": fail, "sweep_queued": queued,
-            "sweep_capped": len(targets) > _CLEANUP_SWEEP_CAP, "browser_url": browser_url,
-            "http_status": http_status, "undo_group": grp,
-            "reversible": {"block": True, "sweep": True, "unsubscribe": False}}, 200
-
-
-def do_screener(account):
-    """First-contact gate: distinct INBOX senders NOT yet decided (no keep/block rule covering
-    their address or domain). One human decision each → Allow (keep) or Screen-out (block)."""
-    if not account or account not in {a["email"] for a in accounts.accounts()}:
-        return {"ok": True, "account": account, "items": [], "total": 0}
-    r = rules.load()
-    decided_addr = set(r.get("keep_senders", [])) | set(r.get("block_senders", []))
-    decided_dom = set(r.get("keep_domains", [])) | set(r.get("block_domains", []))
-    c = store.conn()
-    rows = c.execute(
-        """SELECT lower(from_addr) addr, MAX(from_name) name, COUNT(*) n,
-                  MAX(ts) last, MAX(date_iso) iso
-           FROM messages WHERE account=? AND folder='INBOX' AND from_addr!='' AND is_junk=0
-             AND pending_removal IS NULL
-           GROUP BY lower(from_addr) ORDER BY last DESC""", (account,)).fetchall()
-    c.close()
-    items = []
-    for row in rows:
-        addr = row["addr"]
-        dom = addr.rpartition("@")[2]
-        if addr in decided_addr or curation.domain_listed(dom, decided_dom):   # kept or blocked, sub-domains too
-            continue
-        items.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
-                      "count": row["n"], "when": rel_time(row["iso"])})
-    return {"ok": True, "account": account, "items": items[:100], "total": len(items)}
 
 
 def contact_card(addr):
@@ -4234,7 +3825,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/views":
                 self._json({"ok": True, "views": views.merged()})
             elif u.path == "/api/audit":
-                self._json(read_audit(q.get("kind", ["all"])[0], int(q.get("limit", ["120"])[0])))
+                self._json(curation.AUDIT.read(q.get("kind", ["all"])[0], int(q.get("limit", ["120"])[0])))
             elif u.path == "/api/folders":
                 _fa = q.get("account", [None])[0]
                 if not _fa:
@@ -4260,13 +3851,13 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/contact":
                 self._json(*contact_card(q.get("addr", [""])[0]))
             elif u.path == "/api/screener":
-                self._json(do_screener(q.get("account", [None])[0]))
+                self._json(curation.screener.queue(q.get("account", [None])[0]))
             elif u.path == "/api/documents":
                 self._json(documents_json(q))
             elif u.path == "/api/cleanup/senders":
-                self._json(cleanup_senders(q))
+                self._json(curation.cleanup.senders(q))
             elif u.path == "/api/cleanup/sender":
-                self._json(cleanup_sender(q))
+                self._json(curation.cleanup.sender(q))
             elif u.path == "/api/account-health":
                 self._json(account_health_json())
             elif u.path == "/api/debug/pool":
@@ -4376,10 +3967,10 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/sweep":
                 self._json(do_sweep(b.get("account", "all"), bool(b.get("dry_run", False))))
             elif u.path == "/api/rules":
-                self._json(self._rules_post(b))
+                self._json(curation.screener.rule(b))
             elif u.path == "/api/cleanup/execute":
                 try:
-                    res, code = cleanup_execute(b)
+                    res, code = curation.cleanup.execute(b)
                 except Exception as ex:
                     print(f"[cleanup] error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "cleanup failed"}, 500
@@ -4548,32 +4139,6 @@ class H(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "request failed"}, 500)
         finally:
             over.__exit__(None, None, None)
-
-    def _rules_post(self, b):
-        token = (b.get("token") or "").strip().lower()
-        verdict = b.get("verdict")
-        pk = b.get("pk")
-        if not token or ("." not in token and "@" not in token):
-            return {"ok": False, "msg": "invalid token (need a domain or an address)"}
-        if verdict == "remove":
-            rules.remove(token)
-            placed = None
-        elif verdict in ("keep", "block"):
-            _, placed = rules.add(token, verdict)
-        else:
-            return {"ok": False, "msg": "verdict must be keep|block|remove"}
-        trashed = False
-        if verdict == "block" and pk is not None:  # close the loop: block also trashes now
-            try:                                   # serialized with every other live-IMAP op
-                trashed, _, _ = gates.run(mailops.account_of(int(pk)) or gates.EVERY_ACCOUNT,
-                                          lambda: mailops.trash_message(int(pk)),
-                                          priority=gates.Priority.INTERACTIVE)   # block-sender is NOT undoable
-            except Exception:
-                trashed = False
-        reclassified = ingest.reclassify(token)
-        invalidate_stats()
-        return {"ok": True, "token": token, "placed_in": placed, "reclassified": reclassified,
-                "trashed": trashed, "rules": rules.load()}
 
     def _views_post(self, b):
         verb = b.get("verb")
