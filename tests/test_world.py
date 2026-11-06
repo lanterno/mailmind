@@ -153,10 +153,10 @@ def test_opening_a_message_records_its_attachments(world):
 
 
 def test_a_forwarded_message_attachment_carries_the_message(world):
-    import mailparse
+    from mailmind.content import mime
     raw = w.raw("ada-inbox-07-forward-rfc822.eml")
-    att = mailparse.parse(raw)["attachments"][0]
-    data, ctype = mailparse.extract_part(raw, att["part_id"])
+    att = mime.parse(raw)["attachments"][0]
+    data, ctype = mime.extract_part(raw, att["part_id"])
     assert ctype == "message/rfc822" and b"Subject: Fabric samples" in data and att["size"] == len(data)
 
 

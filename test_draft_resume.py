@@ -32,7 +32,7 @@ def _home():
 
 _home()                                               # before anything opens a file
 import compose
-import mailparse
+from mailmind.content import mime
 import outbox
 import server
 
@@ -117,7 +117,7 @@ def _synced(raw, uid, account=ACCT, folder="Drafts"):
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, "
               "in_reply_to, refs) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
               (account, "imap", folder, uid, (m["Message-ID"] or "").strip(), f"td{uid}", 1_800_000_100, account,
-               server.ingest.dec(m["Subject"]), m["In-Reply-To"] or None, m["References"] or None))
+               mime.dec(m["Subject"]), m["In-Reply-To"] or None, m["References"] or None))
     pk = c.execute("SELECT pk FROM messages WHERE folder=? AND uid=?", (folder, uid)).fetchone()["pk"]
     store.store_body(c, pk, raw, "2026-10-31T10:00:00")
     c.commit()
@@ -189,7 +189,7 @@ def _round_trip(text, html=None, attachments=()):
     """What a draft's text/plain reads as once it has been saved and fetched back."""
     raw = compose.build_message({"account": ACCT, "to": ["bo@example.test"], "subject": "Re: Plans",
                                  "text": text, "html": html, "attachments": list(attachments)}, draft=True)["raw"]
-    return mailparse.parse(raw)
+    return mime.parse(raw)
 
 
 def test_own_html_is_where_reply_and_forward_html_start():
@@ -546,7 +546,7 @@ def test_reply_draft_records_text_quote_and_html():
     assert row["own_text"] == OWN and row["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026"), dict(row)
     assert row["tail_text"].count("wrote:") == 1 and "> Shall we meet Saturday?" in row["tail_text"]
     assert row["tail_html"].startswith("<div>On Mon") and "<blockquote" in row["tail_html"], row["tail_html"]
-    assert compose.lf(mailparse.parse(raw)["text"]) == OWN + row["tail_text"]
+    assert compose.lf(mime.parse(raw)["text"]) == OWN + row["tail_text"]
 
 
 def test_forward_draft_records_the_banner():
@@ -556,7 +556,7 @@ def test_forward_draft_records_the_banner():
     row = _row(res["draft_id"])
     assert row["own_text"] == "FYI" and row["tail_text"].startswith("\n\n---------- Forwarded message"), dict(row)
     assert "From: Bo Park <bo@example.test>" in row["tail_text"], row["tail_text"]
-    files = [a["filename"] for a in mailparse.parse(CALLS["append"][-1]["raw"])["attachments"]]
+    files = [a["filename"] for a in mime.parse(CALLS["append"][-1]["raw"])["attachments"]]
     assert files == ["map.pdf"], files
 
 
@@ -743,15 +743,15 @@ def test_many_files_come_back_in_order_from_one_parse():
     files = [{"filename": f"f{i}.bin", "content_type": "application/octet-stream",
               "b64": base64.b64encode(bytes([i]) * 3000).decode()} for i in range(40)]
     pk, _ = _saved_and_synced(text="Many.", attachments=files)
-    real = mailparse.extract_part
+    real = mime.extract_part
 
     def per_part(raw, part_id):
         raise AssertionError("re-parsed the whole draft for one file")
-    mailparse.extract_part = per_part
+    mime.extract_part = per_part
     try:
         r, code = _resume(pk)
     finally:
-        mailparse.extract_part = real
+        mime.extract_part = real
     assert code == 200 and [f["filename"] for f in r["files"]] == [f"f{i}.bin" for i in range(40)], r
     assert all(base64.b64decode(f["b64"]) == bytes([i]) * 3000 for i, f in enumerate(r["files"]))
 
@@ -1244,15 +1244,15 @@ def test_unreadable_draft_is_422_and_only_a_dead_server_502():
         assert code == want, (exc, code, r)
         assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
     server.ingest.fetch_body = _real_fetch_body
-    real = mailparse.parse
+    real = mime.parse
 
     def parse(raw):
         raise ValueError("address parts cannot contain CR or LF")
-    mailparse.parse = parse                                     # a body cached by an older Python
+    mime.parse = parse                                     # a body cached by an older Python
     try:
         r, code = _resume(pk)
     finally:
-        mailparse.parse = real
+        mime.parse = real
     assert code == 422 and "can’t read this draft" in r["error"], (code, r)
 
 

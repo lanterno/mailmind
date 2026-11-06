@@ -791,15 +791,15 @@ def _layered():
 
 
 def test_hwf_part_ids_count_every_leaf_in_walk_order_and_extract_part_agrees():
-    import mailparse
+    from mailmind.content import mime
     raw = _layered()
-    p = mailparse.parse(raw)
+    p = mime.parse(raw)
     assert (p["text"], p["html"]) == ("first plain\n", "<p>first html</p>\n")      # the first of each wins
     assert [(a["part_id"], a["filename"], a["is_inline"]) for a in p["attachments"]] == [
         ("5", "swatch.pdf", 0), ("6", "inline-6", 1)]
-    assert mailparse.extract_part(raw, "5") == (b"%PDF-1.4 swatch", "application/pdf")
-    assert mailparse.extract_part(raw, "6") == (b"\x89PNG quilt", "image/png")
-    assert mailparse.extract_part(raw, "1")[0] == b"first plain\n"
+    assert mime.extract_part(raw, "5") == (b"%PDF-1.4 swatch", "application/pdf")
+    assert mime.extract_part(raw, "6") == (b"\x89PNG quilt", "image/png")
+    assert mime.extract_part(raw, "1")[0] == b"first plain\n"
 
 
 def _with_part(headers):
@@ -826,8 +826,8 @@ ATTACHMENT_RULE = [
 
 @pytest.mark.parametrize("headers,want", [c[1:] for c in ATTACHMENT_RULE], ids=[c[0] for c in ATTACHMENT_RULE])
 def test_hwf_which_parts_are_listed_as_attachments(headers, want):
-    import mailparse
-    got = [(a["filename"], a["is_inline"], a["content_id"]) for a in mailparse.parse(_with_part(headers))["attachments"]]
+    from mailmind.content import mime
+    got = [(a["filename"], a["is_inline"], a["content_id"]) for a in mime.parse(_with_part(headers))["attachments"]]
     assert got == ([want] if want else [])
 
 
@@ -847,27 +847,27 @@ def _forwarded_email(outer_text):
 
 
 def test_hwf_an_attached_emails_files_are_not_listed_as_the_outers():
-    import mailparse
-    assert [a["content_type"] for a in mailparse.parse(_forwarded_email(True))["attachments"]] == ["message/rfc822"]
+    from mailmind.content import mime
+    assert [a["content_type"] for a in mime.parse(_forwarded_email(True))["attachments"]] == ["message/rfc822"]
 
 
 def test_hwf_an_attached_emails_text_is_not_taken_for_the_outers():
-    import mailparse
-    assert mailparse.parse(_forwarded_email(False))["text"] is None
+    from mailmind.content import mime
+    assert mime.parse(_forwarded_email(False))["text"] is None
 
 
 def test_hwf_an_attached_email_is_one_part_of_the_right_size():
-    import mailparse
+    from mailmind.content import mime
     raw = _forwarded_email(True)
-    [att] = mailparse.parse(raw)["attachments"]
-    data, ctype = mailparse.extract_part(raw, att["part_id"])
+    [att] = mime.parse(raw)["attachments"]
+    data, ctype = mime.extract_part(raw, att["part_id"])
     assert ctype == "message/rfc822" and att["size"] == len(data) and b"Subject: Fabric" in data
 
 
 def test_hwf_an_attached_email_with_no_file_name_is_still_listed():
-    import mailparse
+    from mailmind.content import mime
     raw = _forwarded_email(True).replace(b"Content-Disposition: attachment\n", b"")
-    assert [(a["filename"], a["content_type"]) for a in mailparse.parse(raw)["attachments"]] == [
+    assert [(a["filename"], a["content_type"]) for a in mime.parse(raw)["attachments"]] == [
         ("message.eml", "message/rfc822")]
 
 
@@ -909,9 +909,9 @@ def test_hwf_a_message_whose_part_rows_were_cleared_records_them_when_opened(wor
 
 
 def test_hwf_an_encoded_line_break_in_to_does_not_break_parsing():
-    import mailparse
+    from mailmind.content import mime
     raw = (b"From: lin@example.test\r\nTo: =?utf-8?q?Bo=0D=0AX?= <bo@example.test>\r\nSubject: x\r\n\r\nhello\r\n")
-    to = mailparse.parse(raw)["to"]
+    to = mime.parse(raw)["to"]
     assert "bo@example.test" in to and "\r" not in to and "\n" not in to
 
 
@@ -927,23 +927,23 @@ def test_hwf_a_recorded_tail_is_cut_only_when_it_starts_with_a_blank_line():
 
 
 def test_hwf_a_fold_in_a_header_leaves_one_space():
-    import mailparse
-    assert mailparse.dec("Items\r\n for next week") == "Items for next week"
-    assert mailparse.dec("Items\n\tfor next week") == "Items for next week"
+    from mailmind.content import mime
+    assert mime.dec("Items\r\n for next week") == "Items for next week"
+    assert mime.dec("Items\n\tfor next week") == "Items for next week"
 
 
 def test_hwf_a_fold_beside_an_encoded_word_keeps_its_space():
-    import mailparse
-    assert mailparse.dec("Re:\r\n =?utf-8?B?2YXYsdit2KjYpw==?=") == "Re: \u0645\u0631\u062d\u0628\u0627"
-    assert mailparse.dec("=?utf-8?Q?Caf=C3=A9_menu?=\r\n for next week") == "Caf\u00e9 menu for next week"
-    assert mailparse.dec("=?utf-8?Q?no?=\r\n =?utf-8?Q?vembre?=") == "novembre"     # one word, split by the fold
+    from mailmind.content import mime
+    assert mime.dec("Re:\r\n =?utf-8?B?2YXYsdit2KjYpw==?=") == "Re: \u0645\u0631\u062d\u0628\u0627"
+    assert mime.dec("=?utf-8?Q?Caf=C3=A9_menu?=\r\n for next week") == "Caf\u00e9 menu for next week"
+    assert mime.dec("=?utf-8?Q?no?=\r\n =?utf-8?Q?vembre?=") == "novembre"     # one word, split by the fold
 
 
 def test_hwf_a_fold_in_a_quoted_sender_keeps_the_address():
     import email
-    import mailparse
+    from mailmind.content import mime
     msg = email.message_from_bytes(b'From: "Bo\r\n Lin" <bo@example.test>\r\n\r\nHi\r\n')
-    assert mailparse.sender_of(msg) == ("Bo Lin", "bo@example.test")
+    assert mime.sender_of(msg) == ("Bo Lin", "bo@example.test")
 
 
 def test_hwf_a_tab_in_a_subject_is_not_deleted():

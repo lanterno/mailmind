@@ -14,7 +14,7 @@ from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 import ics
 import ingest
-import mailparse
+from mailmind.content import mime
 import server
 
 ACCT = "ada@example.test"
@@ -57,7 +57,7 @@ def _msg(cal=None, folder="INBOX", ts=None, account=ACCT, fetched=True, thread_i
         m.add_attachment(cal.encode(), maintype="text", subtype="calendar", filename="invite.ics")
         raw = m.as_bytes()
         store.store_body(c, pk, raw, NOW.isoformat())
-        for a in mailparse.parse(raw)["attachments"]:
+        for a in mime.parse(raw)["attachments"]:
             c.execute("INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,"
                       "is_inline) VALUES(?,?,?,?,?,?,?)", (pk, a["part_id"], a["filename"],
                                                           a["content_type"], a["size"], a["content_id"], a["is_inline"]))
@@ -309,13 +309,13 @@ def _alt(cal, attach=False):
 def test_an_inline_only_invite_is_recorded_once_and_listed():
     _fresh()
     cal = _ics("ol", NOW + timedelta(days=1), summary="Quarterly review")
-    out = mailparse.parse(_alt(cal))["attachments"]
+    out = mime.parse(_alt(cal))["attachments"]
     assert [(a["filename"], a["content_type"], a["is_inline"]) for a in out] == [("invite.ics", "text/calendar", 1)], out
-    both = mailparse.parse(_alt(cal, attach=True))["attachments"]
+    both = mime.parse(_alt(cal, attach=True))["attachments"]
     assert [a["content_type"] for a in both] == ["application/ics"], "no second chip when a file carries it"
     pk = _msg()
     c = store.conn()
-    ingest._keep_body(c, pk, _alt(cal), mailparse.parse(_alt(cal)))
+    ingest._keep_body(c, pk, _alt(cal), mime.parse(_alt(cal)))
     c.commit()
     c.close()
     assert [(x["pk"], x["summary"]) for x in _up()] == [(pk, "Quarterly review")]

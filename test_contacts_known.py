@@ -25,7 +25,7 @@ def _home():
 
 
 _home()                                               # before anything opens a file
-import mailparse
+from mailmind.content import mime
 import outbox
 import server
 
@@ -45,7 +45,7 @@ def _msg(from_addr, recipients="", folder="INBOX", is_junk=0, draft=0, account=A
                     "subject, recipients, is_junk, draft) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (account, "imap", folder, _uid[0], f"<m{_uid[0]}@example.test>", f"t{_uid[0]}",
                      1_800_000_000 + _uid[0], from_addr, "Saturday market", recipients, is_junk, draft))
-    store.set_recipients(c, cur.lastrowid, mailparse.recipient_addrs(email.message_from_string(f"To: {recipients}\n\n")))
+    store.set_recipients(c, cur.lastrowid, mime.recipient_addrs(email.message_from_string(f"To: {recipients}\n\n")))
     c.commit()
     c.close()
 
