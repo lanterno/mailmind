@@ -1816,7 +1816,7 @@ function composeOpen(opts){
   if(state.compose)clearInterval(state.compose._autosaveIv);   // a composer replaced in place: its autosave stops with it
   state.compose={ mode:opts.mode||"new", from,
     to:(opts.to||[]).map(v=>({v})), cc:(opts.cc||[]).map(v=>({v})), bcc:(opts.bcc||[]).map(v=>({v})),
-    subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null,
+    subject:opts.subject||"", origPk:opts.origPk||null, quote:opts.quote||null, draftId:opts.draftId||null, version:opts.version??null,
     resume:opts.resume||null,   // a reopened draft: its own threading and the quote it already carries
     fwdAttach:opts.fwdAttach||0, attachments:[], idk:rid(), status:"idle", dirty:false,
     _reading:new Map(),   // files still being read: id → name
@@ -2390,8 +2390,8 @@ let _outboxNudge=null;
 function nudgeOutbox(){ clearTimeout(_outboxNudge); _outboxNudge=setTimeout(loadOutbox,120); }   // a bulk action queued offline tells this once per message
 async function loadOutbox(){
   let d,p; try{ [d,p]=await Promise.all([api("/api/outbox?limit=50"),api("/api/pending")]); }catch(e){ return; }
-  state.outbox=d.items||[]; state.pending=p;
-  const active=state.outbox.filter(o=>o.state==="queued"||o.state==="sending").length+p.waiting;
+  state.outbox=d.items||[]; state.pending=p; state.draftsWaiting=d.drafts||[];
+  const active=state.outbox.filter(o=>o.state==="queued"||o.state==="sending").length+p.waiting+state.draftsWaiting.length;
   const failed=state.outbox.filter(o=>o.state==="error").length+p.stuck;
   const btn=$("#outboxBtn");
   if(active||failed){ btn.hidden=false; $("#outboxN").textContent=active+failed; btn.classList.toggle("has-fail",failed>0); }
@@ -2413,6 +2413,18 @@ function pendingRow(p){
     <span class="ob-sub">${esc(pendingWhat(p))}: ${esc(p.subject||"(no subject)")}<br><span class="ob-to ob-why">${esc(why)} · ${esc(p.account)}</span></span>
     ${stuck?`<button class="ob-retry" data-pending-retry="${p.id}">Retry</button>`:""}<button class="ob-retry" data-pending-discard="${p.id}">Discard</button></div>`;
 }
+function draftWaitRow(d){
+  const goes=d.discarding?"leaves the server":"reaches the server";
+  const why=readOnly()?`${goes} on a full run`:d.attempts?`tried ${d.attempts}×, trying again`:`${goes} once it’s back`;
+  return `<div class="ob-row"><span class="ob-st queued">${d.discarding?"discarded":"draft"}</span>
+    <span class="ob-sub">${esc(d.subject||"(no subject)")}<br><span class="ob-to ob-why">${esc(why)} · ${esc(d.account)}</span></span>
+    ${d.discarding?"":`<button class="ob-retry" data-draft-edit="${d.id}">Edit</button><button class="ob-retry" data-draft-discard="${d.id}">Discard</button>`}</div>`;
+}
+async function discardWaitingDraft(id){
+  try{ await cpost("/api/draft",{draft_id:id,delete:true}); toast("Draft discarded"); }
+  catch(e){ toast("Couldn’t discard it"); }
+  loadOutbox(); refreshDrafts();
+}
 async function pendingAct(what,id){
   try{ const r=await cpost(`/api/pending/${what}`,{id}); toast(!r.ok?"It has already settled":what==="retry"?"Trying again…":"Discarded: it stays as it was"); }
   catch(e){ toast(e.status===409?"It’s being tried now. Try again in a moment":"It has already settled"); }
@@ -2420,7 +2432,8 @@ async function pendingAct(what,id){
 }
 function renderOutbox(){
   const f=$("#outboxFly"), held=(state.pending&&state.pending.items)||[];
-  const changes=held.length?'<h4>Changes waiting</h4>'+held.map(pendingRow).join(""):"";
+  const waiting=state.draftsWaiting||[];
+  const changes=(held.length?'<h4>Changes waiting</h4>'+held.map(pendingRow).join(""):"")+(waiting.length?'<h4>Drafts waiting</h4>'+waiting.map(draftWaitRow).join(""):"");
   if(!state.outbox.length){ f.innerHTML=changes||'<h4>Outbox</h4><div class="ob-row"><span class="ob-sub">Nothing queued.</span></div>'; return; }
   f.innerHTML=changes+'<h4>Outbox</h4>'+state.outbox.map(o=>{
     const to=(o.to||[]).join(", ")+(o.bcc_count?` +${o.bcc_count} bcc`:"");
@@ -2906,7 +2919,7 @@ function composePayload(){
     attachments:cmp.attachments.map(a=>({filename:a.filename,content_type:a.content_type,b64:a.b64})),
     ...resumeFields(cmp.resume) };
 }
-async function composeSaveDraft(silent){   // → true once saved, false if it wasn't, null when there's nothing to save
+async function composeSaveDraft(silent,autosave){   // → true once saved, false if it wasn't, null when there's nothing to save
   const cmp=state.compose; if(!cmp)return null; const payload=composePayload();
   // never litter Drafts with an empty / signature-only message (shared by manual save, autosave, close)
   const bodyTrim=(payload.text||"").replace(cmp._sigBlock||"","").trim();
@@ -2918,12 +2931,17 @@ async function composeSaveDraft(silent){   // → true once saved, false if it w
   const mine=(async()=>{
     if(prior)await prior;   // one composer's saves go in turn, so each names the copy the last one left
     payload.draft_id=cmp.draftId||null; namesItself(payload,cmp);
+    if(autosave)payload.autosave=true;
+    if(cmp.version!=null&&(silent||!cmp._conflict))payload.base_version=cmp.version;   // a save someone asked for overwrites
     try{ const r=await cpost("/api/draft", payload); if(!r.ok)throw new Error(r.error||"err");
-      cmp.draftId=r.draft_id; adoptResume(cmp,r); if((cmp.edits||0)===at)cmp.dirty=false;   // an edit since this save began stays to save
+      cmp.draftId=r.draft_id; cmp.version=r.version??cmp.version; cmp._conflict=false; adoptResume(cmp,r); if((cmp.edits||0)===at)cmp.dirty=false;   // an edit since this save began stays to save
       cmp._lastSaveHash=_draftHash(payload);
       mark("Saved "+new Date().toTimeString().slice(0,5)); if(!silent)toast("Draft saved");
+      if(!autosave&&r.pushed===false)nudgeOutbox();   // it waits for its server: the tray says so
       return true; }
-    catch(e){ mark("Not saved"); if(!silent)toast("Couldn’t save draft: "+(e.message||""));   // never leave an older "Saved" up
+    catch(e){
+      if(e.status===409){ cmp._conflict=true; mark("Changed in another window"); if(!silent)toast("This draft changed in another window. Save again to keep this text."); return false; }
+      mark("Not saved"); if(!silent)toast("Couldn’t save draft: "+(e.message||""));   // never leave an older "Saved" up
       return false; }
   })();
   cmp._saving=mine; mine.finally(()=>{ if(cmp._saving===mine)cmp._saving=null; });
@@ -2932,21 +2950,21 @@ async function composeSaveDraft(silent){   // → true once saved, false if it w
 function _cheapHash(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return h; }
 function _draftHash(p){ return _cheapHash(JSON.stringify([p.to,p.cc,p.bcc,p.subject,p.text,p.account,(p.attachments||[]).map(a=>a.filename)])); }
 function autosaveTick(){
-  const cmp=state.compose; if(!cmp||cmp.status==="sending"||!cmp.dirty||cmp._saving)return;   // the next tick saves what this one would
+  const cmp=state.compose; if(!cmp||cmp.status==="sending"||!cmp.dirty||cmp._saving||cmp._conflict)return;   // the next tick saves what this one would
   const p=composePayload(); if(!p)return;
   // skip a compose that is effectively just the inserted signature (no recipients/subject)
   const bodyTrim=(p.text||"").replace(cmp._sigBlock||"","").trim();
   if(!p.to.length&&!p.cc.length&&!p.bcc.length&&!(p.subject||"").trim()&&!bodyTrim)return;
   const key=_draftHash(p); if(key===cmp._lastSaveHash)return;
-  composeSaveDraft(true);
+  composeSaveDraft(true,true);
 }
 let _resumeTok=0;
-async function editDraft(pk){   // your text in the box, the quote folded below, files, Bcc and thread as saved
+async function editDraft(pk,draftId){   // by its row, or by its id for one the list can't show yet. Your text in the box, the quote folded below, files, Bcc and thread as saved
   const busy="Close the message you’re writing first";
   if(state.compose){ toast(busy); return; }
   const tok=++_resumeTok; let d;
   if(_closeSave){ await _closeSave; if(tok!==_resumeTok)return; }   // the copy it saves replaces the one this row shows
-  try{ d=await cpost("/api/draft/resume",{pk}); if(!d.ok)throw new Error(d.error||"Couldn’t open this draft."); }
+  try{ d=await cpost("/api/draft/resume",pk==null?{draft_id:draftId}:{pk}); if(!d.ok)throw new Error(d.error||"Couldn’t open this draft."); }
   catch(e){ if(tok!==_resumeTok)return; const m=e.message||"Couldn’t open this draft."; toast(m); announce(m);
     if((e.status===404||e.status===409)&&state.csel===pk)clearReader();   // that copy is gone: don't keep showing it
     if(state.allInbox)loadAllInboxes(); else if(state.searching)runSearch(); else loadCMessages();   // a stale row goes
@@ -3499,6 +3517,8 @@ $("#outboxBtn").addEventListener("click",toggleOutbox);
 $("#outboxFly").addEventListener("click",e=>{
   const pr=e.target.closest("[data-pending-retry]"); if(pr){ pendingAct("retry",+pr.dataset.pendingRetry); return; }
   const pd=e.target.closest("[data-pending-discard]"); if(pd){ pendingAct("discard",+pd.dataset.pendingDiscard); return; }
+  const de=e.target.closest("[data-draft-edit]"); if(de){ $("#outboxFly").hidden=true; editDraft(null,+de.dataset.draftEdit); return; }
+  const dd=e.target.closest("[data-draft-discard]"); if(dd){ discardWaitingDraft(+dd.dataset.draftDiscard); return; }
   const r=e.target.closest("[data-retry]"); if(r){ retrySend(+r.dataset.retry); return; }
   const sn=e.target.closest("[data-sendnow]"); if(sn){ sendNow(+sn.dataset.sendnow); return; }
   const cx=e.target.closest("[data-cancel]"); if(cx){ cancelScheduled(+cx.dataset.cancel); return; }

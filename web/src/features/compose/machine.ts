@@ -109,7 +109,7 @@ export function createComposing(env: Env) {
     c = {
       id: nextId++, mode: opts.mode ?? "new", from, to, cc, bcc, typed: { to: "", cc: "", bcc: "" }, showCc: cc.length > 0 || bcc.length > 0,
       subject: opts.subject ?? "", subject0: opts.subject0 ?? opts.subject ?? "", body, sigBlock,
-      origPk: opts.origPk ?? null, quote: opts.quote ?? null, draftId: opts.draftId ?? null, resume: opts.resume ?? null,
+      origPk: opts.origPk ?? null, quote: opts.quote ?? null, draftId: opts.draftId ?? null, version: opts.version ?? null, conflict: false, resume: opts.resume ?? null,
       fwdAttach: opts.fwdAttach ?? 0, attachments: opts.attachments ?? [], reading: new Map(), idk: randomId(),
       dirty: false, edits: 0, saving: null, lastSaveHash: null, savedLine: "", note: opts.note ?? "",
       autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null,
@@ -390,7 +390,7 @@ export function createComposing(env: Env) {
 
   // → true once saved, false if it wasn't, null when there's nothing to save. Half an address isn't a recipient yet, so
   // autosave leaves what's being typed where it is; a save anyone asked for takes it.
-  function save(silent = false, takeTyped = true): Promise<boolean | null> {
+  function save(silent = false, takeTyped = true, autosave = false): Promise<boolean | null> {
     const x = c;
     if (!x) return Promise.resolve(null);
     if (takeTyped) commitTyped(x);
@@ -407,17 +407,28 @@ export function createComposing(env: Env) {
       if (prior) await prior;   // one composer's saves go in turn, so each names the copy the last one left
       payload.draft_id = x.draftId;
       namesItself(payload, x);
+      if (autosave) payload.autosave = true;
+      if (x.version !== null && (silent || !x.conflict)) payload.base_version = x.version;   // a save someone asked for overwrites
       try {
         const r = await env.post("/api/draft", payload);
         if (!r.ok) throw new Error(r.error || "err");
         x.draftId = r.draft_id;
+        x.version = r.version ?? x.version;
+        x.conflict = false;
         adoptResume(x, r);
         if (x.edits === at) x.dirty = false;   // an edit since this save began stays to save
         x.lastSaveHash = draftHash(payload);
         line(`Saved ${new Date().toTimeString().slice(0, 5)}`);
         if (!silent) env.toast("Draft saved");
+        if (!autosave && r.pushed === false) env.outboxChanged();   // it waits for its server: the tray says so
         return true;
       } catch (e) {
+        if ((e as { status?: number }).status === 409) {
+          x.conflict = true;
+          line("Changed in another window");
+          if (!silent) env.toast("This draft changed in another window. Save again to keep this text.");
+          return false;
+        }
         line("Not saved");   // never leave an older "Saved" up
         if (!silent) env.toast(`Couldn’t save draft: ${e instanceof Error ? e.message : ""}`);
         return false;
@@ -432,8 +443,8 @@ export function createComposing(env: Env) {
 
   function autosaveTick() {
     const x = c;
-    if (!x || !x.dirty || x.saving || nothingToSave(x)) return;   // the next tick saves what this one would
-    if (draftHash(payloadOf(x)) !== x.lastSaveHash) void save(true, false);
+    if (!x || !x.dirty || x.saving || x.conflict || nothingToSave(x)) return;   // the next tick saves what this one would
+    if (draftHash(payloadOf(x)) !== x.lastSaveHash) void save(true, false, true);
   }
 
   /* ---------- sending ---------- */
@@ -680,7 +691,7 @@ export function createComposing(env: Env) {
   }
 
   // Your text in the box, the quote folded below, files, Bcc and thread as saved.
-  async function editDraft(pk: number) {
+  async function editDraft(pk: number | null, draftId?: number) {   // by its row, or by its id for one the list can't show yet
     const busy = "Close the message you’re writing first";
     if (c) return env.toast(busy);
     const turn = ++resumeTurn;
@@ -690,7 +701,7 @@ export function createComposing(env: Env) {
     }
     let d: ReopenedDraft & { ok?: boolean; error?: string; text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
     try {
-      d = await env.post("/api/draft/resume", { pk });
+      d = await env.post("/api/draft/resume", pk === null ? { draft_id: draftId } : { pk });
       if (!d.ok) throw new Error(d.error || "Couldn’t open this draft.");
     } catch (e) {
       if (turn !== resumeTurn) return;
@@ -698,7 +709,7 @@ export function createComposing(env: Env) {
       env.toast(m);
       env.say(m);
       const status = (e as { status?: number }).status;
-      if (status === 404 || status === 409) env.draftGone(pk);   // that copy is gone: don't keep showing it
+      if (pk !== null && (status === 404 || status === 409)) env.draftGone(pk);   // that copy is gone: don't keep showing it
       env.draftsChanged();
       return;
     }

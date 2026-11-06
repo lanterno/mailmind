@@ -27,7 +27,7 @@ export interface GuardView {
 
 export interface OpenOptions {
   mode?: Mode; from?: string | undefined; to?: string[]; cc?: string[]; bcc?: string[];
-  subject?: string; subject0?: string; origPk?: number | null; quote?: Quote | null; draftId?: number | null | undefined;
+  subject?: string; subject0?: string; origPk?: number | null; quote?: Quote | null; draftId?: number | null | undefined; version?: number | null;
   resume?: ResumeFields | null; fwdAttach?: number; noSig?: boolean; autoCc?: string[] | null;
   participants?: string[]; ack?: Partial<Ack> | null; body?: string; attachments?: Attachment[]; note?: string;
 }
@@ -46,6 +46,8 @@ export interface Composer {
   origPk: number | null;
   quote: Quote | null;
   draftId: number | null;
+  version: number | null;   // the save this composer last saw, so one it never saw isn't overwritten
+  conflict: boolean;        // another window saved since: autosave stops, and only a save someone asks for overwrites
   resume: ResumeFields | null;   // its own threading and quote: a reopened draft, or a reply after its first save
   fwdAttach: number;
   attachments: Attachment[];
@@ -136,7 +138,7 @@ export interface Payload {
   account: string; mode: Mode; idempotency_key: string; draft_id: number | null;
   to: string[]; cc: string[]; bcc: string[]; subject: string; text: string; in_reply_to_pk: number | null;
   attachments: { filename: string; content_type: string; b64: string }[];
-  resume?: ResumeFields; send_after?: number;
+  resume?: ResumeFields; send_after?: number; autosave?: boolean; base_version?: number;
 }
 
 export function payloadOf(c: Composer): Payload {

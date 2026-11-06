@@ -4,10 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
 import { toast } from "../../lib/toast";
+import { composing } from "./compose";
 import { fmtWhen } from "./model";
 
 type Sent = GetAnswers["/api/outbox"]["items"][number];
 type Held = GetAnswers["/api/pending"]["items"][number];
+type Waiting = GetAnswers["/api/outbox"]["drafts"][number];
 
 const OPS: Record<string, string> = { trash: "Move to Trash", archive: "Archive", junk: "Mark as junk", move: "Move" };
 const FLAGS: Record<string, [string, string]> = { seen: ["Mark unread", "Mark read"], flagged: ["Remove star", "Star"], answered: ["Mark unanswered", "Mark answered"] };
@@ -24,7 +26,7 @@ function whatItDoes(p: Held): string {
 const useTray = () => {
   const outbox = useQuery({ queryKey: ["outbox"], queryFn: () => get("/api/outbox?limit=50") });
   const pending = useQuery({ queryKey: ["pending"], queryFn: () => get("/api/pending") });
-  return { items: outbox.data?.items ?? [], held: pending.data?.items ?? [], waiting: pending.data?.waiting ?? 0, stuck: pending.data?.stuck ?? 0 };
+  return { items: outbox.data?.items ?? [], drafts: outbox.data?.drafts ?? [], held: pending.data?.items ?? [], waiting: pending.data?.waiting ?? 0, stuck: pending.data?.stuck ?? 0 };
 };
 
 function HeldRow({ p, readOnly, act }: { p: Held; readOnly: boolean; act: (what: "retry" | "discard", id: number) => void }) {
@@ -36,6 +38,23 @@ function HeldRow({ p, readOnly, act }: { p: Held; readOnly: boolean; act: (what:
       <span className="ob-sub">{whatItDoes(p)}: {p.subject || "(no subject)"}<br /><span className="ob-to ob-why">{why} · {p.account}</span></span>
       {stuck && <button className="ob-retry" onClick={() => act("retry", p.id)}>Retry</button>}
       <button className="ob-retry" onClick={() => act("discard", p.id)}>Discard</button>
+    </div>
+  );
+}
+
+function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolean; edit: () => void; discard: () => void }) {
+  const goes = d.discarding ? "leaves the server" : "reaches the server";
+  const why = readOnly ? `${goes} on a full run` : d.attempts ? `tried ${d.attempts}×, trying again` : `${goes} once it’s back`;
+  return (
+    <div className="ob-row">
+      <span className="ob-st queued">{d.discarding ? "discarded" : "draft"}</span>
+      <span className="ob-sub">{d.subject || "(no subject)"}<br /><span className="ob-to ob-why">{why} · {d.account}</span></span>
+      {!d.discarding && (
+        <>
+          <button className="ob-retry" onClick={edit}>Edit</button>
+          <button className="ob-retry" onClick={discard}>Discard</button>
+        </>
+      )}
     </div>
   );
 }
@@ -60,7 +79,7 @@ function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (o
 
 export function OutboxButton({ readOnly }: { readOnly: boolean }) {
   const qc = useQueryClient();
-  const { items, held, waiting, stuck } = useTray();
+  const { items, drafts, held, waiting, stuck } = useTray();
   const [open, setOpen] = useState(false);
   const again = () => {
     void qc.invalidateQueries({ queryKey: ["outbox"] });
@@ -75,7 +94,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     document.addEventListener("click", onDown);
     return () => document.removeEventListener("click", onDown);
   }, [open]);
-  const active = items.filter((o) => o.state === "queued" || o.state === "sending").length + waiting;
+  const active = items.filter((o) => o.state === "queued" || o.state === "sending").length + waiting + drafts.length;
   const failed = items.filter((o) => o.state === "error").length + stuck;
   const act = async (what: "retry" | "discard", id: number) => {
     try {
@@ -83,6 +102,21 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
       toast(!r.ok ? "It has already settled" : what === "retry" ? "Trying again…" : "Discarded: it stays as it was");
     } catch (e) {
       toast(e instanceof ApiError && e.status === 409 ? "It’s being tried now. Try again in a moment" : "It has already settled");
+    }
+    again();
+    void qc.invalidateQueries({ queryKey: ["messages"] });
+    void qc.invalidateQueries({ queryKey: ["folders"] });
+  };
+  const editDraft = (id: number) => {
+    setOpen(false);
+    void composing.editDraft(null, id);
+  };
+  const discardDraft = async (id: number) => {
+    try {
+      await post("/api/draft", { draft_id: id, delete: true });
+      toast("Draft discarded");
+    } catch {
+      toast("Couldn’t discard it");
     }
     again();
     void qc.invalidateQueries({ queryKey: ["messages"] });
@@ -107,8 +141,10 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
         <div className="outbox-fly" id="outboxFly">
           {held.length > 0 && <h4>Changes waiting</h4>}
           {held.map((p) => <HeldRow key={p.id} p={p} readOnly={readOnly} act={(w, i) => void act(w, i)} />)}
-          {(items.length > 0 || !held.length) && <h4>Outbox</h4>}
-          {!items.length && !held.length && <div className="ob-row"><span className="ob-sub">Nothing queued.</span></div>}
+          {drafts.length > 0 && <h4>Drafts waiting</h4>}
+          {drafts.map((d) => <DraftRow key={d.id} d={d} readOnly={readOnly} edit={() => editDraft(d.id)} discard={() => void discardDraft(d.id)} />)}
+          {(items.length > 0 || (!held.length && !drafts.length)) && <h4>Outbox</h4>}
+          {!items.length && !held.length && !drafts.length && <div className="ob-row"><span className="ob-sub">Nothing queued.</span></div>}
           {items.map((o) => <SentRow key={o.id} o={o} call={(p, i, k, f) => void call(p, i, k, f)} />)}
         </div>
       )}
