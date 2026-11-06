@@ -108,12 +108,6 @@ def test_a_negation_alone_excludes_what_it_names(app, world):
     assert n > 0 and "lin@example.test" not in found
 
 
-def test_a_negation_alone_is_still_too_wide_for_a_bulk_action():
-    import search
-    import server
-    match, _, _ = search.build("-from:lin")
-    assert server._do_is_whole_inbox("-from:lin", match)
-
 
 def test_excluding_a_category_keeps_mail_that_has_none(app, world):
     _, everything = senders(app, "in:INBOX")

@@ -120,9 +120,9 @@ def test_the_grammar_says_where_snoozed_mail_went():
 # -- ranking --------------------------------------------------------------
 
 def test_search_and_ask_rank_by_one_table():
-    named = {os.path.basename(p) for p in glob.glob(os.path.join(ROOT, "*.py"))
-             if "bm25(" in open(p, encoding="utf-8").read()}
-    assert named == {"search.py"}
+    sources = [*glob.glob(os.path.join(ROOT, "*.py")), *glob.glob(os.path.join(ROOT, "mailmind", "**", "*.py"), recursive=True)]
+    named = {os.path.basename(p) for p in sources if "bm25(" in open(p, encoding="utf-8").read()}
+    assert named == {"fts.py"}
 
 
 def test_the_table_covers_every_indexed_column_and_ranks_them(world):
