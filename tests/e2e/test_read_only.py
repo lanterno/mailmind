@@ -117,15 +117,15 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
     assert app.post("/api/thread/archive", {"pk": world.pk(LUNCH_CONFIRM)}).json["ok"]
     offline.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
-    assert {r["state"] for r in q("SELECT state FROM read_mutations")} == {"queued"}
-    assert q("SELECT max(attempts) n FROM read_mutations") == [{"n": 0}]
+    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"queued"}
+    assert q("SELECT max(attempts) n FROM mail_commands") == [{"n": 0}]
     assert on_server(world, RECEIPT) == [(w.ADA, "INBOX")]
     listed = {m["pk"] for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]}
     assert not listed & {world.pk(n) for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM)}
 
     read_only.end()
     offline.drain()
-    assert {r["state"] for r in q("SELECT state FROM read_mutations")} == {"done"}
+    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
     assert on_server(world, RECEIPT) == [(w.ADA, "Archive")]
     assert on_server(world, SCAM) == [(w.ADA, "Trash")]
     assert on_server(world, NEWSLETTER) == [(w.ADA, "Junk")]
@@ -137,7 +137,7 @@ def test_undo_takes_a_waiting_move_back_without_a_write(app, world, read_only):
     since = world.mark()
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["status"] == "queued"
     assert app.post("/api/undo", {}).json["ok"]
-    assert q("SELECT id FROM read_mutations") == []
+    assert q("SELECT id FROM mail_commands") == []
     assert world.writes(since) == []
     assert [(d["account"], d["folder"]) for d in world.where(RECEIPT)["db"]] == [(w.ADA, "INBOX")]
 
@@ -168,7 +168,7 @@ def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world
 
     read_only.end()
     offline.drain()
-    assert {r["state"] for r in q("SELECT state FROM read_mutations")} == {"done"}
+    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
     [(_, _, _, flags)] = world.where(RECEIPT)["server"]
     assert {w.SEEN, "\\Flagged"} <= set(flags)
 

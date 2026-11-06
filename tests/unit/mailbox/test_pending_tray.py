@@ -45,7 +45,7 @@ def state_of(mid):
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        r = store.read_mut_get(c, mid)
+        r = store.command_get(c, mid)
         return r and r["state"]
     finally:
         c.close()
@@ -108,9 +108,9 @@ def test_retry_of_a_flag_change_shows_it_and_a_new_refusal_puts_back_what_it_rep
     assert app.post("/api/pending/retry", {"id": mid}).json == {"ok": True}
     assert row_flagged(world) == 1
     c = store.conn()
-    r = store.read_mut_get(c, mid)
+    r = store.command_get(c, mid)
     c.close()
-    assert '"was": {"flagged": false}' in r["payload"]
+    assert '"was": {"flagged": false}' in r["params"]
     refused(world, "UID STORE")
     offline.drain()
     assert row_flagged(world) == 0

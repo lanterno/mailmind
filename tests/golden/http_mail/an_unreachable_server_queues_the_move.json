@@ -45,8 +45,8 @@
     "applied": 0,
     "dest": null,
     "idempotency_key": "archive:ada@example.test:<order-1042@thimble.example.test>:m-1",
+    "kind": "archive",
     "message_id": "<order-1042@thimble.example.test>",
-    "op": "archive",
     "src_folder": "INBOX"
    }
   ]

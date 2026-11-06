@@ -239,7 +239,7 @@ def test_a_cleanup_with_the_server_away_queues_the_sweep_and_undo_takes_it_back(
     r = _clean_up_the_loom(app)
     assert (r["swept"], r["sweep_queued"], r["sweep_failed"]) == (1, 1, 0)
     c = store.conn()
-    assert c.execute("SELECT count(*) FROM read_mutations WHERE op='trash' AND applied=0").fetchone()[0] == 1
+    assert c.execute("SELECT count(*) FROM mail_commands WHERE kind='trash' AND applied=0").fetchone()[0] == 1
     assert c.execute("SELECT pending_removal IS NOT NULL FROM messages WHERE pk=?", (world.pk(NEWSLETTER),)).fetchone()[0]
     c.close()
     undone = app.post("/api/undo", {}).json

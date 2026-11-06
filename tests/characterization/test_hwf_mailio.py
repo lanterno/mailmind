@@ -89,7 +89,7 @@ def queue(app, world, op="archive", name=RECEIPT, account=w.ADA, mutation_id="m-
 
 
 def queued():
-    return q("SELECT id, op, state, attempts, applied, dest FROM read_mutations ORDER BY id")
+    return q("SELECT id, kind AS op, state, attempts, applied, dest FROM mail_commands ORDER BY id")
 
 
 def new(**kw):
@@ -408,7 +408,7 @@ def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(
     ingest.sync_new(acct())
     assert modseq() == mark
     c = store.conn()
-    c.execute("UPDATE read_mutations SET state='error' WHERE account=? AND op='flag'", (w.ADA,))
+    c.execute("UPDATE mail_commands SET state='error' WHERE account=? AND kind='flag'", (w.ADA,))
     c.commit()
     c.close()
     ingest.sync_new(acct())

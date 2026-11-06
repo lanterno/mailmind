@@ -110,7 +110,7 @@ def test_an_unreachable_server_queues_each_message(app, world):
     r = app.post("/api/thread/trash", {"pk": world.pk(CONFIRM)}).json
     assert (r["ok"], r["count"], r["queued"]) == (True, 2, 2)
     c = store.conn()
-    queued = c.execute("SELECT COUNT(*) FROM read_mutations WHERE op='trash' AND applied=0").fetchone()[0]
+    queued = c.execute("SELECT COUNT(*) FROM mail_commands WHERE kind='trash' AND applied=0").fetchone()[0]
     c.close()
     assert queued == 2
     assert world.where(LUNCH)["db"] == [] and world.where(CONFIRM)["db"] == []   # out of the lists

@@ -651,7 +651,7 @@ def _offline():
 
 def _queued(mid):
     c = store.conn()
-    rows = c.execute("SELECT id, state FROM read_mutations WHERE message_id=? ORDER BY id", (mid,)).fetchall()
+    rows = c.execute("SELECT id, state FROM mail_commands WHERE message_id=? ORDER BY id", (mid,)).fetchall()
     c.close()
     return rows
 

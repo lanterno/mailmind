@@ -88,12 +88,12 @@ def test_hwf_trash_moves_and_queues_under_the_imap_lock(app, world, monkeypatch)
     held = lock_spy(world, "UID MOVE", user=w.ADA)
     assert app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json["ok"]
     assert held == [True]
-    queued, insert = [], store.read_mut_insert
+    queued, insert = [], store.command_insert
 
     def spy(c, row):
         queued.append(gates.held(w.ADA))
         return insert(c, row)
-    monkeypatch.setattr(store, "read_mut_insert", spy)
+    monkeypatch.setattr(store, "command_insert", spy)
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/trash", {"pk": world.pk(FOLDED)}).json
     assert (r["status"], queued) == ("queued", [True])
@@ -212,7 +212,7 @@ def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_s
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json
     assert (r["status"], r["undoable"]) == ("queued", True)
-    assert [x["dest"] for x in rows("SELECT dest FROM read_mutations")] == ["Trash"]   # known before any IMAP
+    assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == ["Trash"]   # known before any IMAP
     offline.drain()
     assert server_boxes(world, RECEIPT) == [(w.ADA, "Trash")]
     assert app.post("/api/undo", {}).json["ok"]

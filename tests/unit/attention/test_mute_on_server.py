@@ -174,7 +174,7 @@ def test_finished_queue_rows_go_after_a_month(app, world):
     def count():
         c = store.conn()
         try:
-            return c.execute("SELECT COUNT(*) FROM read_mutations WHERE state='done'").fetchone()[0]
+            return c.execute("SELECT COUNT(*) FROM mail_commands WHERE state='done'").fetchone()[0]
         finally:
             c.close()
     done = count()

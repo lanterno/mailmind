@@ -26,8 +26,8 @@ def rows():
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        return [{k: r[k] for k in ("id", "op", "state", "attempts", "applied", "dest", "last_error",
-                                   "next_attempt_at")} for r in c.execute("SELECT * FROM read_mutations ORDER BY id")]
+        return [{k: r[k] for k in ("id", "kind", "state", "attempts", "applied", "dest", "last_error",
+                                   "next_attempt_at")} for r in c.execute("SELECT * FROM mail_commands ORDER BY id")]
     finally:
         c.close()
 

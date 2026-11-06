@@ -424,11 +424,11 @@ def test_hwf_an_outbox_insert_that_loses_a_race_returns_the_winners_row(db):
 
 def test_hwf_a_queued_mutation_insert_that_loses_a_race_returns_the_winners_row(db):
     from mailmind.bootstrap.mailbox import store
-    row = {"account": A, "idempotency_key": "trash:k1", "op": "trash", "message_id": "<m@example.test>",
-           "src_folder": "INBOX", "dest": "Trash", "payload": "{}", "next_attempt_at": 0, "created_at": "now"}
-    mid, created = store.read_mut_insert(db, row)
-    assert created and store.read_mut_insert(_LosesTheRace(db), row) == (mid, False)
-    assert db.execute("SELECT count(*) FROM read_mutations").fetchone()[0] == 1
+    row = {"account": A, "idempotency_key": "trash:k1", "kind": "trash", "message_id": "<m@example.test>",
+           "src_folder": "INBOX", "dest": "Trash", "params": "{}", "next_attempt_at": 0, "created_at": "now"}
+    mid, created = store.command_insert(db, row)
+    assert created and store.command_insert(_LosesTheRace(db), row) == (mid, False)
+    assert db.execute("SELECT count(*) FROM mail_commands").fetchone()[0] == 1
 
 
 # -- threading ----------------------------------------------------------------

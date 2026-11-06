@@ -74,7 +74,7 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
-            return [dict(r) for r in c.execute("SELECT * FROM read_mutations ORDER BY id")]
+            return [dict(r) for r in c.execute("SELECT * FROM mail_commands ORDER BY id")]
         finally:
             c.close()
 
@@ -91,8 +91,8 @@ class Machine(RuleBasedStateMachine):
         self.may.setdefault(name, set()).update(boxes)
 
     def allow_row(self, row):
-        if row["op"] != "flag":
-            self.allow(self.name_of(row), row["dest"] or OPS[row["op"]])
+        if row["kind"] != "flag":
+            self.allow(self.name_of(row), row["dest"] or OPS[row["kind"]])
 
     # ── what a person asks ─────────────────────────────────────────────
 
@@ -257,7 +257,7 @@ class Machine(RuleBasedStateMachine):
         c = store.conn()
         try:
             stray = c.execute("SELECT pk, pending_removal FROM messages WHERE pending_removal IS NOT NULL AND "
-                              "pending_removal NOT IN (SELECT id FROM read_mutations WHERE state IN "
+                              "pending_removal NOT IN (SELECT id FROM mail_commands WHERE state IN "
                               "('queued', 'running'))").fetchall()
         finally:
             c.close()

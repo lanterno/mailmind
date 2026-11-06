@@ -159,8 +159,8 @@ def test_an_unreachable_server_queues_the_move(app, golden, world):
     c = store.conn()
     try:
         golden.note("queued mutations", [
-            {k: r[k] for k in ("account", "idempotency_key", "op", "message_id", "src_folder", "dest", "applied")}
-            for r in c.execute("SELECT * FROM read_mutations ORDER BY id")])
+            {k: r[k] for k in ("account", "idempotency_key", "kind", "message_id", "src_folder", "dest", "applied")}
+            for r in c.execute("SELECT * FROM mail_commands ORDER BY id")])
     finally:
         c.close()
 
