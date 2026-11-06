@@ -183,7 +183,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     reach IMAP from worker threads, and each holds the lock as a request does."""
     from mailmind.bootstrap.compose import outbox
     from mailmind.bootstrap.mailbox import offline
-    import summarize_thread
+    from mailmind.bootstrap import assistant
     appends, stores = lock_spy(world, "APPEND", user=w.ADA), lock_spy(world, "UID STORE", user=w.ADA)
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk("ada-inbox-02-lunch-confirm.eml"),
                                "to": ["bea@example.test"], "subject": "Re: Lunch", "text": "See you there.",
@@ -201,7 +201,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
 
     pk = world.pk("bea-inbox-01-client.eml")                  # its body was never fetched
     fetches = lock_spy(world, "UID FETCH", user=w.BEA)
-    summarize_thread._gather([{"pk": pk, "account": w.BEA, "body_text": None, "snippet": "", "body_fetched": 0,
+    assistant.threads._gather([{"pk": pk, "account": w.BEA, "body_text": None, "snippet": "", "body_fetched": 0,
                                "from_name": "Bea", "from_addr": w.BEA, "date_iso": ""}])
     assert fetches == [True]
 
@@ -295,9 +295,9 @@ def test_hwf_weekend_and_next_week_from_the_weekend(app, world, now, preset, wak
 # -- AI: the delta's window, draft-ahead, the semaphore ---------------------
 
 def test_hwf_since_is_held_between_a_day_ago_and_now(app, world, monkeypatch):
-    import summarize_briefing
+    from mailmind.bootstrap import assistant
     seen = []
-    monkeypatch.setattr(summarize_briefing, "build_delta",
+    monkeypatch.setattr(assistant.briefs, "build_delta",
                         lambda accts, since, generate=True: (seen.append(since), ({"ok": True}, 200))[1])
     app.clock.shift(timedelta(minutes=7))                    # 12:07
     now = int(time.time())

@@ -93,7 +93,7 @@ def test_migration_22_run_again_changes_nothing(tmp_path):
 
 def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
     from mailmind.bootstrap.mailbox import store
-    import summarize_thread
+    from mailmind.bootstrap import assistant
     path = str(data_dir / "mailmind.db")
     c = sqlite3.connect(path)
     c.executemany("INSERT INTO messages(pk, account, kind, folder, uid, message_id, thread_id, ts) "
@@ -102,7 +102,7 @@ def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
     c.close()
     c = store.conn()
     try:
-        rows = summarize_thread._rows(c, ADA, "t-lunch")
+        rows = assistant.threads._rows(c, ADA, "t-lunch")
     finally:
         c.close()
     raw = sqlite3.connect(path)
@@ -110,4 +110,4 @@ def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
         frozen = m22._by_message_id(m22._rows(raw, ADA, "t-lunch"))
     finally:
         raw.close()
-    assert summarize_thread._fingerprint(rows) == frozen == fingerprint.of([A, B], 200)
+    assert assistant.threads._fingerprint(rows) == frozen == fingerprint.of([A, B], 200)

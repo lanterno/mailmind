@@ -75,7 +75,7 @@ def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import store
-    import summarize_review
+    from mailmind.bootstrap import assistant
     lunch = world.row(LUNCH)
     c = store.conn()
     attention.book.followup_record_sent(c, w.ADA, lunch["thread_id"], lunch["pk"], int(time.time()), "2026-11-01T00:00:00+00:00")
@@ -86,7 +86,7 @@ def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     ingest.sync_new(accounts.get(w.ADA))
     c = store.conn()
     try:
-        _, _, waiting = summarize_review._aggregate(c, {w.ADA}, 0)
+        _, _, waiting = assistant.reviews._aggregate(c, {w.ADA}, 0)
         [item] = [i for i in waiting if i["thread_id"] == lunch["thread_id"]]
         newest = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? ORDER BY ts DESC, pk DESC LIMIT 1",
                            (w.ADA, lunch["thread_id"])).fetchone()["pk"]
