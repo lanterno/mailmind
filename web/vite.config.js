@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-const CLASSIC = ["theme", "app"];
+const CLASSIC = ["theme", "pure", "app"];
 
 function classicScripts() {
   return {
