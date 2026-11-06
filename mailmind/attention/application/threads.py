@@ -1,12 +1,16 @@
 """Which thread a request names."""
+from collections.abc import Mapping
+from typing import Any
+
+from mailmind.attention.application.ports import Accounts, Messages
 
 
 class Threads:
-    def __init__(self, messages, accounts):
+    def __init__(self, messages: Messages, accounts: Accounts):
         self._messages = messages
         self._accounts = accounts
 
-    def target(self, c, body):
+    def target(self, c: object, body: Mapping[str, Any]) -> tuple[str, str] | tuple[None, None]:
         """Resolve (account, thread_id) from {account, thread_id} or {pk}. Validates the account."""
         acct = body.get("account")
         tid = body.get("thread_id")

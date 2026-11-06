@@ -1,22 +1,24 @@
 """Hiding a message until later, and bringing it back."""
 import time
 from datetime import datetime
+from typing import Any
 
+from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
+from mailmind.attention.application.tabs import sse
 from mailmind.attention.domain import snooze
 from mailmind.kernel.when import now_iso
-from mailmind.platform import sse
 
 
 class Snoozing:
-    def __init__(self, book, messages, undo, screen):
+    def __init__(self, book: AttentionBook, messages: Messages, undo: Undo, screen: Screen):
         self._book = book
         self._messages = messages
         self._undo = undo
         self._screen = screen
 
-    def reverse(self, d):
+    def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
         """Undo of a snooze: each message as it was. An entry from before `where` names the row by pk alone."""
-        where = d.get("where") or []
+        where: list[Any] = d.get("where") or []
         with self._book.transaction() as c:
             for i, pk in enumerate(d["pks"]):
                 pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
@@ -31,7 +33,7 @@ class Snoozing:
                 self._messages.index(c, pk)
         return True, d.get("account"), None
 
-    def _pks(self, c, body):
+    def _pks(self, c: object, body: dict[str, Any]) -> list[int]:
         if body.get("thread_id") and body.get("account"):
             return self._book.thread_pks(c, body["account"], body["thread_id"])
         if isinstance(body.get("pks"), list):
@@ -40,14 +42,15 @@ class Snoozing:
             return [int(body["pk"])]
         return []
 
-    def snooze(self, body):
+    def snooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
         until = snooze.wake_time(body, datetime.now().astimezone())
         if until is None:
             return {"ok": False, "error": "bad snooze time"}, 400
         with self._book.transaction() as c:
             pks = self._pks(c, body)
-            prev, where = [], []
+            prev: list[int | None] = []
+            where: list[list[str] | None] = []
             for pk in pks:
                 r = self._messages.get(c, pk)
                 prev.append(r["snoozed_until"] if r else None)
@@ -59,7 +62,7 @@ class Snoozing:
         self._screen.stats_changed()
         return {"ok": True, "count": len(pks), "until": until}, 200
 
-    def unsnooze(self, body):
+    def unsnooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
         with self._book.transaction() as c:
             pks = self._pks(c, body)
@@ -68,7 +71,7 @@ class Snoozing:
         self._screen.stats_changed()
         return {"ok": True, "count": len(pks)}, 200
 
-    def wake_due(self):
+    def wake_due(self) -> None:
         """Resurface messages whose snooze time has passed: clear the snooze, mark unread, and push a realtime event
         so they pop back into the inbox view. Database only: the unread mark reaches the server through the queue, or
         the next sync that read the flags would take it back."""

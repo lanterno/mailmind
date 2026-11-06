@@ -1,19 +1,23 @@
 """Threads waiting on someone: follow-ups, nudges and the Reply-Later stack."""
 import time
+from typing import Any
 
+from mailmind.attention.application.ports import Accounts, AttentionBook, Screen
+from mailmind.attention.application.snoozing import Snoozing
+from mailmind.attention.application.tabs import sse
+from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.kernel.when import now_iso
-from mailmind.platform import sse
 
 
 class FollowUps:
-    def __init__(self, book, threads, accounts, screen):
+    def __init__(self, book: AttentionBook, threads: Threads, accounts: Accounts, screen: Screen):
         self._book = book
         self._threads = threads
         self._accounts = accounts
         self._screen = screen
 
-    def tick(self):
+    def tick(self) -> None:
         """Resolve met commitments, expire stale ones, then promote/detect Waiting threads. Pure-local SQL (no IMAP),
         so it rides the always-on 60s loop and works read-only, as the snooze does."""
         now = int(time.time())
@@ -29,23 +33,23 @@ class FollowUps:
             self._screen.stats_changed()
             sse.publish("followup", {"count": len(after)})
 
-    def dismiss(self, body):
+    def dismiss(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
         with self._book.transaction() as c:
             acct, tid = self._threads.target(c, body)
-            if not tid:
+            if not acct or not tid:
                 return {"ok": False, "error": "bad target"}, 400
             self._book.dismiss_followup(c, acct, tid, now_iso())
         self._screen.stats_changed()
         sse.publish("followup", {"account": acct})
         return {"ok": True, "thread_id": tid}, 200
 
-    def reply_later(self, body):
+    def reply_later(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """Pin/un-pin a thread to the Reply-Later stack. on=true pins (supersedes auto-nudges), on=false clears.
         (result, code)."""
         with self._book.transaction() as c:
             acct, tid = self._threads.target(c, body)
-            if not tid:
+            if not acct or not tid:
                 return {"ok": False, "error": "bad target"}, 400
             on = body.get("on", True)
             if on:
@@ -59,11 +63,11 @@ class FollowUps:
 
 class Clocked:
     """The job that runs every minute. Database only, so it runs read-only too."""
-    def __init__(self, snoozing, follow_ups):
+    def __init__(self, snoozing: Snoozing, follow_ups: FollowUps):
         self._snoozing = snoozing
         self._follow_ups = follow_ups
 
-    def round(self):
+    def round(self) -> None:
         """Wake due snoozes, then bring the follow-ups up to date; one step failing doesn't stop the other."""
         try:
             self._snoozing.wake_due()
