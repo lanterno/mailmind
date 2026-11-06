@@ -118,7 +118,7 @@ def test_a_write_of_the_wrong_shape_leaves_the_file(data_dir):
 
 
 def test_a_request_parses_the_file_once_however_often_it_reads_it(app, parses, monkeypatch):
-    import config
+    from mailmind.bootstrap.accounts import config
     calls = []
     real = config._raw
 

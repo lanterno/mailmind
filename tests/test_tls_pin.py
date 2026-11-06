@@ -24,7 +24,7 @@ def pins(world, email=w.ADA):
 
 def pin(world, email, where, fingerprint):
     """Pin `fingerprint` for `email` at `where`, as a certificate met before would have."""
-    import config
+    from mailmind.bootstrap.accounts import config
     raw = config._raw()
     entry = next(a for a in raw["accounts"] if a["email"] == email)
     entry.setdefault("tls_pins", {})[where] = fingerprint
@@ -36,7 +36,7 @@ def imap(world):
 
 
 def connect(email=w.ADA):
-    import accounts
+    from mailmind.bootstrap import accounts
     M = accounts.connect(accounts.get(email), timeout=10)
     M.logout()
 
@@ -77,7 +77,7 @@ def test_each_account_keeps_its_own_pins(world):
 
 
 def test_off_this_machine_nothing_is_pinned(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     before = cfg(world)
     accounts.check_pin(accounts.get(w.ADA), "imap.example.test", 993, object())   # never reads a socket
     assert cfg(world) == before
@@ -128,7 +128,7 @@ def test_a_move_while_the_certificate_is_wrong_waits_in_the_queue(app, world):
 
 
 def test_smtp_pins_its_own_endpoint_and_refuses_a_changed_certificate(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.compose import transport
     smtp = f"127.0.0.1:{world.smtp.port}"
     transport.connect(accounts.get(w.ADA)).quit()
@@ -142,8 +142,8 @@ def test_smtp_pins_its_own_endpoint_and_refuses_a_changed_certificate(world):
 
 def test_bridge_set_to_ssl_connects_and_is_pinned(world):
     """Bridge can serve IMAP over implicit TLS too. Its certificate is as self-signed there."""
-    import accounts
-    import config
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.accounts import config
     from fakes.imap_server import FakeIMAPServer
     with FakeIMAPServer(kind="proton", implicit_tls=True) as srv:
         entry = srv.add_account("dee@example.test")

@@ -237,7 +237,7 @@ class Machine(RuleBasedStateMachine):
 
     @rule(folder=st.sampled_from(FOLDERS))
     def sync(self, folder):
-        import accounts
+        from mailmind.bootstrap import accounts
         import ingest
         try:
             ingest.sync_folder(accounts.get(w.ADA), folder)
@@ -276,7 +276,7 @@ class Machine(RuleBasedStateMachine):
     def settle(self):
         """Everything over: the server back, the queue run dry, every folder caught up. Then the
         lists show each message where the server has it, with the flags the server has."""
-        import accounts
+        from mailmind.bootstrap import accounts
         import ingest
         import readmutq
         self.server.clear_faults()

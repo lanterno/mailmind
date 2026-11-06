@@ -125,7 +125,7 @@ def test_what_tests_need_is_allowed(tmp_path):
 
 def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import json
-    import config
+    from mailmind.bootstrap.accounts import config
     from mailmind.bootstrap.curation import rules
     import store
     from mailmind.bootstrap.discovery import views

@@ -72,7 +72,7 @@ def test_a_message_with_no_verdict_asks_nothing(app, world, route):
 
 def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     import ingest
-    import accounts
+    from mailmind.bootstrap import accounts
     import store
     import summarize_review
     lunch = world.row(LUNCH)

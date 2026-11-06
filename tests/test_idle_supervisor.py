@@ -33,7 +33,7 @@ def edit_by_hand(email, **fields):
     """Change an account in the config file as an editor would, publishing no event. It holds the
     config's write lock meanwhile, as the app's own writers do, so a worker pinning its first
     certificate can't write its older copy of the file over the edit."""
-    import config
+    from mailmind.bootstrap.accounts import config
     with config._write_lock:
         raw = config._raw()
         next(a for a in raw["accounts"] if a["email"] == email).update(fields)
@@ -76,7 +76,7 @@ def test_start_watches_every_account(world, supervisor):
 
 
 def test_a_removed_account_stops_being_watched_at_once(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.BEA)
     worker = supervisor._watchers[w.BEA].thread
@@ -89,7 +89,7 @@ def test_a_removed_account_stops_being_watched_at_once(world, supervisor):
 
 
 def test_a_disabled_account_stops_being_watched(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.CY)
     worker = supervisor._watchers[w.CY].thread
@@ -99,7 +99,7 @@ def test_a_disabled_account_stops_being_watched(world, supervisor):
 
 
 def test_a_changed_password_gets_a_fresh_worker_that_logs_in_with_it(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.ADA)
     old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
@@ -114,7 +114,7 @@ def test_a_changed_password_gets_a_fresh_worker_that_logs_in_with_it(world, supe
 
 
 def test_a_new_alias_leaves_the_worker_be(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.ADA)
     old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
@@ -124,7 +124,7 @@ def test_a_new_alias_leaves_the_worker_be(world, supervisor):
 
 
 def test_an_added_account_is_watched(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     supervisor.start()
     entry = world.server.add_account(DEE)
     config.add_account({"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
@@ -134,7 +134,7 @@ def test_an_added_account_is_watched(world, supervisor):
 
 
 def test_past_the_cap_a_removed_account_makes_room_for_the_next(world, supervisor, monkeypatch):
-    import config
+    from mailmind.bootstrap.accounts import config
     monkeypatch.setattr(supervisor, "MAX_IDLE_ACCOUNTS", 2)
     supervisor.start()
     assert set(supervisor.watching()) == {w.ADA, w.BEA}
@@ -144,7 +144,7 @@ def test_past_the_cap_a_removed_account_makes_room_for_the_next(world, superviso
 
 
 def test_a_worker_backing_off_stops_at_once_when_its_account_goes(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     world.server.drop("LOGIN", user=w.ADA, times=None)
     supervisor.start()
     assert wait_until(lambda: count(world, "LOGIN") >= 1)
@@ -182,7 +182,7 @@ def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, sup
 
 
 def test_the_configuration_says_what_happened_to_each_account(data_dir):
-    import config
+    from mailmind.bootstrap.accounts import config
     from mailmind.accounts.domain import events
     from mailmind.platform import bus
     heard = []
@@ -203,7 +203,7 @@ def test_the_configuration_says_what_happened_to_each_account(data_dir):
 
 
 def test_before_start_and_after_stop_the_supervisor_starts_nothing(world, supervisor):
-    import config
+    from mailmind.bootstrap.accounts import config
     config.update_account(w.ADA, {"strip_spaces": True})
     assert supervisor.watching() == {}
     supervisor.start()

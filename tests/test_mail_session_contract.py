@@ -26,7 +26,7 @@ def kind(request):
 
 
 def open_session(email=w.ADA):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap import mailbox
     return mailbox.open_session(accounts.get(email), timeout=10)
 
@@ -125,7 +125,7 @@ def test_odd_folder_names_come_back_as_list_gave_them_and_work_as_given(world, k
 
 
 def test_a_folder_name_that_cant_be_sent_is_refused_before_it_is(world, session):
-    import accounts
+    from mailmind.bootstrap import accounts
     since = len(world.server.commands)
     for bad in ('a"b', "line\r\nbreak", "trailing\\"):
         with pytest.raises(accounts.BadMailbox):
@@ -477,14 +477,14 @@ def test_a_dropped_connection_raises_abort_or_oserror(world, session):
 
 
 def test_a_refused_login_is_unreachable(world, kind):
-    import accounts
+    from mailmind.bootstrap import accounts
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
     with pytest.raises(accounts.LoginUnreachable):
         open_session()
 
 
 def test_a_changed_certificate_is_refused_before_login(world, kind):
-    import config
+    from mailmind.bootstrap.accounts import config
     from mailmind.accounts.domain import tls_pin
     raw = config._raw()
     next(a for a in raw["accounts"] if a["email"] == w.ADA)["tls_pins"] = {
@@ -496,7 +496,7 @@ def test_a_changed_certificate_is_refused_before_login(world, kind):
 
 
 def test_the_first_session_pins_the_certificate(world, kind):
-    import config
+    from mailmind.bootstrap.accounts import config
     open_session().logout()
     entry = next(a for a in config._raw()["accounts"] if a["email"] == w.ADA)
     assert entry["tls_pins"] == {f"127.0.0.1:{world.server.port}": "sha256:" + world.server.cert_sha256}

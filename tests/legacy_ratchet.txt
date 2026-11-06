@@ -5,33 +5,22 @@
 # The refactor moves code out of the legacy modules, so the list should only shrink: delete a line
 # when its import goes. Add one only with a reason, and only in mailmind.bootstrap, the one place
 # new code may reach legacy code. When the legacy modules are gone, so is every line.
-mailmind.bootstrap.attention accounts
 mailmind.bootstrap.attention store
-mailmind.bootstrap.calendar accounts
 mailmind.bootstrap.calendar ingest
 mailmind.bootstrap.calendar store
-mailmind.bootstrap.cli accounts
-mailmind.bootstrap.cli config
 mailmind.bootstrap.cli export
 mailmind.bootstrap.cli ingest
 mailmind.bootstrap.cli store
 mailmind.bootstrap.cli summarize
-mailmind.bootstrap.compose accounts
-mailmind.bootstrap.compose config
 mailmind.bootstrap.compose ingest
 mailmind.bootstrap.compose mailops
 mailmind.bootstrap.compose store
-mailmind.bootstrap.curation accounts
 mailmind.bootstrap.curation ingest
 mailmind.bootstrap.curation mailops
 mailmind.bootstrap.curation pool
 mailmind.bootstrap.curation store
-mailmind.bootstrap.discovery accounts
-mailmind.bootstrap.discovery config
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime
 mailmind.bootstrap.legacy server
 mailmind.bootstrap.legacy store
 mailmind.bootstrap.legacy summarize
-mailmind.bootstrap.mailbox accounts
-mailmind.bootstrap.mailbox config

@@ -57,7 +57,7 @@ def send(**kw):
 # -- the connections -----------------------------------------------------------
 
 def test_its_imap_connection_examines_and_refuses_every_write_before_sending_it(world, read_only):
-    import accounts
+    from mailmind.bootstrap import accounts
     since = world.mark()
     M = accounts.connect(accounts.get(w.ADA))
     try:
@@ -88,7 +88,7 @@ def test_its_imap_connection_examines_and_refuses_every_write_before_sending_it(
 
 def test_a_full_process_gets_the_connection_itself(world):
     import imaplib
-    import accounts
+    from mailmind.bootstrap import accounts
     M = accounts.connect(accounts.get(w.ADA))
     try:
         assert isinstance(M, imaplib.IMAP4)
@@ -97,7 +97,7 @@ def test_a_full_process_gets_the_connection_itself(world):
 
 
 def test_it_opens_no_smtp_session(world, read_only):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.compose import transport
     before = len(world.smtp.commands)
     with pytest.raises(ReadOnlyError):

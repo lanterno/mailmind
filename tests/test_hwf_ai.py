@@ -109,7 +109,7 @@ def kick(app, pk):
 def renumber_inbox(world, account):
     """The server renumbers the folder (a UIDVALIDITY change) and the app re-syncs it: every
     INBOX row comes back under a new pk."""
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     world.server.renumber(account, "INBOX")
     ingest.sync_new(accounts.get(account))

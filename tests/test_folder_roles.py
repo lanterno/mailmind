@@ -96,7 +96,7 @@ def test_list_lines_read_as_folders():
 
 
 def test_a_literal_name_is_escaped_to_the_quoted_form_and_a_line_break_left_out():
-    import accounts
+    from mailmind.bootstrap import accounts
     data = [(b'(\\HasNoChildren) "/" {11}', 'Café "x"\\'.encode()), b")",
             (b'(\\HasNoChildren) "/" {6}', b"a\r\nb\r\n"), b")"]
     (f,) = imap_list.parse(data)
@@ -120,7 +120,7 @@ def test_a_refused_list_raises_and_find_role_falls_back():
 # ── through the fake server and the app ────────────────────────────────────────────────────────
 
 def test_on_the_fake_each_role_finds_its_special_use_folder(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap import mailbox
     from mailmind.mailbox.application.session import find_role
     found = {}
@@ -156,7 +156,7 @@ def test_archive_on_gmail_without_an_archive_folder_still_files_by_label(app, wo
 
 def test_imaplib_is_what_the_parser_reads(world):
     """The parser reads what imaplib hands back from a real LIST, not a guess at it."""
-    import accounts
+    from mailmind.bootstrap import accounts
     M = accounts.connect(accounts.get(w.BEA), timeout=10)
     try:
         typ, data = M.list()

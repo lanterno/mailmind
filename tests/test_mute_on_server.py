@@ -9,7 +9,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 
 def acct():
-    import accounts
+    from mailmind.bootstrap import accounts
     return accounts.get(w.ADA)
 
 

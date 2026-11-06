@@ -136,7 +136,7 @@ def test_a_token_changes_only_what_a_rule_decides(world):
 
 def test_every_folder_counts(app, world):
     import ingest
-    import accounts
+    from mailmind.bootstrap import accounts
     addr = sender(world, RECEIPT)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     ingest.sync_folder(accounts.get(w.ADA), "Archive")

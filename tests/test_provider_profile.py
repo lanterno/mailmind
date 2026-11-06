@@ -51,7 +51,7 @@ def test_deep_links_open_the_message_where_the_provider_can():
 
 
 def test_the_fake_servers_capabilities_reach_the_profile(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     acct = accounts.get(w.ADA)
     world.server.without = {"MOVE"}
     M = accounts.connect(acct, timeout=10)

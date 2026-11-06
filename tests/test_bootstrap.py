@@ -135,7 +135,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
 
 def test_an_account_gets_imapclient_only_where_it_is_offered(world):
     # Cy's Gmail asks for IMAPClient in the world's config, as an account soaking it would.
-    import accounts
+    from mailmind.bootstrap import accounts
     from fixtures import world as w
     from mailmind.bootstrap import mailbox
 
@@ -154,7 +154,7 @@ def test_an_account_gets_imapclient_only_where_it_is_offered(world):
 
 
 def test_each_door_runs_the_account_that_asks_on_its_own_adapter(app):
-    import accounts
+    from mailmind.bootstrap import accounts
     from fixtures import world as w
     from mailmind.bootstrap import mailbox
     expected = "imapclient" if app.door == "new" else "imaplib"
@@ -199,7 +199,7 @@ def test_a_short_reconcile_cycle_still_waits_30_seconds_between_rounds(monkeypat
 
 
 def test_the_sync_jobs_first_round_resolves_the_credentials_and_no_other_does(monkeypatch):
-    import accounts
+    from mailmind.bootstrap import accounts
     import server
     calls = []
     monkeypatch.setattr(accounts, "preload_creds", lambda: calls.append("credentials") or 0)

@@ -58,7 +58,7 @@ def test_reconcile_says_when_theres_nothing_to_do(page, world):
 
 
 def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certificate(page, world):
-    import config
+    from mailmind.bootstrap.accounts import config
     import server
     where = f"127.0.0.1:{world.server.port}"
 

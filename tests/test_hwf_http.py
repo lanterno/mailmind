@@ -118,7 +118,7 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
 
 
 def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.curation import rules
     import server
     rules.set_expiry("nobody.example.test", 72)              # so expiry has work that needs IMAP
@@ -134,7 +134,7 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
 
 
 def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypatch):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import server
     real, jobs = server.gates.run, []
@@ -428,7 +428,7 @@ def test_hwf_a_forward_leaves_inline_pictures_behind(app, world):
 
 
 def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import store
     saved = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],

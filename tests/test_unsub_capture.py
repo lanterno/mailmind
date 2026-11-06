@@ -60,7 +60,7 @@ def test_ingest_says_so_when_there_are_none(world):
 
 def test_a_header_folded_across_lines_is_read_whole(world):
     import ingest
-    import accounts
+    from mailmind.bootstrap import accounts
     raw = (b"From: News <folded@list.example.test>\r\nTo: ada@example.test\r\nSubject: Folded\r\n"
            b"Message-ID: <folded@example.test>\r\nDate: Mon, 02 Nov 2026 09:00:00 +0000\r\n"
            b"List-Unsubscribe: <mailto:out@list.example.test>,\r\n <https://list.example.test/u/1>\r\n"
@@ -136,7 +136,7 @@ def test_a_busy_gate_is_waited_for_only_so_long(app, world, monkeypatch):
 
 
 def test_the_newest_message_decides(app, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     newer = w.variant(NEWS, Message_ID="<issue-219@loom.example.test>", Date="Mon, 02 Nov 2026 11:00:00 +0000",
                       List_Unsubscribe="<mailto:out@loom.example.test>", List_Unsubscribe_Post="")
@@ -163,7 +163,7 @@ def test_trying_again_after_the_sweep_still_knows_the_way(app, world, posts):
 
 
 def test_a_list_that_stops_offering_a_way_is_taken_at_its_word(app, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import store
     assert method(app) == "one-click"
@@ -182,7 +182,7 @@ def test_a_list_that_stops_offering_a_way_is_taken_at_its_word(app, world):
 
 def test_a_kept_newsletter_goes_back_to_being_a_newsletter_when_the_rule_goes(app, world):
     # Its List-Unsubscribe is all that says it's one, so that has to have been kept.
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import store
     addr = "pat@plain.example.test"

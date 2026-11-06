@@ -28,7 +28,7 @@ JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-1
 
 
 def acct(email=w.ADA):
-    import accounts
+    from mailmind.bootstrap import accounts
     return accounts.get(email)
 
 
@@ -857,7 +857,7 @@ def test_hwf_a_draft_delete_declines_when_uidvalidity_rolled(app, world):
 
 def filed(world, folder, name="<filed@example.test>", flags=(w.SEEN,), special="", email=w.ADA):
     """A message in a folder of its own, on the server and synced. Returns its pk and UID."""
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     from fakes.imap_server import Mailbox
     a = world.server.accounts[email]
@@ -1203,7 +1203,7 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_on_the_server_too(app, wor
 
 
 def test_hwf_a_queued_move_for_a_removed_account_is_given_up(app, world):
-    import config
+    from mailmind.bootstrap.accounts import config
     import readmutq
     queue(app, world)
     assert config.remove_account(w.ADA)
@@ -1437,7 +1437,7 @@ def test_hwf_a_slow_catch_up_answers_with_what_is_stored_then_says_what_came(app
 
 
 def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkeypatch):
-    import config
+    from mailmind.bootstrap.accounts import config
     import realtime
     monkeypatch.setattr(realtime, "IDLE_SECONDS", 0.1)
     idle()

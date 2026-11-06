@@ -38,7 +38,7 @@ def write():
 
 
 def test_an_imap_connection_is_not_opened(world, write):
-    import accounts
+    from mailmind.bootstrap import accounts
     before = len(world.server.commands)
     write.open()
     with pytest.raises(TxAcrossNetworkError, match="^an IMAP connection while"):
@@ -49,7 +49,7 @@ def test_an_imap_connection_is_not_opened(world, write):
 
 
 def test_an_open_imap_connection_sends_no_command(world, write):
-    import accounts
+    from mailmind.bootstrap import accounts
     M = accounts.connect(accounts.get(w.ADA))
     try:
         assert M.select('"INBOX"')[0] == "OK"
@@ -67,7 +67,7 @@ def test_an_open_imap_connection_sends_no_command(world, write):
 
 
 def test_no_smtp_session_is_opened(world, write):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.compose import transport
     before = len(world.smtp.commands)
     write.open()
@@ -78,7 +78,7 @@ def test_no_smtp_session_is_opened(world, write):
 
 
 def test_an_open_smtp_session_sends_nothing(world, write):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.compose import transport
     s = transport.connect(accounts.get(w.ADA))
     try:

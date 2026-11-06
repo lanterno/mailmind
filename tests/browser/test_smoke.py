@@ -168,7 +168,7 @@ def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
 
 
 def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import server
     gone = "ada-archive-01-old-thread.eml"
     opened(page)
@@ -189,7 +189,7 @@ def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
 
 
 def test_mail_marked_unread_elsewhere_shows_on_an_open_list(page, world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     name = "ada-archive-01-old-thread.eml"
     opened(page)
@@ -299,7 +299,7 @@ def test_gmails_all_mail_is_named_so_and_g_a_opens_it(page, world):
 
 
 def test_a_changed_certificate_is_shown_in_settings_and_trusted_from_there(page, world):
-    import config
+    from mailmind.bootstrap.accounts import config
     import server
     where = f"127.0.0.1:{world.server.port}"
 

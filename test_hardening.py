@@ -24,7 +24,7 @@ settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anythi
 with open(settings.current().config, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
-import accounts
+from mailmind.bootstrap import accounts
 import ingest
 import mailops
 import readmutq
@@ -33,7 +33,7 @@ from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
 import smtplib
-import config
+from mailmind.bootstrap.accounts import config
 store.init()
 
 
@@ -63,13 +63,13 @@ class _FakeIMAP:
 
 
 def _starttls_ctx(host):
-    real_imap, real_cred = accounts.imaplib.IMAP4, accounts.config.resolve_credential
-    accounts.imaplib.IMAP4 = _FakeIMAP
-    accounts.config.resolve_credential = lambda acct: "app-password"
+    real_imap, real_cred = imaplib.IMAP4, config.resolve_credential
+    imaplib.IMAP4 = _FakeIMAP
+    config.resolve_credential = lambda acct: "app-password"
     try:
         accounts.connect({"email": "ada@example.test", "host": host, "port": 143, "starttls": True})
     finally:
-        accounts.imaplib.IMAP4, accounts.config.resolve_credential = real_imap, real_cred
+        imaplib.IMAP4, config.resolve_credential = real_imap, real_cred
     return _FakeIMAP.made[-1].ctx
 
 
@@ -511,7 +511,8 @@ except ValueError:
 
 def test_a_malformed_config_is_never_written_even_under_python_O():
     got = _optimized("""
-import os, tempfile, config
+import os, tempfile
+from mailmind.bootstrap.accounts import config
 from mailmind.platform import settings
 home = tempfile.mkdtemp()
 settings.configure(settings.Settings(home=home))

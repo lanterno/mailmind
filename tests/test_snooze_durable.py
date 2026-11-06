@@ -10,7 +10,7 @@ CI = "ada-inbox-04-ci.eml"                               # already read
 
 
 def acct():
-    import accounts
+    from mailmind.bootstrap import accounts
     return accounts.get(w.ADA)
 
 

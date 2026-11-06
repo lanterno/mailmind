@@ -13,7 +13,7 @@ NEW = "<late-1@example.test>"
 
 
 def acct(email=w.ADA):
-    import accounts
+    from mailmind.bootstrap import accounts
     return accounts.get(email)
 
 

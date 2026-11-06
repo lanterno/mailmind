@@ -175,7 +175,7 @@ def user(dovecot, data_dir, kind):
 
 
 def open_session(user):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.bootstrap import mailbox
     return mailbox.open_session(accounts.get(user), timeout=20)
 
@@ -472,14 +472,14 @@ def test_an_interrupt_ends_an_idle_at_once(session):
 # ── logging in ──────────────────────────────────────────────────────────────────────────────────
 
 def test_a_refused_login_is_unreachable(dovecot, data_dir, kind):
-    import accounts
+    from mailmind.bootstrap import accounts
     write_config(data_dir, "wrong@example.test", dovecot.port, password="not-the-password")
     with pytest.raises(accounts.LoginUnreachable):
         open_session("wrong@example.test")
 
 
 def test_the_first_session_pins_dovecots_certificate(dovecot, user):
-    import config
+    from mailmind.bootstrap.accounts import config
     open_session(user).logout()
     [entry] = config._raw()["accounts"]
     assert entry["tls_pins"] == {f"127.0.0.1:{dovecot.port}": "sha256:" + dovecot.cert_sha256}

@@ -148,7 +148,7 @@ def boxes(world, name):
 def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command):
     """The server moved it (or, without MOVE, copied it), then the connection dropped before it
     said so. The move is queued, and its drain leaves one copy, in the Archive."""
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import readmutq
     name = "ada-inbox-05-receipt.eml"

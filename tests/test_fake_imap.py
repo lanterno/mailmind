@@ -32,14 +32,14 @@ def srv():
 @pytest.fixture
 def app(srv, data_dir):
     """The fake's account written into this test's MailMind config. Returns the account dict."""
-    import accounts
+    from mailmind.bootstrap import accounts
     entry = srv.add_account(ADA)
     (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
     return accounts.get(ADA)
 
 
 def _connect(app):
-    import accounts
+    from mailmind.bootstrap import accounts
     return accounts.connect(app, timeout=5)
 
 
@@ -68,7 +68,7 @@ def test_a_login_before_starttls_is_refused(srv):
 
 
 def test_a_wrong_password_is_a_login_failure(srv, app):
-    import accounts
+    from mailmind.bootstrap import accounts
     with pytest.raises(accounts.LoginUnreachable):
         accounts.connect({**app, "credential": {"plain": "nope"}}, timeout=5)
 
@@ -96,7 +96,7 @@ def test_examine_reports_the_count_and_uidvalidity(srv, app):
 
 
 def test_uid_search_all_by_range_and_by_message_id(srv, app):
-    import accounts
+    from mailmind.bootstrap import accounts
     uids = [srv.deliver(ADA, "INBOX", _mail(n)) for n in range(4)]
     M = _connect(app)
     M.select('"INBOX"', readonly=True)
@@ -191,7 +191,7 @@ def test_a_store_on_a_read_only_mailbox_is_refused(srv, app):
 
 
 def test_a_folder_name_with_spaces_and_quotes_round_trips(srv, data_dir):
-    import accounts
+    from mailmind.bootstrap import accounts
     srv.add_account(ADA, folders=['Clients "VIP"', "Old Projects"])
     entry = srv.config_entry(ADA)
     (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
@@ -286,7 +286,7 @@ def test_idle_hears_new_mail(srv, app):
 # ── provider habits ─────────────────────────────────────────────────────────────────────────────
 
 def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
-    import accounts
+    from mailmind.bootstrap import accounts
     with FakeIMAPServer(kind="proton") as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
@@ -299,7 +299,7 @@ def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
 
 
 def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
-    import accounts
+    from mailmind.bootstrap import accounts
     from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
     with FakeIMAPServer(kind="gmail") as srv:
         entry = srv.add_account(ADA)
@@ -322,7 +322,7 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
 
 
 def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
-    import accounts
+    from mailmind.bootstrap import accounts
     with FakeIMAPServer(kind="gmail") as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))

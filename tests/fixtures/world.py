@@ -143,7 +143,7 @@ def synced_folders():
 
 def ingest_all():
     """Run the app's own first sync of every folder that holds mail."""
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     for acct, folder in synced_folders():
         ingest.sync_folder(accounts.get(acct), folder, full=True)
@@ -174,7 +174,7 @@ class World:
     def deliver(self, acct, folder, data, flags=()):
         """Put one more message on the server and run the app's own incremental sync of that
         folder, as the background sync would. Returns its UID."""
-        import accounts
+        from mailmind.bootstrap import accounts
         import ingest
         uid = self.server.deliver(acct, folder, data, flags=flags)
         ingest.sync_folder(accounts.get(acct), folder)

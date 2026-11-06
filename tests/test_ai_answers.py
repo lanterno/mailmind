@@ -48,7 +48,7 @@ def summarize_as(pk, importance=5, category="action-needed", action="Reply"):
 
 
 def renumber_inbox(world, account=w.ADA):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     world.server.renumber(account, "INBOX")
     ingest.sync_new(accounts.get(account))

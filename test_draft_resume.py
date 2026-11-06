@@ -38,7 +38,7 @@ import server
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel import addresses
-import accounts
+from mailmind.bootstrap import accounts
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import sending

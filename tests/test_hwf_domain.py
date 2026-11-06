@@ -227,7 +227,7 @@ def test_hwf_a_fetched_body_fills_only_an_empty_snippet(db):
 
 
 def test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     pk = world.pk("ada-sent-01-lunch-reply.eml")
     ingest.fetch_body(pk)
@@ -651,7 +651,7 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
 
 
 def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     with open(world.dir / "mailmind_rules.json", "w") as f:
         f.write('{"keep_senders": ["lin@example.test",]')
@@ -667,7 +667,7 @@ def test_hwf_expiry_takes_the_shortest_of_matching_domain_rules():
 
 
 def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "block")
@@ -678,7 +678,7 @@ def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(worl
 
 
 def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
-    import accounts
+    from mailmind.bootstrap import accounts
     world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", From="Lin Mori <lin@studio.example.test>",
                                             Message_ID="<issue-219@loom.example.test>"))
     [stored] = rows("SELECT count(*) AS n FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1", w.ADA)
