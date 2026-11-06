@@ -14,8 +14,8 @@ def init(path, steps=None):
     """Create the database at `path` if it is new, and run every migration in `steps` (all of
     them unless given) that it hasn't run yet. Safe on every start: each migration is idempotent,
     and a database already at the last of them is left alone. The base schema only creates what is
-    missing, but that includes a table a later migration retired, so it runs only ahead of a
-    migration (or to begin a new database) and never brings one back."""
+    missing, but that includes a table a later migration retired, so it runs only on a database
+    older than the frozen migrations' last, which it was written for, and never brings one back."""
     steps = migrations.MIGRATIONS if steps is None else steps
     c = database.connect(path)
     c.isolation_level = None                    # the transactions below are the only ones
@@ -31,7 +31,8 @@ def init(path, steps=None):
             db.executescript(migrations.BASE_SCHEMA)
             for table, coldef in migrations.LEGACY_COLS:
                 migrations.add_column(db, table, coldef)
-        _in_transaction(c, base)
+        if v < migrations.BASE_UNTIL:
+            _in_transaction(c, base)
         for target, fn in steps:
             if v < target:
                 _in_transaction(c, fn, version=target)
