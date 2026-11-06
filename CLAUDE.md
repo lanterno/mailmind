@@ -64,7 +64,7 @@ comment out cases or copy one into a REPL. `script_css_sanitizer.py`, `script_ex
 `script_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
 renaming. `script_send_guard.py` and `script_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
 `/* draft-resume:pure:start */` …) out of `web/assets/legacy/pure.js` and run it in node. That file is written from
-`web/src/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
+`web/src/features/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
 twins beside them; edit those and run `just gen-web`. The send guard's two suites share
 `tests/fixtures/send_guard_words.json`.
 
@@ -142,9 +142,9 @@ and strict ones on what `[tool.pyright]` lists, which a package joins once it re
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
-`web/assets/legacy/pure.js` is what `web/src/compose` gives; it installs `web/node_modules` from the lockfile if they
+`web/assets/legacy/pure.js` is what `web/src/features/compose` gives; it installs `web/node_modules` from the lockfile if they
 are missing. `just gen-web` writes `pure.js`. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
-writes `web/src/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
+writes `web/src/lib/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
 have no schema to generate from: run it when an answer's shape changes, and review the diff.
 
 `just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
@@ -162,20 +162,20 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   third-party package; `tests/e2e/test_front_door.py` checks that.
 - **The page runs as it stands.** `web/index.html` is the markup, `web/assets/styles/` the CSS (`fonts.css` the
   self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from system fonts), and `web/assets/legacy/` the
-  scripts: `theme.js`, `pure.js` (written from `web/src/compose`) and `app.js`, ~310KB of classic script. No build is needed:
+  scripts: `theme.js`, `pure.js` (written from `web/src/features/compose`) and `app.js`, ~310KB of classic script. No build is needed:
   `mailmind.platform.webroot` serves this source to either door with gzip and an ETag, so the old door still needs
   nothing installed. `just build-web` (Vite, Node) writes the same files, named by their content, to
   `mailmind/http/dist` (gitignored), served for good while it is as new as every source file, so an edit never leaves
   the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
   `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), and a tab that loaded another build
-  offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`api/client.ts`, typed by `api/types.gen.ts`).
+  offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`lib/api/client.ts`, typed by `lib/api/types.gen.ts`).
   `web/next.html` and `web/src/main.tsx` are the React app at `/next` (React 19 with the React Compiler, TanStack Query, React Aria Components), beside the page and on its
   stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
-  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/brief` is today's brief, the lists the digest answers (`/next/brief/needs`, `tidy`, `topic/<label>`),
-  Commitments, Your week and the new-mail pill, `features/ask` Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
-  `features/lanes` is the Feed and the Paper Trail, `features/senders` the Screener and the contact card, `features/docs` the Document Hub and `features/curate` the drawer and a sender's cleanup. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. It does what the page does now, and the top bar links to `/` until it takes the page's place. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
+  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/next/brief/needs`, `tidy`, `topic/<label>`),
+  Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
+  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. It does what the page does now, and the top bar links to `/` until it takes the page's place. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
   its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
