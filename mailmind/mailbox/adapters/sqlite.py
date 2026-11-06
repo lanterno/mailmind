@@ -4,7 +4,8 @@ import sqlite3
 from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
-from mailmind.mailbox.domain import conversations, identity
+from mailmind.mailbox.domain import identity
+from mailmind.mailbox.domain import threading as conversations
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
 from typing import Any
@@ -467,7 +468,7 @@ def stats(c):
 
 def recompute_threads(c, account):
     """Give each of the account's messages its thread id, and move what was kept under an id no row holds
-    any more (see mailmind.mailbox.domain.conversations)."""
+    any more (see mailmind.mailbox.domain.threading)."""
     rows = c.execute(
         "SELECT pk, message_id, gmail_thread, in_reply_to, refs, thread_id "
         "FROM messages WHERE account=?", (account,)).fetchall()
