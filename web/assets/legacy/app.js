@@ -2437,11 +2437,11 @@ function renderOutbox(){
   if(!state.outbox.length){ f.innerHTML=changes||'<h4>Outbox</h4><div class="ob-row"><span class="ob-sub">Nothing queued.</span></div>'; return; }
   f.innerHTML=changes+'<h4>Outbox</h4>'+state.outbox.map(o=>{
     const to=(o.to||[]).join(", ")+(o.bcc_count?` +${o.bcc_count} bcc`:"");
-    const stLabel=o.scheduled?"scheduled":o.unsure?"unsure":o.state;
+    const stLabel=o.scheduled?"scheduled":o.retrying?"retrying":o.unsure?"unsure":o.state;
     const when=o.scheduled?` · ${esc(fmtWhen(o.next_attempt_at))}`:"";
     return `<div class="ob-row"><span class="ob-st ${o.scheduled?"scheduled":o.state}">${stLabel}</span>
       <span class="ob-sub">${esc(o.subject)}<br><span class="ob-to${o.error?" ob-why":""}">to ${esc(to)}${when}${o.error?" · "+esc(o.error):""}</span></span>
-      ${o.scheduled?`<button class="ob-retry" data-sendnow="${o.id}">Send now</button><button class="ob-retry" data-cancel="${o.id}">Cancel</button>`:""}
+      ${o.scheduled||o.retrying?`<button class="ob-retry" data-sendnow="${o.id}">${o.retrying?"Try now":"Send now"}</button><button class="ob-retry" data-cancel="${o.id}">Cancel</button>`:""}
       ${o.state==="error"?`<button class="ob-retry" data-retry="${o.id}">${o.unsure?"Send again":"Retry"}</button>`:""}</div>`; }).join("");
 }
 async function sendNow(id){
@@ -2449,11 +2449,11 @@ async function sendNow(id){
   catch(e){ toast("Couldn’t send now"); }
 }
 async function cancelScheduled(id){
-  try{ const r=await cpost("/api/outbox/cancel",{id}); toast(r.ok?"Scheduled send cancelled":"Too late to cancel"); setTimeout(loadOutbox,300); }
+  try{ const r=await cpost("/api/outbox/cancel",{id}); toast(r.ok?"Send cancelled":"Too late to cancel"); setTimeout(loadOutbox,300); }
   catch(e){ toast("Cancel failed"); }
 }
 async function retrySend(id){
-  try{ await cpost("/api/outbox/retry",{id}); toast("Retrying…"); setTimeout(loadOutbox,500); }
+  try{ const r=await cpost("/api/outbox/retry",{id}); toast(r.gone?"It had gone out, so it wasn’t sent again":"Retrying…"); setTimeout(loadOutbox,500); }
   catch(e){ toast("Retry failed"); }
 }
 

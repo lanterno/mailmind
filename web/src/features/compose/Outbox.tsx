@@ -59,20 +59,20 @@ function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolea
   );
 }
 
-function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (ok: boolean) => string, fail: string) => void }) {
+function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean }) => string, fail: string) => void }) {
   const to = (o.to ?? []).join(", ") + (o.bcc_count ? ` +${o.bcc_count} bcc` : "");
-  const label = o.scheduled ? "scheduled" : o.unsure ? "unsure" : o.state;
+  const label = o.scheduled ? "scheduled" : o.retrying ? "retrying" : o.unsure ? "unsure" : o.state;
   return (
     <div className="ob-row">
       <span className={`ob-st ${o.scheduled ? "scheduled" : o.state}`}>{label}</span>
       <span className="ob-sub">{o.subject}<br /><span className={o.error ? "ob-to ob-why" : "ob-to"}>to {to}{o.scheduled ? ` · ${fmtWhen(o.next_attempt_at)}` : ""}{o.error ? ` · ${o.error}` : ""}</span></span>
-      {o.scheduled && (
+      {(o.scheduled || o.retrying) && (
         <>
-          <button className="ob-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>Send now</button>
-          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, (ok) => (ok ? "Scheduled send cancelled" : "Too late to cancel"), "Cancel failed")}>Cancel</button>
+          <button className="ob-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>{o.retrying ? "Try now" : "Send now"}</button>
+          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, (r) => (r.ok ? "Send cancelled" : "Too late to cancel"), "Cancel failed")}>Cancel</button>
         </>
       )}
-      {o.state === "error" && <button className="ob-retry" onClick={() => call("/api/outbox/retry", o.id, () => "Retrying…", "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
+      {o.state === "error" && <button className="ob-retry" onClick={() => call("/api/outbox/retry", o.id, (r) => (r.gone ? "It had gone out, so it wasn’t sent again" : "Retrying…"), "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
     </div>
   );
 }
@@ -122,10 +122,10 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     void qc.invalidateQueries({ queryKey: ["messages"] });
     void qc.invalidateQueries({ queryKey: ["folders"] });
   };
-  const call = async (path: string, id: number, ok: (ok: boolean) => string, fail: string) => {
+  const call = async (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean }) => string, fail: string) => {
     try {
-      const r = await post(path as "/api/outbox/cancel", { id });
-      toast(ok(Boolean(r.ok)));
+      const r = await post(path as "/api/outbox/retry", { id });
+      toast(ok(r));
     } catch {
       toast(fail);
     }
