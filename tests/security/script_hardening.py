@@ -2,16 +2,19 @@
 database and config, fake IMAP and SMTP connections, and fictional addresses, so nothing here
 can reach a real server.
 Run: python3 test_hardening.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, ROOT)
 import contextlib
 import dataclasses
 import http.client
 import imaplib
 import json
-import os
 import re
 import ssl
 import subprocess
-import sys
 import tempfile
 import threading
 import urllib.parse
@@ -487,7 +490,7 @@ def test_the_route_reports_a_refusal_and_offers_no_undo():
 
 def _optimized(code):
     """Run code under python -O, which strips asserts, from this directory; return its stdout."""
-    out = subprocess.run([sys.executable, "-O", "-c", code], cwd=os.path.dirname(os.path.abspath(__file__)),
+    out = subprocess.run([sys.executable, "-O", "-c", code], cwd=ROOT,
                          capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     return out.stdout.strip()
@@ -626,7 +629,7 @@ def test_nosync_reads_one_way_and_fails_toward_read_only():
         else:
             os.environ["MAILMIND_NOSYNC"] = real
     readers = []                                    # one place reads it, so every check agrees
-    root = os.path.dirname(os.path.abspath(__file__))
+    root = ROOT
     for dirpath, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("tests", "node_modules", "__pycache__")]
         for name in files:
@@ -697,7 +700,7 @@ def test_two_cleanups_of_one_sender_undo_separately():
 
 def _page_functions(*names):
     """The named one-line functions from the page's script, as source."""
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
         page = f.read()
     out = []
     for name in names:

@@ -7,8 +7,12 @@ survives. Strings inside escaped attribute values are inert and don't count.
 
 Run:  python3 tests_sanitize.py      (exits non-zero on any leak)
 """
-import re
+import os
 import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, ROOT)
+import re
 import html as htmlmod
 from html.parser import HTMLParser
 

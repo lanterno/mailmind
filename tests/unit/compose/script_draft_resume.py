@@ -3,6 +3,11 @@ quote or forwarded section, so it must come back split into your text and that t
 again with each part once. Hermetic — temp database and config, and every IMAP or SMTP call is
 replaced with a recorder, so nothing can leave. All addresses are fictional.
 Run: python3 test_draft_resume.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 import base64
 import dataclasses
 import hashlib

@@ -2,12 +2,12 @@
 
 Those suites make a temp directory the app's data directory (mailmind.platform.settings) when
 they are imported, and some replace module functions with fakes. Two of them in one process would
-overwrite each other's, so each runs the way `python3 <suite>.py` does: alone, from the repo root.
+overwrite each other's, so each runs the way `python3 tests/.../script_<suite>.py` does: alone, from the repo root.
 Its output is shown if it fails. MAILMIND_HOME names a temp directory of its own, so a path a
 suite forgets to redirect still lands there and not in the repo.
 
-Any `test*.py` added at the repo root is picked up here. New pytest-native tests live beside this
-file.
+Any `script_*.py` under tests/ is picked up here, and pytest collects none of them itself. New tests
+are pytest-native.
 """
 import os
 import pathlib
@@ -17,11 +17,12 @@ import sys
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SUITES = sorted(p.name for p in ROOT.glob("test*.py"))
+SUITES = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob("tests/**/script_*.py"))
 
 
 def test_the_suites_are_found():
-    assert {"tests.py", "tests_sanitize.py", "test_hardening.py"} <= set(SUITES)
+    assert {"tests/unit/curation/script_classifier.py", "tests/security/script_sanitize.py",
+            "tests/security/script_hardening.py"} <= set(SUITES)
 
 
 @pytest.mark.parametrize("suite", SUITES)

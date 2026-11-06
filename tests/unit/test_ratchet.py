@@ -3,7 +3,7 @@ tests/legacy_ratchet.txt (the file says how the list may change)."""
 import ast
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 RATCHET = ROOT / "tests" / "legacy_ratchet.txt"
 
 

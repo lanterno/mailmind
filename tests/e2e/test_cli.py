@@ -7,7 +7,7 @@ import pytest
 from fixtures import world as w
 from mailmind.__main__ import main, parser
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 SAMPLE = {"port": "8721", "target": "all", "days": "90", "limit": "10", "workers": "2", "tokens": "a.example.test",
           "token": "a.example.test", "hours": "72", "out": "/tmp/x", "args": ""}
 

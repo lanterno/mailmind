@@ -3,6 +3,11 @@ counts as known, exact address matching, drafts never vouching, the thin-history
 limits, the CSRF guard, and that it never waits on the IMAP lock. Hermetic — the database,
 config and rules are temp files. All addresses are fictional.
 Run: python3 test_contacts_known.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 import dataclasses
 import email
 import http.client

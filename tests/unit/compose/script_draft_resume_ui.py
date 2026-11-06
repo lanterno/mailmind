@@ -5,14 +5,16 @@ hidden, the signature a reopened text still ends with, and the wording of the no
 is pure JavaScript with no DOM, so this runs it once in node, like test_send_guard.py. All
 addresses are fictional.
 Run: python3 test_draft_resume_ui.py"""
-import json
 import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
+import json
 import shutil
 import subprocess
-import sys
 import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 START, END = "/* draft-resume:pure:start */", "/* draft-resume:pure:end */"
 TAIL = "\n\nOn Mon, 02 Feb 2026, Bo Park <bo@example.test> wrote:\n> Shall we meet Saturday?\n"
 D = {"ok": True, "draft_id": 12, "mode": "reply", "account": "ada@example.test", "subject": "Re: Plans",
@@ -53,7 +55,7 @@ def _run():
     global _RESULTS
     if _RESULTS is not None:
         return _RESULTS
-    with open(os.path.join(HERE, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
         html = f.read()
     assert START in html and END in html, "the draft-resume:pure markers are missing"
     a, b = html.index(START), html.index(END)

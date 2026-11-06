@@ -3,6 +3,11 @@ refused before anything is built, a sane one is scheduled, and none means send n
 temp database and config, and the outbox is replaced with a recorder, so nothing can leave.
 All addresses are fictional.
 Run: python3 test_send_after.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 import json
 import tempfile
 import time

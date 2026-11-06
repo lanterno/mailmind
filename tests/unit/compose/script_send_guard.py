@@ -4,16 +4,18 @@ empty subjects, reply-all size, speed on long unbroken text, acknowledgements, a
 is pure JavaScript with no DOM, so this runs it once in node, like `just check-frontend` does.
 All addresses are fictional.
 Run: python3 test_send_guard.py"""
-import json
 import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
+import json
 import shutil
 import subprocess
-import sys
 import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 START, END = "/* send-guard:pure:start */", "/* send-guard:pure:end */"
-with open(os.path.join(HERE, "tests", "fixtures", "send_guard_words.json"), encoding="utf-8") as _f:
+with open(os.path.join(ROOT, "tests", "fixtures", "send_guard_words.json"), encoding="utf-8") as _f:
     _WORDS = json.load(_f)
 
 # A default snapshot: a new message to one person, nothing waved through yet.
@@ -131,7 +133,7 @@ def _run(group="main"):
         return _RESULTS[group]
     make, stop = _GROUPS[group]
     try:
-        with open(os.path.join(HERE, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
+        with open(os.path.join(ROOT, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
             html = f.read()
         a, b = html.index(START), html.index(END)
         block = html[a + len(START):b]

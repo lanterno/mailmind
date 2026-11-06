@@ -3,6 +3,11 @@ a repeating one next happens (ics.next_occurrence), and the recipient the Waitin
 (mailbox.queries.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
 Run: python3 test_upcoming.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 import tempfile
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage

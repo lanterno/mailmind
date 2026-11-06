@@ -4,7 +4,7 @@ import ast
 import pathlib
 import re
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "mailmind"
 CONTEXTS = ("accounts", "assistant", "attention", "calendar", "compose", "curation", "discovery", "mailbox")
 

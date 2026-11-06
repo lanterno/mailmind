@@ -1,5 +1,10 @@
 """Attack corpus for the CSS sanitizer. Each red-team payload must be neutralized;
    legitimate newsletter styling must survive.  Run: python3 test_css_sanitizer.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 from mailmind.content.sanitize import html as S
 
 

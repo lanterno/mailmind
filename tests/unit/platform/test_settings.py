@@ -8,7 +8,7 @@ import pytest
 from mailmind.platform import settings
 from mailmind.platform.settings import Settings, SettingsError
 
-REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
 
 @pytest.fixture(autouse=True)

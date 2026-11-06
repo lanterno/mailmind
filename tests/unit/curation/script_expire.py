@@ -1,6 +1,11 @@
 """Expiry rules: rule storage, sender/domain matching, and age selection. Hermetic — the
 rules file is redirected to a temp path and nothing touches IMAP. All addresses are fictional.
 Run: python3 test_expire.py"""
+import os
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
 import email
 import tempfile
 from datetime import datetime, timezone

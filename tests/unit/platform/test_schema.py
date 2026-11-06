@@ -20,7 +20,7 @@ def version():
 
 
 def snapshot_path():
-    return os.path.join(HERE, "golden", f"schema_v{version()}.sql")
+    return os.path.join(HERE, "..", "..", "golden", f"schema_v{version()}.sql")
 
 
 def dump(path):

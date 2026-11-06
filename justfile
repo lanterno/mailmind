@@ -54,12 +54,12 @@ test-full *args: setup
 
 # Only the browser tests, which drive the page and the React app in Chromium through both front doors
 test-browser *args: setup
-    uv run pytest --browser tests/browser {{args}}
+    uv run pytest --browser tests/e2e/browser {{args}}
 
 # The MailSession contract against a real IMAP server, Dovecot in Docker, through each adapter.
 # Needs Docker running; the first run pulls the image.
 test-dovecot *args:
-    uv run pytest --dovecot tests/test_mail_session_dovecot.py {{args}}
+    uv run pytest --dovecot tests/contract/test_mail_session_dovecot.py {{args}}
 
 # Undefined names, unused imports and pyflakes' other checks, run by ruff; then the import rules
 # between the mailmind package's layers (import-linter; the contracts are in pyproject.toml), then types (pyright)

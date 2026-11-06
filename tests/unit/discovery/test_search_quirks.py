@@ -14,7 +14,7 @@ from fixtures import world as w
 from mailmind.bootstrap import attention
 
 RECEIPT = "ada-inbox-05-receipt.eml"
-ROOT = os.path.join(os.path.dirname(__file__), "..")
+ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 
 
 @pytest.fixture

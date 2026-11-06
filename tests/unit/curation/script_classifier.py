@@ -6,10 +6,12 @@ on any real account, employer, or contact. All addresses below are fictional.
 
 Run:  python3 tests.py      (exits non-zero on any failure)
 """
-import sys
 import os
+import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, ROOT)
+
 from mailmind.curation.domain import classifier as m
 
 # Stub the learned rules with a synthetic fixture (tests the MECHANISM only).

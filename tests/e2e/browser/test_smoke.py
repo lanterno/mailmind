@@ -31,7 +31,7 @@ pytestmark = pytest.mark.browser
 RECEIPT = "ada-inbox-05-receipt.eml"
 LUNCH = ("ada-inbox-01-lunch.eml", "ada-inbox-02-lunch-confirm.eml")
 DRAFT = "ada-drafts-02-thunderbird-v2.eml"
-BASELINE = os.path.join(os.path.dirname(__file__), "..", "golden", "browser", "axe_baseline.json")
+BASELINE = os.path.join(os.path.dirname(__file__), "..", "..", "golden", "browser", "axe_baseline.json")
 
 
 def opened(page):
