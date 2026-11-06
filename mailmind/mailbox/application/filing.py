@@ -1,30 +1,30 @@
-"""Filing a message as a person asks: on the account's gate, reversible by Undo, and queued when the server can't be
-reached. The tray's Retry and Discard of what is queued are here too."""
-import json
+"""Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. The
+tray's Retry and Discard of what is waiting are here too."""
 import secrets
 
-from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.commands import MailCommands
-from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.undo import Undo
+from mailmind.mailbox.domain import command
 from mailmind.platform import sse
 from mailmind.platform.workers import gates
 
-_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
+_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
+_REFUSED = {"archive": "the server refused the archive"}
+_NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
+_NOT_FOUND = {"ok": False, "msg": "not found", "undoable": False}
 
 
 class Filing:
     PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
 
-    def __init__(self, store: StoredMail, accounts: Accounts, server: ServerOps, commands: MailCommands, ingest: Ingest,
+    def __init__(self, store: StoredMail, accounts: Accounts, commands: MailCommands, ingest: Ingest,
                  undo: Undo, stats: LiveStats, folders: Folders, attention: Attention):
         self._store = store
         self._accounts = accounts
-        self._server = server
         self._commands = commands
         self._ingest = ingest
         self._undo = undo
@@ -32,75 +32,51 @@ class Filing:
         self._folders = folders
         self._attention = attention
 
-    def _readmut_enqueue(self, op, pk, dest, undo_group, mutation_id):
-        """IMAP was unreachable — durably queue this move-type mutation, take the message out of the
-        lists (its row stays, marked pending_removal, until the move settles), push the undo
-        descriptor, and report it queued. The offline queue re-applies it (resolving dest online) once the
-        server is reachable again, and lists the message again if the move doesn't happen."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        if not row:
-            c.close()
-            return {"ok": False, "msg": "not found"}
-        acct, mid = row["account"], (row["message_id"] or "").strip()
-        try:
-            is_gmail = self._accounts.profile(self._accounts.get(acct)).archive_is_label_removal   # archive drops a label
-        except KeyError:
-            is_gmail = False
-        if op == "trash" and not dest:                  # trash dest is static (no IMAP) — store it for undo
-            try:
-                dest = self._accounts.trash_folder(self._accounts.get(acct))
-            except Exception:
-                dest = None
-        payload = {"pk": pk, "uid": row["uid"], "is_gmail": is_gmail,
-                   "subject": row["subject"], "thread_id": row["thread_id"]}
-        # The client's mutation_id names one request, so a resubmit of it dedupes; without one, every
-        # request is its own. A key built from the message alone made a second trash of the same message,
-        # after the first had been applied and the message moved back, answer "queued" and do nothing.
-        if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
-            mutation_id = secrets.token_hex(16)
-        idem = f"{op}:{acct}:{mid or pk}:{mutation_id}"
-        _id, created = self._store.command_insert(c, {"account": acct, "idempotency_key": idem, "kind": op,
-                                  "message_id": mid, "src_folder": row["folder"], "dest": dest,
-                                  "params": json.dumps(payload), "next_attempt_at": 0,
-                                  "created_at": now_iso()})
-        if not created:                             # duplicate submit (same mutation_id) — already queued
-            c.close()
+    def _waiting(self, outcome, undoable):
+        """The worker has it: the tray shows it, and it says how it went."""
+        self.flags_queued()
+        return {"ok": True, "msg": "queued", "status": outcome, "undoable": undoable}
+
+
+    def _file(self, kind, pk, dest, undo_group, mutation_id, undo=True):
+        """A move, through the command path: what the person hears of it."""
+        push = (lambda c, entry: self._undo.push_within(c, entry, undo_group)) if undo else None
+        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, push)
+        if accepted is None:
+            return dict(_NOT_FOUND)
+        if not accepted.created:
             return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
-        undo = None
-        if mid:
-            undo = {"kind": "gmail_archive" if (op == "archive" and is_gmail) else "move",
-                    "account": acct, "src_folder": row["folder"], "dest_folder": dest or "",
-                    "message_id": mid, "label": _UNDO_LABEL.get(op, "Updated"),
-                    "subject": row["subject"], "thread_id": row["thread_id"]}
-        self._store.mark_pending_removal(c, pk, _id)      # out of the lists, as the online path's move takes it
-        c.commit()
-        c.close()
-        if undo:
-            self._undo.push(undo, undo_group)
-        self._commands.kick()                             # drain ASAP once IMAP returns
-        self._stats.invalidate()
-        sse.publish("outbox", {})                   # the tray shows it
-        return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
+        outcome = self._commands.submit(accepted)
+        if outcome == command.APPLIED:
+            self._stats.invalidate()
+            self._folders.invalidate()      # the move changed IMAP UNSEEN/MESSAGES: drop stale rail badges
+            return {"ok": True, "msg": _FILED[kind], "undoable": accepted.undoable}
+        if outcome in (command.QUEUED, command.WAITING):
+            return self._waiting(outcome, accepted.undoable)
+        if outcome == command.CANCELLED:
+            return {"ok": True, "msg": "cancelled", "undoable": False}
+        self._stats.invalidate()            # the message is listed again
+        msg = (_NO_FOLDER.get(kind) if outcome == command.NO_FOLDER else None) or _REFUSED.get(kind, "the server refused the move")
+        return {"ok": False, "msg": msg, "undoable": False}
 
 
-    def _readmut_enqueue_flags(self, pk, flags, mutation_id):
-        """IMAP was unreachable (or the process is read-only) — durably queue this flag change, show it
-        on the local row at once, and report it queued. The row records the flags as they were, so a
-        change the server refuses, or one the queue gives up on, puts them back."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        if not row:
-            c.close()
-            return {"ok": False, "msg": "not found"}
-        if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
-            mutation_id = secrets.token_hex(16)
-        created = self._store.queue_flags(c, row, flags, mutation_id, now_iso())
-        c.commit()
-        c.close()
-        if created:
-            self.flags_queued()
-        return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+    def _set_flags(self, pk, flags, mutation_id):
+        """A flag change, through the command path: what the person hears of it."""
+        accepted = self._commands.accept_flags(pk, flags, mutation_id)
+        if accepted is None:
+            return dict(_NOT_FOUND)
+        if not accepted.created:
+            return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
+        outcome = self._commands.submit(accepted)
+        if outcome == command.APPLIED:
+            self._stats.invalidate()
+            self._folders.invalidate()      # seen changed IMAP UNSEEN: drop stale rail badges
+            return {"ok": True, "msg": "ok", "undoable": False}
+        if outcome in (command.QUEUED, command.WAITING):
+            return self._waiting(outcome, False)
+        if outcome == command.CANCELLED:
+            return {"ok": True, "msg": "cancelled", "undoable": False}
+        return {"ok": False, "msg": "the server refused the flag change", "undoable": False}
 
 
     def flags_queued(self):
@@ -151,75 +127,36 @@ class Filing:
 
 
     def do_write(self, path, body):
-        """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Each falls
-        back to the durable offline queue if IMAP is unreachable, or the process is read-only."""
+        """Per-message mailbox writes (flags/seen/archive/move)."""
         try:
             pk = int(body.get("pk"))
         except (TypeError, ValueError):
             return {"ok": False, "msg": "bad pk"}
-        _Q = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")),
-              "/api/junk": ("junk", None)}
         if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
             # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
             # request's: \Deleted from here would bypass Trash and undo.
             return {"ok": False, "msg": "unknown flag"}
-
-        def write():
-            """(ok, msg, undo, queued): queued is the answer when IMAP was down and the move waits in
-            the offline queue instead."""
-            if path in ("/api/seen", "/api/flag"):
-                flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
-                         else {body.get("flag", "flagged"): bool(body.get("on", True))})
-                try:
-                    return (*self._server.set_flags(pk, flags), None, None)
-                except UNREACHABLE:           # IMAP down → queue it, as a move is (no IMAP here)
-                    return None, None, None, self._readmut_enqueue_flags(pk, flags, body.get("mutation_id"))
-            if path in _Q:
-                op, dest = _Q[path]
-                try:
-                    if op == "archive":
-                        return (*self._server.archive_message(pk), None)
-                    if op == "move":
-                        return (*self._server.move_message(pk, dest), None)
-                    return (*self._server.junk_message(pk), None)
-                except UNREACHABLE:           # IMAP down → queue it (still under the gate; no IMAP here)
-                    return None, None, None, self._readmut_enqueue(op, pk, dest, body.get("undo_group"),
-                                                              body.get("mutation_id"))
-            return False, "unknown", None, None
-        # no such message: the op finds that out under the gate, as it always has
-        ok, msg, undo, queued = gates.run(self._server.account_of(pk) or gates.EVERY_ACCOUNT, write,
-                                          priority=gates.Priority.INTERACTIVE)
-        if queued is not None:
-            return queued
-        if ok:
-            if undo:
-                self._undo.push(undo, body.get("undo_group"))
-            self._stats.invalidate()
-            self._folders.invalidate()      # seen/archive/move/junk changed IMAP UNSEEN/MESSAGES → drop stale rail badges
-        return {"ok": ok, "msg": msg, "undoable": bool(undo)}
+        if path in ("/api/seen", "/api/flag"):
+            flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
+                     else {body.get("flag", "flagged"): bool(body.get("on", True))})
+            return self._set_flags(pk, flags, body.get("mutation_id"))
+        moves = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")), "/api/junk": ("junk", None)}
+        if path not in moves:
+            return {"ok": False, "msg": "unknown", "undoable": False}
+        kind, dest = moves[path]
+        if kind == "move" and not dest:
+            return dict(_NOT_FOUND)
+        return self._file(kind, pk, dest, body.get("undo_group"), body.get("mutation_id"))
 
 
     def do_trash(self, body):
-        """Move one message to the account's Trash, serialized with every other live-IMAP op. Falls
-        back to the durable offline queue if IMAP is unreachable, like the move-type ops in do_write."""
-        pk = int(body.get("pk"))
+        """Move one message to the account's Trash."""
+        return self._file("trash", int(body.get("pk")), None, body.get("undo_group"), body.get("mutation_id"))
 
-        def trash():
-            """(ok, msg, undo, queued): queued is the answer when IMAP was down, as in do_write."""
-            try:
-                return (*self._server.trash_message(pk), None)
-            except UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
-                return None, None, None, self._readmut_enqueue("trash", pk, None, body.get("undo_group"),
-                                                          body.get("mutation_id"))
-        ok, msg, undo, queued = gates.run(self._server.account_of(pk) or gates.EVERY_ACCOUNT, trash,
-                                          priority=gates.Priority.INTERACTIVE)
-        if queued is not None:
-            return queued
-        if ok:
-            self._undo.push(undo, body.get("undo_group"))
-            self._stats.invalidate()
-            self._folders.invalidate()   # trash removed a message from INBOX → refresh rail badges
-        return {"ok": ok, "msg": msg, "undoable": bool(undo)}
+
+    def trash_now(self, pk):
+        """Trash with nothing for Undo to reverse, as blocking a sender does: whether it went or will go."""
+        return self._file("trash", int(pk), None, None, None, undo=False)["ok"]
 
 
     def do_thread_file(self, path, body):

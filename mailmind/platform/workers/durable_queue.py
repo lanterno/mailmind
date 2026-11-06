@@ -54,6 +54,12 @@ class DurableQueue:
                          (self.running, id_, QUEUED)).fetchall()
         return rows[0] if rows else None
 
+    def put_back(self, c, id_):
+        """A claimed row wasn't tried, or its try says nothing against it: back in the queue, due now, with no
+        attempt counted."""
+        c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=0 WHERE id=? AND state=?",
+                  (QUEUED, id_, self.running))
+
     def backoff(self, attempts):
         """Seconds to wait after the `attempts`-th attempt failed."""
         return min(self.backoff_cap, self.backoff_base * (2 ** (attempts - 1)))

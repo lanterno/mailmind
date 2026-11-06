@@ -1,5 +1,6 @@
 """Undo: a stack in the database, so it outlives a restart, of what reverses each thing a person did. What isn't the
 Mailbox's own (a snooze, a mute, a block) its own context reverses, handed in as `reversers`."""
+import json
 import threading
 
 from mailmind.mailbox.application.commands import MailCommands
@@ -48,6 +49,11 @@ class Undo:
         self._undo_db(lambda c: self._store.undo_push(c, desc, group, self.UNDO_MAX))
 
 
+    def push_within(self, c, desc, group=None):
+        """Push in the caller's transaction, which already holds the database's write lock."""
+        self._store.undo_push(c, desc, group, self.UNDO_MAX)
+
+
     def entries(self):
         """The undo stack, oldest first."""
         return self._undo_db(self._store.undo_entries)
@@ -63,14 +69,13 @@ class Undo:
     def _reverse_held(self, d):
         kind = d.get("kind")
         if kind in ("move", "gmail_archive") and d.get("message_id"):
-            # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued,
-            # claimed-but-not-applied, or given up), CANCEL it and list its message again: its row
-            # waited, marked, for the move to settle, so no server is asked. A row queued before
-            # migration 23 was dropped instead, and is re-ingested. If it already shipped, recover the
-            # dest the worker resolved online so the counter-move searches the RIGHT folder (the
-            # enqueued desc had an empty dest_folder for junk/archive).
+            # Reconcile undo with the command path. If the move hasn't reached the server (waiting, being tried or
+            # given up), CANCEL it and list its message again: its row waited, marked, for the move to settle, so no
+            # server is asked. A row queued before migration 23 was dropped instead, and is re-ingested. If it has,
+            # the command says where it went and what the server did on the way, and the counter-move goes from there.
             c = self._store.conn()
-            q = self._store.command_latest_by_msgid(c, d["account"], d["message_id"])
+            q = (self._store.command_get(c, d["command"]) if d.get("command")
+                 else self._store.command_latest_move(c, d["account"], d["message_id"]))
             if q is not None and not q["applied"]:
                 src = d.get("src_folder") or "INBOX"
                 cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
@@ -91,8 +96,11 @@ class Undo:
                         return True, d["account"], src
                     # re-ingest found nothing (UID gone) → fall through to the normal reverse
             else:
-                if q is not None and q["dest"] and not d.get("dest_folder"):
-                    d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
+                if q is not None:
+                    if q["dest"] and not d.get("dest_folder"):
+                        d = {**d, "dest_folder": q["dest"]}
+                    if json.loads(q["outcome"] or "{}").get("unseen"):
+                        d = {**d, "unseen": True}
                 c.close()
         if kind == "move":
             ok, _ = self._server.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],

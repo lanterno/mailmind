@@ -266,7 +266,7 @@ queries = Queries(store, _attention, folders)
 bodies = Bodies(store, ingest, _Reader())
 undo = Undo(store, _directory, server_ops, commands, ingest, stats, folders,
             {"snooze": _reverse_snooze, "mute": _reverse_mute, "unblock": _reverse_block})
-filing = Filing(store, _directory, server_ops, commands, ingest, undo, stats, folders, _attention)
+filing = Filing(store, _directory, commands, ingest, undo, stats, folders, _attention)
 
 
 def _kick(job):

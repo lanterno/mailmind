@@ -1,4 +1,4 @@
-"""The mail MailMind has stored: messages, their bodies, per-folder sync state, the offline queue's rows and
+"""The mail MailMind has stored: messages, their bodies, per-folder sync state, the command log's rows and
 the undo stack. Every function but conn and init takes its caller's connection and leaves the commit to it."""
 import json
 import sqlite3
@@ -39,21 +39,27 @@ def set_list_unsub(c, pk, raw, method):
     c.execute("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?", (raw, method, pk))
 
 
-# ---- offline read-mutation queue: the rows; offline.QUEUE moves them through their states ----
-def queue_flags(c, row, flags, mutation_id, when):
-    """Queue a flag change on message `row` for the server and show it on the row at once, in the
-    caller's transaction. The queue's row keeps the flags it replaced, which a change the server
-    refuses, or one the queue gives up on, puts back. False if that id was queued already."""
+# ---- the command log's rows; commands.QUEUE moves them through their states ----
+def flag_command(c, row, flags, mutation_id, when):
+    """A flag change on message `row`, for the server, shown on the row at once, in the caller's transaction. The
+    command keeps the flags it replaced, which a change the server refuses, or one given up on, puts back. Returns
+    (id, created): created is False if that id was seen already."""
     acct, mid = row["account"], (row["message_id"] or "").strip()
-    params = {"pk": row["pk"], "uid": row["uid"], "flags": flags,
-               "was": {k: bool(row[k]) for k in flags}}
-    _id, created = command_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
-                                       "kind": "flag", "message_id": mid, "src_folder": row["folder"],
-                                       "dest": None, "params": json.dumps(params),
-                                       "next_attempt_at": 0, "created_at": when})
+    params = {"pk": row["pk"], "uid": row["uid"], "epoch": get_uidvalidity(c, acct, row["folder"]), "flags": flags,
+              "was": {k: bool(row[k]) for k in flags}}
+    id_, created = command_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
+                                      "kind": "flag", "message_id": mid, "src_folder": row["folder"],
+                                      "dest": None, "params": json.dumps(params),
+                                      "next_attempt_at": 0, "created_at": when})
     if created:
         set_local_flags(c, row["pk"], **{k: int(bool(v)) for k, v in flags.items()})
-    return created
+    return id_, created
+
+
+def queue_flags(c, row, flags, mutation_id, when):
+    """A flag change for the queue's worker alone, as what another context asks for on its own is. False if that id
+    was seen already."""
+    return flag_command(c, row, flags, mutation_id, when)[1]
 
 
 def command_insert(c, row):
@@ -79,9 +85,18 @@ def command_get(c, mid):
     return c.execute("SELECT * FROM mail_commands WHERE id=?", (mid,)).fetchone()
 
 
-def command_set_dest(c, mid, dest):
-    """Persist the destination the worker resolved online, so a later undo can find the message."""
-    c.execute("UPDATE mail_commands SET dest=? WHERE id=?", (dest, mid))
+def command_mark_begun(c, mid):
+    """A try at it may reach the server from here on: the next one asks the server before it repeats anything."""
+    c.execute("UPDATE mail_commands SET begun=1 WHERE id=?", (mid,))
+
+
+def command_never_begun(c, mid):
+    c.execute("UPDATE mail_commands SET begun=0 WHERE id=?", (mid,))
+
+
+def command_record(c, mid, dest, outcome):
+    """What the server's answer left for a reversal to know: where the message went, and what else."""
+    c.execute("UPDATE mail_commands SET dest=COALESCE(?, dest), outcome=? WHERE id=?", (dest, outcome, mid))
 
 
 def command_set_params(c, mid, params):
@@ -108,10 +123,10 @@ def command_forget_finished(c, now_ts, days=30):
     return c.execute("DELETE FROM mail_commands WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
 
 
-def command_latest_by_msgid(c, account, message_id):
-    """The most recent read-mutation row for a message (any state) — undo uses it to decide
-    cancel-vs-counter-move and to recover the resolved destination folder."""
-    return c.execute("SELECT * FROM mail_commands WHERE account=? AND message_id=? "
+def command_latest_move(c, account, message_id):
+    """The newest move of a message, in any state: what an undo entry written before entries named their command
+    goes by, to decide between a cancel and a counter-move and to find where the message went."""
+    return c.execute("SELECT * FROM mail_commands WHERE account=? AND message_id=? AND kind!='flag' "
                      "ORDER BY id DESC LIMIT 1", (account, message_id)).fetchone()
 
 
@@ -197,8 +212,8 @@ def forget_gone_messages(c, now_ts, days=30):
 
 
 def mark_pending_removal(c, pk, mutation_id):
-    """Leave message `pk` out of every list while the queued move `mutation_id` (a mail_commands
-    id) takes it away. The row stays, so a move that doesn't happen can list it again."""
+    """Leave message `pk` out of every list while the move `mutation_id` (a mail_commands id) takes it
+    away. The row stays, so a move that doesn't happen can list it again."""
     c.execute("UPDATE messages SET pending_removal=? WHERE pk=?", (mutation_id, pk))
 
 
