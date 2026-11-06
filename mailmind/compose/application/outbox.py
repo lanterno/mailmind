@@ -10,9 +10,9 @@ exponentially and retry; after MAX_ATTEMPTS the row is 'error' (terminal until a
 retry). Exactly-once delivery is enforced by a persisted `delivered` flag, the queue's gate,
 set the instant the wire send returns: a crash/DB-failure after delivery requeues the row, but
 send_one() then skips the send and only finishes bookkeeping.
-A Sent copy that fails puts the delivered row back in the queue, with the same back-off and
-attempts counted afresh, so the copy is filed once the server is back; the gate keeps the retry
-from sending again. Listed, such a row is `sent`, or `error` with a Retry once the copy gives up.
+A step of those that fails puts the delivered row back in the queue, with the same back-off and
+attempts counted afresh, so it's done once the server is back; the gate keeps the retry from
+sending again. Listed, such a row is `sent`, or `error` with a Retry once a Sent copy gives up.
 The Message-ID + raw bytes are built once and reused, so the Sent copy matches the wire.
 """
 import json
@@ -116,9 +116,10 @@ class Outbox:
     def _side_effects(self, oid, row, acct):
         """Done-once: Sent copy (non-Gmail) + \\Answered on the original, and the rest below.
         Each IMAP op is a job of its own on its account's IMAP gate (NOT one across the whole
-        thing). A failure here never fails an already-delivered send. A Sent copy that failed is
-        returned (scrubbed), for send_one to try again; any other step is logged and skipped."""
-        unfiled = None
+        thing). A failure here never fails an already-delivered send. Each step is owed until its
+        flag is set: what failed is returned (scrubbed), for send_one to try again, and the next
+        pass does only what's still owed."""
+        owed = None
         if self._accounts.saves_sent(acct) and not row["sent_appended"]:
             self._commit(lambda c: self._book.outbox_set(c, oid, sent_appended=1))   # Gmail auto-saves
         elif not row["sent_appended"]:
@@ -129,7 +130,7 @@ class Outbox:
                           priority=gates.Priority.AFTER_USER)
                 self._commit(lambda c: self._book.outbox_set(c, oid, sent_appended=1))
             except Exception as e:
-                unfiled = f"sent copy failed: {type(e).__name__}"
+                owed = f"sent copy failed: {type(e).__name__}"
                 print(f"[outbox] Sent-copy failed for #{oid}: {self._transport.sanitize_error(e)}", flush=True)
         replied_to = row["in_reply_to_pk"] or row["orig_message_id"]
         if replied_to and not row["answered_set"]:
@@ -139,6 +140,7 @@ class Outbox:
                           priority=gates.Priority.AFTER_USER)
                 self._commit(lambda c: self._book.outbox_set(c, oid, answered_set=1))
             except Exception as e:
+                owed = owed or f"marking the original answered failed: {type(e).__name__}"
                 print(f"[outbox] \\Answered failed for #{oid}: {type(e).__name__}", flush=True)
         # sent-no-reply: seed a follow-up on the replied-to thread (replies only — a brand-new compose
         # has no local thread_id until its Sent copy syncs). Best-effort, done-once, never fails the send.
@@ -178,8 +180,9 @@ class Outbox:
                     gates.run(dr["account"], cleanup, priority=gates.Priority.AFTER_USER)
                 self._commit(lambda c: self._book.outbox_set(c, oid, draft_deleted=1))
             except Exception as e:
+                owed = owed or f"removing the draft's copy failed: {type(e).__name__}"
                 print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
-        return unfiled
+        return owed
 
     def draft_copy_is_ours(self, d):
         """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
@@ -234,15 +237,15 @@ class Outbox:
                 return
             self._commit(lambda c: self.QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
         # delivered — side effects, then mark sent (all guarded so a DB hiccup can't strand a
-        # delivered row; next pass sees delivered=1 and only retries bookkeeping). A Sent copy that
-        # failed sends the row back to the queue instead, delivered, until it's filed or gives up.
+        # delivered row; next pass sees delivered=1 and only retries bookkeeping). A step that
+        # failed sends the row back to the queue instead, delivered, until it's done or gives up.
         try:
-            unfiled = self._side_effects(oid, row, acct)
-            if unfiled:
-                # the copy's tries count from the delivery, not on from the send's
+            owed = self._side_effects(oid, row, acct)
+            if owed:
+                # its tries count from the delivery, not on from the send's
                 tried = {"id": oid, "attempts": row["attempts"] if row["delivered"] else 0}
-                terminal, delay = self._commit(lambda c: self.QUEUE.retry_later(c, tried, unfiled, _now()))
-                print(f"[outbox] sent #{oid}; its Sent copy "
+                terminal, delay = self._commit(lambda c: self.QUEUE.retry_later(c, tried, owed, _now()))
+                print(f"[outbox] sent #{oid}; what it still owes "
                       f"{'gives up' if terminal else f'is tried again in {delay}s'}", flush=True)
             else:
                 self._commit(lambda c: self.QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))

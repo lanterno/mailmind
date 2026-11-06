@@ -39,8 +39,11 @@ def listed(r):
         pass
     na = r["next_attempt_at"] or 0
     state, error = r["state"], r["last_error"]
-    if r["delivered"] and state != "sent":           # went out; only its Sent copy is owed
-        state, error = ("error", SENT_COPY_FAILED) if state == "error" else ("sent", SENT_COPY_PENDING)
+    if r["delivered"] and state != "sent":           # went out
+        if r["sent_appended"]:                       # what's left of it asks nothing of anyone
+            state, error = "sent", None
+        else:                                        # its Sent copy is owed
+            state, error = ("error", SENT_COPY_FAILED) if state == "error" else ("sent", SENT_COPY_PENDING)
     waiting = r["wait_kind"] if state == "queued" else None
     return {
         "id": r["id"], "account": r["account"], "subject": r["subject"] or "(no subject)",
