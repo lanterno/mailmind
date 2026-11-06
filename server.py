@@ -645,25 +645,6 @@ def _resolve_cids(pk, safe_html):
     return _CID_IMG.sub(sub, safe_html)
 
 
-def _invite_for(pk, parsed):
-    """If the message carries a text/calendar part, parse it into a display-ready invite."""
-    cal = next((a for a in parsed.get("attachments", [])
-                if "calendar" in (a.get("content_type") or "").lower()
-                or (a.get("filename") or "").lower().endswith(".ics")), None)
-    if not cal:
-        return None, None
-    c = store.conn()
-    raw = store.get_body(c, pk)
-    c.close()
-    if not raw:
-        return None, None
-    try:
-        payload, _ct = mime.extract_part(raw, cal["part_id"])
-        return calendar.ics.parse(payload.decode("utf-8", "replace")), cal["part_id"]
-    except Exception:
-        return None, None
-
-
 def message_body(pk, load_images, prefetch=False):
     c = store.conn()
     row = store.get_message(c, pk)
@@ -691,7 +672,7 @@ def message_body(pk, load_images, prefetch=False):
                        if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
     if safe_html and "cid:" in safe_html:
         safe_html = _resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
-    invite, invite_part = _invite_for(pk, parsed)
+    invite, invite_part = calendar.invites.of(pk, parsed)
     return {
         "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": text,
         "has_html": bool(html), "attachments": parsed["attachments"],
@@ -922,74 +903,6 @@ def muted_in(account, offset, limit):
     } for r in rows]
     return {"ok": True, "account": account, "folder": "__muted__", "items": items, "muted": True,
             "total": total, "offset": offset, "has_more": offset + len(items) < total}
-
-
-def _local_naive(d):
-    """A parsed calendar time as local wall-clock time; a floating (naive) one is already that."""
-    return d.astimezone().replace(tzinfo=None) if d.tzinfo else d
-
-
-def upcoming(account=None, now=None, limit=5, days=60):
-    """Today & next: the events in calendar invites from the last `days` of mail that haven't ended
-    yet, soonest first; a repeating one at its next occurrence. Pure-local: it reads only stored
-    bodies, never IMAP. One row per event UID, from the newest message that carries it (an update
-    replaces the original, a cancellation removes it); a message about one occurrence of a series
-    (RECURRENCE-ID) moves or cancels just that one. Times are local wall-clock ISO strings."""
-    now = now or datetime.now()
-    c = store.conn()
-    rows = c.execute(
-        """SELECT m.pk, m.message_key, m.account, m.folder, m.thread_id, a.part_id
-           FROM attachments a JOIN messages m ON m.pk=a.message_pk
-           WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?) AND m.pending_removal IS NULL
-             AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
-           ORDER BY m.ts DESC, m.pk DESC""",
-        (int(now.timestamp()) - days * 86400, account, account)).fetchall()
-    seen, found = set(), []
-    for r in rows:
-        if folder_roles.role_by_name(r["folder"]) in ("trash", "junk"):
-            continue
-        try:
-            raw = store.get_body(c, r["pk"])
-            payload, _ct = mime.extract_part(raw, r["part_id"])
-            inv = calendar.ics.parse(payload.decode("utf-8", "replace"))
-        except Exception:
-            continue
-        if not inv or not inv.get("start_iso"):
-            continue
-        key = (inv.get("uid") or (inv["summary"], inv["start_iso"]), inv.get("recurrence_id", ""))
-        if key not in seen:
-            seen.add(key)
-            found.append((r, inv))
-    c.close()
-    dead = lambda inv: inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED"
-    moved, gone = {}, set()                # per series: its rescheduled or cancelled occurrences
-    for _r, inv in found:
-        if inv.get("uid") and inv.get("recurrence_id"):
-            moved.setdefault(inv["uid"], []).append(inv["recurrence_id"])
-        elif inv.get("uid") and dead(inv):
-            gone.add(inv["uid"])
-    items = []
-    for r, inv in found:
-        if dead(inv) or (inv.get("recurrence_id") and inv.get("uid") in gone):
-            continue
-        if inv.get("rrule") and not inv.get("recurrence_id"):
-            inv = dict(inv, exdates=inv["exdates"] + moved.get(inv.get("uid"), []))
-        occ = calendar.ics.next_occurrence(inv, now)
-        if occ is None and inv.get("rrule"):                     # a rule ics can't expand: its first date
-            occ = calendar.ics.next_occurrence(dict(inv, rrule=""), now)
-        if occ is None:
-            continue
-        start, end = (_local_naive(d) for d in occ)
-        org = inv.get("organizer") or {}
-        items.append({
-            "pk": r["pk"], "key": r["message_key"], "account": r["account"], "thread_id": r["thread_id"],
-            "summary": inv["summary"], "location": inv.get("location", ""),
-            "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
-            "all_day": inv["all_day"], "organizer": org.get("name") or org.get("email") or "",
-            "invite": inv.get("method") == "REQUEST", "recurrence": inv.get("recurrence", ""),
-        })
-    items.sort(key=lambda x: x["start"])
-    return {"ok": True, "items": items[:limit]}
 
 
 def waiting_in(account, offset, limit):
@@ -1856,7 +1769,7 @@ def do_invite_rsvp(body):
     except Exception as e:
         print(f"[rsvp] fetch failed for pk {pk}: {_sanitize_conn_error(e)}", flush=True)
         return {"ok": False, "error": "could not load the invite"}, 502
-    invite, _part = _invite_for(pk, parsed)
+    invite, _part = calendar.invites.of(pk, parsed)
     if not invite:
         return {"ok": False, "error": "no invite on this message"}, 400
     organizer = ((invite.get("organizer") or {}).get("email") or "").strip()
@@ -3380,7 +3293,7 @@ class H(BaseHTTPRequestHandler):
                                        int(q.get("offset", ["0"])[0]), int(q.get("limit", ["80"])[0]),
                                        group=(q.get("group", [""])[0] == "thread")))
             elif u.path == "/api/upcoming":     # read-only: invites in fetched mail, nothing fetched
-                self._json(upcoming(q.get("account", [None])[0] or None))
+                self._json(calendar.agenda.upcoming(q.get("account", [None])[0] or None))
             elif u.path == "/api/thread":
                 self._json(thread_json(q.get("account", [None])[0], q.get("thread_id", [None])[0]))
             elif u.path == "/api/search":
