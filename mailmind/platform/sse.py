@@ -22,6 +22,7 @@ import secrets
 import threading
 from collections import deque
 from dataclasses import dataclass
+from typing import Any
 
 HELLO = "hello"           # opens every stream, naming the build the server has now: not published
 
@@ -75,7 +76,7 @@ class Hub:
     def _id(self, n: int) -> str:
         return f"{self.run}-{n}"
 
-    def publish(self, topic: str, data: dict | None = None) -> str:
+    def publish(self, topic: str, data: dict[str, Any] | None = None) -> str:
         """Number the event, keep it, wake every listener. Returns its id."""
         if topic not in TOPICS:
             raise ValueError(f"{topic!r} is not one of the stream's topics")
@@ -166,6 +167,6 @@ class Listener:
 HUB = Hub()
 
 
-def publish(topic: str, data: dict | None = None) -> str:
+def publish(topic: str, data: dict[str, Any] | None = None) -> str:
     """HUB.publish: the app's one stream hub."""
     return HUB.publish(topic, data)

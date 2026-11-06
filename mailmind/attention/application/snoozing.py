@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
-from mailmind.attention.application.tabs import sse
 from mailmind.attention.domain import snooze
 from mailmind.kernel.when import now_iso
+from mailmind.platform import sse
 
 
 class Snoozing:

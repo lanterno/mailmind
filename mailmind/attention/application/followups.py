@@ -4,10 +4,10 @@ from typing import Any
 
 from mailmind.attention.application.ports import Accounts, AttentionBook, Screen
 from mailmind.attention.application.snoozing import Snoozing
-from mailmind.attention.application.tabs import sse
 from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.kernel.when import now_iso
+from mailmind.platform import sse
 
 
 class FollowUps:

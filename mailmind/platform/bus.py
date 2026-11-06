@@ -52,7 +52,7 @@ class Bus:
                 self._handlers[topic] = tuple(left)
         return unsubscribe
 
-    def publish(self, event) -> None:
+    def publish(self, event: object) -> None:
         """Tell each of the event's subscribers, in this thread, in the order they subscribed."""
         if not _is_event(type(event)):
             raise TypeError(f"{event!r} is not a frozen dataclass, so it can't be an event")
@@ -80,6 +80,6 @@ def subscribe(topic: type, handler: Handler) -> Callable[[], None]:
     return BUS.subscribe(topic, handler)
 
 
-def publish(event) -> None:
+def publish(event: object) -> None:
     """BUS.publish: the app's one bus."""
     BUS.publish(event)

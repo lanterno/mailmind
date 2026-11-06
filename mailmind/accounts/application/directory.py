@@ -21,21 +21,13 @@ Type defaults (override per account as needed):
 import os
 import threading
 from collections.abc import Callable, Mapping
-from typing import Any, Protocol
+from typing import Any
 
 from mailmind.accounts.application.ports import ConfigStore, Secrets
 from mailmind.accounts.domain import account, events
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.kernel.parsed import is_object
-from mailmind.platform import bus as _bus
-from mailmind.platform import settings
-
-
-class _Bus(Protocol):
-    def publish(self, event: object) -> None: ...
-
-
-bus: _Bus = _bus    # mailmind.platform.bus's own publish leaves its event unannotated, until the platform is typed too
+from mailmind.platform import bus, settings
 
 
 class Directory:

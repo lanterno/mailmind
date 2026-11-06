@@ -3,10 +3,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
-from mailmind.attention.application.tabs import sse
 from mailmind.attention.application.threads import Threads
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
+from mailmind.platform import sse
 
 
 class Muting:
