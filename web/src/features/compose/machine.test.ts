@@ -187,6 +187,63 @@ describe("saving", () => {
     expect(second.attachments).toEqual([{ filename: "a.pdf", content_type: "application/pdf", b64: "AAA" }]);
   });
 
+  it("says an autosave is one, and from the second save on names the version it saw", async () => {
+    const { m, answer, posted } = setup();
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 1, pushed: false }));
+    m.open();
+    m.edit("body", "hello");
+    await vi.advanceTimersByTimeAsync(8000);
+    const [first] = posted("/api/draft");
+    expect(first.autosave).toBe(true);
+    expect(first.base_version).toBeUndefined();
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 2, pushed: true }));
+    m.edit("body", "hello again");
+    await m.save();
+    const second = posted("/api/draft")[1];
+    expect(second.autosave).toBeUndefined();
+    expect(second.base_version).toBe(1);
+  });
+
+  it("stops at a save it never saw, and only a save someone asks for overwrites it", async () => {
+    const { m, answer, posted, toasts } = setup();
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 1, pushed: true }));
+    const c = m.open()!;
+    m.edit("body", "one");
+    await m.save(true);
+    const conflict = () => { throw Object.assign(new Error("This draft changed in another window."), { status: 409 }); };
+    answer("/api/draft", conflict);
+    m.edit("body", "two");
+    expect(await m.save()).toBe(false);
+    expect(c.conflict).toBe(true);
+    expect(c.savedLine).toBe("Changed in another window");
+    expect(toasts.at(-1)).toContain("Save again");
+    m.edit("body", "three");
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(posted("/api/draft").length).toBe(2);           // autosave leaves it be
+    answer("/api/draft", conflict);
+    expect(await m.save(true)).toBe(false);                // so does a close, which nobody watches
+    expect(posted("/api/draft")[2].base_version).toBe(1);
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 3, pushed: true }));
+    expect(await m.save()).toBe(true);
+    expect(posted("/api/draft")[3].base_version).toBeUndefined();
+    expect(c.conflict).toBe(false);
+    expect(c.version).toBe(3);
+  });
+
+  it("tells the tray when a save someone asked for waits for its server", async () => {
+    const { m, env, answer } = setup();
+    const told = vi.spyOn(env, "outboxChanged");
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 1, pushed: false }));
+    m.open();
+    m.edit("body", "one");
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(told).not.toHaveBeenCalled();                   // an autosave always waits
+    answer("/api/draft", () => ({ ok: true, draft_id: 7, version: 2, pushed: false }));
+    m.edit("body", "two");
+    await m.save();
+    expect(told).toHaveBeenCalledTimes(1);
+  });
+
   it("autosaves what changed, not what didn't, and not during a save", async () => {
     const { m, posted } = setup();
     const c = m.open()!;
@@ -556,6 +613,16 @@ describe("from the mail", () => {
     await m.editDraft(3);
     expect(toasts).toEqual(["Close the message you’re writing first"]);
     expect(posted("/api/draft/resume")).toEqual([]);
+  });
+
+  it("reopens a draft the list can't show by its id, knowing its version", async () => {
+    const { m, answer, posted } = setup();
+    answer("/api/draft/resume", () => ({ ok: true, draft_id: 4, version: 6, account: FROM, mode: "new", subject: "x", text: "Mine." }));
+    await m.editDraft(null, 4);
+    expect(posted("/api/draft/resume")).toEqual([{ draft_id: 4 }]);
+    m.edit("body", "Mine, more.");
+    await m.save();
+    expect(posted("/api/draft")[0].base_version).toBe(6);
   });
 
   it("reopens a draft with its text and files, and saves nothing until an edit", async () => {

@@ -28,9 +28,12 @@ describe("resumeOpts", () => {
     expect(o.quote?.text.startsWith("---------- Forwarded message")).toBe(true);
     expect([o.resume.in_reply_to, o.origPk]).toEqual(["", null]);
   });
+  it("carries the draft's version", () => {
+    expect(resumeOpts({ ...D, version: 4 }).version).toBe(4);
+  });
   it("has defaults for a bare answer", () => {
     const o = resumeOpts({ draft_id: 3, account: "ada@example.test" });
-    expect([o.mode, o.to, o.subject, o.quote, o.origPk]).toEqual(["new", [], "", null, null]);
+    expect([o.mode, o.to, o.subject, o.quote, o.origPk, o.version]).toEqual(["new", [], "", null, null, null]);
     expect(o.resume).toEqual({ in_reply_to: "", references: "", tail_text: "" });
   });
 });

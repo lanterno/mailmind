@@ -531,20 +531,57 @@ def test_opening_the_composer_focuses_at_once_and_never_takes_focus_back(page, w
 def test_a_message_whose_closing_save_fails_stays_a_click_away(page, world):
     opened(page)
     writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
-    world.server.fail("APPEND", user=w.ADA)
+    page.pw.route("**/api/draft", lambda route: route.fulfill(status=500, body="{}"))   # a server away wouldn't do it
     page.keyboard.press("Escape")
     box, float_ = page.get_by_role("textbox", name="message body"), page.locator("#sendFloat")
     expect(float_).to_contain_text("Your message couldn’t be saved")
     expect(box).to_be_hidden()
     expect(page.locator("#srLive")).to_have_text("Your message couldn’t be saved")
-    assert page.problems and all("502" in x for x in page.problems)   # the save's answer, as the console logs it
+    assert page.problems and all("500" in x for x in page.problems)   # the save's answer, as the console logs it
     page.problems.clear()
+    page.pw.unroute("**/api/draft")
     float_.get_by_role("button", name="Edit").click()
     expect(box).to_have_value("Which blue did you mean?")
     expect(page.get_by_role("textbox", name="subject")).to_have_value("Thread colours")
     expect(float_).to_be_hidden()
     page.keyboard.press("Escape")                         # nothing else holds it, so closing it saves it
     until(page, lambda: len(copies(world, "Thread colours")) == 1, "the reopened message saved")
+    clean(page)
+
+
+def test_autosave_writes_it_down_here_and_the_server_gets_it_a_minute_on(page, app, world):
+    from mailmind.bootstrap.compose import drafts
+    opened(page)
+    writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    page.clock.run_for(8_500)
+    expect(page.locator("#cmpSaved")).to_contain_text("Saved")
+    assert copies(world, "Thread colours") == []
+    app.clock.shift(timedelta(minutes=2))
+    drafts.push_round()
+    assert len(copies(world, "Thread colours")) == 1
+    clean(page)
+
+
+def test_a_draft_the_server_wont_take_waits_in_the_tray_and_opens_from_it(page, app, world):
+    from mailmind.bootstrap.compose import drafts
+    opened(page)
+    world.server.fail("APPEND", user=w.ADA, times=None)
+    writing(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
+    page.keyboard.press("Escape")                         # closing saves: here, and the server says no
+    button = page.locator("#outboxBtn")
+    expect(button).to_be_visible()
+    button.click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("Drafts waiting")
+    expect(fly).to_contain_text("Thread colours")
+    fly.get_by_role("button", name="Edit").click()
+    expect(page.get_by_role("textbox", name="message body")).to_have_value("Which blue did you mean?")
+    page.keyboard.press("Escape")
+    world.server.clear_faults()
+    app.clock.shift(timedelta(minutes=2))
+    drafts.push_round()
+    assert len(copies(world, "Thread colours")) == 1
+    expect(button).to_be_hidden()
     clean(page)
 
 
