@@ -2,18 +2,39 @@
 import email
 import hashlib
 import hmac
+import json
 
 from mailmind.content import mime
 
 NO_METHOD = {"method": "none", "https_uri": None, "mailto_uri": None, "mailto_to": None,
              "mailto_subject": None, "mailto_body": None}
+TOKEN_LIFE = 600           # seconds a preview's confirm_token stands
 TERMINAL = ("unsubscribed_oneclick", "mailto_sent", "needs_browser")   # never fired twice; anything else stays retryable
 
 
-def confirm_token(secret, from_addr):
-    """Stateless proof the human saw the preview: HMAC(the process's secret, addr). Rotates per server start."""
-    return hmac.new(secret.encode(), ("cleanup:" + (from_addr or "").lower()).encode(),
-                    hashlib.sha256).hexdigest()[:16]
+def _plan_mac(secret, from_addr, info, ts):
+    target = info.get("mailto_to") if info["method"] == "mailto" else info.get("https_uri")
+    plan = json.dumps(["cleanup", (from_addr or "").lower(), info["method"], target, ts])
+    return hmac.new(secret.encode(), plan.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def confirm_token(secret, from_addr, info, now):
+    """Stateless proof the human saw the preview: what it said would go out, where, and when they saw it. `info` is
+    what resolve gave. Rotates per server start."""
+    ts = int(now)
+    return f"{ts}.{_plan_mac(secret, from_addr, info, ts)}"
+
+
+def token_in_date(token, now):
+    """Is this a token at all, and of the last few minutes? Asked first, since going on may read from a server."""
+    ts = token.partition(".")[0]
+    return ts.isascii() and ts.isdigit() and len(ts) <= 12 and 0 <= int(now) - int(ts) <= TOKEN_LIFE
+
+
+def token_names(secret, token, from_addr, info):
+    """Did the preview say what would go out now? A list that changed its way out since then needs a fresh look."""
+    ts, _, mac = token.partition(".")
+    return hmac.compare_digest(mac.encode(), _plan_mac(secret, from_addr, info, int(ts)).encode())
 
 
 def parse_list_unsub(raw_bytes):

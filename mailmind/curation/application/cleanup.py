@@ -101,7 +101,7 @@ class Cleanup:
                 "accounts": accts, "domain": addr.rpartition("@")[2],
                 "unsub": unsub, "sweep_count": len(affected), "sweep_capped": capped,
                 "reversible": {"block": True, "sweep": True, "unsubscribe": False},
-                "confirm_token": unsubscribe.confirm_token(self._secret(), addr)}
+                "confirm_token": unsubscribe.confirm_token(self._secret(), addr, info, time.time())}
 
     def execute(self, body):
         """Commit for ONE sender. ALWAYS-FIRST + reversible: a block rule + verified INBOX sweep to
@@ -113,13 +113,13 @@ class Cleanup:
             return {"ok": False, "error": "bad address"}, 400
         scope = "domain" if body.get("block_scope") == "domain" else "sender"
         do_unsub = bool(body.get("do_unsubscribe"))
-        token_ok = secrets.compare_digest(str(body.get("confirm_token") or ""),
-                                          unsubscribe.confirm_token(self._secret(), from_addr))
+        token = str(body.get("confirm_token") or "")
         grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
         block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
         # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
         # the row it moved, and the sender's newest issue is most often one the sweep takes.
-        unsub = self._unsub.resolve(from_addr) if do_unsub and token_ok else None
+        unsub = self._unsub.resolve(from_addr) if do_unsub and unsubscribe.token_in_date(token, time.time()) else None
+        token_ok = unsub is not None and unsubscribe.token_names(self._secret(), token, from_addr, unsub[0])
 
         # 1) BLOCK (reversible) — rule + an unblock descriptor coalesced into the undo group
         self._rules.add(block_token, "block")
