@@ -49,8 +49,14 @@ CREATE INDEX idx_muted_acct ON muted(account);
 -- index idx_outbox_created
 CREATE INDEX idx_outbox_created ON outbox(created_at);
 
+-- index idx_outbox_orig_thread
+CREATE INDEX idx_outbox_orig_thread ON outbox(orig_account, orig_thread_id) WHERE orig_thread_id IS NOT NULL;
+
 -- index idx_outbox_state
 CREATE INDEX idx_outbox_state ON outbox(state, next_attempt_at);
+
+-- index idx_thread_links_message
+CREATE INDEX idx_thread_links_message ON thread_links(message_pk);
 
 -- index idx_unsub_log_addr
 CREATE INDEX idx_unsub_log_addr ON unsub_log(from_addr);
@@ -139,6 +145,9 @@ CREATE TABLE summaries ( message_pk INTEGER PRIMARY KEY REFERENCES messages(pk) 
 -- table sync_state
 CREATE TABLE sync_state ( account TEXT NOT NULL, folder TEXT NOT NULL DEFAULT 'INBOX', last_sync TEXT, last_uid INTEGER DEFAULT 0, uidvalidity INTEGER, last_ok_ts TEXT, -- health: last successful sync (added _m15) last_error TEXT, -- exception CLASS name only (scrubbed; never the message) last_error_ts TEXT, last_error_kind TEXT, -- coarse enum: TIMEOUT|AUTH|UIDVALIDITY|IMAP|NETWORK|UNKNOWN sync_count INTEGER DEFAULT 0, scan_state TEXT NOT NULL DEFAULT 'never', highest_modseq INTEGER, PRIMARY KEY(account, folder) );
 
+-- table thread_links
+CREATE TABLE thread_links( name TEXT NOT NULL, message_pk INTEGER NOT NULL REFERENCES messages(pk) ON DELETE CASCADE, PRIMARY KEY(name, message_pk));
+
 -- table thread_summaries
 CREATE TABLE thread_summaries ( account TEXT NOT NULL, thread_id TEXT NOT NULL, scope TEXT NOT NULL DEFAULT 'thread', -- thread | message fingerprint TEXT NOT NULL, -- content hash; mismatch => stale tldr TEXT, points TEXT, action TEXT, participants TEXT, -- points/participants = JSON message_count INTEGER, model TEXT, created_at TEXT, PRIMARY KEY(account, thread_id, scope) );
 
@@ -148,4 +157,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=41;
+PRAGMA user_version=42;
