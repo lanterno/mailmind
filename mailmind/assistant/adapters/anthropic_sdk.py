@@ -11,7 +11,7 @@ runs with nothing installed.
 import anthropic
 
 from mailmind.assistant.adapters import wire
-from mailmind.assistant.application.ports import ModelError, Prompt, Reply
+from mailmind.assistant.application.ports import BatchResult, ModelError, Prompt, Reply
 from mailmind.assistant.domain.models import FALLBACK_BETA
 from mailmind.platform.db import txguard
 
@@ -55,3 +55,19 @@ class AnthropicModel:
         else:
             resp = self._calling(lambda: self._client.messages.create(**body))
         return wire.reply(resp.to_dict(), prompt.model)
+
+    def submit_batch(self, requests: list[tuple[str, Prompt]]) -> str:
+        batches = self._client.with_options(max_retries=0).messages.batches
+        return self._calling(lambda: batches.create(
+            requests=[wire.batch_request(i, p) for i, p in requests])).id
+
+    def batch_ended(self, batch_id: str) -> bool:
+        batch = self._calling(lambda: self._client.messages.batches.retrieve(batch_id))
+        return batch.processing_status == "ended"
+
+    def batch_results(self, batch_id: str, asked: str) -> list[BatchResult]:
+        return self._calling(lambda: [wire.batch_result(line.to_dict(), asked)
+                                      for line in self._client.messages.batches.results(batch_id)])
+
+    def discard_batch(self, batch_id: str) -> None:
+        self._calling(lambda: self._client.messages.batches.delete(batch_id))

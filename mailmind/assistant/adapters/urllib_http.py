@@ -11,10 +11,11 @@ import json
 import random
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from mailmind.assistant.adapters import wire
-from mailmind.assistant.application.ports import RETRIED, ModelError, Prompt, Reply
+from mailmind.assistant.application.ports import RETRIED, BatchResult, ModelError, Prompt, Reply
 from mailmind.assistant.domain.models import FALLBACK_BETA
 from mailmind.platform.db import txguard
 
@@ -22,7 +23,7 @@ VERSION = "2026-10-21"             # anthropic-version header, the one the SDK s
 TIMEOUT = 120                      # seconds per attempt
 RETRIES = 2                        # after the first attempt
 DEFAULT_URL = "https://api.anthropic.com"
-MESSAGES = "/v1/messages"
+MESSAGES, BATCHES = "/v1/messages", "/v1/messages/batches"
 
 
 def _retry_after(headers):
@@ -58,6 +59,24 @@ class UrllibModel:
             headers["anthropic-beta"] = FALLBACK_BETA
         out = self._send("POST", MESSAGES, json.dumps(wire.body(prompt)).encode(), headers, self._retries)
         return wire.reply(json.loads(out), prompt.model)
+
+    def submit_batch(self, requests: list[tuple[str, Prompt]]) -> str:
+        data = json.dumps({"requests": [wire.batch_request(i, p) for i, p in requests]}).encode()
+        return json.loads(self._send("POST", BATCHES, data, self._headers(), 0))["id"]
+
+    def _batch_path(self, batch_id: str) -> str:
+        return f"{BATCHES}/{urllib.parse.quote(batch_id, safe='')}"
+
+    def batch_ended(self, batch_id: str) -> bool:
+        out = self._send("GET", self._batch_path(batch_id), None, self._headers(), self._retries)
+        return json.loads(out).get("processing_status") == "ended"
+
+    def batch_results(self, batch_id: str, asked: str) -> list[BatchResult]:
+        out = self._send("GET", self._batch_path(batch_id) + "/results", None, self._headers(), self._retries)
+        return [wire.batch_result(json.loads(line), asked) for line in out.splitlines() if line.strip()]
+
+    def discard_batch(self, batch_id: str) -> None:
+        self._send("DELETE", self._batch_path(batch_id), None, self._headers(), self._retries)
 
     def _send(self, method: str, path: str, data: bytes | None, headers: dict, retries: int) -> bytes:
         attempt = 0

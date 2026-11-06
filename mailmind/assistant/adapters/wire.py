@@ -1,6 +1,6 @@
 """The Messages API's wire format, which both HTTP adapters speak: the request body for a Prompt,
 and the Reply in a response."""
-from mailmind.assistant.application.ports import Prompt, Reply, Usage
+from mailmind.assistant.application.ports import BatchResult, Prompt, Reply, Usage
 
 
 def body(prompt: Prompt) -> dict:
@@ -58,3 +58,19 @@ def reply(resp: dict, asked: str) -> Reply:
             break
     text = "".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text").strip()
     return Reply(text, served, spent, stop)
+
+
+def batch_request(custom_id: str, prompt: Prompt) -> dict:
+    """One request of a batch. Batches reject `fallbacks`, so the gateway doesn't ask for it in one."""
+    return {"custom_id": custom_id, "params": body(prompt)}
+
+
+def batch_result(line: dict, asked: str) -> BatchResult:
+    """One line of a batch's results: a message that succeeded, or one errored, canceled or expired."""
+    result = line.get("result") or {}
+    custom_id = str(line.get("custom_id") or "")
+    if result.get("type") == "succeeded":
+        return BatchResult(custom_id, reply(result.get("message") or {}, asked))
+    error = result.get("error") or {}
+    inner = error.get("error") if isinstance(error.get("error"), dict) else error
+    return BatchResult(custom_id, None, "invalid_request" in str(inner.get("type") or ""))

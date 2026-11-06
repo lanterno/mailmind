@@ -49,6 +49,15 @@ class Reply:
         return self.stop_reason == "refusal"
 
 
+@dataclass(frozen=True)
+class BatchResult:
+    """What became of one request in a batch: its reply, or None with `permanent` saying that sending it
+    again won't change that (a bad request, not an outage, a cancel or an expiry)."""
+    custom_id: str
+    reply: Reply | None
+    permanent: bool = False
+
+
 class ModelError(RuntimeError):
     """No reply: the API rejected the call with `status`, or nothing answered (status None)."""
 
@@ -101,6 +110,14 @@ class LanguageModel(Protocol):
 
     def complete(self, prompt: Prompt) -> Reply: ...
 
+    def submit_batch(self, requests: list[tuple[str, Prompt]]) -> str: ...     # the batch's id; never retried
+
+    def batch_ended(self, batch_id: str) -> bool: ...
+
+    def batch_results(self, batch_id: str, asked: str) -> list[BatchResult]: ...
+
+    def discard_batch(self, batch_id: str) -> None: ...      # removes what the API keeps of it
+
 
 @dataclass(frozen=True)
 class Spend:
@@ -113,11 +130,14 @@ class Spend:
     usage: Usage
     cost_micros: int                 # US dollars × 1,000,000
     ts: int                          # when it ended, in seconds since the epoch
+    calls: int = 1                   # more than one for the answers of a batch, counted together
 
 
 class UsageLedger(Protocol):
     def record(self, spend: Spend) -> None: ...
 
     def spent(self, day: str) -> int: ...                # micro-dollars, that day
+
+    def reserved(self) -> int: ...                       # what batches still out may cost, in micro-dollars
 
     def days(self, since: str) -> list[dict]: ...        # per day and feature, from `since` on
