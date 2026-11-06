@@ -131,3 +131,41 @@ def test_an_edit_of_a_file_is_served_at_once(two_roots):
 def test_the_builds_frame_has_no_id():
     frame = sse.hello("abc123").decode()
     assert frame == 'event: hello\ndata: {"build": "abc123"}\n\n' and "id:" not in frame
+
+
+def test_next_says_how_to_build_it_when_nothing_has(app):
+    r = app.get("/next")
+    assert r.status == 404 and b"just build-web" in r.body
+
+
+@pytest.fixture
+def with_next(tmp_path, monkeypatch):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "next.html").write_text('<meta name="csrf" content="__CSRF_TOKEN__"><meta content="__BUILD__"><div id="root"></div>')
+    (dist / "assets" / "next-abc.js").write_text("// the app\n")
+    monkeypatch.setattr(webroot, "DIST", str(dist))
+
+
+@pytest.mark.parametrize("path", ["/next", "/next/", "/next/m/ada%40example.test/INBOX", "/next/search?q=x"])
+def test_next_and_every_path_under_it_is_the_app_holding_this_runs_token(app, with_next, path):
+    r = app.get(path)
+    assert r.status == 200 and r.headers["cache-control"] == "no-store"
+    assert "__CSRF_TOKEN__" not in r.body.decode() and "__BUILD__" not in r.body.decode()
+    assert "content-security-policy-report-only" in r.headers
+
+
+def test_a_path_that_only_starts_like_next_isnt_it(app, with_next):
+    assert app.get("/nextdoor").status == 404
+
+
+def test_an_app_file_comes_from_the_build_though_the_page_comes_from_source(app, with_next):
+    assert not os.path.exists(os.path.join(webroot.DIST, "index.html"))
+    assert webroot._root() == webroot.SOURCE
+    r = app.get("/assets/next-abc.js")
+    assert r.status == 200 and b"the app" in r.body and "immutable" in r.headers["cache-control"]
+    assert app.get(SCRIPT).status == 200
+
+
+def test_the_page_never_needs_next(app):
+    assert app.get("/").status == 200
