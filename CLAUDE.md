@@ -27,6 +27,7 @@ python3 config.py check           # verify credentials resolve, per account (pri
 python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
 python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
 python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
+python3 -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
 python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
 python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
@@ -361,7 +362,10 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   was before it. A migration gets the connection through `_Within`: `execute`, and
   `executescript` run one statement at a time inside the transaction. It never commits.
 - Each must still be idempotent; `init()` runs on every process start. A database with no
-  migration to run is left alone, or the base schema would bring back a table a migration retired.
+  migration to run is left alone, and the base schema runs only on one older than the frozen migrations'
+  last (`migrations.BASE_UNTIL`), or it would bring back a table a migration retired.
+- A migration that builds a table afresh says so in `migrations.REBUILT`, as m38 does `msg_fts`: the upgrade check
+  reports `rebuilt` rather than a change of count, and leaves out the index's own tables.
 - A migration that ends a table says so in `migrations.RETIRED`. The upgrade check then reports it
   as retired rather than as rows lost, and `tests/test_db_upgrade.py` holds it to that.
 - Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
@@ -372,6 +376,9 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   already held (an orphaned body or summary from before foreign keys were on) is reported by
   table and passes; one the migrations add fails. The owner runs it on the real database before
   an upgrade; no agent does.
+- `msg_fts` keeps no copy of the mail (m38: `content=''`, `contentless_delete=1`, SQLite 3.43 or newer, which `init`
+  checks). Read rowids and ranks from it and columns from `messages`; its own columns read as NULL, and `snippet()`
+  and `highlight()` have nothing to work on. `python3 -m mailmind db compact` (`just db-compact`) gives back freed room.
 - `tests/test_db_upgrade.py` upgrades a database seeded with data from every version. A
   migration that derives a column on purpose adds it to `DERIVED` there.
 
