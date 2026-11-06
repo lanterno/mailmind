@@ -169,7 +169,7 @@ def test_j_and_k_walk_the_list_and_the_listbox_says_where_you_are(page, world):
     page.keyboard.press("k")
     expect(options.nth(0)).to_have_attribute("aria-selected", "true")
     page.keyboard.press("Escape")
-    expect(page.locator("#reader")).to_have_class(re.compile("empty-pane"))
+    expect(page.locator("#reader")).to_have_class(re.compile("brief-pane"))
     clean(page)
 
 
@@ -219,7 +219,7 @@ def test_a_rows_own_buttons_file_it_with_the_mouse(page, world):
     r.locator(".ract.del").click()
     until(page, lambda: mailbox(world, RECEIPT) == "Trash", "the server never trashed it")
     expect(r).to_have_count(0)
-    expect(page.locator("#reader")).to_have_class(re.compile("empty-pane"))
+    expect(page.locator("#reader")).to_have_class(re.compile("brief-pane"))
     clean(page)
 
 
@@ -445,11 +445,12 @@ def test_a_saved_summary_shows_at_once_with_no_call_and_a_full_one_comes_when_as
     finally:
         c.close()
     opened(page)
+    expect(page.locator(".bf-narr")).to_be_visible()   # the day's brief is written as the Inbox opens: that one call
     row(page, world, RECEIPT).click()
     stored = page.locator("#aiCard.stored")
     expect(stored.locator(".ai-tldr")).to_have_text("Saved words")
     expect(stored.locator(".ai-action")).to_have_text("→ Keep the receipt")
-    assert not ai.requests
+    assert len(ai.requests) == 1
     ai.queue(fa.answer({"tldr": "Paid for thread.", "points": ["One order."], "action": "Keep it"}))
     page.keyboard.press("i")
     card = page.locator("#aiCard")
