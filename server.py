@@ -52,6 +52,7 @@ import outbox
 import search
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
+from mailmind.content.quote import own_html, quote_tail
 import ics
 import summarize_thread
 import summarize_briefing
@@ -1928,7 +1929,7 @@ def _compose_spec(body):
             if dr and dr["tail_html"] and compose.lf(dr["tail_text"] or "") == tail:
                 # built and sanitized by us at that save; never re-sanitized
                 tail_html = sanitize.without_fold(dr["tail_html"])
-                html = compose.own_html(own) + tail_html
+                html = own_html(own) + tail_html
         tail_text = tail or None
         in_reply_to, references = compose.thread_ids(resume.get("in_reply_to"), resume.get("references"))
         if mode in ("reply", "replyall") and in_reply_to:   # by Message-ID: a pk may have been renumbered
@@ -1975,7 +1976,7 @@ def _compose_spec(body):
             in_reply_to = orow["message_id"]
             references = compose._references(orow["message_id"], orow["refs"], orow["in_reply_to"])
             in_reply_to_pk = opk
-        tail_text, tail_html = compose.quote_tail(own, text, html)
+        tail_text, tail_html = quote_tail(own, text, html)
     spec = {
         "account": acct["email"], "account_name": acct.get("alias") or acct["email"],
         "to": body.get("to") or [], "cc": body.get("cc") or [], "bcc": body.get("bcc") or [],

@@ -18,6 +18,7 @@ from email.headerregistry import Address
 from datetime import datetime, timezone
 
 from mailmind.content import sanitize
+from mailmind.content.quote import html_escape, own_html
 
 MAX_RECIPIENTS = 100
 # Codepoints that must never survive into a header value: C0/C1 controls, bidi
@@ -192,16 +193,6 @@ def lf(s):
     return (s or "").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def quote_tail(new_text, text, html):
-    """(tail_text|None, tail_html|None): what reply_bodies or forward_bodies added after what
-    you typed, kept so a reopened draft can send its quote again without quoting twice."""
-    own = new_text or ""
-    tail = text[len(own):] if text is not None and text.startswith(own) else None
-    head = own_html(own)
-    tail_h = html[len(head):] if html and html.startswith(head) else None
-    return (tail or None), (tail_h or None)
-
-
 def resume_split(text, rec, exact):
     """Split a saved draft's text/plain into (own, tail, how), or None when that can't be done
     without losing something. rec: {"own_text", "tail_text"} as recorded at MailMind's last
@@ -234,11 +225,6 @@ def _quote_plain(text):
     return "\n".join("> " + ln for ln in (text or "").splitlines()) or ">"
 
 
-def _html_escape(s):
-    import html
-    return html.escape(s or "")
-
-
 def _plain_from_html(html_str):
     """Crude HTML->text fallback when an original has no text/plain part."""
     safe, _ = sanitize.sanitize(html_str or "", load_images=False, fold=False)
@@ -249,11 +235,6 @@ def _plain_from_html(html_str):
     return _h.unescape(txt).strip()
 
 
-def own_html(new_text):
-    """The HTML a reply or forward opens with: what you typed, before the quote."""
-    return f"<div>{_html_escape(new_text or '').replace(chr(10), '<br>')}</div><br>"
-
-
 def reply_bodies(new_text, orig):
     """(text, html|None) for a reply. orig: {from_name,from_addr,date,text,html}."""
     attr = _attribution(orig)
@@ -262,7 +243,7 @@ def reply_bodies(new_text, orig):
     if orig.get("html"):
         safe, _ = sanitize.sanitize(orig["html"], load_images=False, fold=False)
         html_body = (
-            own_html(new_text) + f"<div>{_html_escape(attr)}</div>"
+            own_html(new_text) + f"<div>{html_escape(attr)}</div>"
             f'<blockquote type="cite" style="margin:0 0 0 .8ex;'
             f'border-left:2px solid #ccc;padding-left:1ex">{safe}</blockquote>')
         return text, html_body
@@ -282,7 +263,7 @@ def forward_bodies(new_text, orig):
     text = f"{new_text or ''}\n\n{banner}\n\n{o_text}"
     if orig.get("html"):
         safe, _ = sanitize.sanitize(orig["html"], load_images=False, fold=False)
-        banner_html = "<br>".join(_html_escape(f"{k}: {v}") for k, v in rows if v)
+        banner_html = "<br>".join(html_escape(f"{k}: {v}") for k, v in rows if v)
         html_body = (
             own_html(new_text) + f"<div>---------- Forwarded message ----------<br>{banner_html}</div><hr>{safe}")
         return text, html_body
