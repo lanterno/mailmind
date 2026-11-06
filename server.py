@@ -2565,8 +2565,6 @@ def contact_card(addr):
 
 
 KNOWN_MIN_HISTORY = 50     # fewer non-junk messages than this → too little history to call anyone new
-_ADDR_TOKEN = re.compile(r'[^\s<>,;:"()\[\]]+@[^\s<>,;:"()\[\]]+')
-_QUOTED_NAME = re.compile(r'"[^"]*"')
 
 
 def _norm_addr(raw):
@@ -2596,16 +2594,6 @@ def _addr_forms(a):
         except UnicodeError:
             pass
     return out
-
-
-def _recipient_addrs(s):
-    """Bare addresses in messages.recipients (decoded To + " " + Cc, cut at 2000 chars). Exact
-    tokens only — a LIKE match would let joann@ vouch for ann@."""
-    s = s or ""
-    toks = _ADDR_TOKEN.findall(_QUOTED_NAME.sub(" ", s))
-    if len(s) >= 2000 and toks:
-        toks = toks[:-1]          # ingest truncated the column; the last token may be partial
-    return {t.strip(".'").lower() for t in toks}
 
 
 def _is_sent_folder(folder):
@@ -2658,31 +2646,19 @@ def contacts_known(addrs, own=None, min_history=KNOWN_MIN_HISTORY):
             hit |= {r[0] for r in c.execute(       # junk excluded: one phishing mail can't vouch,
                 f"SELECT DISTINCT lower(from_addr), folder FROM messages WHERE lower(from_addr) IN ({ph}) "
                 "AND is_junk=0", forms) if not _is_junk_folder(r[1])}   # whether we or the provider filed it
-            rows = {}
-            if own:
-                oph = ",".join("?" * len(own))
-                for r in c.execute(
-                        f"SELECT pk, folder, recipients FROM messages WHERE lower(from_addr) IN ({oph}) "
-                        "AND COALESCE(draft,0)=0 AND is_junk=0 AND lower(folder) NOT LIKE '%draft%' "
-                        "AND recipients IS NOT NULL AND recipients != ''", list(own)):
-                    if not _is_junk_folder(r[1]):  # spam forging your From: vouches for no one
-                        rows[r[0]] = (r[1], r[2])
-            for acct, folder in c.execute("SELECT account, folder FROM sync_state").fetchall():
-                if not _is_sent_folder(folder):
-                    continue
-                for r in c.execute(                # send-as identities that aren't configured accounts
-                        "SELECT pk, folder, recipients FROM messages WHERE account=? AND folder=? "
-                        "AND COALESCE(draft,0)=0 AND recipients IS NOT NULL AND recipients != ''",
-                        (acct, folder)):
-                    rows[r[0]] = (r[1], r[2])
+            sent = {(r[0], r[1]) for r in c.execute("SELECT account, folder FROM sync_state") if _is_sent_folder(r[1])}
             # the autosaved copy of the message being written must not vouch for its own recipient
             draft_folders = {r[0] for r in c.execute(
                 "SELECT DISTINCT folder FROM drafts WHERE folder IS NOT NULL")}
-            for folder, rcpt in rows.values():
-                if hit >= wanted:
-                    break
-                if folder not in draft_folders:
-                    hit |= _recipient_addrs(rcpt) & wanted
+            for r in c.execute(
+                    "SELECT r.addr, m.account, m.folder, m.is_junk, lower(m.from_addr) sender FROM message_recipients r "
+                    f"JOIN messages m ON m.pk=r.message_pk WHERE r.addr IN ({ph}) AND COALESCE(m.draft,0)=0", forms):
+                if r["folder"] in draft_folders:
+                    continue
+                yours = (r["sender"] in own and not r["is_junk"] and "draft" not in (r["folder"] or "").lower()
+                         and not _is_junk_folder(r["folder"]))    # spam forging your From: vouches for no one
+                if yours or (r["account"], r["folder"]) in sent:  # a Sent folder: send-as identities that aren't accounts
+                    hit.add(r["addr"])
             for (env,) in c.execute("SELECT envelope FROM outbox WHERE delivered=1"):
                 try:                               # queued rows may still be undone, or be the typo
                     hit |= {str(x).lower() for x in json.loads(env or "[]")} & wanted
