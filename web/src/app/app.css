@@ -18,3 +18,5 @@ button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12p
 button.rv-item{all:unset;box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;margin-bottom:7px;cursor:pointer}
 button.rv-item:hover{border-color:var(--line-hi);background:var(--panel-hi)}
 button.rv-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button.ask-src{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer}
+button.ask-src:focus-visible{outline:2px solid var(--focus);outline-offset:2px}

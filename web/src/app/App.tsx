@@ -2,6 +2,9 @@
 import { useEffect, useRef } from "react";
 import { post } from "../api/client";
 import { composing } from "../features/compose/compose";
+import { asking, stopAsking } from "../features/ask/ask";
+import { AskPane } from "../features/ask/AskPane";
+import { DoPanel } from "../features/ask/Do";
 import { backFromDigest, BriefRow } from "../features/brief/Brief";
 import { lookedAt, NewMailPill } from "../features/brief/NewMail";
 import { Panels } from "../features/brief/Panels";
@@ -23,14 +26,15 @@ import { Icon } from "../lib/ui/Icon";
 import { buildCommands, commandForKey, goChord, type Command } from "./commands";
 import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
-import { go } from "./route";
+import { go, type ListSource } from "./route";
 import { Splitter } from "./Splitter";
-import { closeRailDrawer, RailScrim, TopBar, toggleRail } from "./TopBar";
+import { clearSearchBox, closeRailDrawer, RailScrim, TopBar, toggleRail } from "./TopBar";
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS: [InboxTab, string][] = [["needs", "Needs you"], ["all", "Everything"], ["unread", "Unread"]];
 const GO_HINT = "Go to folder:  i·s·a·t·k·d·z·w·l";
 const narrow = () => matchMedia("(max-width:820px)").matches;
+const sourceWhere = (s: ListSource | null) => JSON.stringify(s);
 
 function Floats() {
   const qc = useQueryClient();
@@ -121,7 +125,10 @@ function useKeys(m: Mailbox, commands: Command[]) {
         return;
       }
       if (key === "Escape") {
-        if (readFocus.get()) setReadFocus(false);
+        if (asking.get()) {
+          stopAsking();
+          clearSearchBox();
+        } else if (readFocus.get()) setReadFocus(false);
         else if (m.marks.size) clearMarks();
         else if (m.opened || m.briefAsked) m.close();
         else if (m.source?.kind === "digest") go({ source: backFromDigest(m.accounts), opened: null });
@@ -148,6 +155,7 @@ export function App() {
   const m = useMailbox();
   const { source, opened, accounts, aliases, all, rows, tab, list, folder, inInbox, searching, title } = m;
   const prefs = readPrefs.useValue();
+  const asked = asking.useValue();
 
   // /next on its own opens the first account's Inbox.
   useEffect(() => {
@@ -157,6 +165,10 @@ export function App() {
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
   useEffect(() => clearMarks(), [source]);
+  useEffect(() => {
+    if (source?.kind === "search") return;
+    stopAsking();
+  }, [sourceWhere(source)]);
   useEffect(() => {
     const look = () => { if (!document.hidden) lookedAt(source, accounts); };
     look();
@@ -245,11 +257,11 @@ export function App() {
                 ))}
               </div>
             )}
-            <div className="lh-row"><span id="count">{list.isSuccess ? count : "—"}</span></div>
+            <div className="lh-row"><span id="count">{asked ? (asked.state === "loading" ? "asking…" : asked.state === "answer" ? `${asked.answer.sources?.length ?? 0} source${asked.answer.sources?.length === 1 ? "" : "s"}` : "") : list.isSuccess ? count : "—"}</span></div>
           </div>
           <BulkBar m={m} />
           <NewMailPill />
-          <MessageList
+          {asked ? <AskPane at={asked} m={m} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
             openPk={m.openPk}
@@ -262,7 +274,7 @@ export function App() {
             onFile={m.file}
             empty={empty}
             footer={list.hasNextPage ? <button className="load-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{searching ? "Load more results" : "Load 200 more"}</button> : null}
-          />
+          />}
         </section>
         <Reader m={m} />
       </main>
@@ -275,6 +287,7 @@ export function App() {
         ai={m.digest?.ai?.engine !== "none"}
       />
       <Panels m={m} />
+      <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
       <OverLimitDialog />
       <ConfirmDialog />
       <Floats />

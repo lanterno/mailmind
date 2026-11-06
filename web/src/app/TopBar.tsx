@@ -1,6 +1,7 @@
 // The bar across the top: the rail's control, search, and the way back to the current app. Each keeps its state in the
 // body's classes and the storage keys the current page uses, since the two share a stylesheet and a browser.
 import { useEffect, useRef, useState } from "react";
+import { ask, doing, runDo, stopAsking } from "../features/ask/ask";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
 import { createStore, store, stored } from "../lib/store";
@@ -54,11 +55,15 @@ export function RailScrim() {
   return <div className={open ? "scrim on" : "scrim"} onClick={closeRailDrawer} />;
 }
 
+// The box's text, so finishing a bulk action can clear it.
+const searchText = createStore("");
+export const clearSearchBox = () => searchText.set("");
+
 export function TopBar({ source, readOnly }: { source: ListSource | null; readOnly: boolean }) {
   const current = theme.useValue();
   const input = useRef<HTMLInputElement>(null);
   const query = source?.kind === "search" ? source.q : "";
-  const [text, setText] = useState(query);
+  const text = searchText.useValue(), setText = searchText.set;
   const [shown, setShown] = useState(query);
   const [folded, setFolded] = useState(true);
   if (query !== shown) {     // the URL moved (Back, a rail click): the box follows it
@@ -75,6 +80,7 @@ export function TopBar({ source, readOnly }: { source: ListSource | null; readOn
   const account = source?.kind === "folder" || source?.kind === "search" ? source.account : "";
   const leave = () => {
     setText("");
+    stopAsking();
     setFolded(true);
     input.current?.blur();
     if (home) go({ source: home, opened: null });
@@ -96,7 +102,7 @@ export function TopBar({ source, readOnly }: { source: ListSource | null; readOn
           ref={input}
           className="search"
           id="search"
-          placeholder="Search — is:unread, from:amazon"
+          placeholder="Ask a question (start with ?) or search — is:unread, from:amazon"
           aria-label="Search"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -104,16 +110,24 @@ export function TopBar({ source, readOnly }: { source: ListSource | null; readOn
             if (e.key === "Escape") leave();
             else if (e.key === "Enter") {
               const q = text.trim();
-              if (q) go({ source: { kind: "search", q, account }, opened: null });
-              else leave();
+              const words = q.slice(1).trim();
+              if (q.startsWith("?") && words) void ask(words);
+              else if (q.startsWith("!")) {
+                stopAsking();
+                if (words) void runDo(words, (filter) => go({ source: { kind: "search", q: filter, account }, opened: null }));
+                else doing.set({ state: "intro" });
+              } else if (q && !q.startsWith("?")) {
+                stopAsking();
+                go({ source: { kind: "search", q, account }, opened: null });
+              } else leave();
             }
           }}
         />
         <button className="tbtn search-x" onMouseDown={(e) => e.preventDefault()} onClick={leave}>Cancel</button>
         <button
           className="tbtn icon search-tog"
-          title="Search (/)"
-          aria-label="Search"
+          title="Search or ask your inbox (/)"
+          aria-label="Search or ask your inbox"
           onClick={() => setFolded(false)}
         >
           <Icon name="search" />
