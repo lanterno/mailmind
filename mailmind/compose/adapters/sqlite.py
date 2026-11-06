@@ -23,11 +23,11 @@ def outbox_insert(c, row):
         cur = c.execute(
             """INSERT INTO outbox(account,idempotency_key,message_id,in_reply_to_pk,
                  orig_account,orig_message_id,orig_thread_id,
-                 envelope,recipients,subject,raw,state,next_attempt_at,draft_id,created_at)
+                 envelope,recipients,subject,raw,state,next_attempt_at,wait_kind,draft_id,created_at)
                VALUES(:account,:idempotency_key,:message_id,:in_reply_to_pk,
                  :orig_account,:orig_message_id,:orig_thread_id,
-                 :envelope,:recipients,:subject,:raw,'queued',:next_attempt_at,:draft_id,:created_at)
-               RETURNING id""", {"orig_account": None, "orig_message_id": None, "orig_thread_id": None, **row})
+                 :envelope,:recipients,:subject,:raw,'queued',:next_attempt_at,:wait_kind,:draft_id,:created_at)
+               RETURNING id""", {"orig_account": None, "orig_message_id": None, "orig_thread_id": None, "wait_kind": "grace", **row})
         return cur.fetchone()["id"], True
     except sqlite3.IntegrityError:   # someone inserted the same key between our SELECT and INSERT
         r = c.execute("SELECT id FROM outbox WHERE idempotency_key=?",
@@ -37,6 +37,8 @@ def outbox_insert(c, row):
 
 def outbox_set(c, oid, **flags):
     cols = {k: int(v) for k, v in flags.items() if k in ("wire_begun", "sent_appended", "answered_set", "draft_deleted", "followup_recorded")}
+    if "wait_kind" in flags:
+        cols["wait_kind"] = flags["wait_kind"]
     if not cols:
         return
     sets = ", ".join(f"{k}=?" for k in cols)
@@ -44,8 +46,8 @@ def outbox_set(c, oid, **flags):
 
 
 def outbox_send_now(c, oid, now_ts):
-    """Bring a scheduled (queued, future next_attempt_at) send forward to now."""
-    cur = c.execute("UPDATE outbox SET next_attempt_at=? WHERE id=? AND state='queued'",
+    """Bring a queued send with a time to wait forward to now."""
+    cur = c.execute("UPDATE outbox SET next_attempt_at=?, wait_kind='grace' WHERE id=? AND state='queued'",
                     (int(now_ts), oid))
     return cur.rowcount == 1
 
@@ -59,8 +61,12 @@ def outbox_holds_draft(c, did):
 def outbox_list(c, limit=50):
     return c.execute(
         """SELECT id,account,subject,recipients,state,attempts,last_error,created_at,sent_at,next_attempt_at,
-                  delivered,wire_begun
+                  delivered,wire_begun,sent_appended,wait_kind
            FROM outbox ORDER BY id DESC LIMIT ?""", (limit,)).fetchall()
+
+
+def outbox_get(c, oid):
+    return c.execute("SELECT * FROM outbox WHERE id=?", (oid,)).fetchone()
 
 
 # ------------------------------------------------------------------- drafts

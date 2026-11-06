@@ -75,7 +75,7 @@ class Outbox:
         def again(c):
             ok = self.QUEUE.requeue(c, oid)
             if ok:
-                self._book.outbox_set(c, oid, wire_begun=0)
+                self._book.outbox_set(c, oid, wire_begun=0, wait_kind="grace")
             return ok
         ok = self._commit(again)
         if ok:
@@ -88,7 +88,7 @@ class Outbox:
             rows = self._book.outbox_list(c, limit)
         finally:
             c.close()
-        out = [outbox_item.listed(r, _now() + self.SEND_DELAY) for r in rows]
+        out = [outbox_item.listed(r) for r in rows]
         return {"ok": True, "items": out}
 
     def send_now(self, oid):
@@ -222,7 +222,7 @@ class Outbox:
                 err, permanent = self._transport.sanitize_error(e), self._transport.permanent(e)
 
                 def failed(c):                     # the server answered, or it never had the whole message
-                    self._book.outbox_set(c, oid, wire_begun=0)
+                    self._book.outbox_set(c, oid, wire_begun=0, wait_kind="backoff")
                     if permanent:                  # a 5xx: the same answer again, so no retry
                         self.QUEUE.give_up(c, row, err)
                         return True, 0

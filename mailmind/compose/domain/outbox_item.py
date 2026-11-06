@@ -25,13 +25,13 @@ def new_row(built, meta, orig, due, created_at):
         "raw": built["raw"],
         "draft_id": meta.get("draft_id"),
         "next_attempt_at": max(due, int(meta.get("send_after") or 0)),
+        "wait_kind": "scheduled" if int(meta.get("send_after") or 0) > due else "grace",
         "created_at": created_at,
     }
 
 
-def listed(r, grace_ends):
-    """A row as the outbox lists it. `grace_ends` is when a send made now would go, so a row due clearly
-    later is a scheduled one."""
+def listed(r):
+    """A row as the outbox lists it."""
     rcpt = {}
     try:
         rcpt = json.loads(r["recipients"]) or {}
@@ -41,12 +41,12 @@ def listed(r, grace_ends):
     state, error = r["state"], r["last_error"]
     if r["delivered"] and state != "sent":           # went out; only its Sent copy is owed
         state, error = ("error", SENT_COPY_FAILED) if state == "error" else ("sent", SENT_COPY_PENDING)
-    scheduled = state == "queued" and na > grace_ends + 5   # clearly future, not just the grace window
+    waiting = r["wait_kind"] if state == "queued" else None
     return {
         "id": r["id"], "account": r["account"], "subject": r["subject"] or "(no subject)",
         "to": rcpt.get("to", []), "cc": rcpt.get("cc", []), "bcc_count": len(rcpt.get("bcc", [])),
         "state": state, "attempts": r["attempts"], "error": error,
         "unsure": bool(state == "error" and r["wire_begun"] and not r["delivered"]),
         "created_at": r["created_at"], "sent_at": r["sent_at"],
-        "next_attempt_at": na, "scheduled": scheduled,
+        "next_attempt_at": na, "scheduled": waiting == "scheduled", "retrying": waiting == "backoff",
     }
