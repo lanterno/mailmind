@@ -189,7 +189,7 @@ mailmind.config.json → config.py/accounts.py → ingest.py → curation's clas
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
-(send), `mailmind.discovery` (FTS + operator grammar), `threads.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
+(send), `mailmind.discovery` (FTS + operator grammar), `threads.py`, `mailmind.calendar` (invites), `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 `discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
@@ -366,6 +366,14 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `curation.sweeps.sweep(acct)`). Filing still goes through the server's own functions, which `curation.attach` names,
   since the server may run as `__main__`, and a message's rows through `store`, until the Mailbox holds them. A sweep's
   `move_verified` is `mailbox.application.filing`. It is standard library only.
+- `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `agenda`
+  (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
+  REPLY and its idempotency key); `adapters` holds `ics_reader` (the hand-rolled reader of an invite's text, `parse` and
+  `next_occurrence`, what the proposal's `IcsReader` port names) and `sqlite` (reads stored bodies and the outbox's keys, and
+  writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
+  binds them, and it's how the legacy modules reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
+  RSVP still goes through `compose` and `outbox`, a message through `store` and `ingest`, until those contexts hold them.
+  It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the

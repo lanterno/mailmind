@@ -52,17 +52,17 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
   into a calendar entry or a dated task. Two distinct halves, and the seam matters:
-  - *The .ics half is cheap.* `ics.py` already has `_fold`, `_ics_esc`, `_ics_dt` and emits
+  - *The .ics half is cheap.* `calendar.domain.rsvp` already has `_fold`, `_ics_esc`, `_ics_dt` and emits
     `BEGIN:VEVENT` inside `build_reply` — what is missing is a `METHOD:PUBLISH` emitter for a **new**
     event, and a date parser over prose. The only "Add to calendar" affordance today just downloads
     an .ics that already arrived as an attachment.
   - *The durable-task half needs a new table*, and per the original design constraint it must key on
     `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
   The AI `action` string in the Commitments panel is read-only and parses no dates.
-- **Today & next's remaining blind spots** · low value · effort S — `ics.next_occurrence` reads
+- **Today & next's remaining blind spots** · low value · effort S — `ics_reader.next_occurrence` reads
   DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY and BYMONTHDAY; any other part
   (BYSETPOS, BYMONTH, BYWEEKNO, BYHOUR, HOURLY) makes `_occurrences` return None and
-  `server.upcoming` shows only the series' first date. Ingest keeps an invite's body only for the
+  `Agenda.upcoming` shows only the series' first date. Ingest keeps an invite's body only for the
   Inbox (`ingest._process` with `with_body`), so an invite filed elsewhere by a server rule is
   listed once opened. Bodies stored before `mime.parse` recorded inline-only calendar parts
   keep attachment rows without one; a one-off re-parse of stored bodies containing
@@ -84,7 +84,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
     `archived_at` column exists. Add it as a new migration in `mailmind/platform/db/migrations`,
     stamp it in the `/api/archive` handler, and **clear it on the undo path** — otherwise the
     column lies after every undo.
-  - **Meetings and deadlines in the retrospective** · medium value · effort M — feed `_invite_for()`'s
+  - **Meetings and deadlines in the retrospective** · medium value · effort M — feed `Invites.of()`'s
     parsed VEVENTs into `summarize_review.py`, which has zero calendar/ics references today.
   - **Scheduled delivery of the review** · needs a decision first, not a sub-bullet — it would be the
     first time the server sends mail with no human in the loop.
