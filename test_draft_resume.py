@@ -36,6 +36,7 @@ from mailmind.content import mime
 import outbox
 import server
 from mailmind.content.headers import addr_chip
+from mailmind.content.quote import own_html, quote_tail
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -196,21 +197,21 @@ def _round_trip(text, html=None, attachments=()):
 def test_own_html_is_where_reply_and_forward_html_start():
     for fn in (compose.reply_bodies, compose.forward_bodies):
         _, html = fn('a & <b> "q"\nline', ORIG)
-        assert html.startswith(compose.own_html('a & <b> "q"\nline')), (fn.__name__, html[:80])
-    assert compose.own_html("a\nb") == "<div>a<br>b</div><br>"
+        assert html.startswith(own_html('a & <b> "q"\nline')), (fn.__name__, html[:80])
+    assert own_html("a\nb") == "<div>a<br>b</div><br>"
 
 
 def test_quote_tail_of_fresh_reply_and_forward():
     text, html = compose.reply_bodies(OWN, ORIG)
-    tail, tail_h = compose.quote_tail(OWN, text, html)
+    tail, tail_h = quote_tail(OWN, text, html)
     assert text == OWN + tail and tail.startswith("\n\nOn Mon, 2 Feb 2026"), tail
-    assert html == compose.own_html(OWN) + tail_h and "<blockquote" in tail_h, tail_h
+    assert html == own_html(OWN) + tail_h and "<blockquote" in tail_h, tail_h
     text, html = compose.forward_bodies(OWN, ORIG)
-    tail, tail_h = compose.quote_tail(OWN, text, html)
+    tail, tail_h = quote_tail(OWN, text, html)
     assert tail.startswith("\n\n---------- Forwarded message ----------"), tail
     assert tail_h.startswith("<div>---------- Forwarded message"), tail_h
-    assert compose.quote_tail(OWN, OWN, None) == (None, None)
-    assert compose.quote_tail("other", "text", "<p>x</p>") == (None, None)
+    assert quote_tail(OWN, OWN, None) == (None, None)
+    assert quote_tail("other", "text", "<p>x</p>") == (None, None)
 
 
 def test_recorded_tail_survives_a_real_round_trip():
@@ -222,7 +223,7 @@ def test_recorded_tail_survives_a_real_round_trip():
         for own in ("", "\n\n\n", OWN, 'a & <b> "q"'):
             for fn in (compose.reply_bodies, compose.forward_bodies):
                 text, html = fn(own, o)
-                tail, _ = compose.quote_tail(own, text, html)
+                tail, _ = quote_tail(own, text, html)
                 p = _round_trip(text, html)
                 got = compose.resume_split(p["text"], {"own_text": own, "tail_text": tail}, False)
                 if got != (own, tail, "tail"):
@@ -232,7 +233,7 @@ def test_recorded_tail_survives_a_real_round_trip():
 
 def test_resave_three_times_is_stable():
     text, html = compose.reply_bodies(OWN, ORIG)
-    tail, _ = compose.quote_tail(OWN, text, html)
+    tail, _ = quote_tail(OWN, text, html)
     own = OWN
     for _ in range(3):
         p = _round_trip(own + tail)
@@ -251,7 +252,7 @@ def test_exact_uses_the_recorded_text_even_without_a_text_part():
 
 def test_changed_quote_falls_back_to_whole():
     text, html = compose.reply_bodies(OWN, ORIG)
-    tail, _ = compose.quote_tail(OWN, text, html)
+    tail, _ = quote_tail(OWN, text, html)
     edited = text.replace("> Shall we", "> Shall we not")
     own, t, how = compose.resume_split(_round_trip(edited)["text"], {"own_text": OWN, "tail_text": tail}, False)
     assert (t, how) == ("", "whole") and own == edited.rstrip("\n"), (own, how)
@@ -259,7 +260,7 @@ def test_changed_quote_falls_back_to_whole():
 
 def test_pasted_quote_cuts_only_the_last_copy():
     text, html = compose.reply_bodies(OWN, ORIG)
-    tail, _ = compose.quote_tail(OWN, text, html)
+    tail, _ = quote_tail(OWN, text, html)
     mine = "Pasted on purpose:" + tail.rstrip("\n") + "\nand more"
     own, t, how = compose.resume_split(mine + tail, {"own_text": "", "tail_text": tail}, False)
     assert (own, t, how) == (mine, tail, "tail"), (own, how)
@@ -977,7 +978,7 @@ def test_resumed_reply_sends_one_quote():
     m, meta, built = _sent()
     text, html = _parts(m)
     assert text.count("wrote:") == 1 and text.startswith(OWN + "\n\nOn Mon, 02 Feb 2026"), text
-    assert html.count("<blockquote") == 1 and html.startswith(compose.own_html(OWN)), html
+    assert html.count("<blockquote") == 1 and html.startswith(own_html(OWN)), html
     assert str(m["In-Reply-To"]) == "<orig1@example.test>", m["In-Reply-To"]
     assert str(m["References"]) == "<root@example.test> <orig1@example.test>", m["References"]
     assert m["Bcc"] is None and "dee@example.test" in built["envelope"], built["envelope"]
