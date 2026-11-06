@@ -5,6 +5,9 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap.curation import safe_http
+from mailmind.curation.application import unsubscribe
+from mailmind.curation.domain.unsubscribe import parse_list_unsub
+from mailmind.bootstrap import curation
 
 NEWS = "ada-inbox-03-newsletter.eml"
 LOOM = "news@loom.example.test"
@@ -13,10 +16,9 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 @pytest.fixture
 def posts(monkeypatch):
-    import server
     sent = []
     monkeypatch.setattr(safe_http, "one_click_post", lambda url, _redirects=1: (sent.append(url), (True, 200, None))[1])
-    monkeypatch.setattr(server, "_unsub_rate_gate", lambda: None)
+    monkeypatch.setattr(unsubscribe, "rate_gate", lambda: None)
     return sent
 
 
@@ -75,8 +77,7 @@ def test_a_header_folded_across_lines_is_read_whole(world):
 
 def test_a_url_folded_in_the_middle_comes_back_whole():
     # RFC 2369 says whitespace within one is ignored; a space or a line break left in it can't be requested.
-    import server
-    r = server._parse_list_unsub(b"List-Unsubscribe: <https://list.example.test/u?t=abc\r\n def>,\r\n"
+    r = parse_list_unsub(b"List-Unsubscribe: <https://list.example.test/u?t=abc\r\n def>,\r\n"
                                  b" <mailto:out@list.example.test?subject=\r\n stop>\r\n\r\nHello.\r\n")
     assert (r["https_uri"], r["mailto_to"], r["mailto_subject"]) == (
         "https://list.example.test/u?t=abcdef", "out@list.example.test", "stop")
@@ -126,10 +127,9 @@ def test_with_the_server_away_a_preview_still_answers_and_nothing_is_cached(app,
 
 
 def test_a_busy_gate_is_waited_for_only_so_long(app, world, monkeypatch):
-    import server
     from gate import held_elsewhere
     forget_headers(world)
-    monkeypatch.setattr(server, "UNSUB_READ_WAIT", 0.05)
+    monkeypatch.setattr(curation, "UNSUB_READ_WAIT", 0.05)
     with held_elsewhere(w.ADA):
         assert method(app) == "none"
     assert row(world)["list_unsub_method"] is None
@@ -168,7 +168,7 @@ def test_a_list_that_stops_offering_a_way_is_taken_at_its_word(app, world):
     import store
     assert method(app) == "one-click"
     c = store.conn()
-    assert store.sender_unsub_get(c, LOOM) is not None
+    assert curation.sqlite.sender_unsub_get(c, LOOM) is not None
     c.close()
     newer = w.variant(LUNCH, Message_ID="<issue-220@loom.example.test>", Date="Mon, 02 Nov 2026 11:00:00 +0000",
                       From=f"News <{LOOM}>")
@@ -176,7 +176,7 @@ def test_a_list_that_stops_offering_a_way_is_taken_at_its_word(app, world):
     ingest.sync_new(accounts.get(w.ADA))
     assert method(app) == "none"
     c = store.conn()
-    assert store.sender_unsub_get(c, LOOM) is None
+    assert curation.sqlite.sender_unsub_get(c, LOOM) is None
     c.close()
 
 

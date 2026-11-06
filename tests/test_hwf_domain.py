@@ -20,6 +20,7 @@ import pytest
 from fixtures import world as w
 from mailmind.content.text import body_text_of, html_to_snippet_text, snippet_of, text_body
 from mailmind.curation.domain import rulebook
+from mailmind.bootstrap import curation
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -624,25 +625,21 @@ def rules_file(data_dir):
 
 @pytest.mark.parametrize("addr,subject,listed,bucket,conf", PRECEDENCE, ids=[f"{a} {s}" for a, s, *_ in PRECEDENCE])
 def test_hwf_classifier_precedence(rules_file, addr, subject, listed, bucket, conf):
-    from mailmind.bootstrap import curation
     assert curation.classify(addr, subject, "", listed)[:2] == (bucket, conf)
 
 
 @pytest.mark.parametrize("addr", ["lin@msg.example.test", "ivo@nsg.example.test", "lin@studio.sg"])
 def test_hwf_a_domain_merely_containing_an_esp_marker_is_not_bulk(data_dir, addr):
-    from mailmind.bootstrap import curation
     assert curation.classify(addr, "Lunch on Thursday?", "", False)[0] != "newsletters/marketing"
 
 
 @pytest.mark.parametrize("addr", ["deals@sg.example.test", "deals@em.sg.example.test"])
 def test_hwf_the_short_esp_marker_still_counts_as_a_whole_label(data_dir, addr):
-    from mailmind.bootstrap import curation
     assert curation.classify(addr, "Lunch on Thursday?", "", False)[:3] == (
         "newsletters/marketing", "high", "bulk email-service-provider domain")
 
 
 def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
-    from mailmind.bootstrap import curation
     from mailmind.bootstrap.curation import rules
 
     def write(data, stamp):
@@ -696,20 +693,18 @@ def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
 
 def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):
     from mailmind.bootstrap.curation import rules
-    import server
     rules.add("example.test", "keep")
-    assert [i["from_addr"] for i in server.do_screener(w.ADA)["items"]] == []
+    assert [i["from_addr"] for i in curation.screener.queue(w.ADA)["items"]] == []
 
 
 def test_hwf_cleanup_skips_senders_a_parent_domain_rule_decided(world):
     from mailmind.bootstrap.curation import rules
-    import server
     for n in range(4):                                       # enough unread issues to rank as noise
         world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
                                                 Date=f"Sun, 0{n + 1} Nov 2026 07:00:00 +0000"))
-    assert "news@loom.example.test" in [s["from_addr"] for s in server.cleanup_senders({})["senders"]]
+    assert "news@loom.example.test" in [s["from_addr"] for s in curation.cleanup.senders({})["senders"]]
     rules.add("example.test", "block")                       # every sender in the world is under it
-    assert server.cleanup_senders({})["senders"] == []
+    assert curation.cleanup.senders({})["senders"] == []
 
 
 # -- saved views and the rules file on disk -----------------------------------
@@ -735,7 +730,6 @@ def test_hwf_saved_views_are_written_owner_only_and_without_builtins(data_dir):
 
 
 def test_hwf_a_bad_edit_of_the_rules_keeps_the_rules_last_read(data_dir, capsys):
-    from mailmind.bootstrap import curation
     from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "keep")
     assert curation.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"

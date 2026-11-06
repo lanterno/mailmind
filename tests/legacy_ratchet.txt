@@ -13,6 +13,11 @@ mailmind.bootstrap.cli manage
 mailmind.bootstrap.cli store
 mailmind.bootstrap.cli summarize
 mailmind.bootstrap.cli views
+mailmind.bootstrap.curation accounts
+mailmind.bootstrap.curation ingest
+mailmind.bootstrap.curation mailops
+mailmind.bootstrap.curation smtpsend
+mailmind.bootstrap.curation store
 mailmind.bootstrap.legacy outbox
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime

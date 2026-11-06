@@ -30,6 +30,7 @@ import mailops
 import readmutq
 import server
 import smtpsend
+from mailmind.bootstrap import curation
 store.init()
 
 
@@ -593,12 +594,12 @@ def test_cleanup_and_block_trash_mail_under_the_imap_lock():
     for _ in range(2):
         _message(sender="promo@example.test")
     with _trash_probe() as held:
-        res, code = server.cleanup_execute({"from_addr": "promo@example.test"})
+        res, code = curation.cleanup.execute({"from_addr": "promo@example.test"})
     assert code == 200 and res["swept"] == 2, (code, res)
     assert held == [True, True], held
     pk = _message(sender="spam@example.test")
     with _trash_probe() as held:
-        res = server.H._rules_post(None, {"token": "spam@example.test", "verdict": "block", "pk": pk})
+        res = curation.screener.rule({"token": "spam@example.test", "verdict": "block", "pk": pk})
     assert res["trashed"] is True, res
     assert held == [True], held
     assert not gates.held()
@@ -683,7 +684,7 @@ def test_two_cleanups_of_one_sender_undo_separately():
     for _ in range(2):
         _message(sender="weekly@example.test")
         with _trash_probe():
-            res, _ = server.cleanup_execute({"from_addr": "weekly@example.test"})
+            res, _ = curation.cleanup.execute({"from_addr": "weekly@example.test"})
         groups.append(res["undo_group"])
     assert groups[0] != groups[1], groups
 

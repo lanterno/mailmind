@@ -21,6 +21,7 @@ import pytest
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap import curation
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 LUNCH_MID = "<lunch-3@lin.example.test>"
@@ -719,7 +720,7 @@ def test_the_review_counts_only_this_accounts_cleanups(app, world, ai):
     import store
     c = store.conn()
     try:
-        store.unsub_log_put(c, "news@loom.example.test", "post", "ok", 200,
+        curation.sqlite.unsub_log_put(c, "news@loom.example.test", "post", "ok", 200,
                             datetime.now(timezone.utc).isoformat(), "unsub-loom-1", [w.ADA])
         c.commit()
     finally:
