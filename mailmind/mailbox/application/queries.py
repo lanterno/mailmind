@@ -1,6 +1,9 @@
 """What the page lists: a folder, a conversation, and the views that aren't folders (Snoozed, Muted, Waiting, Reply Later).
 Each read is of the database alone, but that a folder opening may start its sync."""
+from typing import Any
+
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Attention, StoredMail
@@ -9,7 +12,7 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
                "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
 
 
-def _attention(r):
+def _attention(r: Row) -> dict[str, bool]:
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
     return verdict.answers(r["importance"], r["category"], r["action"])
 
@@ -20,7 +23,7 @@ class Queries:
         self._attention = attention
         self._folders = folders
 
-    def snoozed_in(self, account, offset, limit):
+    def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
         c = self._store.conn()
         rows = c.execute(
@@ -47,7 +50,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def muted_in(self, account, offset, limit):
+    def muted_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Muted' virtual view: one row per muted thread (its latest message), so the user
         can find + unmute. Pure-local read (no IMAP)."""
         c = self._store.conn()
@@ -68,14 +71,14 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def waiting_in(self, account, offset, limit):
+    def waiting_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
         c = self._store.conn()
         all_rows = self._attention.list_waiting(c, account)
         c.close()
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
-        items = []
+        items: list[dict[str, Any]] = []
         for r in rows:
             if r["f_kind"] == "sent":
                 label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
@@ -96,7 +99,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def replylater_in(self, account, offset, limit):
+    def replylater_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
         c = self._store.conn()
         all_rows = self._attention.list_replylater(c, account)
@@ -117,7 +120,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def messages_in(self, account, folder, offset, limit, group=False):
+    def messages_in(self, account: str, folder: str, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
         if folder == "__snoozed__":
             return self.snoozed_in(account, offset, limit)
         if folder == "__muted__":
@@ -126,7 +129,7 @@ class Queries:
             return self.waiting_in(account, offset, limit)
         if folder == "__replylater__":
             return self.replylater_in(account, offset, limit)
-        scan = self._folders.on_open(account, folder) if offset == 0 else {}
+        scan: dict[str, bool] = self._folders.on_open(account, folder) if offset == 0 else {}
         c = self._store.conn()
         if group:
             # collapse to conversations: one row per thread (the latest message) + rollups
@@ -162,9 +165,9 @@ class Queries:
                               + _MUTED_EXCL.format(t="messages"),
                               (account, folder)).fetchone()[0]
         c.close()
-        items = []
+        items: list[dict[str, Any]] = []
         for r in rows:
-            it = {
+            it: dict[str, Any] = {
                 "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
                 "from_addr": r["from_addr"],
                 "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
@@ -182,7 +185,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
 
 
-    def thread_json(self, account, thread_id):
+    def thread_json(self, account: str, thread_id: str) -> dict[str, Any]:
         """All messages in a conversation within an account, oldest->newest, de-duped by
         Message-ID (so a Gmail INBOX+All-Mail copy shows once)."""
         if not account or not thread_id:
@@ -195,7 +198,8 @@ class Queries:
                ORDER BY ts ASC, pk ASC""",
             (account, thread_id)).fetchall()
         c.close()
-        items, seen_ids = [], set()
+        items: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
         for r in rows:
             key = (r["message_id"] or "").strip() or f"pk:{r['pk']}"
             if key in seen_ids:

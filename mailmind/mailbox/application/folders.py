@@ -7,10 +7,12 @@ the counts from the database stay fresh."""
 import re
 import threading
 import time
+from collections.abc import Iterable
+from typing import Any, TypedDict
 
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
-from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
+from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.mailbox.domain import sync_errors
@@ -18,7 +20,19 @@ from mailmind.platform import sse
 from mailmind.platform.workers import gates
 
 
-def _rail_order(folders):
+class RailFolder(TypedDict):
+    name: str
+    role: str
+    unseen: int
+    total: int
+
+
+class _Listed(TypedDict):
+    folders: list[RailFolder]
+    ts: float
+
+
+def _rail_order(folders: Iterable[RailFolder]) -> list[RailFolder]:
     order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
     return sorted(folders, key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
 
@@ -35,14 +49,14 @@ class Folders:
         self._pool = pool
         self._ingest = ingest
         self._attention = attention
-        self._folder_list_cache = {}     # account -> {"folders": [...], "ts": epoch}
+        self._folder_list_cache: dict[str, _Listed] = {}
         self._folder_list_lock = threading.Lock()
-        self._folder_syncs = {}          # (account, folder) -> threading.Event, set when that folder's sync ends
-        self._first_sync_failed = {}     # (account, folder) -> the error kind of its last first scan, while it failed
-        self._caught_up = {}             # (account, folder) -> time.monotonic() its last sync on open started
+        self._folder_syncs: dict[tuple[str, str], threading.Event] = {}    # set when that folder's sync ends
+        self._first_sync_failed: dict[tuple[str, str], str] = {}           # the error kind of its last first scan, while it failed
+        self._caught_up: dict[tuple[str, str], float] = {}                 # time.monotonic() its last sync on open started
         self._folder_syncs_lock = threading.Lock()
 
-    def plays_drafts(self, account, folder):
+    def plays_drafts(self, account: str, folder: str) -> bool:
         """Whether `folder` is this account's Drafts: what the last LIST said (its SPECIAL-USE attribute
         first, and one folder a role), else what its name says on its own. Part of a name never counts:
         "Contract drafts" holds whatever was filed there."""
@@ -53,7 +67,7 @@ class Folders:
         return folder_roles.names_drafts(folder)
 
 
-    def role(self, account, folder):
+    def role(self, account: str, folder: str) -> str:
         """The part `folder` plays on this account: what the last LIST said, else what its name says."""
         with self._folder_list_lock:
             hit = self._folder_list_cache.get(account)
@@ -65,10 +79,10 @@ class Folders:
 
 
 
-    def _live_folder_list(self, acct):
+    def _live_folder_list(self, acct: Account) -> list[RailFolder]:
         """The expensive part: live IMAP LIST + per-folder UNSEEN/MESSAGES status,
         over a POOLED connection (reused — no per-call login/logout churn)."""
-        out = []
+        out: list[RailFolder] = []
         with self._pool.borrow(acct) as s:
             folders = [f for f in s.folders() if f.selectable]
             playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}   # one folder a role
@@ -82,7 +96,7 @@ class Folders:
         return _rail_order(out)
 
 
-    def _stored_folder_list(self, account):
+    def _stored_folder_list(self, account: str) -> list[RailFolder]:
         """The folders MailMind holds this account's mail in, from the database alone: what the rail
         shows when the server can't be reached and no live list is cached (Bridge down, its
         certificate changed). Roles by name, the shallower folder first; counts as stored."""
@@ -103,7 +117,7 @@ class Folders:
                              "total": counts[n][1] or 0} for n in names])
 
 
-    def _folders_list_cached(self, account, acct):
+    def _folders_list_cached(self, account: str, acct: Account) -> list[RailFolder]:
         """Folder list from the TTL cache, refreshed via live IMAP when stale. On a
         live-refresh failure, serve the last cached list (even if expired) so a
         transient IMAP hiccup doesn't 500 the rail."""
@@ -112,7 +126,7 @@ class Folders:
         if hit and (time.time() - hit["ts"]) < self._FOLDER_LIST_TTL:
             return hit["folders"]
 
-        def refresh():
+        def refresh() -> list[RailFolder]:
             # double-check under the IMAP gate: a concurrent caller may have refreshed
             # while we waited, so a cold burst does ONE live fetch, not N.
             with self._folder_list_lock:
@@ -135,7 +149,7 @@ class Folders:
             raise
 
 
-    def invalidate(self, account=None):
+    def invalidate(self, account: str | None = None) -> None:
         """Drop the folder-list cache so the next load re-pulls live counts (called
         after a sync ingests new mail, so unread badges don't lag the TTL)."""
         with self._folder_list_lock:
@@ -145,7 +159,7 @@ class Folders:
                 self._folder_list_cache.pop(account, None)
 
 
-    def of_account(self, account):
+    def of_account(self, account: str) -> dict[str, Any]:
         """Folder list with roles + unread counts for one account. The live-IMAP part
         is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh."""
         acct = self._accounts.get(account)
@@ -162,7 +176,7 @@ class Folders:
                 "muted": muted, "waiting": waiting, "replylater": replylater}
 
 
-    def _folder_sync(self, account, folder, full):
+    def _folder_sync(self, account: str, folder: str, full: bool) -> threading.Event:
         """Sync a folder as it is opened, as a job on the account's gate, unless a sync of it is
         running already: its first scan (full) or a catch-up (what came above the watermark, and the
         newest flags again), since only INBOX is synced in the background. Return the Event set when
@@ -176,7 +190,7 @@ class Folders:
             done = self._folder_syncs[key] = threading.Event()
             self._caught_up[key] = time.monotonic()
 
-        def run():
+        def run() -> None:
             ok, new = False, 0
             try:
                 kept, junk, _ = gates.run(
@@ -199,7 +213,7 @@ class Folders:
         return done
 
 
-    def _catch_up_due(self, account, folder):
+    def _catch_up_due(self, account: str, folder: str) -> bool:
         """Whether opening a folder read before should catch it up: not INBOX, which the background
         sync keeps, and not again within self.CATCH_UP_EVERY seconds, unless MailMind put mail in it since.
         An open while one runs waits for it too, or it would answer with what that one is about to
@@ -213,19 +227,19 @@ class Folders:
         return last is None or time.monotonic() - last >= self.CATCH_UP_EVERY
 
 
-    def touched(self, account, folder):
+    def touched(self, account: str, folder: str) -> None:
         """MailMind put mail in `folder` (a draft saved there): its next open catches it up at once."""
         with self._folder_syncs_lock:
             self._caught_up.pop((account, folder), None)
 
 
-    def list_changed(self, account, folder):
+    def list_changed(self, account: str, folder: str) -> None:
         """A copy left `folder` and its row went with it: a list of that folder on screen loads again,
         and through its catch-up shows the copy that replaced it."""
         sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
-    def on_open(self, account, folder):
+    def on_open(self, account: str, folder: str) -> dict[str, bool]:
         """A folder opens: its first scan, or a catch-up if one is due, waited for a moment. Returns how the
         sync went, for the list's answer."""
         if not self._ingest.folder_synced(account, folder):

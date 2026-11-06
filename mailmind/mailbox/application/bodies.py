@@ -1,6 +1,7 @@
 """A message opened: its body from the server if it isn't stored, sanitized for the reader's sandboxed frame."""
 import base64
 import re
+from typing import Any
 
 from mailmind.content import mime, sanitize
 from mailmind.mailbox.application.ports import Reader, StoredMail
@@ -18,7 +19,7 @@ class Bodies:
         self._ingest = ingest
         self._reader = reader
 
-    def _resolve_cids(self, pk, safe_html):
+    def _resolve_cids(self, pk: int, safe_html: str) -> str:
         """Rewrite src="cid:<id>" -> a data: URI for embedded RASTER images only, so the
         sandboxed iframe (CSP img-src allows data:) renders logos without any network.
         Active types (svg/html) are never embedded; oversized sets are left as cid (broken)."""
@@ -30,7 +31,7 @@ class Bodies:
             return safe_html
         used = [0]
 
-        def sub(m):
+        def sub(m: re.Match[str]) -> str:
             cid = m.group(2).strip().strip("<>")
             ent = parts.get(cid)
             if not ent:
@@ -44,7 +45,7 @@ class Bodies:
         return _CID_IMG.sub(sub, safe_html)
 
 
-    def message_body(self, pk, load_images, prefetch=False):
+    def message_body(self, pk: int, load_images: bool, prefetch: bool = False) -> dict[str, Any]:
         c = self._store.conn()
         row = self._store.get_message(c, pk)
         c.close()
@@ -88,7 +89,7 @@ class Bodies:
             **self._reader.draft_info(row),
         }
 
-    def attachment(self, pk, part_id):
+    def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""
         c = self._store.conn()
         row = self._store.get_message(c, pk)

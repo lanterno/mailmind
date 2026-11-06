@@ -11,8 +11,11 @@ reconcile(), and a worker that finds its account changed under it leaves on its 
 Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread clean exit.
 """
 import threading
+from collections.abc import Callable, Mapping
+from typing import Any
 
-from mailmind.mailbox.application.ports import Accounts
+from mailmind.mailbox.application.ports import Account, Accounts, OpenSession
+from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.platform import bus
 
@@ -23,18 +26,18 @@ _ENDPOINT = ("kind", "host", "port", "starttls", "credential", "strip_spaces",  
 class _Watch:
     """One account's worker: the account as configured when it started, and what stops it."""
 
-    def __init__(self, acct, stopping):
+    def __init__(self, acct: Account, stopping: Callable[[], bool]):
         self.acct = acct
         self._stopping = stopping
         self.quit = False               # retired: its account is gone or now reached another way
-        self.conn = None                # its connection, while it has one
+        self.conn: MailSession | None = None    # its connection, while it has one
         self.thread: threading.Thread | None = None
 
-    def leaving(self):
+    def leaving(self) -> bool:
         return self.quit or self._stopping()
 
 
-def _same_endpoint(a, b):
+def _same_endpoint(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     return all(a.get(k) == b.get(k) for k in _ENDPOINT)
 
 
@@ -43,29 +46,29 @@ class Realtime:
     MAX_IDLE_ACCOUNTS = 12
     _DEBOUNCE = 3                   # coalesce a burst of IDLE signals into one sync
 
-    def __init__(self, accounts: Accounts, open_session):
+    def __init__(self, accounts: Accounts, open_session: OpenSession):
         self._accounts = accounts
         self._open_session = open_session
         self._stop = threading.Event()
-        self._conns = []                     # worker IMAP sessions, for force-close on stop()
+        self._conns: list[MailSession] = []  # worker IMAP sessions, for force-close on stop()
         self._wake = threading.Condition()   # a worker backing off waits here; stop() and a retirement wake it
-        self._watchers = {}                  # email -> _Watch: the workers start() and reconcile() run
+        self._watchers: dict[str, _Watch] = {}    # email -> _Watch: the workers start() and reconcile() run
         self._watch_lock = threading.Lock()
         self._running = False                # start() has run, and stop() hasn't
-        self._dirty = set()
+        self._dirty: set[str] = set()
         self._dirty_lock = threading.Lock()
         self._kick = threading.Event()
 
-    def _stopping(self):
+    def _stopping(self) -> bool:
         return self._stop.is_set()
 
-    def _trigger_sync(self, email):
+    def _trigger_sync(self, email: str) -> None:
         with self._dirty_lock:
             self._dirty.add(email)
         self._kick.set()
 
 
-    def _dispatch_loop(self):
+    def _dispatch_loop(self) -> None:
         while not self._stop.is_set():
             self._kick.wait(timeout=self._DEBOUNCE)
             if self._stop.is_set():
@@ -78,7 +81,7 @@ class Realtime:
                 bus.publish(InboxChanged(frozenset(todo)))
 
 
-    def _wanted(self, acct):
+    def _wanted(self, acct: Account) -> bool:
         """Is this account still configured, enabled and reached the same way? A configuration that
         can't be read keeps the worker watching."""
         try:
@@ -89,12 +92,12 @@ class Realtime:
             return True
 
 
-    def _rest(self, watch, seconds):
+    def _rest(self, watch: _Watch, seconds: float) -> None:
         with self._wake:
             self._wake.wait_for(watch.leaving, timeout=seconds)
 
 
-    def _worker(self, acct, watch=None):
+    def _worker(self, acct: Account, watch: _Watch | None = None) -> None:
         watch = watch or _Watch(acct, self._stopping)
         email = acct["email"]
         backoff = 5
@@ -103,22 +106,22 @@ class Realtime:
                 print(f"[idle] {email}: removed, disabled or changed; this worker stops", flush=True)
                 self.reconcile()                  # changed by hand: a worker for the new settings, if running
                 return
-            M = None
+            session = None
             try:
-                M = self._open_session(acct)
-                if "IDLE" not in M.capabilities:
+                session = self._open_session(acct)
+                if "IDLE" not in session.capabilities:
                     print(f"[idle] {email}: server has no IDLE — falling back to periodic sync", flush=True)
                     try:
-                        M.logout()
+                        session.logout()
                     except Exception:
                         pass
                     return
-                M.select("INBOX", readonly=False)
-                self._conns.append(M)
-                watch.conn = M               # set before leaving() is asked: _retire sets quit first
+                session.select("INBOX", readonly=False)
+                self._conns.append(session)
+                watch.conn = session               # set before leaving() is asked: _retire sets quit first
                 backoff = 5
                 while not watch.leaving():
-                    changed = M.idle(self.IDLE_SECONDS)   # it leaves IDLE (sends DONE) before syncing
+                    changed = session.idle(self.IDLE_SECONDS)   # it leaves IDLE (sends DONE) before syncing
                     if watch.leaving():
                         break
                     if changed:
@@ -132,21 +135,21 @@ class Realtime:
                 backoff = min(backoff * 2, 300)
             finally:
                 watch.conn = None
-                try:
-                    self._conns.remove(M)
-                except ValueError:
-                    pass
-                if M:
+                if session:
                     try:
-                        M.logout()               # closes the connection once the server answers
+                        self._conns.remove(session)
+                    except ValueError:
+                        pass
+                    try:
+                        session.logout()               # closes the connection once the server answers
                     except Exception:
                         try:
-                            M.shutdown()         # it didn't answer (stop() shut the socket down): close here
+                            session.shutdown()         # it didn't answer (stop() shut the socket down): close here
                         except Exception:
                             pass
 
 
-    def _spawn(self, acct):
+    def _spawn(self, acct: Account) -> _Watch:
         watch = _Watch(acct, self._stopping)
         watch.thread = threading.Thread(target=self._worker, args=(acct, watch), name=f"idle:{acct['email']}",
                                         daemon=True)
@@ -154,7 +157,7 @@ class Realtime:
         return watch
 
 
-    def _retire(self, watch):
+    def _retire(self, watch: _Watch) -> None:
         """Stop a worker: wake it from a backoff, and from IDLE by shutting its socket down (see stop)."""
         with self._wake:
             watch.quit = True
@@ -164,7 +167,7 @@ class Realtime:
             M.interrupt()
 
 
-    def reconcile(self, _event=None):
+    def reconcile(self, _event: object = None) -> int:
         """Bring the workers in line with the configuration: retire each whose account is gone, disabled
         or now reached another way, and start one for each account without one, up to
         self.MAX_IDLE_ACCOUNTS. Each account event calls it; before start() and after stop() it does nothing.
@@ -187,14 +190,15 @@ class Realtime:
             return len(wanted)
 
 
-    def watching(self):
+    def watching(self) -> dict[str, bool]:
         """The accounts with a worker, each with whether it is still running (it ends on a server
         without IDLE, and the periodic sync covers that account)."""
         with self._watch_lock:
-            return {email: watch.thread.is_alive() for email, watch in self._watchers.items()}
+            return {email: watch.thread is not None and watch.thread.is_alive()
+                    for email, watch in self._watchers.items()}
 
 
-    def start(self):
+    def start(self) -> None:
         """Launch the sync dispatcher, then one IDLE worker per enabled account (capped)."""
         with self._watch_lock:
             self._running = True
@@ -206,7 +210,7 @@ class Realtime:
         print(f"[idle] watching {len(self.watching())} account(s) in real time", flush=True)
 
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop.set()
         self._kick.set()
         with self._watch_lock:

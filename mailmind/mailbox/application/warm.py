@@ -20,9 +20,11 @@ Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts (Bridge included on
 import os
 import threading
 import time
+from collections.abc import Collection
+from typing import Protocol
 
 from mailmind.mailbox.application import session as mail_session
-from mailmind.mailbox.application.ports import Accounts
+from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, Stored
 
 WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
 _ROLES = {                          # what to warm -> the folder roles that may play it, in order
@@ -33,7 +35,11 @@ _ROLES = {                          # what to warm -> the folder roles that may 
 _STAGGER = {"drafts": 1, "archive": 2, "sent": 3}   # warm role every Nth tick
 
 
-def _enabled(acct):
+class SyncFolder(Protocol):
+    def __call__(self, acct: Account, folder: str, *, full: bool, recent: int) -> Stored: ...
+
+
+def _enabled(acct: Account) -> bool:
     v = os.environ.get("MAILMIND_WARM_FOLDERS", "").strip()
     if not v:
         return False
@@ -43,20 +49,20 @@ def _enabled(acct):
 
 
 class Warming:
-    def __init__(self, accounts: Accounts, open_session, sync_folder):
+    def __init__(self, accounts: Accounts, open_session: OpenSession, sync_folder: SyncFolder):
         self._accounts = accounts
         self._open_session = open_session
         self._sync_folder = sync_folder
-        self._resolved = {}         # email -> {role: folder_name|None}  (folder names are stable; resolve once)
+        self._resolved: dict[str, dict[str, str | None]] = {}     # email -> {role: folder_name|None}  (folder names are stable; resolve once)
         self._lock = threading.Lock()
         self._tick = 0
 
-    def _roles_for(self, acct):
+    def _roles_for(self, acct: Account) -> dict[str, str | None]:
         """Resolve (and cache) this account's Drafts/Archive/Sent folder names in one LIST."""
         with self._lock:
             if acct["email"] in self._resolved:
                 return self._resolved[acct["email"]]
-        out = {}
+        out: dict[str, str | None] = {}
         try:
             s = self._open_session(acct)
             try:
@@ -78,7 +84,7 @@ class Warming:
         return out
 
 
-    def warm_tick(self, emails=None):
+    def warm_tick(self, emails: Collection[str] | None = None) -> None:
         """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
         after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS enables the account."""
         if not os.environ.get("MAILMIND_WARM_FOLDERS", "").strip():

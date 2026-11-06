@@ -14,11 +14,13 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable, Collection, Mapping
+from typing import Any
 
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
+from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
@@ -27,7 +29,7 @@ from mailmind.platform import settings, sse
 from mailmind.platform.workers import gates
 
 
-def _reconcile_secs():
+def _reconcile_secs() -> int:
     try:
         return int(os.environ.get("MAILMIND_RECONCILE_SECS", "1800"))  # full-cycle target; 0 disables
     except ValueError:
@@ -41,7 +43,7 @@ class Syncing:
     _RECONCILE_INTERVAL = _reconcile_secs()
 
     def __init__(self, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
-                 stats: LiveStats, attention: Attention, kick):
+                 stats: LiveStats, attention: Attention, kick: Callable[[str], object]):
         self._store = store
         self._accounts = accounts
         self._ingest = ingest
@@ -50,13 +52,23 @@ class Syncing:
         self._stats = stats
         self._attention = attention
         self._kick = kick
-        self._sync = {"running": False, "last": None, "result": "idle"}
-        self._status = {}              # email -> {"health": ok|syncing|error, "msg": str}
+        self._sync: dict[str, Any] = {"running": False, "last": None, "result": "idle"}
+        self._status: dict[str, dict[str, str]] = {}   # email -> {"health": ok|syncing|error, "msg": str}
         self._sync_lock = threading.Lock()
-        self._sync_asked = []          # syncs asked for while one ran: each a set of accounts, or None for all
-        self._backfill_missed = {}     # pk -> when backfill may ask for its body again
+        self._sync_asked: list[frozenset[str] | None] = []   # syncs asked for while one ran: each its accounts, or None for all
+        self._backfill_missed: dict[int, float] = {}         # pk -> when backfill may ask for its body again
 
-    def sync_accounts(self, emails=None):
+    @property
+    def status(self) -> dict[str, dict[str, str]]:
+        """How each account's sync stands now."""
+        return self._status
+
+    @property
+    def sync(self) -> dict[str, Any]:
+        """How the sync as a whole stands now."""
+        return self._sync
+
+    def sync_accounts(self, emails: Collection[str] | None = None) -> int:
         """Sync the given account emails (or all when None). Emits realtime events. Caller
         must hold the _sync single-flight guard (sync_once / sync_guarded)."""
         new = 0
@@ -83,13 +95,13 @@ class Syncing:
         return new
 
 
-    def account_health_json(self):
+    def account_health_json(self) -> dict[str, Any]:
         """Per-account durable sync health (last ok/error + coarse kind), merged with the in-flight
         _status. Pure read; no IMAP, no IMAP gate."""
         c = self._store.conn()
         rows = self._store.account_health(c)
         c.close()
-        out = []
+        out: list[dict[str, Any]] = []
         for r in rows:
             if (r["folder"] or "INBOX") != "INBOX":
                 continue
@@ -102,7 +114,7 @@ class Syncing:
         return {"ok": True, "accounts": out, "generated": now_iso()}
 
 
-    def do_sync_retry(self, body):
+    def do_sync_retry(self, body: Mapping[str, Any]) -> Result:
         """Clear an account's recorded sync error and re-run its sync via the existing single-flight."""
         acct = (body.get("account") or "").strip()
         if acct not in {a["email"] for a in self._accounts.accounts()}:
@@ -113,16 +125,16 @@ class Syncing:
         return {"ok": True, "account": acct}, 200
 
 
-    def sync_once(self):
+    def sync_once(self) -> None:
         self.sync_guarded(None)
 
 
-    def sync_rounds(self):
+    def sync_rounds(self) -> Callable[[], None]:
         """The background sync's round function. Its first round resolves the credentials still
         waiting (1Password's) before it syncs, so a long-running server never has to ask again."""
         warmed = False
 
-        def sync_round():
+        def sync_round() -> None:
             nonlocal warmed
             if not warmed:
                 warmed = True
@@ -133,7 +145,7 @@ class Syncing:
         return sync_round
 
 
-    def sync_guarded(self, emails):
+    def sync_guarded(self, emails: Collection[str] | None) -> None:
         """Single-flight sync of `emails` (or all). Both the 300s loop and the IDLE dispatcher route
         through here so syncs never overlap. A sync asked for while one runs isn't dropped: the
         running one goes round again as it ends, once for every such ask, so mail IDLE heard about
@@ -152,14 +164,14 @@ class Syncing:
                         return
                     asked = self._sync_asked[:]
                     self._sync_asked.clear()
-                emails = None if None in asked else set().union(*asked)
+                emails = None if None in asked else {e for one in asked if one is not None for e in one}
         except BaseException:
             with self._sync_lock:
                 self._sync["running"] = False
             raise
 
 
-    def _sync_round(self, emails):
+    def _sync_round(self, emails: Collection[str] | None) -> None:
         """One sync of `emails` (or all). Wakes due snoozes first. New mail kicks the assess job,
         which triages it outside this single-flight."""
         self._attention.wake_due()
@@ -176,13 +188,14 @@ class Syncing:
             print(f"[warm] tick error: {type(e).__name__}: {e}", flush=True)
 
 
-    def _reconcile_folders(self, acct, dry_run=False, force=False, priority=gates.Priority.INTERACTIVE, wait=True):
+    def _reconcile_folders(self, acct: Account, dry_run: bool = False, force: bool = False,
+                           priority: int = gates.Priority.INTERACTIVE, wait: bool = True) -> AccountPruned:
         """Reconcile each folder a sync has stored for `acct`, each as a job of its own on the
         account's gate, so a long run never holds it across folders. Returns one result for the
         account: the counts added up, the first folder's error, and how many folders it reached. With
         wait=False it stops at the first folder whose gate is busy (gates.Busy if that's the first)."""
-        out = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0, "pruned": 0,
-               "error": None, "folders": 0}
+        out: AccountPruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0, "pruned": 0,
+                              "error": None, "folders": 0}
         for folder in self._ingest.reconciled_folders(acct["email"]):
             try:
                 res = gates.run(acct["email"], lambda f=folder: self._ingest.reconcile_account(
@@ -192,13 +205,15 @@ class Syncing:
                     raise
                 break                                     # a user op came: the rest wait for next time
             out["folders"] += 1
-            for k in ("live", "stored", "ghosts", "pruned"):
-                out[k] += res[k]
+            out["live"] += res["live"]
+            out["stored"] += res["stored"]
+            out["ghosts"] += res["ghosts"]
+            out["pruned"] += res["pruned"]
             out["error"] = out["error"] or res["error"]
         return out
 
 
-    def _auto_reconcile_one(self, acct):
+    def _auto_reconcile_one(self, acct: Account) -> None:
         """Prune one account's ghosts, folder by folder, yielding to any live user op: its IMAP gate
         is taken without waiting (skip this tick if a user op holds it — caught next cycle), then
         publish so open lists drop the pruned phantoms."""
@@ -206,7 +221,7 @@ class Syncing:
             res = self._reconcile_folders(acct, priority=gates.Priority.MAINTENANCE, wait=False)
         except gates.Busy:
             return                                        # user op live — yield, retry next cycle
-        if not res.get("pruned"):
+        if not res["pruned"]:
             return
         with open(settings.current().reconcile_audit, "a") as f:
             f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
@@ -221,13 +236,13 @@ class Syncing:
         print(f"[reconcile] auto: {acct['email']} pruned {res['pruned']} ghost row(s)", flush=True)
 
 
-    def reconcile_rounds(self):
+    def reconcile_rounds(self) -> Callable[[], int]:
         """A ghost pruner's round function, with its own place in the round-robin: each round prunes
         one account and returns the seconds until the next, so the full cycle spans about
         MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
         rr = 0
 
-        def reconcile_round():
+        def reconcile_round() -> int:
             nonlocal rr
             accts = self._accounts.accounts()
             n = len(accts) or 1
@@ -241,7 +256,7 @@ class Syncing:
         return reconcile_round
 
 
-    def backfill_round(self):
+    def backfill_round(self) -> int:
         """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
         apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
         there is a backlog, ten minutes once caught up (new mail lands body-less).
@@ -261,7 +276,8 @@ class Syncing:
             c.close()                        # always close, even if the SELECT raises
         if not rows:
             return 600
-        tried, wait = [], 8                  # drain a backlog briskly
+        tried: list[int] = []
+        wait = 8                             # drain a backlog briskly
         for r in rows:
             try:
                 gates.run(r["account"], lambda: self._ingest.fetch_body(r["pk"]),
@@ -288,7 +304,7 @@ class Syncing:
         return wait
 
 
-    def do_reconcile(self, account, dry_run, force=False):
+    def do_reconcile(self, account: str | None, dry_run: bool, force: bool = False) -> dict[str, Any]:
         """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
         force prunes even where the server's SEARCH came back empty against stored mail."""
         self._accounts.preload_creds()
@@ -298,7 +314,7 @@ class Syncing:
             stamp = now_iso()
             with open(settings.current().reconcile_audit, "a") as f:
                 for r in results:
-                    if r.get("pruned"):
+                    if r["pruned"]:
                         f.write(json.dumps({"kind": "reconcile", "ts": stamp,
                                             "account": r["account"], "pruned": r["pruned"],
                                             "live": r["live"]}) + "\n")

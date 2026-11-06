@@ -27,25 +27,35 @@ import contextlib
 import os
 import threading
 import time
+from collections.abc import Generator
+from typing import Any, TypedDict
 
-from mailmind.mailbox.application.ports import Accounts
+from mailmind.mailbox.application.ports import Account, Accounts, OpenSession
+from mailmind.mailbox.application.session import MailSession
 
 # A pooled connection is discarded after ProviderProfile.recycle_seconds (600, well under a
 # server's ~29-minute idle drop; 90 on Bridge) or recycle_uses (200; 40 on Bridge).
 
 
-def _targets():
+class _Slot(TypedDict):
+    M: MailSession | None
+    lock: threading.Lock
+    born: float
+    uses: int
+
+
+def _targets() -> str:
     return os.environ.get("MAILMIND_POOL", "").strip()
 
 
-def _logout(M):
+def _logout(M: MailSession) -> None:
     try:
         M.logout()
     except Exception:
         pass
 
 
-def _valid(M):
+def _valid(M: MailSession) -> bool:
     """A cached session is reusable only if it answers NOOP OK."""
     try:
         return M.noop()
@@ -54,14 +64,14 @@ def _valid(M):
 
 
 class Pool:
-    def __init__(self, accounts: Accounts, open_session):
+    def __init__(self, accounts: Accounts, open_session: OpenSession):
         self._accounts = accounts
         self._open_session = open_session
         self._reg_lock = threading.Lock()
-        self._slots = {}          # email -> {"M": conn|None, "lock": Lock, "born": float, "uses": int}
+        self._slots: dict[str, _Slot] = {}
         self._stats = {"created": 0, "reused": 0, "validate_fail": 0, "discard_dirty": 0}
 
-    def _enabled(self, acct):
+    def _enabled(self, acct: Account) -> bool:
         v = _targets()
         if not v:
             return False
@@ -70,66 +80,66 @@ class Pool:
         return acct["email"] in {x.strip() for x in v.split(",") if x.strip()}   # explicit list honored verbatim
 
 
-    def _slot(self, email):
+    def _slot(self, email: str) -> _Slot:
         with self._reg_lock:
-            s = self._slots.get(email)
+            s: _Slot | None = self._slots.get(email)
             if s is None:
                 s = {"M": None, "lock": threading.Lock(), "born": 0.0, "uses": 0}
                 self._slots[email] = s
             return s
 
 
-    def _take(self, slot, acct):
+    def _take(self, slot: _Slot, acct: Account) -> tuple[MailSession, bool]:
         """Return a ready connection: a validated cached one, or a fresh login. Caller holds slot lock.
         Proton Bridge (loopback) is fragile + connection-capped, so a pooled Bridge connection is
         recycled far more aggressively (shorter age, fewer reuses) and still validated every borrow."""
         p = self._accounts.profile(acct)
         max_age, max_uses = p.recycle_seconds, p.recycle_uses
-        M = slot["M"]
-        if M is not None:
+        held = slot["M"]
+        if held is not None:
             too_old = (time.time() - slot["born"]) > max_age or slot["uses"] >= max_uses
-            if not too_old and _valid(M):
+            if not too_old and _valid(held):
                 slot["uses"] += 1
                 self._stats["reused"] += 1
-                return M, True
+                return held, True
             self._stats["validate_fail"] += 1 if not too_old else 0
-            _logout(M)
+            _logout(held)
             slot["M"] = None
-        M = self._open_session(acct)    # guaranteed-fresh, authenticated, no folder selected
-        slot["M"] = M
+        fresh = self._open_session(acct)    # guaranteed-fresh, authenticated, no folder selected
+        slot["M"] = fresh
         slot["born"] = time.time()
         slot["uses"] = 1
         self._stats["created"] += 1
-        return M, False
+        return fresh, False
 
 
     @contextlib.contextmanager
-    def borrow(self, acct):
+    def borrow(self, acct: Account) -> Generator[MailSession]:
         """Yield a MailSession for a READ-ONLY operation. Dormant (env unset) → a fresh session, logged
         out after. Enabled → a validated pooled session that is repooled on a clean exit and discarded
         on any error."""
         if not self._enabled(acct):
-            M = self._open_session(acct)
+            fresh = self._open_session(acct)
             try:
-                yield M
+                yield fresh
             finally:
-                _logout(M)
+                _logout(fresh)
             return
         slot = self._slot(acct["email"])
         with slot["lock"]:
-            M, _reused = self._take(slot, acct)
+            pooled, _reused = self._take(slot, acct)
             try:
-                yield M
+                yield pooled
             except BaseException:
-                _logout(M)                # poison the slot on ANY error; next borrow reconnects fresh
+                _logout(pooled)           # poison the slot on ANY error; next borrow reconnects fresh
                 slot["M"] = None
                 self._stats["discard_dirty"] += 1
                 raise
 
 
-    def stats(self):
+    def stats(self) -> dict[str, Any]:
         with self._reg_lock:                        # serialize against self._slot() insertion / self.close_all()
-            live = {}
+            live: dict[str, dict[str, Any]] = {}
             for e, s in self._slots.items():
                 m = s["M"]                      # snapshot once → consistent open/age
                 live[e] = {"open": m is not None, "uses": s["uses"],
@@ -137,7 +147,7 @@ class Pool:
         return {"enabled": bool(_targets()), "target": _targets(), "counters": dict(self._stats), "slots": live}
 
 
-    def close_all(self):
+    def close_all(self) -> None:
         """Best-effort teardown of all pooled connections (e.g. on shutdown)."""
         with self._reg_lock:
             for s in self._slots.values():

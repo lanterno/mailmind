@@ -74,6 +74,7 @@ strict = [
     "mailmind/compose/application",
     "mailmind/curation/application",
     "mailmind/discovery/application",
+    "mailmind/mailbox/application",
 ]
 
 [tool.importlinter]
