@@ -118,8 +118,7 @@ changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo,
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
-- Console errors fail the test, and so does any content security policy violation, which a
-  report-only policy logs at the info level.
+- Console errors fail the test, and so does any content security policy violation.
 - axe's findings are compared with `tests/golden/browser/axe_baseline.json`, which may only go down.
 - `page.pw.evaluate` has no timeout, so a promise that never settles hangs the run for good. A test waiting on animations leaves out
   the looping ones (`FADES_DONE`).
@@ -765,7 +764,7 @@ Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
 Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
 an answer didn't set itself, and so does the middleware. The page also carries
-`Content-Security-Policy-Report-Only` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
+`Content-Security-Policy` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
 only, framed by no one. The browser tests fail on any violation.
 
 A failed GET or POST answers a fixed message and logs its path and the error's class. Every TLS connection, IMAP

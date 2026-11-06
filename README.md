@@ -429,8 +429,7 @@ automatically.
   token and origin, can't be framed by another page, and checks every folder name and search
   value before it reaches the mail server, so a message whose ID hides a line break can't slip
   in a command of its own. Its answers tell the browser to keep them from other sites and out of
-  caches, and the page carries a content security policy, report-only for now, that lets only
-  its own scripts run.
+  caches, and the page carries a content security policy that lets only its own scripts run.
 - **Your Bridge password goes only to Bridge.** Bridge's certificate is pinned the first
   time MailMind connects, so something else listening on its port while it's down gets no
   password, over IMAP or SMTP. A changed certificate shows in Settings, to trust or not.
