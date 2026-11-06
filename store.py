@@ -855,6 +855,13 @@ def pk_now(c, key, folder):
     return row["pk"] if row else None
 
 
+def pk_in(c, key, folder):
+    """The pk of a message's copy in this folder now, or None if none is there or it is on its way out."""
+    row = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? AND pending_removal IS NULL "
+                    "ORDER BY pk DESC LIMIT 1", (key, folder)).fetchone()
+    return row["pk"] if row else None
+
+
 def get_brief(c, accounts, day):
     return c.execute("SELECT * FROM briefs WHERE accounts=? AND day=?", (accounts, day)).fetchone()
 

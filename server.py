@@ -56,6 +56,7 @@ import ics
 import summarize_thread
 import summarize_briefing
 import summarize_review
+from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.kernel import attention
@@ -3889,13 +3890,14 @@ def ai_ask(body):
 
 # -------------------------------------------------- NL bulk actions (plan → preview → confirm)
 # Map an untrusted natural-language command to a CONSTRAINED {verb, filter} via claude, then
-# RE-VALIDATE the filter through the same injection-safe search grammar and resolve it to a
-# capped pk set. This endpoint is READ-ONLY: it never mutates. The client shows a mandatory
-# confirm gate; only an explicit click routes the returned pks through the existing bulk path.
+# RE-VALIDATE the filter through the same injection-safe search grammar and freeze what it resolves to,
+# capped, as a plan (mailmind.assistant.application.plans). Planning is READ-ONLY: it never mutates. The
+# client shows a mandatory confirm gate, and only an explicit click sends the plan's id back to be carried out.
 _DO_VERB_ALLOW = {"archive", "trash", "junk", "read", "unread", "star", "snooze"}
 _DO_CAP = 500            # hard ceiling on how many messages ONE command may touch
 _DO_TRASH_CAP = 200      # trash/junk are extra-dangerous → a lower ceiling
 _DO_SAMPLE = 8
+_DO_PLANS = plans.PlanBook()
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -3996,9 +3998,9 @@ def _do_total_messages():
 
 
 def _do_resolve(match, where, params, cap):
-    """Exact COUNT + a capped pk set + an 8-row sample for a validated filter. Mirrors
-    search_json's FROM/JOINs exactly. Read-only; the pks come from OUR db, never the model.
-    Returns (count, pks, sample) or (None, [], []) on a bad query."""
+    """Exact COUNT + a capped set of (message key, folder) + an 8-row sample for a validated filter.
+    Mirrors search_json's FROM/JOINs exactly. Read-only; the messages come from OUR db, never the model.
+    Returns (count, messages, sample) or (None, [], []) on a bad query."""
     where_sql = (" AND " + " AND ".join(where)) if where else ""
     c = store.conn()
     try:
@@ -4014,23 +4016,23 @@ def _do_resolve(match, where, params, cap):
         try:
             count = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
             rows = c.execute(
-                f"SELECT m.pk, m.from_name, m.from_addr, m.subject, m.date_iso {base} "
+                f"SELECT m.pk, m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso {base} "
                 "ORDER BY m.ts DESC LIMIT ?", [*bargs, cap]).fetchall()
         except sqlite3.OperationalError:
-            return None, [], []
+            return None, [], [], []
     finally:
         c.close()
-    pks = [r["pk"] for r in rows]
+    messages = [(r["message_key"], r["folder"]) for r in rows]
     sample = [{"from": (r["from_name"] or r["from_addr"] or ""),
                "subject": r["subject"] or "(no subject)",
                "when": rel_time(r["date_iso"])} for r in rows[:_DO_SAMPLE]]
-    return count, pks, sample
+    return count, messages, sample, [r["pk"] for r in rows]
 
 
 def ai_do_plan(body):
-    """Plan an NL bulk command → a validated, capped {verb, pks} PREVIEW. READ-ONLY: generates no
-    mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted, safely-scoped
-    action. Returns (result, code)."""
+    """Plan an NL bulk command → a validated, capped PREVIEW with the id of the plan it froze. READ-ONLY:
+    generates no mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted,
+    safely-scoped action. Returns (result, code)."""
     cmd = str(body.get("cmd") or "").strip()[:512]
     if not cmd:
         return {"ok": False, "error": "empty command"}, 400
@@ -4053,19 +4055,66 @@ def ai_do_plan(body):
     if _do_is_whole_inbox(filt, match):                # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP
-    count, pks, sample = _do_resolve(match, where, params, cap)
+    count, messages, sample, pks = _do_resolve(match, where, params, cap)
     if count is None:                                  # unparseable resolved query → degrade
         return {"ok": True, "intent": "search", "filter": filt}, 200
-    if not pks:                                        # nothing matches → nothing to confirm
+    if not messages:                                   # nothing matches → nothing to confirm
         return {"ok": True, "intent": "search", "filter": filt, "empty": True}, 200
     total = _do_total_messages()                       # blast-radius backstop: refuse a filter that
     if total and count >= _DO_BROAD_FRACTION * total:  # still resolves to most of the whole mailbox
         return {"ok": True, "intent": "search", "filter": filt}, 200
-    preset = plan.get("snooze_preset") if verb == "snooze" else None
+    preset = (plan.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
+    frozen = _DO_PLANS.open(verb, preset, messages)
     return {"ok": True, "intent": "act", "verb": verb, "filter": filt,
-            "snooze_preset": preset or "tomorrow",
+            "snooze_preset": preset,
             "count": count, "cap": cap, "capped": count > cap,
-            "pks": pks, "sample": sample}, 200
+            "plan": frozen.id, "pks": pks, "sample": sample}, 200
+
+
+def _do_one(verb, one):
+    """One message of a plan, through the route a click on that message would take."""
+    if verb == "trash":
+        return do_trash(one)
+    if verb in ("read", "unread"):
+        return do_write("/api/seen", {**one, "seen": verb == "read"})
+    if verb == "star":
+        return do_write("/api/flag", {**one, "flag": "flagged", "on": True})
+    return do_write("/api/junk" if verb == "junk" else "/api/archive", one)
+
+
+def do_plan_confirm(body):
+    """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
+    in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
+    right for the Inbox may not be for wherever it went. Returns (result, code)."""
+    plan = _DO_PLANS.take(str(body.get("plan") or ""))
+    if plan is None:
+        return {"ok": False, "error": "this plan has expired", "expired": True}, 410
+    c = store.conn()
+    try:
+        pks = [p for p in (store.pk_in(c, key, folder) for key, folder in plan.messages) if p is not None]
+    finally:
+        c.close()
+    group = body.get("undo_group") or "plan:" + secrets.token_hex(6)
+    done = {"ok": True, "verb": plan.verb, "count": 0, "failed": 0, "gone": len(plan.messages) - len(pks),
+            "queued": 0, "undoable": False}
+    if plan.verb == "snooze":
+        if pks:
+            res, _ = do_snooze({"pks": pks, "preset": plan.preset, "undo_group": group})
+            done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
+        return done, 200
+    for pk in pks:
+        try:
+            res = _do_one(plan.verb, {"pk": pk, "undo_group": group})
+        except Exception as e:                 # the rest still go: this run has no second try
+            print(f"[do] {plan.verb} failed: {type(e).__name__}", flush=True)
+            res = {}
+        if res.get("ok"):
+            done["count"] += 1
+            done["queued"] += res.get("status") == "queued"
+            done["undoable"] = done["undoable"] or bool(res.get("undoable"))
+        else:
+            done["failed"] += 1
+    return done, 200
 
 
 # ----------------------------------------------------------------------- accounts
@@ -4532,6 +4581,8 @@ class H(BaseHTTPRequestHandler):
                     print(f"[ai] ask error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "ask failed"}, 500
                 self._json(res, code)
+            elif u.path == "/api/ai/do-confirm":   # carry out the plan a preview froze
+                self._json(*do_plan_confirm(b))
             elif u.path == "/api/ai/do-plan":     # read-only: NL command → validated, capped action PREVIEW
                 try:
                     res, code = ai_do_plan(b)
