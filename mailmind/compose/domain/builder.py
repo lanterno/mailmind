@@ -1,24 +1,14 @@
-"""Pure outgoing-message construction for MailMind — stdlib email only, NO I/O.
-
-build_message(spec) -> dict with the wire-ready RFC822 bytes, the minted Message-ID,
-and the SMTP envelope recipient list. Every header is set through EmailMessage (which
-refuses embedded CR/LF) and every address is validated + IDNA-normalized BEFORE
-construction, so header/SMTP injection is structurally impossible. Bcc is NEVER written
-into the bytes (privacy): it rides only in the returned envelope list.
-
-The reply_bodies/forward_bodies helpers assemble the quoted-original body, running any
-HTML original through the verified sanitizer's allowlist so a hostile message can't
-inject active content into what we send.
-"""
-import re
+"""Building an outgoing message, with no I/O. Every header is set through EmailMessage, which refuses
+an embedded CR or LF, and every address is validated and IDNA-normalized before that, so neither
+header nor SMTP injection has a way in. Bcc is never written into the bytes: it rides only in the
+envelope list returned."""
 import email.policy
 import email.utils
-from email.message import EmailMessage
-from email.headerregistry import Address
 from datetime import datetime, timezone
+from email.headerregistry import Address
+from email.message import EmailMessage
+import re
 
-from mailmind.content import sanitize
-from mailmind.content.quote import html_escape, own_html
 from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
 
 _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
@@ -29,7 +19,7 @@ def _addr(name, spec):
     return Address(display_name=name or "", username=local, domain=domain)
 
 
-def _references(orig_message_id, orig_refs, orig_in_reply_to):
+def reference_chain(orig_message_id, orig_refs, orig_in_reply_to):
     """RFC 5322 §3.6.4 References chain for a reply, de-duped, parent appended last."""
     ids = []
     for blob in (orig_refs or "", orig_in_reply_to or ""):
@@ -132,86 +122,3 @@ def build_message(spec, draft=False):
         "to_disp": [a for _, a in to], "cc_disp": [a for _, a in cc],
         "bcc_disp": [a for _, a in bcc],
     }
-
-
-# --------------------------------------------------------- quoted-body assembly
-def lf(s):
-    """Text with LF line ends only."""
-    return (s or "").replace("\r\n", "\n").replace("\r", "\n")
-
-
-def resume_split(text, rec, exact):
-    """Split a saved draft's text/plain into (own, tail, how), or None when that can't be done
-    without losing something. rec: {"own_text", "tail_text"} as recorded at MailMind's last
-    save of this draft, or None. exact: this is the very copy MailMind saved, so the record is
-    the truth even when the server rewrote the bytes. how is "exact" (the record), "tail" (the
-    text still ends with the recorded quote, so only that is cut) or "whole" (none of it can be
-    told apart, so all of it is yours to edit). own + tail is the drafted text, give or take
-    trailing newlines."""
-    rec = rec or {}
-    if exact and rec.get("own_text") is not None:
-        return lf(rec["own_text"]), lf(rec.get("tail_text") or ""), "exact"
-    if text is None:
-        return None
-    t, tail = lf(text), lf(rec.get("tail_text") or "")
-    s, b = tail.rstrip("\n"), t.rstrip("\n")
-    if s.startswith("\n\n") and b.endswith(s):
-        return b[:len(b) - len(s)], tail, "tail"
-    return (t[:-1] if t.endswith("\n") else t), "", "whole"   # set_content's own trailing newline
-
-
-def _attribution(orig):
-    who = orig.get("from_name") or orig.get("from_addr") or "someone"
-    addr = orig.get("from_addr") or ""
-    date = orig.get("date") or ""
-    tail = f" <{addr}>" if addr and addr != who else ""
-    return f"On {date}, {who}{tail} wrote:".strip()
-
-
-def _quote_plain(text):
-    return "\n".join("> " + ln for ln in (text or "").splitlines()) or ">"
-
-
-def _plain_from_html(html_str):
-    """Crude HTML->text fallback when an original has no text/plain part."""
-    safe, _ = sanitize.sanitize(html_str or "", load_images=False, fold=False)
-    txt = re.sub(r"(?is)<br\s*/?>", "\n", safe)
-    txt = re.sub(r"(?is)</p\s*>", "\n\n", txt)
-    txt = re.sub(r"(?s)<[^>]+>", "", txt)
-    import html as _h
-    return _h.unescape(txt).strip()
-
-
-def reply_bodies(new_text, orig):
-    """(text, html|None) for a reply. orig: {from_name,from_addr,date,text,html}."""
-    attr = _attribution(orig)
-    o_text = orig.get("text") or (_plain_from_html(orig.get("html")) if orig.get("html") else "")
-    text = f"{new_text or ''}\n\n{attr}\n{_quote_plain(o_text)}\n"
-    if orig.get("html"):
-        safe, _ = sanitize.sanitize(orig["html"], load_images=False, fold=False)
-        html_body = (
-            own_html(new_text) + f"<div>{html_escape(attr)}</div>"
-            f'<blockquote type="cite" style="margin:0 0 0 .8ex;'
-            f'border-left:2px solid #ccc;padding-left:1ex">{safe}</blockquote>')
-        return text, html_body
-    return text, None
-
-
-def forward_bodies(new_text, orig):
-    """(text, html|None) for a forward — banner + original (un-quoted)."""
-    rows = [("From", f"{orig.get('from_name') or ''} <{orig.get('from_addr') or ''}>".strip()),
-            ("Date", orig.get("date") or ""), ("Subject", orig.get("subject") or ""),
-            ("To", orig.get("to") or "")]
-    if orig.get("cc"):
-        rows.append(("Cc", orig["cc"]))
-    banner = "---------- Forwarded message ----------\n" + \
-        "\n".join(f"{k}: {v}" for k, v in rows if v)
-    o_text = orig.get("text") or (_plain_from_html(orig.get("html")) if orig.get("html") else "")
-    text = f"{new_text or ''}\n\n{banner}\n\n{o_text}"
-    if orig.get("html"):
-        safe, _ = sanitize.sanitize(orig["html"], load_images=False, fold=False)
-        banner_html = "<br>".join(html_escape(f"{k}: {v}") for k, v in rows if v)
-        html_body = (
-            own_html(new_text) + f"<div>---------- Forwarded message ----------<br>{banner_html}</div><hr>{safe}")
-        return text, html_body
-    return text, None

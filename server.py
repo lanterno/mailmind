@@ -37,7 +37,7 @@ import mailops
 from mailmind.bootstrap import attention, calendar, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
-import compose
+from mailmind.compose.api import build_message, forward_bodies, lf, reference_chain, reply_bodies, resume_split, thread_ids
 import smtpsend
 import outbox
 from mailmind.content import mime
@@ -1568,8 +1568,8 @@ def _compose_spec(body):
         # The original is never fetched, re-quoted or re-attached.
         if not isinstance(resume, dict):
             raise _Http(400, "bad draft data")
-        own = compose.lf(text)
-        tail = compose.lf(str(resume.get("tail_text") or ""))
+        own = lf(text)
+        tail = lf(str(resume.get("tail_text") or ""))
         text = own + tail
         if tail:   # the quote's HTML only when this draft's record vouches for that exact quote
             try:
@@ -1579,12 +1579,12 @@ def _compose_spec(body):
             c = store.conn()
             dr = store.draft_get(c, did) if did else None
             c.close()
-            if dr and dr["tail_html"] and compose.lf(dr["tail_text"] or "") == tail:
+            if dr and dr["tail_html"] and lf(dr["tail_text"] or "") == tail:
                 # built and sanitized by us at that save; never re-sanitized
                 tail_html = sanitize.without_fold(dr["tail_html"])
                 html = own_html(own) + tail_html
         tail_text = tail or None
-        in_reply_to, references = compose.thread_ids(resume.get("in_reply_to"), resume.get("references"))
+        in_reply_to, references = thread_ids(resume.get("in_reply_to"), resume.get("references"))
         if mode in ("reply", "replyall") and in_reply_to:   # by Message-ID: a pk may have been renumbered
             c = store.conn()
             orow = store.get_message_by_msgid(c, acct["email"], in_reply_to)
@@ -1614,7 +1614,7 @@ def _compose_spec(body):
                 "to": parsed.get("to"), "cc": parsed.get("cc"),
                 "text": parsed.get("text"), "html": parsed.get("html")}
         if mode == "forward":
-            text, html = compose.forward_bodies(text, orig)
+            text, html = forward_bodies(text, orig)
             if body.get("forward_attachments", True):
                 c = store.conn(); raw = store.get_body(c, opk); c.close()
                 existing = sum(len(a["data"]) for a in attachments)
@@ -1625,9 +1625,9 @@ def _compose_spec(body):
                     attachments.append(a)
                     forwarded.append(a)
         else:
-            text, html = compose.reply_bodies(text, orig)
+            text, html = reply_bodies(text, orig)
             in_reply_to = orow["message_id"]
-            references = compose._references(orow["message_id"], orow["refs"], orow["in_reply_to"])
+            references = reference_chain(orow["message_id"], orow["refs"], orow["in_reply_to"])
             in_reply_to_pk = opk
         tail_text, tail_html = quote_tail(own, text, html)
     spec = {
@@ -1658,7 +1658,7 @@ def do_send(body):
         send_after = sa
     try:
         spec, in_reply_to_pk, acct = _compose_spec(body)
-        built = compose.build_message(spec)       # validates addresses/headers; raises ValueError
+        built = build_message(spec)       # validates addresses/headers; raises ValueError
     except _Http as h:
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
@@ -1712,7 +1712,7 @@ def do_draft(body):
         if not (spec["subject"].strip() or (spec["text"] or "").strip()
                 or spec["to"] or spec["cc"] or spec["bcc"] or spec["attachments"]):
             return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}, 200
-        built = compose.build_message(spec, draft=True)
+        built = build_message(spec, draft=True)
     except _Http as h:
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
@@ -1773,8 +1773,8 @@ def do_draft(body):
         c = store.conn()
         try:
             new_id = store.draft_upsert(c, row)
-            store.draft_set_resume(c, new_id, compose.lf(spec["own"]),
-                                   compose.lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
+            store.draft_set_resume(c, new_id, lf(spec["own"]),
+                                   lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
                                    spec["tail"]["html"], json.dumps(bcc) if bcc else None,
                                    hashlib.sha256(built["raw"]).hexdigest())
             if key and not did:
@@ -1805,7 +1805,7 @@ def do_draft(body):
         # From here on the composer names the quote, the threading and the files itself, as a
         # reopened draft's does, so its saves and its send no longer need the original's row.
         answer["resume"] = {"in_reply_to": spec["in_reply_to"] or "", "references": " ".join(spec["references"] or []),
-                            "tail_text": compose.lf(spec["tail"]["text"])}
+                            "tail_text": lf(spec["tail"]["text"])}
         answer["files"] = [{"filename": a["filename"], "content_type": a["content_type"], "size": len(a["data"]),
                             "b64": base64.b64encode(a["data"]).decode("ascii")} for a in spec["forwarded"]]
     return answer, 200
@@ -2002,7 +2002,7 @@ def draft_resume(body):
     same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
                  and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
     exact = bool(same_copy or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
-    split = compose.resume_split(parsed["text"], {"own_text": d["own_text"], "tail_text": d["tail_text"]}, exact)
+    split = resume_split(parsed["text"], {"own_text": d["own_text"], "tail_text": d["tail_text"]}, exact)
     if split is None:
         return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
                                       "so its links and formatting aren’t lost."}, 422
@@ -2014,7 +2014,7 @@ def draft_resume(body):
     if size + _RESUME_HEADROOM > MAX_SEND_POST:
         return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
                                       "and the text it quotes." + elsewhere}, 422
-    irt, refs = compose.thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
+    irt, refs = thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
     mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
     if mode == "new" and irt:                            # MailMind's own new drafts never carry one
         mode = "reply"
