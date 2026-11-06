@@ -10,17 +10,22 @@ from mailmind.curation.adapters import rules_file as rules
 from mailmind.curation.adapters import safe_http, sqlite
 from mailmind.curation.adapters.audit_file import AuditFile
 from mailmind.curation.api import (BLOCKED, EXPIRE, JUNK_BUCKETS, KEYS, MKT, NOTIF, PERSONAL, PROTECTED, RECEIPT, SPAM,
-                                   by_rule, decided, domain_listed, expiry_hours, is_junk, looks_human)
+                                   arrival_ts, by_rule, decided, domain_listed, expiry_hours, is_junk, looks_human,
+                                   select_expired)
 from mailmind.curation.application.cleanup import Cleanup
+from mailmind.curation.application.expiry import Expiry
 from mailmind.curation.application.screener import Screener
+from mailmind.curation.application.sweep import Sweeps
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import classifier
+from mailmind.mailbox.application import filing
 from mailmind.platform import sse
 from mailmind.platform.workers import gates
 
 __all__ = ["AUDIT", "BLOCKED", "EXPIRE", "JUNK_BUCKETS", "KEYS", "MKT", "NOTIF", "PERSONAL", "PROTECTED", "RECEIPT",
-           "SPAM", "attach", "by_rule", "classify", "cleanup", "decided", "domain_listed", "expiry_hours", "is_junk",
-           "looks_human", "rules", "safe_http", "screener", "sqlite"]
+           "SPAM", "arrival_ts", "attach", "by_rule", "classify", "cleanup", "decided", "domain_listed", "expiry",
+           "expiry_hours", "is_junk", "looks_human", "rules", "safe_http", "screener", "select_expired", "sqlite",
+           "sweeps"]
 
 UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's gate to read one message's headers
 _server = None
@@ -131,6 +136,28 @@ class _Mailboxes:
     def known(self):
         return {a["email"] for a in self.all()}
 
+    def preload_creds(self):
+        import accounts
+        accounts.preload_creds()
+
+    def open_session(self, acct):
+        return mailbox.open_session(acct)
+
+    def borrow(self, acct):
+        import pool
+        return pool.borrow(acct)
+
+    def trash_folder(self, acct):
+        import accounts
+        return accounts.trash_folder(acct)
+
+    def quote(self, value):
+        import accounts
+        return accounts.imap_quote(value)
+
+    def move_verified(self, session, uids, dest):
+        return filing.move_verified(session, uids, dest)
+
 
 AUDIT = AuditFile()
 _mail = sqlite.SenderMail(_MessageRows())
@@ -139,3 +166,5 @@ _boxes = _Mailboxes()
 cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp(), _SystemSend()), _filing, AUDIT,
                   lambda: _server.CSRF)
 screener = Screener(rules, _mail, _boxes, _filing)
+sweeps = Sweeps(rules, _mail, _boxes, AUDIT, _filing)
+expiry = Expiry(rules, _mail, _boxes, AUDIT, _filing)

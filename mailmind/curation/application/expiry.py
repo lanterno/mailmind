@@ -1,0 +1,94 @@
+"""Shelf life: moving INBOX mail past its rule's age to Trash. Ages come from the live server, so it's right
+whether or not the store is synced. Verified and audited, and the audit comes before the move."""
+import email
+import imaplib
+import time
+
+from mailmind.content import mime
+from mailmind.content.mime import dec
+from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailboxes, RuleBookRepository, SenderMail
+from mailmind.curation.domain.expiry import arrival_ts, select_expired
+from mailmind.curation.domain.rulebook import EXPIRE
+from mailmind.platform.workers import gates
+
+EXP_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "DATE")
+
+
+class Expiry:
+    def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, audit: AuditLog,
+                 filing: FilingCommands):
+        self._rules, self._mail, self._boxes, self._audit, self._filing = rules, mail, boxes, audit, filing
+
+    def account(self, acct, dry=False, now=None):
+        """Move INBOX mail past its expiry rule to Trash — verified, audited, and pruned from the local DB
+        by Message-ID. Errors are captured, not raised."""
+        expire = self._rules.load()[EXPIRE]
+        out = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [], "error": None}
+        if not expire:
+            return out
+        try:
+            s = self._boxes.open_session(acct)
+        except Exception as e:
+            out["error"] = f"{type(e).__name__}: {e}"
+            return out
+        try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
+            s.select("INBOX")
+            uids = set()
+            for token in expire:                # coarse server-side filter; select_expired matches exactly
+                try:
+                    uids.update(s.uids("FROM", self._boxes.quote(token)))
+                except imaplib.IMAP4.abort:
+                    raise
+                except imaplib.IMAP4.error:     # a refused search finds nothing
+                    pass
+            rows = []
+            for h in s.headers(sorted(uids), EXP_FIELDS, internaldate=True):
+                msg = email.message_from_bytes(h.raw)
+                rows.append({"uid": str(h.uid), "from": mime.sender_of(msg)[1].lower(),
+                             "subject": dec(msg.get("Subject", "")),
+                             "mid": (msg.get("Message-ID", "") or "").strip(),
+                             "ts": arrival_ts(h.internaldate, msg)})
+            targets = select_expired(rows, expire, now if now is not None else time.time())
+            out["planned"] = len(targets)
+            if dry or not targets:
+                return out
+            for t in targets:
+                t["bucket"], t["reason"] = "expired", f"expire rule: older than {t['hours']}h"
+            self._audit.swept(acct["email"], targets)       # log BEFORE moving so a crash still records intent
+            moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
+                                                          self._boxes.trash_folder(acct))
+        except Exception as e:
+            out["error"] = f"{type(e).__name__}: {e}"
+            return out
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
+        out["moved"], out["stragglers"] = moved, stragglers
+        self._mail.forget_expired(acct["email"], targets, stragglers)
+        return out
+
+    def auto_one(self, acct):
+        """One account's turn in the background job. It gives way to anyone using the account's gate."""
+        try:
+            res = gates.run(acct["email"], lambda: self.account(acct),
+                            priority=gates.Priority.MAINTENANCE, wait=False)
+        except gates.Busy:
+            return                                        # user op live — yield, retry next cycle
+        if res.get("error"):
+            print(f"[expire] {acct['email']}: {res['error']}", flush=True)
+            return
+        if not res.get("moved"):
+            return
+        self._filing.folders_changed(acct["email"], res["moved"])
+        print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
+
+    def round(self):
+        """One pass of the expiry rules over every account, when there are any rules."""
+        if self._rules.load()[EXPIRE]:
+            for a in self._boxes.all():
+                try:
+                    self.auto_one(a)
+                except Exception as e:
+                    print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)

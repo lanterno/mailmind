@@ -36,7 +36,6 @@ import readmutq
 import summarize
 import mailops
 from mailmind.bootstrap import curation
-import manage
 from mailmind.bootstrap.curation import rules
 import views
 from mailmind.content import sanitize
@@ -327,36 +326,6 @@ def _expire_secs():
 _EXPIRE_INTERVAL = _expire_secs()
 
 
-def _auto_expire_one(acct):
-    try:
-        res = gates.run(acct["email"], lambda: manage.expire_account(acct),
-                        priority=gates.Priority.MAINTENANCE, wait=False)
-    except gates.Busy:
-        return                                        # user op live — yield, retry next cycle
-    if res.get("error"):
-        print(f"[expire] {acct['email']}: {res['error']}", flush=True)
-        return
-    if not res.get("moved"):
-        return
-    invalidate_stats()
-    _invalidate_folders(acct["email"])
-    try:                                              # same refresh as a ghost prune: open lists drop the rows
-        sse.publish("reconcile", {"account": acct["email"], "pruned": res["moved"]})
-    except Exception:
-        pass
-    print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
-
-
-def expire_round():
-    """One pass of the expiry rules over every account, when there are any rules."""
-    if rules.load()[rules.EXPIRE]:
-        for a in accounts.accounts():
-            try:
-                _auto_expire_one(a)
-            except Exception as e:
-                print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
-
-
 def forget_round():
     """What's kept of a message no copy of has come back to in a month goes, and so do queue rows
     finished a month ago."""
@@ -605,7 +574,7 @@ def live_stats(account=None, refresh=False):
     accts = accounts.accounts() if is_all else [accounts.get(account)]
     out = []
     for a in accts:
-        p = _strip(manage.plan_account_db(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
+        p = _strip(curation.sweeps.plan_stored(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
         p["alias"] = a.get("alias")              # the Sweep buttons still re-verify live before moving
         out.append(p)
     data = {
@@ -630,16 +599,6 @@ def invalidate_stats():
 
 
 # ----------------------------------------------------------------------------- curation ops
-def _each_account(account, job):
-    """[job(acct)] for the account named, or for each account in turn when it names "all", each on
-    its own account's gate alone: the accounts' work is independent, so a run over all of them
-    never holds every gate at once, and one account's slow server holds up only its own turn."""
-    if account and account != "all":
-        return [gates.run(account, lambda: job(accounts.get(account)), priority=gates.Priority.INTERACTIVE)]
-    return [gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE)
-            for a in accounts.accounts()]
-
-
 def do_reconcile(account, dry_run, force=False):
     """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
     force prunes even where the server's SEARCH came back empty against stored mail."""
@@ -658,18 +617,6 @@ def do_reconcile(account, dry_run, force=False):
     return {"ok": True, "dry_run": dry_run, "results": results,
             "total_ghosts": sum(r["ghosts"] for r in results),
             "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}
-
-
-def do_sweep(account, dry_run):
-    if not dry_run:
-        profile.refuse_writes("a sweep")     # it moves mail, and its moves can't wait in a queue
-    accounts.preload_creds()
-    results = _each_account(account, lambda a: manage.sweep_account(a, dry=dry_run))
-    if not dry_run:
-        invalidate_stats()
-    return {"ok": True, "dry_run": dry_run, "results": results,
-            "total_planned": sum(r.get("planned", 0) for r in results),
-            "total_moved": sum(r.get("moved", 0) for r in results), "generated": now_iso()}
 
 
 # --------------------------------------------------------------------- mailbox mode
@@ -3965,7 +3912,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(do_reconcile(b.get("account", "all"), bool(b.get("dry_run", False)),
                                         force=b.get("force") is True))
             elif u.path == "/api/sweep":
-                self._json(do_sweep(b.get("account", "all"), bool(b.get("dry_run", False))))
+                self._json(curation.sweeps.run(b.get("account", "all"), bool(b.get("dry_run", False))))
             elif u.path == "/api/rules":
                 self._json(curation.screener.rule(b))
             elif u.path == "/api/cleanup/execute":
@@ -4176,7 +4123,7 @@ def schedule(jobs):
         jobs.add("reconcile", reconcile_rounds(), every=max(30, _RECONCILE_INTERVAL),
                  first=min(120, _RECONCILE_INTERVAL))
     if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
-        jobs.add("expire", expire_round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
+        jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
 
 

@@ -6,7 +6,7 @@ A borrow yields a MailSession (mailmind.mailbox.application.session), opened thr
 mailmind.bootstrap.mailbox like any other.
 
 SAFETY (load-bearing):
-  • Only read-only paths (ingest.fetch_body, the folder rail's counts, manage.plan_account) borrow.
+  • Only read-only paths (ingest.fetch_body, the folder rail's counts, a sweep's plan) borrow.
     MUTATIONS NEVER touch the pool — they keep opening a fresh session — so a pooled session can
     never carry a stale selected folder into a UID STORE/MOVE/EXPUNGE. All mutation invariants
     (UIDVALIDITY, never-bulk-EXPUNGE, etc.) are untouched.
