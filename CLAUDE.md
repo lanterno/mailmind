@@ -308,7 +308,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
   holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
-  each answer, and the page reads those and never works them out.
+  each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
+  (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes),
   `triage` (`Triage`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
@@ -389,13 +390,14 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
   `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
-  `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
+  `application` holds `ports.py`, `tabs` (the event stream, named until the platform types `sse.publish`) and the use cases
+  `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
   `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention (`attention.muting.mute(body)`,
   `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
   what a change makes stale through the Mailbox (`mailbox.undo`, `mailbox.stats`).
   `mailmind.kernel.attention` is a different module, what a verdict asks of you, which the modules that need both import as `verdict`.
   It is standard library only.
-- `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `agenda`
+- `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `invite` (the shape the reader gives), `agenda`
   (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
   REPLY and its idempotency key); `adapters` holds `ics_reader` (the hand-rolled reader of an invite's text, `parse` and
   `next_occurrence`, what the proposal's `IcsReader` port names) and `sqlite` (reads stored bodies and the outbox's keys, and
