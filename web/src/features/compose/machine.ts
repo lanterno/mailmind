@@ -4,7 +4,7 @@
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
 import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
-import { createStore } from "../../lib/store";
+import type { Store } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, looksLikeAddr, namesItself, nothingToSave, payloadOf,
   QUICK, rcptAddr, recipientProblem, replySeed, runChecks, splitChips,
@@ -13,9 +13,13 @@ import {
 
 export type Focus = "guard" | "send" | "body" | "subject" | "schedule" | "attach" | { field: Field };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the answer of whichever route was asked, read field by field, with machine.test.ts holding what it reads
+export type Answer = any;
+
 export interface Env {
-  post(path: string, body: unknown, ai?: boolean): Promise<any>;   // ai: a request a person started, which may ask to go over the daily limit
-  get(path: string): Promise<any>;
+  createStore<T>(initial: T): Store<T>;   // how what the machine publishes is held, which is the screen's business
+  post(path: string, body: unknown, ai?: boolean): Promise<Answer>;   // ai: a request a person started, which may ask to go over the daily limit
+  get(path: string): Promise<Answer>;
   toast(message: string): void;
   say(message: string): void;
   senders(): string[];
@@ -55,12 +59,12 @@ const AUTOSAVE_MS = 8000;
 const KNOWN_WAIT_MS = 150;
 const UNDO_SECONDS = 10;
 
-const randomId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`);
+const randomId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`);
 
 export function createComposing(env: Env) {
-  const view = createStore<Composer | null>(null);
-  const float = createStore<SendFloat | null>(null);
-  const laterOpen = createStore(false);
+  const view = env.createStore<Composer | null>(null);
+  const float = env.createStore<SendFloat | null>(null);
+  const laterOpen = env.createStore(false);
   let c: Composer | null = null;
   let nextId = 1;
   let autosaver: ReturnType<typeof setInterval> | undefined;
@@ -203,7 +207,7 @@ export function createComposing(env: Env) {
     if (x && roomBusy) return false;
     if (x && x.dirty) {
       roomBusy = true;
-      let ok: boolean | null = null;
+      let ok: boolean | null;
       try {
         do ok = await save(true); while (ok && c === x && x.dirty);   // typed during the save: that too
       } finally {
@@ -313,7 +317,7 @@ export function createComposing(env: Env) {
     if (c !== x) return;
     const addrs = [...x.knownQ].slice(0, 100);
     addrs.forEach((a) => x.knownQ.delete(a));
-    let d: any;
+    let d: Answer;
     try {
       d = await env.post("/api/contacts/known", { addrs });
     } catch {
@@ -321,7 +325,7 @@ export function createComposing(env: Env) {
     }
     if (c !== x || !d?.ok) return;
     x.thin = Boolean(d.thin);
-    for (const [a, p] of Object.entries<any>(d.items ?? {})) {
+    for (const [a, p] of Object.entries<Answer>(d.items ?? {})) {
       const v = { known: Boolean(p.known), self: Boolean(p.self) };
       x.people.set(a, v);
       if (v.known || v.self) knownCache.set(a, v);

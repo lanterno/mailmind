@@ -38,6 +38,7 @@ function elementOf(what: Focus): HTMLElement | null {
 const afterRender = (fn: () => void) => void setTimeout(fn);
 
 export const composing = createComposing({
+  createStore,
   post: (path, body, ai) => post(path as "/api/draft", body, ai ? { askOverLimit } : {}),
   get: (path) => get(path as "/api/digest"),
   toast,
