@@ -37,6 +37,7 @@ import outbox
 import server
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
+from mailmind.kernel import addresses
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -283,7 +284,7 @@ def test_addr_chip_round_trips():
     for name in ("Bo Park", "Park, Bo", 'Bo "B" Park', "Dr. Bo", "bo@work", "(Bo)", "back\\slash",
                  "semi;colon", "Zoë Ünal", "x<y>"):
         chip = addr_chip(name, addr)
-        assert compose.parse_addr_list([chip]) == [(name, addr)], (name, chip, compose.parse_addr_list([chip]))
+        assert addresses.parse_addr_list([chip]) == [(name, addr)], (name, chip, addresses.parse_addr_list([chip]))
     assert addr_chip("Bo Park", addr) == "Bo Park <bo@example.test>"
     assert addr_chip("Park, Bo", addr) == '"Park, Bo" <bo@example.test>'
 
