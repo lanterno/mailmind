@@ -16,6 +16,8 @@ just test-dovecot                 # the MailSession contract against Dovecot in 
 just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
 just run-old [port]               # the same through the old front door, which needs nothing installed
+just run-next [port]              # build the React app, then run; it's at /next
+just setup                        # install the Python packages, node_modules and Chromium
 ```
 
 ```bash
@@ -23,9 +25,12 @@ uv run python -m mailmind serve [port]   # run the app (default http://127.0.0.1
 python3 server.py [port]          # the old front door: the same app, with nothing installed
 MAILMIND_PROFILE=read-only python3 server.py   # the same read-only profile, either door
 
-python3 config.py check           # verify credentials resolve, per account (prints ok/fail, no secrets)
-python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>` for one account
-python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
+python3 -m mailmind check         # verify credentials resolve, per account (prints ok/fail, no secrets)
+python3 -m mailmind sync all 90   # pull last 90 days; `sync <email> <days>` for one account
+python3 -m mailmind assess 2000 3 # summarize up to 2000 messages, 3 workers
+python3 -m mailmind rules         # the learned rules; `rules keep|block|remove|expire ...` change them
+python3 -m mailmind sweep --dry   # what a junk sweep would trash; also status, inventory, plan, expire
+python3 -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
 python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 python3 -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
 python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only

@@ -177,9 +177,9 @@ and the Claude API.
   sender offers it, else a mailto from each account that got the mail, else the sender's page,
   opened in the browser. The way out comes from the headers ingest keeps, so a sender whose mail
   was never opened can still be left, and a second try after the sweep still knows it.
-- **Expiry rules.** Give a sender or domain a shelf life — `python3 rules.py expire
+- **Expiry rules.** Give a sender or domain a shelf life — `python3 -m mailmind rules expire
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
-  server checks hourly; `manage.py expire --dry` previews. Expiry is independent of
+  server checks hourly; `python3 -m mailmind expire --dry` previews. Expiry is independent of
   keep/block, so a kept sender can still age out.
 - **Lists that heal.** Rows collapse and fade as you triage, folder lists and search
   results paginate with **Load 200 more**, capped counts read honestly as `N+`, and
@@ -404,7 +404,7 @@ automatically.
 
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot from
   Settings, plus a CLI that exports lossless per-message `.eml` files or standard
-  `mbox` archives (`python3 export.py --format eml --out DIR`). Read-only — it never
+  `mbox` archives (`python3 -m mailmind export --format eml --out DIR`). Read-only — it never
   touches IMAP.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
   backs it up beside it (the newest three kept, readable only by you), and each step of the change
@@ -484,11 +484,11 @@ cp mailmind.config.example.json mailmind.config.json
 $EDITOR mailmind.config.json
 
 # 2. Verify the credentials resolve (prints ok/fail per account and for the API key, no secrets)
-python3 config.py check
+python3 -m mailmind check
 
 # 3. Pull recent mail, then summarize it
-python3 ingest.py all 90       # last 90 days (use a big number like 3650 for all-time)
-python3 summarize.py 2000 3    # summarize up to 2000, 3 workers
+python3 -m mailmind sync all 90   # last 90 days (use a big number like 3650 for all-time)
+python3 -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
 uv run python -m mailmind serve   # http://127.0.0.1:8721   (custom port: ... serve 9000)
@@ -545,7 +545,7 @@ back, and the startup line `[imap] …` says how many accounts asked.
   `"port": 143, "starttls": true` for STARTTLS. Either way the server's certificate
   is verified, so a self-signed one won't connect. The **trash folder name matters** —
   some servers use `INBOX.Trash` instead of `Trash`; a wrong name silently breaks
-  sweeps. Run `python3 manage.py inventory you@company.com` to see the real names.
+  sweeps. Run `python3 -m mailmind inventory you@company.com` to see the real names.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
   (`MAILMIND_PROTON_OP_ITEM`), or `~/.config/mailmind/proton_bridge_pass`
@@ -564,19 +564,19 @@ slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one s
 read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
 queues until a full run, and it syncs nothing in the background. `just dev` does that.
 
-**CLI curation** (`manage.py`) — works across every account:
+**CLI curation** (`python3 -m mailmind`, or `just`) — works across every account:
 
 ```bash
-python3 manage.py status              # INBOX + Trash counts
-python3 manage.py inventory all       # every folder + message/unseen counts
-python3 manage.py plan all            # classify the live inbox, show what would be trashed
-python3 manage.py sweep you@x.com --dry   # preview a junk sweep (ALWAYS dry-run first)
-python3 manage.py sweep you@x.com         # move junk → Trash (verified)
-python3 manage.py keep example.com        # learned rule: always keep this sender/domain
-python3 manage.py block spammer.com       # always trash (writes a rule)
-python3 manage.py rules                    # show the learned lists
-python3 rules.py expire github.com 72      # trash this domain's INBOX mail after 72h (0 clears)
-python3 manage.py expire all --dry         # preview what the expiry rules would trash now
+python3 -m mailmind status              # INBOX + Trash counts
+python3 -m mailmind inventory all       # every folder + message/unseen counts
+python3 -m mailmind plan all            # classify the live inbox, show what would be trashed
+python3 -m mailmind sweep you@x.com --dry   # preview a junk sweep (ALWAYS dry-run first)
+python3 -m mailmind sweep you@x.com         # move junk → Trash (verified)
+python3 -m mailmind rules keep example.com  # learned rule: always keep this sender/domain
+python3 -m mailmind rules block spammer.com # always trash (writes a rule)
+python3 -m mailmind rules                  # show the learned lists
+python3 -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
+python3 -m mailmind expire all --dry       # preview what the expiry rules would trash now
 ```
 
 > ⚠️ **`sweep`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
@@ -647,9 +647,9 @@ Each exits non-zero on failure. With [`just`](https://just.systems) and
 together with the pytest suite in `tests/`. That suite drives the app against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
-`just test-full` also runs the browser tests, which click through the dashboard in
-Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
-real Dovecot server in Docker. `just` on its own lists every recipe. uv installs those dev
+`just test-full` also runs the browser tests (`just test-browser` runs only those), which click
+through the dashboard in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
+real Dovecot server in Docker. `just setup` installs all of it, and `just` on its own lists every recipe. uv installs those dev
 tools from `pyproject.toml` on first use, as it does the app's own packages.
 
 Separately, `python3 -m mailmind assess --batch` (`just backfill`) sends every message with no
