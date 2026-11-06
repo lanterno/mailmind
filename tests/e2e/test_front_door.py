@@ -12,9 +12,12 @@ import os
 import re
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
+
+import pytest
 
 import guard
 
@@ -142,14 +145,31 @@ def post(port, path, body):
         conn.close()
 
 
+def old(port):
+    return GUARDED_OLD.format(tests=TESTS, root=ROOT, argv=["server.py", str(port)],
+                              server=os.path.join(ROOT, "server.py"))
+
+
+def new(port):
+    return GUARDED.format(tests=TESTS, root=ROOT, argv=["mailmind", "serve", str(port)])
+
+
+@pytest.mark.parametrize("code", [old, new], ids=["old", "new"])
+def test_each_door_keeps_its_log_in_the_data_directory_its_owners_alone(tmp_path, code):
+    with door(code, tmp_path) as port:
+        pass
+    path = tmp_path / "mailmind.log"
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert f"MailMind → http://127.0.0.1:{port}  (serving now)" in [line["msg"] for line in lines]
+    assert "mail through imaplib" in [line["msg"] for line in lines if line["logger"] == "imap"]
+
+
 def test_undo_outlives_a_restart_and_crosses_the_doors(world):
     """Archived through the old door, undone through the new one after it stopped. Both run
     read-only, so the archive waits in the queue and its Undo asks no server."""
     from fixtures import world as w
     receipt = world.pk("ada-inbox-05-receipt.eml")
-    old = lambda port: GUARDED_OLD.format(tests=TESTS, root=ROOT, argv=["server.py", str(port)],
-                                          server=os.path.join(ROOT, "server.py"))
-    new = lambda port: GUARDED.format(tests=TESTS, root=ROOT, argv=["mailmind", "serve", str(port)])
     with door(old, world.dir) as port:
         assert post(port, "/api/archive", {"pk": receipt})["status"] == "queued"
     with door(new, world.dir) as port:

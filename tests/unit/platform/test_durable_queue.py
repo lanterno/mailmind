@@ -164,7 +164,9 @@ def test_draining_runs_each_due_row_and_one_that_raises_stops_none_of_the_rest(q
             raise ValueError("bad row")
     q.drain(handle, NOW)
     assert handled == ids
-    assert f"[jobs] handle #{ids[1]} errored: ValueError: bad row" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"[jobs] handle #{ids[1]} errored: ValueError" in out
+    assert "bad row" not in out                          # a row's error can carry what its server said
 
 
 def test_a_lane_waiting_on_its_server_holds_up_no_other_lane(laned):

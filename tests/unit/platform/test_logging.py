@@ -1,6 +1,7 @@
 """mailmind.platform.logging: what reaches the terminal and the log file, and above all what doesn't.
 A log is personal data, so most of these say what stays out. Every address is fictional."""
 import ast
+import dataclasses
 import fnmatch
 import json
 import logging as stdlib_logging
@@ -13,11 +14,12 @@ import threading
 import pytest
 
 import guard
-from mailmind.bootstrap import background, mailbox, wiring
+from mailmind.bootstrap import assistant, background, calendar, curation, discovery, mailbox, wiring
 from mailmind.bootstrap.mailbox import realtime
 from mailmind.http import serving
 from mailmind.platform import logging as logs
-from mailmind.platform import settings
+from mailmind.platform import profile, settings
+from mailmind.platform.bus import Bus
 from mailmind.platform.workers.scheduler import Scheduler
 
 WITHHELD = "<withheld>"
@@ -326,6 +328,103 @@ def test_each_round_of_a_job_carries_an_id_of_its_own(home):
     assert first["job_id"].startswith("sync-") and second["job_id"].startswith("sync-")
     assert first["job_id"] != second["job_id"]
     assert "job_id" not in after
+
+
+# -- what the app says through it ---------------------------------------------------------------
+
+def raises(error=None):
+    def boom(*a, **k):
+        raise error or RuntimeError("no such user ada@example.test, Lunch on Friday")
+    return boom
+
+
+def said_in_the_file():
+    return written(pathlib.Path(settings.current().home))
+
+
+def test_a_get_that_fails_says_its_path_and_the_class_of_its_error(app, monkeypatch, capsys):
+    logs.setup()
+    monkeypatch.setattr(mailbox.pool, "stats", raises())
+    r = app.get("/api/debug/pool?account=ada@example.test")
+    assert (r.status, r.json["error"]) == (500, "request failed")
+    out = capsys.readouterr().out
+    assert "[http] GET /api/debug/pool failed: RuntimeError\n" in out
+    assert "example.test" not in out and "Lunch" not in out
+    [line] = said_in_the_file()
+    assert (line["path"], line["error"], line["level"]) == ("/api/debug/pool", "RuntimeError", "ERROR")
+    assert line["request_id"] and "example.test" not in json.dumps(line)
+
+
+def test_a_post_that_fails_says_its_path_and_not_its_query(app, monkeypatch, capsys):
+    logs.setup()
+    monkeypatch.setattr(mailbox.filing, "do_pending_retry", raises())
+    assert app.post("/api/pending/retry?folder=Lunch+on+Friday", {"id": 1}).status == 500
+    out = capsys.readouterr().out
+    assert "[http] POST /api/pending/retry failed: RuntimeError\n" in out
+    assert "Lunch" not in out
+    assert "Lunch" not in json.dumps(said_in_the_file())
+
+
+def test_a_write_refused_read_only_says_what_was_refused(app, monkeypatch, capsys):
+    monkeypatch.setattr(mailbox.filing, "do_pending_retry", raises(profile.ReadOnlyError("a sweep")))
+    assert app.post("/api/pending/retry", {"id": 1}).status == 409
+    assert "[http] POST /api/pending/retry refused, read-only: a sweep\n" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("path, holder, name, said", [
+    ("/api/invite/rsvp", lambda: calendar.rsvp, "respond", "[rsvp] error: RuntimeError"),
+    ("/api/cleanup/execute", lambda: curation.cleanup, "execute", "[cleanup] error: RuntimeError"),
+    ("/api/contacts/known", lambda: discovery.known, "ask", "[contacts] known error: RuntimeError"),
+    ("/api/ai/ask", lambda: assistant.asking, "ask", "[ai] ask error: RuntimeError"),
+])
+def test_a_route_that_answers_its_own_failure_says_only_its_class(app, monkeypatch, capsys, path, holder, name, said):
+    monkeypatch.setattr(holder(), name, raises())
+    assert app.post(path, {}).status == 500
+    out = capsys.readouterr().out
+    assert said + "\n" in out
+    assert "example.test" not in out and "Lunch" not in out
+
+
+def test_a_snapshot_that_fails_says_only_its_class(monkeypatch, capsys):
+    from mailmind.http.routers import export
+    monkeypatch.setattr(export.export, "export_db", raises())
+    export._snapshot(None)                               # it fails before it has answered anything
+    assert capsys.readouterr().out == "[export] db error: RuntimeError\n"
+
+
+def test_a_round_that_fails_says_which_job_and_the_class_of_its_error(home, capsys):
+    jobs = Scheduler()
+    jobs.add("sync", raises(), every=300)
+    jobs.run("sync")
+    assert capsys.readouterr().out == "[jobs] sync failed: RuntimeError\n"
+    [line] = written(home)
+    assert (line["job"], line["error"]) == ("sync", "RuntimeError")
+    assert line["job_id"].startswith("sync-") and "example.test" not in json.dumps(line)
+
+
+def test_a_bus_handler_that_fails_goes_in_the_file_too(home):
+    @dataclasses.dataclass(frozen=True)
+    class Happened:
+        pass
+    bus = Bus()
+    bus.subscribe(Happened, raises())
+    bus.publish(Happened())
+    [line] = written(home)
+    assert (line["event"], line["error"]) == ("Happened", "RuntimeError")
+    assert "example.test" not in json.dumps(line)
+
+
+def test_each_start_says_its_startup_lines_in_the_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(realtime, "start", lambda: None)
+    monkeypatch.setattr(background, "JOBS", background.JOBS)
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        wiring.start(spawn=lambda target: None)
+        wiring.unwire()
+    out = capsys.readouterr().out
+    assert "[imap] mail through imaplib\n" in out
+    by_logger = {line["logger"]: line for line in written(tmp_path)}
+    assert by_logger["imap"]["msg"] == "mail through imaplib"
+    assert by_logger["ai"]["msg"] in out and "Claude API" in by_logger["ai"]["msg"]
 
 
 # -- how the package uses it -----------------------------------------------------------------
