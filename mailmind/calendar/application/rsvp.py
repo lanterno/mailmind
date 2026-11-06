@@ -1,19 +1,25 @@
 """iMIP RSVP: reply to a calendar invite's organizer with a METHOD:REPLY .ics carrying the responder's PARTSTAT. Goes
 through the durable outbox (so it's Undo-Send-able), behind the same mutation + strict-origin guards as /api/send."""
+from collections.abc import Mapping
+from typing import Any
+
+from mailmind.calendar.application.invites import Invites
+from mailmind.calendar.application.ports import Messages, StoredInvites, SystemSend
 from mailmind.calendar.domain import rsvp
+from mailmind.calendar.domain.invite import Party
 
 
 class Rsvp:
-    def __init__(self, invites, stored, messages, send):
+    def __init__(self, invites: Invites, stored: StoredInvites, messages: Messages, send: SystemSend):
         self._invites = invites
         self._stored = stored
         self._messages = messages
         self._send = send
 
-    def respond(self, body):
+    def respond(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
         try:
-            pk = int(body.get("pk"))
+            pk = int(body.get("pk", ""))
         except (TypeError, ValueError):
             return {"ok": False, "error": "missing message"}, 400
         decision = (body.get("decision") or "").strip().lower()
@@ -34,7 +40,7 @@ class Rsvp:
         invite, _part = self._invites.of(pk, parsed)
         if not invite:
             return {"ok": False, "error": "no invite on this message"}, 400
-        organizer = ((invite.get("organizer") or {}).get("email") or "").strip()
+        organizer = ((invite.get("organizer") or Party()).get("email") or "").strip()
         if not organizer or "@" not in organizer:
             return {"ok": False, "error": "this invite has no organizer to reply to"}, 400
         me_email = acct["email"]
@@ -45,7 +51,7 @@ class Rsvp:
         subject = f"{rsvp.VERB[decision]}: {summary}"
         text = (f"{me_name} has responded \"{partstat.title()}\" to the invitation "
                 f"“{summary}”.\n\n— sent from MailMind")
-        spec = {
+        spec: dict[str, Any] = {
             "account": acct["email"], "account_name": me_name,
             "to": [organizer], "cc": [], "bcc": [],
             "subject": subject, "text": text, "html": None,
@@ -59,10 +65,12 @@ class Rsvp:
         except ValueError as e:
             return {"ok": False, "error": str(e)}, 400
         prefix = rsvp.key_prefix(row["account"], invite.get("uid") or pk)
-        meta = {"account": acct["email"],
-                "idempotency_key": rsvp.key(prefix, self._stored.keys_sent(prefix), partstat),
-                "in_reply_to_pk": pk, "subject": subject,
-                "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": 0}
+        meta: dict[str, Any] = {
+            "account": acct["email"],
+            "idempotency_key": rsvp.key(prefix, self._stored.keys_sent(prefix), partstat),
+            "in_reply_to_pk": pk, "subject": subject,
+            "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": 0,
+        }
         oid, created = self._send.enqueue(built, meta)
         return {"ok": True, "outbox_id": oid, "queued": created, "decision": decision,
                 "organizer": organizer, "summary": summary}, 200

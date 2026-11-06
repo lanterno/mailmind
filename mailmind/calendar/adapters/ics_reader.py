@@ -11,6 +11,8 @@ import calendar
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from mailmind.calendar.domain.invite import Invite
+
 try:
     from zoneinfo import ZoneInfo
 except Exception:                       # pragma: no cover
@@ -136,7 +138,7 @@ def _rrule_human(r):
     return base
 
 
-def parse(text):
+def parse(text: str) -> Invite | None:
     lines = _unfold(text)
     method, in_ev = "", False
     ev: dict[str, Any] | None = None
@@ -295,7 +297,7 @@ def _until(kv, start):
     return u
 
 
-def next_occurrence(inv, after):
+def next_occurrence(inv: Invite, after: datetime) -> tuple[datetime, datetime] | None:
     """(start, end) of the first occurrence of a parsed invite that hasn't ended by `after`, in the
     invite's own terms (aware in its zone, or floating). A one-off event is its only occurrence.
     None when every occurrence has ended, or for an RRULE this reader doesn't expand."""
