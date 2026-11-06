@@ -2,9 +2,9 @@
 /* draft-resume:pure:start */ and /* draft-resume:pure:end */): the composer options built from
 /api/draft/resume's answer, the `resume` fields every save and send carries, when AI Draft is
 hidden, the signature a reopened text still ends with, and the wording of the notes. The block
-is pure JavaScript with no DOM, so this runs it once in node, like test_send_guard.py. All
+is pure JavaScript with no DOM, so this runs it once in node, like script_send_guard.py. All
 addresses are fictional.
-Run: python3 test_draft_resume_ui.py"""
+Run: python3 tests/unit/compose/script_draft_resume_ui.py"""
 import os
 import sys
 

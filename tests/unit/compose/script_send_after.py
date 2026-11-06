@@ -2,7 +2,7 @@
 refused before anything is built, a sane one is scheduled, and none means send now. Hermetic —
 temp database and config, and the outbox is replaced with a recorder, so nothing can leave.
 All addresses are fictional.
-Run: python3 test_send_after.py"""
+Run: python3 tests/unit/compose/script_send_after.py"""
 import os
 import sys
 

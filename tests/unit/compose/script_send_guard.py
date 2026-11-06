@@ -3,7 +3,7 @@ and /* send-guard:pure:end */): attachment wording in eight languages, what coun
 empty subjects, reply-all size, speed on long unbroken text, acknowledgements, and the exact wording of every line. The block
 is pure JavaScript with no DOM, so this runs it once in node, like `just check-frontend` does.
 All addresses are fictional.
-Run: python3 test_send_guard.py"""
+Run: python3 tests/unit/compose/script_send_guard.py"""
 import os
 import sys
 

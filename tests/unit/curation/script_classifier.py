@@ -4,7 +4,7 @@ Hermetic: the rules layer is stubbed with a synthetic fixture so the suite
 passes in a clean clone (where mailmind_rules.json is absent) and never depends
 on any real account, employer, or contact. All addresses below are fictional.
 
-Run:  python3 tests.py      (exits non-zero on any failure)
+Run:  python3 tests/unit/curation/script_classifier.py      (exits non-zero on any failure)
 """
 import os
 import sys

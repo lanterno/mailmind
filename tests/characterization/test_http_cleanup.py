@@ -4,7 +4,7 @@ mailto: sent through the fake SMTP server, or a landing page handed back for the
 golden files are in tests/golden/http_cleanup/.
 
 The one-click POST would leave the machine, so `safe_http.one_click_post` is replaced here by a
-recorder; tests/test_unsub_post.py covers the real one against a local HTTPS server. The method
+recorder; tests/unit/curation/test_unsub_post.py covers the real one against a local HTTPS server. The method
 is resolved from a stored body only, so each test opens a message first. It is resolved before
 the sweep, which deletes the rows it moves; most tests put the issue that carries the header in
 the Archive, which the sweep leaves alone, and the ones at the end keep it in the INBOX.

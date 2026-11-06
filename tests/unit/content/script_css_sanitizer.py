@@ -1,5 +1,5 @@
 """Attack corpus for the CSS sanitizer. Each red-team payload must be neutralized;
-   legitimate newsletter styling must survive.  Run: python3 test_css_sanitizer.py"""
+   legitimate newsletter styling must survive.  Run: python3 tests/unit/content/script_css_sanitizer.py"""
 import os
 import sys
 

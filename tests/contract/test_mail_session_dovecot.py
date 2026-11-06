@@ -2,7 +2,7 @@
 
 The fake IMAP server (tests/fakes/imap_server.py) is MailMind's own reading of IMAP, so a case it
 passes can still fail on a real server: Dovecot names MOVE and UIDPLUS only once a user has logged
-in, for one. These cases hold the promises tests/test_mail_session_contract.py states, seen
+in, for one. These cases hold the promises tests/contract/test_mail_session_contract.py states, seen
 through a connection of the test's own instead of the fake's insides.
 
 Marked dovecot, so skipped unless pytest runs with --dovecot (`just test-dovecot`), which needs

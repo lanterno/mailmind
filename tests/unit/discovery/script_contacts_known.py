@@ -2,7 +2,7 @@
 counts as known, exact address matching, drafts never vouching, the thin-history flag, input
 limits, the CSRF guard, and that it never waits on the IMAP lock. Hermetic — the database,
 config and rules are temp files. All addresses are fictional.
-Run: python3 test_contacts_known.py"""
+Run: python3 tests/unit/discovery/script_contacts_known.py"""
 import os
 import sys
 

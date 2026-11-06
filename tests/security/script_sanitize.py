@@ -5,7 +5,7 @@ would (entities decoded) and assert NO real dangerous tag, event-handler
 attribute, dangerous URL scheme, SVG-data image, or remote image (when blocked)
 survives. Strings inside escaped attribute values are inert and don't count.
 
-Run:  python3 tests_sanitize.py      (exits non-zero on any leak)
+Run:  python3 tests/security/script_sanitize.py      (exits non-zero on any leak)
 """
 import os
 import sys

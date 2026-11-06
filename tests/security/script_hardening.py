@@ -1,7 +1,7 @@
 """Phase 0 hardening: live security and data-loss fixes, each pinned by a test. Hermetic: a temp
 database and config, fake IMAP and SMTP connections, and fictional addresses, so nothing here
 can reach a real server.
-Run: python3 test_hardening.py"""
+Run: python3 tests/security/script_hardening.py"""
 import os
 import sys
 

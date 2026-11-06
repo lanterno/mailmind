@@ -2,7 +2,7 @@
 a repeating one next happens (ics.next_occurrence), and the recipient the Waiting view names
 (mailbox.queries.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
-Run: python3 test_upcoming.py"""
+Run: python3 tests/unit/calendar/script_upcoming.py"""
 import os
 import sys
 
