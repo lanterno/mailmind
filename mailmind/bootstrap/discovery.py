@@ -43,11 +43,11 @@ class _Folders:
 
 class _Accounts:
     def emails(self):
-        import accounts
+        from mailmind.bootstrap import accounts
         return [a["email"] for a in accounts.accounts()]
 
     def aliases(self):
-        import config
+        from mailmind.bootstrap.accounts import config
         return config.alias_map()
 
 

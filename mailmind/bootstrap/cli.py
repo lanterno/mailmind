@@ -10,12 +10,12 @@ from mailmind.bootstrap import curation, discovery, mailbox
 
 def check():
     """Whether each account's credential resolves, printing ok or fail and never a secret."""
-    import config
+    from mailmind.bootstrap.accounts import config
     config.check()
 
 
 def list_accounts():
-    import config
+    from mailmind.bootstrap.accounts import config
     for a in config.accounts():
         c = a.get("credential")
         style = "plain" if isinstance(c, (str,)) or (isinstance(c, dict) and "plain" in c) else \
@@ -26,13 +26,13 @@ def list_accounts():
 
 
 def materialize(only):
-    import config
+    from mailmind.bootstrap.accounts import config
     config.materialize(only)
 
 
 def sync(who, days):
     """Pull `who`'s mail (an address, or every account) from the last `days` days."""
-    import accounts
+    from mailmind.bootstrap import accounts
     import ingest
     import store
     store.init()
@@ -74,7 +74,7 @@ def _count(s, folder):
 
 
 def _status(accts):
-    import accounts
+    from mailmind.bootstrap import accounts
     for a in accts:
         try:
             s = mailbox.open_session(a)
@@ -168,7 +168,7 @@ def _plan(accts, do_sweep=False, dry=False):
 
 
 def _empty_trash(accts):
-    import accounts
+    from mailmind.bootstrap import accounts
     for a in accts:
         if provider.resolve(a).bulk_expunge_unsafe:
             print(f"{a['email']:30} SKIPPED — empty Proton Trash with the native button "
@@ -200,7 +200,7 @@ def _empty_trash(accts):
 
 def mailboxes(command, who, dry=False):
     """`status`, `inventory`, `plan`, `sweep`, `sweep-ai`, `expire` or `empty-trash` over `who`."""
-    import accounts
+    from mailmind.bootstrap import accounts
     accts = accounts.accounts() if who == "all" else [accounts.get(who)]
     accounts.preload_creds()            # one Touch ID up front for all Gmail accounts
     if command == "status":

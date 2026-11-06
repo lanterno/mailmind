@@ -22,8 +22,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
-import accounts
-import config
+from mailmind.bootstrap import accounts
+from mailmind.bootstrap.accounts import config
 import ingest
 import warm
 import readmutq

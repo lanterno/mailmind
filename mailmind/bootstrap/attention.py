@@ -33,7 +33,7 @@ class _Messages:
 
 class _Accounts:
     def emails(self):
-        import accounts
+        from mailmind.bootstrap import accounts
         return [a["email"] for a in accounts.accounts()]
 
 

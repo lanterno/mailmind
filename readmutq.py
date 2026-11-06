@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import accounts
+from mailmind.bootstrap import accounts
 import store
 import mailops
 from mailmind.platform import bus, profile

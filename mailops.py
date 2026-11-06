@@ -9,7 +9,7 @@ import ssl
 import imaplib
 
 sys.path.insert(0, os.path.dirname(__file__))
-import accounts
+from mailmind.bootstrap import accounts
 import store
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox

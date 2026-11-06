@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
-import accounts
+from mailmind.bootstrap import accounts
 from mailmind.bootstrap import curation
 from mailmind.content import mime
 from mailmind.content.mime import dec

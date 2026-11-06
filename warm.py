@@ -21,7 +21,7 @@ import os
 import time
 import threading
 
-import accounts
+from mailmind.bootstrap import accounts
 import ingest
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox

@@ -37,7 +37,7 @@ class _Messages:
             c.close()
 
     def account(self, email):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.get(email)
 
     def fetched(self, account, pk):

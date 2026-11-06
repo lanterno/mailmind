@@ -22,8 +22,8 @@ from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
-import accounts         # the connection's TLS, pin and login, until they move into Accounts
-import config           # the credential, likewise
+from mailmind.bootstrap import accounts         # the connection's TLS, pin and login, until they move into Accounts
+from mailmind.bootstrap.accounts import config           # the credential, likewise
 
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers

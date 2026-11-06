@@ -88,7 +88,7 @@ class _Filing:
 
 class _SystemSend:
     def send(self, account, raw, recipients):
-        import accounts
+        from mailmind.bootstrap import accounts
         from mailmind.bootstrap import compose
         acct = accounts.get(account)                      # a removed/stale account raises KeyError
         if not acct:
@@ -104,7 +104,7 @@ class _SafeHttp:
 
 class _ListHeaders:
     def read(self, r):
-        import accounts
+        from mailmind.bootstrap import accounts
         acct = next((a for a in accounts.accounts() if a["email"] == r["account"]), None)
         if acct is None:
             return None
@@ -126,18 +126,18 @@ class _ListHeaders:
 
 class _Mailboxes:
     def all(self):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.accounts()
 
     def get(self, email):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.get(email)
 
     def known(self):
         return {a["email"] for a in self.all()}
 
     def preload_creds(self):
-        import accounts
+        from mailmind.bootstrap import accounts
         accounts.preload_creds()
 
     def open_session(self, acct):
@@ -148,11 +148,11 @@ class _Mailboxes:
         return pool.borrow(acct)
 
     def trash_folder(self, acct):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.trash_folder(acct)
 
     def quote(self, value):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.imap_quote(value)
 
     def move_verified(self, session, uids, dest):

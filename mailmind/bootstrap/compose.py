@@ -28,22 +28,22 @@ class _Credentials:
     PinMismatch = tls_pin.TLSPinMismatch
 
     def tls_context(self, host):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.tls_context(host)
 
     def check_pin(self, acct, host, port, connection):
-        import accounts
+        from mailmind.bootstrap import accounts
         accounts.check_pin(acct, host, port, connection)
 
     def secret(self, acct):
-        import config
+        from mailmind.bootstrap.accounts import config
         return config.resolve_credential(acct)
 
 
 class _Accounts:
     """An account as the configuration has it, until Accounts holds it."""
     def get(self, email):
-        import accounts
+        from mailmind.bootstrap import accounts
         return accounts.get(email)              # host, port and credential only from the configuration
 
     def saves_sent(self, acct):

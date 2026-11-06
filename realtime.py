@@ -13,7 +13,7 @@ Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread cl
 import threading
 from dataclasses import dataclass
 
-import accounts
+from mailmind.bootstrap import accounts
 from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
 
