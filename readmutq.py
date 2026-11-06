@@ -1,4 +1,4 @@
-"""Offline-safe read-mutation drain worker — a structural clone of outbox.py for read-side
+"""Offline-safe read-mutation drain worker — a structural clone of Compose's outbox for read-side
 mailbox mutations (trash/archive/junk/move/flag). When the route enqueues a mutation (because
 IMAP was unreachable), this worker re-applies it once the server is back, exactly once.
 

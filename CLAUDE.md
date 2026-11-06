@@ -188,7 +188,7 @@ mailmind.config.json → config.py/accounts.py → ingest.py → curation's clas
                                               summarize.py (Claude API) → server.py + web/
 ```
 
-Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
+Around that spine: `mailops.py` (IMAP writes), `mailmind.compose`
 (send), `mailmind.discovery` (FTS + operator grammar), `threads.py`, `mailmind.calendar` (invites), `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
@@ -227,7 +227,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   directory; unset, it is the repo root. It must exist, and nothing creates it.
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
-  what the legacy workers publish: `outbox.Sent`, `outbox.DraftCopyRemoved`, `readmutq.Applied` and
+  what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, `readmutq.Applied` and
   `realtime.InboxChanged`.
   It also hands each account event (below) to `realtime.reconcile`. `readmutq.Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
@@ -290,7 +290,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `text` (what a list shows and what search indexes), `headers` and `quote` (the part of a reply you typed, and the
   quote after it). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `when` (`now_iso`, `rel_time`, `ago`) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
@@ -355,7 +355,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
   the legacy modules and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
   A folder's role goes through the server's own `_folder_role`, which `discovery.attach` names, since the server may run
-  as `__main__`; the account list through `accounts` and `config`, and an address through the composer's parser, until
+  as `__main__`; the account list through `accounts` and `config`, until
   those contexts hold them. It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
   matcher for the classifier, the Screener and expiry), `expiry`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
@@ -382,8 +382,17 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `next_occurrence`, what the proposal's `IcsReader` port names) and `sqlite` (reads stored bodies and the outbox's keys, and
   writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
   binds them, and it's how the legacy modules reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
-  RSVP still goes through `compose` and `outbox`, a message through `store` and `ingest`, until those contexts hold them.
+  RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
   It is standard library only.
+- `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
+  else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `resume` (a saved draft split back into your text, its quote and its
+  files), `attachments`, `limits`, `outbox_item`, `events` and `errors`. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
+  and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Sending`, `Drafts`
+  and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the legacy modules, the other contexts and the tests reach
+  Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
+  what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
+  (`mailbox.copies`). A message's row through `store`, and what the server keeps about folders and tells the page through its own functions, which
+  `compose.attach` names, until the Mailbox and the routers hold them. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
@@ -412,7 +421,7 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   the thread that opened it, and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
   while one has a transaction open, since a write held while a server answers keeps every other
   writer waiting. An IMAP session and each command (`mailbox.open_session`), an SMTP session and
-  all it sends (`smtpsend.smtp_connect`), a Claude API request and a one-click unsubscribe check
+  all it sends (`SmtpTransport.connect`), a Claude API request and a one-click unsubscribe check
   it, in tests and in use. Commit before talking to a server; a new network path calls
   `refuse_network` first, or wraps the connection's method with `txguard.guard_calls`.
 - `migrations.MIGRATIONS` is a list of `(target_user_version, callable)` run against
@@ -520,7 +529,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   and the queue row's payload keeps the flags it replaced (`was`), which a refusal or a give-up
   puts back.
 - `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
-  exactly-once gate. It and `outbox.py` each run a `DurableQueue`, `QUEUE`, over their table:
+  exactly-once gate. It and Compose's `Outbox` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
   goes to `error`, where a person's retry (`requeue`) starts the count again. `/api/pending` lists the
   move queue's unapplied rows for the panel the outbox button opens; its Retry (`readmutq.retry`) marks the message or
@@ -528,8 +537,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   takes the entry off the undo stack (`store.undo_forget_move`). The `forget` job removes rows finished a month
   ago (`store.read_mut_forget_finished`). The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
-  outbox publishes `outbox.Failed` for an attempt that failed, as it does `outbox.Sent`. A send the
-  server refuses for good (`smtpsend.permanent`: a 5xx, or every recipient refused with one) goes
+  outbox publishes `Failed` for an attempt that failed, as it does `Sent`. A send the
+  server refuses for good (`SmtpTransport.permanent`: a 5xx, or every recipient refused with one) goes
   to `error` on its first try (`give_up`). The gate column (`applied`, `delivered`) is set the instant the one
   irreversible step returns, so the boot-time reset of running rows never repeats it, and for a move
   before the IMAP gate opens, so an Undo or Discard waiting on it finds it set. A row's
@@ -538,19 +547,19 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - The outbox's queue has a lane for each account (`DurableQueue(lane="account")`): its drain
   runs each account's rows in turn on a thread of their own. The worker's drain doesn't wait
   for them; any other caller's (a test's `outbox.drain()`) waits for every lane it ran.
-- `smtpsend.send` tells apart the two sides of a message's last bytes. `before_dot` sets `outbox.wire_begun`
-  (migration 32) just before they go, and with no answer after them it raises `smtpsend.Unanswered`: the row goes
-  to `error` as `outbox.UNSURE`, listed `unsure`, and only a person's retry sends it again. Any answer clears the
+- `SmtpTransport.send` tells apart the two sides of a message's last bytes. `before_dot` sets `outbox.wire_begun`
+  (migration 32) just before they go, and with no answer after them it raises `Unanswered`: the row goes
+  to `error` as `outbox_item.UNSURE`, listed `unsure`, and only a person's retry sends it again. Any answer clears the
   mark, and so does a failure before them. `DurableQueue(unsure=...)` makes `reset_stuck` do the same for a
   row a crash left with the mark set.
 - A Sent copy that fails puts the delivered row back in the queue, its tries counted from the
   delivery, until it is filed or goes to `error`. The retry looks for the copy by Message-ID
-  first (`smtpsend.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as
+  first (`Copies.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as
   `error` once it gives up, and `cancel_queued` never deletes a row past its gate.
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
-  which refuses any command not known to only read. `smtpsend.smtp_connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
+  which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
   member of `mailops._UNREACHABLE`, so a move or a flag change queues as it does offline, and
   both queues' drains wait for a full run. What nothing queues (a draft, a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
@@ -603,25 +612,25 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.
-  `do_send` refuses a `send_after` that has passed instead of sending now.
-- Reopening a draft (`/api/draft/resume` → `draft_resume`) reads the draft's own bytes, never
-  the original. At each save `do_draft` records beside the `drafts` row what the composer held
+  `Sending.send` refuses a `send_after` that has passed instead of sending now.
+- Reopening a draft (`/api/draft/resume` → `Drafts.resume`) reads the draft's own bytes, never
+  the original. At each save `Drafts.save` records beside the `drafts` row what the composer held
   (migration 20: `own_text`, `tail_text`, `tail_html`, `bcc`, `raw_sha`). That record is
   trusted only for the very copy it describes, the same UID or the same sha256. The composer
-  sends `resume` (threading and the quote's text) on every save and send. `_compose_spec`
+  sends `resume` (threading and the quote's text) on every save and send. `Composing.spec`
   then builds `own + tail`, with HTML only where the row vouches for that exact tail. The
-  original is looked up by `(account, Message-ID)` for `\Answered` only. `_draft_live`, the
+  original is looked up by `(account, Message-ID)` for `\Answered` only. `Drafts._live`, the
   "is this copy still there" probe, is a stateless 10-second connection outside the IMAP gate.
-  Under the gate `draft_resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
-  so `do_draft` and the outbox's draft cleanup also change that row only under the gate. Edit
+  Under the gate `Drafts.resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
+  so `Drafts.save` and the outbox's draft cleanup also change that row only under the gate. Edit
   answers 423 while a queued or sending outbox row holds the draft. A save appends the new copy
-  first and only then removes the old one (`smtpsend.append_to_drafts`), wherever it was, so one that
+  first and only then removes the old one (`Copies.append_to_drafts`), wherever it was, so one that
   fails or a crash leaves the old copy, at worst beside the new.
 - A message is a draft if the server flags it `\Draft` or its folder is the account's Drafts
-  (`server._is_draft`): the role the last LIST gave it, else `roles.names_drafts`, the whole name
+  (`Drafts.is_draft`): the role the last LIST gave it, else `roles.names_drafts`, the whole name
   at the top of the tree or under INBOX or Gmail's parent. A name that merely holds "draft" counts
   for nothing, and a removal has no Undo, so Discard, a Send and a replacing save remove a copy only
-  if MailMind saved it, the server flags it or its folder is Drafts (`outbox.draft_copy_is_ours`).
+  if MailMind saved it, the server flags it or its folder is Drafts (`Outbox.draft_copy_is_ours`).
   Older `drafts` rows may name received mail: those are forgotten and the mail stays.
 - A reply or forward names its original by pk until its first save, whose answer carries `resume`
   (threading, the quote) and a forward's `files`; the composer then works from those, as a reopened
@@ -635,9 +644,9 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
   It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at
   every edit, never `cmp.dirty=true`. A closing save that fails goes to `state.failedSend`, with the
-  float's Edit. On the server `do_draft` reads the row it replaces under the gate, and a first
+  float's Edit. On the server `Drafts.save` reads the row it replaces under the gate, and a first
   save finds an earlier one's row by the composer's key (`drafts.idempotency_key`, migration 26),
-  as `do_send` does when it has no `draft_id`.
+  as `Sending.send` does when it has no `draft_id`.
 - A composer replaced after an `await` (Undo Send, a failed send's Edit → `makeRoom`) must
   close and open in the same task. In the gap `_syncBack`'s MutationObserver calls
   `history.back()`, the new composer's `pushState` lands before that traversal does, and the

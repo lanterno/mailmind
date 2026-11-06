@@ -40,7 +40,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   that drops `utm_*`/`fbclid` and unwraps redirect wrappers before insertion. Independent of the
   markdown work.
 - **Configurable Undo-Send delay** · low value · effort S — The feature ships; only "configurable"
-  is unmet. `SEND_DELAY = 10` is a bare module constant in `outbox.py` with no config key and no env
+  is unmet. `Outbox.SEND_DELAY = 10` is a bare class constant with no config key and no env
   override, though `enqueue` and the `scheduled` heuristic both already read it. Keep 10s as the
   default and expose a slider alongside the existing signature setting.
 - **Three-way choice on Esc with a dirty draft** · low value · effort S — The litter bug is fixed
