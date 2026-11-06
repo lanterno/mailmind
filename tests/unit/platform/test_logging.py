@@ -13,11 +13,12 @@ import threading
 import pytest
 
 import guard
-from mailmind.bootstrap import background, wiring
+from mailmind.bootstrap import background, mailbox, wiring
 from mailmind.bootstrap.mailbox import realtime
 from mailmind.http import serving
 from mailmind.platform import logging as logs
 from mailmind.platform import settings
+from mailmind.platform.workers.scheduler import Scheduler
 
 WITHHELD = "<withheld>"
 log = logs.get_logger("test")
@@ -301,6 +302,30 @@ def test_each_request_gets_an_id_of_its_own_that_stays_on_its_thread(home):
         pass
     assert one != two
     assert seen == [{}]
+
+
+def test_each_request_through_either_door_carries_an_id_of_its_own(app, monkeypatch):
+    logs.setup()
+    monkeypatch.setattr(mailbox.pool, "stats", lambda: log.warning("in a GET") or {})
+    monkeypatch.setattr(mailbox.filing, "do_pending_retry", lambda id_: log.warning("in a POST") or {"ok": True})
+    assert app.get("/api/debug/pool").status == 200
+    assert app.get("/api/debug/pool").status == 200
+    assert app.post("/api/pending/retry", {"id": 1}).status == 200
+    lines = written(pathlib.Path(settings.current().home))
+    assert [line["msg"] for line in lines] == ["in a GET", "in a GET", "in a POST"]
+    assert len({line["request_id"] for line in lines}) == 3
+
+
+def test_each_round_of_a_job_carries_an_id_of_its_own(home):
+    jobs = Scheduler()
+    jobs.add("sync", lambda: log.warning("in the round"), every=300)
+    jobs.run("sync")
+    jobs.run("sync")
+    log.warning("after the rounds")
+    first, second, after = written(home)
+    assert first["job_id"].startswith("sync-") and second["job_id"].startswith("sync-")
+    assert first["job_id"] != second["job_id"]
+    assert "job_id" not in after
 
 
 # -- how the package uses it -----------------------------------------------------------------
