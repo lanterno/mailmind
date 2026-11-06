@@ -2,11 +2,12 @@
 `config`, the file's directory, and the rest by name, as `accounts.get(email)`."""
 from mailmind.accounts.adapters import config_file, imap_connection, secrets
 from mailmind.accounts.adapters.imap_connection import LoginUnreachable, ReadOnlyIMAP, is_loopback, tls_context
+from mailmind.accounts.application.connections import Connections
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.domain import conn_error, provider
 from mailmind.mailbox.adapters.imap_names import BadMailbox, imap_quote, mailbox_arg
 
-__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "quiet_error", "connect", "get",
+__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connections", "quiet_error", "connect", "get",
            "imap_quote", "is_loopback", "mailbox_arg", "preload_creds", "tls_context", "trash_folder"]
 
 
@@ -39,3 +40,21 @@ def trash_folder(acct):
 
 def preload_creds():
     return config.preload()
+
+
+def _open_session(acct, timeout):
+    from mailmind.bootstrap import mailbox
+    return mailbox.open_session(acct, timeout=timeout)
+
+
+def _retry_sync(body):
+    from mailmind.bootstrap import mailbox
+    return mailbox.syncing.do_sync_retry(body)
+
+
+def _forget_status(email):
+    from mailmind.bootstrap import mailbox
+    mailbox.syncing._status.pop(email, None)
+
+
+connections = Connections(config, get, accounts, _open_session, quiet_error, _retry_sync, _forget_status)
