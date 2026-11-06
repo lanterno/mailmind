@@ -34,6 +34,7 @@ from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
 import smtplib
 from mailmind.bootstrap.accounts import config
+from mailmind.bootstrap import background
 store.init()
 
 
@@ -615,9 +616,9 @@ def test_nosync_reads_one_way_and_fails_toward_read_only():
         for value, want in (("1", True), ("true", True), ("yes", True), (" On ", True), ("anything", True),
                             ("", False), ("0", False), ("false", False), ("No", False), ("off", False)):
             os.environ["MAILMIND_NOSYNC"] = value
-            assert server.nosync() is want, (value, want)
+            assert background.nosync() is want, (value, want)
         os.environ.pop("MAILMIND_NOSYNC")
-        assert server.nosync() is False
+        assert background.nosync() is False
     finally:
         if real is None:
             os.environ.pop("MAILMIND_NOSYNC", None)

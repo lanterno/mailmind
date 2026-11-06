@@ -9,6 +9,8 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import assistant
+from mailmind.bootstrap import background
+from mailmind.bootstrap import legacy
 
 TRANSPORTS = ["sdk", "urllib"]
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
@@ -491,15 +493,14 @@ def test_status_says_so_only_when_a_batch_is_out(backlog, ai):
 
 
 def test_finished_batches_are_forgotten_after_a_month(backlog, ai):
-    import server
     from mailmind.bootstrap import assistant
     assert assistant.triage.batch_submit() > 0
     ai.end_batch()
     assistant.triage.batch_collect()
-    server.forget_round()
+    background.forget_round()
     assert len(_sql("SELECT * FROM ai_batches")) == 1
     _write("UPDATE ai_batches SET ended_at = ended_at - ?", 31 * 86400)
-    server.forget_round()
+    background.forget_round()
     assert _sql("SELECT * FROM ai_batches") == []
 
 
@@ -507,7 +508,6 @@ def test_finished_batches_are_forgotten_after_a_month(backlog, ai):
 
 def test_the_command_sends_any_size_and_says_so(backlog, ai, capsys, monkeypatch):
     from mailmind.bootstrap import assistant
-    from mailmind.bootstrap import legacy
     monkeypatch.setattr(assistant.triage, "BATCH_MIN", 100000)
     assert legacy.assess_batch() == 0
     assert len(posts(ai)) == 1
@@ -516,7 +516,6 @@ def test_the_command_sends_any_size_and_says_so(backlog, ai, capsys, monkeypatch
 
 def test_the_command_brings_in_a_batch_that_ended(backlog, ai, capsys):
     from mailmind.bootstrap import assistant
-    from mailmind.bootstrap import legacy
     assert assistant.triage.batch_submit() > 0
     ai.end_batch()
     assert legacy.assess_batch() == 0
@@ -526,7 +525,6 @@ def test_the_command_brings_in_a_batch_that_ended(backlog, ai, capsys):
 
 def test_the_command_says_when_nothing_is_waiting(backlog, ai, capsys):
     from mailmind.bootstrap.mailbox import store
-    from mailmind.bootstrap import legacy
     c = store.conn()
     for r in answers.needs_summary(c, 1000):
         answers.save_summary(c, r["pk"], "s", 2, "info", "", "m", "2026-11-02T12:00:00+00:00")
@@ -537,13 +535,11 @@ def test_the_command_says_when_nothing_is_waiting(backlog, ai, capsys):
 
 
 def test_the_command_with_ai_off_sends_nothing(world, anthropic_api, capsys):
-    from mailmind.bootstrap import legacy
     assert legacy.assess_batch() == 1
     assert "AI is off" in capsys.readouterr().out and anthropic_api.requests == []
 
 
 def test_the_command_in_the_read_only_profile_sends_nothing(backlog, ai, capsys, monkeypatch):
-    from mailmind.bootstrap import legacy
     from mailmind.platform import profile
     monkeypatch.setattr(profile, "writes_allowed", lambda: False)
     assert legacy.assess_batch() == 1

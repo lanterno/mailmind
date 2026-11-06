@@ -6,6 +6,7 @@ import time
 import pytest
 
 from mailmind.platform.workers.scheduler import Scheduler
+from mailmind.bootstrap import background
 
 
 def wait_until(cond, timeout=5.0):
@@ -141,7 +142,6 @@ def test_each_lane_is_named_for_its_job():
 
 @pytest.mark.parametrize("named, shown", [(None, "full"), ("read-only", "read-only")])
 def test_the_jobs_route_shows_the_profile_and_each_jobs_last_round(app, monkeypatch, named, shown):
-    import server
     if named:
         monkeypatch.setenv("MAILMIND_PROFILE", named)
     jobs = Scheduler()
@@ -152,7 +152,7 @@ def test_the_jobs_route_shows_the_profile_and_each_jobs_last_round(app, monkeypa
     jobs.add("expire", refused, every=3600, first=180)
     jobs.run("sync")
     jobs.run("expire")
-    monkeypatch.setattr(server, "JOBS", jobs)
+    monkeypatch.setattr(background, "JOBS", jobs)
 
     r = app.get("/api/debug/jobs")
     assert r.status == 200

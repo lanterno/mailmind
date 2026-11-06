@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from fixtures import world as w
 from mailmind.bootstrap import attention
+from mailmind.bootstrap import background
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
@@ -165,7 +166,6 @@ def test_read_only_mutes_and_the_mark_waits_in_the_queue(app, world, monkeypatch
 
 def test_finished_queue_rows_go_after_a_month(app, world):
     from mailmind.bootstrap.mailbox import offline
-    import server
     from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
@@ -179,18 +179,17 @@ def test_finished_queue_rows_go_after_a_month(app, world):
             c.close()
     done = count()
     assert done
-    server.forget_round()
+    background.forget_round()
     assert count() == done
     app.clock.shift(timedelta(days=31))
-    server.forget_round()
+    background.forget_round()
     assert count() == 0
 
 
 def test_an_unfinished_queue_row_stays_past_a_month(app, world):
-    import server
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
     open_rows = len(app.get("/api/pending").json["items"])
     app.clock.shift(timedelta(days=31))
-    server.forget_round()
+    background.forget_round()
     assert len(app.get("/api/pending").json["items"]) == open_rows

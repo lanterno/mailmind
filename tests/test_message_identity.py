@@ -6,6 +6,7 @@ from fixtures import world as w
 from mailmind.mailbox.domain import identity
 from mailmind.platform.db import migrate, migrations
 from mailmind.bootstrap import attention
+from mailmind.bootstrap import background
 
 LUNCH = "ada-inbox-01-lunch.eml"
 DAY = 86400
@@ -193,7 +194,6 @@ def test_a_key_with_a_copy_left_isnt_gone(world):
 
 
 def test_the_forget_job_ends_a_key_long_gone(world):
-    import server
     from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     c = store.conn()
@@ -201,7 +201,7 @@ def test_the_forget_job_ends_a_key_long_gone(world):
     c.execute("UPDATE message_identity SET gone_at=1 WHERE key=?", (row["message_key"],))
     c.commit()
     c.close()
-    server.forget_round()
+    background.forget_round()
     assert q("SELECT 1 FROM message_identity WHERE key=?", row["message_key"]) == []
 
 

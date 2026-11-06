@@ -5,6 +5,7 @@ from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import assistant
+from mailmind.bootstrap import background
 
 
 def unsummarized():
@@ -37,9 +38,8 @@ def test_a_round_triages_a_batch_and_comes_back_at_once_while_more_wait(app, wor
 
 
 def test_a_sync_with_new_mail_kicks_triage_and_asks_nothing_itself(app, world, ai, monkeypatch):
-    import server
     kicked = []
-    monkeypatch.setattr(server, "_kick", kicked.append)
+    monkeypatch.setattr(background, "_kick", kicked.append)
     world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml",       # on the server only
                                                    Message_ID="<lunch-5@example.test>",
                                                    Subject="Re: Lunch, a table for three"))
@@ -50,11 +50,10 @@ def test_a_sync_with_new_mail_kicks_triage_and_asks_nothing_itself(app, world, a
 
 
 def test_a_kick_for_a_job_this_process_doesnt_run_is_ignored(monkeypatch):
-    import server
     from mailmind.platform.workers.scheduler import Scheduler
     jobs = Scheduler()
-    monkeypatch.setattr(server, "JOBS", jobs)
-    server._kick("assess")                         # read-only schedules no assess job
+    monkeypatch.setattr(background, "JOBS", jobs)
+    background._kick("assess")                         # read-only schedules no assess job
     jobs.add("assess", lambda: None, every=300)
-    server._kick("assess")
+    background._kick("assess")
     assert jobs._jobs["assess"]._wake.is_set()

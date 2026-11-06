@@ -10,14 +10,14 @@ from mailmind.compose.api import Sent
 from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import background
+from mailmind.bootstrap import legacy
 
 
 @pytest.fixture
 def unwired(monkeypatch):
     """No wiring on the bus, and the server's jobs as they were, after the test."""
-    import server
-    from mailmind.bootstrap import legacy
-    monkeypatch.setattr(server, "JOBS", server.JOBS)
+    monkeypatch.setattr(background, "JOBS", background.JOBS)
     yield
     legacy.unwire()
 
@@ -30,37 +30,31 @@ def wiring():
 def test_the_server_hears_what_the_workers_publish(unwired):
     """That they hold the IMAP lock for their mail commands, test_hwf_http checks at the fake
     server."""
-    import server
-    from mailmind.bootstrap import legacy
-    legacy.wire(server)
-    assert wiring() == [(server._after_send,), (mailbox.filing.settled,), (server._after_idle,)]
-    legacy.wire(server)                                       # wiring again replaces, never doubles
-    assert wiring() == [(server._after_send,), (mailbox.filing.settled,), (server._after_idle,)]
+    legacy.wire()
+    assert wiring() == [(legacy._after_send,), (mailbox.filing.settled,), (legacy._after_idle,)]
+    legacy.wire()                                       # wiring again replaces, never doubles
+    assert wiring() == [(legacy._after_send,), (mailbox.filing.settled,), (legacy._after_idle,)]
     legacy.unwire()
     assert wiring() == [(), (), ()]
 
 
 def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
     from mailmind.bootstrap.mailbox import realtime
-    import server
     from mailmind.accounts.domain import events
-    from mailmind.bootstrap import legacy
     from mailmind.platform.bus import BUS
     topics = (events.AccountAdded, events.AccountChanged, events.AccountRemoved)
-    legacy.wire(server)
-    legacy.wire(server)
+    legacy.wire()
+    legacy.wire()
     assert [BUS.subscribers(t) for t in topics] == [(realtime.reconcile,)] * 3
     legacy.unwire()
     assert [BUS.subscribers(t) for t in topics] == [()] * 3
 
 
 def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
-    import server
-    from mailmind.bootstrap import legacy
     from mailmind.platform import bus
     synced = []
     monkeypatch.setattr(mailbox.syncing, "sync_guarded", synced.append)
-    legacy.wire(server)
+    legacy.wire()
     bus.publish(InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
     assert synced == [{"ada@example.test", "cy@example.test"}]
 
@@ -98,9 +92,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     """What both front doors run before they serve. Read-only, only snooze wake starts, since it
     needs no mail server: the outbox and the offline queue wait, and nothing syncs."""
     from mailmind.bootstrap.mailbox import realtime
-    import server
     from mailmind.bootstrap.mailbox import store
-    from mailmind.bootstrap import legacy
     from mailmind.platform import settings
     from mailmind.platform.db import migrations
     monkeypatch.delenv("MAILMIND_PROFILE", raising=False)
@@ -111,7 +103,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     monkeypatch.setattr(realtime, "start", lambda: spawned.append(realtime.start))
     spawned = []
     with settings.use(settings.Settings(home=str(tmp_path))):
-        legacy.start(server, spawn=spawned.append)
+        legacy.start(spawn=spawned.append)
         c = store.conn()
         try:
             version = c.execute("PRAGMA user_version").fetchone()[0]
@@ -126,7 +118,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
                               "job:backfill", "job:draft-ahead", "job:reconcile", "job:expire",
                               "job:forget"]
         assert spawned[-1] is realtime.start
-    assert [j["name"] for j in server.JOBS.snapshot()] == [n.removeprefix("job:") for n in names if "job:" in n]
+    assert [j["name"] for j in background.JOBS.snapshot()] == [n.removeprefix("job:") for n in names if "job:" in n]
     out = capsys.readouterr().out
     assert ("auto-sync disabled" in out) == read_only
     assert "[ai] Claude API" in out
@@ -162,14 +154,13 @@ def test_each_door_runs_the_account_that_asks_on_its_own_adapter(app):
 
 
 def scheduled(monkeypatch, **env):
-    """The jobs server.schedule puts on a fresh scheduler under `env`: name, interval and first delay."""
-    import server
+    """The jobs background.schedule puts on a fresh scheduler under `env`: name, interval and first delay."""
     for name in ("MAILMIND_PROFILE", "MAILMIND_NOSYNC", "MAILMIND_NO_DRAFT_TICK"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     jobs = Scheduler()
-    server.schedule(jobs)
+    background.schedule(jobs)
     return [(j.name, j.every, j.first) for j in jobs._jobs.values()]
 
 
@@ -185,9 +176,8 @@ def test_read_only_schedules_snooze_wake_alone(monkeypatch):
 
 
 def test_a_job_switched_off_is_left_out(monkeypatch):
-    import server
     monkeypatch.setattr(mailbox.syncing, "_RECONCILE_INTERVAL", 0)
-    monkeypatch.setattr(server, "_EXPIRE_INTERVAL", 0)
+    monkeypatch.setattr(background, "_EXPIRE_INTERVAL", 0)
     assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "assess",
                                                                                       "backfill", "forget"]
 
