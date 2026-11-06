@@ -1002,7 +1002,7 @@ START = datetime(2026, 10, 5, 10, 0)                       # a Monday; floating 
 
 
 def _next(rule, *extra, start="20261005T100000", end="20261005T103000", after=datetime(2026, 11, 1, 12, 0)):
-    import ics
+    from mailmind.bootstrap.calendar import ics
     head = "DTSTART;VALUE=DATE:" if len(start) == 8 else "DTSTART:"
     tail = "DTEND;VALUE=DATE:" if len(end) == 8 else "DTEND:"
     inv = ics.parse(_cal(["UID:r", head + start, tail + end, "RRULE:" + rule, *extra]))
@@ -1011,7 +1011,7 @@ def _next(rule, *extra, start="20261005T100000", end="20261005T103000", after=da
 
 
 def test_hwf_only_the_first_event_of_a_calendar_is_read():
-    import ics
+    from mailmind.bootstrap.calendar import ics
     inv = ics.parse(_cal(["UID:a", "SUMMARY:First", "DTSTART:20261110T100000"],
                          ["UID:b", "SUMMARY:Second", "DTSTART:20261111T100000"]))
     assert (inv["uid"], inv["summary"], inv["start_iso"]) == ("a", "First", "2026-11-10T10:00:00")

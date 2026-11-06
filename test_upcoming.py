@@ -12,7 +12,7 @@ import store
 from mailmind.mailbox.application.session import Headers
 from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
-import ics
+from mailmind.bootstrap.calendar import ics
 import ingest
 from mailmind.content import mime
 import server
