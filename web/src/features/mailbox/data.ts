@@ -1,0 +1,82 @@
+// What the mailbox reads, and when it reads it again. The event stream says what changed (app/realtime.ts); a query
+// refetches in place, so the row you are on and what you were reading stay put.
+import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
+import { get } from "../../api/client";
+import { sourceKey, type ListSource } from "../../app/route";
+import { store, stored } from "../../lib/store";
+import { fromFolder, fromSearch, type Row } from "./rows";
+
+const PAGE = 200, ALL_INBOXES_EACH = 40;
+const q = encodeURIComponent;
+
+export interface ListPage { rows: Row[]; hasMore: boolean; total: number; syncing: boolean; syncFailed: boolean; catchingUp: boolean; error?: string }
+
+export const useDigest = () => useQuery({ queryKey: ["digest"], queryFn: () => get("/api/digest") });
+
+export const useFolders = (account: string | undefined) =>
+  useQuery({ queryKey: ["folders", account], queryFn: () => get(`/api/folders?account=${q(account!)}`), enabled: Boolean(account) });
+
+async function folderPage(account: string, folder: string, grouped: boolean, offset: number): Promise<ListPage> {
+  const group = grouped ? "&group=thread" : "";
+  const d = await get(`/api/messages?account=${q(account)}&folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
+  return {
+    rows: d.items.map((it) => fromFolder(it, account, folder)),
+    hasMore: d.has_more,
+    total: d.total,
+    syncing: Boolean(d.syncing),
+    syncFailed: Boolean(d.sync_failed),
+    catchingUp: Boolean(d.catching_up),
+  };
+}
+
+async function searchPage(query: string, account: string, offset: number): Promise<ListPage> {
+  const d = await get(`/api/search?q=${q(query)}&scope=all&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
+  return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
+}
+
+// One page of each account's Inbox, newest first. An account that can't answer leaves the rest in place.
+async function allInboxesPage(accounts: string[], grouped: boolean): Promise<ListPage> {
+  const group = grouped ? "&group=thread" : "";
+  const pages = await Promise.all(accounts.map((a) =>
+    get(`/api/messages?account=${q(a)}&folder=INBOX&limit=${ALL_INBOXES_EACH}${group}`)
+      .then((d) => d.items.map((it) => fromFolder(it, a, "INBOX")))
+      .catch(() => [] as Row[])));
+  const rows = pages.flat().sort((x, y) => (y.ts ?? 0) - (x.ts ?? 0));
+  return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
+}
+
+export function useMessages(source: ListSource | null, grouped: boolean, accounts: string[]) {
+  return useInfiniteQuery({
+    queryKey: ["messages", ...sourceKey(source), source?.kind === "search" ? false : grouped],
+    enabled: Boolean(source) && (source?.kind !== "allInboxes" || accounts.length > 0),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => {
+      if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
+      if (source?.kind === "search") return searchPage(source.q, source.account, pageParam);
+      return allInboxesPage(accounts, grouped);
+    },
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((n, p) => n + p.rows.length, 0) : undefined),
+  });
+}
+
+export type ListData = InfiniteData<ListPage, number>;
+
+export const useBody = (pk: number | null, images: boolean) =>
+  useQuery({
+    queryKey: ["body", pk, images],
+    queryFn: () => get(`/api/message/${pk!}/body${images ? "?images=1" : ""}`),
+    enabled: pk !== null,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+export const useThread = (account: string | undefined, threadId: string | undefined) =>
+  useQuery({
+    queryKey: ["thread", account, threadId],
+    queryFn: () => get(`/api/thread?account=${q(account!)}&thread_id=${q(threadId!)}`),
+    enabled: Boolean(account && threadId),
+  });
+
+// Conversations on or off, kept under the key the current page uses.
+export const groupedPref = () => stored("mm_threadview") !== "0";
+export const saveGroupedPref = (on: boolean) => store("mm_threadview", on ? "1" : "0");

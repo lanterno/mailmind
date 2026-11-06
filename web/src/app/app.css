@@ -1,0 +1,10 @@
+/* What the React app needs beyond the page's own stylesheet, which it shares. */
+a.frow{text-decoration:none}
+button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12px;text-align:left;color:var(--mute)}
+.rows-box:focus{outline:none}
+.rows-box:focus-visible .row.sel{outline:2px solid var(--primary);outline-offset:-2px}
+.acct-menu.rac [role="menu"]{display:flex;flex-direction:column;gap:1px;outline:none}
+.acct-menu.rac .am-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--r-sm);color:var(--soft);cursor:pointer;outline:none}
+.acct-menu.rac .am-item[data-focused],.acct-menu.rac .am-item[data-selected]{background:var(--sel)}
+.racts .ract{width:30px;height:30px;display:grid;place-items:center;border:none;background:none;border-radius:var(--r-sm); color:var(--mute);font-size:14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+.racts .ract:hover{background:var(--panel-hi);color:var(--ink)}
