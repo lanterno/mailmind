@@ -985,6 +985,7 @@
   .send-float{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:center;gap:10px;
     background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);padding:11px 15px;font-size:12.5px;
     box-shadow:var(--sh-3)}
+  .build-float{right:auto;bottom:auto;top:12px;left:50%;transform:translateX(-50%)}
   .send-float.sending{border-color:var(--syncing);color:var(--syncing)}
   .send-float.sent{border-color:var(--ok);color:var(--ok)}
   .send-float.failed{border-color:var(--err);color:var(--err)}

@@ -3086,6 +3086,10 @@ async function editDraft(pk){   // your text in the box, the quote folded below,
 }
 
 /* ---------- realtime (SSE) ---------- */
+function onHello(d){   // the server moved on from what this tab loaded: offer a reload, never force one
+  $("#buildFloat").hidden=d.build===$('meta[name="mailmind-build"]').content;
+}
+$("#buildReload").addEventListener("click",()=>location.reload());
 function connectEvents(){
   let es; try{ es=new EventSource("/api/events"); }catch(e){ return; }
   es.onopen=()=>{ state.sseLive=true;
@@ -3105,6 +3109,7 @@ function connectEvents(){
   es.addEventListener("undo-done", onChangedElsewhere);         // an undo, here or in another tab
   es.addEventListener("commands-changed", ()=>{ onChangedElsewhere(); nudgeOutbox(); });  // a change queued offline reached the server, or won't
   es.addEventListener("resync", onResync);   // the stream lost our place (a restart, or away too long)
+  es.addEventListener("hello", e=>onHello(JSON.parse(e.data)));   // the build the server has now
 }
 let _newPending=0, _digestDeb=null, _bgNew=0;
 function bumpTitle(){ document.title = _bgNew>0 ? `(${_bgNew}) MailMind` : "MailMind"; }
