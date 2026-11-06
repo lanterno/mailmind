@@ -24,6 +24,7 @@ from mailmind.bootstrap import curation
 from mailmind.discovery.domain import views as builtin
 from mailmind.bootstrap import discovery
 from mailmind.bootstrap import attention
+from mailmind.bootstrap.compose import book
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -415,12 +416,11 @@ class _LosesTheRace:
 
 
 def test_hwf_an_outbox_insert_that_loses_a_race_returns_the_winners_row(db):
-    import store
     row = {"account": A, "idempotency_key": "send:k1", "message_id": "<o@example.test>", "in_reply_to_pk": None,
            "envelope": "[]", "recipients": "{}", "subject": "s", "raw": b"x", "next_attempt_at": 0,
            "draft_id": None, "created_at": "now"}
-    oid, created = store.outbox_insert(db, row)
-    assert created and store.outbox_insert(_LosesTheRace(db), row) == (oid, False)
+    oid, created = book.outbox_insert(db, row)
+    assert created and book.outbox_insert(_LosesTheRace(db), row) == (oid, False)
     assert db.execute("SELECT count(*) FROM outbox").fetchone()[0] == 1
 
 
@@ -968,10 +968,10 @@ def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
     import store
     c = store.conn()
     fold = '<details class="mm-quote"><summary>··· quoted text</summary>'
-    did = store.draft_upsert(c, {"id": None, "account": A, "folder": "Drafts", "uid": 7, "message_id": "<d@example.test>",
+    did = book.draft_upsert(c, {"id": None, "account": A, "folder": "Drafts", "uid": 7, "message_id": "<d@example.test>",
                                  "uidvalidity": 1, "in_reply_to_pk": None, "mode": "reply", "subject": "Re: Lunch",
                                  "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
-    store.draft_set_resume(c, did, "Great", "\n\nOn Sunday:\n> lunch?\n",
+    book.draft_set_resume(c, did, "Great", "\n\nOn Sunday:\n> lunch?\n",
                            f"<div>On Sunday:</div><blockquote>{fold}<blockquote>lunch?</blockquote></details></blockquote>",
                            None, "sha")
     c.commit()

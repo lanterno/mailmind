@@ -19,6 +19,8 @@ import pytest
 import gate
 from fixtures import world as w
 from mailmind.bootstrap import curation
+from mailmind.compose.domain import outbox_item
+from mailmind.bootstrap.compose import book
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
@@ -738,7 +740,7 @@ def test_hwf_a_new_draft_copy_replaces_the_old_with_no_uid_to_go_by(app, world):
 # -- the outbox ------------------------------------------------------------
 
 def test_hwf_a_crash_after_delivery_never_sends_twice(app, world, monkeypatch):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     import store
     oid = app.post("/api/send", new(idempotency_key="k-crash")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
@@ -761,7 +763,7 @@ def test_hwf_a_crash_after_delivery_never_sends_twice(app, world, monkeypatch):
 
 
 def test_hwf_the_sent_copy_is_the_bytes_that_went_on_the_wire(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = app.post("/api/send", new(idempotency_key="k-bytes")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
@@ -774,7 +776,7 @@ def test_hwf_the_sent_copy_is_the_bytes_that_went_on_the_wire(app, world):
 
 
 def test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = app.post("/api/send", new(idempotency_key="k-sent-later")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     world.server.drop("APPEND", user=w.ADA)                     # the connection goes as the copy goes up
@@ -788,7 +790,7 @@ def test_hwf_a_sent_copy_that_failed_is_filed_once_the_server_is_back(app, world
 
 
 def test_hwf_a_sent_copy_that_landed_but_lost_its_answer_is_filed_once(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = app.post("/api/send", new(idempotency_key="k-landed")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     world.server.drop_after("APPEND", user=w.ADA)               # the copy is filed; its OK never comes
@@ -802,7 +804,7 @@ def test_hwf_a_sent_copy_that_landed_but_lost_its_answer_is_filed_once(app, worl
 
 
 def test_hwf_a_send_owing_its_sent_copy_is_listed_sent_and_retried_once_it_gives_up(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
 
     def listed():
         return {i["id"]: i for i in app.get("/api/outbox").json["items"]}[oid]
@@ -811,13 +813,13 @@ def test_hwf_a_send_owing_its_sent_copy_is_listed_sent_and_retried_once_it_gives
     world.server.fail("APPEND", times=outbox.MAX_ATTEMPTS, user=w.ADA)
     outbox.drain()
     item = listed()
-    assert (item["state"], item["scheduled"], item["error"]) == ("sent", False, outbox.SENT_COPY_PENDING)
+    assert (item["state"], item["scheduled"], item["error"]) == ("sent", False, outbox_item.SENT_COPY_PENDING)
     assert app.post("/api/outbox/cancel", {"id": oid}).json == {"ok": False}   # it went out: nothing to undo
     for _ in range(outbox.MAX_ATTEMPTS - 1):
         app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
         outbox.drain()
     item = listed()
-    assert (item["state"], item["error"]) == ("error", outbox.SENT_COPY_FAILED)
+    assert (item["state"], item["error"]) == ("error", outbox_item.SENT_COPY_FAILED)
     assert len(world.server.commands_for(w.ADA, "APPEND")) == outbox.MAX_ATTEMPTS
     assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
     outbox.drain()
@@ -828,7 +830,7 @@ def test_hwf_a_send_owing_its_sent_copy_is_listed_sent_and_retried_once_it_gives
 
 
 def test_hwf_only_a_send_past_the_undo_window_is_listed_as_scheduled(app):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     now = int(time.time())                                       # frozen
     ids = [app.post("/api/send", new(idempotency_key=f"k-{n}", **kw)).json["outbox_id"] for n, kw in enumerate((
         {}, {"send_after": now + outbox.SEND_DELAY + 5}, {"send_after": now + outbox.SEND_DELAY + 6}))]
@@ -871,7 +873,7 @@ def old_row(folder, uid, name="<filed@example.test>", email=w.ADA):
     import store
     c = store.conn()
     try:
-        did = store.draft_upsert(c, {"id": None, "account": email, "folder": folder, "uid": uid, "message_id": name,
+        did = book.draft_upsert(c, {"id": None, "account": email, "folder": folder, "uid": uid, "message_id": name,
                                      "uidvalidity": store.get_uidvalidity(c, email, folder), "in_reply_to_pk": None,
                                      "mode": "new", "subject": "Filed", "created_at": "2026-10-01T09:00:00",
                                      "updated_at": "2026-10-01T09:00:00"})
@@ -902,7 +904,7 @@ def test_hwf_discard_forgets_an_old_row_on_received_mail_and_keeps_the_mail(app,
 
 
 def test_hwf_sending_keeps_received_mail_an_old_row_points_at(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     _, uid = filed(world, "Contract drafts")
     did = old_row("Contract drafts", uid)
     assert app.post("/api/send", new(idempotency_key="k-filed", draft_id=did)).json["ok"]
@@ -967,7 +969,7 @@ def test_hwf_a_discarded_draft_leaves_the_list_at_once(app, world):
 
 
 def test_hwf_a_sent_draft_leaves_the_list_at_once(app, world, published):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     saved = app.post("/api/draft", new(subject="Fabric order")).json
     assert "Fabric order" in listed(app)
     del published[:]
@@ -1013,7 +1015,7 @@ def replying(world, **kw):
 
 
 def test_hwf_a_reply_saved_once_no_longer_needs_its_originals_row(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     pk, resave = world.pk(LUNCH), replying(world)
     first = app.post("/api/draft", resave).json
     assert first["resume"]["in_reply_to"] and first["resume"]["tail_text"].startswith("\n\nOn ")
@@ -1034,7 +1036,7 @@ def test_hwf_a_reply_saved_once_no_longer_needs_its_originals_row(app, world):
 
 
 def test_hwf_a_forward_saved_once_carries_its_files_itself(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     with_file = w.variant(LUNCH, Message_ID="<with-file@example.test>")
     msg = email.message_from_bytes(with_file, policy=email.policy.default)
     msg.add_attachment(b"linen swatch", maintype="application", subtype="octet-stream", filename="swatch.bin")
@@ -1056,7 +1058,7 @@ def test_hwf_a_forward_saved_once_carries_its_files_itself(app, world):
 
 
 def test_hwf_a_reply_records_its_follow_up_after_its_original_is_archived(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     assert app.post("/api/send", replying(world, idempotency_key="k-fu")).json["ok"]
     [before] = q("SELECT thread_id FROM messages WHERE pk=?", world.pk(LUNCH))
     assert app.post("/api/archive", {"pk": world.pk(LUNCH)}).json["ok"]
@@ -1220,13 +1222,13 @@ class _StoppableDrain:
         return self.drain()
 
     def stop(self):
-        import outbox
+        from mailmind.bootstrap.compose import outbox
         self.stopping = True
         outbox.kick()
 
 
 def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     import server
     monkeypatch.setattr(outbox, "SEND_DELAY", 1)                 # a one-second Undo Send window, in real time
     drain = _StoppableDrain(outbox.drain)
@@ -1253,7 +1255,7 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
 
 
 def test_hwf_a_manual_retry_gets_a_fresh_set_of_attempts(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     oid = app.post("/api/send", new(idempotency_key="k-retry")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))

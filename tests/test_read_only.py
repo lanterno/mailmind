@@ -143,7 +143,7 @@ def test_undo_takes_a_waiting_move_back_without_a_write(app, world, read_only):
 
 
 def test_a_send_waits_in_the_outbox_until_a_full_run_sends_it(app, world, read_only):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = app.post("/api/send", send(idempotency_key="k-wait")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()

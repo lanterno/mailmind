@@ -81,7 +81,7 @@ def let_undo_pass(page):
 
 
 def due(app):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
 
@@ -516,7 +516,7 @@ def test_a_digit_picks_a_later_time(page, world):
 # ── the tray ────────────────────────────────────────────────────────────
 
 def give_up_on_a_send(page, app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     opened(page)
     compose(page, LIN, "Thread colours", "Which blue did you mean?")
@@ -530,7 +530,7 @@ def give_up_on_a_send(page, app, world):
 
 
 def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     button = give_up_on_a_send(page, app, world)
     expect(button).to_have_class(re.compile("has-fail"), timeout=3000)
     button.click()

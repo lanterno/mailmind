@@ -6,6 +6,7 @@ import time
 import pytest
 
 from mailmind.platform.workers.scheduler import Scheduler
+from mailmind.compose.api import Sent
 
 
 @pytest.fixture
@@ -19,11 +20,10 @@ def unwired(monkeypatch):
 
 
 def wiring():
-    import outbox
     import readmutq
     import realtime
     from mailmind.platform.bus import BUS
-    return [BUS.subscribers(topic) for topic in (outbox.Sent, readmutq.Applied, realtime.InboxChanged)]
+    return [BUS.subscribers(topic) for topic in (Sent, readmutq.Applied, realtime.InboxChanged)]
 
 
 def test_the_server_hears_what_the_workers_publish(unwired):

@@ -80,7 +80,7 @@ def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, w
 
 
 def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(app, world, per_account):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.server.stall("APPEND", user=w.BEA)                   # Bea's server takes the send's copy, then nothing
     for who, key in ((w.BEA, "k-bea"), (w.ADA, "k-ada")):     # Bea's first: the outbox goes in order
         assert app.post("/api/send", {"account": who, "mode": "new", "to": ["Lin Mori <lin@example.test>"],
@@ -101,7 +101,7 @@ def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(a
 def test_the_outbox_worker_sends_on_while_another_accounts_sent_copy_hangs(app, world, per_account):
     """The worker's drains don't wait for a busy account: a send that comes due while Bea's Sent
     copy hangs goes out at once, not after her server's 60-second timeout."""
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     import store
 
     def send(who, key):

@@ -22,6 +22,7 @@ def _home():
 
 _home()                                               # before anything opens a file
 import server
+from mailmind.bootstrap.compose import outbox
 
 ACCT = "ada@example.test"
 _real_spec = server._compose_spec
@@ -35,7 +36,7 @@ def _fresh():
     def enqueue(built, meta):
         calls.append(meta)
         return 1, True
-    server.outbox.enqueue = enqueue
+    outbox.enqueue = enqueue
     server._compose_spec = _real_spec
     return calls
 

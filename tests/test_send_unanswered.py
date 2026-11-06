@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 
 from fixtures import world as w
+from mailmind.compose.domain import outbox_item
 
 
 def new(key):
@@ -22,7 +23,7 @@ def row(oid):
 
 
 def queued(app, key="k-1"):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = app.post("/api/send", new(key)).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     return oid
@@ -33,14 +34,14 @@ def listed(app, oid):
 
 
 def later(app):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP + 1))
     outbox.drain()
 
 
 @pytest.mark.parametrize("command", ["MAIL", "RCPT", "DATA"])
 def test_a_connection_lost_before_the_message_went_is_tried_again(app, world, command):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     world.smtp.drop(command)
     outbox.drain()
@@ -52,7 +53,7 @@ def test_a_connection_lost_before_the_message_went_is_tried_again(app, world, co
 
 
 def test_a_refusal_after_the_message_went_is_an_answer_and_is_tried_again(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     world.smtp.fail("DATA-END", "451 4.3.0 try again later")
     outbox.drain()
@@ -63,7 +64,7 @@ def test_a_refusal_after_the_message_went_is_an_answer_and_is_tried_again(app, w
 
 
 def test_a_refusal_for_good_after_the_message_went_gives_up_as_a_failure_not_a_doubt(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     world.smtp.fail("DATA-END", "554 5.7.1 refused")
     outbox.drain()
@@ -72,20 +73,20 @@ def test_a_refusal_for_good_after_the_message_went_gives_up_as_a_failure_not_a_d
 
 
 def test_no_answer_to_the_whole_message_stops_and_says_so(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     world.smtp.drop_after_data()
     outbox.drain()
     assert len(world.smtp.messages) == 1
     r = listed(app, oid)
-    assert (r["state"], r["error"], r["unsure"]) == ("error", outbox.UNSURE, True)
+    assert (r["state"], r["error"], r["unsure"]) == ("error", outbox_item.UNSURE, True)
     later(app)
     later(app)
     assert len(world.smtp.messages) == 1                       # never again on its own
 
 
 def test_a_person_can_send_it_again_and_it_finishes_like_any_send(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     world.smtp.drop_after_data()
     outbox.drain()
@@ -98,7 +99,7 @@ def test_a_person_can_send_it_again_and_it_finishes_like_any_send(app, world):
 
 
 def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(app, world, monkeypatch):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     from mailmind.bootstrap.compose import transport
     import store
     oid = queued(app)
@@ -125,7 +126,7 @@ def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(
 
 
 def test_a_crash_before_the_message_went_is_tried_again_after_the_restart(app, world, monkeypatch):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     from mailmind.bootstrap.compose import transport
     import store
     oid = queued(app)
@@ -153,7 +154,7 @@ def test_a_big_message_lost_part_way_through_is_tried_again(app, world, monkeypa
     """A send() that raises left the last bytes unsent: no one can have the whole message."""
     import smtplib
 
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     oid = queued(app)
     real = smtplib.SMTP.send
 

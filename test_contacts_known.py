@@ -26,9 +26,10 @@ def _home():
 
 _home()                                               # before anything opens a file
 from mailmind.content import mime
-import outbox
+from mailmind.bootstrap.compose import outbox
 import server
 from mailmind.bootstrap import discovery
+from mailmind.bootstrap.compose import book
 
 ACCT = "ada@example.test"
 _uid = [0]
@@ -61,7 +62,7 @@ def _sql(q, args=()):
 def _outbox(envelope, delivered):
     _uid[0] += 1
     c = store.conn()
-    oid, _ = store.outbox_insert(c, {
+    oid, _ = book.outbox_insert(c, {
         "account": ACCT, "idempotency_key": f"k{_uid[0]}", "message_id": f"<o{_uid[0]}@example.test>",
         "in_reply_to_pk": None, "envelope": json.dumps(envelope),
         "recipients": json.dumps({"to": envelope, "cc": [], "bcc": []}), "subject": "Plans",

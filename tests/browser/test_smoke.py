@@ -100,7 +100,7 @@ def let_undo_pass(page):
 
 def due(app):
     """Move the server clock past the outbox's send delay and run one outbox pass."""
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
 
@@ -353,7 +353,7 @@ def test_compose_send_undo_then_send(page, app, world):
 
 def give_up_on_a_send(page, app, world):
     """Send a message the SMTP server keeps refusing, and run the outbox until it gives up."""
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     opened(page)
     compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
@@ -367,7 +367,7 @@ def give_up_on_a_send(page, app, world):
 
 
 def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_again(page, app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.smtp.drop_after_data()
     opened(page)
     compose(page, "lin@example.test", "Thread colours", "Which blue did you mean?")
@@ -448,7 +448,7 @@ def test_retry_in_the_tray_sends_the_change_again(page, app, world):
 
 
 def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     button = give_up_on_a_send(page, app, world)
     button.click()                                        # opening the outbox reloads it
     fly = page.locator("#outboxFly")
@@ -1168,7 +1168,7 @@ def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, 
 
 
 def test_undo_after_an_rsvp_stops_the_rsvp_and_leaves_what_was_filed(page, app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     opened(page)
     row(page, world, RECEIPT).click()
     page.keyboard.press("e")

@@ -24,6 +24,7 @@ from mailmind.platform.workers import gates
 from mailmind.curation.application import cleanup
 from mailmind.bootstrap import curation
 from mailmind.bootstrap import attention
+from mailmind.bootstrap.compose import book
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -160,7 +161,7 @@ def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):
 
 
 def test_hwf_smtp_delivery_holds_no_imap_lock(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     held, filed = [], world.smtp.on_message
 
     def look(delivery):
@@ -179,7 +180,7 @@ def test_hwf_smtp_delivery_holds_no_imap_lock(app, world):
 def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     """The outbox's Sent copy and \\Answered flag, a queued move and a thread summary's body fetch
     reach IMAP from worker threads, and each holds the lock as a request does."""
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     import readmutq
     import summarize_thread
     appends, stores = lock_spy(world, "APPEND", user=w.ADA), lock_spy(world, "UID STORE", user=w.ADA)
@@ -435,7 +436,7 @@ def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
     ingest.sync_folder(accounts.get(w.ADA), "Drafts")
     [d] = rows("SELECT pk FROM messages WHERE account=? AND folder='Drafts' AND uid=?", w.ADA, saved["uid"])
     c = store.conn()
-    oid, _ = store.outbox_insert(c, {"account": w.ADA, "idempotency_key": "k-held", "message_id": "<held@example.test>",
+    oid, _ = book.outbox_insert(c, {"account": w.ADA, "idempotency_key": "k-held", "message_id": "<held@example.test>",
                                      "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Held",
                                      "raw": b"x", "next_attempt_at": 0, "draft_id": saved["draft_id"],
                                      "created_at": "2026-11-02T12:00:00+00:00"})
@@ -520,7 +521,7 @@ def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):
 
 
 def test_a_reply_marks_its_original_answered_after_the_original_is_archived(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk(LUNCH_CONFIRM),
                                "to": ["lin@example.test"], "subject": "Re: Lunch on Thursday?", "text": "See you.",
                                "idempotency_key": "k-reply-archive"}).json
@@ -558,7 +559,7 @@ def _draft_row(did):
     import store
     c = store.conn()
     try:
-        return dict(store.draft_get(c, did))
+        return dict(book.draft_get(c, did))
     finally:
         c.close()
 
@@ -593,7 +594,7 @@ def test_saves_that_overlap_leave_one_copy_and_the_row_on_it(app, world, monkeyp
 
 
 def test_a_send_that_never_heard_its_first_save_still_removes_the_copy(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     saved = app.post("/api/draft", _swatch("cmp-3")).json          # its answer is lost: no id in the composer
     assert world.server.find(w.ADA, "Drafts", saved["message_id"])
     assert app.post("/api/send", _swatch("cmp-3")).json["ok"]

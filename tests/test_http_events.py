@@ -200,7 +200,7 @@ def test_a_tab_further_back_than_the_hub_keeps_is_told_to_fetch_afresh(app, gold
 
 def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
     from datetime import timedelta
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     s = Stream(app)
     s.frame()
     app.post("/api/send", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Linen",
@@ -214,7 +214,7 @@ def test_a_send_that_goes_out_tells_the_open_tabs(app, world, quick):
 
 def test_a_send_that_fails_tells_the_open_tabs(app, world, quick):
     from datetime import timedelta
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     s = Stream(app)
     s.frame()
     world.smtp.fail("RCPT", "451 4.3.0 try again later")

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fixtures import world as w
+from mailmind.compose.api import Sent
 
 OUTBOX_COLS = ("id", "account", "state", "attempts", "last_error", "delivered", "sent_appended",
                "answered_set", "followup_recorded", "draft_deleted", "subject", "envelope", "recipients",
@@ -66,7 +67,7 @@ class Sender:
     def drain(self, label, seconds=None):
         """Let the Undo Send window pass (or `seconds`), run one outbox pass, and note what went
         over the wire and what changed on the IMAP server."""
-        import outbox
+        from mailmind.bootstrap.compose import outbox
         self.app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1 if seconds is None else seconds))
         outbox.drain()
         sent = self.world.smtp.messages[self.wire:]
@@ -175,7 +176,7 @@ def test_send_now_skips_the_window_and_a_resubmit_dedupes(send):
 # ── when SMTP fails ──────────────────────────────────────────────────────
 
 def test_a_temporary_failure_backs_off_then_gives_up_then_retries(send):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     send.world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     send.post("send", "/api/send", new(idempotency_key="k-fail"))
     send.drain("first attempt")
@@ -189,10 +190,10 @@ def test_a_temporary_failure_backs_off_then_gives_up_then_retries(send):
 
 
 def test_a_send_is_published_once_it_goes_out_and_not_while_it_fails(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     from mailmind.platform import bus
     heard = []
-    stop = bus.subscribe(outbox.Sent, heard.append)
+    stop = bus.subscribe(Sent, heard.append)
     try:
         world.smtp.fail("RCPT", "451 4.3.0 try again later")
         oid = app.post("/api/send", new(idempotency_key="k-heard")).json["outbox_id"]
@@ -204,11 +205,11 @@ def test_a_send_is_published_once_it_goes_out_and_not_while_it_fails(app, world)
         outbox.drain()
     finally:
         stop()
-    assert heard == [outbox.Sent(oid, w.ADA)]
+    assert heard == [Sent(oid, w.ADA)]
 
 
 def test_a_refused_login_and_a_rejected_message_give_up_at_once(send):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     send.world.smtp.users[w.ADA] = "changed"
     send.post("send with a password the server no longer takes", "/api/send", new(idempotency_key="k-auth"))
     send.drain("login refused")
@@ -221,7 +222,7 @@ def test_a_refused_login_and_a_rejected_message_give_up_at_once(send):
 
 
 def test_a_recipient_refused_for_good_is_given_up_at_once(app, world):
-    import outbox
+    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "550 5.1.1 no such user", times=None)
     oid = app.post("/api/send", new(idempotency_key="k-nobody")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))

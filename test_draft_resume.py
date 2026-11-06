@@ -33,13 +33,14 @@ def _home():
 _home()                                               # before anything opens a file
 from mailmind.compose import api as compose
 from mailmind.content import mime
-import outbox
+from mailmind.bootstrap.compose import outbox
 import server
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel import addresses
 import accounts
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap.compose import book
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -72,7 +73,7 @@ def _fresh(uidv=777, appenduid=True):
         return len(CALLS["sent"]), True
     mailbox.copies.append_to_drafts = append
     mailbox.copies.delete_draft_uid = delete
-    server.outbox.enqueue = enqueue
+    outbox.enqueue = enqueue
     server.ingest.fetch_body = _real_fetch_body
     server._draft_live = lambda acct, folder, uid: True           # the server still holds the copy
 
@@ -185,7 +186,7 @@ def _reply_resumed(**kw):
 
 def _row(did):
     c = store.conn()
-    r = store.draft_get(c, did)
+    r = book.draft_get(c, did)
     c.close()
     return r
 
@@ -395,7 +396,7 @@ def test_received_mail_a_row_points_at_is_never_removed():
     c.close()
     assert server._draft_info(row) == {}                         # no Edit for it today
     c = store.conn()
-    did = store.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
+    did = book.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
                                  "message_id": "<stmt@bank.example.test>", "uidvalidity": 912,
                                  "in_reply_to_pk": None, "mode": "new", "subject": "Your statement",
                                  "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
@@ -488,7 +489,7 @@ def test_vanished_draft_row_is_tracked_again():
     _fresh()
     did = _save()["draft_id"]
     c = store.conn()
-    store.draft_delete(c, did)                                  # sent or discarded in another tab
+    book.draft_delete(c, did)                                  # sent or discarded in another tab
     c.commit()
     c.close()
     res = _save(draft_id=did, text="Saturday at ten.")
@@ -701,12 +702,12 @@ def test_a_save_that_moved_the_row_meanwhile_is_not_re_pointed_over():
     _save(draft_id=did, text="Newer, from another tab.", bcc=["dee@example.test"])   # lands after the read
     newest = dict(_row(did))
     c = store.conn()
-    moved = store.draft_repoint(c, seen, "Drafts", 555, 777, forget=True)
+    moved = book.draft_repoint(c, seen, "Drafts", 555, 777, forget=True)
     c.commit()
     c.close()
     assert moved is False and dict(_row(did)) == newest, dict(_row(did))
     c = store.conn()
-    assert store.draft_repoint(c, _row(did), "Drafts", 556, 777, forget=True) is True
+    assert book.draft_repoint(c, _row(did), "Drafts", 556, 777, forget=True) is True
     c.commit()
     c.close()
     assert (_row(did)["uid"], _row(did)["own_text"]) == (556, None)
@@ -1112,7 +1113,7 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened():
     _fresh()
     pk, res = _saved_and_synced(text="Send this tomorrow.")
     c = store.conn()
-    oid, _ = store.outbox_insert(c, {"account": ACCT, "idempotency_key": "k-later", "message_id": "<later@example.test>",
+    oid, _ = book.outbox_insert(c, {"account": ACCT, "idempotency_key": "k-later", "message_id": "<later@example.test>",
                                      "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Plans",
                                      "raw": b"x", "next_attempt_at": 4_000_000_000, "draft_id": res["draft_id"],
                                      "created_at": "2026-11-01T10:00:00"})
@@ -1135,7 +1136,7 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
         def meanwhile(acct, folder, uid, change=change, did=res["draft_id"]):
             c = store.conn()                                    # between the probe and the lock
             if change == "sent":
-                store.draft_delete(c, did)
+                book.draft_delete(c, did)
             else:
                 c.execute("UPDATE drafts SET uid=uid+1000 WHERE id=?", (did,))
             c.commit()
@@ -1154,16 +1155,16 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
 
 def test_save_and_send_cleanup_move_the_row_under_the_lock():
     _fresh()
-    held, real_upsert, real_delete = [], store.draft_upsert, store.draft_delete
-    store.draft_upsert = lambda c, row: (held.append(("upsert", gates.held(ACCT))), real_upsert(c, row))[1]
-    store.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
+    held, real_upsert, real_delete = [], book.draft_upsert, book.draft_delete
+    book.draft_upsert = lambda c, row: (held.append(("upsert", gates.held(ACCT))), real_upsert(c, row))[1]
+    book.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
     try:
         did = _save()["draft_id"]
-        server.outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
+        outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
                                         "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                                     {"email": ACCT})
     finally:
-        store.draft_upsert, store.draft_delete = real_upsert, real_delete
+        book.draft_upsert, book.draft_delete = real_upsert, real_delete
     assert held == [("upsert", True), ("delete", True)], held
     assert _row(did) is None and len(CALLS["delete"]) == 1, CALLS["delete"]
 
