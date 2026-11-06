@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
 from mailmind.mailbox.domain import identity
-from mailmind.mailbox.domain import threading as conversations
+from mailmind.mailbox.domain.threading import Copy, Threader
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
 from typing import Any
@@ -470,14 +470,16 @@ def recompute_threads(c, account):
     """Give each of the account's messages its thread id, and move what was kept under an id no row holds
     any more (see mailmind.mailbox.domain.threading)."""
     rows = c.execute(
-        "SELECT pk, message_id, gmail_thread, in_reply_to, refs, thread_id "
+        "SELECT pk, message_id, gmail_thread, in_reply_to, refs, thread_id, folder, ts "
         "FROM messages WHERE account=?", (account,)).fetchall()
     if not rows:
         return
-    given, moved = conversations.assign(rows, account)
-    for pk, tid in given.items():
+    placed = Threader(account).regroup(
+        Copy(r["pk"], r["message_id"], r["gmail_thread"], r["in_reply_to"], r["refs"], r["thread_id"], r["folder"], r["ts"])
+        for r in rows)
+    for pk, tid in placed.given.items():
         c.execute("UPDATE messages SET thread_id=? WHERE pk=? AND (thread_id IS NULL OR thread_id<>?)", (tid, pk, tid))
-    for old, surv in moved.items():
+    for old, surv in placed.merged.items():
         _rekey(c, account, old, surv)
 
 
