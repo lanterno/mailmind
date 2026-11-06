@@ -442,6 +442,7 @@ def _body_text_of(parsed):
 
 
 RECIPIENT_ROWS_MAX = 5000
+RECIPIENTS_CHARS = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
 
 def set_recipients(c, pk, addrs):
@@ -454,7 +455,7 @@ def set_recipients(c, pk, addrs):
 
 def _recipients_of(parsed):
     """To + Cc as one searchable string (names + addresses), for the to:/cc: operators."""
-    return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:2000]
+    return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:RECIPIENTS_CHARS]
 
 
 def fts_index(c, pk):

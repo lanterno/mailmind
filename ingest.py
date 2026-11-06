@@ -220,7 +220,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
                          "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
                          "refs": (msg.get("References") or "").replace("\n", " ").strip(),
                          "recipient_addrs": mailparse.recipient_addrs(msg),
-                         "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:2000]})
+                         "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:store.RECIPIENTS_CHARS]})
     c = store.conn()
     for r in rows:
         snippet, invite = "", None
