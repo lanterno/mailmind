@@ -6,9 +6,9 @@ from mailmind.platform.db import database
 _ADD = """
 INSERT INTO ai_usage(day, feature, model, served, outcome, calls, input_tokens, output_tokens,
                      cache_write_tokens, cache_read_tokens, cost_micros, last_ts)
-VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(day, feature, model, served, outcome) DO UPDATE SET
-  calls = calls + 1,
+  calls = calls + excluded.calls,
   input_tokens = input_tokens + excluded.input_tokens,
   output_tokens = output_tokens + excluded.output_tokens,
   cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens,
@@ -26,7 +26,7 @@ class SqliteLedger:
         u = spend.usage
         c = self._connect()
         try:
-            c.execute(_ADD, (spend.day, spend.feature, spend.model, spend.served, spend.outcome,
+            c.execute(_ADD, (spend.day, spend.feature, spend.model, spend.served, spend.outcome, spend.calls,
                              u.input_tokens, u.output_tokens, u.cache_write_tokens, u.cache_read_tokens,
                              spend.cost_micros, spend.ts))
             c.commit()
@@ -38,6 +38,14 @@ class SqliteLedger:
         try:
             return int(c.execute("SELECT COALESCE(SUM(cost_micros), 0) FROM ai_usage WHERE day = ?",
                                  (day,)).fetchone()[0])
+        finally:
+            c.close()
+
+    def reserved(self) -> int:
+        c = self._connect()
+        try:
+            return int(c.execute("SELECT COALESCE(SUM(estimate_micros), 0) FROM ai_batches "
+                                 "WHERE state IN ('submitting', 'running')").fetchone()[0])
         finally:
             c.close()
 

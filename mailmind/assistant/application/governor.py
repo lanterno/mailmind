@@ -52,9 +52,11 @@ def allowing_over(allow: bool = True) -> Generator[None]:
 class CostGovernor:
     def __init__(self, spent: Callable[[], int], limit: Callable[[], int],
                  clock: Callable[[], float] = time.time, interactive_slots: int = 2,
-                 background_slots: int = 2):
-        """`spent()` is today's spending and `limit()` the daily limit, both in micro-dollars."""
-        self._spent, self._limit, self._clock = spent, limit, clock
+                 background_slots: int = 2, reserved: Callable[[], int] = lambda: 0):
+        """`spent()` is today's spending and `limit()` the daily limit, both in micro-dollars.
+        `reserved()` is what batches still out may cost: background work counts it as spent, and
+        someone asking for something doesn't, since a backlog shouldn't stand in their way."""
+        self._spent, self._limit, self._clock, self._reserved = spent, limit, clock, reserved
         self._interactive = threading.BoundedSemaphore(interactive_slots)
         self._background = threading.BoundedSemaphore(background_slots)
         self._lock = threading.Lock()
@@ -85,10 +87,13 @@ class CostGovernor:
                 return "away"
             if self._is_open(feature, model, instance):
                 return "breaker"
+        return "limit" if self.room() <= 0 else None    # a ledger that can't be read stops work, not starts it
+
+    def room(self) -> int:
+        """What today's limit leaves for background work, in micro-dollars."""
         spent, limit = self._today()
-        if spent is None or spent >= limit:     # a ledger that can't be read stops work, not starts it
-            return "limit"
-        return None
+        booked = self._booked()
+        return 0 if spent is None or booked is None else max(0, limit - spent - booked)
 
     @contextmanager
     def call(self, kind: str, feature: str, model: str, instance: LanguageModel) -> Generator[None]:
@@ -159,7 +164,8 @@ class CostGovernor:
         spent, limit = self._today()
         now = self._clock()
         with self._lock:
-            return {"spent_today_micros": spent, "limit_micros": limit, "interactive_running": self._running,
+            return {"spent_today_micros": spent, "limit_micros": limit, "reserved_micros": self._booked(),
+                    "interactive_running": self._running,
                     "since_interactive": None if self._last_interactive == float("-inf")
                     else round(now - self._last_interactive, 1),
                     "since_seen": round(now - self._last_seen, 1),
@@ -174,6 +180,13 @@ class CostGovernor:
                 return True
             del self._open[scope]               # the model changed since it opened: try again
         return False
+
+    def _booked(self) -> int | None:
+        try:
+            return self._reserved()
+        except Exception as e:
+            print(f"[ai] what batches may cost can't be read: {type(e).__name__}", flush=True)
+            return None
 
     def _today(self) -> tuple[int | None, int]:
         """(today's spending, or None when the ledger can't be read; the limit)."""

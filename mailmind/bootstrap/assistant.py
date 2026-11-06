@@ -93,7 +93,7 @@ def limit_micros() -> int:
 
 _bound = _Bound("urllib")
 LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
-GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros)
+GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
 GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
 
 

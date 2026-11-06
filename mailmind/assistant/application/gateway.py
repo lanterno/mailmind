@@ -8,8 +8,8 @@ from collections.abc import Callable
 from datetime import date, timedelta
 
 from mailmind.assistant.application.governor import CostGovernor
-from mailmind.assistant.application.ports import (LanguageModel, ModelError, NotSent, Prompt, Reply,
-                                                  Spend, Usage, UsageLedger)
+from mailmind.assistant.application.ports import (BatchResult, LanguageModel, ModelError, NotSent, Prompt,
+                                                  Reply, Spend, Usage, UsageLedger)
 from mailmind.assistant.domain import features, models, pricing
 from mailmind.assistant.domain.schema import structured
 
@@ -43,10 +43,7 @@ class Gateway:
         it holds the call back (OverLimit, Deferred). The call is counted under `feature`
         whatever its outcome, if it was made."""
         name = model or models.DEFAULT
-        prompt = Prompt(text=text, model=name, max_tokens=MAX_TOKENS,
-                        schema=None if schema is None else structured(schema),
-                        effort=(effort or models.EFFORT) if models.takes_effort(name) else None,
-                        fallback=models.takes_fallback(name))
+        prompt = self._prompt(text, name, schema, effort, models.takes_fallback(name))
         lm = self._model()
         if not lm.enabled:
             return lm.complete(prompt)          # raises AIOff: nothing is sent
@@ -62,6 +59,67 @@ class Gateway:
         self._heard(feature, name, lm, None)
         self._count(feature, name, reply.model, "refused" if reply.refused else "ok", reply.usage)
         return reply
+
+    def _prompt(self, text: str, name: str, schema: dict | None, effort: str | None, fallback: bool) -> Prompt:
+        return Prompt(text=text, model=name, max_tokens=MAX_TOKENS,
+                      schema=None if schema is None else structured(schema),
+                      effort=(effort or models.EFFORT) if models.takes_effort(name) else None,
+                      fallback=fallback)
+
+    def submit_batch(self, requests: list[tuple[str, str]], schema: dict | None = None, *, feature: str,
+                     model: str | None = None, effort: str | None = None) -> str:
+        """Send each (custom id, text) as one request of one batch, and return the batch's id. Never
+        with the refusal fallback, which batches reject. Its cost is counted when its answers are in;
+        a failure to send it is counted as a call that failed."""
+        name = model or models.DEFAULT
+        prompts = [(cid, self._prompt(text, name, schema, effort, False)) for cid, text in requests]
+        lm = self._model()
+        try:
+            batch_id = lm.submit_batch(prompts)
+        except NotSent:
+            raise
+        except ModelError as e:
+            self._heard(feature, name, lm, e)
+            self._count(feature, name, "", "rejected" if e.permanent else "failed", Usage())
+            raise
+        self._heard(feature, name, lm, None)
+        return batch_id
+
+    def batch_ended(self, batch_id: str) -> bool:
+        return self._model().batch_ended(batch_id)
+
+    def batch_results(self, batch_id: str, *, feature: str, model: str | None = None) -> list[BatchResult]:
+        """What a batch that has ended said, each answer counted under `feature` at half price, and
+        how each went told to the cost governor, as a call's is."""
+        name = model or models.DEFAULT
+        lm = self._model()
+        results = lm.batch_results(batch_id, name)
+        tally: dict[tuple[str, str], list] = {}
+        for r in results:
+            reply = r.reply
+            if reply is None:
+                outcome = "rejected" if r.permanent else "failed"
+                self._heard(feature, name, lm, ModelError("a request in a batch was rejected", 400 if r.permanent else None))
+            else:
+                outcome = "refused" if reply.refused else "ok"
+                self._heard(feature, name, lm, None)
+            u = reply.usage if reply else Usage()
+            row = tally.setdefault((reply.model if reply else "", outcome), [0, 0, 0, 0, 0, 0])
+            for i, n in enumerate((1, u.input_tokens, u.output_tokens, u.cache_write_tokens, u.cache_read_tokens,
+                                   pricing.batch_micros(pricing.cost_micros(
+                                       name, reply.model if reply else "", u.input_tokens, u.output_tokens,
+                                       u.cache_write_tokens, u.cache_read_tokens)))):
+                row[i] += n
+        for (served, outcome), (calls, i, o, w, r, cost) in tally.items():
+            self._record(feature, name, served, outcome, Usage(i, o, w, r), cost, calls)
+        return results
+
+    def discard_batch(self, batch_id: str) -> None:
+        self._model().discard_batch(batch_id)
+
+    def room(self) -> int | None:
+        """What today's limit leaves for background work, in micro-dollars; None with no governor."""
+        return None if self._governor is None else self._governor.room()
 
     def held_back(self, feature: str, model: str | None = None) -> str | None:
         """Why a call for `feature` would be held back now ("yielding", "away", "limit",
@@ -81,14 +139,18 @@ class Gateway:
             self._governor.heard(feature, name, lm, error)
 
     def _count(self, feature: str, asked: str, served: str, outcome: str, usage: Usage) -> None:
+        self._record(feature, asked, served, outcome, usage,
+                     pricing.cost_micros(asked, served, usage.input_tokens, usage.output_tokens,
+                                         usage.cache_write_tokens, usage.cache_read_tokens))
+
+    def _record(self, feature: str, asked: str, served: str, outcome: str, usage: Usage, cost: int,
+                calls: int = 1) -> None:
         if self._ledger is None:
             return
         now = self._clock()
-        cost = pricing.cost_micros(asked, served, usage.input_tokens, usage.output_tokens,
-                                   usage.cache_write_tokens, usage.cache_read_tokens)
         try:
             self._ledger.record(Spend(local_day(now), feature, asked, served, outcome, usage, cost,
-                                      int(now)))
+                                      int(now), calls))
         except Exception as e:     # the call itself went fine; a ledger write never undoes it
             print(f"[ai] the usage ledger failed: {type(e).__name__}", flush=True)
 

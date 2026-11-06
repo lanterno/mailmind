@@ -67,6 +67,21 @@ def cost_micros(asked: str, served: str, input_tokens: int = 0, output_tokens: i
     return -(-nanos // 1000)
 
 
+def batch_micros(micros: int) -> int:
+    """What a call costs through the Message Batches API: half, rounded up."""
+    return -(-micros // 2)
+
+
+CHARS_PER_TOKEN = 3            # on the low side: mail runs near 4, and an estimate should err high
+OUTPUT_TOKENS_GUESS = 400      # a triage answer is rarely half this
+
+
+def batch_estimate(model: str, chars: int) -> int:
+    """About the most one triage request of `chars` characters should cost through a batch. A batch's cost
+    is only known when its answers are in, so this is what it books against the daily limit until then."""
+    return batch_micros(cost_micros(model, model, chars // CHARS_PER_TOKEN + 1, OUTPUT_TOKENS_GUESS))
+
+
 def usd(micros: int) -> str:
     """`micros` in dollars and cents, rounded up to the cent, so a little spending never reads as
     none: 15_200 is "$0.02"."""
