@@ -6,7 +6,9 @@ they always appear, can't be deleted, and are never written to disk.
 """
 import secrets
 from collections.abc import Collection, Iterable
-from typing import Any, NotRequired, TypedDict, TypeIs
+from typing import NotRequired, TypedDict
+
+from mailmind.kernel.parsed import is_list, is_object
 
 
 class View(TypedDict):
@@ -39,20 +41,11 @@ LANES: tuple[View, ...] = (
 BUILTIN_IDS = {v["id"] for v in DEFAULTS} | {v["id"] for v in LANES}
 
 
-def _is_list(held: object) -> TypeIs[list[Any]]:
-    return isinstance(held, list)
-
-
-def _is_object(held: object) -> TypeIs[dict[str, Any]]:
-    """A JSON object, whose keys are strings."""
-    return isinstance(held, dict)
-
-
 def clean(raw: object) -> list[View]:
     """User views out of whatever a file held (no builtins). TOTAL: never raises, drops malformed entries."""
     out: list[View] = []
-    for v in (raw if _is_list(raw) else []):
-        if not _is_object(v):
+    for v in (raw if is_list(raw) else []):
+        if not is_object(v):
             continue
         vid, name, q = str(v.get("id", "")), str(v.get("name", "")).strip(), str(v.get("q", "")).strip()
         if not vid or not name or not q or vid in BUILTIN_IDS:
