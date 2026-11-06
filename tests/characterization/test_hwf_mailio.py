@@ -713,14 +713,15 @@ def test_hwf_a_draft_save_that_fails_keeps_the_last_copy(app, world):
     assert first["ok"] and drafts_on_server(world) == [first["uid"]]
     world.server.fail("APPEND", user=w.ADA)
     second = app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]})
-    assert second.status == 502
+    assert second.status == 200 and second.json["pushed"] is False    # the journal holds it, and asks again
     assert drafts_on_server(world) == [first["uid"]]
 
 
 def test_hwf_a_lost_connection_during_a_draft_save_keeps_the_last_copy(app, world):
     first = app.post("/api/draft", new(idempotency_key="d-1")).json
     world.server.drop("APPEND", user=w.ADA)
-    assert app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]}).status == 502
+    second = app.post("/api/draft", {**new(idempotency_key="d-1"), "draft_id": first["draft_id"]})
+    assert second.status == 200 and second.json["pushed"] is False
     assert drafts_on_server(world) == [first["uid"]]
 
 

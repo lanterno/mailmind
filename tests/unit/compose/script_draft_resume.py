@@ -68,7 +68,7 @@ def _fresh(uidv=777, appenduid=True):
     CALLS.clear()
     CALLS.update(append=[], delete=[], sent=[])
 
-    def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
+    def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None, message_id=None, tried=None):
         _uid[0] += 1
         CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
                                 "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
@@ -362,9 +362,11 @@ def test_failed_save_under_a_new_from_keeps_the_old_copy():
     mailbox.copies.append_to_drafts = unreachable
     res, code = drafts.save({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
                                  "subject": "Plans", "text": "Saturday works.", "draft_id": did})
-    assert code == 502 and not res["ok"], (code, res)
+    assert code == 200 and res["ok"] and res["pushed"] is False, (code, res)   # the journal holds it
     assert CALLS["delete"] == [], CALLS["delete"]
-    assert dict(_row(did)) == old
+    now = dict(_row(did))
+    assert {k: now[k] for k in ("account", "folder", "uid", "message_id", "raw_sha")} == {
+        k: old[k] for k in ("account", "folder", "uid", "message_id", "raw_sha")}
 
 
 def _other_folder_draft(uid=5):
@@ -1164,8 +1166,8 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
 
 def test_save_and_send_cleanup_move_the_row_under_the_lock():
     _fresh()
-    held, real_upsert, real_delete = [], book.draft_upsert, book.draft_delete
-    book.draft_upsert = lambda c, row: (held.append(("upsert", gates.held(ACCT))), real_upsert(c, row))[1]
+    held, real_settle, real_delete = [], book.draft_settle_push, book.draft_delete
+    book.draft_settle_push = lambda c, *a: (held.append(("settle", gates.held(ACCT))), real_settle(c, *a))[1]
     book.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
     try:
         did = _save()["draft_id"]
@@ -1173,8 +1175,8 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock():
                                         "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                                     {"email": ACCT})
     finally:
-        book.draft_upsert, book.draft_delete = real_upsert, real_delete
-    assert held == [("upsert", True), ("delete", True)], held
+        book.draft_settle_push, book.draft_delete = real_settle, real_delete
+    assert held == [("settle", True), ("delete", True)], held
     assert _row(did) is None and len(CALLS["delete"]) == 1, CALLS["delete"]
 
 

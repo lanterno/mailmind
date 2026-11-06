@@ -80,7 +80,7 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path):
             except OSError:
                 assert proc.poll() is None and time.monotonic() < deadline, "serve didn't come up"
                 time.sleep(0.05)
-        assert (status, body) == (200, b'{"ok": true, "items": []}')
+        assert (status, body) == (200, b'{"ok": true, "items": [], "drafts": []}')
         assert sorted(p.name for p in tmp_path.iterdir())[0] == "mailmind.db"
         stream = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         stream.request("GET", "/api/events", headers={"Host": f"127.0.0.1:{port}",

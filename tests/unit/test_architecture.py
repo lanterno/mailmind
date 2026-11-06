@@ -15,7 +15,7 @@ OWNER = {
                   "thread_summaries"),
     "attention": ("followups", "muted", "snoozes"),
     "calendar": (),
-    "compose": ("drafts", "outbox"),
+    "compose": ("drafts", "draft_journal", "outbox"),
     "curation": ("sender_unsub", "unsub_log"),
     "discovery": ("msg_fts",),
     "mailbox": ("attachments", "bodies", "message_identity", "message_recipients", "messages", "mail_commands", "sync_state"),

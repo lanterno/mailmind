@@ -23,7 +23,8 @@
    "text": "First thoughts on the layouts:\n- the grid is too tight on mobile\n- the header colour fights the logo",
    "to": [
     "Noor Haddad <noor@studio.example.test>"
-   ]
+   ],
+   "version": 0
   },
   "headers": {
    "cache-control": "no-store",
@@ -72,7 +73,8 @@
    "text": "Hi Ivo, my comments are in the attached file. Two points stand out.",
    "to": [
     "Ivo Brandt <ivo@harbor.example.test>"
-   ]
+   ],
+   "version": 0
   },
   "headers": {
    "cache-control": "no-store",

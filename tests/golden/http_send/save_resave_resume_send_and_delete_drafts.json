@@ -4,7 +4,9 @@
    "draft_id": 1,
    "message_id": "<msg 1>",
    "ok": true,
-   "uid": 3
+   "pushed": true,
+   "uid": 3,
+   "version": 1
   },
   "headers": {
    "cache-control": "no-store",
@@ -30,7 +32,9 @@
    "draft_id": 1,
    "message_id": "<msg 2>",
    "ok": true,
-   "uid": 4
+   "pushed": true,
+   "uid": 4,
+   "version": 2
   },
   "headers": {
    "cache-control": "no-store",
@@ -100,7 +104,8 @@
    "text": "Hi Lin,\n\nThe linen came in.",
    "to": [
     "Lin Mori <lin@example.test>"
-   ]
+   ],
+   "version": 2
   },
   "headers": {
    "cache-control": "no-store",
@@ -207,7 +212,9 @@
    "draft_id": 2,
    "message_id": "<msg 4>",
    "ok": true,
-   "uid": 5
+   "pushed": true,
+   "uid": 5,
+   "version": 1
   },
   "headers": {
    "cache-control": "no-store",

@@ -33,6 +33,11 @@ def read_only(monkeypatch):
         @staticmethod
         def end():
             monkeypatch.setenv("MAILMIND_PROFILE", "full")
+
+        @staticmethod
+        def again():
+            monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+            return ReadOnly.end
     return ReadOnly()
 
 
@@ -176,13 +181,31 @@ def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world
 # -- what is refused ----------------------------------------------------------
 
 
-def test_a_draft_is_neither_saved_nor_deleted(app, world, read_only):
+def test_a_draft_waits_here_until_a_full_run_pushes_it(app, world, read_only):
+    from mailmind.bootstrap.compose import drafts
     since = world.mark()
     r = app.post("/api/draft", send(subject="Fabric order (draft)"))
-    assert (r.status, r.json) == (409, REFUSED)
-    r = app.post("/api/draft", {"delete": True, "draft_id": 1})
-    assert (r.status, r.json) == (409, REFUSED)
+    assert r.status == 200 and r.json["pushed"] is False
+    assert [d["subject"] for d in app.get("/api/outbox").json["drafts"]] == ["Fabric order (draft)"]
     assert world.writes(since) == []
+    read_only.end()
+    drafts.push_round()
+    assert world.server.find(w.ADA, "Drafts", r.json["message_id"])
+    assert app.get("/api/outbox").json["drafts"] == []
+
+
+def test_a_discard_waits_too(app, world, read_only):
+    from mailmind.bootstrap.compose import drafts
+    read_only.end()
+    saved = app.post("/api/draft", send(subject="Fabric order (draft)")).json
+    monkey_env = read_only.again()
+    since = world.mark()
+    r = app.post("/api/draft", {"delete": True, "draft_id": saved["draft_id"]})
+    assert r.status == 200 and r.json["deleted"] is True
+    assert world.writes(since) == [] and world.server.find(w.ADA, "Drafts", saved["message_id"])
+    monkey_env()
+    drafts.push_round()
+    assert not world.server.find(w.ADA, "Drafts", saved["message_id"])
 
 
 def test_a_sweep_is_refused_but_its_dry_run_still_plans(app, world, read_only):

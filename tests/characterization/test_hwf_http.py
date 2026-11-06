@@ -607,19 +607,21 @@ def test_a_save_whose_row_moved_accounts_while_it_waited_takes_the_wider_gate(ap
     # copy it must remove: it goes round again holding them all.
     a = app.post("/api/draft", _swatch("cmp-5")).json
     real, scopes = gates.run, []
-    b = {}
+    b, back = {}, {}
 
     def run(scope, job, **kw):
         scopes.append(scope)
-        if len(scopes) == 1:                                       # another tab's save gets in first
+        if len(scopes) == 1:                                       # another tab's saves get in first
             b.update(app.post("/api/draft", _swatch("cmp-5", account=w.BEA, draft_id=a["draft_id"])).json)
+            back.update(app.post("/api/draft", _swatch("cmp-5", draft_id=a["draft_id"], text="Back from Ada.",
+                                                       autosave=True)).json)
         return real(scope, job, **kw)
     monkeypatch.setattr(gates, "run", run)
-    r = app.post("/api/draft", _swatch("cmp-5", draft_id=a["draft_id"], text="Back from Ada.")).json
+    r = app.post("/api/draft", _swatch("cmp-5", draft_id=a["draft_id"], text="Typing.")).json
     assert r["ok"] and r["draft_id"] == a["draft_id"]
     assert scopes[0] == w.ADA and scopes[-1] == gates.EVERY_ACCOUNT
     assert not world.server.find(w.BEA, "Drafts", b["message_id"])
-    assert world.server.find(w.ADA, "Drafts", r["message_id"])
+    assert world.server.find(w.ADA, "Drafts", back["message_id"])
 
 
 def test_a_failed_rules_write_keeps_the_rules(app, world, monkeypatch):
