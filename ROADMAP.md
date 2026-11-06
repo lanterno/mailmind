@@ -75,7 +75,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   there, fix `sweep_account_ai`, whose docstring advertises an AI verdict it does not use.
 - **Scheduled morning briefing + summarize-this-sender** · medium value · effort M — Cross-message
   synthesis ships in three flavours, but the 60s tick only calls `wake_snoozed()` and
-  `followups_tick()`, so `briefing_cache` is never warmed before you open the tab, and the
+  `followups_tick()`, so `briefs` is never warmed before you open the tab, and the
   Notification API fires only for new mail. Second half: a claude pass over one sender's recent
   threads, hung off the contact card — `contact_card()` is pure SQL relationship stats with no AI
   call.

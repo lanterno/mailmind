@@ -354,7 +354,10 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   own (`BEGIN IMMEDIATE`) that sets its version too, so one that fails leaves the database as it
   was before it. A migration gets the connection through `_Within`: `execute`, and
   `executescript` run one statement at a time inside the transaction. It never commits.
-- Each must still be idempotent; `init()` runs on every process start.
+- Each must still be idempotent; `init()` runs on every process start. A database with no
+  migration to run is left alone, or the base schema would bring back a table a migration retired.
+- A migration that ends a table says so in `migrations.RETIRED`. The upgrade check then reports it
+  as retired rather than as rows lost, and `tests/test_db_upgrade.py` holds it to that.
 - Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
   to `backups/mailmind-v{N}-{UTC time}.db` beside it, readable by its owner only, keeping the
   newest 3 (`backup.py` says how to roll back).
@@ -556,8 +559,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `(account, message_id)` — see `store.get_message_by_msgid`. A stored AI answer is checked
   against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
-  moved stored thread summaries onto it. A stored brief keeps each group's messages by Message-ID
-  too, and a read gives the pks they have now (`summarize_briefing._groups_now`).
+  moved stored thread summaries onto it. A stored brief and a stored review name their messages by
+  key and folder (below), and a read gives the pks they have now (`store.pk_now`).
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
@@ -744,7 +747,11 @@ did; a batch already out is still brought in.
 - A batch holds mail, so `batch_collect` deletes it from the API once its answers are stored, trying again each
   round until it goes. A message with no answer (errored, expired, canceled) waits again.
 
-The brief, the delta and the review are read and written apart:
+The brief, the delta and the review each have a table (migration 37): `briefs` and `reviews` by account set
+and local day, `deltas` by account set, watermark and fingerprint, so a window that changes is written once
+more however large it is. A review's lists and a brief's groups are stored by message key and read back as
+the pks those messages have now, and a message that has gone leaves them. A delta's items are the model's own
+words, with no message behind them. Each table keeps a week. They are read and written apart:
 - A GET of `/api/briefing`, `/api/briefing/since` or `/api/review` reads only what is stored. When
   there is none it answers `missing: true` and calls nothing (the builders' `generate=False`).
 - A POST to the same path writes one, reading first, and its `/refresh` POST writes it again.
