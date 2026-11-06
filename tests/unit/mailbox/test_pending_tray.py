@@ -4,6 +4,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
+from mailmind.platform import undo
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -148,7 +149,7 @@ def test_discarding_one_of_a_group_leaves_undo_the_rest(app, world):
     queue_archive(app, world, LUNCH, group="g-1")
     assert app.post("/api/pending/discard", {"id": a}).json["ok"]
     c = store.conn()
-    [held] = store.undo_entries(c)
+    [held] = undo.entries(c)
     c.close()
     assert [ch["message_id"] for ch in held["children"]] == [world.row(LUNCH)["message_id"]]
 

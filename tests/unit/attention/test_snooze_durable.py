@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fixtures import world as w
 from mailmind.bootstrap import attention
+from mailmind.platform import undo
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 CI = "ada-inbox-04-ci.eml"                               # already read
@@ -78,8 +79,8 @@ def test_undo_from_a_stack_written_before_the_rows_were_named(app, world):
     pk = world.pk(RECEIPT)
     snooze(app, world)
     c = store.conn()
-    store.undo_pop(c)
-    store.undo_put_back(c, {"kind": "snooze", "pks": [pk], "prev_until": [None], "label": "Snoozed"})
+    undo.pop(c)
+    undo.put_back(c, {"kind": "snooze", "pks": [pk], "prev_until": [None], "label": "Snoozed"})
     c.commit()
     c.close()
     assert app.post("/api/undo", {}).json["ok"]

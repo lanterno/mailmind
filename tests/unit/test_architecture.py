@@ -18,8 +18,8 @@ OWNER = {
     "compose": ("drafts", "outbox"),
     "curation": ("sender_unsub", "unsub_log"),
     "discovery": ("msg_fts",),
-    "mailbox": ("attachments", "bodies", "message_identity", "message_recipients", "messages", "mail_commands", "sync_state",
-                "undo_entries"),
+    "mailbox": ("attachments", "bodies", "message_identity", "message_recipients", "messages", "mail_commands", "sync_state"),
+    "platform": ("undo_entries",),
 }
 
 # Where another context still writes a table, each for a reason this list names. It may only shrink.

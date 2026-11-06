@@ -118,8 +118,9 @@ class Machine(RuleBasedStateMachine):
     @rule()
     def undo(self):
         from mailmind.bootstrap.mailbox import store
+        from mailmind.platform import undo as platform_undo
         c = store.conn()
-        entries = store.undo_entries(c)
+        entries = platform_undo.entries(c)
         c.close()
         if entries:                                   # the newest goes back where it came from
             top = entries[-1]

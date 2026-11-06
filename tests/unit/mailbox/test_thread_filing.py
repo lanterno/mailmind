@@ -16,9 +16,10 @@ def boxes(world, name):
 
 def stack():
     from mailmind.bootstrap.mailbox import store
+    from mailmind.platform import undo
     c = store.conn()
     try:
-        return store.undo_entries(c)
+        return undo.entries(c)
     finally:
         c.close()
 
