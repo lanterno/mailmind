@@ -221,47 +221,47 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_legacy_file_without_expiry_loads` | `tests/unit/curation/test_expire.py` |
 | `test_missing_file_loads_empty` | `tests/unit/curation/test_expire.py` |
 
-## `test_hardening.py`: `tests/security/script_hardening.py`
+## `test_hardening.py`: `tests/security/test_hardening.py`
 
 | Test | Now |
 |---|---|
-| `test_starttls_off_this_machine_verifies_the_certificate` | `tests/security/script_hardening.py` |
-| `test_starttls_on_loopback_accepts_bridges_own_certificate` | `tests/security/script_hardening.py` |
-| `test_smtp_follows_the_same_loopback_rule` | `tests/security/script_hardening.py` |
-| `test_a_move_without_MOVE_copies_then_expunges_only_its_uid` | `tests/security/script_hardening.py` |
-| `test_a_failed_copy_leaves_the_message_untouched` | `tests/security/script_hardening.py` |
-| `test_without_uidplus_the_message_stays_flagged_and_nothing_else_goes` | `tests/security/script_hardening.py` |
-| `test_a_lost_connection_during_expunge_still_raises` | `tests/security/script_hardening.py` |
-| `test_deleting_a_draft_copy_never_bulk_expunges` | `tests/security/script_hardening.py` |
-| `test_replacing_a_draft_copy_never_bulk_expunges` | `tests/security/script_hardening.py` |
-| `test_the_app_still_loads_on_its_own_host` | `tests/security/script_hardening.py` |
-| `test_a_rebound_name_reads_nothing` | `tests/security/script_hardening.py` |
-| `test_a_foreign_origin_reads_nothing` | `tests/security/script_hardening.py` |
-| `test_a_refused_read_is_not_counted_as_someone_at_the_screen` | `tests/security/script_hardening.py` |
-| `test_folder_names_from_list_pass_through_unchanged` | `tests/security/script_hardening.py` |
-| `test_a_folder_name_that_would_break_the_command_is_refused` | `tests/security/script_hardening.py` |
-| `test_a_move_to_an_injected_folder_sends_nothing` | `tests/security/script_hardening.py` |
-| `test_an_injected_folder_in_the_url_reaches_no_imap_command` | `tests/security/script_hardening.py` |
-| `test_a_read_another_site_starts_is_refused` | `tests/security/script_hardening.py`; `tests/security/test_perimeter.py` |
-| `test_another_site_can_link_to_the_app_but_not_frame_it` | `tests/security/script_hardening.py` |
-| `test_the_apps_own_reads_and_older_browsers_still_work` | `tests/security/script_hardening.py` `test_the_api_answers_only_the_pages_own_reads`; `tests/security/test_perimeter.py` `test_the_page_itself_opens_from_a_typed_url_or_an_older_browser` |
-| `test_no_page_may_frame_the_app` | `tests/security/script_hardening.py` |
-| `test_a_request_can_only_star_or_mark_read` | `tests/security/script_hardening.py` |
-| `test_a_refused_move_keeps_the_message_and_says_so` | `tests/security/script_hardening.py` |
-| `test_a_refused_gmail_archive_keeps_the_message` | `tests/security/script_hardening.py` |
-| `test_an_accepted_move_still_files_the_message` | `tests/security/script_hardening.py` |
-| `test_the_route_reports_a_refusal_and_offers_no_undo` | `tests/security/script_hardening.py` |
-| `test_bcc_never_leaves_even_under_python_O` | `tests/security/script_hardening.py` |
-| `test_a_malformed_config_is_never_written_even_under_python_O` | `tests/security/script_hardening.py` |
-| `test_a_failed_read_answers_without_the_exception_text` | `tests/security/script_hardening.py` |
-| `test_undo_ingest_leaves_the_inbox_watermark_alone` | `tests/security/script_hardening.py` |
-| `test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync` | `tests/security/script_hardening.py` |
-| `test_cleanup_and_block_trash_mail_under_the_imap_lock` | `tests/security/script_hardening.py` |
-| `test_nosync_reads_one_way_and_fails_toward_read_only` | `tests/security/script_hardening.py` |
-| `test_trashing_the_same_message_offline_again_queues_it_again` | `tests/security/script_hardening.py` |
-| `test_a_resubmit_with_the_same_mutation_id_queues_once` | `tests/security/script_hardening.py` |
-| `test_two_cleanups_of_one_sender_undo_separately` | `tests/security/script_hardening.py` |
-| `test_undo_groups_differ_across_page_loads` | `tests/security/script_hardening.py` |
+| `test_starttls_off_this_machine_verifies_the_certificate` | `tests/security/test_hardening.py` |
+| `test_starttls_on_loopback_accepts_bridges_own_certificate` | `tests/security/test_hardening.py` |
+| `test_smtp_follows_the_same_loopback_rule` | `tests/security/test_hardening.py` |
+| `test_a_move_without_MOVE_copies_then_expunges_only_its_uid` | `tests/security/test_hardening.py` |
+| `test_a_failed_copy_leaves_the_message_untouched` | `tests/security/test_hardening.py` |
+| `test_without_uidplus_the_message_stays_flagged_and_nothing_else_goes` | `tests/security/test_hardening.py` |
+| `test_a_lost_connection_during_expunge_still_raises` | `tests/security/test_hardening.py` |
+| `test_deleting_a_draft_copy_never_bulk_expunges` | `tests/security/test_hardening.py` |
+| `test_replacing_a_draft_copy_never_bulk_expunges` | `tests/security/test_hardening.py` |
+| `test_the_app_still_loads_on_its_own_host` | `tests/security/test_hardening.py` |
+| `test_a_rebound_name_reads_nothing` | `tests/security/test_hardening.py` |
+| `test_a_foreign_origin_reads_nothing` | `tests/security/test_hardening.py` |
+| `test_a_refused_read_is_not_counted_as_someone_at_the_screen` | `tests/security/test_hardening.py` |
+| `test_folder_names_from_list_pass_through_unchanged` | `tests/security/test_hardening.py` |
+| `test_a_folder_name_that_would_break_the_command_is_refused` | `tests/security/test_hardening.py` |
+| `test_a_move_to_an_injected_folder_sends_nothing` | `tests/security/test_hardening.py` |
+| `test_an_injected_folder_in_the_url_reaches_no_imap_command` | `tests/security/test_hardening.py` |
+| `test_a_read_another_site_starts_is_refused` | `tests/security/test_hardening.py`; `tests/security/test_perimeter.py` |
+| `test_another_site_can_link_to_the_app_but_not_frame_it` | `tests/security/test_hardening.py` |
+| `test_the_apps_own_reads_and_older_browsers_still_work` | `tests/security/test_hardening.py` `test_the_api_answers_only_the_pages_own_reads`; `tests/security/test_perimeter.py` `test_the_page_itself_opens_from_a_typed_url_or_an_older_browser` |
+| `test_no_page_may_frame_the_app` | `tests/security/test_hardening.py` |
+| `test_a_request_can_only_star_or_mark_read` | `tests/security/test_hardening.py` |
+| `test_a_refused_move_keeps_the_message_and_says_so` | `tests/security/test_hardening.py` |
+| `test_a_refused_gmail_archive_keeps_the_message` | `tests/security/test_hardening.py` |
+| `test_an_accepted_move_still_files_the_message` | `tests/security/test_hardening.py` |
+| `test_the_route_reports_a_refusal_and_offers_no_undo` | `tests/security/test_hardening.py` |
+| `test_bcc_never_leaves_even_under_python_O` | `tests/security/test_hardening.py` |
+| `test_a_malformed_config_is_never_written_even_under_python_O` | `tests/security/test_hardening.py` |
+| `test_a_failed_read_answers_without_the_exception_text` | `tests/security/test_hardening.py` |
+| `test_undo_ingest_leaves_the_inbox_watermark_alone` | `tests/security/test_hardening.py` |
+| `test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync` | `tests/security/test_hardening.py` |
+| `test_cleanup_and_block_trash_mail_under_the_imap_lock` | `tests/security/test_hardening.py` |
+| `test_nosync_reads_one_way_and_fails_toward_read_only` | `tests/security/test_hardening.py` |
+| `test_trashing_the_same_message_offline_again_queues_it_again` | `tests/security/test_hardening.py` |
+| `test_a_resubmit_with_the_same_mutation_id_queues_once` | `tests/security/test_hardening.py` |
+| `test_two_cleanups_of_one_sender_undo_separately` | `tests/security/test_hardening.py` |
+| `test_undo_groups_differ_across_page_loads` | `tests/security/test_hardening.py` |
 
 ## `test_send_after.py`: `tests/unit/compose/test_send_after.py`
 

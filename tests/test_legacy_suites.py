@@ -21,7 +21,7 @@ SUITES = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob("tests/**/scri
 
 
 def test_the_suites_are_found():
-    assert {"tests/security/script_hardening.py"} <= set(SUITES)
+    assert {"tests/unit/compose/script_draft_resume.py"} <= set(SUITES)
 
 
 @pytest.mark.parametrize("suite", SUITES)
