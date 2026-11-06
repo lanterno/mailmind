@@ -862,7 +862,7 @@ def test_hwf_a_snippet_leaves_an_attached_emails_text_out():
 def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
     import email
     from email import policy
-    import compose
+    from mailmind.compose import api as compose
     import server
     [att] = server._extract_attachments(_forwarded_email(True))
     assert att["content_type"] == "message/rfc822" and b"Subject: Fabric" in att["data"]
@@ -900,7 +900,7 @@ def test_hwf_an_encoded_line_break_in_to_does_not_break_parsing():
 # -- composing ----------------------------------------------------------------
 
 def test_hwf_a_recorded_tail_is_cut_only_when_it_starts_with_a_blank_line():
-    import compose
+    from mailmind.compose import api as compose
     quote = "On Mon, Lin wrote:\n> hi\n"
     assert compose.resume_split("Mine\n\n" + quote, {"own_text": None, "tail_text": "\n\n" + quote}, False) == (
         "Mine", "\n\n" + quote, "tail")
@@ -930,7 +930,7 @@ def test_hwf_a_fold_in_a_quoted_sender_keeps_the_address():
 
 def test_hwf_a_tab_in_a_subject_is_not_deleted():
     import email
-    import compose
+    from mailmind.compose import api as compose
     built = compose.build_message({"account": A, "to": ["lin@example.test"], "subject": "Plans\tfor next week",
                                    "text": "hi"})
     assert email.message_from_bytes(built["raw"])["Subject"] == "Plans for next week"
@@ -942,7 +942,7 @@ FOLDABLE = {"from_name": "Lin Mori", "from_addr": "lin@example.test", "date": "M
 
 @pytest.mark.parametrize("bodies", ["reply_bodies", "forward_bodies"])
 def test_hwf_mail_going_out_carries_no_reader_quote_fold(bodies):
-    import compose
+    from mailmind.compose import api as compose
     text, html = getattr(compose, bodies)("Great", FOLDABLE)
     assert "<details" not in html and "quoted text" not in text
     assert "On Sun, Ada wrote: lunch?" in html and "On Sun, Ada wrote: lunch?" in text

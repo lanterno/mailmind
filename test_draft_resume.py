@@ -31,7 +31,7 @@ def _home():
 
 
 _home()                                               # before anything opens a file
-import compose
+from mailmind.compose import api as compose
 from mailmind.content import mime
 import outbox
 import server

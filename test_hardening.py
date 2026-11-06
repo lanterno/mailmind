@@ -491,7 +491,7 @@ def _optimized(code):
 def test_bcc_never_leaves_even_under_python_O():
     for name in ("Bcc", "BCC", "bcc "):
         got = _optimized(f"""
-import compose
+from mailmind.compose.domain import builder as compose
 class Leaky(compose.EmailMessage):
     def as_bytes(self, *a, **k):
         return b"{name}: hidden@example.test\\r\\n" + super().as_bytes(*a, **k)

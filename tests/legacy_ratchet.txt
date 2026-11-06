@@ -8,7 +8,6 @@
 mailmind.bootstrap.attention accounts
 mailmind.bootstrap.attention store
 mailmind.bootstrap.calendar accounts
-mailmind.bootstrap.calendar compose
 mailmind.bootstrap.calendar ingest
 mailmind.bootstrap.calendar outbox
 mailmind.bootstrap.calendar store
