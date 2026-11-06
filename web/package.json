@@ -5,6 +5,7 @@
   "workspaces": ["lint"],
   "scripts": {
     "build": "vite build",
+    "lint": "eslint --max-warnings 0",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
