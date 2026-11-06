@@ -64,7 +64,7 @@ class DraftAhead:
 
     def _draft_key(self, row):
         """Natural draft identity (account, ref_key) — survives reconcile/reset_folder
-        delete+reinsert; NEVER messages.pk (same rule as muted/followups/read_mutations).
+        delete+reinsert; NEVER messages.pk (same rule as muted/followups/mail_commands).
         Thread-scoped ('t:') so two pks in one thread can never double-spend claude.
         Returns None for keyless malformed mail (pre-gen refuses; on-demand still works)."""
         tid = (row["thread_id"] or "").strip()

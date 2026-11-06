@@ -32,7 +32,7 @@ def forget_round():
     c = store.conn()
     try:
         store.forget_gone_messages(c, int(time.time()))
-        store.read_mut_forget_finished(c, int(time.time()))
+        store.command_forget_finished(c, int(time.time()))
         answers.batch_forget_finished(c, int(time.time()))
         c.commit()
     finally:

@@ -70,7 +70,7 @@ class Undo:
             # dest the worker resolved online so the counter-move searches the RIGHT folder (the
             # enqueued desc had an empty dest_folder for junk/archive).
             c = self._store.conn()
-            q = self._store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
+            q = self._store.command_latest_by_msgid(c, d["account"], d["message_id"])
             if q is not None and not q["applied"]:
                 src = d.get("src_folder") or "INBOX"
                 cancelled = self._offline.QUEUE.cancel_unapplied(c, q["id"])

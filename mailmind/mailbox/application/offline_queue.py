@@ -1,6 +1,6 @@
 """What couldn't reach a server, applied once it can be: moves and flag changes queued because IMAP was unreachable.
 
-The same machinery as Compose's outbox, a DurableQueue over the read_mutations table: a single worker thread, an atomic
+The same machinery as Compose's outbox, a DurableQueue over the mail_commands table: a single worker thread, an atomic
 claim (queued to running), the `applied` flag as the exactly-once gate, exponential backoff, and running rows reset at
 boot. The one difference from the outbox: the primary op here is an IMAP op, so it runs as a job on the account's IMAP
 gate (the outbox's SMTP send holds none).
@@ -32,7 +32,7 @@ class OfflineQueue:
         self._store = store
         self._accounts = accounts
         self._commands = commands
-        self.QUEUE = DurableQueue("readmutq", "read_mutations", running="running", finished="done", finished_at="done_at",
+        self.QUEUE = DurableQueue("readmutq", "mail_commands", running="running", finished="done", finished_at="done_at",
                                   gate="applied", connect=lambda: store.conn(), max_attempts=self.MAX_ATTEMPTS,
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL)
 
@@ -54,7 +54,7 @@ class OfflineQueue:
     def _commit_get(self, mid):
         c = self._store.conn()
         try:
-            return self._store.read_mut_get(c, mid)
+            return self._store.command_get(c, mid)
         finally:
             c.close()
 
@@ -67,11 +67,11 @@ class OfflineQueue:
         Re-running is harmless (delete of a gone row is a no-op; set_flags is idempotent)."""
         c = self._store.conn()
         try:
-            if row["op"] == "flag":
+            if row["kind"] == "flag":
                 r = self._flagged_row(c, row)
                 if r is None:
                     return
-                flags = (json.loads(row["payload"] or "{}").get("flags") or {})
+                flags = (json.loads(row["params"] or "{}").get("flags") or {})
                 self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
             else:
                 pks = self._store.pending_removal_pks(c, row["id"])
@@ -94,7 +94,7 @@ class OfflineQueue:
             r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
                           "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
             return r or self._store.get_message_by_msgid(c, row["account"], row["message_id"])
-        pk = json.loads(row["payload"] or "{}").get("pk")
+        pk = json.loads(row["params"] or "{}").get("pk")
         return self._store.get_message(c, pk) if pk else None
 
 
@@ -102,9 +102,9 @@ class OfflineQueue:
         """The queued change `row` won't happen: a move's message is listed again, and a flag change's
         row gets back the flags it had when the change was asked for."""
         self._store.restore_pending(c, row["id"])
-        if row["op"] == "flag":
+        if row["kind"] == "flag":
             r = self._flagged_row(c, row)
-            was = json.loads(row["payload"] or "{}").get("was") or {}
+            was = json.loads(row["params"] or "{}").get("was") or {}
             if r is not None and was:
                 self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in was.items()})
 
@@ -118,15 +118,15 @@ class OfflineQueue:
     def _take_up(self, c, row):
         """The given-up change `row` is asked for again: as when it was queued, a move's message leaves
         the lists and a flag change shows, its `was` now the flags it replaces this time."""
-        payload = json.loads(row["payload"] or "{}")
-        if row["op"] == "flag":
+        payload = json.loads(row["params"] or "{}")
+        if row["kind"] == "flag":
             r = self._flagged_row(c, row)
             r = self._store.get_message(c, r["pk"]) if r is not None else None
             if r is None:
                 return
             flags = payload.get("flags") or {}
             payload["was"] = {k: bool(r[k]) for k in flags}
-            self._store.read_mut_set_payload(c, row["id"], json.dumps(payload))
+            self._store.command_set_params(c, row["id"], json.dumps(payload))
             self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
             return
         if row["message_id"]:
@@ -144,18 +144,18 @@ class OfflineQueue:
         c = self._store.conn()
         try:
             items = []
-            for r in self._store.read_mut_open(c, limit):
-                payload = json.loads(r["payload"] or "{}")
+            for r in self._store.command_open(c, limit):
+                payload = json.loads(r["params"] or "{}")
                 subject = payload.get("subject")
                 if subject is None:
                     found = self._flagged_row(c, r)
                     found = self._store.get_message(c, found["pk"]) if found is not None else None
                     subject = found["subject"] if found is not None else ""
-                items.append({"id": r["id"], "account": r["account"], "op": r["op"], "folder": r["src_folder"],
+                items.append({"id": r["id"], "account": r["account"], "op": r["kind"], "folder": r["src_folder"],
                               "dest": r["dest"], "flags": payload.get("flags"), "state": r["state"],
                               "attempts": r["attempts"], "error": r["last_error"], "subject": subject,
                               "next_attempt_at": r["next_attempt_at"], "created_at": r["created_at"]})
-            counts = self._store.read_mut_open_counts(c)
+            counts = self._store.command_open_counts(c)
         finally:
             c.close()
         return {"items": items, "waiting": counts.get("queued", 0) + counts.get("running", 0),
@@ -165,7 +165,7 @@ class OfflineQueue:
     def retry(self, mid):
         """Ask again for a change the queue gave up on. False when it isn't one."""
         def go(c):
-            row = self._store.read_mut_get(c, mid)
+            row = self._store.command_get(c, mid)
             if row is None or not self.QUEUE.requeue(c, mid):
                 return False
             self._take_up(c, row)
@@ -181,11 +181,11 @@ class OfflineQueue:
         there is nothing for Undo to reverse. Returns the row, or None when it had reached one or is gone.
         The caller holds the account's IMAP gate, so a try at it is over or hasn't begun."""
         def go(c):
-            row = self._store.read_mut_get(c, mid)
+            row = self._store.command_get(c, mid)
             if row is None or not self.QUEUE.cancel_unapplied(c, mid):
                 return None
             self._give_back(c, row)
-            if row["op"] != "flag" and row["message_id"]:
+            if row["kind"] != "flag" and row["message_id"]:
                 self._store.undo_forget_move(c, row["account"], row["message_id"], row["src_folder"])
             return row
         return self._commit(go)

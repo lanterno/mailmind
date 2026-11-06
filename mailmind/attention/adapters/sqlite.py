@@ -75,7 +75,7 @@ def unread_in_muted_threads(c, account):
     asked for again each sync."""
     return c.execute("""SELECT * FROM messages m WHERE m.account=? AND m.seen=0 AND m.thread_id IN
                           (SELECT thread_id FROM muted WHERE account=?)
-                        AND NOT EXISTS (SELECT 1 FROM read_mutations q WHERE q.account=m.account AND q.op='flag'
+                        AND NOT EXISTS (SELECT 1 FROM mail_commands q WHERE q.account=m.account AND q.kind='flag'
                           AND q.applied=0 AND q.message_id=m.message_id AND q.message_id!='')""",
                      (account, account)).fetchall()
 

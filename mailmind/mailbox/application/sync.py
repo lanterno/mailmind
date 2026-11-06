@@ -86,7 +86,7 @@ class Ingest:
         c = self._store.conn()
         try:
             waiting = {r["message_id"] for r in c.execute(
-                "SELECT message_id FROM read_mutations WHERE account=? AND op='flag' AND applied=0 "
+                "SELECT message_id FROM mail_commands WHERE account=? AND kind='flag' AND applied=0 "
                 "AND state IN ('queued', 'running') AND message_id != ''", (email,))}
             rows = self._flag_rows(c, email, folder, uids)    # before the flags are read: see above
         finally:

@@ -45,73 +45,73 @@ def queue_flags(c, row, flags, mutation_id, when):
     caller's transaction. The queue's row keeps the flags it replaced, which a change the server
     refuses, or one the queue gives up on, puts back. False if that id was queued already."""
     acct, mid = row["account"], (row["message_id"] or "").strip()
-    payload = {"pk": row["pk"], "uid": row["uid"], "flags": flags,
+    params = {"pk": row["pk"], "uid": row["uid"], "flags": flags,
                "was": {k: bool(row[k]) for k in flags}}
-    _id, created = read_mut_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
-                                       "op": "flag", "message_id": mid, "src_folder": row["folder"],
-                                       "dest": None, "payload": json.dumps(payload),
+    _id, created = command_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
+                                       "kind": "flag", "message_id": mid, "src_folder": row["folder"],
+                                       "dest": None, "params": json.dumps(params),
                                        "next_attempt_at": 0, "created_at": when})
     if created:
         set_local_flags(c, row["pk"], **{k: int(bool(v)) for k, v in flags.items()})
     return created
 
 
-def read_mut_insert(c, row):
+def command_insert(c, row):
     """Insert a queued mutation; (id, created) — created=False on idempotency_key dupe. Race-safe."""
-    existing = c.execute("SELECT id FROM read_mutations WHERE idempotency_key=?",
+    existing = c.execute("SELECT id FROM mail_commands WHERE idempotency_key=?",
                          (row["idempotency_key"],)).fetchone()
     if existing:
         return existing["id"], False
     try:
         cur = c.execute(
-            """INSERT INTO read_mutations(account,idempotency_key,op,message_id,src_folder,dest,
-                 payload,state,next_attempt_at,created_at)
-               VALUES(:account,:idempotency_key,:op,:message_id,:src_folder,:dest,
-                 :payload,'queued',:next_attempt_at,:created_at) RETURNING id""", row)
+            """INSERT INTO mail_commands(account,idempotency_key,kind,message_id,src_folder,dest,
+                 params,state,next_attempt_at,created_at)
+               VALUES(:account,:idempotency_key,:kind,:message_id,:src_folder,:dest,
+                 :params,'queued',:next_attempt_at,:created_at) RETURNING id""", row)
         return cur.fetchone()["id"], True
     except sqlite3.IntegrityError:
-        r = c.execute("SELECT id FROM read_mutations WHERE idempotency_key=?",
+        r = c.execute("SELECT id FROM mail_commands WHERE idempotency_key=?",
                       (row["idempotency_key"],)).fetchone()
         return (r["id"] if r else None), False
 
 
-def read_mut_get(c, mid):
-    return c.execute("SELECT * FROM read_mutations WHERE id=?", (mid,)).fetchone()
+def command_get(c, mid):
+    return c.execute("SELECT * FROM mail_commands WHERE id=?", (mid,)).fetchone()
 
 
-def read_mut_set_dest(c, mid, dest):
+def command_set_dest(c, mid, dest):
     """Persist the destination the worker resolved online, so a later undo can find the message."""
-    c.execute("UPDATE read_mutations SET dest=? WHERE id=?", (dest, mid))
+    c.execute("UPDATE mail_commands SET dest=? WHERE id=?", (dest, mid))
 
 
-def read_mut_set_payload(c, mid, payload):
-    c.execute("UPDATE read_mutations SET payload=? WHERE id=?", (payload, mid))
+def command_set_params(c, mid, params):
+    c.execute("UPDATE mail_commands SET params=? WHERE id=?", (params, mid))
 
 
-def read_mut_open(c, limit):
+def command_open(c, limit):
     """The changes that haven't reached a server, newest first: waiting, being tried or given up."""
-    return c.execute("SELECT * FROM read_mutations WHERE applied=0 AND state IN ('queued', 'running', 'error') "
+    return c.execute("SELECT * FROM mail_commands WHERE applied=0 AND state IN ('queued', 'running', 'error') "
                      "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
-def read_mut_open_counts(c):
+def command_open_counts(c):
     """{state: how many} of the changes that haven't reached a server."""
     return {r["state"]: r["n"] for r in c.execute(
-        "SELECT state, COUNT(*) n FROM read_mutations WHERE applied=0 "
+        "SELECT state, COUNT(*) n FROM mail_commands WHERE applied=0 "
         "AND state IN ('queued', 'running', 'error') GROUP BY state")}
 
 
-def read_mut_forget_finished(c, now_ts, days=30):
+def command_forget_finished(c, now_ts, days=30):
     """A queue row finished `days` ago goes: nothing resubmits or undoes it after that. A row still
     open, or in `error` waiting for a person, stays."""
     cutoff = datetime.fromtimestamp(now_ts - days * 86400, timezone.utc).isoformat()
-    return c.execute("DELETE FROM read_mutations WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
+    return c.execute("DELETE FROM mail_commands WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
 
 
-def read_mut_latest_by_msgid(c, account, message_id):
+def command_latest_by_msgid(c, account, message_id):
     """The most recent read-mutation row for a message (any state) — undo uses it to decide
     cancel-vs-counter-move and to recover the resolved destination folder."""
-    return c.execute("SELECT * FROM read_mutations WHERE account=? AND message_id=? "
+    return c.execute("SELECT * FROM mail_commands WHERE account=? AND message_id=? "
                      "ORDER BY id DESC LIMIT 1", (account, message_id)).fetchone()
 
 
@@ -197,7 +197,7 @@ def forget_gone_messages(c, now_ts, days=30):
 
 
 def mark_pending_removal(c, pk, mutation_id):
-    """Leave message `pk` out of every list while the queued move `mutation_id` (a read_mutations
+    """Leave message `pk` out of every list while the queued move `mutation_id` (a mail_commands
     id) takes it away. The row stays, so a move that doesn't happen can list it again."""
     c.execute("UPDATE messages SET pending_removal=? WHERE pk=?", (mutation_id, pk))
 

@@ -165,9 +165,9 @@ class MailCommands:
         Raises a UNREACHABLE member on connection failure (worker backs off + retries). Used ONLY by
         the offline queue."""
         acct = self._accounts.get(row["account"])
-        op, src, dest = row["op"], row["src_folder"], row["dest"]
+        op, src, dest = row["kind"], row["src_folder"], row["dest"]
         mid = (row["message_id"] or "").strip()
-        payload = json.loads(row["payload"] or "{}")
+        payload = json.loads(row["params"] or "{}")
 
         def run(s):
             s.select(src, readonly=False)
@@ -186,7 +186,7 @@ class MailCommands:
                     return "no_folder"                     # no target: it stays (don't loop forever)
                 if d != dest and row["id"]:                # persist the resolved dest so undo can find it later
                     cc = self._store.conn()
-                    self._store.read_mut_set_dest(cc, row["id"], d)
+                    self._store.command_set_dest(cc, row["id"], d)
                     cc.commit()
                     cc.close()
                 if self._already_in(s, d, mid, src):            # an earlier try's COPY landed, then its connection

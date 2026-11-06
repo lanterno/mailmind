@@ -60,9 +60,9 @@ class Filing:
         if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
             mutation_id = secrets.token_hex(16)
         idem = f"{op}:{acct}:{mid or pk}:{mutation_id}"
-        _id, created = self._store.read_mut_insert(c, {"account": acct, "idempotency_key": idem, "op": op,
+        _id, created = self._store.command_insert(c, {"account": acct, "idempotency_key": idem, "kind": op,
                                   "message_id": mid, "src_folder": row["folder"], "dest": dest,
-                                  "payload": json.dumps(payload), "next_attempt_at": 0,
+                                  "params": json.dumps(payload), "next_attempt_at": 0,
                                   "created_at": now_iso()})
         if not created:                             # duplicate submit (same mutation_id) — already queued
             c.close()
@@ -121,14 +121,14 @@ class Filing:
         """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
         migration 23 kept them, is read back. Returns (result, code)."""
         c = self._store.conn()
-        row = self._store.read_mut_get(c, mid)
+        row = self._store.command_get(c, mid)
         c.close()
         if row is None:
             return {"ok": False}, 404
 
         def job():
             gone = self._offline.discard(mid)
-            if gone is None or gone["op"] == "flag" or not gone["message_id"]:
+            if gone is None or gone["kind"] == "flag" or not gone["message_id"]:
                 return gone is not None
             cc = self._store.conn()
             listed = cc.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=?",

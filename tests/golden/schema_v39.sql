@@ -4,6 +4,12 @@ CREATE INDEX idx_ai_batch_items_batch ON ai_batch_items(batch_id);
 -- index idx_att_msg
 CREATE INDEX idx_att_msg ON attachments(message_pk);
 
+-- index idx_commands_message
+CREATE INDEX idx_commands_message ON mail_commands(account, message_id);
+
+-- index idx_commands_state
+CREATE INDEX idx_commands_state ON mail_commands(state, next_attempt_at);
+
 -- index idx_draft_ahead_created
 CREATE INDEX idx_draft_ahead_created ON draft_ahead(created_ts);
 
@@ -43,9 +49,6 @@ CREATE INDEX idx_outbox_created ON outbox(created_at);
 -- index idx_outbox_state
 CREATE INDEX idx_outbox_state ON outbox(state, next_attempt_at);
 
--- index idx_readmut_state
-CREATE INDEX idx_readmut_state ON read_mutations(state, next_attempt_at);
-
 -- index idx_unsub_log_addr
 CREATE INDEX idx_unsub_log_addr ON unsub_log(from_addr);
 
@@ -82,6 +85,9 @@ CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NUL
 -- table followups
 CREATE TABLE followups ( -- commitment tracking; keyed on (account,thread_id), NEVER pk account TEXT NOT NULL, thread_id TEXT NOT NULL, kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', anchor_pk INTEGER, first_sent_ts INTEGER, last_msg_ts INTEGER, due_ts INTEGER, created_at TEXT, resolved_at TEXT, PRIMARY KEY(account, thread_id) );
 
+-- table mail_commands
+CREATE TABLE mail_commands( -- keyed on message_id, never pk id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, -- one per request, so a resubmit dedupes kind TEXT NOT NULL, -- trash | archive | junk | move | flag message_id TEXT, -- RFC822 Message-ID: what outlasts a renumber src_folder TEXT NOT NULL, -- where the message was when it was accepted dest TEXT, -- where it goes, once that is known params TEXT NOT NULL, -- JSON: the copy as accepted, flags, what they replaced state TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, applied INTEGER NOT NULL DEFAULT 0, -- done once: the server holds the change begun INTEGER NOT NULL DEFAULT 0, -- a try may have reached the server: ask before repeating outcome TEXT, -- JSON: what a reversal needs from the server's answer last_error TEXT, -- a fixed code or a class name, nothing more created_at TEXT NOT NULL, done_at TEXT);
+
 -- table message_identity
 CREATE TABLE message_identity( key INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, identity TEXT NOT NULL, gone_at INTEGER, UNIQUE(account, identity));
 
@@ -112,9 +118,6 @@ CREATE TABLE muted ( -- silenced threads; keyed on (account,thread_id), NEVER pk
 -- table outbox
 CREATE TABLE outbox ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, -- the FROM account email (must exist in config) idempotency_key TEXT NOT NULL UNIQUE, -- one logical send per key (dedupes double-submit) message_id TEXT NOT NULL, -- minted at build; stable across retries in_reply_to_pk INTEGER, -- original pk (reply) -> set \Answered after send envelope TEXT NOT NULL, -- JSON [addr-spec,...] full delivery set incl. Bcc (PRIVATE; never in raw) recipients TEXT NOT NULL, -- JSON {to,cc,bcc} for the outbox UI only subject TEXT, raw BLOB NOT NULL, -- Bcc-LESS RFC822 bytes: sent on the wire AND APPENDed to Sent state TEXT NOT NULL DEFAULT 'queued', -- queued | sending | sent | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, -- unix secs; backoff gate delivered INTEGER NOT NULL DEFAULT 0, -- 1 once the wire send succeeded (never re-send) sent_appended INTEGER NOT NULL DEFAULT 0, -- done-once: Sent copy made answered_set INTEGER NOT NULL DEFAULT 0, -- done-once: \Answered set on original followup_recorded INTEGER NOT NULL DEFAULT 0, -- done-once: sent-no-reply followup seeded last_error TEXT, -- SCRUBBED code only draft_id INTEGER, -- supersede this draft after delivery draft_deleted INTEGER NOT NULL DEFAULT 0, -- done-once: draft removed post-send created_at TEXT NOT NULL, sent_at TEXT , orig_account TEXT, orig_message_id TEXT, orig_thread_id TEXT, wire_begun INTEGER NOT NULL DEFAULT 0);
 
--- table read_mutations
-CREATE TABLE read_mutations ( -- offline-safe read-side mutation queue (mirrors outbox); keyed on message_id, NEVER pk id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, -- one logical mutation per key (dedupes double-submit) op TEXT NOT NULL, -- trash | archive | junk | move | flag message_id TEXT, -- RFC822 Message-ID: the DURABLE key (survives reconcile re-pk) src_folder TEXT NOT NULL, -- folder the message lived in at enqueue dest TEXT, -- move/junk/archive target (NULL for flag / gmail label-remove) payload TEXT NOT NULL, -- JSON {pk,uid,kind,flags?,is_gmail,undo_label,subject,thread_id} state TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, applied INTEGER NOT NULL DEFAULT 0, -- EXACTLY-ONCE flag (mirrors outbox.delivered): set the instant the IMAP op lands last_error TEXT, -- SCRUBBED code only created_at TEXT NOT NULL, done_at TEXT );
-
 -- table reviews
 CREATE TABLE reviews( accounts TEXT NOT NULL, day TEXT NOT NULL, fingerprint TEXT NOT NULL, narrative TEXT NOT NULL, next_json TEXT NOT NULL, stats_json TEXT NOT NULL, needs_json TEXT NOT NULL, waiting_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, day));
 
@@ -139,4 +142,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=38;
+PRAGMA user_version=39;
