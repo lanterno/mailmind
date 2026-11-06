@@ -72,7 +72,7 @@ def test_a_message_with_no_verdict_asks_nothing(app, world, route):
 
 
 def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import store
     import summarize_review

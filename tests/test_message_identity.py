@@ -93,7 +93,7 @@ def test_a_message_archived_then_undone_keeps_its_assessment_with_no_new_call(ap
 
 def test_a_renumbered_folder_keeps_its_assessments_with_no_new_call(app, world, ai):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     assess()
     before, asked = world.row(LUNCH), len(ai.requests)
     told = said(before["pk"])

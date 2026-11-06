@@ -238,7 +238,7 @@ class Machine(RuleBasedStateMachine):
     @rule(folder=st.sampled_from(FOLDERS))
     def sync(self, folder):
         from mailmind.bootstrap import accounts
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         try:
             ingest.sync_folder(accounts.get(w.ADA), folder)
         except Exception:                             # a sync on a bad day: it tries again later
@@ -277,7 +277,7 @@ class Machine(RuleBasedStateMachine):
         """Everything over: the server back, the queue run dry, every folder caught up. Then the
         lists show each message where the server has it, with the flags the server has."""
         from mailmind.bootstrap import accounts
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         from mailmind.bootstrap.mailbox import offline
         self.server.clear_faults()
         self.restart()

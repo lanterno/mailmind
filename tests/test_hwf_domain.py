@@ -229,7 +229,7 @@ def test_hwf_a_fetched_body_fills_only_an_empty_snippet(db):
 
 def test_hwf_a_full_rescan_keeps_the_snippet_of_an_opened_message(world):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     pk = world.pk("ada-sent-01-lunch-reply.eml")
     ingest.fetch_body(pk)
     before = world.row("ada-sent-01-lunch-reply.eml")["snippet"]
@@ -648,7 +648,7 @@ def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
 
 def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     with open(world.dir / "mailmind_rules.json", "w") as f:
         f.write('{"keep_senders": ["lin@example.test",]')
     world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<late@example.test>"))
@@ -664,7 +664,7 @@ def test_hwf_expiry_takes_the_shortest_of_matching_domain_rules():
 
 def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(world):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "block")
     assert world.row("ada-inbox-01-lunch.eml")["bucket"] == "other/personal-ish"
@@ -872,7 +872,7 @@ def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
 
 
 def test_hwf_a_message_whose_part_rows_were_cleared_records_them_when_opened(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-07-forward-rfc822.eml"
     pk = world.pk(name)

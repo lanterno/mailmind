@@ -283,7 +283,7 @@ def test_save_resave_resume_send_and_delete_drafts(send):
     send.golden.note("Ada's Drafts on the server", sorted(
         str(m.headers()["Subject"]) for m in send.world.server.messages(w.ADA, "Drafts").values()))
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     ingest.sync_folder(accounts.get(w.ADA), "Drafts")      # the Drafts list shows it, as a sync would
     [draft] = rows("SELECT m.pk FROM drafts d JOIN messages m ON m.account=d.account AND m.folder=d.folder "
                    "AND m.uid=d.uid WHERE d.id=?", did)

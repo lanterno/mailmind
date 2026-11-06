@@ -84,7 +84,7 @@ def test_a_confirm_ignores_any_list_a_request_names(app, world, ai):
 
 def test_a_confirm_files_the_same_messages_after_a_renumber(app, world, ai):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     before = {r["pk"] for r in lin_in_inbox()}
     plan = preview(app, ai)
     world.server.renumber(w.ADA, "INBOX")

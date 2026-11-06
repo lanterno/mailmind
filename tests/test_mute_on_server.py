@@ -88,7 +88,7 @@ def test_undo_before_the_mark_landed_ends_up_unread(app, world):
 
 
 def test_undo_finds_the_row_after_a_renumber(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import offline
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
@@ -122,7 +122,7 @@ def test_an_undo_written_before_this_only_changes_the_local_row(app, world):
 
 
 def test_a_refused_mark_goes_to_the_tray_and_isnt_asked_again_each_sync(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import offline
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
@@ -138,7 +138,7 @@ def test_a_refused_mark_goes_to_the_tray_and_isnt_asked_again_each_sync(app, wor
 
 
 def test_a_reply_after_a_marked_one_is_marked_as_well(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import offline
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]

@@ -47,7 +47,7 @@ def searches(world, since):
 # ── the watermark ────────────────────────────────────────────────────────
 
 def test_an_incremental_sync_asks_only_above_the_watermark_then_moves_it(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.without.add("CONDSTORE")               # which would ask what changed, besides
     wm = watermark()
     uid = world.server.deliver(w.ADA, "INBOX", late())
@@ -58,14 +58,14 @@ def test_an_incremental_sync_asks_only_above_the_watermark_then_moves_it(world):
 
 
 def test_a_sync_with_nothing_new_leaves_the_watermark(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     wm = watermark()
     assert ingest.sync_new(acct())[0] == 0
     assert watermark() == wm
 
 
 def test_ingest_message_stores_one_message_and_leaves_the_watermark(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     wm, uid = watermark(), world.server.deliver(w.ADA, "INBOX", late())
     assert ingest.ingest_message(acct(), "INBOX", NEW) == 1
     assert (uid, NEW) in inbox()
@@ -76,7 +76,7 @@ def test_ingest_message_stores_one_message_and_leaves_the_watermark(world):
 
 
 def test_ingest_message_into_a_folder_never_synced_marks_nothing_synced(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     assert not ingest.folder_synced(w.ADA, "Junk")         # the world never opened Ada's Junk
     world.server.deliver(w.ADA, "Junk", late())
     assert ingest.ingest_message(acct(), "Junk", NEW) == 1
@@ -85,7 +85,7 @@ def test_ingest_message_into_a_folder_never_synced_marks_nothing_synced(world):
 
 
 def test_ingest_message_for_a_message_the_server_lacks_stores_nothing(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     before = inbox()
     assert ingest.ingest_message(acct(), "INBOX", "<nowhere@example.test>") == 0
     assert ingest.ingest_message(acct(), "INBOX", "") == 0
@@ -110,14 +110,14 @@ def junk_mail(world, n):
 
 
 def test_each_folder_the_world_synced_counts_as_read_whole(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     for email, folder in w.synced_folders():
         assert ingest.folder_synced(email, folder), (email, folder)
 
 
 def test_a_first_scan_that_fails_leaves_the_folder_to_scan_again(world):
     import imaplib
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     junk_mail(world, 1)
     world.server.fail("UID SEARCH", user=w.ADA)
     with pytest.raises(imaplib.IMAP4.error):
@@ -127,7 +127,7 @@ def test_a_first_scan_that_fails_leaves_the_folder_to_scan_again(world):
 
 
 def test_a_warmed_folder_counts_as_read_whole_only_after_a_whole_scan(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     junk_mail(world, 3)
     ingest.sync_folder(acct(), "Junk", recent=2)            # warming's first touch: the newest two
     assert scan_state("Junk") == ["recent"] and not ingest.folder_synced(w.ADA, "Junk")
@@ -141,7 +141,7 @@ def test_a_warmed_folder_counts_as_read_whole_only_after_a_whole_scan(world):
 
 
 def test_a_warm_scan_that_reads_every_message_counts_the_folder_read(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     junk_mail(world, 2)
     ingest.sync_folder(acct(), "Junk", recent=5)
     assert ingest.folder_synced(w.ADA, "Junk")
@@ -149,7 +149,7 @@ def test_a_warm_scan_that_reads_every_message_counts_the_folder_read(world):
 
 def test_a_uidvalidity_change_whose_scan_fails_leaves_the_folder_to_scan_again(world):
     import imaplib
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.renumber(w.ADA, "Archive")
     world.server.fail("UID SEARCH", user=w.ADA)
     with pytest.raises(imaplib.IMAP4.error):
@@ -178,7 +178,7 @@ def local_flags(world, name):
 
 
 def test_a_sync_reads_the_flags_of_stored_mail_again(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     server_flags(world, LUNCH, add=(w.FLAGGED, w.ANSWERED), drop=(w.SEEN,))
     server_flags(world, RECEIPT, add=(w.SEEN,))
     ingest.sync_new(acct())
@@ -187,7 +187,7 @@ def test_a_sync_reads_the_flags_of_stored_mail_again(world):
 
 
 def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/flag", {"pk": world.pk(RECEIPT), "flag": "flagged", "on": True}).json["status"] == "queued"
     ingest.sync_new(acct())                                     # the server hasn't heard of the star yet
@@ -195,7 +195,7 @@ def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, worl
 
 
 def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     server_flags(world, RECEIPT, add=(w.SEEN,))
     real = ingest._flags_of
@@ -212,7 +212,7 @@ def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
 
 
 def test_with_no_condstore_only_the_newest_stored_mail_is_read_again(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.without.add("CONDSTORE")
     monkeypatch.setattr(ingest, "FLAG_REFRESH", 1)
     since = len(world.server.commands_for(w.ADA, "UID FETCH"))
@@ -224,7 +224,7 @@ def test_with_no_condstore_only_the_newest_stored_mail_is_read_again(world, monk
 # ── UIDVALIDITY ─────────────────────────────────────────────────────────
 
 def test_a_uidvalidity_change_drops_the_folder_and_resyncs_it_whole(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     before = [m for _, m in inbox()]
     thread = {r["message_id"]: r["thread_id"] for r in q("SELECT message_id, thread_id FROM messages WHERE account=?",
                                                          w.ADA)}
@@ -251,7 +251,7 @@ def gone(world, name):
 
 
 def test_reconcile_prunes_what_the_server_lost_and_stamps_the_rest(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
     res = ingest.reconcile_account(acct())
@@ -262,7 +262,7 @@ def test_reconcile_prunes_what_the_server_lost_and_stamps_the_rest(world):
 
 
 def test_a_dry_run_counts_the_ghosts_and_changes_nothing(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
     res = ingest.reconcile_account(acct(), dry_run=True)
@@ -271,7 +271,7 @@ def test_a_dry_run_counts_the_ghosts_and_changes_nothing(world):
 
 
 def test_reconcile_never_lowers_the_watermark(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     uid = world.server.deliver(w.ADA, "INBOX", late())
     ingest.sync_new(acct())
     with world.server.lock:
@@ -282,7 +282,7 @@ def test_reconcile_never_lowers_the_watermark(world):
 
 @pytest.mark.parametrize("trouble", ["a refused SEARCH", "a dropped connection", "a refused EXAMINE"])
 def test_reconcile_never_prunes_when_the_server_misbehaves(world, trouble):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
     if trouble == "a refused SEARCH":
@@ -297,7 +297,7 @@ def test_reconcile_never_prunes_when_the_server_misbehaves(world, trouble):
 
 
 def test_reconcile_never_prunes_across_a_uidvalidity_change(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     before = inbox()
     world.server.renumber(w.ADA, "INBOX")
     res = ingest.reconcile_account(acct())
@@ -306,7 +306,7 @@ def test_reconcile_never_prunes_across_a_uidvalidity_change(world):
 
 
 def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     before = inbox()
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages.clear()
@@ -318,7 +318,7 @@ def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
 
 
 def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     real = store.reconcile
 

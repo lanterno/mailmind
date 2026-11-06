@@ -243,7 +243,7 @@ def test_hwf_x_gm_thrid_is_asked_of_gmail_only_and_read_from_the_fetch_data(worl
 # -- what a sync stores ----------------------------------------------------
 
 def test_hwf_a_bounded_first_sync_takes_the_newest_uids(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     for n in range(3):
         world.server.deliver(w.ADA, "Junk", late(n))
     ingest.sync_folder(acct(), "Junk", recent=2)          # how folder warming first touches a folder
@@ -251,7 +251,7 @@ def test_hwf_a_bounded_first_sync_takes_the_newest_uids(world):
 
 
 def test_hwf_rows_commit_one_by_one_and_the_watermark_moves_only_after_all(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     wm = watermark()
     uids = [world.server.deliver(w.ADA, "INBOX", late(n)) for n in range(3)]
@@ -273,7 +273,7 @@ def test_hwf_rows_commit_one_by_one_and_the_watermark_moves_only_after_all(world
 
 
 def test_hwf_mail_read_in_another_client_shows_read_after_a_sync(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name = "ada-inbox-02-lunch-confirm.eml"
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags.add(w.SEEN)
@@ -310,7 +310,7 @@ def elsewhere(world, name, folder="INBOX", email=w.ADA):
 
 
 def test_hwf_a_sync_with_nothing_changed_reads_no_flags(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     assert modseq()                                   # the first sync, a whole scan, left the mark
     since = len(world.server.commands)
     ingest.sync_new(acct())
@@ -318,7 +318,7 @@ def test_hwf_a_sync_with_nothing_changed_reads_no_flags(world):
 
 
 def test_hwf_a_sync_asks_only_for_what_changed_since_its_mark(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
     elsewhere(world, name)
     since = len(world.server.commands)
@@ -330,7 +330,7 @@ def test_hwf_a_sync_asks_only_for_what_changed_since_its_mark(world):
 
 
 def test_hwf_a_change_to_mail_older_than_the_newest_is_seen_too(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     monkeypatch.setattr(ingest, "FLAG_REFRESH", 1)
     oldest = min(((world.row(n)["uid"], n) for n, acct_, folder, *_ in w.MAIL if acct_ == w.ADA and folder == "INBOX"))[1]
     elsewhere(world, oldest)
@@ -339,7 +339,7 @@ def test_hwf_a_change_to_mail_older_than_the_newest_is_seen_too(world, monkeypat
 
 
 def test_hwf_a_server_with_no_condstore_has_its_newest_read_each_time(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.without.add("CONDSTORE")
     name = "ada-inbox-02-lunch-confirm.eml"
     elsewhere(world, name)
@@ -351,7 +351,7 @@ def test_hwf_a_server_with_no_condstore_has_its_newest_read_each_time(world):
 
 
 def test_hwf_a_refused_modseq_search_falls_back_to_the_newest(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
     elsewhere(world, name)
     world.server.fail("UID SEARCH", "BAD [scripted] no such key", user=w.ADA,
@@ -362,7 +362,7 @@ def test_hwf_a_refused_modseq_search_falls_back_to_the_newest(world):
 
 
 def test_hwf_a_refused_flag_read_leaves_the_mark_so_the_next_sync_asks_again(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name, mark = "ada-inbox-02-lunch-confirm.eml", modseq()
     elsewhere(world, name)
     world.server.fail("UID SEARCH", user=w.ADA, when=lambda a: str(a[0]).upper() == "MODSEQ")
@@ -374,7 +374,7 @@ def test_hwf_a_refused_flag_read_leaves_the_mark_so_the_next_sync_asks_again(wor
 
 
 def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said_what_changed(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
     name = "ada-inbox-02-lunch-confirm.eml"
@@ -395,7 +395,7 @@ def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said
 
 
 def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-02-lunch-confirm.eml"
     world.server.fail("LOGIN", user=w.ADA)            # so this one queues
@@ -414,7 +414,7 @@ def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(
 
 
 def test_hwf_a_new_uidvalidity_starts_the_mark_again(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     old = modseq()
     assert old
     world.server.renumber(w.ADA, "INBOX")
@@ -423,7 +423,7 @@ def test_hwf_a_new_uidvalidity_starts_the_mark_again(world):
 
 
 def test_hwf_a_sync_tells_an_open_list_of_mail_read_elsewhere(app, world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.platform import sse
     told = []
     real = sse.publish
@@ -439,7 +439,7 @@ def test_hwf_a_sync_tells_an_open_list_of_mail_read_elsewhere(app, world, monkey
 # -- reconcile -------------------------------------------------------------
 
 def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap import mailbox
     real, timeouts = mailbox.open_session, []
     monkeypatch.setattr(mailbox, "open_session", lambda a, timeout=60: (timeouts.append(timeout), real(a, timeout))[1])
@@ -557,7 +557,7 @@ def test_hwf_a_queued_move_undone_while_the_worker_waits_for_the_lock_never_ship
 
 
 def test_hwf_an_offline_trash_undone_while_offline_comes_back(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name = "ada-inbox-09-rfc2047-folded.eml"
     queue(app, world, op="trash", name=name)
     world.server.drop("LOGIN", user=w.ADA, times=None)           # still unreachable when Undo is pressed
@@ -858,7 +858,7 @@ def test_hwf_a_draft_delete_declines_when_uidvalidity_rolled(app, world):
 def filed(world, folder, name="<filed@example.test>", flags=(w.SEEN,), special="", email=w.ADA):
     """A message in a folder of its own, on the server and synced. Returns its pk and UID."""
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from fakes.imap_server import Mailbox
     a = world.server.accounts[email]
     with world.server.lock:
@@ -1316,7 +1316,7 @@ def test_hwf_backfill_asks_again_for_a_missed_body_once_its_wait_is_over(world, 
 
 
 def test_hwf_backfill_stops_its_round_when_the_server_cant_be_reached(world, monkeypatch):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     import server
     monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))
     monkeypatch.setattr(server, "_backfill_missed", {})
@@ -1340,7 +1340,7 @@ def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, wo
 
 
 def test_hwf_opening_a_warmed_folder_shows_its_older_mail(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     for n in range(3):
         world.server.deliver(w.ADA, "Junk", late(n))
     ingest.sync_folder(acct(), "Junk", recent=2)                 # warm.warm_tick's first touch, WARM_RECENT=2

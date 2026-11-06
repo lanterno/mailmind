@@ -184,7 +184,7 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
 
 def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, monkeypatch):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import offline
     ingest.sync_folder(accounts.get(w.ADA), "Archive", full=True)
     queue(app, world)

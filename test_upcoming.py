@@ -14,7 +14,7 @@ from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
 from mailmind.bootstrap import calendar
 from mailmind.bootstrap.calendar import ics
-import ingest
+from mailmind.bootstrap.mailbox import ingest
 from mailmind.content import mime
 import server
 

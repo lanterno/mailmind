@@ -191,7 +191,7 @@ def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
 
 def test_mail_marked_unread_elsewhere_shows_on_an_open_list(page, world):
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     name = "ada-archive-01-old-thread.eml"
     opened(page)
     folder(page, "Archive").click()

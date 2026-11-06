@@ -149,7 +149,7 @@ def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command
     """The server moved it (or, without MOVE, copied it), then the connection dropped before it
     said so. The move is queued, and its drain leaves one copy, in the Archive."""
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import offline
     name = "ada-inbox-05-receipt.eml"
     if command == "UID COPY":

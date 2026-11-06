@@ -37,7 +37,7 @@ def copy(world, name=RECEIPT, folder="INBOX"):
 
 
 def renumber(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.renumber(w.ADA, "INBOX")
     ingest.sync_new(acct())
 
@@ -94,7 +94,7 @@ def test_unsnoozing_ends_it_for_good(app, world):
 
 
 def test_a_snoozed_message_filed_elsewhere_isnt_hidden_there(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
@@ -104,7 +104,7 @@ def test_a_snoozed_message_filed_elsewhere_isnt_hidden_there(app, world):
 
 
 def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
@@ -114,7 +114,7 @@ def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, worl
 
 
 def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
@@ -157,7 +157,7 @@ def test_waking_marks_read_mail_unread_on_the_server(app, world):
 
 
 def test_a_sync_before_the_mark_lands_keeps_it_unread(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     world.server.without.add("CONDSTORE")                       # so the sync reads the newest's flags
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))

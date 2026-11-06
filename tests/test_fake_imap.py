@@ -350,7 +350,7 @@ def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
 # ── ingest end to end ───────────────────────────────────────────────────────────────────────────
 
 def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     srv.without.add("CONDSTORE")
     for n in range(3):
@@ -371,7 +371,7 @@ def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
 
 
 def test_ingest_resyncs_a_folder_whose_uidvalidity_changed(srv, app):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     for n in range(2):
         srv.deliver(ADA, "INBOX", _mail(n))

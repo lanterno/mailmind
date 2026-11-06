@@ -129,14 +129,14 @@ def test_a_kept_sender_stays_kept_under_a_blocked_domain(app, world):
 
 
 def test_a_token_changes_only_what_a_rule_decides(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     assert ingest.reclassify("%") == 0                           # in a LIKE it covers everything
     assert ingest.reclassify("%.test") == 0
     assert stored(world, LUNCH)["is_junk"] == 0
 
 
 def test_every_folder_counts(app, world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap import accounts
     addr = sender(world, RECEIPT)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]

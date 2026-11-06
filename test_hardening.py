@@ -25,7 +25,7 @@ with open(settings.current().config, "w") as f:
     json.dump({"accounts": [{"email": "ada@example.test", "type": "imap",
                              "host": "imap.example.test"}]}, f)
 from mailmind.bootstrap import accounts
-import ingest
+from mailmind.bootstrap.mailbox import ingest
 from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap.mailbox import offline
 import server

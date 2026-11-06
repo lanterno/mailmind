@@ -114,7 +114,7 @@ def test_snippets_hold_no_carriage_returns(world):
 
 
 def test_a_multipart_with_no_boundary_keeps_its_text(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     assert "statement for October" in world.row("ada-inbox-08-boundaryless.eml")["snippet"]
     assert "statement for October" in (ingest.fetch_body(world.pk("ada-inbox-08-boundaryless.eml"))["text"] or "")
 
@@ -136,7 +136,7 @@ def test_sync_state_records_each_folder_at_its_highest_uid(world):
 
 
 def test_opening_a_message_records_its_attachments(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     apple = ingest.fetch_body(world.pk("bea-drafts-01-apple-mail.eml"))
     assert apple["text"].startswith("Hi Ivo, my comments are in the attached file.")
     assert [(a["filename"], a["content_type"], a["size"], a["is_inline"]) for a in apple["attachments"]] == [
@@ -161,7 +161,7 @@ def test_a_forwarded_message_attachment_carries_the_message(world):
 
 
 def test_opening_a_message_twice_reads_the_server_once(world):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     pk = world.pk("bea-inbox-01-client.eml")
     ingest.fetch_body(pk)
     before = len(world.server.commands_for(w.BEA, "UID FETCH"))
