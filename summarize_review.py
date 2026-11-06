@@ -2,8 +2,8 @@
 from SQLite (cheap columns only, NO body/IMAP fetch): what you sent, what came in, who's waiting on
 YOU (open action mail) vs who you're waiting on (sent-no-reply follow-ups), your reply-later stack,
 and what you cleaned up. One schema-constrained Claude call turns the numbers + the top open
-threads into a short prose retrospective plus up to 3 "start next week with" suggestions. Cached in
-briefing_cache keyed on (account set + local date), so the cost is paid once a day and the lists are
+threads into a short prose retrospective plus up to 3 "start next week with" suggestions. Stored in
+`reviews` by (account set + local date), so the cost is paid once a day and the lists are
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.
 """
 import json
@@ -18,7 +18,6 @@ from mailmind.platform.workers.singleflight import SingleFlight
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
 CAP_TOTAL = 9000
-_CACHE_VER = "v1"
 
 REVIEW_SCHEMA = {
     "type": "object",
@@ -55,11 +54,6 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _cache_key(accounts_set):
-    day = datetime.now().astimezone().date().isoformat()
-    return "review|" + ",".join(sorted(accounts_set)) + "|" + day + "|" + _CACHE_VER
-
-
 def _acct_clause(accounts_set, col="account"):
     if not accounts_set:
         return "", []
@@ -87,7 +81,7 @@ def _aggregate(c, accounts_set, since_ts):
     # who's waiting on the person to reply — open, important, unanswered INBOX mail (mirrors the brief's
     # "needs you" set; joins summaries so we get importance/action, excludes junk/snoozed/muted/answered)
     needs_rows = c.execute(
-        "SELECT m.pk, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
+        "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
         "       s.importance, s.action, s.category "
         "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
         "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
@@ -95,7 +89,8 @@ def _aggregate(c, accounts_set, since_ts):
         f"  AND {attention.needs_you_sql()} "
         "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
         + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, TOP_OPEN]).fetchall()
-    needs = [{"pk": r["pk"], "account": r["account"], "thread_id": r["thread_id"],
+    needs = [{"pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+              "account": r["account"], "thread_id": r["thread_id"],
               "who": r["from_name"] or r["from_addr"] or "someone",
               "subject": r["subject"] or "(no subject)",
               "importance": r["importance"], "action": r["action"] or ""} for r in needs_rows]
@@ -106,13 +101,14 @@ def _aggregate(c, accounts_set, since_ts):
     # resolve subject/recipients via the thread's LATEST message on the STABLE (account,thread_id) key —
     # anchor_pk is advisory and doesn't survive a reconcile/reset_folder re-pk (would blank the row).
     waiting_rows = c.execute(
-        "SELECT f.account, f.thread_id, m.pk, f.first_sent_ts, m.subject, m.recipients "
+        "SELECT f.account, f.thread_id, m.pk, m.message_key, m.folder, f.first_sent_ts, m.subject, m.recipients "
         "FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
         "  AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id "
         "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "
         "WHERE f.state='due' AND f.kind='sent'" + fac
         + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, TOP_OPEN]).fetchall()
     waiting = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["pk"],
+                "key": r["message_key"], "folder": r["folder"],
                 "subject": r["subject"] or "(no subject)",
                 "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
                 "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
@@ -163,6 +159,18 @@ def _clean(obj):
     return {"narrative": narrative, "next": nxt}
 
 
+def _items_now(c, items):
+    """A stored list, as the page reads it: each with the pk its message has now. The pk it had says
+    nothing after a renumber. One whose message has gone is left out, and one that named no message
+    (a follow-up whose thread has no row) stays as it was."""
+    now = []
+    for item in items:
+        pk = store.pk_now(c, item["key"], item["folder"]) if item["key"] else None
+        if pk is not None or not item["key"]:
+            now.append({**item, "pk": pk})
+    return now
+
+
 def _result(stats, needs, waiting, ai, model, created_at, cached, stale, since_ts):
     return {"ok": True, "narrative": ai["narrative"], "next": ai["next"],
             "stats": stats, "needs": needs, "waiting": waiting,
@@ -176,36 +184,36 @@ def build(accounts_set, force=False, generate=True):
     accounts_set = set(accounts_set or [])
     import time
     since_ts = time.time() - WEEK_SECONDS
-    key = _cache_key(accounts_set)
+    accounts, day = ",".join(sorted(accounts_set)), datetime.now().astimezone().date().isoformat()
     c = store.conn()
     stats, needs, waiting = _aggregate(c, accounts_set, since_ts)
-    cached_row = store.get_briefing(c, key)
+    cached_row = store.get_review(c, accounts, day)
     c.close()
     fp = _fingerprint(stats, needs, waiting)
 
+    def stored(row):
+        c = store.conn()
+        try:
+            stored_needs = _items_now(c, json.loads(row["needs_json"]))
+            stored_waiting = _items_now(c, json.loads(row["waiting_json"]))
+        finally:
+            c.close()
+        return _result(json.loads(row["stats_json"]), stored_needs, stored_waiting,
+                       {"narrative": row["narrative"], "next": json.loads(row["next_json"])},
+                       row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
+
     if cached_row and not force:
-        payload = json.loads(cached_row["groups_json"] or "{}")
-        return _result(payload.get("stats", stats), payload.get("needs", needs),
-                       payload.get("waiting", waiting),
-                       {"narrative": cached_row["narrative"], "next": payload.get("next", [])},
-                       cached_row["model"], cached_row["created_at"], True,
-                       cached_row["fingerprint"] != fp, since_ts), 200
+        return stored(cached_row)
     if not generate:
         return {"ok": True, "missing": True}, 200
 
     def read():
         c = store.conn()
         try:
-            row = store.get_briefing(c, key)
+            row = store.get_review(c, accounts, day)
         finally:
             c.close()
-        if row is None:
-            return None
-        payload = json.loads(row["groups_json"] or "{}")
-        return _result(payload.get("stats", stats), payload.get("needs", needs),
-                       payload.get("waiting", waiting),
-                       {"narrative": row["narrative"], "next": payload.get("next", [])},
-                       row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
+        return stored(row) if row else None
 
     def make():
         bl = ", ".join(f"{k}: {v}" for k, v in sorted(stats["by_bucket"].items(), key=lambda kv: -kv[1])[:5])
@@ -236,14 +244,14 @@ def build(accounts_set, force=False, generate=True):
             return {"ok": False, "error": "review unavailable", "retry": True}, 502
 
         created = _now()
-        payload = {"stats": stats, "needs": needs, "waiting": waiting, "next": ai["next"]}
         c = store.conn()
         try:
-            store.save_briefing(c, key, fp, ai["narrative"], json.dumps(payload), model, created)
+            store.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
+                              json.dumps(needs), json.dumps(waiting), model, created)
             c.commit()
         finally:
             c.close()                          # release the handle even if save/commit raises
         return _result(stats, needs, waiting, ai, model, created, False, False, since_ts), 200
 
-    return (_FLIGHTS.run(key, make, read, wait=60, recheck=not force)   # a first load may be making it
+    return (_FLIGHTS.run((accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
             or ({"ok": False, "error": "review unavailable", "retry": True}, 502))

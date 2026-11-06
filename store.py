@@ -840,20 +840,53 @@ def save_thread_summary(c, row):
                    created_at=excluded.created_at""", row)
 
 
-# ------------------------------------------------------------------- briefing card
-def get_briefing(c, key):
-    return c.execute("SELECT * FROM briefing_cache WHERE key=?", (key,)).fetchone()
-
-
-def save_briefing(c, key, fingerprint, narrative, groups_json, model, created_at):
-    c.execute("""INSERT INTO briefing_cache(key,fingerprint,narrative,groups_json,model,created_at)
-                 VALUES(?,?,?,?,?,?)
-                 ON CONFLICT(key) DO UPDATE SET fingerprint=excluded.fingerprint,
-                   narrative=excluded.narrative, groups_json=excluded.groups_json,
-                   model=excluded.model, created_at=excluded.created_at""",
-              (key, fingerprint, narrative, groups_json, model, created_at))
-    c.execute("DELETE FROM briefing_cache WHERE created_at < ?",   # keep the table tiny
+# ------------------------------------------------------------------- the brief, the delta, the review
+def _forget_old_answers(c, table):
+    """Each is read on the day it was written: a week keeps its table tiny."""
+    c.execute(f"DELETE FROM {table} WHERE created_at < ?",
               ((datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),))
+
+
+def pk_now(c, key, folder):
+    """The pk a stored answer's message has now, or None if it has gone. Among its copies, the one in
+    the folder it was read from."""
+    row = c.execute("SELECT pk FROM messages WHERE message_key=? AND pending_removal IS NULL "
+                    "ORDER BY folder=? DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+    return row["pk"] if row else None
+
+
+def get_brief(c, accounts, day):
+    return c.execute("SELECT * FROM briefs WHERE accounts=? AND day=?", (accounts, day)).fetchone()
+
+
+def save_brief(c, accounts, day, fingerprint, narrative, groups_json, model, created_at):
+    c.execute("INSERT OR REPLACE INTO briefs(accounts, day, fingerprint, narrative, groups_json, model, created_at) "
+              "VALUES(?,?,?,?,?,?,?)", (accounts, day, fingerprint, narrative, groups_json, model, created_at))
+    _forget_old_answers(c, "briefs")
+
+
+def get_delta(c, accounts, since_ts, fingerprint):
+    return c.execute("SELECT * FROM deltas WHERE accounts=? AND since_ts=? AND fingerprint=?",
+                     (accounts, since_ts, fingerprint)).fetchone()
+
+
+def save_delta(c, accounts, since_ts, fingerprint, headline, items_json, model, created_at):
+    c.execute("INSERT OR REPLACE INTO deltas(accounts, since_ts, fingerprint, headline, items_json, model, created_at) "
+              "VALUES(?,?,?,?,?,?,?)", (accounts, since_ts, fingerprint, headline, items_json, model, created_at))
+    _forget_old_answers(c, "deltas")
+
+
+def get_review(c, accounts, day):
+    return c.execute("SELECT * FROM reviews WHERE accounts=? AND day=?", (accounts, day)).fetchone()
+
+
+def save_review(c, accounts, day, fingerprint, narrative, next_json, stats_json, needs_json, waiting_json,
+                model, created_at):
+    c.execute("INSERT OR REPLACE INTO reviews(accounts, day, fingerprint, narrative, next_json, stats_json, "
+              "needs_json, waiting_json, model, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+              (accounts, day, fingerprint, narrative, next_json, stats_json, needs_json, waiting_json,
+               model, created_at))
+    _forget_old_answers(c, "reviews")
 
 
 # ------------------------------------------------------------------- draft-ahead cache

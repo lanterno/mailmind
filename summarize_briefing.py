@@ -54,7 +54,7 @@ def _now():
 
 
 def _top_rows(c, accounts_set, n=TOP_N):
-    sql = ("SELECT m.pk, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
+    sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
            "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
@@ -68,13 +68,12 @@ def _top_rows(c, accounts_set, n=TOP_N):
     return c.execute(sql, params).fetchall()
 
 
-_CACHE_VER = "v2"   # bump to invalidate cached briefs after a generation-logic change
-                    #   (v2: sentence-aware narrative trim replaced the mid-word [:800] cut)
+def _accounts_key(accounts_set):
+    return ",".join(sorted(accounts_set))
 
 
-def _cache_key(accounts_set):
-    day = datetime.now().astimezone().date().isoformat()   # rolls at LOCAL midnight
-    return ",".join(sorted(accounts_set)) + "|" + day + "|" + _CACHE_VER
+def _today():
+    return datetime.now().astimezone().date().isoformat()   # rolls at LOCAL midnight
 
 
 def _fingerprint(rows):
@@ -129,38 +128,27 @@ def _clean(obj, valid_pks):
     return narrative, groups
 
 
-def _keyed(groups, rows):
-    """The groups as stored: each names its messages by Message-ID as well, since a pk doesn't last."""
-    where = {r["pk"]: [r["account"], r["folder"], r["message_id"]] for r in rows}
-    return [{**g, "keys": [where[p] for p in g["pks"]]} for g in groups]
-
-
-def _pk_now(c, pk, key):
-    """The pk a stored brief's message has now, or None if it has gone. One with no Message-ID has
-    only the pk it had. Among its copies, the one in the folder it was read from."""
-    account, folder, message_id = key
-    if not message_id:
-        return pk
-    row = c.execute("SELECT pk FROM messages WHERE account=? AND message_id=? "
-                    "ORDER BY folder=? DESC, pk DESC LIMIT 1", (account, message_id, folder)).fetchone()
-    return row["pk"] if row else None
+def _stored_groups(groups, rows):
+    """The groups as stored: each message by its key and the folder it was read from, since a pk
+    doesn't last."""
+    where = {r["pk"]: [r["message_key"], r["folder"]] for r in rows}
+    return [{"label": g["label"], "messages": [where[p] for p in g["pks"]]} for g in groups]
 
 
 def _groups_now(groups_json):
     """A stored brief's groups, as the page reads them: by the pks their messages have now."""
-    groups = json.loads(groups_json or "[]")
     c = store.conn()
     try:
-        for g in groups:
-            keys = g.pop("keys", None)
-            if keys is not None:              # a brief stored before keys keeps its pks till it is rewritten
-                g["pks"] = [p for p in (_pk_now(c, pk, k) for pk, k in zip(g["pks"], keys)) if p is not None]
+        groups = []
+        for g in json.loads(groups_json):
+            pks = [p for p in (store.pk_now(c, *m) for m in g["messages"]) if p is not None]
+            groups.append({"label": g["label"], "count": len(pks), "pks": pks})
     finally:
         c.close()
     return groups
 
 
-def _result(account_label, narrative, groups, model, created_at, cached, stale):
+def _result(narrative, groups, model, created_at, cached, stale):
     return {"ok": True, "narrative": narrative, "groups": groups, "model": model,
             "generated": created_at, "cached": cached, "stale": stale}
 
@@ -168,7 +156,7 @@ def _result(account_label, narrative, groups, model, created_at, cached, stale):
 # ─────────────────────────────────────────────────────────────────────────────
 # "Since you last looked" DELTA digest — a recency-scoped micro-briefing over only
 # the mail newer than a client watermark. Reuses every primitive of build(); the only
-# new SQL is `AND m.ts > ?`. Cached in briefing_cache under a "delta|…|<since>" key.
+# new SQL is `AND m.ts > ?`. Stored in `deltas`, by the watermark and the messages it was made from.
 # ─────────────────────────────────────────────────────────────────────────────
 DELTA_TOP_N = 25
 DELTA_CAP = 4000
@@ -222,12 +210,6 @@ def _delta_rows(c, accounts_set, since_ts, n=DELTA_TOP_N):
     return c.execute(sql, params).fetchall()
 
 
-def _delta_key(accounts_set, since_ts, n_rows=0):
-    # n_rows in the key → if the window GROWS (more mail since the same watermark) the delta re-summarizes
-    # once instead of serving a stale headline; an unchanged window stays a cache hit (free re-polls).
-    return "delta|" + ",".join(sorted(accounts_set)) + "|" + str(int(since_ts)) + "|" + str(n_rows)
-
-
 def _clean_delta(obj):
     headline = str(obj.get("headline") or "")[:300]
     items = []
@@ -260,18 +242,21 @@ def build_delta(accounts_set, since_ts, generate=True):
     c.close()
     if not rows:
         return {"ok": True, "empty": True, "count": 0}, 200
-    key = _delta_key(accounts_set, since_ts, len(rows))   # row-count in the key → grown window re-summarizes
+    # Stored by what it was made from: if the window changes (more mail since the same watermark, even
+    # past DELTA_TOP_N) it is written once more instead of serving a stale headline, and an unchanged
+    # window stays free to read again.
+    accounts, since, fp = _accounts_key(accounts_set), int(since_ts), _fingerprint(rows)
 
     def read():
         c = store.conn()
         try:
-            row = store.get_briefing(c, key)
+            row = store.get_delta(c, accounts, since, fp)
         finally:
             c.close()
         if row is None:
             return None
-        return {"ok": True, "empty": False, "headline": row["narrative"],
-                "items": json.loads(row["groups_json"] or "[]"), "count": len(rows), "cached": True}, 200
+        return {"ok": True, "empty": False, "headline": row["headline"],
+                "items": json.loads(row["items_json"]), "count": len(rows), "cached": True}, 200
 
     def make():
         lines, total = [], 0
@@ -297,7 +282,7 @@ def build_delta(accounts_set, since_ts, generate=True):
             headline, items = _delta_fallback(rows)
             model = "fallback"
         c = store.conn()
-        store.save_briefing(c, key, _fingerprint(rows), headline, json.dumps(items), model, _now())
+        store.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, _now())
         c.commit()
         c.close()
         return {"ok": True, "empty": False, "headline": headline,
@@ -305,7 +290,7 @@ def build_delta(accounts_set, since_ts, generate=True):
 
     if not generate:
         return read() or ({"ok": True, "empty": False, "missing": True, "count": len(rows)}, 200)
-    return (read() or _FLIGHTS.run(key, make, read, wait=30)       # another tab may be making it
+    return (read() or _FLIGHTS.run(("delta", accounts, since, fp), make, read, wait=30)   # another tab may be making it
             or ({"ok": False, "error": "delta unavailable", "retry": True}, 502))
 
 
@@ -313,16 +298,19 @@ def build(accounts_set, force=False, generate=True):
     """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
     {missing:true}, and no AI call."""
     accounts_set = set(accounts_set or [])
-    key = _cache_key(accounts_set)
+    accounts, day = _accounts_key(accounts_set), _today()
     c = store.conn()
     rows = _top_rows(c, accounts_set)
-    cached = store.get_briefing(c, key)
+    cached = store.get_brief(c, accounts, day)
     c.close()
     fp = _fingerprint(rows)
+
+    def stored(row):
+        return _result(row["narrative"], _groups_now(row["groups_json"]), row["model"], row["created_at"],
+                       True, row["fingerprint"] != fp), 200
+
     if cached and not force:
-        return _result(key, cached["narrative"], _groups_now(cached["groups_json"]),
-                       cached["model"], cached["created_at"], True,
-                       cached["fingerprint"] != fp), 200
+        return stored(cached)
     if not rows:
         return {"ok": True, "narrative": "Nothing needs you right now — your inbox is quiet.",
                 "groups": [], "model": "empty", "generated": _now(), "cached": False, "stale": False}, 200
@@ -332,13 +320,10 @@ def build(accounts_set, force=False, generate=True):
     def read():
         c = store.conn()
         try:
-            row = store.get_briefing(c, key)
+            row = store.get_brief(c, accounts, day)
         finally:
             c.close()
-        if row is None:
-            return None
-        return _result(key, row["narrative"], _groups_now(row["groups_json"]),
-                       row["model"], row["created_at"], True, row["fingerprint"] != fp), 200
+        return stored(row) if row else None
 
     def make():
         valid = {r["pk"] for r in rows}
@@ -366,10 +351,10 @@ def build(accounts_set, force=False, generate=True):
             narrative, groups, model = fb["narrative"], fb["groups"], "fallback"
         created = _now()
         c = store.conn()
-        store.save_briefing(c, key, fp, narrative, json.dumps(_keyed(groups, rows)), model, created)
+        store.save_brief(c, accounts, day, fp, narrative, json.dumps(_stored_groups(groups, rows)), model, created)
         c.commit()
         c.close()
-        return _result(key, narrative, groups, model, created, False, False), 200
+        return _result(narrative, groups, model, created, False, False), 200
 
-    return (_FLIGHTS.run(key, make, read, wait=60, recheck=not force)   # a first load may be making it
+    return (_FLIGHTS.run(("brief", accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
             or ({"ok": False, "error": "briefing unavailable", "retry": True}, 502))

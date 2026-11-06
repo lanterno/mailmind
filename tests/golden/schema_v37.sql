@@ -67,8 +67,11 @@ CREATE TABLE attachments ( id INTEGER PRIMARY KEY AUTOINCREMENT, message_pk INTE
 -- table bodies
 CREATE TABLE bodies ( message_pk INTEGER PRIMARY KEY REFERENCES messages(pk) ON DELETE CASCADE, raw BLOB, -- raw RFC822 bytes (lossless; parse on read) fetched_at TEXT );
 
--- table briefing_cache
-CREATE TABLE briefing_cache ( -- AI "Today" card, keyed on (sorted-accounts|local-date) key TEXT PRIMARY KEY, fingerprint TEXT, narrative TEXT, groups_json TEXT, model TEXT, created_at TEXT );
+-- table briefs
+CREATE TABLE briefs( accounts TEXT NOT NULL, day TEXT NOT NULL, fingerprint TEXT NOT NULL, narrative TEXT NOT NULL, groups_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, day));
+
+-- table deltas
+CREATE TABLE deltas( accounts TEXT NOT NULL, since_ts INTEGER NOT NULL, fingerprint TEXT NOT NULL, headline TEXT NOT NULL, items_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, since_ts, fingerprint));
 
 -- table draft_ahead
 CREATE TABLE draft_ahead ( -- durable AI pre-draft cache; key (account,ref_key) NEVER pk account TEXT NOT NULL, ref_key TEXT NOT NULL, -- 't:<thread_id>' or 'm:<message_id>' fp TEXT NOT NULL DEFAULT '', -- thread-state hash captured BEFORE generation body TEXT, -- NULL => failure-only row, never servable tone TEXT, model TEXT, source TEXT NOT NULL DEFAULT 'dwell', -- 'dwell' | 'topk' | 'demand' src_pk INTEGER, -- advisory only: which message the draft answers src_message_id TEXT, created_ts INTEGER NOT NULL DEFAULT 0, last_hit_ts INTEGER, fail_ts INTEGER NOT NULL DEFAULT 0, fail_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account, ref_key) );
@@ -115,6 +118,9 @@ CREATE TABLE outbox ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NUL
 -- table read_mutations
 CREATE TABLE read_mutations ( -- offline-safe read-side mutation queue (mirrors outbox); keyed on message_id, NEVER pk id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, -- one logical mutation per key (dedupes double-submit) op TEXT NOT NULL, -- trash | archive | junk | move | flag message_id TEXT, -- RFC822 Message-ID: the DURABLE key (survives reconcile re-pk) src_folder TEXT NOT NULL, -- folder the message lived in at enqueue dest TEXT, -- move/junk/archive target (NULL for flag / gmail label-remove) payload TEXT NOT NULL, -- JSON {pk,uid,kind,flags?,is_gmail,undo_label,subject,thread_id} state TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, applied INTEGER NOT NULL DEFAULT 0, -- EXACTLY-ONCE flag (mirrors outbox.delivered): set the instant the IMAP op lands last_error TEXT, -- SCRUBBED code only created_at TEXT NOT NULL, done_at TEXT );
 
+-- table reviews
+CREATE TABLE reviews( accounts TEXT NOT NULL, day TEXT NOT NULL, fingerprint TEXT NOT NULL, narrative TEXT NOT NULL, next_json TEXT NOT NULL, stats_json TEXT NOT NULL, needs_json TEXT NOT NULL, waiting_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, day));
+
 -- table sender_unsub
 CREATE TABLE sender_unsub( from_addr TEXT PRIMARY KEY, raw TEXT NOT NULL, accounts TEXT NOT NULL, updated_at TEXT NOT NULL);
 
@@ -136,4 +142,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=36;
+PRAGMA user_version=37;

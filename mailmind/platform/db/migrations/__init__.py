@@ -10,7 +10,7 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
                                              m0027_reply_original, m0028_attached_email_parts, m0029_unsub_accounts,
                                              m0030_message_identity, m0031_highest_modseq,
                                              m0032_outbox_wire_begun, m0033_snoozes, m0034_sender_unsub,
-                                             m0035_message_recipients, m0036_ai_batches)
+                                             m0035_message_recipients, m0036_ai_batches, m0037_ai_answers)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
@@ -36,6 +36,7 @@ MIGRATIONS = [
     (34, m0034_sender_unsub.migrate),
     (35, m0035_message_recipients.migrate),
     (36, m0036_ai_batches.migrate),
+    (37, m0037_ai_answers.migrate),
 ]
 
-RETIRED = {"notes": 18}     # a table a migration ended, and that migration's version
+RETIRED = {"notes": 18, "briefing_cache": 37}     # a table a migration ended, and that migration's version
