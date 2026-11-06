@@ -153,3 +153,12 @@ def test_axe_finds_nothing_on_status_help_or_settings(page, world):
     page.get_by_role("button", name="+ Add a connection").click()
     assert found() == {}
     clean(page)
+
+
+def test_with_no_accounts_the_welcome_offers_settings(page, world):
+    page.pw.route(re.compile(r"/api/digest"), lambda route: route.fulfill(json={**route.fetch().json(), "accounts": [], "send_accounts": []}))
+    page.goto("/next")
+    expect(page.locator(".firstrun .fr-h")).to_have_text("Welcome to MailMind")
+    page.locator("#frAdd").click()
+    expect(page.locator("#setClose")).to_be_visible()
+    clean(page)
