@@ -38,7 +38,7 @@ def set_list_unsub(c, pk, raw, method):
     c.execute("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?", (raw, method, pk))
 
 
-# ---- offline read-mutation queue: the rows; readmutq.QUEUE moves them through their states ----
+# ---- offline read-mutation queue: the rows; offline.QUEUE moves them through their states ----
 def queue_flags(c, row, flags, mutation_id, when):
     """Queue a flag change on message `row` for the server and show it on the row at once, in the
     caller's transaction. The queue's row keeps the flags it replaced, which a change the server

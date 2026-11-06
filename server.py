@@ -26,7 +26,7 @@ from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
 import ingest
 import warm
-import readmutq
+from mailmind.bootstrap.mailbox import offline
 import summarize
 from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
@@ -1076,7 +1076,7 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
     c.close()
     if undo:
         undo_push(undo, undo_group)
-    readmutq.kick()                             # drain ASAP once IMAP returns
+    offline.kick()                             # drain ASAP once IMAP returns
     invalidate_stats()
     sse.publish("outbox", {})                   # the tray shows it
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
@@ -1102,14 +1102,14 @@ def _readmut_enqueue_flags(pk, flags, mutation_id):
 
 
 def _flags_queued():
-    readmutq.kick()
+    offline.kick()
     invalidate_stats()
     sse.publish("outbox", {})                   # the tray shows it
 
 
 def do_pending_retry(mid):
     """The tray's Retry: a change the queue gave up on goes back in. Returns (result, code)."""
-    if not readmutq.retry(mid):
+    if not offline.retry(mid):
         return {"ok": False}, 404
     _after_readmut(None)
     return {"ok": True}, 200
@@ -1125,7 +1125,7 @@ def do_pending_discard(mid):
         return {"ok": False}, 404
 
     def job():
-        gone = readmutq.discard(mid)
+        gone = offline.discard(mid)
         if gone is None or gone["op"] == "flag" or not gone["message_id"]:
             return gone is not None
         cc = store.conn()
@@ -1307,7 +1307,7 @@ def _reverse_held(d):
         q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
         if q is not None and not q["applied"]:
             src = d.get("src_folder") or "INBOX"
-            cancelled = readmutq.QUEUE.cancel_unapplied(c, q["id"])
+            cancelled = offline.QUEUE.cancel_unapplied(c, q["id"])
             if cancelled:
                 store.restore_pending(c, q["id"])
             listed = cancelled and c.execute(
@@ -2389,7 +2389,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/outbox":
                 self._json(compose.outbox.list_recent(int(q.get("limit", ["50"])[0])))
             elif u.path == "/api/pending":
-                self._json(readmutq.list_open())
+                self._json(offline.list_open())
             elif u.path == "/api/contacts":
                 self._json(discovery.contacts.autocomplete(q.get("q", [""])[0]))
             elif u.path == "/api/contact":
@@ -2728,7 +2728,7 @@ def _after_draft_removed(gone):
 
 
 def _after_readmut(_settled):
-    """readmutq.Applied or Restored, or the tray's Retry or Discard: a queued change reached the
+    """Applied or Restored, or the tray's Retry or Discard: a queued change reached the
     server or won't, and its message is listed again; or a person asked it again or dropped it."""
     invalidate_stats()
     sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ

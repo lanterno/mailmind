@@ -12,10 +12,12 @@ from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import scheduler
 
-import readmutq
+from mailmind.bootstrap.mailbox import offline
 import realtime
 from mailmind.bootstrap.mailbox import store
 import summarize
+from mailmind.mailbox.domain.events import Applied
+from mailmind.mailbox.domain.events import Restored
 
 
 _wired = []                             # wire()'s subscriptions, each a function that ends it
@@ -35,8 +37,8 @@ def wire(server):
     _wired.extend([bus.subscribe(Sent, server._after_send),
                    bus.subscribe(Failed, server._after_send),
                    bus.subscribe(DraftCopyRemoved, server._after_draft_removed),
-                   bus.subscribe(readmutq.Applied, server._after_readmut),
-                   bus.subscribe(readmutq.Restored, server._after_readmut),
+                   bus.subscribe(Applied, server._after_readmut),
+                   bus.subscribe(Restored, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle),
                    bus.subscribe(server.ingest.FlagsChanged, server._after_flags_changed)])
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
@@ -79,7 +81,7 @@ def start(server, spawn=_daemon):
               "in their queues; snooze still runs)", flush=True)
     else:
         spawn(compose.outbox.worker_loop)
-        spawn(readmutq.worker_loop)
+        spawn(offline.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {summarize.describe_engine()}", flush=True)
