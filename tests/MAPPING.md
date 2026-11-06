@@ -263,15 +263,15 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_two_cleanups_of_one_sender_undo_separately` | `tests/security/script_hardening.py` |
 | `test_undo_groups_differ_across_page_loads` | `tests/security/script_hardening.py` |
 
-## `test_send_after.py`: `tests/unit/compose/script_send_after.py`
+## `test_send_after.py`: `tests/unit/compose/test_send_after.py`
 
 | Test | Now |
 |---|---|
-| `test_passed_time_is_refused_before_building` | `tests/unit/compose/script_send_after.py` |
-| `test_more_than_a_year_out_is_refused` | `tests/unit/compose/script_send_after.py` |
-| `test_malformed_time_is_refused` | `tests/unit/compose/script_send_after.py` |
-| `test_future_time_is_scheduled` | `tests/unit/compose/script_send_after.py` |
-| `test_no_time_sends_now` | `tests/unit/compose/script_send_after.py` |
+| `test_passed_time_is_refused_before_building` | `tests/unit/compose/test_send_after.py` `test_a_bad_time_is_refused_before_building[passed]` |
+| `test_more_than_a_year_out_is_refused` | `tests/unit/compose/test_send_after.py` `test_a_bad_time_is_refused_before_building[more_than_a_year_out]` |
+| `test_malformed_time_is_refused` | `tests/unit/compose/test_send_after.py` `test_a_bad_time_is_refused_before_building[malformed]` |
+| `test_future_time_is_scheduled` | `tests/unit/compose/test_send_after.py` |
+| `test_no_time_sends_now` | `tests/unit/compose/test_send_after.py` |
 
 ## `test_send_guard.py`: `tests/unit/compose/script_send_guard.py`
 
