@@ -171,65 +171,65 @@ class Machine(RuleBasedStateMachine):
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def worker_tries(self, which):
-        from mailmind.bootstrap.mailbox import offline
+        from mailmind.bootstrap.mailbox import commands
         rows = self.open_rows()
         row = rows[which % len(rows)]
         self.allow_row(row)
-        offline.apply_one(row["id"])
+        commands.apply_one(row["id"])
 
     def crash_during(self, which, target, attribute, effect):
-        from mailmind.bootstrap.mailbox import offline
+        from mailmind.bootstrap.mailbox import commands
         rows = self.open_rows()
         row = rows[which % len(rows)]
         self.allow_row(row)
         with mock.patch.object(target, attribute, effect(getattr(target, attribute))):
             try:
-                offline.apply_one(row["id"])
+                commands.apply_one(row["id"])
             except Crash:
                 pass
         self.restart()
 
     def restart(self):
-        from mailmind.bootstrap.mailbox import offline
+        from mailmind.bootstrap.mailbox import commands
         from mailmind.bootstrap.mailbox import store
         c = store.conn()
-        offline.QUEUE.reset_stuck(c)
+        commands.QUEUE.reset_stuck(c)
         c.commit()
         c.close()
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_before_the_server_is_asked(self, which):
-        from mailmind.bootstrap.mailbox import commands
+        from mailmind.bootstrap.mailbox import server_ops
 
         def effect(_real):
             def die(_row):
                 raise Crash
             return die
-        self.crash_during(which, commands, "apply_queued_mutation", effect)
+        self.crash_during(which, server_ops, "apply_queued_mutation", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_after_the_server_answered(self, which):
-        from mailmind.bootstrap.mailbox import commands
+        from mailmind.bootstrap.mailbox import server_ops
 
         def effect(real):
             def die(row):
                 real(row)
                 raise Crash
             return die
-        self.crash_during(which, commands, "apply_queued_mutation", effect)
+        self.crash_during(which, server_ops, "apply_queued_mutation", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
     def crash_before_the_local_copy_is_settled(self, which):
-        from mailmind.bootstrap.mailbox import offline
+        from mailmind.bootstrap.mailbox import commands
 
         def effect(_real):
             def die(_row):
                 raise Crash
             return die
-        self.crash_during(which, offline, "_local_mirror", effect)
+        self.crash_during(which, commands, "_local_mirror", effect)
 
     @rule(folder=st.sampled_from(FOLDERS))
     def sync(self, folder):
@@ -274,7 +274,7 @@ class Machine(RuleBasedStateMachine):
         lists show each message where the server has it, with the flags the server has."""
         from mailmind.bootstrap import accounts
         from mailmind.bootstrap.mailbox import ingest
-        from mailmind.bootstrap.mailbox import offline
+        from mailmind.bootstrap.mailbox import commands
         self.server.clear_faults()
         self.restart()
         for _ in range(8):
@@ -282,7 +282,7 @@ class Machine(RuleBasedStateMachine):
             if not rows:
                 break
             for row in rows:
-                offline.apply_one(row["id"])
+                commands.apply_one(row["id"])
         assert not self.open_rows()
         for folder in FOLDERS:
             ingest.sync_folder(accounts.get(w.ADA), folder)

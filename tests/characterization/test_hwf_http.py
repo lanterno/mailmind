@@ -181,7 +181,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     """The outbox's Sent copy and \\Answered flag, a queued move and a thread summary's body fetch
     reach IMAP from worker threads, and each holds the lock as a request does."""
     from mailmind.bootstrap.compose import outbox
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap import assistant
     appends, stores = lock_spy(world, "APPEND", user=w.ADA), lock_spy(world, "UID STORE", user=w.ADA)
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk("ada-inbox-02-lunch-confirm.eml"),
@@ -195,7 +195,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     moves = lock_spy(world, "UID MOVE", user=w.ADA)
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["status"] == "queued"
-    offline.drain()
+    commands.drain()
     assert moves == [True]
 
     pk = world.pk("bea-inbox-01-client.eml")                  # its body was never fetched
@@ -208,12 +208,12 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
 # -- the offline queue and undo --------------------------------------------
 
 def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_ships(app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json
     assert (r["status"], r["undoable"]) == ("queued", True)
     assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == ["Trash"]   # known before any IMAP
-    offline.drain()
+    commands.drain()
     assert server_boxes(world, RECEIPT) == [(w.ADA, "Trash")]
     assert app.post("/api/undo", {}).json["ok"]
     assert server_boxes(world, RECEIPT) == [(w.ADA, "INBOX")]

@@ -4,7 +4,7 @@ pending_removal), and the worker applies it when the server is back. That happen
 even across a crash, with backoff while the server stays away. A move the server refuses, or one
 the queue gives up on, lists its message again, and Undo cancels a queued move that hasn't
 shipped without asking the server. The worker doesn't run here: each test calls
-offline.drain() itself and moves the frozen clock past the backoff.
+commands.drain() itself and moves the frozen clock past the backoff.
 """
 from datetime import timedelta
 
@@ -33,8 +33,8 @@ def rows():
 
 
 def drain():
-    from mailmind.bootstrap.mailbox import offline
-    offline.drain()
+    from mailmind.bootstrap.mailbox import commands
+    commands.drain()
 
 
 def boxes(world, name):
@@ -68,19 +68,19 @@ def test_a_queued_gmail_archive_drops_the_inbox_label(app, world):
 
 
 def test_while_the_server_stays_away_it_backs_off_then_gives_up(app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     queue(app, world, op="trash")
     world.server.drop("SELECT", user=w.ADA, times=None)
     seen = []
-    for _ in range(offline.MAX_ATTEMPTS):
+    for _ in range(commands.MAX_ATTEMPTS):
         drain()
         [r] = rows()
         seen.append((r["state"], r["attempts"], r["last_error"]))
         drain()                                                        # not due yet: nothing happens
         assert rows()[0]["attempts"] == r["attempts"]
-        app.clock.shift(timedelta(seconds=offline._BACKOFF_CAP + 1))
-    assert seen == [("queued", n, "abort") for n in range(1, offline.MAX_ATTEMPTS)] + [
-        ("error", offline.MAX_ATTEMPTS, "abort")]
+        app.clock.shift(timedelta(seconds=commands._BACKOFF_CAP + 1))
+    assert seen == [("queued", n, "abort") for n in range(1, commands.MAX_ATTEMPTS)] + [
+        ("error", commands.MAX_ATTEMPTS, "abort")]
     world.server.clear_faults()
     since = world.mark()
     drain()
@@ -89,11 +89,11 @@ def test_while_the_server_stays_away_it_backs_off_then_gives_up(app, world):
 
 
 def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap.mailbox import store
     queue(app, world)
 
-    mirror, crashed = offline._local_mirror, []
+    mirror, crashed = commands._local_mirror, []
 
     def crash_once(row):
         if not crashed:
@@ -101,11 +101,11 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
             raise RuntimeError("the process died here")
         return mirror(row)
 
-    monkeypatch.setattr(offline, "_local_mirror", crash_once)
+    monkeypatch.setattr(commands, "_local_mirror", crash_once)
     drain()                                                            # moved, then "crashed"
     assert (rows()[0]["state"], rows()[0]["applied"]) == ("running", 1)
     c = store.conn()
-    offline.QUEUE.reset_stuck(c)                                      # what the worker does at boot
+    commands.QUEUE.reset_stuck(c)                                      # what the worker does at boot
     c.commit()
     c.close()
     since = world.mark()
@@ -116,7 +116,7 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
 
 
 def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap.mailbox import store
     from mailmind.platform import bus
     heard = []
@@ -126,13 +126,13 @@ def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monke
     stop = bus.subscribe(Applied, heard.append)
     try:
         queue(app, world)
-        mirror = offline._local_mirror
-        monkeypatch.setattr(offline, "_local_mirror", crash)
+        mirror = commands._local_mirror
+        monkeypatch.setattr(commands, "_local_mirror", crash)
         drain()                                                        # moved, then "crashed": not yet
         assert heard == []
-        monkeypatch.setattr(offline, "_local_mirror", mirror)
+        monkeypatch.setattr(commands, "_local_mirror", mirror)
         c = store.conn()
-        offline.QUEUE.reset_stuck(c)
+        commands.QUEUE.reset_stuck(c)
         c.commit()
         c.close()
         drain()
@@ -185,15 +185,15 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
 def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, monkeypatch):
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import ingest
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     ingest.sync_folder(accounts.get(w.ADA), "Archive", full=True)
     queue(app, world)
-    mirror = offline._local_mirror
+    mirror = commands._local_mirror
 
     def archive_synced_first(row):
         ingest.sync_new(accounts.get(w.ADA), "Archive")                # the moved copy is stored before
         return mirror(row)
-    monkeypatch.setattr(offline, "_local_mirror", archive_synced_first)
+    monkeypatch.setattr(commands, "_local_mirror", archive_synced_first)
     drain()
     assert boxes(world, RECEIPT) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
 
@@ -233,12 +233,12 @@ def test_a_queued_flag_change_the_server_refuses_is_put_back(app, world):
 
 
 def test_a_queued_flag_change_given_up_on_is_put_back(app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     flag_queued(app, world)
-    world.server.drop("SELECT", user=w.ADA, times=offline.MAX_ATTEMPTS)
-    for _ in range(offline.MAX_ATTEMPTS):
+    world.server.drop("SELECT", user=w.ADA, times=commands.MAX_ATTEMPTS)
+    for _ in range(commands.MAX_ATTEMPTS):
         drain()
-        app.clock.shift(timedelta(seconds=offline._BACKOFF_CAP + 1))
+        app.clock.shift(timedelta(seconds=commands._BACKOFF_CAP + 1))
     assert rows()[0]["state"] == "error"
     assert flags_here(world) == (0, 0)
 
@@ -246,11 +246,11 @@ def test_a_queued_flag_change_given_up_on_is_put_back(app, world):
 def test_a_copy_flagged_deleted_in_the_destination_isnt_the_copy_a_retry_looks_for(app, world):
     """A refused EXPUNGE left it there. Taken for an earlier try's COPY, the live original would be
     removed, and the next expunge from any client would leave nothing."""
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     world.server.without.add("MOVE")
     world.server.deliver(w.ADA, "Archive", w.raw(RECEIPT), flags=("\\Deleted",))
     queue(app, world)
-    offline.drain()
+    commands.drain()
     live = [box for _, box, _, flags in world.where(RECEIPT)["server"] if "\\Deleted" not in flags]
     assert live == ["Archive"]
 
@@ -258,7 +258,7 @@ def test_a_copy_flagged_deleted_in_the_destination_isnt_the_copy_a_retry_looks_f
 def test_a_move_that_landed_says_so_before_the_imap_gate_lets_anyone_in(app, world, monkeypatch):
     """A Discard or an Undo waiting for the gate must find the move marked, or it would cancel a
     move that has already happened and list a message the server has moved."""
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     from mailmind.platform.workers import gates
     queue(app, world)
     real, at_release = gates.run, []
@@ -268,7 +268,7 @@ def test_a_move_that_landed_says_so_before_the_imap_gate_lets_anyone_in(app, wor
         at_release.append(rows()[0]["applied"])
         return out
     monkeypatch.setattr(gates, "run", noting)
-    offline.drain()
+    commands.drain()
     assert at_release == [1]
 
 
@@ -282,11 +282,11 @@ def test_a_queued_move_the_server_refuses_comes_back(app, world):
 
 
 def test_a_queued_move_given_up_on_comes_back(app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     queue(app, world)
-    world.server.drop("SELECT", user=w.ADA, times=offline.MAX_ATTEMPTS)
-    for _ in range(offline.MAX_ATTEMPTS):
+    world.server.drop("SELECT", user=w.ADA, times=commands.MAX_ATTEMPTS)
+    for _ in range(commands.MAX_ATTEMPTS):
         drain()
-        app.clock.shift(timedelta(seconds=offline._BACKOFF_CAP + 1))
+        app.clock.shift(timedelta(seconds=commands._BACKOFF_CAP + 1))
     assert rows()[0]["state"] == "error"
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])

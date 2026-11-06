@@ -392,7 +392,7 @@ def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_
 
 
 def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_it_back(page, app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -410,7 +410,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     world.server.clear_faults()
     world.server.fail("UID MOVE", user=w.ADA, times=None)
     world.server.fail("UID COPY", user=w.ADA, times=None)
-    offline.drain()
+    commands.drain()
     expect(fly).to_contain_text("stuck")                  # told by the event, with the panel open
     expect(fly).to_contain_text("the server refused it")
     expect(receipt).to_have_count(1)                      # it's listed again, as the server has it
@@ -424,7 +424,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
 
 
 def test_retry_in_the_tray_sends_the_change_again(page, app, world):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -434,14 +434,14 @@ def test_retry_in_the_tray_sends_the_change_again(page, app, world):
     world.server.clear_faults()
     world.server.fail("UID MOVE", user=w.ADA, times=1)
     world.server.fail("UID COPY", user=w.ADA, times=1)
-    offline.drain()
+    commands.drain()
     page.locator("#outboxBtn").click()
     fly = page.locator("#outboxFly")
     expect(fly).to_contain_text("stuck")
     fly.get_by_role("button", name="Retry").click()
     expect(fly).to_contain_text("waiting")
     expect(receipt).to_have_count(0)
-    offline.drain()
+    commands.drain()
     until(page, lambda: box_of(world, RECEIPT) == "Archive", "archived on the server")
     expect(page.locator("#outboxBtn")).to_be_hidden()
     clean(page)

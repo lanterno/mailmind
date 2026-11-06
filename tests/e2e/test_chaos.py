@@ -152,14 +152,14 @@ def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command
     said so. The move is queued, and its drain leaves one copy, in the Archive."""
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import ingest
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     name = "ada-inbox-05-receipt.eml"
     if command == "UID COPY":
         world.server.without = {"MOVE"}
     world.server.drop_after(command, user=w.ADA)
     r = app.post("/api/archive", {"pk": world.pk(name), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
-    offline.drain()
+    commands.drain()
     ingest.sync_folder(accounts.get(w.ADA), "Archive")
     assert boxes(world, name) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
 

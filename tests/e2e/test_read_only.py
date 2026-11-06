@@ -108,14 +108,14 @@ def test_it_opens_no_smtp_session(world, read_only):
 # -- what waits in a queue ----------------------------------------------------
 
 def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_only):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     since = world.mark()
     for path, name, extra in (("/api/archive", RECEIPT, {}), ("/api/trash", SCAM, {}),
                               ("/api/junk", NEWSLETTER, {}), ("/api/move", CI, {"dest": "Archive"})):
         r = app.post(path, {"pk": world.pk(name), "mutation_id": f"m-{name}", **extra}).json
         assert (r["ok"], r["status"]) == (True, "queued"), (path, r)
     assert app.post("/api/thread/archive", {"pk": world.pk(LUNCH_CONFIRM)}).json["ok"]
-    offline.drain()                                                   # a read-only drain does nothing
+    commands.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
     assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"queued"}
     assert q("SELECT max(attempts) n FROM mail_commands") == [{"n": 0}]
@@ -124,7 +124,7 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
     assert not listed & {world.pk(n) for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM)}
 
     read_only.end()
-    offline.drain()
+    commands.drain()
     assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
     assert on_server(world, RECEIPT) == [(w.ADA, "Archive")]
     assert on_server(world, SCAM) == [(w.ADA, "Trash")]
@@ -157,17 +157,17 @@ def test_a_send_waits_in_the_outbox_until_a_full_run_sends_it(app, world, read_o
 
 
 def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world, read_only):
-    from mailmind.bootstrap.mailbox import offline
+    from mailmind.bootstrap.mailbox import commands
     since = world.mark()
     for path, body in (("/api/seen", {"seen": True}), ("/api/flag", {"flag": "flagged", "on": True})):
         r = app.post(path, {"pk": world.pk(RECEIPT), **body})
         assert (r.status, r.json["status"]) == (200, "queued"), path
-    offline.drain()                                                   # a read-only drain does nothing
+    commands.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
     assert {k: world.where(RECEIPT)["db"][0][k] for k in ("seen", "flagged")} == {"seen": 1, "flagged": 1}
 
     read_only.end()
-    offline.drain()
+    commands.drain()
     assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
     [(_, _, _, flags)] = world.where(RECEIPT)["server"]
     assert {w.SEEN, "\\Flagged"} <= set(flags)

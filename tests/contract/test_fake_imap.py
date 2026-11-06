@@ -205,7 +205,7 @@ def test_a_folder_name_with_spaces_and_quotes_round_trips(srv, data_dir):
 # ── scripted trouble ────────────────────────────────────────────────────────────────────────────
 
 def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
-    from mailmind.bootstrap.mailbox import commands
+    from mailmind.bootstrap.mailbox import server_ops
     from mailmind.bootstrap.mailbox import store
     uid = srv.deliver(ADA, "INBOX", _mail(1))
     c = store.conn()
@@ -218,7 +218,7 @@ def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
     c.close()
     srv.fail("UID MOVE", "NO [CANNOT] not today")
     srv.fail("UID COPY", "NO [OVERQUOTA] full")
-    ok, msg, undo = commands.trash_message(pk)
+    ok, msg, undo = server_ops.trash_message(pk)
     assert (ok, undo) == (False, None)
     assert list(srv.messages(ADA, "INBOX")) == [uid]
 
@@ -316,8 +316,8 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
         M.logout()
         assert list(srv.messages(ADA, "INBOX")) == [b]
         assert len(srv.messages(ADA, "[Gmail]/All Mail")) == 2
-        from mailmind.bootstrap.mailbox import commands
-        assert commands.relabel_by_msgid(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == (True, "relabeled")
+        from mailmind.bootstrap.mailbox import server_ops
+        assert server_ops.relabel_by_msgid(ADA, "[Gmail]/All Mail", "<note-1@example.test>") == (True, "relabeled")
         assert list(srv.messages(ADA, "INBOX")) == [a, b]
 
 

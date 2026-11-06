@@ -29,8 +29,7 @@ with open(settings.current().config, "w") as f:
                              "host": "imap.example.test"}]}, f)
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import ingest
-from mailmind.bootstrap.mailbox import commands
-from mailmind.bootstrap.mailbox import offline
+from mailmind.bootstrap.mailbox import commands, server_ops
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
@@ -446,8 +445,8 @@ def _refusing():
 
 
 def test_a_refused_move_keeps_the_message_and_says_so():
-    for name, op in (("trash", commands.trash_message), ("archive", commands.archive_message),
-                     ("junk", commands.junk_message), ("move", lambda pk: commands.move_message(pk, "Archive"))):
+    for name, op in (("trash", server_ops.trash_message), ("archive", server_ops.archive_message),
+                     ("junk", server_ops.junk_message), ("move", lambda pk: server_ops.move_message(pk, "Archive"))):
         pk = _message()
         with _connection(_refusing()):
             ok, msg, undo = op(pk)
@@ -461,7 +460,7 @@ def test_a_refused_gmail_archive_keeps_the_message():
     accounts.get = lambda email: {**real(email), "kind": "gmail"}
     try:
         with _connection(_ScriptedIMAP(STORE=("NO", [b"label not removed"]))):
-            ok, _, undo = commands.archive_message(pk)
+            ok, _, undo = server_ops.archive_message(pk)
     finally:
         accounts.get = real
     assert ok is False and undo is None, ok
@@ -473,7 +472,7 @@ def test_an_accepted_move_still_files_the_message():
     M = _ScriptedIMAP()
     M.list = lambda: _FOLDERS
     with _connection(M):
-        ok, _, undo = commands.archive_message(pk)
+        ok, _, undo = server_ops.archive_message(pk)
     assert ok is True and undo and undo["dest_folder"] == "Archive", (ok, undo)
     assert not _still_there(pk)
 
@@ -587,16 +586,16 @@ def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync():
 @contextlib.contextmanager
 def _trash_probe():
     """Replaces trash_message; yields the list of whether the IMAP gate was held at each call."""
-    held, real = [], commands.trash_message
+    held, real = [], server_ops.trash_message
 
     def probe(pk):
         held.append(gates.held())
         return True, "trashed", None
-    commands.trash_message = probe
+    server_ops.trash_message = probe
     try:
         yield held
     finally:
-        commands.trash_message = real
+        server_ops.trash_message = real
 
 
 def test_cleanup_and_block_trash_mail_under_the_imap_lock():
@@ -663,7 +662,7 @@ def test_trashing_the_same_message_offline_again_queues_it_again():
         first = mailbox.filing.do_trash({"pk": _message(mid=mid)})
         assert first["ok"] and first.get("status") == "queued", first
         c = store.conn()
-        offline.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
+        commands.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
         c.commit()
         c.close()
         second = mailbox.filing.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again
