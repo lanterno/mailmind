@@ -188,18 +188,18 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_draft_live_is_a_short_stateless_probe` | `tests/unit/compose/script_draft_resume.py` |
 | `test_edit_probes_the_server_without_holding_the_ops_lock` | `tests/unit/compose/script_draft_resume.py` |
 
-## `test_draft_resume_ui.py`: `tests/unit/compose/script_draft_resume_ui.py`
+## `test_draft_resume_ui.py`: `tests/unit/compose/test_draft_resume_ui.py`
 
 | Test | Now |
 |---|---|
-| `test_a_reopened_reply_opens_like_a_fresh_one` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_a_whole_draft_has_no_quote_to_fold` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_a_forward_keeps_its_section_and_no_thread` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_defaults_for_a_bare_answer` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_resume_fields_on_every_save_and_send` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_ai_draft_hidden_only_when_the_quote_is_in_the_box` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_the_signature_a_reopened_text_ends_with` | `tests/unit/compose/script_draft_resume_ui.py` |
-| `test_notes_wording` | `tests/unit/compose/script_draft_resume_ui.py` |
+| `test_a_reopened_reply_opens_like_a_fresh_one` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_a_whole_draft_has_no_quote_to_fold` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_a_forward_keeps_its_section_and_no_thread` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_defaults_for_a_bare_answer` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_resume_fields_on_every_save_and_send` | `tests/unit/compose/test_draft_resume_ui.py` `test_resume_fields_on_every_save_and_send, test_resume_fields_of_no_draft_are_none` |
+| `test_ai_draft_hidden_only_when_the_quote_is_in_the_box` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_the_signature_a_reopened_text_ends_with` | `tests/unit/compose/test_draft_resume_ui.py` |
+| `test_notes_wording` | `tests/unit/compose/test_draft_resume_ui.py` |
 
 ## `test_expire.py`: `tests/unit/curation/test_expire.py`
 
