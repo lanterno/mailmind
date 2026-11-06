@@ -9,6 +9,7 @@ from mailmind.accounts.domain import events as account_events
 from mailmind.bootstrap import background, compose, mailbox
 from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
+from mailmind.platform.logging import setup as setup_logging
 from mailmind.platform.workers import scheduler
 
 from mailmind.bootstrap.mailbox import commands
@@ -76,13 +77,14 @@ def _daemon(target):
 
 
 def start(spawn=_daemon):
-    """Everything a front door does before it serves: check the profile, create or migrate the
-    schema, wire the workers, and start them: the two queues' workers, the background jobs on a
+    """Everything a front door does before it serves: check the profile, open the log, create or migrate
+    the schema, wire the workers, and start them: the two queues' workers, the background jobs on a
     scheduler (background.schedule says which), and IDLE. Read-only, only snooze wake starts, since it
     needs no mail server: sends and moves wait in their queues, and nothing syncs.
 
     `spawn(target)` runs each worker and each job's lane; by default on a daemon thread of its own."""
     profile.check()                      # a MAILMIND_PROFILE that names no profile stops the start
+    setup_logging()
     store.init()
     wire()
     jobs = scheduler.Scheduler()

@@ -20,6 +20,7 @@ mailmind_views.json
 
 # === Logs ===
 *.log
+*.log.*
 
 # === Backups & screenshots (may contain real mail) ===
 backups/

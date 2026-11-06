@@ -53,6 +53,10 @@ class Settings:
     def reconcile_audit(self) -> str:
         return os.path.join(self.home, "reconcile_audit.jsonl")
 
+    @property
+    def log(self) -> str:
+        return os.path.join(self.home, "mailmind.log")
+
 
 def from_env(environ: Mapping[str, str] | None = None) -> Settings:
     """Settings from the environment (os.environ unless given). An empty MAILMIND_HOME counts as
