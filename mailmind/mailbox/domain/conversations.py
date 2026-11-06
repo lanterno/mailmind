@@ -17,28 +17,31 @@ summaries and the reply drafted ahead.
 """
 import hashlib
 import re
+from collections.abc import Sequence
+
+from mailmind.kernel.row import Row
 
 _ID = re.compile(r"<[^<>\s]+>")
 _WELL = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
 
 
-def _ids(blob):
+def _ids(blob: str | None) -> list[str]:
     return _ID.findall(blob or "")
 
 
 class _UF:
     """Disjoint-set with a deterministic (lexicographically-smaller) root."""
     def __init__(self):
-        self.p = {}
+        self.p: dict[str, str] = {}
 
-    def find(self, x):
+    def find(self, x: str) -> str:
         self.p.setdefault(x, x)
         while self.p[x] != x:
             self.p[x] = self.p[self.p[x]]
             x = self.p[x]
         return x
 
-    def union(self, a, b):
+    def union(self, a: str, b: str) -> None:
         ra, rb = self.find(a), self.find(b)
         if ra == rb:
             return
@@ -47,12 +50,12 @@ class _UF:
         self.p[rb] = ra
 
 
-def assign(rows, account):
+def assign(rows: Sequence[Row], account: str) -> tuple[dict[int, str], dict[str, str]]:
     """`rows`: the account's messages, each with pk, message_id, gmail_thread, in_reply_to, refs and the
     thread_id it holds. Returns ({pk: its thread id now}, {an id no row holds now: the id its rows took}):
     one a split left on some rows still has them, and isn't in the second."""
     uf = _UF()
-    self_key = {}
+    self_key: dict[int, str] = {}
     # Tier 2 — union each row's self-id with its In-Reply-To / References parents.
     for r in rows:
         pk = r["pk"]
@@ -63,7 +66,7 @@ def assign(rows, account):
         for p in _ids(r["in_reply_to"]) + _ids(r["refs"]):
             uf.union(key, p)
     # Tier 1 — union all rows sharing a Gmail thrid (authoritative, same account).
-    thrid_groups = {}
+    thrid_groups: dict[str, list[int]] = {}
     for r in rows:
         g = (r["gmail_thread"] or "").strip()
         if g:
@@ -72,19 +75,20 @@ def assign(rows, account):
         for pk in pks[1:]:
             uf.union(self_key[pks[0]], self_key[pk])
     # a component backed by a Gmail thrid gets the authoritative gm: label
-    root_thrid = {}
+    root_thrid: dict[str, str] = {}
     for g, pks in thrid_groups.items():
         root_thrid[uf.find(self_key[pks[0]])] = g
     # STICKY thread_id: once a component has an rf: id, keep it as the thread grows (the union-find
     # root is the lexicographically-smallest member id, which a new reply CAN change — so we must
     # NOT re-derive it each time). Only a brand-new component with no prior id mints a fresh hash.
-    comp_existing = {}
+    comp_existing: dict[str, set[str]] = {}
     for r in rows:
         root = uf.find(self_key[r["pk"]])
         ex = (r["thread_id"] or "")
         if ex.startswith("rf:"):
             comp_existing.setdefault(root, set()).add(ex)
-    given, held = {}, set()                   # pk -> its id now; every id a row holds now
+    given: dict[int, str] = {}                # pk -> its id now
+    held: set[str] = set()                    # every id a row holds now
     for r in rows:
         root = uf.find(self_key[r["pk"]])
         if root in root_thrid:
@@ -96,7 +100,7 @@ def assign(rows, account):
             tid = f"rf:{account}:{h}"
         given[r["pk"]] = tid
         held.add(tid)
-    moved = {}
+    moved: dict[str, str] = {}
     for r in rows:
         old = r["thread_id"] or ""
         if old and old not in held:

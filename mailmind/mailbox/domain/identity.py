@@ -7,7 +7,7 @@ A message with none is known by its envelope, which is all two copies of it shar
 from hashlib import sha256
 
 
-def of(message_id, from_addr, date_iso, subject):
+def of(message_id: str | None, from_addr: str | None, date_iso: str | None, subject: str | None) -> str:
     written = "".join((message_id or "").split())
     if written:
         return written

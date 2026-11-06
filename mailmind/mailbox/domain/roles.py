@@ -14,6 +14,7 @@ Never the server's order: Proton Bridge lists its folders in a new order each ti
 `archive`, and only where there is none to `all`.
 """
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 
 ROLES = ("inbox", "sent", "drafts", "archive", "all", "junk", "trash")
@@ -38,25 +39,25 @@ class Folder:
     attributes in lower case ("\\noselect", "\\junk"...), and the server's hierarchy delimiter,
     None when LIST said NIL."""
     name: str
-    attributes: frozenset = frozenset()
+    attributes: frozenset[str] = frozenset()
     delimiter: str | None = "/"
 
     @property
-    def selectable(self):
+    def selectable(self) -> bool:
         return not (self.attributes & {"\\noselect", "\\nonexistent"})
 
     @property
-    def depth(self):
+    def depth(self) -> int:
         return self.name.count(self.delimiter) if self.delimiter else 0
 
 
-def _last_segment(name, delimiter):
+def _last_segment(name: str, delimiter: str | None) -> str:
     name = name.replace('\\"', '"').replace("\\\\", "\\")
     parts = name.split(delimiter) if delimiter else re.split(r"[/.]", name)
     return parts[-1].strip().lower()
 
 
-def role_by_name(name, delimiter=None):
+def role_by_name(name: str | None, delimiter: str | None = None) -> str:
     """The role a folder's name alone gives it. With no delimiter, both "/" and "." separate the
     path, as a stored folder name carries none."""
     if (name or "").upper() == "INBOX":
@@ -71,7 +72,7 @@ def role_by_name(name, delimiter=None):
 _DRAFTS_PARENTS = {"inbox", "[gmail]", "[google mail]"}
 
 
-def names_drafts(name):
+def names_drafts(name: str) -> bool:
     """Whether a folder's name alone says it is the account's Drafts, with no LIST to ask: at the
     top of the tree, or under the parents servers keep it in. "Clients/Draft" is a folder someone
     made, so what it holds may be anything."""
@@ -81,21 +82,21 @@ def names_drafts(name):
     return len(path) == 1 or (len(path) == 2 and path[0].strip().lower() in _DRAFTS_PARENTS)
 
 
-def _by_attribute(folder):
+def _by_attribute(folder: Folder) -> str | None:
     for a in folder.attributes:
         if a in _ATTRIBUTES:
             return _ATTRIBUTES[a]
     return None
 
 
-def role_of(folder):
+def role_of(folder: Folder) -> str:
     """The role `folder` plays: INBOX by name, then its attribute, then its name."""
     if folder.name.upper() == "INBOX":
         return "inbox"
     return _by_attribute(folder) or role_by_name(folder.name, folder.delimiter)
 
 
-def find(folders, *roles):
+def find(folders: Collection[Folder], *roles: str) -> str | None:
     """The name of the selectable folder playing the first of `roles` that one plays, or None."""
     for role in roles:
         found = [(0 if role == "inbox" or _by_attribute(f) == role else 1, f.depth, f.name)

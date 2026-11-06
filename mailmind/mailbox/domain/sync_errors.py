@@ -1,7 +1,7 @@
 """What kind of trouble a sync had."""
 
 
-def kind_of(e):
+def kind_of(e: BaseException) -> str:
     """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
     never its message (which can carry credentials/host strings)."""
     n = type(e).__name__.lower()
