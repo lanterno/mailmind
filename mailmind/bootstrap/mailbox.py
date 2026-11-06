@@ -23,6 +23,7 @@ from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.bodies import Bodies
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
+from mailmind.mailbox.application.filing_commands import Filing
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
@@ -30,6 +31,7 @@ from mailmind.mailbox.application.queries import Queries
 from mailmind.mailbox.application.realtime import Realtime
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.mailbox.application.undo import Undo
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
@@ -129,6 +131,9 @@ class _Accounts:
     def profile(self, acct):
         return provider.resolve(acct)
 
+    def quiet_error(self, e):
+        return accounts.quiet_error(e)
+
 
 class _Curation:
     def classify(self, addr, subject, name, has_unsub):
@@ -203,6 +208,21 @@ class _Reader:
         return compose.drafts.info(row)
 
 
+def _reverse_snooze(d):
+    from mailmind.bootstrap import attention
+    return attention.snoozing.reverse(d)
+
+
+def _reverse_mute(d):
+    from mailmind.bootstrap import attention
+    return attention.muting.reverse(d)
+
+
+def _reverse_block(d):
+    from mailmind.bootstrap import curation
+    return curation.cleanup.reverse_block(d)
+
+
 _directory = _Accounts()
 _attention = _Attention()
 copies = Copies(_open, imap_quote)
@@ -216,3 +236,6 @@ stats = LiveStats(_directory, _Curation())
 folders = Folders(store, _directory, pool, ingest, _attention)
 queries = Queries(store, _attention, folders)
 bodies = Bodies(store, ingest, _Reader())
+undo = Undo(store, _directory, commands, offline, ingest, stats, folders,
+            {"snooze": _reverse_snooze, "mute": _reverse_mute, "unblock": _reverse_block})
+filing = Filing(store, _directory, commands, offline, ingest, undo, stats, folders)

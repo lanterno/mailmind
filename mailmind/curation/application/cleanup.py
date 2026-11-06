@@ -21,6 +21,15 @@ class Cleanup:
         self._rules, self._mail, self._unsub = rules, mail, unsubscribing
         self._filing, self._audit, self._secret = filing, audit, secret
 
+    def reverse_block(self, d):
+        """Undo of a block: the rule goes, and what it decided is classified again."""
+        try:
+            self._rules.remove(d["token"])
+            self._filing.reclassify(d["token"])
+        except Exception:
+            return False, d.get("account"), None
+        return True, d.get("account"), None
+
     def senders(self, qs):
         """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
         lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an

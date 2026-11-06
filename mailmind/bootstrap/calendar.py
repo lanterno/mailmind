@@ -9,6 +9,7 @@ from mailmind.calendar.application.rsvp import Rsvp
 from mailmind.mailbox.domain import roles
 from mailmind.platform.workers import gates
 from mailmind.compose.api import build_message, reference_chain
+from mailmind.bootstrap import accounts
 
 __all__ = ["agenda", "attach", "ics", "invites", "rsvp"]
 
@@ -45,7 +46,7 @@ class _Messages:
         return gates.run(account, lambda: ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE) or {}
 
     def quiet_error(self, e):
-        return _server._sanitize_conn_error(e)
+        return accounts.quiet_error(e)
 
 
 class _Send:

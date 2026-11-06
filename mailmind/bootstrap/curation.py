@@ -59,7 +59,7 @@ class _MessageRows:
 
 class _Filing:
     def trash(self, pk, undo_group):
-        return _server.do_trash({"pk": pk, "undo_group": undo_group})
+        return mailbox.filing.do_trash({"pk": pk, "undo_group": undo_group})
 
     def trash_now(self, pk):
         from mailmind.bootstrap.mailbox import commands
@@ -68,7 +68,7 @@ class _Filing:
         return trashed
 
     def undo_push(self, descriptor, group):
-        _server.undo_push(descriptor, group)
+        mailbox.undo.push(descriptor, group)
 
     def reclassify(self, token):
         from mailmind.bootstrap.mailbox import ingest

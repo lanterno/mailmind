@@ -41,7 +41,7 @@ from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import now_iso, rel_time
-from mailmind.accounts.domain import provider, tls_pin
+from mailmind.accounts.domain import provider
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
@@ -67,9 +67,6 @@ _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
 _sync_lock = threading.Lock()
 _sync_asked = []                          # syncs asked for while one ran: each a set of accounts, or None for all
-_undo_lock = threading.Lock()            # the undo stack is in the database (undo_entries): it outlives the process
-UNDO_MAX = 25
-PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
 
 
 # ----------------------------------------------------------------------------- sync
@@ -459,417 +456,6 @@ def do_reconcile(account, dry_run, force=False):
     return {"ok": True, "dry_run": dry_run, "results": results,
             "total_ghosts": sum(r["ghosts"] for r in results),
             "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}
-
-
-_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
-
-
-def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
-    """IMAP was unreachable — durably queue this move-type mutation, take the message out of the
-    lists (its row stays, marked pending_removal, until the move settles), push the undo
-    descriptor, and report it queued. readmutq re-applies it (resolving dest online) once the
-    server is reachable again, and lists the message again if the move doesn't happen."""
-    c = store.conn()
-    row = store.get_message(c, pk)
-    if not row:
-        c.close()
-        return {"ok": False, "msg": "not found"}
-    acct, mid = row["account"], (row["message_id"] or "").strip()
-    try:
-        is_gmail = provider.resolve(accounts.get(acct)).archive_is_label_removal   # archive drops a label
-    except KeyError:
-        is_gmail = False
-    if op == "trash" and not dest:                  # trash dest is static (no IMAP) — store it for undo
-        try:
-            dest = accounts.trash_folder(accounts.get(acct))
-        except Exception:
-            dest = None
-    payload = {"pk": pk, "uid": row["uid"], "is_gmail": is_gmail,
-               "subject": row["subject"], "thread_id": row["thread_id"]}
-    # The client's mutation_id names one request, so a resubmit of it dedupes; without one, every
-    # request is its own. A key built from the message alone made a second trash of the same message,
-    # after the first had been applied and the message moved back, answer "queued" and do nothing.
-    if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
-        mutation_id = secrets.token_hex(16)
-    idem = f"{op}:{acct}:{mid or pk}:{mutation_id}"
-    _id, created = store.read_mut_insert(c, {"account": acct, "idempotency_key": idem, "op": op,
-                              "message_id": mid, "src_folder": row["folder"], "dest": dest,
-                              "payload": json.dumps(payload), "next_attempt_at": 0,
-                              "created_at": now_iso()})
-    if not created:                             # duplicate submit (same mutation_id) — already queued
-        c.close()
-        return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
-    undo = None
-    if mid:
-        undo = {"kind": "gmail_archive" if (op == "archive" and is_gmail) else "move",
-                "account": acct, "src_folder": row["folder"], "dest_folder": dest or "",
-                "message_id": mid, "label": _UNDO_LABEL.get(op, "Updated"),
-                "subject": row["subject"], "thread_id": row["thread_id"]}
-    store.mark_pending_removal(c, pk, _id)      # out of the lists, as the online path's move takes it
-    c.commit()
-    c.close()
-    if undo:
-        undo_push(undo, undo_group)
-    offline.kick()                             # drain ASAP once IMAP returns
-    mailbox.stats.invalidate()
-    sse.publish("outbox", {})                   # the tray shows it
-    return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
-
-
-def _readmut_enqueue_flags(pk, flags, mutation_id):
-    """IMAP was unreachable (or the process is read-only) — durably queue this flag change, show it
-    on the local row at once, and report it queued. The row records the flags as they were, so a
-    change the server refuses, or one the queue gives up on, puts them back."""
-    c = store.conn()
-    row = store.get_message(c, pk)
-    if not row:
-        c.close()
-        return {"ok": False, "msg": "not found"}
-    if not (isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128):
-        mutation_id = secrets.token_hex(16)
-    created = store.queue_flags(c, row, flags, mutation_id, now_iso())
-    c.commit()
-    c.close()
-    if created:
-        _flags_queued()
-    return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
-
-
-def _flags_queued():
-    offline.kick()
-    mailbox.stats.invalidate()
-    sse.publish("outbox", {})                   # the tray shows it
-
-
-def do_pending_retry(mid):
-    """The tray's Retry: a change the queue gave up on goes back in. Returns (result, code)."""
-    if not offline.retry(mid):
-        return {"ok": False}, 404
-    _after_readmut(None)
-    return {"ok": True}, 200
-
-
-def do_pending_discard(mid):
-    """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
-    migration 23 kept them, is read back. Returns (result, code)."""
-    c = store.conn()
-    row = store.read_mut_get(c, mid)
-    c.close()
-    if row is None:
-        return {"ok": False}, 404
-
-    def job():
-        gone = offline.discard(mid)
-        if gone is None or gone["op"] == "flag" or not gone["message_id"]:
-            return gone is not None
-        cc = store.conn()
-        listed = cc.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=?",
-                            (gone["account"], gone["src_folder"], gone["message_id"])).fetchone()
-        cc.close()
-        if not listed:
-            try:
-                ingest.ingest_message(accounts.get(gone["account"]), gone["src_folder"], gone["message_id"])
-            except Exception as e:                # the next open of the folder has another chance
-                print(f"[pending] reading a discarded move's message back: {_sanitize_conn_error(e)}", flush=True)
-        return True
-    try:
-        ok = gates.run(row["account"], job, priority=gates.Priority.INTERACTIVE, deadline=PENDING_WAIT)
-    except gates.Busy:
-        return {"ok": False, "busy": True}, 409
-    if not ok:
-        return {"ok": False}, 404
-    _after_readmut(None)
-    return {"ok": True}, 200
-
-
-def do_write(path, body):
-    """Per-message mailbox writes (flags/seen/archive/move), serialized + optimistic. Each falls
-    back to the durable offline queue if IMAP is unreachable, or the process is read-only."""
-    try:
-        pk = int(body.get("pk"))
-    except (TypeError, ValueError):
-        return {"ok": False, "msg": "bad pk"}
-    _Q = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")),
-          "/api/junk": ("junk", None)}
-    if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
-        # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
-        # request's: \Deleted from here would bypass Trash and undo.
-        return {"ok": False, "msg": "unknown flag"}
-
-    def write():
-        """(ok, msg, undo, queued): queued is the answer when IMAP was down and the move waits in
-        the offline queue instead."""
-        if path in ("/api/seen", "/api/flag"):
-            flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
-                     else {body.get("flag", "flagged"): bool(body.get("on", True))})
-            try:
-                return (*commands.set_flags(pk, flags), None, None)
-            except commands.UNREACHABLE:           # IMAP down → queue it, as a move is (no IMAP here)
-                return None, None, None, _readmut_enqueue_flags(pk, flags, body.get("mutation_id"))
-        if path in _Q:
-            op, dest = _Q[path]
-            try:
-                if op == "archive":
-                    return (*commands.archive_message(pk), None)
-                if op == "move":
-                    return (*commands.move_message(pk, dest), None)
-                return (*commands.junk_message(pk), None)
-            except commands.UNREACHABLE:           # IMAP down → queue it (still under the gate; no IMAP here)
-                return None, None, None, _readmut_enqueue(op, pk, dest, body.get("undo_group"),
-                                                          body.get("mutation_id"))
-        return False, "unknown", None, None
-    # no such message: the op finds that out under the gate, as it always has
-    ok, msg, undo, queued = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, write,
-                                      priority=gates.Priority.INTERACTIVE)
-    if queued is not None:
-        return queued
-    if ok:
-        if undo:
-            undo_push(undo, body.get("undo_group"))
-        mailbox.stats.invalidate()
-        mailbox.folders.invalidate()      # seen/archive/move/junk changed IMAP UNSEEN/MESSAGES → drop stale rail badges
-    return {"ok": ok, "msg": msg, "undoable": bool(undo)}
-
-
-def do_trash(body):
-    """Move one message to the account's Trash, serialized with every other live-IMAP op. Falls
-    back to the durable offline queue if IMAP is unreachable, like the move-type ops in do_write."""
-    pk = int(body.get("pk"))
-
-    def trash():
-        """(ok, msg, undo, queued): queued is the answer when IMAP was down, as in do_write."""
-        try:
-            return (*commands.trash_message(pk), None)
-        except commands.UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
-            return None, None, None, _readmut_enqueue("trash", pk, None, body.get("undo_group"),
-                                                      body.get("mutation_id"))
-    ok, msg, undo, queued = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, trash,
-                                      priority=gates.Priority.INTERACTIVE)
-    if queued is not None:
-        return queued
-    if ok:
-        undo_push(undo, body.get("undo_group"))
-        mailbox.stats.invalidate()
-        mailbox.folders.invalidate()   # trash removed a message from INBOX → refresh rail badges
-    return {"ok": ok, "msg": msg, "undoable": bool(undo)}
-
-
-def do_thread_file(path, body):
-    """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
-    anchor's folder, which is what a conversation row stands for. Members are resolved here, never
-    sent by the client (pk isn't stable, and a list row only knows its newest message). Each one
-    goes through the per-message op, so locking, the offline queue and undo descriptors are
-    unchanged; one undo group spans them all, so a single Undo restores the conversation. A
-    message without a thread_id is a conversation of one, never the folder's unthreaded pool."""
-    try:
-        pk = int(body.get("pk"))
-    except (TypeError, ValueError):
-        return {"ok": False, "msg": "bad pk"}
-    c = store.conn()
-    row = store.get_message(c, pk)
-    if not row:
-        pks = []
-    elif (row["thread_id"] or "").strip():
-        pks = [r["pk"] for r in c.execute(
-            "SELECT pk FROM messages WHERE account=? AND folder=? AND thread_id=? "
-            "AND pending_removal IS NULL ORDER BY ts DESC, pk DESC", (row["account"], row["folder"], row["thread_id"]))]
-    else:
-        pks = [pk]
-    c.close()
-    if not pks:
-        return {"ok": False, "msg": "not found"}
-    group = body.get("undo_group") or "thread:" + secrets.token_hex(6)
-    filed, queued, undoable, msg = [], 0, False, ""
-    for p in pks:
-        one = {"pk": p, "undo_group": group, "mutation_id": body.get("mutation_id")}
-        res = do_write("/api/archive", one) if path == "/api/thread/archive" else do_trash(one)
-        if res.get("ok"):
-            filed.append(p)
-            queued += res.get("status") == "queued"
-            undoable = undoable or bool(res.get("undoable"))
-        else:
-            msg = res.get("msg") or msg
-    return {"ok": bool(filed), "msg": msg if not filed else ("queued" if queued else "filed"),
-            "pks": filed, "count": len(filed), "failed": len(pks) - len(filed),
-            "queued": queued, "undoable": undoable}
-
-
-# --------------------------------------------------------------------- undo
-def _undo_db(fn):
-    """Run fn(c) on the undo stack under its lock, commit, and return what fn returned."""
-    with _undo_lock:
-        c = store.conn()
-        try:
-            out = fn(c)
-            c.commit()
-            return out
-        finally:
-            c.close()
-
-
-def undo_push(desc, group=None):
-    """Push a reverse descriptor. With a group id, coalesce consecutive pushes into one
-    bulk entry so a single Undo reverses the whole batch. The stack keeps the newest UNDO_MAX
-    entries, in the database, so Undo still works after a restart."""
-    if not desc:
-        return
-    _undo_db(lambda c: store.undo_push(c, desc, group, UNDO_MAX))
-
-
-def undo_entries():
-    """The undo stack, oldest first."""
-    return _undo_db(store.undo_entries)
-
-
-def _reverse_one(d):
-    """Run one descriptor's inverse as a job on its account's IMAP gate. Returns (ok,
-    affected_account, src_folder)."""
-    return gates.run(d.get("account") or gates.EVERY_ACCOUNT, lambda: _reverse_held(d),
-                     priority=gates.Priority.INTERACTIVE)
-
-
-def _reverse_held(d):
-    kind = d.get("kind")
-    if kind in ("move", "gmail_archive") and d.get("message_id"):
-        # Reconcile undo with the offline queue. If the forward op hasn't shipped yet (queued,
-        # claimed-but-not-applied, or given up), CANCEL it and list its message again: its row
-        # waited, marked, for the move to settle, so no server is asked. A row queued before
-        # migration 23 was dropped instead, and is re-ingested. If it already shipped, recover the
-        # dest the worker resolved online so the counter-move searches the RIGHT folder (the
-        # enqueued desc had an empty dest_folder for junk/archive).
-        c = store.conn()
-        q = store.read_mut_latest_by_msgid(c, d["account"], d["message_id"])
-        if q is not None and not q["applied"]:
-            src = d.get("src_folder") or "INBOX"
-            cancelled = offline.QUEUE.cancel_unapplied(c, q["id"])
-            if cancelled:
-                store.restore_pending(c, q["id"])
-            listed = cancelled and c.execute(
-                "SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=? "
-                "AND pending_removal IS NULL", (d["account"], src, d["message_id"])).fetchone()
-            c.commit(); c.close()
-            if listed:
-                return True, d["account"], src
-            if cancelled:
-                try:
-                    n = ingest.ingest_message(accounts.get(d["account"]), src, d["message_id"])
-                except Exception:
-                    n = 0
-                if n:
-                    return True, d["account"], src
-                # re-ingest found nothing (UID gone) → fall through to the normal reverse
-        else:
-            if q is not None and q["dest"] and not d.get("dest_folder"):
-                d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
-            c.close()
-    if kind == "move":
-        ok, _ = commands.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
-                                      unseen=bool(d.get("unseen")))
-        if not ok:
-            return False, d["account"], d["src_folder"]
-        try:   # re-ingest the exact restored message (watermark sync would miss a re-used UID)
-            ingest.ingest_message(accounts.get(d["account"]), d["src_folder"], d["message_id"])
-        except Exception:
-            pass
-        return True, d["account"], d["src_folder"]
-    if kind == "gmail_archive":
-        allmail = commands.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
-        ok, _ = commands.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
-        if not ok:
-            return False, d["account"], "INBOX"
-        try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
-            ingest.ingest_message(accounts.get(d["account"]), "INBOX", d["message_id"])
-        except Exception:
-            pass
-        return True, d["account"], "INBOX"
-    if kind == "snooze":
-        c = store.conn()
-        where = d.get("where") or []
-        for i, pk in enumerate(d["pks"]):
-            pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
-            if i < len(where):                      # an entry from before `where` names the row by pk alone
-                pk = store.copy_in_folder(c, *where[i]) if where[i] else None
-                if pk is None:
-                    continue
-            if pu:
-                attention.book.set_snooze(c, pk, pu)
-            else:
-                attention.book.clear_snooze(c, pk)
-            discovery.index_message(c, pk)
-        c.commit()
-        c.close()
-        return True, d.get("account"), None
-    if kind == "mute":                              # unmute + mark unread again what it marked read
-        c = store.conn()
-        attention.book.unmute_thread(c, d["account"], d["thread_id"])
-        for pk, prev in d.get("prev_seen", []):     # an entry from when muting told the server nothing
-            store.set_local_flags(c, pk, seen=int(prev or 0))
-        marked, when = False, now_iso()
-        for key, folder in d.get("unread", []):
-            pk = store.copy_in_folder(c, key, folder)
-            r = store.get_message(c, pk) if pk else None
-            if r:
-                marked = store.queue_flags(c, r, {"seen": False}, f"unmute:{pk}:{when}", when) or marked
-        c.commit()
-        c.close()
-        if marked:
-            _flags_queued()
-        return True, d.get("account"), None
-    if kind == "unblock":                           # pure-local: drop the block rule (sender cleanup)
-        try:
-            rules.remove(d["token"])
-            ingest.reclassify(d["token"])
-        except Exception:
-            return False, d.get("account"), None
-        return True, d.get("account"), None
-    return False, d.get("account"), None
-
-
-def do_undo():
-    """Pop the last undoable action and reverse it. Returns (result, code)."""
-    entry = _undo_db(store.undo_pop)          # off the stack before any server is asked
-    if entry is None:
-        return {"ok": False, "empty": True}, 200
-    kept = False                              # what couldn't be reversed is back on the stack
-    try:
-        if entry.get("kind") == "bulk":
-            acct = folder = None
-            left = []                             # newest first, as they were tried
-            for child in reversed(entry["children"]):
-                try:
-                    ok, a, f = _reverse_one(child)
-                except Exception as e:            # one member's trouble never stops the rest
-                    print(f"[undo] a group member: {_sanitize_conn_error(e)}", flush=True)
-                    ok = False
-                if ok:
-                    acct, folder = a, f
-                else:
-                    left.append(child)
-            done = len(entry["children"]) - len(left)
-            if left:                              # a smaller group of what's left, for a retry
-                _undo_db(lambda c: store.undo_put_back(c, {**entry, "children": left[::-1]}))
-                kept = True
-            okk = done > 0
-            res = {"ok": okk, "label": entry.get("label"), "account": acct, "folder": folder,
-                   "reversed": done, "failed": len(left)}
-        else:
-            ok, acct, folder = _reverse_one(entry)
-            okk = ok
-            res = {"ok": ok, "label": entry.get("label"), "account": acct, "folder": folder}
-        if not okk:
-            if not kept:                      # couldn't reverse -> keep it so the user can retry
-                _undo_db(lambda c: store.undo_put_back(c, entry))
-            return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
-        mailbox.stats.invalidate()
-        mailbox.folders.invalidate()      # undo re-added/removed a message → refresh rail badges
-        sse.publish("undo-done", {})
-        res["remaining"] = len(undo_entries())
-        return res, 200
-    except Exception as e:
-        if not kept:
-            _undo_db(lambda c: store.undo_put_back(c, entry))
-        print(f"[undo] error: {_sanitize_conn_error(e)}", flush=True)
-        return {"ok": False, "error": "couldn’t undo"}, 200
 
 
 def _safe_filename(name):
@@ -1473,12 +1059,12 @@ def ai_do_plan(body):
 def _do_one(verb, one):
     """One message of a plan, through the route a click on that message would take."""
     if verb == "trash":
-        return do_trash(one)
+        return mailbox.filing.do_trash(one)
     if verb in ("read", "unread"):
-        return do_write("/api/seen", {**one, "seen": verb == "read"})
+        return mailbox.filing.do_write("/api/seen", {**one, "seen": verb == "read"})
     if verb == "star":
-        return do_write("/api/flag", {**one, "flag": "flagged", "on": True})
-    return do_write("/api/junk" if verb == "junk" else "/api/archive", one)
+        return mailbox.filing.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
+    return mailbox.filing.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
 
 
 def do_plan_confirm(body):
@@ -1517,21 +1103,6 @@ def do_plan_confirm(body):
 
 
 # ----------------------------------------------------------------------- accounts
-def _sanitize_conn_error(e):
-    if isinstance(e, tls_pin.TLSPinMismatch):
-        return "certificate changed"
-    s = f"{type(e).__name__}: {e}".lower()
-    if any(w in s for w in ("auth", "credential", "invalid", "login", "password")):
-        return "AUTHENTICATIONFAILED"
-    if "refused" in s:
-        return "connection refused"
-    if "timed out" in s or "timeout" in s:
-        return "timeout"
-    if any(w in s for w in ("name or service", "nodename", "getaddrinfo", "not known")):
-        return "host not found"
-    return type(e).__name__
-
-
 def account_test(body):
     """Test a SAVED account ({email}) or an UNSAVED draft (no disk write).
     Errors are sanitized — never echoes the attempted password or server banner.
@@ -1574,7 +1145,7 @@ def account_test(body):
     except Exception as e:
         return {"ok": True, "connect": False,
                 "email": body.get("email") or (body.get("draft") or {}).get("email"),
-                "error": _sanitize_conn_error(e)}
+                "error": accounts.quiet_error(e)}
 
 
 def account_trust_cert(body):
@@ -1911,9 +1482,9 @@ class H(BaseHTTPRequestHandler):
                     res, code = {"ok": False, "error": "RSVP failed"}, 500
                 self._json(res, code)
             elif u.path == "/api/pending/retry":
-                self._json(*do_pending_retry(int(b.get("id"))))
+                self._json(*mailbox.filing.do_pending_retry(int(b.get("id"))))
             elif u.path == "/api/pending/discard":
-                self._json(*do_pending_discard(int(b.get("id"))))
+                self._json(*mailbox.filing.do_pending_discard(int(b.get("id"))))
             elif u.path == "/api/outbox/retry":
                 ok = compose.outbox.retry(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
@@ -1923,11 +1494,11 @@ class H(BaseHTTPRequestHandler):
                 ok = compose.outbox.send_now(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
             elif u.path == "/api/trash":
-                self._json(do_trash(b))
+                self._json(mailbox.filing.do_trash(b))
             elif u.path in ("/api/thread/archive", "/api/thread/trash"):
-                self._json(do_thread_file(u.path, b))
+                self._json(mailbox.filing.do_thread_file(u.path, b))
             elif u.path == "/api/undo":
-                res, code = do_undo()
+                res, code = mailbox.undo.undo_last()
                 self._json(res, code)
             elif u.path == "/api/refresh":
                 threading.Thread(target=sync_once, daemon=True).start()
@@ -1949,7 +1520,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/views":
                 self._json(discovery.views.post(b))
             elif u.path in ("/api/flag", "/api/seen", "/api/archive", "/api/move", "/api/junk"):
-                self._json(do_write(u.path, b))
+                self._json(mailbox.filing.do_write(u.path, b))
             elif u.path == "/api/draft":
                 try:
                     res, code = compose.drafts.save(b)
@@ -2152,13 +1723,6 @@ def _after_flags_changed(changed):
 def _after_draft_removed(gone):
     """Compose's DraftCopyRemoved: a send's draft left the server."""
     mailbox.folders.list_changed(gone.account, gone.folder)
-
-
-def _after_readmut(_settled):
-    """Applied or Restored, or the tray's Retry or Discard: a queued change reached the
-    server or won't, and its message is listed again; or a person asked it again or dropped it."""
-    mailbox.stats.invalidate()
-    sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 
 
 def _after_idle(changed):

@@ -39,8 +39,8 @@ def wire(server):
     _wired.extend([bus.subscribe(Sent, server._after_send),
                    bus.subscribe(Failed, server._after_send),
                    bus.subscribe(DraftCopyRemoved, server._after_draft_removed),
-                   bus.subscribe(Applied, server._after_readmut),
-                   bus.subscribe(Restored, server._after_readmut),
+                   bus.subscribe(Applied, mailbox.filing.settled),
+                   bus.subscribe(Restored, mailbox.filing.settled),
                    bus.subscribe(InboxChanged, server._after_idle),
                    bus.subscribe(FlagsChanged, server._after_flags_changed)])
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in

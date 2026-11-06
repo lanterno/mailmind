@@ -12,6 +12,7 @@ from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
 from mailmind.mailbox.domain import roles
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import accounts
 
 __all__ = ["attach", "book", "composing", "drafts", "outbox", "sending", "transport"]
 
@@ -147,7 +148,7 @@ class _Screen:
         return mailbox.folders.plays_drafts(account, folder)
 
     def quiet_error(self, e):
-        return _server._sanitize_conn_error(e) if _server else type(e).__name__
+        return accounts.quiet_error(e)
 
     def touched(self, account, folder):
         mailbox.folders.touched(account, folder)

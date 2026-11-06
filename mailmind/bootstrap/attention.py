@@ -31,6 +31,18 @@ class _Messages:
         from mailmind.bootstrap.mailbox import store
         return store.queue_flags(c, row, flags, mutation_id, when)
 
+    def copy_in_folder(self, c, key, folder):
+        from mailmind.bootstrap.mailbox import store
+        return store.copy_in_folder(c, key, folder)
+
+    def set_local_flags(self, c, pk, **flags):
+        from mailmind.bootstrap.mailbox import store
+        return store.set_local_flags(c, pk, **flags)
+
+    def index(self, c, pk):
+        from mailmind.bootstrap import discovery
+        return discovery.index_message(c, pk)
+
 
 class _Accounts:
     def emails(self):
@@ -40,7 +52,7 @@ class _Accounts:
 
 class _Undo:
     def push(self, entry, group):
-        _server.undo_push(entry, group)
+        mailbox.undo.push(entry, group)
 
 
 class _Screen:
@@ -50,8 +62,7 @@ class _Screen:
             mailbox.stats.invalidate()
 
     def flags_queued(self):
-        if _server:
-            _server._flags_queued()
+        mailbox.filing.flags_queued()
 
 
 _threads = Threads(_Messages(), _Accounts())

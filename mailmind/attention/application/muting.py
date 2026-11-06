@@ -46,6 +46,23 @@ class Muting:
         sse.publish("mute", {"account": acct})
         return {"ok": True, "thread_id": tid}, 200
 
+    def reverse(self, d):
+        """Undo of a mute: unmuted, and unread again what it marked read. `prev_seen` is an entry's from when muting
+        told the server nothing."""
+        marked, when = False, now_iso()
+        with self._book.transaction() as c:
+            self._book.unmute_thread(c, d["account"], d["thread_id"])
+            for pk, prev in d.get("prev_seen", []):
+                self._messages.set_local_flags(c, pk, seen=int(prev or 0))
+            for key, folder in d.get("unread", []):
+                pk = self._messages.copy_in_folder(c, key, folder)
+                r = self._messages.get(c, pk) if pk else None
+                if r:
+                    marked = self._messages.queue_flags(c, r, {"seen": False}, f"unmute:{pk}:{when}", when) or marked
+        if marked:
+            self._screen.flags_queued()
+        return True, d.get("account"), None
+
     def on_ingest(self, c, account):
         """After recompute_threads assigns thread_ids, mark unseen members of any muted thread read, here and on the
         server, so freshly-arrived replies in a muted thread stay silent. In the caller's transaction."""

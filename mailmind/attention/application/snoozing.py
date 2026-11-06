@@ -14,6 +14,23 @@ class Snoozing:
         self._undo = undo
         self._screen = screen
 
+    def reverse(self, d):
+        """Undo of a snooze: each message as it was. An entry from before `where` names the row by pk alone."""
+        where = d.get("where") or []
+        with self._book.transaction() as c:
+            for i, pk in enumerate(d["pks"]):
+                pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
+                if i < len(where):
+                    pk = self._messages.copy_in_folder(c, *where[i]) if where[i] else None
+                    if pk is None:
+                        continue
+                if pu:
+                    self._book.set_snooze(c, pk, pu)
+                else:
+                    self._book.clear_snooze(c, pk)
+                self._messages.index(c, pk)
+        return True, d.get("account"), None
+
     def _pks(self, c, body):
         if body.get("thread_id") and body.get("account"):
             return self._book.thread_pks(c, body["account"], body["thread_id"])

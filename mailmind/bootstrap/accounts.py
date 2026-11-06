@@ -3,10 +3,10 @@
 from mailmind.accounts.adapters import config_file, imap_connection, secrets
 from mailmind.accounts.adapters.imap_connection import LoginUnreachable, ReadOnlyIMAP, is_loopback, tls_context
 from mailmind.accounts.application.directory import Directory
-from mailmind.accounts.domain import provider
+from mailmind.accounts.domain import conn_error, provider
 from mailmind.mailbox.adapters.imap_names import BadMailbox, imap_quote, mailbox_arg
 
-__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connect", "get",
+__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "quiet_error", "connect", "get",
            "imap_quote", "is_loopback", "mailbox_arg", "preload_creds", "tls_context", "trash_folder"]
 
 
@@ -16,6 +16,7 @@ def _ai_key():
 
 
 config = Directory(config_file.FILE, secrets, _ai_key)
+quiet_error = conn_error.quiet
 _connector = imap_connection.Connector(config)
 connect = _connector.connect
 check_pin = _connector.check_pin
