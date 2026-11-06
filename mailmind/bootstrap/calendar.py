@@ -5,9 +5,19 @@ from mailmind.calendar.adapters import ics_reader as ics
 from mailmind.calendar.adapters.sqlite import StoredInvites
 from mailmind.calendar.application.agenda import Agenda
 from mailmind.calendar.application.invites import Invites
+from mailmind.calendar.application.rsvp import Rsvp
 from mailmind.mailbox.domain import roles
+from mailmind.platform.workers import gates
 
-__all__ = ["agenda", "ics", "invites"]
+__all__ = ["agenda", "attach", "ics", "invites", "rsvp"]
+
+_server = None
+
+
+def attach(server):
+    """Name the running server module, the one that says a connection's trouble without its details."""
+    global _server
+    _server = server
 
 
 class _Folders:
@@ -15,6 +25,42 @@ class _Folders:
         return roles.role_by_name(folder)
 
 
+class _Messages:
+    """A message and its account, until the Mailbox and Accounts hold them."""
+    def message(self, pk):
+        import store
+        c = store.conn()
+        try:
+            return store.get_message(c, pk)
+        finally:
+            c.close()
+
+    def account(self, email):
+        import accounts
+        return accounts.get(email)
+
+    def fetched(self, account, pk):
+        import ingest
+        return gates.run(account, lambda: ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE) or {}
+
+    def quiet_error(self, e):
+        return _server._sanitize_conn_error(e)
+
+
+class _Send:
+    """Through Compose's outbox, until Compose holds it."""
+    def build(self, spec, original):
+        import compose
+        return compose.build_message({
+            **spec, "in_reply_to": original["message_id"],
+            "references": compose._references(original["message_id"], original["refs"], original["in_reply_to"])})
+
+    def enqueue(self, built, meta):
+        import outbox
+        return outbox.enqueue(built, meta)
+
+
 _stored = StoredInvites(_Folders())
 invites = Invites(_stored, ics)
 agenda = Agenda(_stored, ics)
+rsvp = Rsvp(invites, _stored, _Messages(), _Send())

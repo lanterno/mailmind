@@ -57,10 +57,10 @@ from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
-from mailmind.calendar.domain import rsvp
 
 curation.attach(sys.modules[__name__])
 discovery.attach(sys.modules[__name__])
+calendar.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -1739,93 +1739,6 @@ def do_send(body):
             "recipients": len(built["envelope"])}, 200
 
 
-_RSVP_PARTSTAT = {"accept": "ACCEPTED", "decline": "DECLINED", "tentative": "TENTATIVE"}
-_RSVP_VERB = {"accept": "Accepted", "decline": "Declined", "tentative": "Tentatively accepted"}
-
-
-def do_invite_rsvp(body):
-    """iMIP RSVP: reply to a calendar invite's organizer with a METHOD:REPLY .ics carrying the
-    responder's PARTSTAT. Goes through the durable outbox (so it's Undo-Send-able), behind the
-    same mutation + strict-origin guards as /api/send."""
-    try:
-        pk = int(body.get("pk"))
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "missing message"}, 400
-    decision = (body.get("decision") or "").strip().lower()
-    if decision not in _RSVP_PARTSTAT:
-        return {"ok": False, "error": "bad decision"}, 400
-    c = store.conn()
-    row = store.get_message(c, pk)
-    c.close()
-    if not row:
-        return {"ok": False, "error": "not found"}, 404
-    try:
-        acct = accounts.get(row["account"])
-    except KeyError:
-        return {"ok": False, "error": "unknown account"}, 400
-    try:
-        parsed = gates.run(row["account"], lambda: ingest.fetch_body(pk),
-                           priority=gates.Priority.INTERACTIVE) or {}
-    except Exception as e:
-        print(f"[rsvp] fetch failed for pk {pk}: {_sanitize_conn_error(e)}", flush=True)
-        return {"ok": False, "error": "could not load the invite"}, 502
-    invite, _part = calendar.invites.of(pk, parsed)
-    if not invite:
-        return {"ok": False, "error": "no invite on this message"}, 400
-    organizer = ((invite.get("organizer") or {}).get("email") or "").strip()
-    if not organizer or "@" not in organizer:
-        return {"ok": False, "error": "this invite has no organizer to reply to"}, 400
-    me_email = acct["email"]
-    me_name = acct.get("alias") or me_email
-    for a in invite.get("attendees", []):          # prefer the CN the organizer used for me
-        if (a.get("email") or "").lower() == me_email.lower() and a.get("name"):
-            me_name = a["name"]
-            break
-    partstat = _RSVP_PARTSTAT[decision]
-    cal = rsvp.build_reply(invite, me_email, me_name, partstat)
-    summary = invite.get("summary") or "(no title)"
-    subject = f"{_RSVP_VERB[decision]}: {summary}"
-    text = (f"{me_name} has responded \"{partstat.title()}\" to the invitation "
-            f"“{summary}”.\n\n— sent from MailMind")
-    spec = {
-        "account": acct["email"], "account_name": me_name,
-        "to": [organizer], "cc": [], "bcc": [],
-        "subject": subject, "text": text, "html": None,
-        "attachments": [{"filename": "invite.ics",
-                         "content_type": "text/calendar",
-                         "params": {"method": "REPLY", "charset": "UTF-8"},
-                         "data": cal.encode("utf-8")}],
-        "in_reply_to": row["message_id"],
-        "references": compose._references(row["message_id"], row["refs"], row["in_reply_to"]),
-    }
-    try:
-        built = compose.build_message(spec)
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}, 400
-    meta = {"account": acct["email"],
-            "idempotency_key": _rsvp_key(row["account"], invite.get("uid") or pk, partstat),
-            "in_reply_to_pk": pk, "subject": subject,
-            "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": 0}
-    oid, created = outbox.enqueue(built, meta)
-    return {"ok": True, "outbox_id": oid, "queued": created, "decision": decision,
-            "organizer": organizer, "summary": summary}, 200
-
-
-def _rsvp_key(account, invite, partstat):
-    """The same answer again, a double click or a retry, finds the send already queued for it. A
-    changed mind is a new send, even back to an earlier answer, since that one went out long ago."""
-    prefix = f"rsvp:{account}:{invite}:"
-    c = store.conn()
-    try:
-        sent = [r[0] for r in c.execute("SELECT idempotency_key FROM outbox WHERE substr(idempotency_key, 1, ?) = ? "
-                                        "ORDER BY id DESC", (len(prefix), prefix))]
-    finally:
-        c.close()
-    if sent and sent[0].rsplit(":", 2)[1] == partstat:
-        return sent[0]
-    return f"{prefix}{partstat}:{len(sent)}"
-
-
 def do_draft(body):
     """Save (APPEND, dedup-on-resave) or delete a draft. Returns (result, code)."""
     profile.refuse_writes("a draft save")    # a draft lives on the server; nothing queues it yet
@@ -3390,7 +3303,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(res, code)
             elif u.path == "/api/invite/rsvp":
                 try:
-                    res, code = do_invite_rsvp(b)
+                    res, code = calendar.rsvp.respond(b)
                 except Exception as ex:            # never leak a raw exception on a send route
                     print(f"[rsvp] error: {type(ex).__name__}: {ex}", flush=True)
                     res, code = {"ok": False, "error": "RSVP failed"}, 500
