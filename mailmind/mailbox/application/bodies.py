@@ -87,3 +87,24 @@ class Bodies:
             "references": row["refs"],
             **self._reader.draft_info(row),
         }
+
+    def attachment(self, pk, part_id):
+        """A part of a message: its bytes, content type and filename, or the error that says why not."""
+        c = self._store.conn()
+        row = self._store.get_message(c, pk)
+        c.close()
+        if not row:
+            return {"error": "not found"}
+        gates.run(row["account"], lambda: self._ingest.fetch_body(pk),   # ensure body + attachment metadata exist
+                  priority=gates.Priority.INTERACTIVE)
+        c = self._store.conn()
+        att = c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
+                        (pk, part_id)).fetchone()
+        raw = self._store.get_body(c, pk)
+        c.close()
+        if not att or not raw:
+            return {"error": "no such part"}
+        data, _ = mime.extract_part(raw, part_id)
+        if data is None:
+            return {"error": "no such part"}
+        return {"data": data, "content_type": att["content_type"], "filename": att["filename"]}

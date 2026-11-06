@@ -4,9 +4,7 @@ import threading
 import urllib.parse
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
-from mailmind.content import mime
 from mailmind.http.routing import ANSWERED, Routes
-from mailmind.platform.workers import gates
 
 
 def _safe_filename(name):
@@ -20,26 +18,15 @@ def _safe_filename(name):
 def _attachment(h, mailbox, pk, part_id):
     if not re.match(r"^[0-9]+$", part_id or ""):     # only the part ids mime gives
         return h._json({"ok": False, "error": "bad part id"}, 400)
-    c = mailbox.store.conn(); row = mailbox.store.get_message(c, pk); c.close()
-    if not row:
-        return h._json({"ok": False, "error": "not found"}, 404)
-    gates.run(row["account"], lambda: mailbox.ingest.fetch_body(pk),   # ensure body + attachment metadata exist
-              priority=gates.Priority.INTERACTIVE)
-    c = mailbox.store.conn()
-    att = c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
-                    (pk, part_id)).fetchone()
-    raw = mailbox.store.get_body(c, pk)
-    c.close()
-    if not att or not raw:
-        return h._json({"ok": False, "error": "no such part"}, 404)
-    data, _ = mime.extract_part(raw, part_id)
-    if data is None:
-        return h._json({"ok": False, "error": "no such part"}, 404)
+    found = mailbox.bodies.attachment(pk, part_id)
+    if "error" in found:
+        return h._json({"ok": False, "error": found["error"]}, 404)
+    data = found["data"]
     if len(data) > MAX_ATTACH_BYTES:
         return h._json({"ok": False, "error": "too large"}, 413)
-    ctype = (att["content_type"] or "application/octet-stream").split(";")[0].strip()
+    ctype = (found["content_type"] or "application/octet-stream").split(";")[0].strip()
     # never inline-render active types from the top frame; force download regardless
-    fn = _safe_filename(att["filename"])
+    fn = _safe_filename(found["filename"])
     disp = "attachment; filename*=UTF-8''" + urllib.parse.quote(fn, safe="")
     h._send_raw(200, data, ctype, {"Content-Disposition": disp})
 
