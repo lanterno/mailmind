@@ -22,6 +22,7 @@ from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
+from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.realtime import Realtime
@@ -160,13 +161,43 @@ class _Attention:
         from mailmind.bootstrap import attention
         return attention.book.resolve_followups(c, account)
 
+    def muted_count(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.muted_count(c, account)
+
+    def waiting_count(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.waiting_count(c, account)
+
+    def replylater_count(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.replylater_count(c, account)
+
+    def list_muted(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.list_muted(c, account)
+
+    def list_waiting(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.list_waiting(c, account)
+
+    def list_replylater(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.list_replylater(c, account)
+
+    def wake_due(self):
+        from mailmind.bootstrap import attention
+        return attention.snoozing.wake_due()
+
 
 _directory = _Accounts()
+_attention = _Attention()
 copies = Copies(_open, imap_quote)
 commands = MailCommands(store, _directory, _open, imap_quote)
 offline = OfflineQueue(store, _directory, commands)
 pool = Pool(_directory, _open)
-ingest = Ingest(store, _directory, _open, pool, _Curation(), _Attention(), fts)
+ingest = Ingest(store, _directory, _open, pool, _Curation(), _attention, fts)
 warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
 stats = LiveStats(_directory, _Curation())
+folders = Folders(store, _directory, pool, ingest, _attention)

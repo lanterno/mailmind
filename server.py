@@ -44,7 +44,7 @@ from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import ago, now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
-from mailmind.mailbox.domain import roles as folder_roles
+from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
@@ -75,25 +75,6 @@ PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the chan
 
 
 # ----------------------------------------------------------------------------- sync
-def _classify_sync_error(e):
-    """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
-    never its message (which can carry credentials/host strings)."""
-    if isinstance(e, tls_pin.TLSPinMismatch):
-        return "TLS_PIN"
-    n = type(e).__name__.lower()
-    if "timeout" in n:
-        return "TIMEOUT"
-    if any(w in n for w in ("auth", "login", "permission")):
-        return "AUTH"
-    if "uidvalidity" in n:
-        return "UIDVALIDITY"
-    if any(w in n for w in ("gaierror", "connection", "socket", "ssl", "dns", "resolve")):
-        return "NETWORK"
-    if "imap" in n:
-        return "IMAP"
-    return "UNKNOWN"
-
-
 def sync_accounts(emails=None):
     """Sync the given account emails (or all when None). Emits realtime events. Caller
     must hold the _sync single-flight guard (sync_once / sync_guarded)."""
@@ -114,7 +95,7 @@ def sync_accounts(emails=None):
                     sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
             except Exception as e:
                 _status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
-                store.record_sync_result(hc, a["email"], False, type(e).__name__, _classify_sync_error(e)); hc.commit()
+                store.record_sync_result(hc, a["email"], False, type(e).__name__, sync_errors.kind_of(e)); hc.commit()
                 print(f"[sync] {a['email']}: {type(e).__name__}: {e}", flush=True)
     finally:
         hc.close()
@@ -203,7 +184,7 @@ def _sync_round(emails):
     attention.snoozing.wake_due()
     new = sync_accounts(emails)
     if new:
-        _invalidate_folders()         # new mail → let the rail re-pull unread badges now, not after the TTL
+        mailbox.folders.invalidate()         # new mail → let the rail re-pull unread badges now, not after the TTL
         _kick("assess")
     _sync["result"] = f"{new} new"
     _sync["last"] = now_iso()
@@ -271,7 +252,7 @@ def _auto_reconcile_one(acct):
                             "account": res["account"], "pruned": res["pruned"],
                             "live": res["live"]}) + "\n")
     mailbox.stats.invalidate()
-    _invalidate_folders(acct["email"])                # folder badge counts changed
+    mailbox.folders.invalidate(acct["email"])                # folder badge counts changed
     try:
         sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
     except Exception:
@@ -580,141 +561,6 @@ def message_body(pk, load_images, prefetch=False):
     }
 
 
-def _plays_drafts(account, folder):
-    """Whether `folder` is this account's Drafts: what the last LIST said (its SPECIAL-USE attribute
-    first, and one folder a role), else what its name says on its own. Part of a name never counts:
-    "Contract drafts" holds whatever was filed there."""
-    with _folder_list_lock:
-        hit = _folder_list_cache.get(account)
-    if hit:
-        return any(f["name"] == folder and f["role"] == "drafts" for f in hit["folders"])
-    return folder_roles.names_drafts(folder)
-
-
-# --- folder rail: the live IMAP LIST + per-folder STATUS is ~140ms+ (a fresh
-#     login round-trip). loadFolders() runs on load, every account switch, AND
-#     after every triage action, so doing it live each time both lagged the UI and
-#     churned IMAP connections (rapid connect/logout makes providers drop IDLE).
-#     We now TTL-cache just that expensive IMAP part per account and reuse the
-#     connection pool; the DB-derived counts below stay always-fresh. ---
-_folder_list_cache = {}          # account -> {"folders": [...], "ts": epoch}
-def _folder_role(account, folder):
-    """The part `folder` plays on this account: what the last LIST said, else what its name says."""
-    with _folder_list_lock:
-        hit = _folder_list_cache.get(account)
-    for f in (hit["folders"] if hit else ()):
-        if f["name"] == folder:
-            return f["role"]
-    return folder_roles.role_by_name(folder)
-
-
-_folder_list_lock = threading.Lock()
-_FOLDER_LIST_TTL = 25.0          # folder unread/total badges may be this stale (ambient counts)
-
-
-def _live_folder_list(acct):
-    """The expensive part: live IMAP LIST + per-folder UNSEEN/MESSAGES status,
-    over a POOLED connection (reused — no per-call login/logout churn)."""
-    from mailmind.bootstrap.mailbox import pool
-    out = []
-    with pool.borrow(acct) as s:
-        folders = [f for f in s.folders() if f.selectable]
-        playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}   # one folder a role
-        for f in folders:
-            name, role = f.name, playing.get(f.name, "custom")
-            try:
-                unseen, total = s.status(name)
-            except Exception:
-                unseen = total = 0
-            out.append({"name": name, "role": role, "unseen": unseen, "total": total})
-    return _rail_order(out)
-
-
-def _rail_order(folders):
-    order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
-    return sorted(folders, key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
-
-
-def _stored_folder_list(account):
-    """The folders MailMind holds this account's mail in, from the database alone: what the rail
-    shows when the server can't be reached and no live list is cached (Bridge down, its
-    certificate changed). Roles by name, the shallower folder first; counts as stored."""
-    c = store.conn()
-    try:
-        counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
-            "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
-            "AND pending_removal IS NULL GROUP BY folder", (account,))}
-        for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
-            counts.setdefault(r["folder"], (0, 0))
-    finally:
-        c.close()
-    counts.setdefault("INBOX", (0, 0))
-    names = sorted(counts, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
-    folders = [folder_roles.Folder(n, frozenset(), None) for n in names]
-    playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}
-    return _rail_order([{"name": n, "role": playing.get(n, "custom"), "unseen": counts[n][0] or 0,
-                         "total": counts[n][1] or 0} for n in names])
-
-
-def _folders_list_cached(account, acct):
-    """Folder list from the TTL cache, refreshed via live IMAP when stale. On a
-    live-refresh failure, serve the last cached list (even if expired) so a
-    transient IMAP hiccup doesn't 500 the rail."""
-    with _folder_list_lock:
-        hit = _folder_list_cache.get(account)
-    if hit and (time.time() - hit["ts"]) < _FOLDER_LIST_TTL:
-        return hit["folders"]
-
-    def refresh():
-        # double-check under the IMAP gate: a concurrent caller may have refreshed
-        # while we waited, so a cold burst does ONE live fetch, not N.
-        with _folder_list_lock:
-            fresh = _folder_list_cache.get(account)
-        if fresh and (time.time() - fresh["ts"]) < _FOLDER_LIST_TTL:
-            return fresh["folders"]
-        folders = _live_folder_list(acct)
-        with _folder_list_lock:
-            _folder_list_cache[account] = {"folders": folders, "ts": time.time()}
-        return folders
-    try:
-        return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE)
-    except Exception as e:
-        if hit:
-            print(f"[folders] {account}: live refresh failed ({type(e).__name__}), serving cached", flush=True)
-            return hit["folders"]
-        if isinstance(e, commands.UNREACHABLE):
-            print(f"[folders] {account}: unreachable ({type(e).__name__}), serving the stored folders", flush=True)
-            return _stored_folder_list(account)
-        raise
-
-
-def _invalidate_folders(account=None):
-    """Drop the folder-list cache so the next load re-pulls live counts (called
-    after a sync ingests new mail, so unread badges don't lag the TTL)."""
-    with _folder_list_lock:
-        if account is None:
-            _folder_list_cache.clear()
-        else:
-            _folder_list_cache.pop(account, None)
-
-
-def folders_for(account):
-    """Folder list with roles + unread counts for one account. The live-IMAP part
-    is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh."""
-    acct = accounts.get(account)
-    out = _folders_list_cached(account, acct)
-    c = store.conn()
-    snoozed = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
-                        "AND pending_removal IS NULL",
-                        (account,)).fetchone()[0]
-    muted = attention.book.muted_count(c, account)
-    waiting = attention.book.waiting_count(c, account)
-    replylater = attention.book.replylater_count(c, account)
-    c.close()
-    return {"ok": True, "account": account, "folders": out, "snoozed": snoozed,
-            "muted": muted, "waiting": waiting, "replylater": replylater}
-
-
 def snoozed_in(account, offset, limit):
     """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
     c = store.conn()
@@ -816,72 +662,6 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
                "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
 
 
-FIRST_SYNC_WAIT = 8.0      # seconds a list request waits for a folder's first scan before it answers
-CATCH_UP_WAIT = 1.5        # ... and for a catch-up of a folder read before
-CATCH_UP_EVERY = 60.0      # seconds between catch-ups of one folder as it is opened
-_folder_syncs = {}         # (account, folder) -> threading.Event, set when that folder's sync ends
-_first_sync_failed = {}    # (account, folder) -> the error kind of its last first scan, while it failed
-_caught_up = {}            # (account, folder) -> time.monotonic() its last sync on open started
-_folder_syncs_lock = threading.Lock()
-
-
-def _folder_sync(account, folder, full):
-    """Sync a folder as it is opened, as a job on the account's gate, unless a sync of it is
-    running already: its first scan (full) or a catch-up (what came above the watermark, and the
-    newest flags again), since only INBOX is synced in the background. Return the Event set when
-    it ends. It ends by publishing folder-synced, with how many messages it stored, so a list that
-    answered before it was done can load again."""
-    key = (account, folder)
-    with _folder_syncs_lock:
-        done = _folder_syncs.get(key)
-        if done is not None:
-            return done
-        done = _folder_syncs[key] = threading.Event()
-        _caught_up[key] = time.monotonic()
-
-    def run():
-        ok, new = False, 0
-        try:
-            kept, junk, _ = gates.run(
-                account, lambda: ingest.sync_folder(accounts.get(account), folder, full=full),
-                priority=gates.Priority.INTERACTIVE if full else gates.Priority.AFTER_USER)
-            ok, new = True, kept + junk
-            _first_sync_failed.pop(key, None)
-        except Exception as e:
-            if full:
-                _first_sync_failed[key] = _classify_sync_error(e)
-            print(f"[folder-sync] {account}/{folder!r}: {e!r}", flush=True)     # a name a request gave us
-        finally:
-            with _folder_syncs_lock:
-                _folder_syncs.pop(key, None)
-            done.set()
-        if new:
-            _invalidate_folders(account)
-        sse.publish("folder-synced", {"account": account, "folder": folder, "ok": ok, "new": new})
-    threading.Thread(target=run, name="folder-sync", daemon=True).start()
-    return done
-
-
-def _catch_up_due(account, folder):
-    """Whether opening a folder read before should catch it up: not INBOX, which the background
-    sync keeps, and not again within CATCH_UP_EVERY seconds, unless MailMind put mail in it since.
-    An open while one runs waits for it too, or it would answer with what that one is about to
-    change, and nothing would say so."""
-    if folder.upper() == "INBOX":
-        return False
-    with _folder_syncs_lock:
-        if (account, folder) in _folder_syncs:
-            return True
-        last = _caught_up.get((account, folder))
-    return last is None or time.monotonic() - last >= CATCH_UP_EVERY
-
-
-def _folder_touched(account, folder):
-    """MailMind put mail in `folder` (a draft saved there): its next open catches it up at once."""
-    with _folder_syncs_lock:
-        _caught_up.pop((account, folder), None)
-
-
 def messages_in(account, folder, offset, limit, group=False):
     if folder == "__snoozed__":
         return snoozed_in(account, offset, limit)
@@ -891,15 +671,7 @@ def messages_in(account, folder, offset, limit, group=False):
         return waiting_in(account, offset, limit)
     if folder == "__replylater__":
         return replylater_in(account, offset, limit)
-    scan = {}          # how the sync this open started went, if it started one
-    if offset == 0 and not ingest.folder_synced(account, folder):
-        if not _folder_sync(account, folder, full=True).wait(FIRST_SYNC_WAIT):
-            scan = {"syncing": True}               # still reading: what's stored now, then folder-synced
-        elif (account, folder) in _first_sync_failed:
-            scan = {"sync_failed": True}
-    elif offset == 0 and _catch_up_due(account, folder):
-        if not _folder_sync(account, folder, full=False).wait(CATCH_UP_WAIT):
-            scan = {"catching_up": True}           # what's stored now; folder-synced says if more came
+    scan = mailbox.folders.on_open(account, folder) if offset == 0 else {}
     c = store.conn()
     if group:
         # collapse to conversations: one row per thread (the latest message) + rollups
@@ -1153,7 +925,7 @@ def do_write(path, body):
         if undo:
             undo_push(undo, body.get("undo_group"))
         mailbox.stats.invalidate()
-        _invalidate_folders()      # seen/archive/move/junk changed IMAP UNSEEN/MESSAGES → drop stale rail badges
+        mailbox.folders.invalidate()      # seen/archive/move/junk changed IMAP UNSEEN/MESSAGES → drop stale rail badges
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
 
@@ -1176,7 +948,7 @@ def do_trash(body):
     if ok:
         undo_push(undo, body.get("undo_group"))
         mailbox.stats.invalidate()
-        _invalidate_folders()   # trash removed a message from INBOX → refresh rail badges
+        mailbox.folders.invalidate()   # trash removed a message from INBOX → refresh rail badges
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
 
@@ -1387,7 +1159,7 @@ def do_undo():
                 _undo_db(lambda c: store.undo_put_back(c, entry))
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
         mailbox.stats.invalidate()
-        _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
+        mailbox.folders.invalidate()      # undo re-added/removed a message → refresh rail badges
         sse.publish("undo-done", {})
         res["remaining"] = len(undo_entries())
         return res, 200
@@ -1404,13 +1176,6 @@ def _safe_filename(name):
     name = name.split("/")[-1].split("\\")[-1]
     name = re.sub(r'[\x00-\x1f\x7f"\r\n]', "_", name).strip(" .") or "attachment"
     return name[:255]
-
-
-# --------------------------------------------------------------------- compose/send
-def _draft_list_changed(account, folder):
-    """A copy left `folder` and its row went with it: a list of that folder on screen loads again,
-    and through its catch-up shows the copy that replaced it."""
-    sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
 # --------------------------------------------------------------------- AI bridge
@@ -2335,7 +2100,7 @@ class H(BaseHTTPRequestHandler):
                 if not _fa:
                     self._json({"ok": False, "error": "account required", "folders": []}, 400)
                 else:
-                    self._json(folders_for(_fa))
+                    self._json(mailbox.folders.of_account(_fa))
             elif u.path == "/api/messages":
                 self._json(messages_in(q.get("account", [None])[0], q.get("folder", ["INBOX"])[0],
                                        int(q.get("offset", ["0"])[0]), int(q.get("limit", ["80"])[0]),
@@ -2684,7 +2449,7 @@ def _after_flags_changed(changed):
 
 def _after_draft_removed(gone):
     """Compose's DraftCopyRemoved: a send's draft left the server."""
-    _draft_list_changed(gone.account, gone.folder)
+    mailbox.folders.list_changed(gone.account, gone.folder)
 
 
 def _after_readmut(_settled):

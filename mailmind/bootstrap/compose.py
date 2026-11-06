@@ -144,18 +144,16 @@ class _Screen:
         return roles.names_drafts(folder)
 
     def plays_drafts(self, account, folder):
-        return _server._plays_drafts(account, folder) if _server else roles.names_drafts(folder)
+        return mailbox.folders.plays_drafts(account, folder)
 
     def quiet_error(self, e):
         return _server._sanitize_conn_error(e) if _server else type(e).__name__
 
     def touched(self, account, folder):
-        if _server:
-            _server._folder_touched(account, folder)
+        mailbox.folders.touched(account, folder)
 
     def list_changed(self, account, folder):
-        if _server:
-            _server._draft_list_changed(account, folder)
+        mailbox.folders.list_changed(account, folder)
 
     def stats_changed(self):
         if _server:

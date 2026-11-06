@@ -13,6 +13,7 @@ from mailmind.discovery.application.documents import DocumentHub
 from mailmind.discovery.application.search import Search
 from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
+from mailmind.bootstrap import mailbox
 
 __all__ = ["BM25", "attach", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "views",
            "visible"]
@@ -33,9 +34,7 @@ def build(q):
 
 class _Folders:
     def role(self, account, folder):
-        if _server is None:         # no server, so no LIST to remember
-            return roles.role_by_name(folder)
-        return _server._folder_role(account, folder)
+        return mailbox.folders.role(account, folder)
 
     def role_by_name(self, folder):
         return roles.role_by_name(folder)

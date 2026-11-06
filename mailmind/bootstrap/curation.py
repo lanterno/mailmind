@@ -79,7 +79,7 @@ class _Filing:
 
     def folders_changed(self, account, moved):
         mailbox.stats.invalidate()
-        _server._invalidate_folders(account)
+        mailbox.folders.invalidate(account)
         try:                                              # same refresh as a ghost prune: open lists drop the row
             sse.publish("reconcile", {"account": account, "pruned": moved})
         except Exception:
