@@ -13,6 +13,7 @@ function initialTab(): InboxTab {
   const saved = stored("mm_inbox_tab");
   return saved === "all" || saved === "unread" ? saved : "needs";
 }
+const DIGEST_TITLE = { needs: "Needs you", tidy: "Safe to file" };
 const inboxTab = createStore<InboxTab>(initialTab());
 const grouping = createStore(groupedPref());
 
@@ -28,7 +29,7 @@ export function setGrouping(on: boolean) {
 
 export function useMailbox() {
   const qc = useQueryClient();
-  const { source, opened } = useRoute();
+  const { source, opened, brief } = useRoute();
   const digest = useDigest();
   const accounts = digest.data?.accounts ?? [];
   const aliases = digest.data?.aliases ?? {};
@@ -57,6 +58,14 @@ export function useMailbox() {
     isWhole(r) ? { kind: "thread", id: r.threadId, pk: r.pk, account: r.account } : { kind: "message", pk: r.pk };
   const open = (r: Row) => go({ source, opened: opening(r) }, { replace: Boolean(opened) });
   const close = () => go({ source, opened: null });
+  // A message named from elsewhere (the brief, a to-do): a conversation in this list opens as one, anything else as the message.
+  const openAny = (pk: number) => {
+    const r = all.find((x) => x.pk === pk);
+    if (r) open(r);
+    else go({ source, opened: { kind: "message", pk } }, { replace: Boolean(opened) });
+  };
+  const openNamed = (pk: number, account: string, thread: string | null | undefined) =>
+    go({ source, opened: thread ? { kind: "thread", id: thread, pk, account } : { kind: "message", pk } });
 
   // A draft saved again is a new copy, and one discarded is gone: don't stay on a copy the list no longer has.
   const inDrafts = folderData?.folders?.some((f) => f.name === folder && f.role === "drafts") ?? false;
@@ -76,8 +85,10 @@ export function useMailbox() {
     return { source, opened: next ? opening(next) : null };
   };
 
+  const showBrief = () => go({ source, opened: null, brief: true });
   const move = (by: number) => {
     const i = rows.findIndex((r) => r.pk === openPk);
+    if (by < 0 && i === 0 && inInbox && !searching) return showBrief();     // above the first row is the brief
     const target = rows[i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + by))];
     if (target) open(target);
   };
@@ -130,6 +141,7 @@ export function useMailbox() {
     qc,
     source,
     opened,
+    briefAsked: Boolean(brief),
     accounts,
     aliases,
     account,
@@ -148,10 +160,13 @@ export function useMailbox() {
     openRow,
     marks,
     markedRows,
-    title: allInboxes ? "All inboxes" : searching ? "Search" : folderTitle(folder, folderData?.folders),
+    title: allInboxes ? "All inboxes" : searching ? "Search" : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),
     hasMore: Boolean(list.hasNextPage),
     isWhole,
     open,
+    openAny,
+    openNamed,
+    showBrief,
     close,
     move,
     moveUnread,

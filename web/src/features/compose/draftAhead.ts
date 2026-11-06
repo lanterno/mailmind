@@ -87,6 +87,19 @@ export function useDraftAhead(pk: number | null, wanted: boolean, skip: boolean)
   }, [pk, wanted, skip]);
 }
 
+// Which of the brief's cards already have a reply written: peeks only, once a card.
+const peeked = new Set<number>();
+export async function peekCards(pks: number[]) {
+  const fresh = pks.filter((pk) => !peeked.has(pk) && chips.get().get(pk) !== "ready");
+  fresh.forEach((pk) => peeked.add(pk));
+  await Promise.all(fresh.map(async (pk) => {
+    try {
+      const d = await get(`/api/ai/draft-ahead?pk=${pk}&peek=1`);
+      if (d?.ok && d.status === "ready") mark(pk, "ready");
+    } catch { /* it stays a plain Reply */ }
+  }));
+}
+
 // r, and the Reply button: the draft written ahead if there is one, else a plain reply.
 export const answer = (pk: number) => (chips.get().get(pk) === "ready" ? composing.openDraftAhead(pk, () => forget(pk)) : composing.reply(pk));
 

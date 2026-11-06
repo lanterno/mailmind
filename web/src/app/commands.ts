@@ -1,5 +1,6 @@
 // Everything you can do from here, in one list: the keys and the palette both read it, so a command means the same either
 // way and neither can drift from the other.
+import { panel } from "../features/brief/Panels";
 import { composing } from "../features/compose/compose";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
@@ -105,6 +106,15 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
 
   add({ id: "compose", group: "Commands", label: "New message", keys: ["c"], hint: "c", run: () => void composing.open({ mode: "new" }) });
   add({ id: "undo", group: "Commands", label: "Undo last action", keys: ["z"], hint: "z", run: m.undo });
+  add({
+    id: "brief", group: "Commands", label: "Today’s brief",
+    run: () => {
+      if (m.inInbox && !m.searching) m.showBrief();
+      else go({ source: m.account ? { kind: "folder", account: m.account, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
+    },
+  });
+  add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
+  add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });
   add({ id: "search", group: "Commands", label: "Search", keys: ["/"], hint: "/", run: () => document.querySelector<HTMLInputElement>("#search")?.focus() });

@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-q
 import { get } from "../../api/client";
 import { sourceKey, type ListSource } from "../../app/route";
 import { store, stored } from "../../lib/store";
+import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../brief/model";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
 const PAGE = 200, ALL_INBOXES_EACH = 40;
@@ -11,7 +12,7 @@ const q = encodeURIComponent;
 
 export interface ListPage { rows: Row[]; hasMore: boolean; total: number; syncing: boolean; syncFailed: boolean; catchingUp: boolean; error?: string }
 
-export const useDigest = () => useQuery({ queryKey: ["digest"], queryFn: () => get("/api/digest") });
+export const useDigest = () => useQuery({ queryKey: ["digest"], queryFn: () => get("/api/digest?min=1&account=") });
 
 export const useFolders = (account: string | undefined) =>
   useQuery({ queryKey: ["folders", account], queryFn: () => get(`/api/folders?account=${q(account!)}`), enabled: Boolean(account) });
@@ -45,14 +46,27 @@ async function allInboxesPage(accounts: string[], grouped: boolean): Promise<Lis
   return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
 }
 
+// What the digest answers, as a list. Nothing here asks the AI: a topic comes from the brief as it is stored.
+async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Promise<ListPage> {
+  const { items } = await get("/api/digest?min=1&account=");
+  let chosen: DigestItem[];
+  if (source.list === "topic") {
+    const groups = (await get("/api/briefing")).groups ?? [];
+    chosen = topicItems(groups.find((g) => g.label === source.label)?.pks ?? [], items);
+  } else chosen = source.list === "needs" ? needsYou(items) : safeToFile(items);
+  const rows = chosen.map(fromDigest);
+  return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
+}
+
 export function useMessages(source: ListSource | null, grouped: boolean, accounts: string[]) {
   return useInfiniteQuery({
-    queryKey: ["messages", ...sourceKey(source), source?.kind === "search" ? false : grouped],
+    queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : false],
     enabled: Boolean(source) && (source?.kind !== "allInboxes" || accounts.length > 0),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
       if (source?.kind === "search") return searchPage(source.q, source.account, pageParam);
+      if (source?.kind === "digest") return digestPage(source);
       return allInboxesPage(accounts, grouped);
     },
     getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((n, p) => n + p.rows.length, 0) : undefined),

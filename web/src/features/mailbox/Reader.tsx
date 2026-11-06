@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../api/client";
 import type { GetAnswers } from "../../api/types.gen";
+import { BriefPane } from "../brief/Brief";
 import { composing, myAddresses } from "../compose/compose";
 import { answer, forget, useDraftAhead, useDraftChip } from "../compose/draftAhead";
 import { canQuickReply, QUICK } from "../compose/model";
@@ -341,6 +342,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
 
 export function Reader({ m }: { m: Mailbox }) {
   const { opened } = m;
+  if (!opened && m.inInbox && !m.searching) return <section className="reader brief-pane" id="reader"><BriefPane m={m} /></section>;
   if (!opened) return <section className="reader empty-pane" id="reader">Select a message to read its summary.</section>;
   return (
     <section className="reader" id="reader" aria-label="Message">

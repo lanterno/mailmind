@@ -2,6 +2,7 @@
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
 import { post } from "../../api/client";
+import type { GetAnswers } from "../../api/types.gen";
 import { go, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
@@ -31,7 +32,7 @@ export const clearMarks = () => marked.set(new Set());
 
 export const undoFloat = createStore<string | null>(null);
 let undoTimer: ReturnType<typeof setTimeout> | undefined;
-function offerUndo(label: string) {
+export function offerUndo(label: string) {
   undoFloat.set(label);
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => undoFloat.set(null), 8000);
@@ -52,9 +53,10 @@ const patchRow = (qc: QueryClient, pk: number, change: Partial<Row>) =>
 
 let inFlight = 0;
 
-const readAgain = (qc: QueryClient) => {
+export const readAgain = (qc: QueryClient) => {
   void qc.invalidateQueries({ queryKey: ["messages"] });
   void qc.invalidateQueries({ queryKey: ["folders"] });
+  void qc.invalidateQueries({ queryKey: ["digest"] });
 };
 
 interface Answer { ok: boolean; error?: string; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string; queued?: unknown; undoable?: boolean }
@@ -76,6 +78,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
     if (!r.ok) throw new Error(r.error || r.msg || "");
     const gone = new Set([...rows, ...(r.pks ?? [])]);
     editRows(qc, (list) => list.filter((x) => !gone.has(x.pk)));
+    qc.setQueryData<GetAnswers["/api/digest"]>(["digest"], (d) => d && { ...d, items: d.items.filter((x) => !gone.has(x.pk)) });
     toast(say(r));
     const label = undoLabel?.(r);
     if (label) offerUndo(label);

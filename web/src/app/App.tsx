@@ -2,6 +2,9 @@
 import { useEffect, useRef } from "react";
 import { post } from "../api/client";
 import { composing } from "../features/compose/compose";
+import { backFromDigest, BriefRow } from "../features/brief/Brief";
+import { lookedAt, NewMailPill } from "../features/brief/NewMail";
+import { Panels } from "../features/brief/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { FolderRail } from "../features/mailbox/FolderRail";
@@ -11,6 +14,7 @@ import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { ConfirmDialog } from "../lib/confirm";
 import { OverLimitDialog } from "../lib/overLimit";
 import { stored } from "../lib/store";
 import { shortAddress } from "../lib/text";
@@ -119,7 +123,8 @@ function useKeys(m: Mailbox, commands: Command[]) {
       if (key === "Escape") {
         if (readFocus.get()) setReadFocus(false);
         else if (m.marks.size) clearMarks();
-        else if (m.opened) m.close();
+        else if (m.opened || m.briefAsked) m.close();
+        else if (m.source?.kind === "digest") go({ source: backFromDigest(m.accounts), opened: null });
         else if (m.source?.kind === "search") go({ source: m.source.account ? { kind: "folder", account: m.source.account, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
         else return;
         e.preventDefault();
@@ -148,10 +153,16 @@ export function App() {
   useEffect(() => {
     if (!source && accounts[0]) go({ source: { kind: "folder", account: accounts[0], folder: "INBOX" }, opened: null }, { replace: true });
   }, [source, accounts[0]]);
-  const reading = Boolean(opened);
+  const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
   useEffect(() => clearMarks(), [source]);
+  useEffect(() => {
+    const look = () => { if (!document.hidden) lookedAt(source, accounts); };
+    look();
+    document.addEventListener("visibilitychange", look);
+    return () => document.removeEventListener("visibilitychange", look);
+  }, [source, accounts.join()]);
   useEffect(() => document.body.style.setProperty("--measure", `${WIDTHS[prefs.width]}px`), [prefs.width]);
 
   const commands = buildCommands(m, { toggleRail, saveSearch: () => void saveSearch(m) });
@@ -160,12 +171,12 @@ export function App() {
   const pages = list.data?.pages ?? [];
   const last = pages[pages.length - 1];
   const more = list.hasNextPage ? "+" : "";
-  const noun = m.grouped && !searching ? "conversation" : "message";
+  const noun = m.grouped && !searching && m.source?.kind !== "digest" ? "conversation" : "message";
   const count = searching
     ? `${all.length}${more} result${all.length === 1 && !more ? "" : "s"}`
     : `${all.length}${more} ${noun}${all.length === 1 && !more ? "" : "s"}${last?.syncing || last?.catchingUp ? " · reading the rest…" : ""}`;
 
-  let empty: React.ReactNode = <div className="nores">{searching ? "No matches." : "Nothing here."}</div>;
+  let empty: React.ReactNode = <div className="nores">{searching ? "No matches." : m.source?.kind === "digest" ? "Nothing left here." : "Nothing here."}</div>;
   if (m.digest && !accounts.length) empty = <div className="nores firstrun"><div className="fr-h">Welcome to MailMind</div><div className="fr-b">No email accounts connected yet. Connect one in the <a href="/">current app</a>.</div></div>;
   else if (list.isError) empty = <div className="nores" role="status">Couldn’t load this list. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
   else if (list.isPending && source) empty = <div className="nores" role="status">Loading…</div>;
@@ -201,6 +212,12 @@ export function App() {
                 <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button>
               </div>
             )}
+            {m.source?.kind === "digest" && (
+              <div className="client-ctx" id="clientCtx">
+                <Icon name="wind" /> <b>{title}</b> · from today’s brief ·{" "}
+                <button className="ctx-save" onClick={() => go({ source: backFromDigest(accounts), opened: null })}>‹ Inbox</button>
+              </div>
+            )}
             {inInbox && !searching && (
               <div className="lh-tabs" id="lhTabs" role="tablist" aria-label="Inbox">
                 {TABS.map(([id, label], i) => (
@@ -231,7 +248,9 @@ export function App() {
             <div className="lh-row"><span id="count">{list.isSuccess ? count : "—"}</span></div>
           </div>
           <BulkBar m={m} />
+          <NewMailPill />
           <MessageList
+            above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
             openPk={m.openPk}
             marks={m.marks}
@@ -255,7 +274,9 @@ export function App() {
         aliases={aliases}
         ai={m.digest?.ai?.engine !== "none"}
       />
+      <Panels m={m} />
       <OverLimitDialog />
+      <ConfirmDialog />
       <Floats />
       <Toaster />
     </>

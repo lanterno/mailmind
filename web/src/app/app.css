@@ -12,3 +12,9 @@ button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12p
 .snooze-menu.rac .rac-col,.snooze-menu.rac [role="menu"]{display:flex;flex-direction:column;gap:1px;outline:none}
 .snooze-menu.rac .am-item{padding:7px 10px;border-radius:var(--r-sm);color:var(--soft);cursor:pointer;outline:none}
 .snooze-menu.rac .am-item[data-focused]{background:var(--sel)}
+.modal-through{display:contents}
+.cm-main{all:unset;flex:1;min-width:0;cursor:pointer;display:block;text-align:left}
+.cm-main:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+button.rv-item{all:unset;box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;margin-bottom:7px;cursor:pointer}
+button.rv-item:hover{border-color:var(--line-hi);background:var(--panel-hi)}
+button.rv-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}

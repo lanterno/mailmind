@@ -54,7 +54,8 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }
   );
 }
 
-export function MessageList({ rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, empty, footer }: {
+export function MessageList({ above, rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, empty, footer }: {
+  above?: React.ReactNode;
   rows: Row[];
   openPk: number | null;
   marks: ReadonlySet<number>;
@@ -74,11 +75,12 @@ export function MessageList({ rows, openPk, marks, label, folder, isWhole, accou
     scrolled.current = openPk;
     document.getElementById(rowId(openPk))?.scrollIntoView({ block: "nearest" });
   }, [openPk, rows.length]);
-  if (!rows.length) return <div id="rows">{empty}</div>;
+  if (!rows.length) return <div id="rows">{above}{empty}</div>;
   let section = "";
   const active = openPk !== null && rows.some((r) => r.pk === openPk) ? rowId(openPk) : undefined;
   return (
     <div id="rows">
+      {above}
       <div className="rows-box" role="listbox" tabIndex={0} aria-label={label} aria-activedescendant={active}>
         {rows.flatMap((row) => {
           const here = sections && row.ts !== null ? dayGroup(row.ts) : "";
