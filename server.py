@@ -30,9 +30,7 @@ from mailmind.bootstrap.curation import rules
 from mailmind.compose.domain import limits
 from mailmind.content import mime
 from mailmind.bootstrap import legacy, mailbox
-from mailmind.kernel import attention as verdict
-from mailmind.kernel.when import now_iso, rel_time
-from mailmind.accounts.domain import provider
+from mailmind.kernel.when import now_iso
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.bootstrap.assistant import answers
@@ -91,56 +89,6 @@ def _kick(job):
 
 
 # ----------------------------------------------------------------------------- helpers
-def deep_link(row, wmap=None):
-    """The message in its provider's web client (ProviderProfile.deep_link), else the account's
-    webmail (e.g. Nextcloud Mail), else ""."""
-    return provider.resolve({"kind": row["kind"]}).deep_link(
-        account=row["account"], message_id=row["message_id"], subject=row["subject"],
-        webmail=(wmap or {}).get(row["account"]))
-
-
-def _attention(r):
-    """What the verdict on row `r` asks of you. The page reads these and never works them out."""
-    return verdict.answers(r["importance"], r["category"], r["action"])
-
-
-def digest_json(qs):
-    min_imp = int(qs.get("min", ["1"])[0])
-    account = qs.get("account", [None])[0] or None
-    c = store.conn()
-    rows = store.digest(c, min_importance=min_imp, account=account, limit=400)
-    keys = set(rows[0].keys()) if rows else set()
-    amap = config.alias_map()
-    wmap = config.webmail_map()
-    items = [{
-        "pk": r["pk"], "key": r["message_key"], "account": r["account"], "kind": r["kind"],
-        "alias": amap.get(r["account"]),
-        "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
-        "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-        "summary": r["summary"], "importance": r["importance"], **_attention(r),
-        "category": r["category"], "action": r["action"] or "", "link": deep_link(r, wmap),
-        "bucket": (r["bucket"] if "bucket" in keys else None),
-        "confidence": (r["confidence"] if "confidence" in keys else None),
-        "reason": (r["reason"] if "reason" in keys else None),
-        "verified": (bool(r["verified"]) if "verified" in keys else False),
-        "last_seen": rel_time(r["last_seen"]) if "last_seen" in keys and r["last_seen"] else None,
-        # what a Mailbox row needs to draw a digest item like a folder item (Needs you, briefing topics)
-        "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-        "thread_id": r["thread_id"], "folder": r["folder"], "ts": r["ts"],
-    } for r in rows]
-    accts = [row[0] for row in c.execute("SELECT DISTINCT account FROM messages ORDER BY account").fetchall()]
-    st = store.stats(c)
-    c.close()
-    # send_accounts = the authoritative configured (enabled) identities — the compose
-    # From list + reply-all self-dedupe set, independent of what's been synced yet.
-    send_accounts = [a["email"] for a in accounts.accounts()]
-    return {"items": items, "stats": st, "accounts": accts, "send_accounts": send_accounts,
-            "aliases": amap, "signatures": config.signature_map(),
-            "signature_default": config.signature_default(),
-            "status": mailbox.syncing._status, "sync": mailbox.syncing._sync, "ai": assistant.calls.status(), "profile": profile.current().value,
-            "generated": now_iso()}
-
-
 def _safe_filename(name):
     """Never trust an email-supplied filename: strip path + control/quote/CRLF chars."""
     name = (name or "attachment")
@@ -360,7 +308,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path.startswith(webroot.PREFIX):
                 self._serve_asset(u.path)
             elif u.path == "/api/digest":
-                self._json(digest_json(q))
+                self._json(mailbox.digest.answer(q))
             elif u.path == "/api/briefing":     # what is stored of the "Today" card; POST writes it
                 self._json(*assistant.asking.briefing(q, generate=False))
             elif u.path == "/api/review":       # what is stored of the Weekly Review; POST writes it

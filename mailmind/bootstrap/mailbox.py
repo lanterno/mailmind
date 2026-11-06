@@ -21,6 +21,7 @@ from mailmind.mailbox.adapters.imap_names import imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.bodies import Bodies
+from mailmind.mailbox.application.digest import Digest
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.filing_commands import Filing
@@ -127,6 +128,25 @@ def _open(acct, **kw):
 
 
 class _Accounts:
+    def deep_link(self, row, wmap=None):
+        """The message in its provider's web client (ProviderProfile.deep_link), else the account's
+        webmail (e.g. Nextcloud Mail), else ""."""
+        return provider.resolve({"kind": row["kind"]}).deep_link(
+            account=row["account"], message_id=row["message_id"], subject=row["subject"],
+            webmail=(wmap or {}).get(row["account"]))
+
+    def alias_map(self):
+        return config.alias_map()
+
+    def webmail_map(self):
+        return config.webmail_map()
+
+    def signature_map(self):
+        return config.signature_map()
+
+    def signature_default(self):
+        return config.signature_default()
+
     """What the Mailbox asks of Accounts."""
 
     def get(self, email):
@@ -261,3 +281,11 @@ def _kick(job):
 
 
 syncing = Syncing(store, _directory, ingest, warm, folders, stats, _attention, _kick)
+
+
+def _ai_status():
+    from mailmind.bootstrap import assistant
+    return assistant.calls.status()
+
+
+digest = Digest(store, _directory, syncing, _ai_status)
