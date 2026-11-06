@@ -35,19 +35,23 @@ class AnthropicModel:
         self._client = anthropic.Anthropic(api_key=key, base_url=base_url or DEFAULT_URL,
                                            timeout=timeout, max_retries=retries)
 
-    def complete(self, prompt: Prompt) -> Reply:
-        body = wire.body(prompt)
-        txguard.refuse_network("a Claude API request")   # the SDK's retries run on this thread too
+    def _calling(self, call):
+        """Make a call on this thread, as the SDK's retries are, its errors as ModelError."""
+        txguard.refuse_network("a Claude API request")
         try:
-            if body.pop("fallbacks", None):
-                resp = self._client.beta.messages.create(**body, fallbacks="default",
-                                                         betas=[FALLBACK_BETA])
-            else:
-                resp = self._client.messages.create(**body)
+            return call()
         except anthropic.APIStatusError as e:
             raise ModelError(f"Claude API {e.status_code}: {_error_text(e)}", e.status_code) from None
         except anthropic.APIConnectionError as e:
             raise ModelError(f"Claude API unreachable: {e.message}") from None
         except anthropic.AnthropicError as e:
             raise ModelError(f"Claude API failed: {type(e).__name__}") from None
+
+    def complete(self, prompt: Prompt) -> Reply:
+        body = wire.body(prompt)
+        if body.pop("fallbacks", None):
+            resp = self._calling(lambda: self._client.beta.messages.create(**body, fallbacks="default",
+                                                                           betas=[FALLBACK_BETA]))
+        else:
+            resp = self._calling(lambda: self._client.messages.create(**body))
         return wire.reply(resp.to_dict(), prompt.model)

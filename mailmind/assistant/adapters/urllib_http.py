@@ -22,6 +22,7 @@ VERSION = "2026-10-21"             # anthropic-version header, the one the SDK s
 TIMEOUT = 120                      # seconds per attempt
 RETRIES = 2                        # after the first attempt
 DEFAULT_URL = "https://api.anthropic.com"
+MESSAGES = "/v1/messages"
 
 
 def _retry_after(headers):
@@ -44,31 +45,34 @@ class UrllibModel:
     def __init__(self, key: str, base_url: str | None = None, timeout: float = TIMEOUT,
                  retries: int = RETRIES):
         self._key = key
-        self._url = (base_url or DEFAULT_URL).rstrip("/") + "/v1/messages"
+        self._base = (base_url or DEFAULT_URL).rstrip("/")
         self._timeout = timeout
         self._retries = retries
 
+    def _headers(self) -> dict:
+        return {"content-type": "application/json", "x-api-key": self._key, "anthropic-version": VERSION}
+
     def complete(self, prompt: Prompt) -> Reply:
-        headers = {"content-type": "application/json", "x-api-key": self._key,
-                   "anthropic-version": VERSION}
+        headers = self._headers()
         if prompt.fallback:
             headers["anthropic-beta"] = FALLBACK_BETA
-        return wire.reply(self._post(json.dumps(wire.body(prompt)).encode(), headers), prompt.model)
+        out = self._send("POST", MESSAGES, json.dumps(wire.body(prompt)).encode(), headers, self._retries)
+        return wire.reply(json.loads(out), prompt.model)
 
-    def _post(self, data: bytes, headers: dict) -> dict:
+    def _send(self, method: str, path: str, data: bytes | None, headers: dict, retries: int) -> bytes:
         attempt = 0
         while True:
             txguard.refuse_network("a Claude API request")
-            req = urllib.request.Request(self._url, data=data, headers=headers, method="POST")
+            req = urllib.request.Request(self._base + path, data=data, headers=headers, method=method)
             try:
                 with urllib.request.urlopen(req, timeout=self._timeout) as r:
-                    return json.loads(r.read())
+                    return r.read()
             except urllib.error.HTTPError as e:
-                if e.code not in RETRIED or attempt == self._retries:
+                if e.code not in RETRIED or attempt == retries:
                     raise ModelError(f"Claude API {e.code}: {_error_text(e)}", e.code) from None
                 wait = _retry_after(e.headers)
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-                if attempt == self._retries:
+                if attempt == retries:
                     raise ModelError(f"Claude API unreachable: {getattr(e, 'reason', e)}") from None
                 wait = None
             time.sleep(wait if wait is not None else min(8.0, 0.5 * 2 ** attempt) + random.random() / 4)
