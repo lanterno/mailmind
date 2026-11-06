@@ -267,8 +267,9 @@ automatically.
   and get a mandatory preview — the count, the resolved filter and a sample — before
   anything runs, with blast-radius caps, a second arming click for trash and junk, and
   a single undo. Confirming files exactly what the preview showed, for ten minutes,
-  and mail that came after it stays put. Anything unsafe or ambiguous degrades into an
-  ordinary search that touches nothing.
+  and mail that came after it stays put. Unless you name a folder, a command leaves Sent,
+  Drafts, Trash and Junk alone. Anything unsafe or ambiguous degrades into an ordinary
+  search that touches nothing.
 - **Tidy.** One strip offers to file every low-importance info/other message to
   Archive, with a Review mode to inspect them first and one undo to reverse the batch.
   User-triggered, never silent.

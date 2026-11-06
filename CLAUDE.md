@@ -165,7 +165,9 @@ Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbo
 
 `search.build` reads a date with no zone at this machine's midnight. `search.visible` leaves snoozed mail out of
 a search and of what a command acts on, unless the query says `is:snoozed`. `search.BM25` is the one table of
-ranking weights, which Ask uses too.
+ranking weights, which Ask uses too. All three come from `mailmind.discovery`, below. A message is one search result
+however many folders hold it: among the copies the query found, the one in the Inbox, else any but All Mail's
+(`server._in_folders_playing`, by what the last LIST said and else by name).
 
 `mailparse.dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
 it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mailparse.walk` takes an
@@ -310,6 +312,10 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `tests/test_mail_session_contract.py` runs every case through each against the fake, and
   `tests/test_mail_session_dovecot.py` against Dovecot. The rest of the context is standard
   library only.
+- `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
+  grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
+  account alone spans nearly everything, and a negation never narrows by itself. `adapters.fts.to_sql` turns one into
+  a MATCH and bound SQL, and `search.py` is what the legacy callers ask it through. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
@@ -515,7 +521,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is
   good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
   in is left where it went, and counted as `gone`. Each message goes through its own route (`do_write`, `do_trash`,
-  `do_snooze`), under one undo group.
+  `do_snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
+  never reaches its own home (`_DO_APART`, `_DO_ALREADY`), and each message counts once, by the copy search would show.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
