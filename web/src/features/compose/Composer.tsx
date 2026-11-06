@@ -3,13 +3,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
-import { theme } from "../../lib/theme";
 import { fileSize, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
-import { bodyDoc } from "../mailbox/mailDoc";
-import { frameTheme, mailPrefs } from "../mailbox/MailFrame";
-import { readPrefs } from "../mailbox/readPrefs";
+import { QuoteFrame } from "../mailbox/MailFrame";
 import { composing, draftTone, setDraftTone } from "./compose";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";
@@ -137,8 +134,6 @@ function ChipField({ c, field, label }: { c: Composer; field: Field; label: stri
 function Quote({ c }: { c: Composer }) {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const prefs = readPrefs.useValue();
-  const name = theme.useValue();
   const q = c.quote;
   if (!q || (!q.html && !q.text)) return null;
   return (
@@ -146,7 +141,7 @@ function Quote({ c }: { c: Composer }) {
       <button type="button" className="cmp-qtoggle" id="cmpQToggle" aria-expanded={open} onClick={() => { setOpen(!open); setLoaded(true); }}>{quoteLabel(c, open)}</button>
       <div className="cmp-qbody" id="cmpQBody" hidden={!open}>
         {loaded && (q.html
-          ? <iframe sandbox="" title="The message you’re answering" srcDoc={bodyDoc(q.html, true, mailPrefs(prefs), frameTheme(name))} />
+          ? <QuoteFrame html={q.html} />
           : <div className="cmp-qtext">{q.text || "(no preview)"}</div>)}
       </div>
     </div>

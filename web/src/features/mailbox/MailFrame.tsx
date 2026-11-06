@@ -5,16 +5,16 @@ import { useEffect, useRef } from "react";
 import { theme as themeStore, type ThemeName } from "../../lib/theme";
 import { toast } from "../../lib/toast";
 import { linkRisk } from "./linkRisk";
-import { mailDoc, type FrameTheme, type MailPrefs } from "./mailDoc";
+import { bodyDoc, mailDoc, type FrameTheme, type MailPrefs } from "./mailDoc";
 import { FONTS, readPrefs, SIZES, type ReadPrefs } from "./readPrefs";
 
 const MAX_HEIGHT = 5000;
 
-export function mailPrefs(p: ReadPrefs): MailPrefs {
+function mailPrefs(p: ReadPrefs): MailPrefs {
   return { colors: p.colors, font: FONTS[p.font], lineHeight: p.font === "mono" ? 1.55 : 1.62, sizePx: SIZES[p.size] };
 }
 
-export function frameTheme(name: ThemeName): FrameTheme {
+function frameTheme(name: ThemeName): FrameTheme {
   const css = getComputedStyle(document.body), tk = (t: string) => css.getPropertyValue(t).trim();
   return { light: name !== "night", bg: tk("--bg"), panel: tk("--panel"), ink: tk("--ink"), primaryInk: tk("--primary-ink"), lineHi: tk("--line-hi"), mute: tk("--mute") };
 }
@@ -83,6 +83,13 @@ export function MailFrame({ body, minHeight, pad }: { body: MailBody; minHeight:
       }}
     />
   );
+}
+
+// The message a reply quotes, in the composer. Nothing here reaches inside this one, so its sandbox allows nothing at all.
+export function QuoteFrame({ html }: { html: string }) {
+  const name = themeStore.useValue();
+  const prefs = readPrefs.useValue();
+  return <iframe sandbox="" title="The message you’re answering" srcDoc={bodyDoc(html, true, mailPrefs(prefs), frameTheme(name))} />;
 }
 
 export function guardFrames() {
