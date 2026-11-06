@@ -737,12 +737,20 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   unread members and `Muting.on_ingest` for mail that arrives later, skipping one with a mark still open
   (a refused one waits in the tray). The undo entry names those members by key and folder, and Undo marks
   unread again only them.
-- **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
-  union-find root (the smallest Message-ID it names) once, and keeps it as the thread grows; a
-  Gmail thread id gives `gm:` instead. When a thread's rows take another id (a merge, or a thread
-  that gained a Gmail id), `threads._rekey` moves what was kept under the id no row holds any
-  more, in the same transaction: `muted`, `followups`, `thread_summaries` and `draft_ahead`'s
-  `t:` keys. A new table keyed on a thread id joins `_rekey`.
+- **A thread id is sticky.** A sync hands `store.thread_stored` what it stored, and any of the account's mail with no
+  id yet goes along (a sync that died, `mailmind sync`). `threading.Threader` (`mailbox/domain`) mints an `rf:` id from the
+  union-find root of what arrived for the thread (the smallest Message-ID it names) once, and keeps it as the thread grows;
+  a Gmail thread id gives `gm:` instead. `thread_links` (migration 42) holds each id a threaded copy names, and goes with
+  the copy, so a sync reads what its mail names and the threads that touches, and a reply writes only its own row. An id
+  goes only when a merge absorbs it (two threads joined, or one that gained a Gmail id). The survivor is a `gm:` id over an
+  `rf:` one, the smallest of several `rf:` ones, and of two Gmail threads joined by headers the one that comes later by
+  folder, date and row. Every row holding the absorbed id takes the survivor, and `ConversationsMerged` goes to whoever
+  keeps something under it, on the merge's connection, so a failure rolls the merge back: `muted`, `followups`,
+  `thread_summaries`, `draft_ahead`'s `t:` keys and `outbox.orig_thread_id`. It isn't on the bus, whose handlers run after
+  the commit. A new table keyed on a thread id gets a `rekey_thread` in its owner's adapter, called from
+  `_conversations_merged` in `mailmind.bootstrap.mailbox`. A split doesn't split: mail that a copy going left unconnected
+  keeps its one id. `store.recompute_threads` regroups a whole account and is the repair (`python3 -m mailmind db
+  rethread`); no sync takes it.
 
 ### Security model
 
