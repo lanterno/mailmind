@@ -57,10 +57,11 @@ comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire
 `test_upcoming.py`, `test_contacts_known.py`,
 `test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
 `test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
-renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
-`/* send-guard:pure:end */` out of `web/assets/legacy/app.js` and runs it in node, so that block must
-stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
-`/* draft-resume:pure:start */` … `/* draft-resume:pure:end */` block.
+renaming. `test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
+`/* draft-resume:pure:start */` …) out of `web/assets/legacy/pure.js` and run it in node. That file is written from
+`web/src/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
+twins beside them; edit those and run `just gen-web`. The send guard's two suites share
+`tests/fixtures/send_guard_words.json`.
 
 ### The pytest suite in `tests/`
 
@@ -128,6 +129,12 @@ the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked
 then `lint-imports` (import-linter) on the `mailmind` package's layers. New pytest-native tests go in `tests/`;
 pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
+`just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
+`web/assets/legacy/pure.js` is what `web/src/compose` gives; it installs `web/node_modules` from the lockfile if they
+are missing. `just gen-web` writes `pure.js`. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
+writes `web/src/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since `server.H`
+has no schema to generate from: run it when an answer's shape changes, and review the diff.
+
 `just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
 brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
 
@@ -143,13 +150,13 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   third-party package; `tests/test_front_door.py` checks that.
 - **The page runs as it stands.** `web/index.html` is the markup, `web/assets/styles/` the CSS (`fonts.css` the
   self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from system fonts), and `web/assets/legacy/` the
-  scripts: `theme.js`, then `app.js`, ~320KB of classic script. There are no modules, and no build is needed:
+  scripts: `theme.js`, `pure.js` (written from `web/src/compose`) and `app.js`, ~310KB of classic script. No build is needed:
   `mailmind.platform.webroot` serves this source to either door with gzip and an ETag, so the old door still needs
   nothing installed. `just build-web` (Vite, Node) writes the same files, named by their content, to
   `mailmind/http/dist` (gitignored), served for good while it is as new as every source file, so an edit never leaves
   the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
   `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), and a tab that loaded another build
-  offers a reload (`onHello`). React and TypeScript come with the frontend track's next slices.
+  offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`api/client.ts`, typed by `api/types.gen.ts`).
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
