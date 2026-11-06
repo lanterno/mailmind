@@ -23,6 +23,7 @@ from fixtures import world as w
 from mailmind.platform.workers import gates
 from mailmind.curation.application import cleanup
 from mailmind.bootstrap import curation
+from mailmind.bootstrap import attention
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -465,7 +466,6 @@ def test_hwf_a_search_the_index_rejects_answers_bad_query(app, world, monkeypatc
 # -- follow-ups -----------------------------------------------------------
 
 def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, world):
-    import server
     import store
     world.deliver(w.ADA, "INBOX", b"From: Lin Mori <lin@example.test>\r\nTo: Ada Park <ada@example.test>\r\n"
                                   b"Subject: Fabric swatches\r\nDate: Wed, 28 Oct 2026 09:00:00 +0000\r\n"
@@ -474,10 +474,10 @@ def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, wo
     [m] = rows("SELECT thread_id, ts FROM messages WHERE pk=?", pk)
     summary(pk, 5, "action-needed")
     c = store.conn()
-    store.followup_record_sent(c, w.ADA, m["thread_id"], pk, m["ts"] - 86400, "2026-10-27T09:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, m["thread_id"], pk, m["ts"] - 86400, "2026-10-27T09:00:00+00:00")
     c.commit()
     c.close()
-    server.followups_tick()                                  # Lin answered: the sent one resolves first
+    attention.followups.tick()                                  # Lin answered: the sent one resolves first
     assert rows("SELECT kind, state FROM followups WHERE thread_id=?", m["thread_id"]) == [
         {"kind": "received", "state": "due"}]
 

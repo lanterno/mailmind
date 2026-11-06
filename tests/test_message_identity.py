@@ -5,6 +5,7 @@ import sqlite3
 from fixtures import world as w
 from mailmind.mailbox.domain import identity
 from mailmind.platform.db import migrate, migrations
+from mailmind.bootstrap import attention
 
 LUNCH = "ada-inbox-01-lunch.eml"
 DAY = 86400
@@ -271,7 +272,7 @@ def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
     assert holds(app.get(f"/api/digest?account={w.ADA}").json["items"])
     assert app.get(f"/api/message/{pk}/body").json["key"] == key
     c = store.conn()
-    store.mute_thread(c, w.ADA, row["thread_id"], "now")
+    attention.book.mute_thread(c, w.ADA, row["thread_id"], "now")
     c.commit()
     c.close()
     muted = [i["key"] for i in app.get(f"/api/messages?account={w.ADA}&folder=__muted__&limit=100").json["items"]

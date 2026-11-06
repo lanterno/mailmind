@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap import attention
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 LUNCH_MID = "<lunch-3@lin.example.test>"
@@ -78,7 +79,7 @@ def review_now(app):
 def waiting_on(pk, thread_id):
     import store
     c = store.conn()
-    store.followup_record_sent(c, w.ADA, thread_id, pk, int(time.time()), "2026-11-01T00:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, thread_id, pk, int(time.time()), "2026-11-01T00:00:00+00:00")
     c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (thread_id,))
     c.commit()
     c.close()

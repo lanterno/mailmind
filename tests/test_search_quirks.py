@@ -11,6 +11,7 @@ import pytest
 from mailmind.bootstrap import discovery
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap import attention
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -80,7 +81,6 @@ def snooze(app, pk):
 
 
 def test_snoozed_mail_isnt_found_until_it_wakes(app, world):
-    import server
     subject = world.row(RECEIPT)["subject"].split()[0]
     pk = world.pk(RECEIPT)
     assert pk in found(app, f"subject:{subject}")
@@ -88,7 +88,7 @@ def test_snoozed_mail_isnt_found_until_it_wakes(app, world):
     assert pk not in found(app, f"subject:{subject}")
     assert pk not in found(app, f"from:{world.row(RECEIPT)['from_addr']}")
     app.clock.shift(timedelta(days=2))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     assert pk in found(app, f"subject:{subject}")
 
 

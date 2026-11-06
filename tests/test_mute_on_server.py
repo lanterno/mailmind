@@ -3,6 +3,7 @@ change, and Undo marks unread again only what muting marked read."""
 from datetime import timedelta
 
 from fixtures import world as w
+from mailmind.bootstrap import attention
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
@@ -109,7 +110,7 @@ def test_an_undo_written_before_this_only_changes_the_local_row(app, world):
     lunch, uid = thread_with_a_reply(world)
     pk = row_of(uid)["pk"]
     c = store.conn()
-    store.mute_thread(c, w.ADA, lunch["thread_id"], "2026-11-01T00:00:00+00:00")
+    attention.book.mute_thread(c, w.ADA, lunch["thread_id"], "2026-11-01T00:00:00+00:00")
     store.set_local_flags(c, pk, seen=1)
     store.undo_put_back(c, {"kind": "mute", "account": w.ADA, "thread_id": lunch["thread_id"],
                             "prev_seen": [[pk, 0]], "label": "Muted"})

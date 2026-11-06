@@ -7,6 +7,7 @@ from urllib.parse import quote
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap import attention
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -76,7 +77,7 @@ def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     import summarize_review
     lunch = world.row(LUNCH)
     c = store.conn()
-    store.followup_record_sent(c, w.ADA, lunch["thread_id"], lunch["pk"], int(time.time()), "2026-11-01T00:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, lunch["thread_id"], lunch["pk"], int(time.time()), "2026-11-01T00:00:00+00:00")
     c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (lunch["thread_id"],))
     c.commit()
     c.close()

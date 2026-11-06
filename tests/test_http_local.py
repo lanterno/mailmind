@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap import attention
+from mailmind.attention.domain import followups as follow_up_rules
 
 
 def rows(sql, *args):
@@ -61,9 +63,8 @@ def test_snooze_list_wake_and_undo(app, golden, world):
     post(app, golden, "undo the ISO snooze", "/api/undo", {})
     listing(app, golden, "Ada's Snoozed after undo", w.ADA, "__snoozed__")
 
-    import server
     app.clock.move_to(datetime(2026, 11, 2, 18, 0, 1, tzinfo=timezone.utc))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     golden.note("after 18:00 the receipt wakes unread", rows(
         "SELECT subject, seen, snoozed_until FROM messages WHERE pk=?", receipt))
     listing(app, golden, "Ada's Snoozed after the wake", w.ADA, "__snoozed__")
@@ -122,16 +123,15 @@ def test_mute_hides_a_thread_marks_it_read_and_undo_restores_it(app, golden, wor
 # ── follow-ups and Reply Later ─────────────────────────────────────────────
 
 def test_waiting_follow_ups_and_dismissal(app, golden, world, ai):
-    import server
     import summarize
     # A received thread waits on you only once AI has called it important or action-needed; the
     # fake API calls every message action-needed.
     golden.note("messages summarized", summarize.summarize_pending(limit=100, workers=1))
-    server.followups_tick()
+    attention.followups.tick()
     golden.note("follow-ups at Monday noon", rows(
         "SELECT account, thread_id, kind, state, due_ts FROM followups ORDER BY account, thread_id"))
     app.clock.shift(timedelta(days=4))
-    server.followups_tick()
+    attention.followups.tick()
     golden.note("follow-ups four days later", rows(
         "SELECT account, thread_id, kind, state, due_ts FROM followups ORDER BY account, thread_id"))
     for acct in (w.ADA, w.BEA, w.CY):
@@ -163,13 +163,12 @@ def test_reply_later_records_when_the_thread_last_moved(app, world):
 
 
 def test_a_received_nudge_stops_after_the_expiry_window(app, world, ai):
-    import server
     import summarize
     summarize.summarize_pending(limit=100, workers=1)
     quilt = world.row("ada-archive-01-old-thread.eml")      # from Lin, read, unanswered, 20 Oct
-    server.followups_tick()
+    attention.followups.tick()
     assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == [{"state": "due"}]
     app.clock.move_to(datetime.fromtimestamp(quilt["ts"], timezone.utc)
-                      + timedelta(days=server.FOLLOWUP_EXPIRE_DAYS, hours=1))
-    server.followups_tick()
+                      + timedelta(days=follow_up_rules.EXPIRE_DAYS, hours=1))
+    attention.followups.tick()
     assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == []

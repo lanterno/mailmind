@@ -23,6 +23,7 @@ from mailmind.curation.domain import rulebook
 from mailmind.bootstrap import curation
 from mailmind.discovery.domain import views as builtin
 from mailmind.bootstrap import discovery
+from mailmind.bootstrap import attention
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -267,70 +268,65 @@ def test_hwf_an_upsert_of_a_stored_uid_keeps_its_sender_date_and_ids(db):
 # -- mute, Reply Later and Waiting: badges and lists --------------------------
 
 def test_hwf_badges_count_only_threads_that_still_have_mail(db):
-    import store
     put(db, "<a@example.test>", thread_id="T1")
     put(db, "<b@example.test>", thread_id="T2")
     put(db, "<c@example.test>", thread_id="T3")
     for t in ("T1", "GONE1"):
-        store.mute_thread(db, A, t, "now")
+        attention.book.mute_thread(db, A, t, "now")
     for t in ("T2", "GONE2"):
-        store.set_replylater(db, A, t, None, "now")
+        attention.book.set_replylater(db, A, t, None, "now")
     db.executemany("INSERT INTO followups(account, thread_id, kind, state, due_ts) VALUES (?,?,?,?,?)",
                    [(A, "T3", "sent", "due", 1), (A, "GONE3", "received", "due", 2)])
-    assert (store.muted_count(db, A), len(store.list_muted(db, A))) == (1, 1)
-    assert (store.replylater_count(db, A), len(store.list_replylater(db, A))) == (1, 1)
-    assert (store.waiting_count(db, A), len(store.list_waiting(db, A))) == (1, 1)
+    assert (attention.book.muted_count(db, A), len(attention.book.list_muted(db, A))) == (1, 1)
+    assert (attention.book.replylater_count(db, A), len(attention.book.list_replylater(db, A))) == (1, 1)
+    assert (attention.book.waiting_count(db, A), len(attention.book.list_waiting(db, A))) == (1, 1)
 
 
 def test_hwf_a_listed_thread_shows_its_latest_message_the_higher_pk_on_a_tie(db):
-    import store
     put(db, "<1@example.test>", thread_id="T", ts=100)
     put(db, "<2@example.test>", thread_id="T", ts=200)
     latest = put(db, "<3@example.test>", thread_id="T", ts=200, folder="Sent")
     put(db, "<4@example.test>", thread_id="U", ts=300)
     waiting = put(db, "<5@example.test>", thread_id="U", ts=300)
-    store.mute_thread(db, A, "T", "now")
-    store.set_replylater(db, A, "T", None, "now")
+    attention.book.mute_thread(db, A, "T", "now")
+    attention.book.set_replylater(db, A, "T", None, "now")
     db.execute("INSERT INTO followups(account, thread_id, kind, state, due_ts) VALUES (?,?,?,?,?)",
                (A, "U", "sent", "due", 1))
-    assert [(r["pk"], r["thread_count"]) for r in store.list_muted(db, A)] == [(latest, 3)]
-    assert [(r["pk"], r["thread_count"]) for r in store.list_replylater(db, A)] == [(latest, 3)]
-    assert [(r["pk"], r["thread_count"]) for r in store.list_waiting(db, A)] == [(waiting, 2)]
+    assert [(r["pk"], r["thread_count"]) for r in attention.book.list_muted(db, A)] == [(latest, 3)]
+    assert [(r["pk"], r["thread_count"]) for r in attention.book.list_replylater(db, A)] == [(latest, 3)]
+    assert [(r["pk"], r["thread_count"]) for r in attention.book.list_waiting(db, A)] == [(waiting, 2)]
 
 
 def test_hwf_a_dismissed_reply_later_thread_leaves_the_stack(db):
-    import store
     put(db, "<a@example.test>", thread_id="T")
-    store.set_replylater(db, A, "T", None, "now")
-    store.dismiss_followup(db, A, "T", "now")          # what POST /api/followups/dismiss does
-    assert [r["thread_id"] for r in store.list_replylater(db, A)] == []
-    assert store.replylater_count(db, A) == 0           # nor counted on the rail
-    store.set_replylater(db, A, "T", None, "later")     # pinned again, it's back
-    assert ([r["thread_id"] for r in store.list_replylater(db, A)], store.replylater_count(db, A)) == (["T"], 1)
+    attention.book.set_replylater(db, A, "T", None, "now")
+    attention.book.dismiss_followup(db, A, "T", "now")          # what POST /api/followups/dismiss does
+    assert [r["thread_id"] for r in attention.book.list_replylater(db, A)] == []
+    assert attention.book.replylater_count(db, A) == 0           # nor counted on the rail
+    attention.book.set_replylater(db, A, "T", None, "later")     # pinned again, it's back
+    assert ([r["thread_id"] for r in attention.book.list_replylater(db, A)], attention.book.replylater_count(db, A)) == (["T"], 1)
 
 
 def test_hwf_a_draft_of_a_reply_is_no_reply_to_reply_later(db):
-    import store
     put(db, "<a@example.test>", thread_id="T", ts=100)
     put(db, "<b@example.test>", thread_id="T", ts=200, from_addr=A, draft=1)
-    store.set_replylater(db, A, "T", None, "now")
-    store.resolve_followups(db, A)
-    assert store.replylater_count(db, A) == 1
+    attention.book.set_replylater(db, A, "T", None, "now")
+    attention.book.resolve_followups(db, A)
+    assert attention.book.replylater_count(db, A) == 1
     put(db, "<c@example.test>", thread_id="T", ts=300, from_addr=A, folder="Sent")
-    store.resolve_followups(db, A)
-    assert store.replylater_count(db, A) == 0
+    attention.book.resolve_followups(db, A)
+    assert attention.book.replylater_count(db, A) == 0
 
 
 def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
-    import store
     day = 86400
     asked = put(db, "<a@example.test>", thread_id="T", ts=NOW_TS - 5 * day, seen=1)
     put(db, "<b@example.test>", thread_id="T", ts=NOW_TS - day, from_addr=A, draft=1)
     db.execute("INSERT INTO summaries(message_pk, importance, category) VALUES (?, 5, 'action-needed')", (asked,))
 
     def nudged():
-        store.followup_detect_received(db, NOW_TS, 3, 14)
-        store.resolve_followups(db, A)
+        attention.book.followup_detect_received(db, NOW_TS, 3, 14)
+        attention.book.resolve_followups(db, A)
         return [(r["anchor_pk"], r["last_msg_ts"])
                 for r in db.execute("SELECT anchor_pk, last_msg_ts FROM followups WHERE kind='received'")]
 
@@ -457,11 +453,10 @@ def test_hwf_a_reply_stored_before_its_original_takes_the_threads_id_at_once(db)
 
 
 def test_hwf_a_thread_that_joins_a_gmail_thread_takes_its_state_along(db):
-    import store
     old = put(db, "<p@example.test>")
     recompute(db)
     was = tid(db, old)
-    store.set_replylater(db, A, was, None, "now")
+    attention.book.set_replylater(db, A, was, None, "now")
     db.execute("INSERT INTO thread_summaries(account, thread_id, scope, fingerprint, tldr) VALUES(?,?,?,?,?)",
                (A, was, "thread", "fp", "Lunch on Friday."))
     _ahead(db, "t:" + was, NOW_TS - 60)
@@ -476,19 +471,18 @@ def test_hwf_a_thread_that_joins_a_gmail_thread_takes_its_state_along(db):
 
 
 def test_hwf_a_merge_keeps_the_survivors_own_state_over_the_absorbed_threads(db):
-    import store
     a = put(db, "<a@example.test>")
     b = put(db, "<b@example.test>")
     recompute(db)
     ta, tb = tid(db, a), tid(db, b)
     _ahead(db, "t:" + ta, NOW_TS - 60, body="From the first thread.")
     _ahead(db, "t:" + tb, NOW_TS - 60, body="From the second thread.")
-    store.mute_thread(db, A, tb, "now")
+    attention.book.mute_thread(db, A, tb, "now")
     put(db, "<c@example.test>", refs="<a@example.test> <b@example.test>")      # joins the two
     recompute(db)
     surv = min(ta, tb)
     assert tid(db, a) == tid(db, b) == surv
-    assert store.is_muted(db, A, surv)
+    assert attention.book.is_muted(db, A, surv)
     assert [r["body"] for r in db.execute("SELECT body FROM draft_ahead")] == [
         "From the first thread." if surv == ta else "From the second thread."]
 
@@ -529,14 +523,13 @@ def test_hwf_two_gmail_threads_joined_by_headers_take_the_later_rows_id(db):
 
 
 def test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute(db):
-    import store
     old = put(db, "<p@example.test>")                      # stored before Gmail's thread id was seen
     recompute(db)
-    store.mute_thread(db, A, tid(db, old), "now")
+    attention.book.mute_thread(db, A, tid(db, old), "now")
     put(db, "<q@example.test>", gm="1781", irt="<p@example.test>")
     recompute(db)
     assert tid(db, old) == f"gm:{A}:1781"
-    assert store.is_muted(db, A, f"gm:{A}:1781")
+    assert attention.book.is_muted(db, A, f"gm:{A}:1781")
 
 
 def test_hwf_a_thread_stored_again_whole_keeps_its_mute(db):
@@ -545,13 +538,13 @@ def test_hwf_a_thread_stored_again_whole_keeps_its_mute(db):
     recompute(db)
     root = put(db, "<m@example.test>")
     recompute(db)
-    store.mute_thread(db, A, tid(db, root), "now")
+    attention.book.mute_thread(db, A, tid(db, root), "now")
     for pk in (reply, root):                               # every copy moves away, then comes back
         store.delete_message(db, pk)
     back = put(db, "<m@example.test>")
     put(db, "<r@example.test>", irt="<m@example.test>")
     recompute(db)
-    assert store.is_muted(db, A, tid(db, back))
+    assert attention.book.is_muted(db, A, tid(db, back))
 
 
 # -- search ranking -----------------------------------------------------------

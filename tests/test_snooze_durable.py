@@ -3,6 +3,7 @@ that wakes is unread on the server too, or the next sync that read its flags wou
 from datetime import datetime, timedelta, timezone
 
 from fixtures import world as w
+from mailmind.bootstrap import attention
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 CI = "ada-inbox-04-ci.eml"                               # already read
@@ -53,12 +54,11 @@ def test_a_snoozed_message_stays_hidden_through_a_resync_of_its_folder(app, worl
 
 
 def test_it_wakes_on_time_on_the_row_it_has_now(app, world):
-    import server
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
     renumber(world)
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     assert copy(world)["snoozed_until"] is None
     assert subject in listed(app)
 
@@ -115,12 +115,11 @@ def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, worl
 
 def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, world):
     import ingest
-    import server
     import store
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     c = store.conn()
     left = c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0]
     c.close()
@@ -137,7 +136,7 @@ def test_a_forgotten_message_takes_its_snooze_with_it(world):
     c = store.conn()
     pk = world.pk(RECEIPT)
     key = world.row(RECEIPT)["message_key"]
-    store.set_snooze(c, pk, 4102444800)
+    attention.book.set_snooze(c, pk, 4102444800)
     store.delete_message(c, pk)
     c.execute("UPDATE message_identity SET gone_at=1 WHERE key=?", (key,))
     store.forget_gone_messages(c, 4102444800)
@@ -148,10 +147,9 @@ def test_a_forgotten_message_takes_its_snooze_with_it(world):
 
 def test_waking_marks_read_mail_unread_on_the_server(app, world):
     import readmutq
-    import server
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     assert copy(world, CI)["seen"] == 0
     readmutq.drain()
     [(_, _, _, flags)] = world.where(CI)["server"]
@@ -160,21 +158,19 @@ def test_waking_marks_read_mail_unread_on_the_server(app, world):
 
 def test_a_sync_before_the_mark_lands_keeps_it_unread(app, world):
     import ingest
-    import server
     world.server.without.add("CONDSTORE")                       # so the sync reads the newest's flags
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     ingest.sync_new(acct())
     assert copy(world, CI)["seen"] == 0
 
 
 def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
     import readmutq
-    import server
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     world.server.fail("UID STORE", user=w.ADA)
     readmutq.drain()
     assert copy(world, CI)["seen"] == 1                         # as the server has it
@@ -183,21 +179,19 @@ def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
 
 
 def test_waking_unread_mail_asks_nothing_of_the_server(app, world):
-    import server
     snooze(app, world)
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     assert app.get("/api/pending").json["items"] == []
 
 
 def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
     import readmutq
-    import server
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     snooze(app, world, CI)
     app.clock.shift(timedelta(hours=7))
     since = world.mark()
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     readmutq.drain()
     assert world.writes(since) == []
     assert copy(world, CI)["seen"] == 0
@@ -205,7 +199,6 @@ def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app
 
 
 def test_two_copies_waking_together_each_get_the_mark(app, world):
-    import server
     import store
     snooze(app, world, CI)
     c = store.conn()
@@ -216,5 +209,5 @@ def test_two_copies_waking_together_each_get_the_mark(app, world):
     c.commit()
     c.close()
     app.clock.shift(timedelta(hours=7))
-    server.wake_snoozed()
+    attention.snoozing.wake_due()
     assert copy(world, CI)["seen"] == 0 and copy(world, CI, "Archive")["seen"] == 0
