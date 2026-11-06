@@ -74,7 +74,7 @@ class Reversals:
         done, d = self._settled_with_command(d)
         if done:
             return done
-        allmail = self._server.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
+        allmail = self._server.find_special(d["account"], "all") or "[Gmail]/All Mail"
         ok, _ = self._server.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
         if not ok:
             return False, d["account"], "INBOX"
