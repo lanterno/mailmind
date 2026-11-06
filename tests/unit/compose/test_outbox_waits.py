@@ -1,8 +1,9 @@
-"""What a queued send is waiting for, and what's still owed once it has gone out."""
+"""What a queued send is waiting for, what's still owed once it has gone out, and a Retry that finds it went."""
 from datetime import timedelta
 import time
 
 from fixtures import world as w
+from gate import held_elsewhere
 from mailmind.platform.db.migrations import m0041_outbox_wait_kind
 
 
@@ -176,3 +177,71 @@ def test_what_gives_up_after_going_out_leaves_it_listed_as_sent(app, world):
     assert row(oid)["state"] == "error"
     assert (item["state"], item["error"], item["unsure"], waits(item)) == ("sent", None, False, (False, False))
     assert len(world.smtp.messages) == 1
+
+
+# -- Retry on a send that went unanswered -----------------------------------------
+
+def unanswered(app, world, account):
+    oid = app.post("/api/send", new(account=account)).json["outbox_id"]
+    world.smtp.drop_after_data()
+    out(app)
+    assert listed(app, oid)["unsure"]
+    return oid
+
+
+def test_a_copy_in_gmails_sent_says_it_went_and_it_isnt_sent_again(app, world):
+    from mailmind.bootstrap.compose import outbox
+    oid = unanswered(app, world, w.CY)
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True, "gone": True}
+    outbox.drain()
+    item = listed(app, oid)
+    assert (item["state"], item["error"], item["unsure"]) == ("sent", None, False)
+    assert len(world.smtp.messages) == 1
+
+
+def test_no_copy_in_gmails_sent_sends_it_again_as_they_were_told(app, world, monkeypatch):
+    from mailmind.bootstrap.compose import outbox
+    oid = unanswered(app, world, w.CY)
+    monkeypatch.setattr(outbox._copies, "in_sent", lambda acct, message_id: False)
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
+    outbox.drain()
+    assert (listed(app, oid)["state"], len(world.smtp.messages)) == ("sent", 2)
+
+
+def test_a_look_in_sent_that_fails_sends_it_again_as_they_were_told(app, world):
+    from mailmind.bootstrap.compose import outbox
+    oid = unanswered(app, world, w.CY)
+    world.server.drop("EXAMINE", user=w.CY)
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
+    outbox.drain()
+    assert len(world.smtp.messages) == 2
+
+
+def test_a_busy_gate_doesnt_keep_the_click_waiting(app, world, monkeypatch):
+    from mailmind.bootstrap.compose import outbox
+    oid = unanswered(app, world, w.CY)
+    monkeypatch.setattr(outbox, "LOOK_IN_SENT_WAIT", 0.01)
+    with held_elsewhere(w.CY):
+        assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
+
+
+def test_only_a_server_that_files_sent_mail_itself_is_asked(app, world, monkeypatch):
+    from mailmind.bootstrap.compose import outbox
+    oid = unanswered(app, world, w.ADA)
+
+    def asked(*a):
+        raise AssertionError("MailMind files Ada's Sent copies, so none can be there")
+    monkeypatch.setattr(outbox._copies, "in_sent", asked)
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
+
+
+def test_a_retry_of_a_send_that_was_refused_doesnt_look_either(app, world, monkeypatch):
+    from mailmind.bootstrap.compose import outbox
+    oid = app.post("/api/send", new(account=w.CY)).json["outbox_id"]
+    world.smtp.fail("MAIL", "550 5.7.1 not from here")
+    out(app)
+
+    def asked(*a):
+        raise AssertionError("a refused send never reached the far side")
+    monkeypatch.setattr(outbox._copies, "in_sent", asked)
+    assert app.post("/api/outbox/retry", {"id": oid}).json == {"ok": True}
