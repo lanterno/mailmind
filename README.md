@@ -605,6 +605,7 @@ python3 -m mailmind expire all --dry       # preview what the expiry rules would
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |
+| `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
@@ -633,6 +634,8 @@ In the repo folder, or in the directory `MAILMIND_HOME` names:
   force, and the next save keeps the broken copy in `backups/`.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.
 - `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
+- `mailmind.log` (and `.1` to `.3`, older) — what the app said of its own running, one JSON object a
+  line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject.
 - `mailmind.config.json` — your accounts + credentials.
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of

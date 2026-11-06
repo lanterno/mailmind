@@ -179,7 +179,7 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
-  `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
+  `mailmind_rules.json`, `mailmind_views.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
   The repo is public — treat any real address, employer or message count as a leak.
 
@@ -265,6 +265,20 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`mailbox.syncing.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
+- `mailmind.platform.logging` is the log, on the standard library's `logging`. A module takes
+  `from mailmind.platform.logging import get_logger`, never `from mailmind.platform import logging`, so that
+  name stays the standard library's, then `log = get_logger("jobs")` and
+  `log.warning("%(job)s failed", {"job": name}, exc_info=e)`. A message is a literal, and a test holds the
+  package to it. `Redact` withholds what it can't vouch for: a value shows only under a name on `ALLOWED`,
+  anything that looks like an address is withheld even there, and of an exception only the class shows. A new
+  field joins `ALLOWED` only if its value can never be a person's. A line goes to stdout for someone at a
+  terminal (`[jobs] sync failed: ConnectionResetError`), from the moment the module loads, the command line
+  included. Once `wiring.start` has called `setup()`, it also goes as a JSON object to `mailmind.log` in the data
+  directory, rotated and readable by its owner only, with `request_id` (`H.handle_one_request`) and `job_id`
+  (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
+  the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
+  lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
+  doesn't count as someone here. The contexts still `print` for now. It is standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
   of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
   change has committed; one that raises is logged by class name and the rest still hear. Nothing
@@ -728,7 +742,9 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 
 Every request passes `mailmind.platform.perimeter` before any route, through either door:
 `H.do_GET` and `H.do_POST` call it, and so does the new door's `Perimeter` middleware.
-It is standard library only.
+It is standard library only. Callers ask the package by these names (`perimeter.refuse_host`); inside it
+`host`, `origin`, `fetch_metadata`, `csrf` and `limits` hold the checks, `headers` and `csp` what an answer
+carries, and `errors` the `Refusal`.
 
 - `refuse_host` — the Host must be this server's (127.0.0.1 or localhost on its port), and an
   Origin, when sent, its own. Blocks DNS rebinding. Every request, `/` included.
@@ -750,7 +766,7 @@ an answer didn't set itself, and so does the middleware. The page also carries
 `Content-Security-Policy-Report-Only` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
 only, framed by no one. The browser tests fail on any violation.
 
-A failed GET or POST answers a fixed message and logs the detail. Every TLS connection, IMAP
+A failed GET or POST answers a fixed message and logs its path and the error's class. Every TLS connection, IMAP
 and SMTP alike, STARTTLS or implicit, takes `accounts.tls_context(host)`: verified everywhere but
 loopback, where Proton Bridge's certificate is self-signed. There `accounts.check_pin` stands in,
 after the handshake and before LOGIN or AUTH: the first certificate an account meets at a loopback
