@@ -42,7 +42,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    summarize.py                summarize + score importance 1–5 with Claude
         │
-   server.py  +  dashboard.html        the app on http://127.0.0.1:8721, served by
+   server.py  +  web/ (the page)        the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
 ```
 
@@ -410,6 +410,8 @@ automatically.
   backs it up beside it (the newest three kept, readable only by you), and each step of the change
   lands whole or not at all. `python3 -m mailmind db check-upgrade` tries the next upgrade on a copy
   first and reports only row counts and integrity checks, never a message.
+- **The page asks no other host for anything.** Its fonts are served from the app, so opening your mail tells
+  no font service you did.
 - **Only your own MailMind page can talk to the local server.** It answers just its
   own host name, refuses requests other websites start and any change that lacks the page's
   token and origin, can't be framed by another page, and checks every folder name and search

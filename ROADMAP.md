@@ -36,7 +36,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `views.py` and `rules.py` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
   this is a snippets store plus a keyup expander and `{{placeholder}}` tab-through in `#cmpBody`.
 - **Smart-paste link cleaning** · low value · effort S — No `paste` listener exists in
-  dashboard.html and no tracking-parameter stripper exists in any module. A pure-client handler
+  the page and no tracking-parameter stripper exists in any module. A pure-client handler
   that drops `utm_*`/`fbclid` and unwraps redirect wrappers before insertion. Independent of the
   markdown work.
 - **Configurable Undo-Send delay** · low value · effort S — The feature ships; only "configurable"
@@ -171,14 +171,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `state.foldersByAcct` and renders the rail instantly from cache, so the rail no longer blanks on
   account switch. There is no equivalent for messages — `loadCMessages()` always refetches
   `/api/messages`, so the row area still goes empty every time.
-- **Self-host the fonts, add gzip and ETag** · high value · effort M — dashboard.html still
-  preconnects to fonts.googleapis.com and blocks on a remote stylesheet for Nunito Sans,
-  Shippori Mincho and Klee One — the only remote dependency in an app whose README sells local-first and
-  privacy-first, so this is a stated-values violation, not just latency. Self-hosting them also
-  takes Google Fonts out of `perimeter.page_policy`. Server side there is no `Content-Encoding` or
-  `ETag` anywhere (the only zlib use is `crc32` for a cache fingerprint; the API's answers carry
-  `Cache-Control: no-store`, the event stream `no-cache`, and the page none); gzip is ~15 lines
-  in the response path and worth real time on a 340KB HTML file plus the large JSON digests.
 - **Pool the reconcile read** · low value · effort S — Half done: `reconcile_account` now connects
   with `timeout=15`, capping the exposure, but it still opens its own connection while holding
   the IMAP gate instead of using `pool.borrow` the way the three read call sites do.

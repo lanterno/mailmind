@@ -58,7 +58,7 @@ comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire
 `test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
 `test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
 renaming. `test_send_guard.py` slices the block between `/* send-guard:pure:start */` and
-`/* send-guard:pure:end */` out of `dashboard.html` and runs it in node, so that block must
+`/* send-guard:pure:end */` out of `web/assets/legacy/app.js` and runs it in node, so that block must
 stay free of DOM and `state` references. `test_draft_resume_ui.py` does the same with the
 `/* draft-resume:pure:start */` … `/* draft-resume:pure:end */` block.
 
@@ -104,7 +104,7 @@ fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows
 changes, outages, refusals, crashes, syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
-`tests/browser/` drives `dashboard.html` in Chromium (Playwright) on the `app` fixture:
+`tests/browser/` drives the page in Chromium (Playwright) on the `app` fixture:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
@@ -128,8 +128,8 @@ the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked
 then `lint-imports` (import-linter) on the `mailmind` package's layers. New pytest-native tests go in `tests/`;
 pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
 
-`just check-frontend` parses every inline `<script>` with `node --check`, checks CSS
-brace balance, and rejects raw control bytes in `dashboard.html` (see Conventions).
+`just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
+brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
 
 ## Constraints
 
@@ -141,9 +141,15 @@ brace balance, and rejects raw control bytes in `dashboard.html` (see Convention
   commit, and the `uv.lock` change goes in the next. But `python3 server.py`, the old front door,
   is the kill switch while the new one carries daily use, so nothing it imports may import a
   third-party package; `tests/test_front_door.py` checks that.
-- **The frontend is one file.** `dashboard.html` (~340KB) holds all HTML, CSS and JS
-  inline. No bundler, no modules, no npm. Edit it directly. This holds until the refactor's
-  frontend track moves it to React 19 and Vite.
+- **The page runs as it stands.** `web/index.html` is the markup, `web/assets/styles/` the CSS (`fonts.css` the
+  self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from system fonts), and `web/assets/legacy/` the
+  scripts: `theme.js`, then `app.js`, ~320KB of classic script. There are no modules, and no build is needed:
+  `mailmind.platform.webroot` serves this source to either door with gzip and an ETag, so the old door still needs
+  nothing installed. `just build-web` (Vite, Node) writes the same files, named by their content, to
+  `mailmind/http/dist` (gitignored), served for good while it is as new as every source file, so an edit never leaves
+  the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
+  `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), and a tab that loaded another build
+  offers a reload (`onHello`). React and TypeScript come with the frontend track's next slices.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
@@ -156,7 +162,7 @@ Pipeline, roughly in data-flow order:
 ```
 mailmind.config.json → config.py/accounts.py → ingest.py → mailclass.py → store.py (SQLite)
                                                                 ↓
-                                              summarize.py (Claude API / CLI) → server.py + dashboard.html
+                                              summarize.py (Claude API) → server.py + web/
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
@@ -243,8 +249,8 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   numbers each event `<run>-<n>` and keeps the last 512. A tab resumes after the `Last-Event-ID`
   its EventSource sends; one the hub can't resume (an earlier run, or further back than it keeps)
   gets one `resync`. `sse.TOPICS` lists every topic and `publish` refuses any other;
-  `tests/test_sse.py` checks that `connectEvents` in `dashboard.html` listens for each, and for
-  `resync`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
+  `tests/test_sse.py` checks that `connectEvents` in `app.js` listens for each, and for
+  `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
   run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
@@ -629,8 +635,7 @@ Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
 Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
 an answer didn't set itself, and so does the middleware. The page also carries
-`Content-Security-Policy-Report-Only` from `perimeter.page_policy`: its own inline scripts by
-sha256 and nothing else, styles and fonts from Google Fonts too, connections to this server
+`Content-Security-Policy-Report-Only` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
 only, framed by no one. The browser tests fail on any violation.
 
 A failed GET or POST answers a fixed message and logs the detail. Every TLS connection, IMAP
@@ -654,7 +659,7 @@ Any other quoted value (a Message-ID, an expiry token) goes through `accounts.im
 refuses CR, LF and NUL with `BadValue`, an `IMAP4.error` too: a sender can fold the Message-ID
 header so the ID stored holds a line break.
 
-`CSRF` is a per-process token. `dashboard.html` ships a `__CSRF_TOKEN__` placeholder in a
+`CSRF` is a per-process token. `web/index.html` ships a `__CSRF_TOKEN__` placeholder in a
 `<meta>` tag that `server.py` substitutes at serve time; the frontend's `api()` helper
 attaches it to every request, GETs included.
 
@@ -811,11 +816,10 @@ so a second try after a cleanup's sweep still knows the way.
 
 - **Don't create `*.bak-*` snapshot files.** The repo used to carry 38 of them; they are
   now gitignored. Use a git branch.
-- **No inline event handlers in `dashboard.html`.** The page's content security policy lets its
-  `<script>` blocks run by hash and nothing else, so an `onclick=` or the like is a violation:
-  attach a listener instead (delegated, like `#doPanel`'s). Keep each script a plain `<script>`
-  with no attributes, or `perimeter.page_policy` won't find it to hash.
-- **Keep `dashboard.html` free of raw control bytes.** A single literal NUL byte once
+- **No inline scripts or event handlers in the page.** Its content security policy lets script files from this
+  server run and nothing else, so an `onclick=` or a `<script>` block is a violation: attach a listener instead
+  (delegated, like `#doPanel`'s).
+- **Keep the page's files free of raw control bytes.** A single literal NUL byte once
   made `grep` and `ripgrep` treat the file as binary and silently return nothing past it,
   hiding half the frontend from every search tool. Use escape sequences in string
   literals.
