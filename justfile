@@ -32,7 +32,7 @@ run-old port="":
 test *args:
     uv run pytest {{args}}
 
-# Every suite plus the browser tests, which drive dashboard.html in Chromium (Playwright).
+# Every suite plus the browser tests, which drive the page in Chromium (Playwright).
 # The first run downloads Playwright's Chromium; later runs find it cached.
 test-full *args:
     uv run playwright install chromium
@@ -106,27 +106,27 @@ lint:
 compile:
     {{py}} -m py_compile *.py && {{py}} -m compileall -q mailmind && echo "compile ok"
 
-# Syntax-check the inline JS in dashboard.html (needs node) and reject raw control bytes
+# Syntax-check the page's scripts (needs node), balance its CSS, and reject an inline script or raw control bytes
 check-frontend:
     #!/usr/bin/env python3
-    import re, subprocess, tempfile, os, sys
-    raw = open("dashboard.html", "rb").read()
-    bad = [i for i, b in enumerate(raw) if b < 0x09 or b in (0x0b, 0x0c) or 0x0e <= b < 0x20]
-    if bad:
-        sys.exit(f"raw control byte(s) at offset(s) {bad[:5]} — they make grep treat the file as binary")
-    s = raw.decode("utf-8")
-    blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', s, re.S)
-    for i, b in enumerate(blocks):
-        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
-            f.write(b); p = f.name
-        r = subprocess.run(["node", "--check", p], capture_output=True, text=True)
-        os.unlink(p)
+    import glob, re, subprocess, sys
+    html, scripts, styles = "web/index.html", glob.glob("web/assets/legacy/*.js"), glob.glob("web/assets/styles/*.css")
+    for path in (html, *scripts, *styles):
+        raw = open(path, "rb").read()
+        bad = [i for i, b in enumerate(raw) if b < 0x09 or b in (0x0b, 0x0c) or 0x0e <= b < 0x20]
+        if bad:
+            sys.exit(f"raw control byte(s) in {path} at offset(s) {bad[:5]}: they make grep treat the file as binary")
+    if re.search(r"<script(?![^>]*\bsrc=)", open(html, encoding="utf-8").read()):
+        sys.exit(f"an inline script in {html}: the page's content security policy runs script files only")
+    for path in scripts:
+        r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
         if r.returncode:
-            sys.exit(f"JS syntax error in script block {i}:\n{r.stderr}")
-    for i, blk in enumerate(re.findall(r'<style[^>]*>(.*?)</style>', s, re.S)):
-        if blk.count("{") != blk.count("}"):
-            sys.exit(f"unbalanced CSS braces in style block {i}")
-    print(f"frontend ok — {len(blocks)} script blocks parse, CSS balanced, no control bytes")
+            sys.exit(f"JS syntax error in {path}:\n{r.stderr}")
+    for path in styles:
+        css = open(path, encoding="utf-8").read()
+        if css.count("{") != css.count("}"):
+            sys.exit(f"unbalanced CSS braces in {path}")
+    print(f"frontend ok: {len(scripts)} scripts parse, {len(styles)} stylesheets balanced, no inline script, no control bytes")
 
 # Everything a change should pass before committing
 verify: lint compile test check-frontend
