@@ -5,7 +5,7 @@ window, draft-ahead's fingerprint and presence rules, the folder rail's cache, c
 unsubscribe lookup, and the background loops that yield or stay off.
 
 Behaviour already pinned elsewhere
-(tests/characterization/test_http_*.py and their goldens, script_draft_resume.py, script_hardening.py...) isn't
+(tests/characterization/test_http_*.py and their goldens, test_draft_resume.py, test_hardening.py...) isn't
 repeated here.
 """
 import email

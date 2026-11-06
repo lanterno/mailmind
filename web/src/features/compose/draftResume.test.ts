@@ -1,4 +1,4 @@
-// The twin of script_draft_resume_ui.py, on the same cases and the exact copy.
+// The twin of tests/unit/compose/test_draft_resume_ui.py, on the same cases and the exact copy.
 import { describe, expect, it } from "vitest";
 import { resumeFields, resumeHidesAi, resumeNotice, resumeOpts, resumeSig } from "./draftResume";
 
