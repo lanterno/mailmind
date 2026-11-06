@@ -11,16 +11,7 @@ from mailmind.platform.workers import gates
 from mailmind.compose.api import build_message, reference_chain
 from mailmind.bootstrap import accounts
 
-__all__ = ["agenda", "attach", "ics", "invites", "rsvp"]
-
-_server = None
-
-
-def attach(server):
-    """Name the running server module, the one that says a connection's trouble without its details."""
-    global _server
-    _server = server
-
+__all__ = ["agenda", "ics", "invites", "rsvp"]
 
 class _Folders:
     def role_by_name(self, folder):

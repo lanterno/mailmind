@@ -1,8 +1,5 @@
 """Discovery's wiring: the one place that binds its ports, to its own adapters and, until those contexts move, to the
 legacy modules behind them. The legacy modules and the command line reach Discovery through here.
-
-A folder's role goes through the server module, which `attach` is handed rather than importing: `python3 server.py`
-runs as __main__, and an import here would load a second copy with state of its own.
 """
 from mailmind.discovery.adapters import fts, views_file
 from mailmind.discovery.adapters.fts import BM25, forget_message, index_message, to_sql, visible
@@ -15,17 +12,8 @@ from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
 from mailmind.bootstrap import mailbox
 
-__all__ = ["BM25", "attach", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "views",
+__all__ = ["BM25", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "views",
            "visible"]
-
-_server = None
-
-
-def attach(server):
-    """Name the running server module, the one that remembers each account's last LIST."""
-    global _server
-    _server = server
-
 
 def build(q):
     """A query as a safe (FTS MATCH, SQL WHERE, params) triple."""

@@ -14,16 +14,7 @@ from mailmind.mailbox.domain import roles
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import accounts
 
-__all__ = ["attach", "book", "composing", "drafts", "outbox", "sending", "transport"]
-
-_server = None
-
-
-def attach(server):
-    """Name the running server module, which still holds the folder list and what the page is told."""
-    global _server
-    _server = server
-
+__all__ = ["book", "composing", "drafts", "outbox", "sending", "transport"]
 
 class _Credentials:
     """An account's TLS and its secret, until Accounts holds them."""
@@ -157,8 +148,7 @@ class _Screen:
         mailbox.folders.list_changed(account, folder)
 
     def stats_changed(self):
-        if _server:
-            mailbox.stats.invalidate()
+        mailbox.stats.invalidate()
 
 
 transport = SmtpTransport(_Credentials())

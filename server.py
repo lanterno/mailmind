@@ -46,10 +46,6 @@ from mailmind.platform.workers.singleflight import SingleFlight
 from mailmind.bootstrap.assistant import answers
 
 curation.attach(sys.modules[__name__])
-discovery.attach(sys.modules[__name__])
-calendar.attach(sys.modules[__name__])
-attention.attach(sys.modules[__name__])
-compose.attach(sys.modules[__name__])
 mailbox.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)

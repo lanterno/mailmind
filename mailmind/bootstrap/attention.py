@@ -1,8 +1,5 @@
 """Attention's wiring: the one place that binds its ports, to its own adapter and, until those contexts move, to the
 legacy modules behind them. The legacy modules reach Attention through here.
-
-What a change makes stale, and undo, go through the server module, which `attach` is handed rather than importing:
-`python3 server.py` runs as __main__, and an import here would load a second copy with state of its own.
 """
 from mailmind.attention.adapters import sqlite as book
 from mailmind.attention.application.followups import Clocked, FollowUps
@@ -11,16 +8,7 @@ from mailmind.attention.application.snoozing import Snoozing
 from mailmind.attention.application.threads import Threads
 from mailmind.bootstrap import mailbox
 
-__all__ = ["attach", "book", "clocked", "followups", "muting", "snoozing"]
-
-_server = None
-
-
-def attach(server):
-    """Name the running server module."""
-    global _server
-    _server = server
-
+__all__ = ["book", "clocked", "followups", "muting", "snoozing"]
 
 class _Messages:
     def get(self, c, pk):
@@ -58,8 +46,7 @@ class _Undo:
 class _Screen:
     """With no server running, nothing is on a screen and no queue's worker is waiting."""
     def stats_changed(self):
-        if _server:
-            mailbox.stats.invalidate()
+        mailbox.stats.invalidate()
 
     def flags_queued(self):
         mailbox.filing.flags_queued()
