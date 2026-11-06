@@ -128,6 +128,10 @@ check-frontend:
             sys.exit(f"unbalanced CSS braces in {path}")
     print(f"frontend ok: {len(scripts)} scripts parse, {len(styles)} stylesheets balanced, no inline script, no control bytes")
 
+# Build the page's files, named by their content, into mailmind/http/dist (needs node). The app runs without this.
+build-web:
+    cd web && npm ci --no-audit --no-fund && npx vite build
+
 # Everything a change should pass before committing
 verify: lint compile test check-frontend
 
