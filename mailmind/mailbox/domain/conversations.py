@@ -1,6 +1,6 @@
 """Conservative, account-scoped conversation threading for MailMind (stdlib only).
 
-recompute_threads(c, account) assigns messages.thread_id, in precedence order:
+assign gives each message of an account its thread id, in precedence order:
   1) Gmail X-GM-THRID  — same account + same thrid = one thread (most reliable),
   2) a union-find over the Message-ID / In-Reply-To / References graph (JWZ-lite),
   3) the message's own id (singleton).
@@ -15,8 +15,8 @@ thread that gained a Gmail thread id), the state kept under the id no row holds 
 to the id its rows hold now, in the same transaction: mutes, follow-ups and Reply Later, thread
 summaries and the reply drafted ahead.
 """
-import re
 import hashlib
+import re
 
 _ID = re.compile(r"<[^<>\s]+>")
 _WELL = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
@@ -47,12 +47,10 @@ class _UF:
         self.p[rb] = ra
 
 
-def recompute_threads(c, account):
-    rows = c.execute(
-        "SELECT pk, message_id, gmail_thread, in_reply_to, refs, thread_id "
-        "FROM messages WHERE account=?", (account,)).fetchall()
-    if not rows:
-        return
+def assign(rows, account):
+    """`rows`: the account's messages, each with pk, message_id, gmail_thread, in_reply_to, refs and the
+    thread_id it holds. Returns ({pk: its thread id now}, {an id no row holds now: the id its rows took}):
+    one a split left on some rows still has them, and isn't in the second."""
     uf = _UF()
     self_key = {}
     # Tier 2 — union each row's self-id with its In-Reply-To / References parents.
@@ -98,35 +96,9 @@ def recompute_threads(c, account):
             tid = f"rf:{account}:{h}"
         given[r["pk"]] = tid
         held.add(tid)
-        c.execute("UPDATE messages SET thread_id=? WHERE pk=? AND (thread_id IS NULL OR thread_id<>?)",
-                  (tid, r["pk"], tid))
-    # An id no row holds any more hands its state to the id its rows took. One a split left on some
-    # rows still has them, and keeps its state.
     moved = {}
     for r in rows:
         old = r["thread_id"] or ""
         if old and old not in held:
             moved.setdefault(old, given[r["pk"]])
-    for old, surv in moved.items():
-        _rekey(c, account, old, surv)
-
-
-def _rekey(c, account, old, surv):
-    """Move the state kept under thread `old` to `surv`. Where `surv` has a row of its own already,
-    that row stays and `old`'s goes (UPDATE OR IGNORE, then DELETE)."""
-    for tbl in ("muted", "followups", "thread_summaries"):
-        try:
-            c.execute(f"UPDATE OR IGNORE {tbl} SET thread_id=? WHERE account=? AND thread_id=?",
-                      (surv, account, old))
-            c.execute(f"DELETE FROM {tbl} WHERE account=? AND thread_id=?", (account, old))
-        except Exception:
-            pass                              # table may not exist yet on a pre-migration DB
-    try:
-        c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
-                  ("t:" + surv, account, "t:" + old))
-        c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + old))
-        c.execute("UPDATE outbox SET orig_thread_id=? WHERE orig_account=? AND orig_thread_id=?", (surv, account, old))
-    except Exception:
-        pass
-
-
+    return given, moved

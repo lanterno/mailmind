@@ -19,7 +19,6 @@ from mailmind.content.mime import dec
 from mailmind.content.text import body_text_of, text_body
 import pool
 from mailmind.bootstrap.mailbox import store
-import threads
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
@@ -292,7 +291,7 @@ def sync_folder(acct, folder, full=False, recent=None):
         c = store.conn()
         if scan == "synced" and modseq:                # a whole scan has just read every flag
             store.set_modseq(c, acct["email"], folder, modseq)
-        threads.recompute_threads(c, acct["email"])   # regroup conversations for new mail
+        store.recompute_threads(c, acct["email"])   # regroup conversations for new mail
         attention.muting.on_ingest(c, acct["email"])  # keep new members of muted threads silent
         attention.book.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
         c.commit(); c.close()
@@ -327,7 +326,7 @@ def ingest_message(acct, folder, message_id):
             return 0
         _process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False)
         c = store.conn()
-        threads.recompute_threads(c, acct["email"])
+        store.recompute_threads(c, acct["email"])
         attention.muting.on_ingest(c, acct["email"])
         attention.book.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
         c.commit()

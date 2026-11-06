@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
-from mailmind.mailbox.domain import identity
+from mailmind.mailbox.domain import conversations, identity
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
 
@@ -514,3 +514,37 @@ def stats(c):
             """SELECT COUNT(*) FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
                WHERE m.is_junk=0 AND s.message_pk IS NULL""").fetchone()[0],
     }
+
+
+def recompute_threads(c, account):
+    """Give each of the account's messages its thread id, and move what was kept under an id no row holds
+    any more (see mailmind.mailbox.domain.conversations)."""
+    rows = c.execute(
+        "SELECT pk, message_id, gmail_thread, in_reply_to, refs, thread_id "
+        "FROM messages WHERE account=?", (account,)).fetchall()
+    if not rows:
+        return
+    given, moved = conversations.assign(rows, account)
+    for pk, tid in given.items():
+        c.execute("UPDATE messages SET thread_id=? WHERE pk=? AND (thread_id IS NULL OR thread_id<>?)", (tid, pk, tid))
+    for old, surv in moved.items():
+        _rekey(c, account, old, surv)
+
+
+def _rekey(c, account, old, surv):
+    """Move the state kept under thread `old` to `surv`. Where `surv` has a row of its own already,
+    that row stays and `old`'s goes (UPDATE OR IGNORE, then DELETE)."""
+    for tbl in ("muted", "followups", "thread_summaries"):
+        try:
+            c.execute(f"UPDATE OR IGNORE {tbl} SET thread_id=? WHERE account=? AND thread_id=?",
+                      (surv, account, old))
+            c.execute(f"DELETE FROM {tbl} WHERE account=? AND thread_id=?", (account, old))
+        except Exception:
+            pass                              # table may not exist yet on a pre-migration DB
+    try:
+        c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
+                  ("t:" + surv, account, "t:" + old))
+        c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + old))
+        c.execute("UPDATE outbox SET orig_thread_id=? WHERE orig_account=? AND orig_thread_id=?", (surv, account, old))
+    except Exception:
+        pass
