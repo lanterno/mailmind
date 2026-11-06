@@ -1,4 +1,4 @@
-"""Reopening a saved draft in the composer (app.js, the block between
+"""Reopening a saved draft in the composer (web/src/compose/draftResume.ts, as pure.js has it: the block between
 /* draft-resume:pure:start */ and /* draft-resume:pure:end */): the composer options built from
 /api/draft/resume's answer, the `resume` fields every save and send carries, when AI Draft is
 hidden, the signature a reopened text still ends with, and the wording of the notes. The block
@@ -53,7 +53,7 @@ def _run():
     global _RESULTS
     if _RESULTS is not None:
         return _RESULTS
-    with open(os.path.join(HERE, "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
+    with open(os.path.join(HERE, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
         html = f.read()
     assert START in html and END in html, "the draft-resume:pure markers are missing"
     a, b = html.index(START), html.index(END)

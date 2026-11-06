@@ -1,4 +1,4 @@
-"""The composer's send-time checks (app.js, the block between /* send-guard:pure:start */
+"""The composer's send-time checks (web/src/compose/sendGuard.ts, as pure.js has it: the block between /* send-guard:pure:start */
 and /* send-guard:pure:end */): attachment wording in eight languages, what counts as typed text,
 empty subjects, reply-all size, speed on long unbroken text, acknowledgements, and the exact wording of every line. The block
 is pure JavaScript with no DOM, so this runs it once in node, like `just check-frontend` does.
@@ -13,6 +13,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 START, END = "/* send-guard:pure:start */", "/* send-guard:pure:end */"
+with open(os.path.join(HERE, "tests", "fixtures", "send_guard_words.json"), encoding="utf-8") as _f:
+    _WORDS = json.load(_f)
 
 # A default snapshot: a new message to one person, nothing waved through yet.
 HARNESS = r"""
@@ -28,36 +30,12 @@ process.stdout.write(JSON.stringify(R));
 """
 
 # Strong wording presents a file of your own, so it warns in every mode.
-STRONG = ["Please see attached.", "Enclosed is the form.", "I'm enclosing the invoice.", "Ci-joint le devis.",
-          "Voici le devis en pièce jointe.", "le devis en piece jointe", "Je vous joins le devis.",
-          "Veuillez trouver la pièce jointe.", "PJ : devis", "Vous trouverez en PJ le devis.", "Voir PJ.",
-          "Te mando adjunto el informe.", "Te adjunto el informe.", "Adjunto el informe.",
-          "Hola Ana, adjunto la factura.", "Va el archivo adjunto.", "Te envío anexa la factura.",
-          "Segue em anexo o relatório.", "Segue anexa a planilha.", "Seguem anexos os documentos.",
-          "Anbei die Rechnung.", "Die Datei ist im Anhang.", "Das Formular ist beigefügt.", "Ich habe es angehängt.",
-          "Beiliegend erhalten Sie die Rechnung.", "Anliegend sende ich Ihnen den Vertrag.",
-          "In der Anlage finden Sie das Angebot.", "Als Anlage sende ich den Vertrag.",
-          "Trovi il file in allegato.", "Trovi il file allegato.", "Ecco la fattura allegata.", "Allego il contratto.",
-          "Zie het bestand in de bijlage.", "Het rapport is bijgevoegd.", "Bijgaand de offerte.",
-          "مرفق التقرير", "تجد التقرير بالمرفق", "وبالمرفق التقرير", "في المرفق التقرير", "الملف المرفق",
-          "ومرفقات الملف", "أرفقت الملف", "نرفقها لكم", "تم إرفاق الملف"]
+STRONG = _WORDS["strong"]
 # Weak wording names a file without presenting it: in a reply it's usually the other person's.
-WEAK = ["The attachment is big.", "Attachments below.", "My CV, as promised.", "See report.pdf for numbers.",
-        "See Q3-report_v2.pdf", "Voici la facture jointe.", "Voir la PJ.", "Les pièces jointes sont lourdes.",
-        "Reenvío el adjunto.", "Mando el anexo.", "Anhang folgt.", "In der Anlage ist ein Fehler.",
-        "Vedi l'allegato.", "Bijlage volgt.", "المرفقات كبيرة"]
-NEVER = ["We joined forces.", "A joint venture.", "The attaché said hello.", "My resume is online.",
-         "cv and pj in lower case", "Unattached luggage.", "اكتب برفق", "مرافق الفندق",
-         "Bug tracker: https://x.example.test/attachment.cgi?id=4", "(see https://x.example.test/attached)",
-         "Write to attachments@example.test.", "Thanks PJ, see you Monday.", "O contrato PJ está pronto?",
-         "Hablé con la directora adjunta.", "Falei com o diretor adjunto.",
-         "Hablé con el director adjunto la semana pasada.", "Gold als Anlage ist sicher.",
-         "Das Kleid ist eng anliegend."]
+WEAK = _WORDS["weak"]
+NEVER = _WORDS["never"]
 # Replies about the file they sent: weak at most, so a reply never warns.
-REPLY_NEVER = ["Thanks, I can't open the attachment.", "Merci pour la pièce jointe, c'est parfait.",
-               "Merci pour la PJ.", "La PJ a ouvert une enquête.", "Je l'ai jointe ce matin au téléphone.",
-               "No puedo abrir el adjunto.", "Non riesco ad aprire l'allegato.", "Grazie, ho ricevuto gli allegati.",
-               "Grazie per i tuoi allegati.", "شكرا على المرفقات"]
+REPLY_NEVER = _WORDS["reply_never"]
 # Long runs with no spaces: a pasted base64 blob, minified JSON, a line of dashes. They run in a
 # node process of their own, which stops at the first that takes SLOW_MS or more.
 SLOW_MS = 1000     # about 120 ms on a quiet machine, 320 ms seen on a busy one, and it was 2-5 s when it was wrong
@@ -153,7 +131,7 @@ def _run(group="main"):
         return _RESULTS[group]
     make, stop = _GROUPS[group]
     try:
-        with open(os.path.join(HERE, "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "web", "assets", "legacy", "pure.js"), encoding="utf-8") as f:
             html = f.read()
         a, b = html.index(START), html.index(END)
         block = html[a + len(START):b]
