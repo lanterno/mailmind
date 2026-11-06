@@ -201,10 +201,10 @@ def app(request, world, monkeypatch):
     import dataclasses
     import time_machine
     import app_client
-    from mailmind.bootstrap import legacy
+    from mailmind.bootstrap import wiring
     app_client.reset_state()
     monkeypatch.setattr(web.H, "CSRF", app_client.CSRF)
-    legacy.wire()                 # as server.__main__ does, without starting the workers' threads
+    wiring.wire()                 # as server.__main__ does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
         from mailmind.bootstrap import assistant

@@ -48,11 +48,11 @@ def test_it_reads_the_process_environment_at_every_call(monkeypatch):
 
 def test_a_front_door_refuses_to_start_on_a_name_that_is_no_profile(tmp_path, monkeypatch):
     """Before it creates or migrates anything, or starts a worker."""
-    from mailmind.bootstrap import legacy
+    from mailmind.bootstrap import wiring
     from mailmind.platform import settings
     monkeypatch.setenv("MAILMIND_PROFILE", "readonly")
     spawned = []
     with settings.use(settings.Settings(home=str(tmp_path))), pytest.raises(ProfileError):
-        legacy.start(spawn=spawned.append)
+        wiring.start(spawn=spawned.append)
     assert spawned == []
     assert list(tmp_path.iterdir()) == []

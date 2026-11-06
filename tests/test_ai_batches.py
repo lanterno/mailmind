@@ -10,7 +10,7 @@ from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import assistant
 from mailmind.bootstrap import background
-from mailmind.bootstrap import legacy
+from mailmind.bootstrap import wiring
 
 TRANSPORTS = ["sdk", "urllib"]
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
@@ -509,7 +509,7 @@ def test_finished_batches_are_forgotten_after_a_month(backlog, ai):
 def test_the_command_sends_any_size_and_says_so(backlog, ai, capsys, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.triage, "BATCH_MIN", 100000)
-    assert legacy.assess_batch() == 0
+    assert wiring.assess_batch() == 0
     assert len(posts(ai)) == 1
     assert "are out in a batch" in capsys.readouterr().out
 
@@ -518,7 +518,7 @@ def test_the_command_brings_in_a_batch_that_ended(backlog, ai, capsys):
     from mailmind.bootstrap import assistant
     assert assistant.triage.batch_submit() > 0
     ai.end_batch()
-    assert legacy.assess_batch() == 0
+    assert wiring.assess_batch() == 0
     assert "brought" in capsys.readouterr().out
     assert ai.deleted
 
@@ -530,19 +530,19 @@ def test_the_command_says_when_nothing_is_waiting(backlog, ai, capsys):
         answers.save_summary(c, r["pk"], "s", 2, "info", "", "m", "2026-11-02T12:00:00+00:00")
     c.commit()
     c.close()
-    assert legacy.assess_batch() == 0
+    assert wiring.assess_batch() == 0
     assert "Nothing was sent" in capsys.readouterr().out and not posts(ai)
 
 
 def test_the_command_with_ai_off_sends_nothing(world, anthropic_api, capsys):
-    assert legacy.assess_batch() == 1
+    assert wiring.assess_batch() == 1
     assert "AI is off" in capsys.readouterr().out and anthropic_api.requests == []
 
 
 def test_the_command_in_the_read_only_profile_sends_nothing(backlog, ai, capsys, monkeypatch):
     from mailmind.platform import profile
     monkeypatch.setattr(profile, "writes_allowed", lambda: False)
-    assert legacy.assess_batch() == 1
+    assert wiring.assess_batch() == 1
     assert "read-only" in capsys.readouterr().out and not ai.requests
 
 

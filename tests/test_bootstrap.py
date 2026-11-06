@@ -1,4 +1,4 @@
-"""mailmind.bootstrap.legacy: what `python3 server.py` and the app fixture connect before anything
+"""mailmind.bootstrap.wiring: what `python3 server.py` and the app fixture connect before anything
 runs, what a front door starts, and the background jobs each profile schedules."""
 import threading
 import time
@@ -11,7 +11,7 @@ from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import background
-from mailmind.bootstrap import legacy
+from mailmind.bootstrap import wiring
 
 
 @pytest.fixture
@@ -19,10 +19,10 @@ def unwired(monkeypatch):
     """No wiring on the bus, and the server's jobs as they were, after the test."""
     monkeypatch.setattr(background, "JOBS", background.JOBS)
     yield
-    legacy.unwire()
+    wiring.unwire()
 
 
-def wiring():
+def subscribers():
     from mailmind.platform.bus import BUS
     return [BUS.subscribers(topic) for topic in (Sent, Applied, InboxChanged)]
 
@@ -30,12 +30,12 @@ def wiring():
 def test_the_server_hears_what_the_workers_publish(unwired):
     """That they hold the IMAP lock for their mail commands, test_hwf_http checks at the fake
     server."""
-    legacy.wire()
-    assert wiring() == [(legacy._after_send,), (mailbox.filing.settled,), (legacy._after_idle,)]
-    legacy.wire()                                       # wiring again replaces, never doubles
-    assert wiring() == [(legacy._after_send,), (mailbox.filing.settled,), (legacy._after_idle,)]
-    legacy.unwire()
-    assert wiring() == [(), (), ()]
+    wiring.wire()
+    assert subscribers() == [(wiring._after_send,), (mailbox.filing.settled,), (wiring._after_idle,)]
+    wiring.wire()                                       # wiring again replaces, never doubles
+    assert subscribers() == [(wiring._after_send,), (mailbox.filing.settled,), (wiring._after_idle,)]
+    wiring.unwire()
+    assert subscribers() == [(), (), ()]
 
 
 def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
@@ -43,10 +43,10 @@ def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
     from mailmind.accounts.domain import events
     from mailmind.platform.bus import BUS
     topics = (events.AccountAdded, events.AccountChanged, events.AccountRemoved)
-    legacy.wire()
-    legacy.wire()
+    wiring.wire()
+    wiring.wire()
     assert [BUS.subscribers(t) for t in topics] == [(realtime.reconcile,)] * 3
-    legacy.unwire()
+    wiring.unwire()
     assert [BUS.subscribers(t) for t in topics] == [()] * 3
 
 
@@ -54,7 +54,7 @@ def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
     from mailmind.platform import bus
     synced = []
     monkeypatch.setattr(mailbox.syncing, "sync_guarded", synced.append)
-    legacy.wire()
+    wiring.wire()
     bus.publish(InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
     assert synced == [{"ada@example.test", "cy@example.test"}]
 
@@ -103,7 +103,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     monkeypatch.setattr(realtime, "start", lambda: spawned.append(realtime.start))
     spawned = []
     with settings.use(settings.Settings(home=str(tmp_path))):
-        legacy.start(spawn=spawned.append)
+        wiring.start(spawn=spawned.append)
         c = store.conn()
         try:
             version = c.execute("PRAGMA user_version").fetchone()[0]
