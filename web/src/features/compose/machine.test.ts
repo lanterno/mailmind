@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createComposing, type Env, type Focus } from "./machine";
+import { createStore } from "../../lib/store";
+import { createComposing, type Answer, type Env, type Focus } from "./machine";
+
+type Json = Answer;   // what a test reads off a request or an answer, field by field
 
 function deferred<T>() {
   let resolve!: (v: T) => void, reject!: (e: unknown) => void;
@@ -11,12 +14,13 @@ const FROM = "ada@example.test";
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
 function setup(over: Partial<Env> = {}) {
-  const calls: { path: string; body: any }[] = [];
+  const calls: { path: string; body: Json }[] = [];
   const toasts: string[] = [], said: string[] = [], focused: Focus[] = [];
   let clock = 0;
-  const answers = new Map<string, ((body: any) => any)[]>();
-  const answer = (path: string, fn: (body: any) => any) => answers.set(path, [...(answers.get(path) ?? []), fn]);
+  const answers = new Map<string, ((body: Json) => Json)[]>();
+  const answer = (path: string, fn: (body: Json) => Json) => answers.set(path, [...(answers.get(path) ?? []), fn]);
   const env: Env = {
+    createStore,
     post: vi.fn(async (path: string, body: unknown) => {
       calls.push({ path, body });
       const q = answers.get(path);
@@ -102,8 +106,8 @@ describe("saving", () => {
 
   it("saves in turn, each naming the copy the last one left", async () => {
     const { m, env, posted } = setup();
-    const first = deferred<any>(), seen: any[] = [];
-    (env.post as any).mockImplementationOnce(async (_path: string, body: unknown) => {
+    const first = deferred<Json>(), seen: Json[] = [];
+    vi.mocked(env.post).mockImplementationOnce(async (_path: string, body: unknown) => {
       seen.push(body);
       return first.promise;
     });
@@ -126,8 +130,8 @@ describe("saving", () => {
 
   it("stays dirty when an edit landed during the save", async () => {
     const { m, env } = setup();
-    const gate = deferred<any>();
-    (env.post as any).mockImplementationOnce(() => gate.promise);
+    const gate = deferred<Json>();
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
     const c = m.open()!;
     m.edit("subject", "one");
     const saved = m.save(true);
@@ -313,8 +317,8 @@ describe("closing and discarding", () => {
 
   it("waits for a save before discarding, so its copy doesn't stay behind", async () => {
     const { m, env, posted } = setup();
-    const gate = deferred<any>();
-    (env.post as any).mockImplementationOnce(() => gate.promise);
+    const gate = deferred<Json>();
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
     m.open();
     m.edit("body", "hello");
     void m.save(true);
@@ -449,8 +453,8 @@ describe("sending", () => {
 
   it("names the copy a save in flight leaves", async () => {
     const { m, env, posted } = setup();
-    const gate = deferred<any>();
-    (env.post as any).mockImplementationOnce(() => gate.promise);
+    const gate = deferred<Json>();
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
     ready(m);
     void m.save(true);
     m.send();
@@ -666,9 +670,9 @@ describe("the AI's words", () => {
   });
 
   it("leaves a composer alone that closed while drafting", async () => {
-    const gate = deferred<any>();
+    const gate = deferred<Json>();
     const { m, env } = setup();
-    (env.post as any).mockImplementationOnce(() => gate.promise);
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
     const first = m.open(seed)!;
     const asked = m.aiDraft();
     m.close(true);
@@ -690,8 +694,8 @@ describe("the AI's words", () => {
 
   it("a quick reply starts as its line, and the AI's only replaces an untouched one", async () => {
     const { m, env } = setup({ get: async () => ({ ok: true, account: FROM, from_addr: "bea@example.test", subject: "x", text: "" }) });
-    const gate = deferred<any>();
-    (env.post as any).mockImplementation(async (path: string) => (path === "/api/ai/draft-reply" ? gate.promise : { ok: true, items: {} }));
+    const gate = deferred<Json>();
+    vi.mocked(env.post).mockImplementation(async (path: string) => (path === "/api/ai/draft-reply" ? gate.promise : { ok: true, items: {} }));
     await m.quickReply(4, "yes");
     expect(m.view.get()!.body).toBe("Yes, that works for me.");
     expect(m.view.get()!.dirty).toBe(false);
