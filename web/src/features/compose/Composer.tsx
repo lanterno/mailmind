@@ -429,18 +429,18 @@ export function SendFloatView() {
   if (!f) return null;
   if (f.kind === "countdown") {
     return (
-      <div className="send-float sending" id="sendFloat">
+      <div className="send-float sending" id="sendFloat" data-react-aria-top-layer="true">
         <span>↑ Sending in {f.left}s…</span><button id="sfUndo" onClick={f.undo}>Undo</button>
       </div>
     );
   }
   if (f.kind === "failed") {
     return (
-      <div className="send-float failed" id="sendFloat">
+      <div className="send-float failed" id="sendFloat" data-react-aria-top-layer="true">
         <span><Icon name="alert" /> {f.text}</span>
         <button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button>
       </div>
     );
   }
-  return <div className={f.kind === "done" ? "send-float sent" : "send-float sending"} id="sendFloat"><span>{f.clock && <Icon name="clock" />} {f.text}</span></div>;
+  return <div className={f.kind === "done" ? "send-float sent" : "send-float sending"} id="sendFloat" data-react-aria-top-layer="true"><span>{f.clock && <Icon name="clock" />} {f.text}</span></div>;
 }

@@ -49,10 +49,11 @@ function Floats() {
   return (
     <>
       <SendFloatView />
-      <div className="send-float undo-float" id="undoFloat" hidden={!label}>
+      {/* A dialog makes what's outside it inert, and a click goes straight through that: these stay in reach over one. */}
+      <div className="send-float undo-float" id="undoFloat" data-react-aria-top-layer="true" hidden={!label}>
         <span>{label}</span><button id="ufUndo" onClick={() => void undo(qc)}>Undo · <kbd>z</kbd></button>
       </div>
-      <div className="send-float build-float" id="buildFloat" role="status" hidden={!build}>
+      <div className="send-float build-float" id="buildFloat" role="status" data-react-aria-top-layer="true" hidden={!build}>
         MailMind was updated. <button id="buildReload" onClick={() => location.reload()}>Reload</button>
       </div>
     </>
