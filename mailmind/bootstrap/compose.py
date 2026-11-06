@@ -108,12 +108,12 @@ class _Messages:
         store.delete_by_uids(c, account, folder, uids)
 
     def fetch_body(self, pk):
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         return ingest.fetch_body(pk)
 
     def sync_whole(self, acct, folder):
         """Full: only a full scan brings back older UIDs."""
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         return ingest.sync_folder(acct, folder, full=True)
 
     def unreachable(self):

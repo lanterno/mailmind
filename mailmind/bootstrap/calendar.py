@@ -41,7 +41,7 @@ class _Messages:
         return accounts.get(email)
 
     def fetched(self, account, pk):
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         return gates.run(account, lambda: ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE) or {}
 
     def quiet_error(self, e):

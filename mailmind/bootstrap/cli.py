@@ -33,7 +33,7 @@ def materialize(only):
 def sync(who, days):
     """Pull `who`'s mail (an address, or every account) from the last `days` days."""
     from mailmind.bootstrap import accounts
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     store.init()
     accts = accounts.accounts() if who == "all" else [accounts.get(who)]
@@ -228,14 +228,14 @@ def rules_list():
 
 
 def rules_add(verdict, tokens):
-    import ingest                       # it reads the rules through the classifier
+    from mailmind.bootstrap.mailbox import ingest
     for tok in tokens:
         t, where = curation.rules.add(tok, verdict)
         print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
 
 
 def rules_remove(tokens):
-    import ingest
+    from mailmind.bootstrap.mailbox import ingest
     for tok in tokens:
         curation.rules.remove(tok)
         print(f"  removed {tok}; {ingest.reclassify(tok)} stored messages classified again")

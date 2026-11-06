@@ -24,6 +24,7 @@ from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
+from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
@@ -123,8 +124,33 @@ class _Accounts:
         return provider.resolve(acct)
 
 
+class _Curation:
+    def classify(self, addr, subject, name, has_unsub):
+        from mailmind.bootstrap import curation
+        return curation.classify(addr, subject, name, has_unsub)
+
+    def is_junk(self, bucket):
+        from mailmind.bootstrap import curation
+        return curation.is_junk(bucket)
+
+    def by_rule(self, reason):
+        from mailmind.bootstrap import curation
+        return curation.by_rule(reason)
+
+
+class _Attention:
+    def on_ingest(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.muting.on_ingest(c, account)
+
+    def resolve_followups(self, c, account):
+        from mailmind.bootstrap import attention
+        return attention.book.resolve_followups(c, account)
+
+
 _directory = _Accounts()
 copies = Copies(_open, imap_quote)
 commands = MailCommands(store, _directory, _open, imap_quote)
 offline = OfflineQueue(store, _directory, commands)
 pool = Pool(_directory, _open)
+ingest = Ingest(store, _directory, _open, pool, _Curation(), _Attention(), fts)

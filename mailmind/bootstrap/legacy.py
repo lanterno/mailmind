@@ -18,6 +18,7 @@ from mailmind.bootstrap.mailbox import store
 import summarize
 from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import Restored
+from mailmind.mailbox.domain.events import FlagsChanged
 
 
 _wired = []                             # wire()'s subscriptions, each a function that ends it
@@ -40,7 +41,7 @@ def wire(server):
                    bus.subscribe(Applied, server._after_readmut),
                    bus.subscribe(Restored, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle),
-                   bus.subscribe(server.ingest.FlagsChanged, server._after_flags_changed)])
+                   bus.subscribe(FlagsChanged, server._after_flags_changed)])
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
                   (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))
 

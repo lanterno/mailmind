@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
-import ingest
+from mailmind.bootstrap.mailbox import ingest
 import warm
 from mailmind.bootstrap.mailbox import offline
 import summarize
@@ -2718,7 +2718,7 @@ def _after_send(_sent):
 
 
 def _after_flags_changed(changed):
-    """ingest.FlagsChanged: mail read or starred elsewhere shows on a list that's open."""
+    """FlagsChanged: mail read or starred elsewhere shows on a list that's open."""
     sse.publish("flags-changed", {"account": changed.account, "folder": changed.folder, "count": changed.count})
 
 

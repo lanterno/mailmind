@@ -71,7 +71,7 @@ class _Filing:
         _server.undo_push(descriptor, group)
 
     def reclassify(self, token):
-        import ingest
+        from mailmind.bootstrap.mailbox import ingest
         return ingest.reclassify(token)
 
     def stats_changed(self):

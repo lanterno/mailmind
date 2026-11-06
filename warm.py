@@ -22,7 +22,7 @@ import time
 import threading
 
 from mailmind.bootstrap import accounts
-import ingest
+from mailmind.bootstrap.mailbox import ingest
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.mailbox.application import session as mail_session

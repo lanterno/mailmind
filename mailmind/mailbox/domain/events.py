@@ -16,3 +16,11 @@ class Restored:
     listed, a flag change's flags put back."""
     mutation_id: int
     account: str
+
+
+@dataclass(frozen=True)
+class FlagsChanged:
+    """A sync found mail read, starred or answered elsewhere."""
+    account: str
+    folder: str
+    count: int

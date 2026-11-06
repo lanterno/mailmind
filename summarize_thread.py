@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timezone
 
 from mailmind.bootstrap.mailbox import store
-import ingest
+from mailmind.bootstrap.mailbox import ingest
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers import gates
