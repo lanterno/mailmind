@@ -12,14 +12,19 @@ from mailmind.platform.db import backup, database, migrations
 
 def init(path, steps=None):
     """Create the database at `path` if it is new, and run every migration in `steps` (all of
-    them unless given) that it hasn't run yet. Safe on every start: the base schema only creates
-    what is missing, and each migration is idempotent."""
+    them unless given) that it hasn't run yet. Safe on every start: each migration is idempotent,
+    and a database already at the last of them is left alone. The base schema only creates what is
+    missing, but that includes a table a later migration retired, so it runs only ahead of a
+    migration (or to begin a new database) and never brings one back."""
     steps = migrations.MIGRATIONS if steps is None else steps
     c = database.connect(path)
     c.isolation_level = None                    # the transactions below are the only ones
     try:
         v = c.execute("PRAGMA user_version").fetchone()[0]
-        if any(target > v for target, _ in steps) and c.execute("SELECT count(*) FROM sqlite_master").fetchone()[0]:
+        pending = any(target > v for target, _ in steps)
+        if v and not pending:
+            return
+        if pending and c.execute("SELECT count(*) FROM sqlite_master").fetchone()[0]:
             backup.take(c, v)
 
         def base(db):
