@@ -25,6 +25,19 @@ describe("the URL", () => {
   });
 });
 
+describe("the lanes", () => {
+  it.each(["feed", "papertrail"] as const)("%s keeps its lane through the URL", (lane) => {
+    const route = { source: { kind: "search", q: "kind:x", account: "", lane }, opened: null } as const;
+    const u = new URL(pathOf(route), "http://127.0.0.1");
+    expect(u.searchParams.get("lane")).toBe(lane);
+    expect(parseRoute(u.pathname, u.search)).toEqual(route);
+  });
+
+  it("takes a lane it doesn't know as a plain search", () => {
+    expect(parseRoute("/next/search", "?q=x&lane=nonsense").source).toEqual({ kind: "search", q: "x", account: "" });
+  });
+});
+
 describe("lists from the digest, and the brief", () => {
   it.each([
     [{ kind: "digest", list: "needs" }, "/next/brief/needs"],
