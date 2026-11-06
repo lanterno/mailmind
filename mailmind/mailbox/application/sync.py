@@ -2,15 +2,20 @@
 isn't junk. What a sync finds gone (reconcile_account), and a body read on demand, are here too."""
 import email
 import imaplib
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from email.parser import BytesHeaderParser
 from email.utils import parsedate_to_datetime
+from typing import Any
 
 from mailmind.content import mime
-from mailmind.content.mime import dec
+from mailmind.content.mime import Parsed, dec
 from mailmind.content.text import body_text_of, text_body
+from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.pool import Pool
-from mailmind.mailbox.application.ports import Accounts, Attention, Classifier, Index, StoredMail
+from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Pruned,
+                                                Stored, StoredMail)
+from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
 
@@ -27,7 +32,7 @@ class Ingest:
     FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sync reads again
     FLAG_BATCH = 500        # how many UIDs one flag read names
 
-    def __init__(self, store: StoredMail, accounts: Accounts, open_session, pool: Pool, curation: Classifier,
+    def __init__(self, store: StoredMail, accounts: Accounts, open_session: OpenSession, pool: Pool, curation: Classifier,
                  attention: Attention, index: Index):
         self._store = store
         self._accounts = accounts
@@ -37,7 +42,7 @@ class Ingest:
         self._attention = attention
         self._index = index
 
-    def _flags_of(self, flags):
+    def _flags_of(self, flags: Iterable[str]) -> dict[str, int]:
         """The local flag columns from a message's IMAP flags."""
         f = {x.lower() for x in flags}
         return {"seen": int("\\seen" in f), "flagged": int("\\flagged" in f),
@@ -45,12 +50,12 @@ class Ingest:
                 "deleted": int("\\deleted" in f)}
 
 
-    def _flag_rows(self, c, email, folder, uids):
+    def _flag_rows(self, c: Connection, email: str, folder: str, uids: Sequence[int] | None) -> list[Row]:
         """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
         if uids is None:
             return c.execute(_FLAG_ROW + "AND pending_removal IS NULL ORDER BY uid DESC LIMIT ?",
                              (email, folder, self.FLAG_REFRESH)).fetchall()
-        rows = []
+        rows: list[Row] = []
         for start in range(0, len(uids), self.FLAG_BATCH):
             part = uids[start:start + self.FLAG_BATCH]
             rows += c.execute(_FLAG_ROW + "AND uid IN (" + ",".join("?" * len(part)) + ")",
@@ -58,7 +63,7 @@ class Ingest:
         return rows
 
 
-    def _refresh_flags(self, session, acct, folder, modseq=None):
+    def _refresh_flags(self, session: MailSession, acct: Account, folder: str, modseq: int | None = None) -> int:
         """Read the flags of the folder's mail again and store what changed, so mail read, starred or
         answered in another client shows so here. `modseq` is the HIGHESTMODSEQ the select just said, if
         the server keeps one: with the mark the last read left, it says whether there is anything to read
@@ -75,10 +80,12 @@ class Ingest:
             c.close()
         if modseq and since == modseq:
             return 0                                     # the server says nothing changed
-        uids, ask = None, bool(since and since < modseq)
-        if ask:
+        behind = since if modseq and since and since < modseq else None
+        uids: list[int] | None = None
+        ask = behind is not None
+        if behind is not None:
             try:
-                uids = session.uids_changed_since(since)
+                uids = session.uids_changed_since(behind)
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:
@@ -91,7 +98,7 @@ class Ingest:
             rows = self._flag_rows(c, email, folder, uids)    # before the flags are read: see above
         finally:
             c.close()
-        now = {}
+        now: dict[int, frozenset[str]] = {}
         try:
             for start in range(0, len(rows), self.FLAG_BATCH):
                 now.update(session.flags([r["uid"] for r in rows[start:start + self.FLAG_BATCH]]))
@@ -121,13 +128,15 @@ class Ingest:
         return changed
 
 
-    def _process(self, session, acct, uids, folder="INBOX", with_body=False, advance=True):
+    def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: str = "INBOX",
+                 with_body: bool = False, advance: bool = True) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
         has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
         other folders get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
         seen every UID up to a point may say the folder is synced to there."""
-        rows, max_uid, kept, junk = [], 0, 0, 0
+        rows: list[dict[str, Any]] = []
+        max_uid, kept, junk = 0, 0, 0
         gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID
         if uids:
             for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail):
@@ -204,7 +213,7 @@ class Ingest:
         return kept, junk, max_uid
 
 
-    def reclassify(self, token):
+    def reclassify(self, token: str) -> int:
         """A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers, as
         mail arriving now would be. Only a row a rule decides now or decided before: what else the
         classifier read at ingest wasn't all kept (List-Unsubscribe), so one that no rule had a say in is
@@ -235,7 +244,7 @@ class Ingest:
             c.close()
 
 
-    def sync_folder(self, acct, folder, full=False, recent=None):
+    def sync_folder(self, acct: Account, folder: str, full: bool = False, recent: int | None = None) -> Stored:
         """Sync one folder (UIDVALIDITY-checked). full=True re-scans the whole folder;
         otherwise pulls only UIDs above the per-folder watermark. Stores everything.
         recent=N bounds a first/full scan to the most recent N UIDs (used by background folder
@@ -293,7 +302,7 @@ class Ingest:
                 pass
 
 
-    def ingest_message(self, acct, folder, message_id):
+    def ingest_message(self, acct: Account, folder: str, message_id: str | None) -> int:
         """Force-ingest ONE message identified by RFC822 Message-ID into `folder`,
         bypassing the incremental watermark. Needed by undo: a re-labeled Gmail message
         keeps its original (<= watermark) UID, so a normal incremental sync skips it.
@@ -329,7 +338,7 @@ class Ingest:
                 pass
 
 
-    def folder_synced(self, acct_email, folder):
+    def folder_synced(self, acct_email: str, folder: str) -> bool:
         """Whether a scan has read the whole folder, so its first open needn't."""
         c = self._store.conn()
         try:
@@ -338,7 +347,7 @@ class Ingest:
             c.close()
 
 
-    def ingest_account(self, acct, days=CUTOFF_DAYS):
+    def ingest_account(self, acct: Account, days: int = CUTOFF_DAYS) -> Stored:
         s = self._open_session(acct)
         try:
             s.select("INBOX")
@@ -356,7 +365,7 @@ class Ingest:
             s.logout()
 
 
-    def fetch_body(self, pk):
+    def fetch_body(self, pk: int) -> Parsed | None:
         """Lazily fetch + store the raw RFC822 for one message (read-only PEEK), record
         attachment metadata, and return the parsed body. Idempotent. Returns parsed dict
         or None if the message/row is gone."""
@@ -392,7 +401,7 @@ class Ingest:
         return parsed
 
 
-    def _record_parts(self, pk, parsed):
+    def _record_parts(self, pk: int, parsed: Parsed) -> None:
         """Rows a parsing change took away (migration 28) come back as the message is opened."""
         if not parsed["attachments"]:
             return
@@ -405,7 +414,7 @@ class Ingest:
             c.close()
 
 
-    def _insert_parts(self, c, pk, parsed):
+    def _insert_parts(self, c: Connection, pk: int, parsed: Parsed) -> None:
         for a in parsed["attachments"]:
             c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
                          VALUES(?,?,?,?,?,?,?)""",
@@ -413,7 +422,7 @@ class Ingest:
                        a["content_id"], a["is_inline"]))
 
 
-    def _keep_body(self, c, pk, raw, parsed):
+    def _keep_body(self, c: Connection, pk: int, raw: bytes, parsed: Parsed) -> None:
         """Store one message's raw RFC822 with what opening it records: attachment metadata, the
         parsed recipients and the full-text body. The caller commits."""
         self._store.store_body(c, pk, raw, datetime.now(timezone.utc).isoformat())
@@ -421,12 +430,12 @@ class Ingest:
         self._insert_parts(c, pk, parsed)
         if parsed["attachments"]:
             c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
-        c.execute("UPDATE messages SET recipients=? WHERE pk=?", (self._store._recipients_of(parsed), pk))
+        c.execute("UPDATE messages SET recipients=? WHERE pk=?", (self._store.recipients_of(parsed), pk))
         self._store.set_recipients(c, pk, mime.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
         self._store.fts_set_body(c, pk, body_text_of(parsed))   # full body + recipients now searchable
 
 
-    def reconciled_folders(self, email):
+    def reconciled_folders(self, email: str) -> list[str]:
         """The folders reconcile looks at for an account: each one a sync has stored (it has a
         sync_state row), INBOX first."""
         c = self._store.conn()
@@ -438,7 +447,7 @@ class Ingest:
         return folders or ["INBOX"]
 
 
-    def reconcile_account(self, acct, force=False, dry_run=False, folder="INBOX"):
+    def reconcile_account(self, acct: Account, force: bool = False, dry_run: bool = False, folder: str = "INBOX") -> Pruned:
         """Prune `folder`'s rows whose UID is no longer live, and stamp survivors verified.
         Pure prune — preserves summaries of survivors and never lowers the watermark.
         SAFETY: never deletes on an IMAP error, and treats an OK-but-empty SEARCH
@@ -447,8 +456,8 @@ class Ingest:
         it can store mail while this runs, and that mail is missing from the SEARCH's answer.
         dry_run computes the ghost count without changing anything."""
         from datetime import datetime as _dt
-        res = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
-               "pruned": 0, "error": None}
+        res: Pruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
+                       "pruned": 0, "error": None}
         c = self._store.conn()
         stored_uids = [r["uid"] for r in c.execute(
             "SELECT uid FROM messages WHERE account=? AND folder=?", (acct["email"], folder))]
@@ -486,13 +495,13 @@ class Ingest:
             return res
         when = _dt.now(timezone.utc).isoformat()
         c = self._store.conn()
-        pruned, kept = self._store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
+        pruned, _ = self._store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
         c.commit()
         c.close()
         res["pruned"] = pruned
         return res
 
 
-    def sync_new(self, acct, folder="INBOX"):
+    def sync_new(self, acct: Account, folder: str = "INBOX") -> Stored:
         """Incremental sync of one folder: only UIDs above the stored watermark."""
         return self.sync_folder(acct, folder, full=False)

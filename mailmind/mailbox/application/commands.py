@@ -13,8 +13,11 @@ the step here is an IMAP op, so it runs as a job on the account's IMAP gate.
 import json
 import secrets
 import time
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
+from typing import Any
 
+from mailmind.kernel.row import Connection, Row
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
@@ -27,11 +30,11 @@ from mailmind.platform.workers.durable_queue import DurableQueue
 _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
 
 
-def _now():
+def _now() -> int:
     return int(time.time())
 
 
-def _forget_undo(c, row):
+def _forget_undo(c: Connection, row: Row) -> None:
     """The move `row` won't happen, so there is nothing to reverse: the newest entry for it goes."""
     if row["kind"] == "flag" or not row["message_id"]:
         return
@@ -39,7 +42,7 @@ def _forget_undo(c, row):
                               and e.get("message_id") == row["message_id"] and e.get("src_folder") == row["src_folder"]))
 
 
-def _request_id(mutation_id):
+def _request_id(mutation_id: object) -> str:
     """The client's mutation_id names one request, so a resubmit of it dedupes; without one, every request is its own.
     A key built from the message alone made a second trash of the same message, after the first had been applied and
     the message moved back, answer "queued" and do nothing."""
@@ -65,11 +68,11 @@ class MailCommands:
                                   gate="applied", connect=lambda: store.conn(), max_attempts=self.MAX_ATTEMPTS,
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL)
 
-    def kick(self):
+    def kick(self) -> None:
         self.QUEUE.kick()
 
 
-    def _commit(self, fn):
+    def _commit[T](self, fn: Callable[[Connection], T]) -> T:
         """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
         c = self._store.conn()
         try:
@@ -80,7 +83,7 @@ class MailCommands:
             c.close()
 
 
-    def _commit_get(self, mid):
+    def _commit_get(self, mid: int) -> Row | None:
         c = self._store.conn()
         try:
             return self._store.command_get(c, mid)
@@ -90,7 +93,7 @@ class MailCommands:
 
     # ── accept ──────────────────────────────────────────────────────────────────────────────────
 
-    def _claim(self, c, id_):
+    def _claim(self, c: Connection, id_: int) -> Row | None:
         """The new command's row, claimed for a try now; None when this process only reads, and only a full run's
         worker will try it."""
         if not profile.writes_allowed():
@@ -99,7 +102,8 @@ class MailCommands:
         return self.QUEUE.claim(c, id_)
 
 
-    def accept_move(self, kind, pk, dest, mutation_id, push_undo=None):
+    def accept_move(self, kind: str, pk: int, dest: str | None, mutation_id: object,
+                    push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
         """Accept a move of message `pk`: an Accepted, or None when there is no such message, or it is on its way out
         already. `push_undo(c, entry)`, in the same transaction, keeps what reverses it; without one, nothing will."""
         c = self._store.conn()
@@ -121,7 +125,7 @@ class MailCommands:
                 "account": email, "idempotency_key": f"{kind}:{email}:{mid or pk}:{_request_id(mutation_id)}", "kind": kind,
                 "message_id": mid, "src_folder": row["folder"], "dest": dest, "params": json.dumps(params),
                 "next_attempt_at": 0, "created_at": now_iso()})
-            if not created:                          # a resubmit of the same request
+            if not created or id_ is None:           # a resubmit of the same request
                 return command.Accepted(id_, email, False, False)
             self._store.mark_pending_removal(c, pk, id_)
             undoable = bool(mid) and push_undo is not None
@@ -137,7 +141,7 @@ class MailCommands:
             c.close()
 
 
-    def accept_flags(self, pk, flags, mutation_id):
+    def accept_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> command.Accepted | None:
         """Accept a flag change on message `pk`, which shows on its row at once: an Accepted, or None when there is
         no such message."""
         c = self._store.conn()
@@ -146,7 +150,7 @@ class MailCommands:
             if not row:
                 return None
             id_, created = self._store.flag_command(c, row, flags, _request_id(mutation_id), now_iso())
-            if not created:
+            if not created or id_ is None:
                 return command.Accepted(id_, row["account"], False, False)
             claimed = self._claim(c, id_)
             c.commit()
@@ -157,7 +161,7 @@ class MailCommands:
 
     # ── a try, and what settles it ──────────────────────────────────────────────────────────────
 
-    def _local_mirror(self, c, row):
+    def _local_mirror(self, c: Connection, row: Row) -> None:
         """Idempotent: what the server now holds, on the local rows. A move drops the rows it marked pending_removal
         or, when there are none (a sync stored the message again meanwhile, or it was queued before migration 23 and
         its row went then), the source folder's row by Message-ID. A flag change sets the flags on the row by
@@ -166,7 +170,7 @@ class MailCommands:
             r = self._flagged_row(c, row)
             if r is None:
                 return
-            flags = (json.loads(row["params"] or "{}").get("flags") or {})
+            flags: dict[str, Any] = json.loads(row["params"] or "{}").get("flags") or {}
             self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
             return
         pks = self._store.pending_removal_pks(c, row["id"])
@@ -179,10 +183,10 @@ class MailCommands:
             self._store.delete_message(c, pk)
 
 
-    def _settle(self, row, answer):
+    def _settle(self, row: Row, answer: command.ServerAnswer) -> None:
         """The server holds the change: `applied`, what its answer left and the local rows, in one transaction, while
         the gate still keeps out a cancel."""
-        def go(c):
+        def go(c: Connection) -> None:
             self.QUEUE.mark_gate(c, row["id"])
             self._store.command_record(c, row["id"], answer.dest,
                                        json.dumps({"unseen": True}) if answer.unseen else None)
@@ -191,7 +195,7 @@ class MailCommands:
         self._commit(go)
 
 
-    def _try_on_gate(self, mid, just_accepted):
+    def _try_on_gate(self, mid: int, just_accepted: bool) -> str:
         """One try, as a job on the account's gate: applied, cancelled or one of WONT_HAPPEN. The row is read again here,
         since an Undo or a Discard may have deleted it while this waited. A row with `applied` set (a crash's, or
         one from before settling took one transaction) has only its bookkeeping left."""
@@ -214,7 +218,7 @@ class MailCommands:
         return command.APPLIED
 
 
-    def submit(self, accepted):
+    def submit(self, accepted: command.Accepted) -> str:
         """A try now, for the person waiting: what became of the command. It waits for the gate only FILE_WAIT seconds,
         and a server that can't be reached leaves the command for the worker. A change that won't happen leaves nothing
         behind, since whoever is waiting hears of it now: the message is as it was, and the tray stays clear."""
@@ -242,14 +246,14 @@ class MailCommands:
         return outcome
 
 
-    def _forget(self, c, row):
+    def _forget(self, c: Connection, row: Row) -> None:
         """The change someone is waiting on won't happen, and they hear so now: as if it was never asked."""
         self._give_back(c, row)
         _forget_undo(c, row)
         self.QUEUE.cancel_unapplied(c, row["id"])
 
 
-    def _flagged_row(self, c, row):
+    def _flagged_row(self, c: Connection, row: Row) -> Row | None:
         """The local row a flag change is for: the one in the folder it was asked in, else the newest with its
         Message-ID, else the row it was asked on."""
         if row["message_id"]:
@@ -260,25 +264,25 @@ class MailCommands:
         return self._store.get_message(c, pk) if pk else None
 
 
-    def _give_back(self, c, row):
+    def _give_back(self, c: Connection, row: Row) -> None:
         """The change `row` won't happen: a move's message is listed again, and a flag change's row gets back the flags
         it had when the change was asked for."""
         self._store.restore_pending(c, row["id"])
         if row["kind"] == "flag":
             r = self._flagged_row(c, row)
-            was = json.loads(row["params"] or "{}").get("was") or {}
+            was: dict[str, Any] = json.loads(row["params"] or "{}").get("was") or {}
             if r is not None and was:
                 self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in was.items()})
 
 
-    def _restore(self, c, row, error):
+    def _restore(self, c: Connection, row: Row, error: str) -> None:
         """The change `row` won't happen, and no one is waiting to hear: to error, for the tray, and the local row as
         the server has it."""
         self.QUEUE.give_up(c, row, error)
         self._give_back(c, row)
 
 
-    def _take_up(self, c, row):
+    def _take_up(self, c: Connection, row: Row) -> None:
         """The given-up change `row` is asked for again: as when it was accepted, a move's message leaves the lists and
         a flag change shows, its `was` now the flags it replaces this time."""
         params = json.loads(row["params"] or "{}")
@@ -287,7 +291,7 @@ class MailCommands:
             r = self._store.get_message(c, r["pk"]) if r is not None else None
             if r is None:
                 return
-            flags = params.get("flags") or {}
+            flags: dict[str, Any] = params.get("flags") or {}
             params["was"] = {k: bool(r[k]) for k in flags}
             self._store.command_set_params(c, row["id"], json.dumps(params))
             self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
@@ -303,12 +307,12 @@ class MailCommands:
 
     # ── the tray ────────────────────────────────────────────────────────────────────────────────
 
-    def list_open(self, limit=100):
+    def list_open(self, limit: int = 100) -> dict[str, Any]:
         """What the pending-changes tray shows: the changes that haven't reached a server, and how many
         wait and how many were given up on. A subject the row doesn't hold comes from its message."""
         c = self._store.conn()
         try:
-            items = []
+            items: list[dict[str, Any]] = []
             for r in self._store.command_open(c, limit):
                 params = json.loads(r["params"] or "{}")
                 subject = params.get("subject")
@@ -327,9 +331,9 @@ class MailCommands:
                 "stuck": counts.get("error", 0)}
 
 
-    def retry(self, mid):
+    def retry(self, mid: int) -> bool:
         """Ask again for a change given up on. False when it isn't one."""
-        def go(c):
+        def go(c: Connection) -> bool:
             row = self._store.command_get(c, mid)
             if row is None or not self.QUEUE.requeue(c, mid):
                 return False
@@ -341,11 +345,11 @@ class MailCommands:
         return ok
 
 
-    def discard(self, mid):
+    def discard(self, mid: int) -> Row | None:
         """Drop a change that hasn't reached a server: its message is as the server has it again, and
         there is nothing for Undo to reverse. Returns the row, or None when it had reached one or is gone.
         The caller holds the account's IMAP gate, so a try at it is over or hasn't begun."""
-        def go(c):
+        def go(c: Connection) -> Row | None:
             row = self._store.command_get(c, mid)
             if row is None or not self.QUEUE.cancel_unapplied(c, mid):
                 return None
@@ -357,7 +361,7 @@ class MailCommands:
 
     # ── the worker ──────────────────────────────────────────────────────────────────────────────
 
-    def apply_one(self, mid):
+    def apply_one(self, mid: int) -> None:
         row = self._commit(lambda c: self.QUEUE.claim(c, mid))
         if row is None:
             return                       # lost the claim (cancelled / another worker) — mirror outbox
@@ -367,7 +371,7 @@ class MailCommands:
         except Exception as e:           # a connection failure or anything else: a hidden message can't wait for a restart
             err = type(e).__name__
 
-            def later(c):
+            def later(c: Connection) -> tuple[bool, int]:
                 terminal, delay = self.QUEUE.retry_later(c, row, err, _now())
                 if terminal:                                 # given up: the message is still as it was
                     self._give_back(c, row)
@@ -388,11 +392,11 @@ class MailCommands:
             print(f"[commands] applied #{mid} {row['kind']}", flush=True)
 
 
-    def drain(self):
+    def drain(self) -> None:
         if not profile.writes_allowed():     # read-only: moves wait here for a full run (D4)
             return
         self.QUEUE.drain(self.apply_one, _now())       # one bad row is logged and never aborts the rest
 
 
-    def worker_loop(self):
+    def worker_loop(self) -> None:
         self.QUEUE.run_forever(self.drain)             # recovers rows a crash left running, then drains

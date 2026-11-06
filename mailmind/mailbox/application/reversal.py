@@ -1,11 +1,15 @@
 """What reverses a move: the Mailbox's kinds of undo entry. One that hasn't reached the server is cancelled; one that has
 gets a counter-move, from where its command says it went."""
 import json
+from typing import Any
 
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
+
+
+type Reversed = tuple[bool, str, str]       # (ok, the account it touched, the folder)
 
 
 class Reversals:
@@ -16,7 +20,7 @@ class Reversals:
         self._commands = commands
         self._ingest = ingest
 
-    def _settled_with_command(self, d):
+    def _settled_with_command(self, d: dict[str, Any]) -> tuple[Reversed | None, dict[str, Any]]:
         """Reconcile an entry with the command path. If its move hasn't reached the server (waiting, being tried or
         given up), CANCEL it and list its message again: its row waited, marked, for the move to settle, so no server is
         asked. A row queued before migration 23 was dropped instead, and is re-ingested. Returns (the answer, or None
@@ -55,7 +59,7 @@ class Reversals:
         return None, d
 
 
-    def move(self, d):
+    def move(self, d: dict[str, Any]) -> Reversed:
         done, d = self._settled_with_command(d)
         if done:
             return done
@@ -70,7 +74,7 @@ class Reversals:
         return True, d["account"], d["src_folder"]
 
 
-    def gmail_archive(self, d):
+    def gmail_archive(self, d: dict[str, Any]) -> Reversed:
         done, d = self._settled_with_command(d)
         if done:
             return done

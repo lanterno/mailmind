@@ -1,10 +1,14 @@
 """Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. The
 tray's Retry and Discard of what is waiting are here too."""
 import secrets
+from collections.abc import Mapping, Sequence
+from typing import Any
 
+from mailmind.kernel.parsed import as_int
+from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
+from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import command
@@ -15,7 +19,7 @@ from mailmind.platform.workers import gates
 _FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
 _REFUSED = {"archive": "the server refused the archive"}
 _NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
-_NOT_FOUND = {"ok": False, "msg": "not found", "undoable": False}
+_NOT_FOUND: dict[str, Any] = {"ok": False, "msg": "not found", "undoable": False}
 
 
 class Filing:
@@ -32,16 +36,19 @@ class Filing:
         self._folders = folders
         self._attention = attention
 
-    def _waiting(self, outcome, undoable):
+    def _waiting(self, outcome: str, undoable: bool) -> dict[str, Any]:
         """The worker has it: the tray shows it, and it says how it went."""
         self.flags_queued()
         return {"ok": True, "msg": "queued", "status": outcome, "undoable": undoable}
 
 
-    def _file(self, kind, pk, dest, undo_group, mutation_id, undo=True):
+    def _file(self, kind: str, pk: int, dest: str | None, undo_group: str | None, mutation_id: object,
+              undo: bool = True) -> dict[str, Any]:
         """A move, through the command path: what the person hears of it."""
-        push = (lambda c, entry: self._undo.push_within(c, entry, undo_group)) if undo else None
-        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, push)
+        def push(c: Connection, entry: dict[str, Any]) -> None:
+            self._undo.push_within(c, entry, undo_group)
+
+        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, push if undo else None)
         if accepted is None:
             return dict(_NOT_FOUND)
         if not accepted.created:
@@ -60,7 +67,7 @@ class Filing:
         return {"ok": False, "msg": msg, "undoable": False}
 
 
-    def _set_flags(self, pk, flags, mutation_id):
+    def _set_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> dict[str, Any]:
         """A flag change, through the command path: what the person hears of it."""
         accepted = self._commands.accept_flags(pk, flags, mutation_id)
         if accepted is None:
@@ -79,13 +86,13 @@ class Filing:
         return {"ok": False, "msg": "the server refused the flag change", "undoable": False}
 
 
-    def flags_queued(self):
+    def flags_queued(self) -> None:
         self._commands.kick()
         self._stats.invalidate()
         sse.publish("outbox", {})                   # the tray shows it
 
 
-    def do_pending_retry(self, mid):
+    def do_pending_retry(self, mid: int) -> Result:
         """The tray's Retry: a change the queue gave up on goes back in. Returns (result, code)."""
         if not self._commands.retry(mid):
             return {"ok": False}, 404
@@ -93,7 +100,7 @@ class Filing:
         return {"ok": True}, 200
 
 
-    def do_pending_discard(self, mid):
+    def do_pending_discard(self, mid: int) -> Result:
         """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
         migration 23 kept them, is read back. Returns (result, code)."""
         c = self._store.conn()
@@ -102,7 +109,7 @@ class Filing:
         if row is None:
             return {"ok": False}, 404
 
-        def job():
+        def job() -> bool:
             gone = self._commands.discard(mid)
             if gone is None or gone["kind"] == "flag" or not gone["message_id"]:
                 return gone is not None
@@ -126,11 +133,10 @@ class Filing:
         return {"ok": True}, 200
 
 
-    def do_write(self, path, body):
+    def do_write(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
         """Per-message mailbox writes (flags/seen/archive/move)."""
-        try:
-            pk = int(body.get("pk"))
-        except (TypeError, ValueError):
+        pk = as_int(body.get("pk"))
+        if pk is None:
             return {"ok": False, "msg": "bad pk"}
         if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
             # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
@@ -140,7 +146,7 @@ class Filing:
             flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
                      else {body.get("flag", "flagged"): bool(body.get("on", True))})
             return self._set_flags(pk, flags, body.get("mutation_id"))
-        moves = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")), "/api/junk": ("junk", None)}
+        moves: dict[str, tuple[str, str | None]] = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")), "/api/junk": ("junk", None)}
         if path not in moves:
             return {"ok": False, "msg": "unknown", "undoable": False}
         kind, dest = moves[path]
@@ -149,26 +155,28 @@ class Filing:
         return self._file(kind, pk, dest, body.get("undo_group"), body.get("mutation_id"))
 
 
-    def do_trash(self, body):
+    def do_trash(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Move one message to the account's Trash."""
-        return self._file("trash", int(body.get("pk")), None, body.get("undo_group"), body.get("mutation_id"))
+        pk = as_int(body.get("pk"))
+        if pk is None:
+            raise ValueError("bad pk")      # the handler answers malformed input with a 400
+        return self._file("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
 
 
-    def trash_now(self, pk):
+    def trash_now(self, pk: int) -> bool:
         """Trash with nothing for Undo to reverse, as blocking a sender does: whether it went or will go."""
         return self._file("trash", int(pk), None, None, None, undo=False)["ok"]
 
 
-    def do_thread_file(self, path, body):
+    def do_thread_file(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
         """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
         anchor's folder, which is what a conversation row stands for. Members are resolved here, never
         sent by the client (pk isn't stable, and a list row only knows its newest message). Each one
         goes through the per-message op, so the gate, the command path and undo descriptors are
         unchanged; one undo group spans them all, so a single Undo restores the conversation. A
         message without a thread_id is a conversation of one, never the folder's unthreaded pool."""
-        try:
-            pk = int(body.get("pk"))
-        except (TypeError, ValueError):
+        pk = as_int(body.get("pk"))
+        if pk is None:
             return {"ok": False, "msg": "bad pk"}
         c = self._store.conn()
         row = self._store.get_message(c, pk)
@@ -184,7 +192,8 @@ class Filing:
         if not pks:
             return {"ok": False, "msg": "not found"}
         group = body.get("undo_group") or "thread:" + secrets.token_hex(6)
-        filed, queued, undoable, msg = [], 0, False, ""
+        filed: list[int] = []
+        queued, undoable, msg = 0, False, ""
         for p in pks:
             one = {"pk": p, "undo_group": group, "mutation_id": body.get("mutation_id")}
             res = self.do_write("/api/archive", one) if path == "/api/thread/archive" else self.do_trash(one)
@@ -199,13 +208,13 @@ class Filing:
                 "queued": queued, "undoable": undoable}
 
 
-    def settled(self, _event=None):
+    def settled(self, _event: object = None) -> None:
         """Applied or Restored, or the tray's Retry or Discard: a queued change reached the
         server or won't, and its message is listed again; or a person asked it again or dropped it."""
         self._stats.invalidate()
         sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 
-    def _carry_out_one(self, verb, one):
+    def _carry_out_one(self, verb: str, one: Mapping[str, Any]) -> dict[str, Any]:
         """One message of a plan, through the route a click on that message would take."""
         if verb == "trash":
             return self.do_trash(one)
@@ -215,7 +224,8 @@ class Filing:
             return self.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
         return self.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
 
-    def carry_out(self, verb, preset, messages, undo_group=None):
+    def carry_out(self, verb: str, preset: str | None, messages: Sequence[tuple[int, str]],
+                  undo_group: str | None = None) -> dict[str, Any]:
         """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
         in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
         right for the Inbox may not be for wherever it went."""
@@ -225,7 +235,7 @@ class Filing:
         finally:
             c.close()
         group = undo_group or "plan:" + secrets.token_hex(6)
-        done = {"ok": True, "verb": verb, "count": 0, "failed": 0, "gone": len(messages) - len(pks),
+        done: dict[str, Any] = {"ok": True, "verb": verb, "count": 0, "failed": 0, "gone": len(messages) - len(pks),
                 "queued": 0, "undoable": False}
         if verb == "snooze":
             if pks:
@@ -234,7 +244,7 @@ class Filing:
             return done
         for pk in pks:
             try:
-                res = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
+                res: dict[str, Any] = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
             except Exception as e:                 # the rest still go: this run has no second try
                 print(f"[do] {verb} failed: {type(e).__name__}", flush=True)
                 res = {}

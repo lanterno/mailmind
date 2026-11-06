@@ -5,9 +5,13 @@ import imaplib
 import json
 import socket
 import ssl
+from collections.abc import Callable, Mapping
+from typing import Any
 
+from mailmind.kernel.row import Row
 from mailmind.mailbox.application import session as mail_session
-from mailmind.mailbox.application.ports import Accounts, StoredMail
+from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, StoredMail
+from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import command, destination
 from mailmind.platform import profile
 
@@ -22,7 +26,7 @@ _FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
          "draft": "\\Draft", "deleted": "\\Deleted"}
 
 
-def _ignoring_refusal(command, *args):
+def _ignoring_refusal[*Ts](command: Callable[[*Ts], object], *args: *Ts) -> None:
     """Run a session command whose refusal changes nothing here, as when imaplib handed a NO back
     unraised; a lost connection still raises."""
     try:
@@ -33,7 +37,7 @@ def _ignoring_refusal(command, *args):
         pass
 
 
-def _uid_by_msgid(s, mid):
+def _uid_by_msgid(s: MailSession, mid: str | None) -> int | None:
     """The live UID of a message in the session's selected folder, by RFC822 Message-ID, or None,
     also when the server refuses the search."""
     if not mid:
@@ -46,7 +50,7 @@ def _uid_by_msgid(s, mid):
         return None
 
 
-def _seen_on_server(s, uid, otherwise):
+def _seen_on_server(s: MailSession, uid: int, otherwise: bool) -> bool:
     """Whether the selected folder's message `uid` carries \\Seen, as the server says now; the
     local row's word (`otherwise`) when it won't say."""
     try:
@@ -61,13 +65,13 @@ def _seen_on_server(s, uid, otherwise):
 class ServerOps:
     UNREACHABLE = UNREACHABLE
 
-    def __init__(self, store: StoredMail, accounts: Accounts, open_session, quote):
+    def __init__(self, store: StoredMail, accounts: Accounts, open_session: OpenSession, quote: Callable[[str], str]):
         self._store = store
         self._accounts = accounts
         self._open_session = open_session
         self._quote = quote
 
-    def account_of(self, pk):
+    def account_of(self, pk: int | None) -> str | None:
         """The account the message `pk` is in, or None when there's no such message."""
         c = self._store.conn()
         try:
@@ -77,7 +81,7 @@ class ServerOps:
         return r["account"] if r else None
 
 
-    def _do_imap(self, acct, fn):
+    def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T]) -> T:
         """Open a session, run fn(session), log out. A connection failure raises (a member of
         UNREACHABLE) so the caller can queue/retry; a clean command-level IMAP4.error from fn propagates
         as a logical error."""
@@ -91,7 +95,7 @@ class ServerOps:
                 pass
 
 
-    def _already_in(self, s, folder, mid, back_to):
+    def _already_in(self, s: MailSession, folder: str, mid: str, back_to: str) -> bool:
         """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
         again after. A queued move asks before it moves: on a server without MOVE, a connection that
         dropped after the COPY landed left the original behind, and moving it again would copy twice.
@@ -116,7 +120,7 @@ class ServerOps:
             s.select(back_to, readonly=False)
 
 
-    def _target(self, s, src, mid, params, first_try):
+    def _target(self, s: MailSession, src: str, mid: str, params: Mapping[str, Any], first_try: bool) -> int | None:
         """Select `src` and name the UID a try acts on, or None when the message has left it. A UID is good only in
         the epoch (UIDVALIDITY) it was seen in. On a first try the one seen as the command was accepted is it. A later
         try may follow one that moved the message, or a renumbering, so the Message-ID says, and if the folder has none
@@ -135,7 +139,7 @@ class ServerOps:
         return uid if same_epoch else None
 
 
-    def apply(self, row, first_try=False):
+    def apply(self, row: Row, first_try: bool = False) -> command.ServerAnswer:
         """One try at the command `row`, on the account's gate: a ServerAnswer. Raises a UNREACHABLE member when the
         connection fails. Unless this is the first try, an earlier one may have got part of the way, so it asks the
         server before it repeats anything: exactly once, however many tries it takes."""
@@ -146,12 +150,13 @@ class ServerOps:
         params = json.loads(row["params"] or "{}")
         server = self._accounts.profile(acct)
 
-        def run(s):
+        def run(s: MailSession) -> command.ServerAnswer:
             uid = self._target(s, src, mid, params, first_try)
             if not uid:
                 return command.ServerAnswer()        # already gone: done, and never retried
             if kind == "flag":                       # a refusal raises IMAP4.error: refused, below
-                for k, v in (params.get("flags") or {}).items():
+                flags: dict[str, Any] = params.get("flags") or {}
+                for k, v in flags.items():
                     if k in _FLAG:
                         (s.add_flags if v else s.remove_flags)([uid], [_FLAG[k]])
                 return command.ServerAnswer()
@@ -180,7 +185,7 @@ class ServerOps:
             return command.ServerAnswer(won_t=command.REFUSED)
 
 
-    def mark_answered(self, pk, account, message_id):
+    def mark_answered(self, pk: int | None, account: str | None, message_id: str | None) -> tuple[bool, str]:
         """\\Answered on the message a send replied to, wherever it is by now: where its row says, or
         with no row left (archiving right after replying deletes it), in the inbox and the folders filing
         moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does."""
@@ -218,7 +223,7 @@ class ServerOps:
                 pass
 
 
-    def set_flags(self, pk, flags):
+    def set_flags(self, pk: int, flags: Mapping[str, bool]) -> tuple[bool, str]:
         """flags: {'answered':True} -> UID STORE +/-FLAGS, mirrored locally once the server took it. What a send sets
         off retries for itself, so this goes straight to the server; what a person asks goes through MailCommands. A
         refusal (the UID gone, a read-only folder) leaves the local row as the server has it, and answers (False, why)."""
@@ -252,7 +257,8 @@ class ServerOps:
 
 
     # ----------------------------------------------------------------- undo reverse ops
-    def move_by_msgid(self, account, search_folder, dest_folder, message_id, unseen=False):
+    def move_by_msgid(self, account: str, search_folder: str, dest_folder: str, message_id: str,
+                      unseen: bool = False) -> tuple[bool, str]:
         """Reverse primitive: find a message by EXACT RFC822 Message-ID in search_folder
         and move it to dest_folder. Fails (never guesses) if not found. unseen: take \\Seen off it
         there, as it was before a server that marks trashed mail read (Proton) set it."""
@@ -282,7 +288,7 @@ class ServerOps:
                 pass
 
 
-    def relabel_by_msgid(self, account, search_folder, message_id, label="\\Inbox"):
+    def relabel_by_msgid(self, account: str, search_folder: str, message_id: str, label: str = "\\Inbox") -> tuple[bool, str]:
         """Gmail-archive reverse: re-add a label (default \\Inbox) to the message found by
         Message-ID in search_folder (All Mail). A refusal answers (False, why): the label isn't there."""
         acct = self._accounts.get(account)
@@ -306,6 +312,6 @@ class ServerOps:
                 pass
 
 
-    def find_special(self, account, *roles):
+    def find_special(self, account: str, *roles: str) -> str | None:
         """The folder playing the first of `roles` on an account's server (e.g. Gmail's All Mail)."""
         return self._do_imap(self._accounts.get(account), lambda s: mail_session.find_role(s, *roles))

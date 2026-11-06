@@ -319,7 +319,7 @@ def set_recipients(c, pk, addrs):
                   [(pk, a) for a in addrs[:RECIPIENT_ROWS_MAX]])
 
 
-def _recipients_of(parsed):
+def recipients_of(parsed):
     """To + Cc as one searchable string (names + addresses), for the to:/cc: operators."""
     return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:RECIPIENTS_CHARS]
 

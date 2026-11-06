@@ -1,11 +1,13 @@
 """The per-account counts the page shows, from what is stored: no server is asked, and the cache only saves the sums."""
 import time
+from collections.abc import Mapping
+from typing import Any
 
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, Classifier
 
 
-def _strip(p):
+def _strip(p: Mapping[str, Any]) -> dict[str, Any]:
     p = dict(p)
     p.pop("_rows", None)
     return p
@@ -17,19 +19,19 @@ class LiveStats:
     def __init__(self, accounts: Accounts, curation: Classifier):
         self._accounts = accounts
         self._curation = curation
-        self._cache = {"data": None, "exp": 0}
+        self._cache: dict[str, Any] = {"data": None, "exp": 0}
 
-    def live(self, account=None, refresh=False):
+    def live(self, account: str | None = None, refresh: bool = False) -> dict[str, Any]:
         is_all = account is None or account == "all"
         if not refresh and is_all and self._cache["data"] and self._cache["exp"] > time.time():
             return self._cache["data"]
-        accts = self._accounts.accounts() if is_all else [self._accounts.get(account)]
-        out = []
+        accts = self._accounts.accounts() if account is None or account == "all" else [self._accounts.get(account)]
+        out: list[dict[str, Any]] = []
         for a in accts:
             p = _strip(self._curation.plan_stored(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
             p["alias"] = a.get("alias")              # the Sweep buttons still re-verify live before moving
             out.append(p)
-        data = {
+        data: dict[str, Any] = {
             "accounts": out,
             "buckets": self._curation.buckets(),
             "totals": {
@@ -44,5 +46,5 @@ class LiveStats:
         return data
 
 
-    def invalidate(self):
+    def invalidate(self) -> None:
         self._cache["data"], self._cache["exp"] = None, 0

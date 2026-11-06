@@ -1,17 +1,19 @@
 """Copies Compose keeps on the server: a sent message in Sent, a draft in Drafts. Each opens a session
 of its own and closes it. Standard library only."""
+from collections.abc import Callable
 from datetime import datetime
 import imaplib
 
-from mailmind.mailbox.application.session import find_role
+from mailmind.mailbox.application.ports import Account, OpenSession
+from mailmind.mailbox.application.session import MailSession, find_role
 
 
 class Copies:
-    def __init__(self, open_session, quote):
+    def __init__(self, open_session: OpenSession, quote: Callable[[str], str]):
         self._open_session = open_session
         self._quote = quote
 
-    def append_to_sent(self, acct, raw, message_id=None):
+    def append_to_sent(self, acct: Account, raw: bytes, message_id: str | None = None) -> str:
         """IMAP APPEND the exact sent bytes to the account's Sent folder, flagged \\Seen.
         Returns the resolved folder name. Raises if no Sent folder or the APPEND fails.
         Given `message_id`, a copy already filed under it is kept and nothing is appended: a retry
@@ -32,7 +34,7 @@ class Copies:
             except Exception:
                 pass
 
-    def in_sent(self, acct, message_id):
+    def in_sent(self, acct: Account, message_id: str) -> bool:
         """Is a message under this Message-ID in the account's Sent?"""
         s = self._open_session(acct)
         try:
@@ -44,8 +46,9 @@ class Copies:
             except Exception:
                 pass
 
-    def append_to_drafts(self, acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None,
-                         message_id=None, tried=None):
+    def append_to_drafts(self, acct: Account, raw: bytes, prev_uid: int | None = None, prev_uidvalidity: int | None = None,
+                         prev_msgid: str | None = None, prev_folder: str | None = None, message_id: str | None = None,
+                         tried: str | None = None) -> tuple[str, int | None, int | None, int | None]:
         """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
         copy (single-UID expunge — NEVER a bulk expunge). Returns
         (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
@@ -66,7 +69,8 @@ class Copies:
             except imaplib.IMAP4.error:          # refused: no copy is deleted, but the APPEND still goes
                 uidv = None
             # the prior draft copy, if we can safely identify it: asked before the new copy can answer too
-            del_uid = removed = None
+            del_uid: int | None = None
+            removed: int | None = None
             if prev_uid and (prev_uidvalidity is None or prev_uidvalidity == uidv):
                 del_uid = int(prev_uid)
             elif prev_msgid:
@@ -98,7 +102,7 @@ class Copies:
             except Exception:
                 pass
 
-    def _left_by(self, s, message_id):
+    def _left_by(self, s: MailSession, message_id: str | None) -> int | None:
         """The UID of a copy of ours under this Message-ID in the selected folder, or None."""
         if not message_id:
             return None
@@ -110,7 +114,7 @@ class Copies:
             return None
         return ids[0] if ids else None
 
-    def delete_left_copy(self, acct, message_id):
+    def delete_left_copy(self, acct: Account, message_id: str) -> bool:
         """Remove the copy a try may have left in Drafts, under a Message-ID only MailMind minted. True if one went."""
         s = self._open_session(acct)
         try:
@@ -127,7 +131,7 @@ class Copies:
             except Exception:
                 pass
 
-    def delete_draft_uid(self, acct, folder, uid, uidvalidity=None):
+    def delete_draft_uid(self, acct: Account, folder: str | None, uid: int | None, uidvalidity: int | None = None) -> bool:
         """Remove one draft message by UID (single-UID expunge). Best-effort: True if it went."""
         if not uid:
             return False
@@ -155,7 +159,7 @@ class Copies:
             except Exception:
                 pass
 
-    def probe(self, acct, folder, uid, timeout):
+    def probe(self, acct: Account, folder: str, uid: int, timeout: int) -> tuple[int | None, bool] | None:
         """Whether this UID is there now: (the folder's uidvalidity, whether it is), or None when that can't
         be told (unreachable, or a refusal, a busy server's NO, which says nothing). A stateless, read-only
         look with a short timeout, like the account test, so it needs no IMAP gate: a black-holed host costs
