@@ -103,11 +103,12 @@ def test_asking_for_snoozed_mail_finds_it(app, world):
 def test_a_command_doesnt_reach_snoozed_mail(app, world, ai):
     pk = world.pk(RECEIPT)
     from_addr = world.row(RECEIPT)["from_addr"]
-    ai.queue(fa.answer({"intent": "act", "verb": "archive", "filter": f"from:{from_addr}"}))
-    assert pk in (app.post("/api/ai/do-plan", {"cmd": "archive them"}).json.get("pks") or [])
+    def planned():
+        ai.queue(fa.answer({"intent": "act", "verb": "archive", "filter": f"from:{from_addr}"}))
+        return app.post("/api/ai/do-plan", {"cmd": "archive them"}).json
+    assert planned()["count"] == 1
     snooze(app, pk)
-    ai.queue(fa.answer({"intent": "act", "verb": "archive", "filter": f"from:{from_addr}"}))
-    assert pk not in (app.post("/api/ai/do-plan", {"cmd": "archive them"}).json.get("pks") or [])
+    assert planned().get("count", 0) == 0
 
 
 def test_the_grammar_says_where_snoozed_mail_went():

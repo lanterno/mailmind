@@ -7,12 +7,7 @@
    "filter": "from:lin",
    "intent": "act",
    "ok": true,
-   "pks": [
-    11,
-    2,
-    1,
-    16
-   ],
+   "plan": "<plan>",
    "sample": [
     {
      "from": "Lin Mori",
@@ -59,10 +54,7 @@
    "filter": "is:newsletter",
    "intent": "act",
    "ok": true,
-   "pks": [
-    3,
-    17
-   ],
+   "plan": "<plan>",
    "sample": [
     {
      "from": "The Weekly Loom",
@@ -99,10 +91,7 @@
    "filter": "is:receipt",
    "intent": "act",
    "ok": true,
-   "pks": [
-    24,
-    5
-   ],
+   "plan": "<plan>",
    "sample": [
     {
      "from": "Parcel Service",

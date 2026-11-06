@@ -108,7 +108,9 @@ def test_do_plans_a_preview_and_degrades_to_search(app, golden, world, ai):
     since = world.mark()
     for cmd, plan in PLANS:
         ai.queue(fa.answer(plan))
-        golden.record(f"do: {cmd}", app.post("/api/ai/do-plan", {"cmd": cmd}))
+        answer = golden.record(f"do: {cmd}", app.post("/api/ai/do-plan", {"cmd": cmd})).json
+        if answer.get("plan"):
+            golden.alias(answer["plan"], "<plan>")
     sent(golden, ai, "sent for the plans")              # one prompt, only the command differs
     golden.note("server writes while planning", world.writes(since))
     golden.record("do: nothing", app.post("/api/ai/do-plan", {"cmd": "  "}))
