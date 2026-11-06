@@ -19,6 +19,7 @@ from mailmind.mailbox.adapters.imap_names import escaped, gmail_labels, sendable
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder
+from collections.abc import Callable
 
 
 _APPENDUID = re.compile(rb"APPENDUID\s+\d+\s+(\d+)")
@@ -29,7 +30,7 @@ def _text(v):
     return v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else str(v)
 
 
-def connect(host, port, *, starttls, ssl_context, timeout, check_tls, username, password, guard=None):
+def connect(host, port, *, starttls, ssl_context, timeout, check_tls, username, password: str | Callable[[], str], guard=None):
     """A logged-in session. `check_tls(imap)` runs after the TLS handshake and before LOGIN, given
     the connection's imaplib object (its `sock` the TLS socket), and may raise to stop it; `guard`
     wraps that object before anything is sent. `password` may be a function, asked only after

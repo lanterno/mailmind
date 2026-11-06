@@ -49,8 +49,8 @@ def price(model: str, prompt_tokens: int = 0) -> Price:
     name = max((k for k in PRICES if model == k or model.startswith(k + "-")), key=len, default=None)
     if name is None:
         return DEAREST
-    above, dearer = LONG_PROMPTS.get(name, (None, None))
-    return dearer if above is not None and prompt_tokens > above else PRICES[name]
+    long = LONG_PROMPTS.get(name)
+    return long[1] if long is not None and prompt_tokens > long[0] else PRICES[name]
 
 
 def cost_micros(asked: str, served: str, input_tokens: int = 0, output_tokens: int = 0,

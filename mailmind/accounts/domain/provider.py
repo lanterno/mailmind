@@ -16,6 +16,7 @@ Bridge too.
 """
 from dataclasses import dataclass, replace
 from urllib.parse import quote
+from typing import Any
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
 
@@ -60,7 +61,7 @@ class ProviderProfile:
 
 _GMAIL = ProviderProfile("gmail", saves_sent=True, archive_is_label_removal=True, gmail_threads=True,
                          trash_fallback="[Gmail]/Trash", junk_fallback="[Gmail]/Spam")
-_BRIDGE = dict(bridge=True, bulk_expunge_unsafe=True, recycle_seconds=90, recycle_uses=40)
+_BRIDGE: dict[str, Any] = dict(bridge=True, bulk_expunge_unsafe=True, recycle_seconds=90, recycle_uses=40)
 
 
 def resolve(acct, capabilities=None):

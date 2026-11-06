@@ -201,8 +201,7 @@ class Triage:
                     log("a batch was cut off while it was being sent; its messages are waiting again")
             c.commit()
             out = self._answers.batch_open(c)
-            due = out is not None and out["state"] == "running" and out["polled_at"] + self.BATCH_POLL <= now
-            if due:
+            if out is not None and out["state"] == "running" and out["polled_at"] + self.BATCH_POLL <= now:
                 try:
                     ended = gw.batch_ended(out["remote_id"])
                     results = gw.batch_results(out["remote_id"], feature=out["feature"], model=out["model"]) if ended else None

@@ -59,7 +59,7 @@ class AnthropicModel:
     def submit_batch(self, requests: list[tuple[str, Prompt]]) -> str:
         batches = self._client.with_options(max_retries=0).messages.batches
         return self._calling(lambda: batches.create(
-            requests=[wire.batch_request(i, p) for i, p in requests])).id
+            requests=[wire.batch_request(i, p) for i, p in requests])).id  # pyright: ignore[reportArgumentType]
 
     def batch_ended(self, batch_id: str) -> bool:
         batch = self._calling(lambda: self._client.messages.batches.retrieve(batch_id))

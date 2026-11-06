@@ -8,9 +8,10 @@ from mailmind.content.text import snippet_of
 from mailmind.mailbox.domain import conversations, identity
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
+from typing import Any
 
 
-_index = None                               # what keeps the search index up to date: bound by mailmind.bootstrap.mailbox
+_index: Any = None                               # what keeps the search index up to date: bound by mailmind.bootstrap.mailbox
 
 
 def bind_index(index):
@@ -359,7 +360,7 @@ def get_body(c, pk):
 
 # ------------------------------------------------------------------------- FTS
 RECIPIENT_ROWS_MAX = 5000
-RECIPIENTS_CHARS = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
+RECIPIENTS_CHARS: int = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
 
 def set_recipients(c, pk, addrs):

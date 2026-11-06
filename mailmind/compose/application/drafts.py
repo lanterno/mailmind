@@ -16,6 +16,7 @@ from mailmind.kernel import addresses
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
 from mailmind.platform.workers import gates
+from typing import Any
 
 _LIVE_TIMEOUT = 10
 
@@ -95,7 +96,7 @@ class Drafts:
         did = int(body["draft_id"]) if body.get("draft_id") else None
         key = composer_key(body)
 
-        def replaces():
+        def replaces() -> Any:
             """The row this save takes over: the one it names, or for a first save the one an earlier
             save under the composer's key made, whose answer the composer never got."""
             c = self._book.connect()
@@ -116,7 +117,7 @@ class Drafts:
             prev = replaces()    # under the gate: a save this one waited for has moved the row on
             if scope != gates.EVERY_ACCOUNT and scope_for(prev) != scope:
                 return None
-            same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
+            same = bool(prev) and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
             folder, uid, uidv, replaced = self._copies.append_to_drafts(
                 acct, built["raw"],
                 prev_uid=(prev["uid"] if same else None),

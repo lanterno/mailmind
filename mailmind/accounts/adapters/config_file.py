@@ -19,6 +19,7 @@ import tempfile
 import threading
 
 from mailmind.platform import settings
+from typing import Any
 
 EMPTY = {"accounts": []}
 
@@ -27,9 +28,9 @@ class ConfigFile:
     def __init__(self):
         self._lock = threading.Lock()
         self._seen = None             # (path, inode, size, mtime) of the parse kept in _raw
-        self._raw = None
+        self._raw: Any = None
 
-    def read(self):
+    def read(self) -> dict[str, Any]:
         """The file's contents as a dict of the caller's own, or EMPTY's copy when there is no
         file. A file that isn't valid JSON raises, every time it is read."""
         path = settings.current().config

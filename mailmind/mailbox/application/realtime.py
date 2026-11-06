@@ -28,7 +28,7 @@ class _Watch:
         self._stopping = stopping
         self.quit = False               # retired: its account is gone or now reached another way
         self.conn = None                # its connection, while it has one
-        self.thread = None
+        self.thread: threading.Thread | None = None
 
     def leaving(self):
         return self.quit or self._stopping()

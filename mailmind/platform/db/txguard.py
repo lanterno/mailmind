@@ -15,6 +15,7 @@ Standard library only: python3 server.py uses it.
 import sqlite3
 import threading
 import weakref
+from collections.abc import Callable
 
 
 class TxAcrossNetworkError(RuntimeError):
@@ -53,7 +54,7 @@ def refuse_network(what: str) -> None:
         raise TxAcrossNetworkError(f"{what} while a transaction is open on this thread")
 
 
-def guard_calls(obj, name: str, what):
+def guard_calls(obj, name: str, what: str | Callable[..., str]):
     """Make each call of `obj.name` pass refuse_network first, naming the call `what`, or
     `what(*args)` when it is a function. Returns obj. An object without that method (a test's
     stand-in) is left as it is."""

@@ -38,6 +38,7 @@ from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
 from mailmind.discovery.adapters.fts import BM25
+from typing import Any
 
 __all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
 
@@ -80,7 +81,7 @@ class _Bound:
 
     def __init__(self, transport):
         self.transport = transport
-        self._made = None, None
+        self._made: tuple[Any, Any] = None, None
         self._lock = threading.Lock()
 
     def __call__(self):

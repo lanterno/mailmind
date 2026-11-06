@@ -15,6 +15,7 @@ import urllib.parse
 from email import policy
 from email.header import decode_header
 from email.utils import getaddresses, parseaddr
+from typing import Any
 
 _FOLD = re.compile(r"\r?\n[ \t]+")
 
@@ -205,7 +206,7 @@ def _decode_fn(name):
         return name
 
 
-def extract_part(raw_bytes, part_id):
+def extract_part(raw_bytes, part_id) -> tuple[Any, Any]:
     """Re-walk a raw RFC822 message EXACTLY like parse() and return
     (payload_bytes, content_type) for the non-multipart part whose running 1-based
     index == int(part_id), else (None, None). Stays in lockstep with parse()'s idx

@@ -9,6 +9,7 @@ import ssl
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.platform import profile
+from typing import Any
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
 # imaplib.IMAP4.abort subclasses IMAP4.error; socket.timeout subclasses OSError. A NON-abort
@@ -126,7 +127,7 @@ class MailCommands:
             s.select(back_to, readonly=False)
 
 
-    def _imap_mutate(self, acct, fn):
+    def _imap_mutate(self, acct, fn) -> tuple[bool, Any]:
         """Run a mutation's IMAP work via _do_imap. A connection-level failure (a UNREACHABLE member,
         incl. IMAP4.abort) PROPAGATES so the route can queue it offline; a command-level IMAP4.error
         (NO/BAD: no such folder, over quota, no permission) returns (False, None). The server still

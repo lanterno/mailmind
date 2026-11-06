@@ -43,7 +43,7 @@ DRY_COMMANDS = {"sweep": "move junk to Trash, verified and audited", "sweep-ai":
 
 
 def parser():
-    top = argparse.ArgumentParser(prog="python -m mailmind", description=__doc__.split("\n", 1)[0])
+    top = argparse.ArgumentParser(prog="python -m mailmind", description=(__doc__ or "").split("\n", 1)[0])
     commands = top.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve", help="serve the app on 127.0.0.1 (FastAPI on uvicorn)")
     serve.add_argument("port", nargs="?", type=int, help="default 8721")

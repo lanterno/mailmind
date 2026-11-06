@@ -3,6 +3,8 @@ from typing import Any, Protocol
 
 
 class Accounts(Protocol):
+    def quiet_error(self, e) -> Any: ...
+
     def get(self, email) -> Any: ...
 
     def accounts(self) -> Any: ...
@@ -64,6 +66,8 @@ class Index(Protocol):
 class StoredMail(Protocol):
     """mailmind.mailbox.adapters.sqlite: the rows of the mail, the folders and the queue."""
     RECIPIENTS_CHARS: int
+
+    def pk_in(self, c, key, folder) -> Any: ...
 
     def _recipients_of(self, parsed) -> Any: ...
 

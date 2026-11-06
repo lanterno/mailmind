@@ -9,6 +9,7 @@ display-ready dict for the reader's Invite card. Read-only; no network. Total â€
 """
 import calendar
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 try:
     from zoneinfo import ZoneInfo
@@ -110,7 +111,7 @@ def _when(start, end, all_day):
 def _rrule_human(r):
     if not r:
         return ""
-    kv = {}
+    kv: dict[str, str] = {}
     for p in r.split(";"):
         if "=" in p:
             k, v = p.split("=", 1)
@@ -137,7 +138,8 @@ def _rrule_human(r):
 
 def parse(text):
     lines = _unfold(text)
-    method, ev, in_ev = "", None, False
+    method, in_ev = "", False
+    ev: dict[str, Any] | None = None
     events = []
     for ln in lines:
         name, params, val = _split(ln)

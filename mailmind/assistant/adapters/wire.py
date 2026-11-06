@@ -72,5 +72,6 @@ def batch_result(line: dict, asked: str) -> BatchResult:
     if result.get("type") == "succeeded":
         return BatchResult(custom_id, reply(result.get("message") or {}, asked))
     error = result.get("error") or {}
-    inner = error.get("error") if isinstance(error.get("error"), dict) else error
+    nested = error.get("error")
+    inner = nested if isinstance(nested, dict) else error
     return BatchResult(custom_id, None, "invalid_request" in str(inner.get("type") or ""))

@@ -19,7 +19,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-Handler = Callable[[Any], None]
+Handler = Callable[[Any], object]
 
 
 def _is_event(topic) -> bool:
