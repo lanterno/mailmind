@@ -11,12 +11,12 @@ _DANGER = re.compile(
 # An addr-spec may not contain whitespace, separators, brackets, or control chars.
 _ADDR_BAD = re.compile(r'[\s,;:<>()\[\]\\"]|[\x00-\x1f\x7f]')
 
-def clean(s):
+def clean(s: str | None) -> str:
     """Strip dangerous codepoints from a free-text header value (subject/display name)."""
     return _DANGER.sub("", (s or "").replace("\t", " ")).strip()
 
 
-def idna_domain(domain):
+def idna_domain(domain: str | None) -> str:
     """ASCII (IDNA) form of a domain, or raise ValueError. ASCII domains pass through."""
     domain = (domain or "").strip().rstrip(".")
     if not domain or "." not in domain and domain.lower() not in ("localhost",):
@@ -27,7 +27,7 @@ def idna_domain(domain):
         raise ValueError(f"invalid domain: {domain!r}")
 
 
-def validate_pair(name, addr):
+def validate_pair(name: str | None, addr: str | None) -> tuple[str, str]:
     """(clean_display_name, addr_spec_ascii) from an already-split (name, addr), or
     raise ValueError. addr_spec is normalized to local@idna-domain."""
     addr = (addr or "").strip()
@@ -43,11 +43,12 @@ def validate_pair(name, addr):
     return clean(name), f"{local}@{idna_domain(domain)}"
 
 
-def parse_addr_list(raw):
+def parse_addr_list(raw: str | list[str] | None) -> list[tuple[str, str]]:
     """Validate a raw recipient string OR a list of tokens -> [(name, addr_spec)].
     Uses getaddresses so a comma inside a quoted display name is not mis-split."""
     tokens = raw if isinstance(raw, list) else [raw or ""]
-    out, seen = [], set()
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
     for name, addr in email.utils.getaddresses([t for t in tokens if t]):
         dn, spec = validate_pair(name, addr)   # validate the split pair directly
         key = spec.lower()

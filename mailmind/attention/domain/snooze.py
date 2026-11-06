@@ -1,10 +1,11 @@
 """When a snooze wakes. Presets read in the machine's local zone: the server is the person's machine."""
 from datetime import datetime, timedelta
+from typing import Any
 
 BULK_CAP = 500      # the most one request may snooze: the one bulk array the API takes, capped here and not only at plan time
 
 
-def wake_time(body, now):
+def wake_time(body: dict[str, Any], now: datetime) -> int | None:
     """A wake time (unix secs) from {preset} or {until}, or None if it's invalid. `now` is aware, in the local zone."""
     preset = body.get("preset")
     if preset:

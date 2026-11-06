@@ -3,11 +3,11 @@ import time
 from datetime import datetime, timezone
 
 
-def now_iso():
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def rel_time(iso):
+def rel_time(iso: str | None) -> str:
     if not iso:
         return ""
     try:
@@ -29,7 +29,7 @@ def rel_time(iso):
         return iso[:10]
 
 
-def ago(ts):
+def ago(ts: float | str | None) -> str:
     """'3d'/'5h' since a unix ts."""
     if not ts:
         return "a while"
@@ -41,7 +41,7 @@ def ago(ts):
     return f"{s // 86400}d"
 
 
-def rel_time_future(ts):
+def rel_time_future(ts: float | str) -> str:
     """Human 'wakes ...' label for a future unix timestamp."""
     try:
         dt = datetime.fromtimestamp(int(ts)).astimezone()
