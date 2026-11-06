@@ -56,8 +56,9 @@ class Unsubscribing:
             return mime.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
         return NO_METHOD, accts
 
-    def _mailto(self, info, acct_emails):
-        """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From).
+    def _mailto(self, info, acct_emails, key):
+        """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From), through
+        the outbox, so a server that's away only makes it wait, and it's filed in Sent like anything else you send.
         Host/creds come from config keyed by the account email — never the request → no SMTP-SSRF."""
         to = info.get("mailto_to") or ""
         if not re.fullmatch(r"[^\s@<>,;:\"()\[\]\\]+@[^\s@<>,;:\"()\[\]\\]+", to):
@@ -75,8 +76,9 @@ class Unsubscribing:
                 m["Message-ID"] = email.utils.make_msgid(domain=em.rpartition("@")[2] or None)
                 m["Auto-Submitted"] = "auto-generated"
                 m.set_content(text)
-                if self._send.send(em, m.as_bytes(policy=email.policy.SMTP), [to]):   # CRLF, as SMTP wants
-                    sent += 1
+                self._send.send(em, m.as_bytes(policy=email.policy.SMTP), m["Message-ID"], to, subj,   # CRLF, as SMTP wants
+                                f"{key}:{em}")
+                sent += 1
             except Exception:
                 pass                                         # a removed or stale account: skip it, not the cleanup
         return sent > 0
@@ -102,7 +104,7 @@ class Unsubscribing:
             status = "unsubscribed_oneclick" if ok else "failed"
         elif method == "mailto":
             rate_gate()
-            status = "mailto_sent" if self._mailto(info, accts) else "failed"
+            status = "mailto_sent" if self._mailto(info, accts, key) else "failed"
         elif method == "http-page":
             status, browser_url = "needs_browser", info.get("https_uri")
         else:

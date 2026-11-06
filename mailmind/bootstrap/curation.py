@@ -78,14 +78,13 @@ class _Filing:
 
 
 class _SystemSend:
-    def send(self, account, raw, recipients):
+    def send(self, account, raw, message_id, to, subject, key):
         from mailmind.bootstrap import accounts
         from mailmind.bootstrap import compose
-        acct = accounts.get(account)                      # a removed/stale account raises KeyError
-        if not acct:
-            return False
-        compose.transport.send(acct, raw, recipients)
-        return True
+        accounts.get(account)                             # a removed/stale account raises KeyError
+        compose.outbox.enqueue({"raw": raw, "message_id": message_id, "envelope": [to],
+                                "to_disp": [to], "cc_disp": [], "bcc_disp": []},
+                               {"account": account, "idempotency_key": key, "subject": subject})
 
 
 class _SafeHttp:

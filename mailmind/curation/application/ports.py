@@ -22,8 +22,8 @@ class AuditLog(Protocol):
 
 
 class SystemSend(Protocol):
-    """A message MailMind sends for itself, from one of the person's accounts."""
-    def send(self, account: str, raw: bytes, recipients: list) -> bool: ...
+    """A message MailMind sends for itself, from one of the person's accounts. `key` makes a second try the same send."""
+    def send(self, account: str, raw: bytes, message_id: str, to: str, subject: str, key: str) -> None: ...
 
 
 class SenderMail(Protocol):
