@@ -1,10 +1,10 @@
-"""export.py's read-only view of the database, wherever the data directory is."""
+"""The export's read-only view of the database, wherever the data directory is."""
 import pytest
 
 
 @pytest.mark.parametrize("name", ["plain", "with space", "hash#mark", "what?", "per%cent"])
 def test_the_export_reads_the_database_whatever_its_directory_is_called(tmp_path, name):
-    import export
+    from mailmind.platform.db import export
     from mailmind.bootstrap.mailbox import store
     from mailmind.platform import settings
     home = tmp_path / name
