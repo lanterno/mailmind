@@ -56,8 +56,8 @@ class _Send:
             "references": reference_chain(original["message_id"], original["refs"], original["in_reply_to"])})
 
     def enqueue(self, built, meta):
-        import outbox
-        return outbox.enqueue(built, meta)
+        from mailmind.bootstrap import compose
+        return compose.outbox.enqueue(built, meta)
 
 
 _stored = StoredInvites(_Folders())

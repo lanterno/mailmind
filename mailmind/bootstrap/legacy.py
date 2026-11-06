@@ -7,11 +7,11 @@ package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
 import threading
 
 from mailmind.accounts.domain import events as account_events
-from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import compose, mailbox
+from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import scheduler
 
-import outbox
 import readmutq
 import realtime
 import store
@@ -32,9 +32,9 @@ def wire(server):
     It takes the server module as an argument rather than importing it: `python3 server.py` runs
     as __main__, and an import here would load a second copy with state of its own."""
     unwire()
-    _wired.extend([bus.subscribe(outbox.Sent, server._after_send),
-                   bus.subscribe(outbox.Failed, server._after_send),
-                   bus.subscribe(outbox.DraftCopyRemoved, server._after_draft_removed),
+    _wired.extend([bus.subscribe(Sent, server._after_send),
+                   bus.subscribe(Failed, server._after_send),
+                   bus.subscribe(DraftCopyRemoved, server._after_draft_removed),
                    bus.subscribe(readmutq.Applied, server._after_readmut),
                    bus.subscribe(readmutq.Restored, server._after_readmut),
                    bus.subscribe(realtime.InboxChanged, server._after_idle),
@@ -78,7 +78,7 @@ def start(server, spawn=_daemon):
         print("(auto-sync disabled: the read-only profile writes nothing, so sends and moves wait "
               "in their queues; snooze still runs)", flush=True)
     else:
-        spawn(outbox.worker_loop)
+        spawn(compose.outbox.worker_loop)
         spawn(readmutq.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch

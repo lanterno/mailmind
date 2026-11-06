@@ -34,11 +34,10 @@ import warm
 import readmutq
 import summarize
 import mailops
-from mailmind.bootstrap import attention, calendar, curation, discovery
+from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
 from mailmind.compose.api import build_message, forward_bodies, lf, reference_chain, reply_bodies, resume_split, thread_ids
-import outbox
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
 from mailmind.content.quote import own_html, quote_tail
@@ -646,8 +645,8 @@ def _is_draft(row):
 
 
 def _draft_copy_ours_to_remove(d):
-    """outbox.draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
-    return outbox.draft_copy_is_ours(d) or _plays_drafts(d["account"], d["folder"])
+    """The outbox's draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
+    return compose.outbox.draft_copy_is_ours(d) or _plays_drafts(d["account"], d["folder"])
 
 
 def _draft_info(row):
@@ -656,10 +655,10 @@ def _draft_info(row):
     if not _is_draft(row):
         return {}
     c = store.conn()
-    d = store.draft_by_msgid(c, row["account"], row["message_id"])
+    d = compose.book.draft_by_msgid(c, row["account"], row["message_id"])
     if not d:
         now = now_iso()
-        did = store.draft_upsert(c, {"id": None, "account": row["account"], "folder": row["folder"],
+        did = compose.book.draft_upsert(c, {"id": None, "account": row["account"], "folder": row["folder"],
                                      "uid": row["uid"], "message_id": row["message_id"],
                                      "uidvalidity": store.get_uidvalidity(c, row["account"], row["folder"]),
                                      "in_reply_to_pk": None, "mode": "new",
@@ -1576,7 +1575,7 @@ def _compose_spec(body):
             except (TypeError, ValueError):
                 did = None
             c = store.conn()
-            dr = store.draft_get(c, did) if did else None
+            dr = compose.book.draft_get(c, did) if did else None
             c.close()
             if dr and dr["tail_html"] and lf(dr["tail_text"] or "") == tail:
                 # built and sanitized by us at that save; never re-sanitized
@@ -1666,14 +1665,14 @@ def do_send(body):
     if not draft_id and _composer_key(body):    # a first save whose answer the composer never heard
         c = store.conn()
         try:
-            found = store.draft_by_key(c, _composer_key(body))
+            found = compose.book.draft_by_key(c, _composer_key(body))
         finally:
             c.close()
         draft_id = found["id"] if found else None
     meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
             "in_reply_to_pk": in_reply_to_pk, "orig_message_id": spec["in_reply_to"],
             "subject": spec["subject"], "draft_id": draft_id, "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
-    oid, created = outbox.enqueue(built, meta)
+    oid, created = compose.outbox.enqueue(built, meta)
     return {"ok": True, "outbox_id": oid, "queued": created, "scheduled": bool(send_after),
             "recipients": len(built["envelope"])}, 200
 
@@ -1683,7 +1682,7 @@ def do_draft(body):
     profile.refuse_writes("a draft save")    # a draft lives on the server; nothing queues it yet
     if body.get("delete") and body.get("draft_id"):
         c = store.conn()
-        row = store.draft_get(c, int(body["draft_id"]))
+        row = compose.book.draft_get(c, int(body["draft_id"]))
         c.close()
         if row:
             removed = False
@@ -1696,7 +1695,7 @@ def do_draft(body):
                     print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
             c = store.conn()
             try:
-                store.draft_delete(c, int(body["draft_id"]))
+                compose.book.draft_delete(c, int(body["draft_id"]))
                 if removed:
                     store.delete_by_uids(c, row["account"], row["folder"], [row["uid"]])
                 c.commit()
@@ -1725,8 +1724,8 @@ def do_draft(body):
         c = store.conn()
         try:
             if did:
-                return store.draft_get(c, did)
-            return store.draft_by_key(c, key) if key else None
+                return compose.book.draft_get(c, did)
+            return compose.book.draft_by_key(c, key) if key else None
         finally:
             c.close()
 
@@ -1771,13 +1770,13 @@ def do_draft(body):
         bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
         c = store.conn()
         try:
-            new_id = store.draft_upsert(c, row)
-            store.draft_set_resume(c, new_id, lf(spec["own"]),
+            new_id = compose.book.draft_upsert(c, row)
+            compose.book.draft_set_resume(c, new_id, lf(spec["own"]),
                                    lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
                                    spec["tail"]["html"], json.dumps(bcc) if bcc else None,
                                    hashlib.sha256(built["raw"]).hexdigest())
             if key and not did:
-                store.draft_set_key(c, new_id, key)
+                compose.book.draft_set_key(c, new_id, key)
             for account, in_folder, old_uid in gone:
                 store.delete_by_uids(c, account, in_folder, [old_uid])
             c.commit()
@@ -1935,8 +1934,8 @@ def draft_resume(body):
     elsewhere = " Edit it in the app that made it."
     unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
     c = store.conn()
-    before = store.draft_by_msgid(c, row["account"], row["message_id"])
-    queued = before is not None and store.outbox_holds_draft(c, before["id"])
+    before = compose.book.draft_by_msgid(c, row["account"], row["message_id"])
+    queued = before is not None and compose.book.outbox_holds_draft(c, before["id"])
     c.close()
     if queued:                                           # reopened and sent again, it would go out twice
         return {"ok": False, "error": "This draft is in the outbox, waiting to be sent. Cancel it there "
@@ -1948,7 +1947,7 @@ def draft_resume(body):
         # the probe ran before the gate: a save or a send that held it meanwhile may have replaced
         # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
         c = store.conn()
-        now = store.draft_get(c, before["id"]) if before is not None else None
+        now = compose.book.draft_get(c, before["id"]) if before is not None else None
         c.close()
         moved = before is not None and (now is None or (now["uid"], now["message_id"])
                                         != (before["uid"], before["message_id"]))
@@ -1995,7 +1994,7 @@ def draft_resume(body):
         return unreadable, 422
     did = _draft_info(row)["draft_id"]                   # registers another app's draft
     c = store.conn()
-    d = store.draft_get(c, did)
+    d = compose.book.draft_get(c, did)
     cur = store.get_uidvalidity(c, row["account"], row["folder"])
     c.close()
     same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
@@ -2039,7 +2038,7 @@ def draft_resume(body):
     bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
     if not same_copy:                                    # the next save or send replaces the copy opened
         c = store.conn()
-        store.draft_repoint(c, d, row["folder"], row["uid"], cur, forget=not exact)
+        compose.book.draft_repoint(c, d, row["folder"], row["uid"], cur, forget=not exact)
         c.commit()
         c.close()
     subject = header_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
@@ -2985,7 +2984,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/search":
                 self._json(discovery.search.answer(q))
             elif u.path == "/api/outbox":
-                self._json(outbox.list_recent(int(q.get("limit", ["50"])[0])))
+                self._json(compose.outbox.list_recent(int(q.get("limit", ["50"])[0])))
             elif u.path == "/api/pending":
                 self._json(readmutq.list_open())
             elif u.path == "/api/contacts":
@@ -3086,12 +3085,12 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/pending/discard":
                 self._json(*do_pending_discard(int(b.get("id"))))
             elif u.path == "/api/outbox/retry":
-                ok = outbox.retry(int(b.get("id")))
+                ok = compose.outbox.retry(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
             elif u.path == "/api/outbox/cancel":
-                self._json({"ok": outbox.cancel(int(b.get("id")))})
+                self._json({"ok": compose.outbox.cancel(int(b.get("id")))})
             elif u.path == "/api/outbox/sendnow":
-                ok = outbox.send_now(int(b.get("id")))
+                ok = compose.outbox.send_now(int(b.get("id")))
                 self._json({"ok": ok}, 200 if ok else 404)
             elif u.path == "/api/trash":
                 self._json(do_trash(b))
@@ -3309,7 +3308,7 @@ def schedule(jobs):
 
 
 def _after_send(_sent):
-    """outbox.Sent or outbox.Failed: a queued send went out, or an attempt at one failed (with
+    """Compose's Sent or Failed: a queued send went out, or an attempt at one failed (with
     SSE live the page doesn't poll the outbox, so a send given up on would still look pending)."""
     invalidate_stats()
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
@@ -3321,7 +3320,7 @@ def _after_flags_changed(changed):
 
 
 def _after_draft_removed(gone):
-    """outbox.DraftCopyRemoved: a send's draft left the server."""
+    """Compose's DraftCopyRemoved: a send's draft left the server."""
     _draft_list_changed(gone.account, gone.folder)
 
 
