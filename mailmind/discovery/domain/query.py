@@ -19,6 +19,7 @@ import shlex
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Self
 
 MAX_CHARS = 512
 
@@ -64,7 +65,7 @@ class Clause:
     narrows: bool = False       # asked for, it picks out part of the mailbox
 
 
-def _seconds(text):
+def _seconds(text: str) -> int | None:
     """A date or time as seconds. With no zone it means this machine's, as the person typing it does:
     before:2026-11-02 ends at that midnight here, not at UTC's."""
     try:
@@ -73,7 +74,7 @@ def _seconds(text):
         return None
 
 
-def _clause(token):
+def _clause(token: str) -> Clause | None:
     negated = token.startswith("-") and len(token) > 1
     if negated:
         token = token[1:]
@@ -112,7 +113,7 @@ class QuerySpec:
     clauses: tuple[Clause, ...] = ()
 
     @classmethod
-    def parse(cls, text):
+    def parse(cls, text: str | None) -> Self:
         text = (text or "").strip()[:MAX_CHARS]
         try:
             tokens = shlex.split(text)
@@ -120,13 +121,13 @@ class QuerySpec:
             tokens = text.split()
         return cls(tuple(c for c in map(_clause, tokens) if c))
 
-    def narrows(self):
+    def narrows(self) -> bool:
         """Whether it picks out part of the mailbox, which a bulk command must. A folder or an account
         alone spans nearly everything, and a negation never narrows on its own."""
         return any(c.narrows and not c.negated for c in self.clauses)
 
-    def names_folder(self):
+    def names_folder(self) -> bool:
         return any(c.kind is Kind.FOLDER and not c.negated for c in self.clauses)
 
-    def asks_about_snoozed(self):
+    def asks_about_snoozed(self) -> bool:
         return any(c.kind is Kind.SNOOZED for c in self.clauses)

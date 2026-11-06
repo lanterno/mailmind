@@ -4,12 +4,12 @@ EXCLUDE = ("text/calendar", "application/ics", "pkcs7", "pgp-signature", "pgp-ke
            "x-pkcs7", "application/x-pkcs7-signature")
 
 
-def is_document(ct):
+def is_document(ct: str | None) -> bool:
     ct = (ct or "").lower()
     return not any(x in ct for x in EXCLUDE)
 
 
-def kind_of(ct, fn):
+def kind_of(ct: str | None, fn: str | None) -> str:
     ct = (ct or "").lower(); fn = (fn or "").lower()
     ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
     if "pdf" in ct or ext == "pdf":

@@ -2,6 +2,9 @@
 you sent them, a delivered outbox envelope (Bcc included), or a keep_senders rule."""
 import dataclasses
 import json
+from collections.abc import Callable, Container
+
+from mailmind.kernel.row import Row
 
 MIN_HISTORY = 50     # fewer non-junk messages than this → too little history to call anyone new
 
@@ -9,16 +12,16 @@ MIN_HISTORY = 50     # fewer non-junk messages than this → too little history 
 @dataclasses.dataclass(frozen=True)
 class Facts:
     """What the stored mail says about the addresses asked after. Holds no subject and no date."""
-    accounts: list          # the accounts that hold mail
-    senders: list           # (address, folder): non-junk mail from one of them
-    synced: list            # (account, folder): every folder synced
-    draft_folders: set      # where a draft is kept
-    copies: list            # rows of mail to one of them: addr, account, folder, is_junk, sender
-    envelopes: list         # what the outbox delivered, as JSON lists
-    thin: bool              # too little history to call anyone new
+    accounts: list[str]                 # the accounts that hold mail
+    senders: list[tuple[str, str]]      # (address, folder): non-junk mail from one of them
+    synced: list[tuple[str, str]]       # (account, folder): every folder synced
+    draft_folders: set[str]             # where a draft is kept
+    copies: list[Row]                   # rows of mail to one of them: addr, account, folder, is_junk, sender
+    envelopes: list[str | None]         # what the outbox delivered, as JSON lists
+    thin: bool                          # too little history to call anyone new
 
 
-def vouched(facts, wanted, own, role_by_name):
+def vouched(facts: Facts, wanted: set[str], own: Container[str], role_by_name: Callable[[str], str]) -> set[str]:
     """Which of the addresses `wanted` the stored mail vouches for. `own` is your addresses."""
     # junk excluded: one phishing mail can't vouch, whether we or the provider filed it
     hit = {addr for addr, folder in facts.senders if role_by_name(folder) != "junk"}
