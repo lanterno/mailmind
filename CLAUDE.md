@@ -510,6 +510,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
   (`mailops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
   life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart.
+- A bulk command's confirm carries out a plan (`mailmind.assistant.application.plans`,
+  `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
+  the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is
+  good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
+  in is left where it went, and counted as `gone`. Each message goes through its own route (`do_write`, `do_trash`,
+  `do_snooze`), under one undo group.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`do_write` / `do_trash`) under one undo group.
