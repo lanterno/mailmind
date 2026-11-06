@@ -112,7 +112,7 @@ def test_what_tests_need_is_allowed(tmp_path):
     db.execute("CREATE TABLE t(x)")
     db.close()
     (tmp_path / "sweep_audit.jsonl").write_text("{}\n")
-    open(os.path.join(ROOT, "dashboard.html"), "rb").close()           # source files are fine
+    open(os.path.join(ROOT, "web", "index.html"), "rb").close()           # source files are fine
     srv = socket.create_server(("127.0.0.1", 0))
     socket.create_connection(srv.getsockname()).close()
     srv.close()

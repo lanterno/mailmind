@@ -174,7 +174,7 @@ def test_each_hub_draws_its_own_run():
 def test_the_page_listens_for_every_topic_and_for_resync_and_nothing_else():
     import os
     import re
-    path = os.path.join(os.path.dirname(__file__), "..", "dashboard.html")
+    path = os.path.join(os.path.dirname(__file__), "..", "web", "assets", "legacy", "app.js")
     with open(path, encoding="utf-8") as f:
         heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', f.read()))
     assert heard == sse.TOPICS | {RESYNC}

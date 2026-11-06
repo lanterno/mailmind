@@ -407,7 +407,7 @@ def test_hwf_the_client_kick_bar_is_what_the_server_says(app, world, tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    with open(os.path.join(os.path.dirname(__file__), "..", "dashboard.html"), encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(__file__), "..", "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
         fn = re.search(r"function _draftEligibleClient\(it\)\{[^{}]*\}", f.read()).group(0)
     pk = world.pk(QUILT)
     items = []

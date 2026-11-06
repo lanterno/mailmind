@@ -133,21 +133,16 @@ def test_no_cache_keeps_an_api_answer():
     assert "Cache-Control" not in dict(perimeter.answer_headers("/"))
 
 
-def policy_of(html):
-    return dict(d.split(" ", 1) for d in perimeter.page_policy(html).split("; "))
+def policy_of():
+    return dict(d.split(" ", 1) for d in perimeter.page_policy().split("; "))
 
 
-def test_the_page_may_run_its_own_inline_scripts_and_no_others():
-    # The first is the example of MDN's script-src page; a line break counts as one newline, as
-    # the HTML parser makes it.
-    got = policy_of("<p><script>var inline = 1;</script><p><script>\r\nx()\r\n</script>")["script-src"]
-    assert got.split(" ") == ["'sha256-B2yPHKaXnvFWtRChIbabYmUBFZdVfKKXHbWtWidDVF8='",
-                              policy_of("<script>\nx()\n</script>")["script-src"]]
-    assert policy_of("<p>no script")["script-src"] == "'none'"
+def test_only_script_files_from_this_server_may_run():
+    assert policy_of()["script-src"] == "'self'"
 
 
 def test_the_page_reaches_only_this_server_and_no_one_may_frame_it():
-    policy = policy_of("")
+    policy = policy_of()
     assert {k: policy[k] for k in ("default-src", "connect-src", "frame-ancestors", "base-uri", "form-action",
                                    "object-src")} == {
         "default-src": "'none'", "connect-src": "'self'", "frame-ancestors": "'none'", "base-uri": "'none'",

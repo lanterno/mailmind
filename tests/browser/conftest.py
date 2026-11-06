@@ -1,9 +1,8 @@
 """Browser fixtures: one Chromium for the session, and per test a page on the app fixture's
 server (the fake IMAP world, a temporary database, the frozen clock).
 
-The page may reach only the app's own origin: any other request (the web fonts dashboard.html
-asks Google for) is answered with an empty response here and listed in `page.blocked`, so no
-test sends anything off the machine. The page's clock is set to the server's NOW, so "today"
+The page may reach only the app's own origin: any other request is answered with an empty response
+here and listed in `page.blocked`, which `clean` holds empty, so no test sends anything off the machine. The page's clock is set to the server's NOW, so "today"
 means the same day on both sides. `page.problems` collects uncaught errors, console errors and
 content security policy violations.
 """

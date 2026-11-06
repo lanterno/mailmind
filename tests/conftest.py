@@ -39,7 +39,7 @@ def pytest_addoption(parser):
     parser.addoption("--update-golden", action="store_true",
                      help="rewrite tests/golden/ from what the app answers now, instead of comparing")
     parser.addoption("--browser", action="store_true",
-                     help="also run the tests marked browser, which drive dashboard.html in Chromium")
+                     help="also run the tests marked browser, which drive the page in Chromium")
     parser.addoption("--dovecot", action="store_true",
                      help="also run the tests marked dovecot, which need Docker to run Dovecot")
 

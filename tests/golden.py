@@ -19,9 +19,6 @@ HEADERS = ("content-type", "content-disposition", "cache-control", "x-frame-opti
            "x-content-type-options", "referrer-policy", "content-security-policy",
            "content-security-policy-report-only", "cross-origin-opener-policy",
            "cross-origin-resource-policy", "permissions-policy")
-# A content security policy names the page's inline scripts by hash, and every edit to a script
-# changes its hash, so the golden files keep each hash's place in the policy, not its value.
-_SCRIPT_HASH = re.compile(r"'sha256-[A-Za-z0-9+/]+=*'")
 
 
 def _file_for(nodeid):
@@ -57,8 +54,7 @@ class Golden:
         JSON as it is, short text as text, anything else as its length and sha256. body=False
         leaves a non-JSON body out (the page, whose every edit would otherwise show up here)."""
         entry = {"request": label, "status": resp.status,
-                 "headers": {k: _SCRIPT_HASH.sub("'sha256-HASH'", resp.headers[k])
-                             for k in HEADERS if k in resp.headers}}
+                 "headers": {k: resp.headers[k] for k in HEADERS if k in resp.headers}}
         ctype = resp.headers.get("content-type", "")
         if isinstance(resp.body, (dict, list)):
             entry["body"] = resp.body

@@ -689,8 +689,8 @@ def test_two_cleanups_of_one_sender_undo_separately():
 
 
 def _page_functions(*names):
-    """The named one-line functions from dashboard.html, as source."""
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html"), encoding="utf-8") as f:
+    """The named one-line functions from the page's script, as source."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
         page = f.read()
     out = []
     for name in names:

@@ -1,4 +1,4 @@
-"""The composer's send-time checks (dashboard.html, the block between /* send-guard:pure:start */
+"""The composer's send-time checks (app.js, the block between /* send-guard:pure:start */
 and /* send-guard:pure:end */): attachment wording in eight languages, what counts as typed text,
 empty subjects, reply-all size, speed on long unbroken text, acknowledgements, and the exact wording of every line. The block
 is pure JavaScript with no DOM, so this runs it once in node, like `just check-frontend` does.
@@ -153,7 +153,7 @@ def _run(group="main"):
         return _RESULTS[group]
     make, stop = _GROUPS[group]
     try:
-        with open(os.path.join(HERE, "dashboard.html"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
             html = f.read()
         a, b = html.index(START), html.index(END)
         block = html[a + len(START):b]

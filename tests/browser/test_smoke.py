@@ -1,4 +1,4 @@
-"""Smoke tests: dashboard.html in Chromium, on the app fixture's server over the fake IMAP world.
+"""Smoke tests: the page in Chromium, on the app fixture's server over the fake IMAP world.
 Each test drives one everyday flow with the keyboard and the mouse as a person would, then checks
 that the page and the servers behind it (the fake IMAP server, the outbox, the fake SMTP server)
 agree on what happened.
@@ -80,7 +80,7 @@ def switch_account(page, acct):
 
 def clean(page):
     assert page.problems == []
-    assert {u.split("/")[2] for u in page.blocked} <= {"fonts.googleapis.com", "fonts.gstatic.com"}
+    assert page.blocked == []
 
 
 def compose(page, to, subject, body):
