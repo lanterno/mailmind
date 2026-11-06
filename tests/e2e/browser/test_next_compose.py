@@ -702,6 +702,10 @@ def test_a_quick_reply_starts_as_its_line(page, world):
     page.get_by_role("button", name="Thanks!").click()
     expect(body(page)).to_have_value(re.compile("^Thanks!"))
     expect(page.get_by_role("heading", name="Reply", exact=True)).to_be_visible()
+    until(page, lambda: page.problems, "a quick reply asks the AI for a version of its own, which AI being off refuses")
+    assert all("status of 409" in p for p in page.problems), page.problems
+    expect(body(page)).to_have_value(re.compile("^Thanks!"))      # with no AI the line stays
+    page.problems.clear()
     clean(page)
 
 
