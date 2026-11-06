@@ -7,6 +7,9 @@ CREATE INDEX idx_draft_ahead_created ON draft_ahead(created_ts);
 -- index idx_followups_state
 CREATE INDEX idx_followups_state ON followups(account, state);
 
+-- index idx_message_recipients_addr
+CREATE INDEX idx_message_recipients_addr ON message_recipients(addr);
+
 -- index idx_messages_key
 CREATE INDEX idx_messages_key ON messages(message_key);
 
@@ -70,6 +73,9 @@ CREATE TABLE followups ( -- commitment tracking; keyed on (account,thread_id), N
 -- table message_identity
 CREATE TABLE message_identity( key INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, identity TEXT NOT NULL, gone_at INTEGER, UNIQUE(account, identity));
 
+-- table message_recipients
+CREATE TABLE message_recipients( message_pk INTEGER NOT NULL REFERENCES messages(pk) ON DELETE CASCADE, addr TEXT NOT NULL, PRIMARY KEY(message_pk, addr));
+
 -- table messages
 CREATE TABLE messages ( pk INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, kind TEXT NOT NULL, -- gmail | proton | imap folder TEXT NOT NULL, uid INTEGER NOT NULL, message_id TEXT, -- RFC822 Message-ID gmail_thread TEXT, -- X-GM-THRID (gmail) for threading thread_id TEXT, -- cross-provider computed thread id in_reply_to TEXT, refs TEXT, -- In-Reply-To / References for threading from_addr TEXT, from_name TEXT, subject TEXT, date_iso TEXT, ts INTEGER, snippet TEXT, -- plain-text body, truncated (list + AI) bucket TEXT, confidence TEXT, reason TEXT, is_junk INTEGER DEFAULT 0, -- a BADGE now (Mailbox shows junk too) verified INTEGER DEFAULT 0, last_seen TEXT, seen INTEGER DEFAULT 0, -- \Seen flagged INTEGER DEFAULT 0, -- \Flagged (star) answered INTEGER DEFAULT 0, -- \Answered draft INTEGER DEFAULT 0, -- \Draft deleted INTEGER DEFAULT 0, -- \Deleted has_attach INTEGER DEFAULT 0, body_fetched INTEGER DEFAULT 0, -- 1 once raw RFC822 is in bodies body_text TEXT, -- plain-text body for FTS (NULL until fetched) snoozed_until INTEGER, recipients TEXT, list_unsub_raw TEXT, list_unsub_method TEXT, pending_removal INTEGER, message_key INTEGER, -- unix secs; NULL = not snoozed (hidden from lists until due) UNIQUE(account, folder, uid) );
 
@@ -121,4 +127,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=34;
+PRAGMA user_version=35;
