@@ -2,6 +2,7 @@
 // way and neither can drift from the other.
 import { panel } from "../features/brief/Panels";
 import { composing } from "../features/compose/compose";
+import { docsOpen } from "../features/docs/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
@@ -122,6 +123,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
   add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
   add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
+  add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => docsOpen.set(true) });
   for (const v of m.views) {
     const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
     add({ id: `view:${v.id}`, group: "Navigation", label: `View · ${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
