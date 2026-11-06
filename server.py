@@ -51,6 +51,7 @@ import smtpsend
 import outbox
 import search
 from mailmind.content import mime
+from mailmind.content.headers import addr_chip, header_chips, header_text
 import ics
 import summarize_thread
 import summarize_briefing
@@ -2921,7 +2922,7 @@ def do_draft(body):
                "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
                "mode": body.get("mode", "new"), "subject": spec["subject"],
                "created_at": now, "updated_at": now}
-        bcc = [compose.addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
+        bcc = [addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
         c = store.conn()
         try:
             new_id = store.draft_upsert(c, row)
@@ -3009,55 +3010,6 @@ def _draft_live(acct, folder, uid):
             s.logout()
         except Exception:
             pass
-
-
-def _unsurrogate(s):
-    """A header written in raw UTF-8 (RFC 6532) as text: policy.default keeps its 8-bit bytes as
-    lone surrogates, which would show as replacement marks and go out as "unknown-8bit"."""
-    try:
-        return s.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
-    except UnicodeError:
-        return s.encode("utf-8", "replace").decode("utf-8")
-
-
-def _raw_header(msg, name):
-    """Every value of one header as written, unfolded and unparsed."""
-    return [_unsurrogate(re.sub(r"\r?\n(?=[ \t])", "", v)) for k, v in msg.raw_items() if k.lower() == name.lower()]
-
-
-def _hdr_text(msg, name):
-    """One header of a parsed draft as text, or None. email.policy.default parses a header when
-    it is read, so one it can't parse (an encoded line break, comments nested past the recursion
-    limit) raises there: its raw value stands in."""
-    try:
-        v = msg.get(name)
-    except Exception:
-        raw = _raw_header(msg, name)
-        return raw[0] if raw else None
-    return None if v is None else _unsurrogate(str(v))
-
-
-def _hdr_chips(msg, name):
-    """One address header of a parsed draft as composer chips, de-duplicated by address. A header
-    that won't parse gives its bare addresses."""
-    try:
-        pairs = [(a.display_name, a.addr_spec) for h in msg.get_all(name) or [] for a in h.addresses]
-    except Exception:
-        raw = _raw_header(msg, name)
-        try:
-            pairs = [("", a) for _, a in email.utils.getaddresses(raw)]
-        except Exception:                                # its comment parser recurses too
-            pairs = []
-        if not any("@" in a for _, a in pairs):          # or gives up with ('', ''): the addresses as written
-            pairs = [("", a) for v in raw for a in re.findall(r'[^\s<>,;:"()\[\]]+@[^\s<>,;:"()\[\]]+', v)]
-    out, seen = [], set()
-    for n, a in pairs:
-        n, a = _unsurrogate(n or ""), _unsurrogate(a or "")
-        if "@" not in a or a.lower() in seen:
-            continue
-        seen.add(a.lower())
-        out.append(compose.addr_chip(n, a))
-    return out
 
 
 def _resume_files(msg, parsed, elsewhere):
@@ -3215,7 +3167,7 @@ def draft_resume(body):
     if size + _RESUME_HEADROOM > MAX_SEND_POST:
         return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
                                       "and the text it quotes." + elsewhere}, 422
-    irt, refs = compose.thread_ids(_hdr_text(msg, "In-Reply-To"), _hdr_text(msg, "References"))
+    irt, refs = compose.thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
     mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
     if mode == "new" and irt:                            # MailMind's own new drafts never carry one
         mode = "reply"
@@ -3235,7 +3187,7 @@ def draft_resume(body):
             return compose.parse_addr_list([chip])[0][1].lower()
         except (ValueError, IndexError):
             return ""
-    hdr = _hdr_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
+    hdr = header_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
     had = {key(x) for x in hdr}
     missing = [x for x in (json.loads(d["bcc"]) if d["bcc"] else []) if key(x) and key(x) not in had]
     bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
@@ -3244,10 +3196,10 @@ def draft_resume(body):
         store.draft_repoint(c, d, row["folder"], row["uid"], cur, forget=not exact)
         c.commit()
         c.close()
-    subject = _hdr_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
+    subject = header_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
     return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"],
             "subject": subject if subject is not None else (row["subject"] or ""),
-            "to": _hdr_chips(msg, "To"), "cc": _hdr_chips(msg, "Cc"), "bcc": bcc,
+            "to": header_chips(msg, "To"), "cc": header_chips(msg, "Cc"), "bcc": bcc,
             "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
             "orig_pk": orig_pk, "participants": participants, "files": files, "split": how,
             "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200

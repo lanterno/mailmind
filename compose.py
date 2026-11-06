@@ -110,21 +110,6 @@ def thread_ids(in_reply_to, references):
     return irt, refs
 
 
-_CHIP_QUOTE = re.compile(r'[()<>\[\]:;@\\,."]')
-
-
-def addr_chip(name, addr):
-    """A recipient the way the composer holds one: the bare address, or Name <address> with
-    the name quoted when it has a character an address list would split on. Round-trips
-    through parse_addr_list."""
-    name = (name or "").strip()
-    if not name or name.lower() == (addr or "").lower():
-        return addr
-    if _CHIP_QUOTE.search(name):
-        name = '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    return f"{name} <{addr}>"
-
-
 _BCC_HEADER = re.compile(rb"(?im)^bcc[ \t]*:")
 
 
