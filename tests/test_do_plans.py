@@ -7,6 +7,7 @@ import pytest
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.application import plans
+from mailmind.bootstrap import mailbox
 
 LUNCH_END = "ada-inbox-02-lunch-confirm.eml"    # Lin's last word: <lunch-3@...>, in Ada's Inbox
 LUNCH_START = "ada-inbox-01-lunch.eml"          # Lin's first: <lunch-1@...>, in Ada's Inbox too
@@ -190,10 +191,9 @@ def test_a_folder_named_only_to_rule_it_out_reaches_nothing_more(app, world, ai)
 
 
 def test_what_the_server_says_a_folder_is_beats_its_name(app, world, ai, monkeypatch):
-    import server
     in_new_folder(world, "Filed", w.variant(QUILT, Message_ID="<odd@filed.example.test>", Subject="Only here zebra"))
     assert preview(app, ai, flt="subject:zebra")["count"] == 1
-    monkeypatch.setitem(server._folder_list_cache, w.ADA, {"ts": 0, "folders": [{"name": "Filed", "role": "trash"}]})
+    monkeypatch.setitem(mailbox.folders._folder_list_cache, w.ADA, {"ts": 0, "folders": [{"name": "Filed", "role": "trash"}]})
     assert degraded(app, ai, "archive", "subject:zebra").get("empty") is True
 
 

@@ -9,6 +9,7 @@ from fixtures import world as w
 from mailmind.mailbox.adapters import imap_list
 from mailmind.mailbox.domain import roles
 from mailmind.mailbox.domain.roles import Folder
+from mailmind.bootstrap import mailbox
 
 
 def folders(*specs):
@@ -184,7 +185,6 @@ def test_an_account_out_of_reach_shows_the_folders_it_has_stored(app, world):
 
 
 def test_stored_folders_play_their_roles_by_name(data_dir):
-    import server
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
@@ -193,7 +193,7 @@ def test_stored_folders_play_their_roles_by_name(data_dir):
         c.commit()
     finally:
         c.close()
-    rail = {f["name"]: f["role"] for f in server._stored_folder_list(w.ADA)}
+    rail = {f["name"]: f["role"] for f in mailbox.folders._stored_folder_list(w.ADA)}
     assert rail == {"INBOX": "inbox", "Sent": "sent", "Archive": "archive", "INBOX.Spam": "junk",
                     "Folders/Archive": "custom", "Bulk orders": "custom"}
-    assert [f["name"] for f in server._stored_folder_list(w.ADA)][:3] == ["INBOX", "Sent", "Archive"]
+    assert [f["name"] for f in mailbox.folders._stored_folder_list(w.ADA)][:3] == ["INBOX", "Sent", "Archive"]

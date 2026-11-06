@@ -24,6 +24,7 @@ from playwright.sync_api import expect
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import mailbox
 
 pytestmark = pytest.mark.browser
 
@@ -56,7 +57,7 @@ def folder(page, name):
     return page.locator(f'#folderrail .frow[data-folder="{name}"]')
 
 
-def mailbox(world, name):
+def box_of(world, name):
     return world.where(name)["server"][0][1]
 
 
@@ -71,7 +72,7 @@ def until(page, check, what):
 
 
 def mailboxes(world, names):
-    return [mailbox(world, n) for n in names]
+    return [box_of(world, n) for n in names]
 
 
 def switch_account(page, acct):
@@ -132,10 +133,10 @@ def test_archive_from_the_list_then_undo(page, world):
     receipt.click()
     page.keyboard.press("e")
     expect(receipt).to_have_count(0)
-    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "archived on the server")
+    until(page, lambda: box_of(world, RECEIPT) == "Archive", "archived on the server")
     page.keyboard.press("z")
     expect(rows_titled(page, "Your receipt for order 1042")).to_have_count(1)
-    until(page, lambda: mailbox(world, RECEIPT) == "INBOX", "back in the inbox on the server")
+    until(page, lambda: box_of(world, RECEIPT) == "INBOX", "back in the inbox on the server")
     clean(page)
 
 
@@ -150,7 +151,7 @@ def test_read_only_says_so_and_what_it_files_waits(page, world, monkeypatch):
     page.keyboard.press("e")
     expect(receipt).to_have_count(0)
     expect(page.locator("#toast")).to_have_text("Archived · waits for a full run")
-    assert world.writes(since) == [] and mailbox(world, RECEIPT) == "INBOX"
+    assert world.writes(since) == [] and box_of(world, RECEIPT) == "INBOX"
     page.locator("#statusBtn").click()
     expect(page.locator("#statusMenu")).to_contain_text("MailMind is running read-only")
     clean(page)
@@ -162,7 +163,7 @@ def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
     receipt.click()
     page.keyboard.press("e")
     expect(receipt).to_have_count(0)
-    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "archived on the server")
+    until(page, lambda: box_of(world, RECEIPT) == "Archive", "archived on the server")
     assert app.post("/api/undo", {}).json["ok"]           # another tab's Undo: this one hears undo-done
     expect(rows_titled(page, "Your receipt for order 1042")).to_have_count(1)
     clean(page)
@@ -214,7 +215,7 @@ def test_archive_a_conversation_files_every_message_then_undo(page, world):
     page.keyboard.press("e")
     expect(convo).to_have_count(0)
     until(page, lambda: mailboxes(world, LUNCH) == ["Archive", "Archive"], "both archived on the server")
-    assert mailbox(world, "ada-sent-01-lunch-reply.eml") == "Sent"   # only the anchor's folder files
+    assert box_of(world, "ada-sent-01-lunch-reply.eml") == "Sent"   # only the anchor's folder files
     page.keyboard.press("z")
     expect(convo).to_have_count(1)
     until(page, lambda: mailboxes(world, LUNCH) == ["INBOX", "INBOX"], "both back on the server")
@@ -251,7 +252,7 @@ def test_snooze_hides_the_message_until_it_is_due(page, world):
     finally:
         c.close()
     assert wakes is not None
-    assert mailbox(world, RECEIPT) == "INBOX"             # snoozing is local; the server copy stays
+    assert box_of(world, RECEIPT) == "INBOX"             # snoozing is local; the server copy stays
     clean(page)
 
 
@@ -420,7 +421,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     expect(button).to_be_hidden()
     expect(receipt).to_have_count(1)
     assert app.get("/api/pending").json["items"] == []
-    assert mailbox(world, RECEIPT) == "INBOX"
+    assert box_of(world, RECEIPT) == "INBOX"
     clean(page)
 
 
@@ -443,7 +444,7 @@ def test_retry_in_the_tray_sends_the_change_again(page, app, world):
     expect(fly).to_contain_text("waiting")
     expect(receipt).to_have_count(0)
     offline.drain()
-    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "archived on the server")
+    until(page, lambda: box_of(world, RECEIPT) == "Archive", "archived on the server")
     expect(page.locator("#outboxBtn")).to_be_hidden()
     clean(page)
 
@@ -675,9 +676,8 @@ def test_a_folder_whose_first_sync_fails_says_so_and_retry_reads_it(page, world)
 
 
 def test_a_folder_still_reading_fills_in_when_its_first_scan_ends(page, app, world, monkeypatch):
-    import server
     from gate import held_elsewhere
-    monkeypatch.setattr(server, "FIRST_SYNC_WAIT", 0.2)
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     with held_elsewhere(w.ADA):
@@ -688,16 +688,15 @@ def test_a_folder_still_reading_fills_in_when_its_first_scan_ends(page, app, wor
 
 
 def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, monkeypatch):
-    import server
     from gate import held_elsewhere
-    monkeypatch.setattr(server, "CATCH_UP_WAIT", 0.1)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
     opened(page)
     folder(page, "Archive").click()
     expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
     folder(page, "INBOX").click()
     world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml",
                                                      Message_ID="<issue-219@example.test>"))
-    monkeypatch.setattr(server, "CATCH_UP_EVERY", 0)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
     with held_elsewhere(w.ADA):                                  # the catch-up waits behind a long op
         folder(page, "Archive").click()
         expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
@@ -806,7 +805,7 @@ def test_do_files_what_its_preview_counted_and_not_the_rest_of_the_conversation(
     plan = do_plan_for(page, ai, "from:lin@example.test in:INBOX subject:re")
     expect(plan).to_contain_text("1 message")
     plan.get_by_role("button", name=re.compile("^Archive 1")).click()
-    until(page, lambda: mailbox(world, LUNCH[0]) == "Archive" or mailbox(world, LUNCH[1]) == "Archive", "one archived")
+    until(page, lambda: box_of(world, LUNCH[0]) == "Archive" or box_of(world, LUNCH[1]) == "Archive", "one archived")
     expect(page.locator("#undoFloat")).to_contain_text("Archived 1")
     assert sorted(mailboxes(world, LUNCH)) == ["Archive", "INBOX"]
     clean(page)

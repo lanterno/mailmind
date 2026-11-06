@@ -22,6 +22,7 @@ from mailmind.bootstrap import curation
 from mailmind.compose.domain import outbox_item
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import sending
+from mailmind.bootstrap import mailbox
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
@@ -1354,15 +1355,14 @@ def junk_scans(world):
 
 
 def test_hwf_a_first_open_slower_than_the_wait_answers_then_lists_the_rest(app, world, monkeypatch):
-    import server
     from gate import held_elsewhere
-    monkeypatch.setattr(server, "FIRST_SYNC_WAIT", 0.2)
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
     world.server.deliver(w.ADA, "Junk", late())
     with held_elsewhere(w.ADA):                                  # a long mail operation holds the gate
         for _ in range(2):                                       # a second open joins the first's scan
             r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
             assert (r["items"], r.get("syncing")) == ([], True)
-    assert wait_until(lambda: not server._folder_syncs)
+    assert wait_until(lambda: not mailbox.folders._folder_syncs)
     r = app.get(f"/api/messages?account={w.ADA}&folder=Junk").json
     assert len(r["items"]) == 1 and "syncing" not in r
     assert junk_scans(world) == 1
@@ -1381,11 +1381,10 @@ def catch_ups(world, folder):
 
 
 def test_hwf_opening_a_folder_again_shows_mail_filed_there_elsewhere(app, world, monkeypatch):
-    import server
     archive = f"/api/messages?account={w.ADA}&folder=Archive"
     before = len(app.get(archive).json["items"])
     world.server.deliver(w.ADA, "Archive", late())               # filed by another client
-    monkeypatch.setattr(server, "CATCH_UP_EVERY", 0)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
     r = app.get(archive).json
     assert len(r["items"]) == before + 1 and "catching_up" not in r
 
@@ -1397,12 +1396,11 @@ def test_hwf_a_folder_opened_again_soon_is_caught_up_once(app, world):
 
 
 def test_hwf_a_folder_opened_during_its_catch_up_says_so_too(app, world, monkeypatch):
-    import server
-    monkeypatch.setattr(server, "CATCH_UP_WAIT", 0.05)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.05)
     with gate.held_elsewhere(w.ADA):
         assert app.get(f"/api/messages?account={w.ADA}&folder=Archive").json["catching_up"]
         assert app.get(f"/api/messages?account={w.ADA}&folder=Archive").json["catching_up"]
-    assert wait_until(lambda: not server._folder_syncs)
+    assert wait_until(lambda: not mailbox.folders._folder_syncs)
     assert "catching_up" not in app.get(f"/api/messages?account={w.ADA}&folder=Archive").json
     assert len(catch_ups(world, "Archive")) == 1
 
@@ -1422,17 +1420,16 @@ def test_hwf_a_draft_saved_lets_drafts_catch_up_on_its_next_open(app, world):
 
 
 def test_hwf_a_slow_catch_up_answers_with_what_is_stored_then_says_what_came(app, world, monkeypatch):
-    import server
     from gate import held_elsewhere
     archive = f"/api/messages?account={w.ADA}&folder=Archive"
-    monkeypatch.setattr(server, "CATCH_UP_WAIT", 0.1)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
     before = len(app.get(archive).json["items"])
     world.server.deliver(w.ADA, "Archive", late())
-    monkeypatch.setattr(server, "CATCH_UP_EVERY", 0)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
     with held_elsewhere(w.ADA):
         r = app.get(archive).json
         assert (len(r["items"]), r.get("catching_up")) == (before, True)
-    assert wait_until(lambda: not server._folder_syncs)
+    assert wait_until(lambda: not mailbox.folders._folder_syncs)
     assert len(app.get(archive).json["items"]) == before + 1
 
 

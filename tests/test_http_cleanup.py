@@ -13,6 +13,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap.curation import safe_http
+from mailmind.bootstrap import mailbox
 
 LOOM = "news@loom.example.test"
 SPINDLE = "deals@spindle.example.test"
@@ -220,10 +221,9 @@ def test_a_mailto_unsubscribe_goes_to_one_plain_address_or_nowhere(app, world, p
 
 
 def test_a_cleanup_refreshes_the_folder_counts_as_trashing_a_message_does(app, world, monkeypatch):
-    import server
     refreshed = []
-    real = server._invalidate_folders
-    monkeypatch.setattr(server, "_invalidate_folders", lambda *a: (refreshed.append(a), real(*a)))
+    real = mailbox.folders.invalidate
+    monkeypatch.setattr(mailbox.folders, "invalidate", lambda *a: (refreshed.append(a), real(*a)))
     r = _clean_up_the_loom(app)
     assert r["swept"] > 0 and len(refreshed) >= r["swept"]
 
