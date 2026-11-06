@@ -558,11 +558,8 @@ def test_the_command_in_the_read_only_profile_sends_nothing(backlog, ai, capsys,
     assert "read-only" in capsys.readouterr().out and not ai.requests
 
 
-def test_the_command_line_asks_for_the_flag_and_runs_it(backlog, ai):
+def test_the_command_line_sends_a_batch_when_asked(backlog, ai):
     from mailmind.__main__ import main
-    with pytest.raises(SystemExit) as e:
-        main(["assess"])
-    assert e.value.code == 2 and not ai.requests        # usage: nothing went
     with pytest.raises(SystemExit) as e:
         main(["assess", "--batch"])
     assert e.value.code == 0 and len(posts(ai)) == 1

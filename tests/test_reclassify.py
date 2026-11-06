@@ -1,6 +1,5 @@
 """A rule change re-classifies the stored mail it covers (decision D11), as mail arriving now would
 be, and leaves alone what no rule ever had a say in."""
-import sys
 
 from fixtures import world as w
 
@@ -145,21 +144,11 @@ def test_every_folder_counts(app, world):
     assert stored(world, RECEIPT, "Archive")["is_junk"] == 1
 
 
-def test_the_command_line_does_it_too(world, monkeypatch, capsys):
-    import manage
+def test_the_command_line_does_it_too(world, capsys):
+    from mailmind.__main__ import main
     addr = sender(world, LUNCH)
-    monkeypatch.setattr(sys, "argv", ["manage.py", "block", addr])
-    manage.main()
+    main(["rules", "block", addr])
     assert stored(world, LUNCH)["is_junk"] == 1
     assert "stored messages classified again" in capsys.readouterr().out
-
-
-def test_the_rules_script_does_it_too(world, monkeypatch):
-    import rules
-    addr = sender(world, LUNCH)
-    monkeypatch.setattr(sys, "argv", ["rules.py", "block", addr])
-    rules.main()
-    assert stored(world, LUNCH)["is_junk"] == 1
-    monkeypatch.setattr(sys, "argv", ["rules.py", "remove", addr])
-    rules.main()
+    main(["rules", "remove", addr])
     assert stored(world, LUNCH)["is_junk"] == 0

@@ -57,12 +57,3 @@ def test_a_kick_for_a_job_this_process_doesnt_run_is_ignored(monkeypatch):
     jobs.add("assess", lambda: None, every=300)
     server._kick("assess")
     assert jobs._jobs["assess"]._wake.is_set()
-
-
-def test_the_summarize_command_says_ai_is_off_and_tries_nothing(data_dir, anthropic_api, monkeypatch, capsys):
-    import summarize
-    monkeypatch.setattr("sys.argv", ["summarize.py", "10", "1"])
-    monkeypatch.setattr(summarize, "summarize_one", lambda row: 1 / 0)
-    summarize.main()
-    assert capsys.readouterr().out == "AI is off: there is no API key, so nothing was summarized.\n"
-    assert anthropic_api.requests == []
