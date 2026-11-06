@@ -1,5 +1,5 @@
-import { expect, it } from "vitest";
-import { avatarHue, dayGroup, fileSize, initialsOf, shortAddress, usd } from "./text";
+import { describe, expect, it } from "vitest";
+import { avatarHue, dayGroup, fileSize, initialsOf, shortAddress, usd, relWhen } from "./text";
 
 it("takes initials from capitalised words first", () => {
   expect(initialsOf("Library of Ash Hollow", "x@example.test")).toBe("LA");
@@ -28,4 +28,12 @@ it("sorts a message into a day's section", () => {
 it("shortens an address to its name", () => expect(shortAddress("bo@example.test")).toBe("bo"));
 it("says money rounded up to the cent", () => {
   expect([usd(0), usd(1), usd(15_000_000), usd(1_234_567_890)]).toEqual(["$0.00", "$0.01", "$15.00", "$1,234.57"]);
+});
+
+describe("how long ago", () => {
+  const now = Date.parse("2026-11-02T12:00:00Z");
+  const ago = (s: number) => new Date(now - s * 1000).toISOString();
+  it.each([[10, "just now"], [120, "2m ago"], [7200, "2h ago"], [3 * 86400, "3d ago"]])("%i seconds is %s", (s, words) => expect(relWhen(ago(s), now)).toBe(words));
+  it("says nothing of what isn't a time", () => expect(relWhen("soon", now)).toBe(""));
+  it("reads a time ahead as now", () => expect(relWhen(ago(-60), now)).toBe("just now"));
 });
