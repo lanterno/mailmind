@@ -11,6 +11,7 @@ from mailmind.compose.application.drafts import Drafts
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
 from mailmind.mailbox.domain import roles
+from mailmind.bootstrap import mailbox
 
 __all__ = ["attach", "book", "composing", "drafts", "outbox", "sending", "transport"]
 
@@ -158,7 +159,7 @@ class _Screen:
 
     def stats_changed(self):
         if _server:
-            _server.invalidate_stats()
+            mailbox.stats.invalidate()
 
 
 transport = SmtpTransport(_Credentials())

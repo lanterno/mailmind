@@ -9,6 +9,7 @@ from mailmind.attention.application.followups import Clocked, FollowUps
 from mailmind.attention.application.muting import Muting
 from mailmind.attention.application.snoozing import Snoozing
 from mailmind.attention.application.threads import Threads
+from mailmind.bootstrap import mailbox
 
 __all__ = ["attach", "book", "clocked", "followups", "muting", "snoozing"]
 
@@ -46,7 +47,7 @@ class _Screen:
     """With no server running, nothing is on a screen and no queue's worker is waiting."""
     def stats_changed(self):
         if _server:
-            _server.invalidate_stats()
+            mailbox.stats.invalidate()
 
     def flags_queued(self):
         if _server:

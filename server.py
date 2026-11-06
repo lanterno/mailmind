@@ -61,7 +61,6 @@ SYNC_INTERVAL = 300                       # seconds between automatic syncs
 ASSESS_INTERVAL = 300                     # seconds between the assess job's rounds, unless kicked
 ASSESS_BATCH = 300                        # messages triaged in one round
 ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
-STATS_TTL = 90                            # seconds to cache the live per-account stats
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 
@@ -70,7 +69,6 @@ _sync = {"running": False, "last": None, "result": "idle"}
 _status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
 _sync_lock = threading.Lock()
 _sync_asked = []                          # syncs asked for while one ran: each a set of accounts, or None for all
-_stats_cache = {"data": None, "exp": 0}
 _undo_lock = threading.Lock()            # the undo stack is in the database (undo_entries): it outlives the process
 UNDO_MAX = 25
 PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
@@ -272,7 +270,7 @@ def _auto_reconcile_one(acct):
         f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
                             "account": res["account"], "pruned": res["pruned"],
                             "live": res["live"]}) + "\n")
-    invalidate_stats()
+    mailbox.stats.invalidate()
     _invalidate_folders(acct["email"])                # folder badge counts changed
     try:
         sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
@@ -484,44 +482,6 @@ def digest_json(qs):
             "generated": now_iso()}
 
 
-# ----------------------------------------------------------------------------- live stats
-def _strip(p):
-    p = dict(p)
-    p.pop("_rows", None)
-    return p
-
-
-def live_stats(account=None, refresh=False):
-    is_all = account is None or account == "all"
-    if not refresh and is_all and _stats_cache["data"] and _stats_cache["exp"] > time.time():
-        return _stats_cache["data"]
-    accts = accounts.accounts() if is_all else [accounts.get(account)]
-    out = []
-    for a in accts:
-        p = _strip(curation.sweeps.plan_stored(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
-        p["alias"] = a.get("alias")              # the Sweep buttons still re-verify live before moving
-        out.append(p)
-    data = {
-        "accounts": out,
-        "buckets": [{"name": b, "is_junk": b in curation.JUNK_BUCKETS} for b in
-                    [curation.SPAM, curation.BLOCKED, curation.MKT, curation.NOTIF,
-                     curation.RECEIPT, curation.PROTECTED, curation.PERSONAL]],
-        "totals": {
-            "in_inbox": sum(a["in_inbox"] for a in out),
-            "junk": sum(a["junk"] for a in out),
-            "keep": sum(a["keep"] for a in out),
-        },
-        "generated": now_iso(),
-    }
-    if account is None or account == "all":
-        _stats_cache["data"], _stats_cache["exp"] = data, time.time() + STATS_TTL
-    return data
-
-
-def invalidate_stats():
-    _stats_cache["data"], _stats_cache["exp"] = None, 0
-
-
 # ----------------------------------------------------------------------------- curation ops
 def do_reconcile(account, dry_run, force=False):
     """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
@@ -537,7 +497,7 @@ def do_reconcile(account, dry_run, force=False):
                     f.write(json.dumps({"kind": "reconcile", "ts": stamp,
                                         "account": r["account"], "pruned": r["pruned"],
                                         "live": r["live"]}) + "\n")
-        invalidate_stats()
+        mailbox.stats.invalidate()
     return {"ok": True, "dry_run": dry_run, "results": results,
             "total_ghosts": sum(r["ghosts"] for r in results),
             "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}
@@ -1077,7 +1037,7 @@ def _readmut_enqueue(op, pk, dest, undo_group, mutation_id):
     if undo:
         undo_push(undo, undo_group)
     offline.kick()                             # drain ASAP once IMAP returns
-    invalidate_stats()
+    mailbox.stats.invalidate()
     sse.publish("outbox", {})                   # the tray shows it
     return {"ok": True, "msg": "queued", "status": "queued", "undoable": bool(undo)}
 
@@ -1103,7 +1063,7 @@ def _readmut_enqueue_flags(pk, flags, mutation_id):
 
 def _flags_queued():
     offline.kick()
-    invalidate_stats()
+    mailbox.stats.invalidate()
     sse.publish("outbox", {})                   # the tray shows it
 
 
@@ -1192,7 +1152,7 @@ def do_write(path, body):
     if ok:
         if undo:
             undo_push(undo, body.get("undo_group"))
-        invalidate_stats()
+        mailbox.stats.invalidate()
         _invalidate_folders()      # seen/archive/move/junk changed IMAP UNSEEN/MESSAGES → drop stale rail badges
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
@@ -1215,7 +1175,7 @@ def do_trash(body):
         return queued
     if ok:
         undo_push(undo, body.get("undo_group"))
-        invalidate_stats()
+        mailbox.stats.invalidate()
         _invalidate_folders()   # trash removed a message from INBOX → refresh rail badges
     return {"ok": ok, "msg": msg, "undoable": bool(undo)}
 
@@ -1426,7 +1386,7 @@ def do_undo():
             if not kept:                      # couldn't reverse -> keep it so the user can retry
                 _undo_db(lambda c: store.undo_put_back(c, entry))
             return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
-        invalidate_stats()
+        mailbox.stats.invalidate()
         _invalidate_folders()      # undo re-added/removed a message → refresh rail badges
         sse.publish("undo-done", {})
         res["remaining"] = len(undo_entries())
@@ -2363,7 +2323,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(*ai_draft_ahead_get(
                     q, kick_ok=perimeter.token_matches(self.headers, CSRF)))
             elif u.path == "/api/stats":
-                self._json(live_stats(q.get("account", [None])[0], q.get("refresh", ["0"])[0] == "1"))
+                self._json(mailbox.stats.live(q.get("account", [None])[0], q.get("refresh", ["0"])[0] == "1"))
             elif u.path == "/api/rules":
                 self._json({"rules": rules.load()})
             elif u.path == "/api/views":
@@ -2664,7 +2624,7 @@ class H(BaseHTTPRequestHandler):
                     except ValueError as ve:
                         self._json({"ok": False, "error": str(ve)}, 400)
                     finally:
-                        invalidate_stats()
+                        mailbox.stats.invalidate()
                 else:
                     self._send(404, b"not found", "text/plain")
             else:
@@ -2713,7 +2673,7 @@ def schedule(jobs):
 def _after_send(_sent):
     """Compose's Sent or Failed: a queued send went out, or an attempt at one failed (with
     SSE live the page doesn't poll the outbox, so a send given up on would still look pending)."""
-    invalidate_stats()
+    mailbox.stats.invalidate()
     sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
 
 
@@ -2730,7 +2690,7 @@ def _after_draft_removed(gone):
 def _after_readmut(_settled):
     """Applied or Restored, or the tray's Retry or Discard: a queued change reached the
     server or won't, and its message is listed again; or a person asked it again or dropped it."""
-    invalidate_stats()
+    mailbox.stats.invalidate()
     sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
 
 

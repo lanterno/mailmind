@@ -75,10 +75,10 @@ class _Filing:
         return ingest.reclassify(token)
 
     def stats_changed(self):
-        _server.invalidate_stats()
+        mailbox.stats.invalidate()
 
     def folders_changed(self, account, moved):
-        _server.invalidate_stats()
+        mailbox.stats.invalidate()
         _server._invalidate_folders(account)
         try:                                              # same refresh as a ghost prune: open lists drop the row
             sse.publish("reconcile", {"account": account, "pruned": moved})

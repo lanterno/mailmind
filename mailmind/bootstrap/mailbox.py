@@ -25,6 +25,7 @@ from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.realtime import Realtime
+from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import ReadOnlySession
@@ -139,6 +140,16 @@ class _Curation:
         from mailmind.bootstrap import curation
         return curation.by_rule(reason)
 
+    def plan_stored(self, acct):
+        from mailmind.bootstrap import curation
+        return curation.sweeps.plan_stored(acct)
+
+    def buckets(self):
+        from mailmind.bootstrap import curation
+        return [{"name": b, "is_junk": b in curation.JUNK_BUCKETS} for b in
+                [curation.SPAM, curation.BLOCKED, curation.MKT, curation.NOTIF,
+                 curation.RECEIPT, curation.PROTECTED, curation.PERSONAL]]
+
 
 class _Attention:
     def on_ingest(self, c, account):
@@ -158,3 +169,4 @@ pool = Pool(_directory, _open)
 ingest = Ingest(store, _directory, _open, pool, _Curation(), _Attention(), fts)
 warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
+stats = LiveStats(_directory, _Curation())
