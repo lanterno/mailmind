@@ -43,7 +43,7 @@ import summarize
 import mailops
 import mailclass
 import manage
-import rules
+from mailmind.bootstrap.curation import rules
 import views
 from mailmind.content import sanitize
 import compose

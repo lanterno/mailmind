@@ -26,10 +26,11 @@ import mailclass
 from mailmind.content import mime
 from mailmind.content.mime import dec
 import pool
-import rules
+from mailmind.bootstrap.curation import rules
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.platform import settings
+from mailmind.curation.domain import rulebook
 
 MOVE_BATCH = 200
 HDR_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "LIST-UNSUBSCRIBE", "LIST-ID")
@@ -334,7 +335,7 @@ def select_expired(rows, expire, now):
     Tags each hit with r['hours']."""
     out = []
     for r in rows:
-        hours = rules.expiry_hours(r["from"], expire)
+        hours = rulebook.expiry_hours(r["from"], expire)
         if hours and r.get("ts") is not None and now - r["ts"] > hours * 3600:
             r["hours"] = hours
             out.append(r)

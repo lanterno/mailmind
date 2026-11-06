@@ -55,7 +55,7 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "bootstrap, then http, then the contexts, then platform, then kernel: each imports only the layers below it"
 type = "layers"
-layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.assistant | mailmind.accounts | mailmind.mailbox | mailmind.discovery", "mailmind.platform", "mailmind.content", "mailmind.kernel"]
+layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.assistant | mailmind.accounts | mailmind.mailbox | mailmind.discovery | mailmind.curation", "mailmind.platform", "mailmind.content", "mailmind.kernel"]
 
 [[tool.importlinter.contracts]]
 name = "within the Assistant, adapters, then application, then domain"
@@ -79,10 +79,15 @@ type = "layers"
 layers = ["mailmind.discovery.adapters", "mailmind.discovery.domain"]
 
 [[tool.importlinter.contracts]]
+name = "within Curation, adapters, then application, then domain"
+type = "layers"
+layers = ["mailmind.curation.adapters", "(mailmind.curation.application)", "mailmind.curation.domain"]
+
+[[tool.importlinter.contracts]]
 name = "only bootstrap picks an adapter"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel"]
-forbidden_modules = ["mailmind.assistant.adapters", "mailmind.accounts.adapters", "mailmind.mailbox.adapters", "mailmind.discovery.adapters"]
+forbidden_modules = ["mailmind.curation.adapters", "mailmind.assistant.adapters", "mailmind.accounts.adapters", "mailmind.mailbox.adapters", "mailmind.discovery.adapters"]
 
 [[tool.importlinter.contracts]]
 name = "only the SDK adapter reaches the Anthropic SDK"
@@ -104,8 +109,8 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "only the IMAPClient adapter reaches IMAPClient"
 type = "forbidden"
-source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel", "mailmind.assistant",
-                  "mailmind.accounts", "mailmind.mailbox.application", "mailmind.mailbox.domain",
+source_modules = ["mailmind.http", "mailmind.platform", "mailmind.content", "mailmind.kernel", "mailmind.assistant",
+                  "mailmind.accounts", "mailmind.curation", "mailmind.mailbox.application", "mailmind.mailbox.domain",
                   "mailmind.mailbox.adapters.imap_list", "mailmind.mailbox.adapters.imap_names",
                   "mailmind.mailbox.adapters.imaplib_session"]
 forbidden_modules = ["imapclient"]

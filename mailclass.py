@@ -23,7 +23,7 @@ Buckets:
 """
 import re
 
-import rules as rules_file
+from mailmind.bootstrap.curation import rules as rules_file
 
 SPAM = "spam/scam"
 BLOCKED = "blocked"                     # user said "always trash this sender/domain"

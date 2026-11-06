@@ -4,7 +4,7 @@ A view is just {id, name, q} where q is a raw search-grammar string (the same gr
 parses), so a saved search and an auto-label "lane" are the same thing. Built-in DEFAULTS (and
 caller-registered lanes) are merged in read-only at load time: they always appear, can't be deleted,
 and are never written to disk. User views persist to mailmind_views.json with the atomic-write
-discipline from config.save(). Modeled on rules.py.
+discipline from config.save(). Modeled on the rule book's file.
 
 `python -m mailmind views` lists and changes them.
 """

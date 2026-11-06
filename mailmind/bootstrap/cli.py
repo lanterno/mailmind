@@ -83,7 +83,7 @@ def mailboxes(command, who, dry=False):
 
 
 def rules_list():
-    import rules
+    from mailmind.bootstrap.curation import rules
     r = rules.load()
     for k in rules.KEYS:
         print(f"{k} ({len(r[k])}): {', '.join(r[k]) or '—'}")
@@ -93,7 +93,7 @@ def rules_list():
 
 def rules_add(verdict, tokens):
     import ingest                       # it reads the rules through the classifier
-    import rules
+    from mailmind.bootstrap.curation import rules
     for tok in tokens:
         t, where = rules.add(tok, verdict)
         print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
@@ -101,14 +101,14 @@ def rules_add(verdict, tokens):
 
 def rules_remove(tokens):
     import ingest
-    import rules
+    from mailmind.bootstrap.curation import rules
     for tok in tokens:
         rules.remove(tok)
         print(f"  removed {tok}; {ingest.reclassify(tok)} stored messages classified again")
 
 
 def rules_expire(token, hours):
-    import rules
+    from mailmind.bootstrap.curation import rules
     t, h = rules.set_expiry(token, hours)
     print(f"  {t} -> {'expires after ' + str(h) + 'h' if h else 'no expiry'}")
 

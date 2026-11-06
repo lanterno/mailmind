@@ -1,13 +1,8 @@
-"""Read/write the learned allow- & block-list that mailclass consults first.
+"""The rule book's one reader and writer: mailmind_rules.json, in the data directory.
 
-The classifier (mailclass) READS mailmind_rules.json; this module is the small
-API the driver uses to GROW it as the user makes keep/block decisions, so we
-never re-litigate the same sender. A domain entry also matches its sub-domains.
-
-Expiry rules are separate from keep/block: `expire github.com 72` moves INBOX mail
-from that sender/domain to Trash once it is older than 72 hours (`python -m mailmind expire`,
-and the server's expire job). A kept sender can also expire — keep decides what
-the classifier shows, expiry decides how long it stays.
+The file holds the keep and block lists and each sender's shelf life. It's read again only when it
+changed; one that won't parse leaves the last rules read well, so a bad edit never stops a sync, and the
+next save moves it to backups/ first. A save writes the whole file or nothing.
 
 `python -m mailmind rules` lists and changes them.
 """
@@ -18,18 +13,15 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 
+from mailmind.curation.domain import rulebook
+from mailmind.curation.domain.rulebook import EXPIRE, KEYS
 from mailmind.platform import settings
 
-KEYS = ("keep_senders", "block_senders", "keep_domains", "block_domains")
-EXPIRE = "expire_hours"   # {sender-or-domain: hours}
+__all__ = ["EXPIRE", "KEYS", "add", "load", "remove", "save", "set_expiry", "sets"]
 
 _lock = threading.Lock()
 _good = {}     # path -> (stamp, rules, sets): the last rules read well from that file
 _bad = {}      # path -> the stamp of the copy that couldn't be read, so it's said once
-
-
-def _empty():
-    return {**{k: [] for k in KEYS}, EXPIRE: {}}
 
 
 def _stamp(path):
@@ -39,10 +31,7 @@ def _stamp(path):
 
 def _parse(path):
     with open(path) as f:
-        raw = json.load(f)
-    out: dict = {k: list(dict.fromkeys(x.lower() for x in raw.get(k, []))) for k in KEYS}
-    out[EXPIRE] = {t.lower(): int(h) for t, h in (raw.get(EXPIRE) or {}).items() if int(h) > 0}
-    return out
+        return rulebook.normalized(json.load(f))
 
 
 def _read():
@@ -53,7 +42,7 @@ def _read():
     try:
         stamp = _stamp(path)
     except FileNotFoundError:
-        return _empty(), {k: frozenset() for k in KEYS}
+        return rulebook.empty(), rulebook.no_sets()
     except OSError:
         stamp = None
     with _lock:
@@ -70,8 +59,8 @@ def _read():
                 print(f"[rules] {os.path.basename(path)} can't be read ({type(e).__name__}); "
                       f"{'keeping the rules last read' if good else 'no rules apply'} until it can",
                       flush=True)
-            return (good[1], good[2]) if good else (_empty(), {k: frozenset() for k in KEYS})
-        sets = {k: frozenset(out[k]) for k in KEYS}
+            return (good[1], good[2]) if good else (rulebook.empty(), rulebook.no_sets())
+        sets = rulebook.as_sets(out)
         _good[path] = (stamp, out, sets)
         _bad.pop(path, None)
         return out, sets
@@ -109,8 +98,7 @@ def _set_aside(path):
 def save(rules):
     """Write the rules whole or not at all: a temp file beside the real one, owner-only, fsynced,
     then renamed over it."""
-    data: dict = {k: sorted(set(rules.get(k, []))) for k in KEYS}
-    data[EXPIRE] = dict(sorted((rules.get(EXPIRE) or {}).items()))
+    data = rulebook.for_saving(rules)
     path = settings.current().rules
     _set_aside(path)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".rules-", suffix=".tmp")
@@ -129,30 +117,21 @@ def save(rules):
         raise
 
 
-def _is_domain(token):
-    return "@" not in token and "." in token
-
-
 def add(token, verdict):
     """verdict in {'keep','block'}. Routes a sender/domain into the right list
     and removes it from the opposite verdict to avoid contradictions."""
     token = token.strip().lower()
     rules = load()
-    skind = "domains" if _is_domain(token) else "senders"
-    rules[f"{verdict}_{skind}"].append(token)
-    other = "block" if verdict == "keep" else "keep"
-    rules[f"{other}_{skind}"] = [x for x in rules[f"{other}_{skind}"] if x != token]
+    placed = rulebook.add(rules, token, verdict)
     save(rules)
-    return token, f"{verdict}_{skind}"
+    return token, placed
 
 
 def remove(token):
-    """Drop a keep/block entry. Leaves any expiry rule alone — clear that with
-    set_expiry(token, 0), so removing a keep chip in the UI can't silently stop expiry."""
+    """Drop a keep/block entry. Leaves any expiry rule alone."""
     token = token.strip().lower()
     rules = load()
-    for k in KEYS:
-        rules[k] = [x for x in rules[k] if x != token]
+    rulebook.remove(rules, token)
     save(rules)
 
 
@@ -161,20 +140,6 @@ def set_expiry(token, hours):
     token = token.strip().lower()
     hours = int(hours)
     rules = load()
-    if hours > 0:
-        rules[EXPIRE][token] = hours
-    else:
-        rules[EXPIRE].pop(token, None)
+    rulebook.set_expiry(rules, token, hours)
     save(rules)
     return token, hours
-
-
-def expiry_hours(addr, expire):
-    """Hours after which mail from `addr` expires under the `expire` map, or None.
-    An exact sender entry wins over a domain entry; a domain also matches sub-domains."""
-    addr = (addr or "").lower()
-    if addr in expire:
-        return expire[addr]
-    dom = addr.partition("@")[2]
-    hits = [h for t, h in expire.items() if _is_domain(t) and (dom == t or dom.endswith("." + t))]
-    return min(hits) if hits else None
