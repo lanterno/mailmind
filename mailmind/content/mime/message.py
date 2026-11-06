@@ -12,15 +12,46 @@ cid: inline images are surfaced so the sanitizer/UI can resolve them later.
 import email
 import re
 import urllib.parse
+from collections.abc import Iterator
 from email import policy
-from email.header import decode_header
+from email.header import Header, decode_header
+from email.message import Message
 from email.utils import getaddresses, parseaddr
-from typing import Any
+from typing import Any, TypedDict, TypeIs
 
 _FOLD = re.compile(r"\r?\n[ \t]+")
 
+# A message under any policy. A header off a compat32 one is a str or a Header, off policy.default one the
+# registry's, and only the policy in force knows which, so what reads one says Any on purpose.
+type AnyMessage = Message[Any, Any]
 
-def _unfold(value):
+
+class Attachment(TypedDict):
+    part_id: str
+    filename: str
+    content_type: str
+    size: int
+    content_id: str | None
+    is_inline: int
+
+
+class Parsed(TypedDict):
+    """A raw message as `parse` reads it. `html` is unsanitized."""
+    text: str | None
+    html: str | None
+    attachments: list[Attachment]
+    to: str
+    cc: str
+    reply_to: str
+    date: str
+
+
+def _is_message(payload: object) -> TypeIs[AnyMessage]:
+    """What a multipart holds is a message, from a parser. The stubs also allow a str."""
+    return isinstance(payload, Message)
+
+
+def _unfold(value: str | Header) -> str | Header:
     """A header value as one line. decode_header drops the space a fold leaves next to an encoded
     word, and parseaddr can't read an address across one. A raw 8-bit value is a Header: not a str."""
     return _FOLD.sub(" ", value) if isinstance(value, str) else value
@@ -29,7 +60,7 @@ def _unfold(value):
 _UNSUB_POST, _UNSUB_RAW_MAX = " | POST:", 4000
 
 
-def list_unsub(lu, post=""):
+def list_unsub(lu: str | None, post: str | None = "") -> dict[str, str | None]:
     """The way to unsubscribe that a message's headers offer, from List-Unsubscribe (`lu`, unfolded) and
     List-Unsubscribe-Post. RFC 2369 holds <mailto:…> and/or <https://…>; RFC 8058 one-click needs BOTH an
     https URI AND `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A bare https URI is a landing PAGE
@@ -62,17 +93,17 @@ def list_unsub(lu, post=""):
             "raw": raw_cache}
 
 
-def list_unsub_stored(raw):
+def list_unsub_stored(raw: str | None) -> dict[str, str | None]:
     """What `list_unsub` said, from the `raw` it gave."""
     lu, _, post = (raw or "").partition(_UNSUB_POST)
     return list_unsub(lu, post)
 
 
-def dec(value):
+def dec(value: str | Header | None) -> str:
     """A header's text, with its encoded words decoded."""
     if not value:
         return ""
-    out = []
+    out: list[str] = []
     for part, enc in decode_header(_unfold(value)):
         if isinstance(part, bytes):
             try:
@@ -84,43 +115,52 @@ def dec(value):
     return "".join(out).replace("\r", " ").replace("\n", " ").strip()
 
 
-def recipient_addrs(msg):
+def recipient_addrs(msg: AnyMessage) -> list[str]:
     """Who a compat32 message went to, To and Cc, as bare lowercase addresses. Read before any encoded word
     is decoded, so a display name can't pass for an address, and a malformed entry costs only itself."""
     values = [str(_unfold(v)) for field in ("To", "Cc") for v in msg.get_all(field) or []]
     return sorted({a.strip(".'").lower() for _, a in getaddresses(values, strict=False) if "@" in a})
 
 
-def sender_of(msg):
+def sender_of(msg: AnyMessage) -> tuple[str, str]:
     """(name, address) from a compat32 message's From. The name still holds its encoded words."""
     sender = msg.get("From", "")
-    return parseaddr(_unfold(sender) if isinstance(sender, str) else dec(sender))
+    return parseaddr(_FOLD.sub(" ", sender) if isinstance(sender, str) else dec(sender))
 
 
-def walk(msg):
+def walk(msg: AnyMessage) -> Iterator[AnyMessage]:
     """Like Message.walk, but an attached email is one part: what it holds isn't this message's."""
     yield msg
     if msg.is_multipart() and msg.get_content_maintype() != "message":
         for sub in msg.get_payload():
-            yield from walk(sub)
+            if _is_message(sub):
+                yield from walk(sub)
 
 
-def part_bytes(part):
+def decoded(part: AnyMessage) -> bytes | None:
+    """A part's body with its transfer encoding undone, or None for a multipart. The stubs also allow a
+    Message, which decode=True never gives."""
+    payload = part.get_payload(decode=True)
+    return payload if isinstance(payload, bytes) else None
+
+
+def part_bytes(part: AnyMessage) -> bytes:
     """A part's bytes. An attached email is parsed, with no encoded body of its own to decode."""
     if part.get_content_maintype() == "message" and part.is_multipart():
         try:
-            return part.get_payload(0).as_bytes()
+            attached = part.get_payload(0)
+            return attached.as_bytes() if _is_message(attached) else b""
         except Exception:
             return b""
-    return part.get_payload(decode=True) or b""
+    return decoded(part) or b""
 
 
-def holds_no_parts(part):
+def holds_no_parts(part: AnyMessage) -> bool:
     """A multipart that named no boundary: what it holds is plain text, and no reader lists it."""
     return part.get_content_maintype() == "multipart" and not part.is_multipart()
 
 
-def _hdr(msg, name):
+def _hdr(msg: AnyMessage, name: str) -> str:
     try:
         v = msg.get(name)
     except ValueError:     # policy.default refuses a value whose encoded words decode to a line break
@@ -128,9 +168,9 @@ def _hdr(msg, name):
     return dec(v)
 
 
-def _decode(part):
+def _decode(part: AnyMessage) -> str:
     try:
-        payload = part.get_payload(decode=True)
+        payload = decoded(part)
         if payload is None:
             return ""
         return payload.decode(part.get_content_charset() or "utf-8", "replace")
@@ -138,13 +178,15 @@ def _decode(part):
         return ""
 
 
-def parse(raw_bytes):
+def parse(raw_bytes: bytes) -> Parsed:
     try:
-        msg = email.message_from_bytes(raw_bytes, policy=policy.default)
+        msg: AnyMessage = email.message_from_bytes(raw_bytes, policy=policy.default)
     except Exception:
         msg = email.message_from_bytes(raw_bytes or b"")
-    text, html, cal = None, None, None
-    attachments = []
+    text: str | None = None
+    html: str | None = None
+    cal: tuple[int, AnyMessage] | None = None
+    attachments: list[Attachment] = []
     idx = 0
     for part in walk(msg):
         if part.get_content_maintype() == "multipart":
@@ -167,7 +209,7 @@ def parse(raw_bytes):
             })
             continue
         if cid:  # an inline image referenced by cid: — record it, don't inline the body
-            payload = part.get_payload(decode=True) or b""
+            payload = decoded(part) or b""
             attachments.append({
                 "part_id": str(idx), "filename": _decode_fn(filename) or f"inline-{idx}",
                 "content_type": ctype, "size": len(payload),
@@ -186,7 +228,7 @@ def parse(raw_bytes):
                        or a["filename"].lower().endswith(".ics") for a in attachments):
         attachments.append({
             "part_id": str(cal[0]), "filename": "invite.ics", "content_type": "text/calendar",
-            "size": len(cal[1].get_payload(decode=True) or b""), "content_id": None, "is_inline": 1,
+            "size": len(decoded(cal[1]) or b""), "content_id": None, "is_inline": 1,
         })
     return {
         "text": text, "html": html, "attachments": attachments,
@@ -195,7 +237,7 @@ def parse(raw_bytes):
     }
 
 
-def _decode_fn(name):
+def _decode_fn(name: str | None) -> str | None:
     if not name:
         return None
     try:
@@ -206,7 +248,7 @@ def _decode_fn(name):
         return name
 
 
-def extract_part(raw_bytes, part_id) -> tuple[Any, Any]:
+def extract_part(raw_bytes: bytes, part_id: str | int) -> tuple[bytes, str] | tuple[None, None]:
     """Re-walk a raw RFC822 message EXACTLY like parse() and return
     (payload_bytes, content_type) for the non-multipart part whose running 1-based
     index == int(part_id), else (None, None). Stays in lockstep with parse()'s idx
@@ -216,7 +258,7 @@ def extract_part(raw_bytes, part_id) -> tuple[Any, Any]:
     except (TypeError, ValueError):
         return None, None
     try:
-        msg = email.message_from_bytes(raw_bytes, policy=policy.default)
+        msg: AnyMessage = email.message_from_bytes(raw_bytes, policy=policy.default)
     except Exception:
         msg = email.message_from_bytes(raw_bytes or b"")
     idx = 0
@@ -231,11 +273,11 @@ def extract_part(raw_bytes, part_id) -> tuple[Any, Any]:
     return None, None
 
 
-def inline_parts(raw_bytes):
+def inline_parts(raw_bytes: bytes) -> dict[str, tuple[str, bytes]]:
     """{content_id: (content_type, bytes)} for cid-referenced inline images, so the
     server can rewrite cid: -> data: in the sanitized body. Raster images only is
     enforced by the caller; here we just surface every cid part's bytes."""
-    out = {}
+    out: dict[str, tuple[str, bytes]] = {}
     try:
         msg = email.message_from_bytes(raw_bytes, policy=policy.default)
     except Exception:
@@ -246,11 +288,11 @@ def inline_parts(raw_bytes):
         cid = _hdr(part, "Content-ID").strip("<>")
         if cid:
             out[cid] = ((part.get_content_type() or "").lower(),
-                        part.get_payload(decode=True) or b"")
+                        decoded(part) or b"")
     return out
 
 
-def has_invite(msg):
+def has_invite(msg: AnyMessage) -> bool:
     """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
     try:
         return any(p.get_content_type() in ("text/calendar", "application/ics")

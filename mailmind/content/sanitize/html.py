@@ -12,9 +12,11 @@ embedded objects, and (by default) remote content used for tracking.
 `load_images=False` strips remote <img src> (returns count) so a 1x1 tracker can't
 beacon the open; the UI offers a per-message "Load images" that re-renders with True.
 """
+from collections.abc import Iterator
 from html.parser import HTMLParser
 from html import escape
 import re
+from typing import Literal, Protocol
 
 # Tags whose CONTENT is also dropped (containers — wait for the close tag).
 DROP_WITH_CONTENT = {
@@ -172,14 +174,24 @@ _CSS_URL_TOKEN = re.compile(r"url\(\s*(\"[^\"]*\"|'[^']*'|[^)]*)\s*\)", re.I)
 _CSS_CANON_URL = re.compile(r"url\(\"(?:[^\"\\]|\\.)*\"\)")
 
 
-def _css_decode_escapes(s):
+class CssContext(Protocol):
+    """What the CSS sanitizer reads of its caller and tells it: _San is the one that renders."""
+    load_images: bool
+    blocked_css_urls: int
+
+
+# One top-level unit of a stylesheet: ('rule', selector, block), or ('at', at_keyword, prelude, block).
+type _CssUnit = tuple[Literal["rule"], str, str] | tuple[Literal["at"], str, str, str | None]
+
+
+def _css_decode_escapes(s: str) -> str:
     """SINGLE explicit pass decoding CSS \\hex and \\char escapes. Output is capped to
     the input length (escapes only shrink), so this cannot expand. Non-recursive: a
     backslash that the decode leaves behind (recursive/malformed escape) is caught by
     the `\\` arm of _CSS_BAD_VAL => fail closed."""
     if "\\" not in s:
         return s
-    def _hex(m):
+    def _hex(m: re.Match[str]) -> str:
         try:
             cp = int(m.group(1), 16)
             if cp == 0 or cp > 0x10FFFF:
@@ -192,9 +204,9 @@ def _css_decode_escapes(s):
     return s[:_CSS_DECL_VAL_MAX * 2]
 
 
-def _css_strip_comments(s):
+def _css_strip_comments(s: str) -> str:
     """Remove /* ... */ including an unterminated /* to EOF. Only removes => no growth."""
-    out = []
+    out: list[str] = []
     i, n = 0, len(s)
     while i < n:
         j = s.find("/*", i)
@@ -209,7 +221,7 @@ def _css_strip_comments(s):
     return "".join(out)
 
 
-def _css_canonical(raw):
+def _css_canonical(raw: str) -> tuple[str, str]:
     """Reduce a raw value to the ONE canonical string used for BOTH matching and
     emission. Order: strip-comments -> decode-escapes -> control-strip -> ws-collapse.
     Returns (canon, lowered): emission uses `canon`; decisions use `lowered`
@@ -221,14 +233,14 @@ def _css_canonical(raw):
     return s, s.lower()
 
 
-def _css_serialize_url(url):
+def _css_serialize_url(url: str) -> str:
     """Wrap a vetted URL in canonical url("...") with " and \\ escaped, so it can't
     terminate the url(), the declaration, or inject ;}<."""
     esc = url.replace("\\", "\\\\").replace('"', '\\"')
     return 'url("%s")' % esc
 
 
-def _css_gate_urls(canon, lowered, prop_is_url, ctx):
+def _css_gate_urls(canon: str, lowered: str, prop_is_url: bool, ctx: CssContext) -> str | None:
     """Rewrite/gate EVERY url() token in `canon`. Returns the emitted value (canonical)
     or None to DROP THE ENTIRE DECLARATION. Single rule: ANY disallowed url() token =>
     drop the whole declaration, never a partial value."""
@@ -240,7 +252,7 @@ def _css_gate_urls(canon, lowered, prop_is_url, ctx):
     drop = [False]
     blocked_remote = [False]
 
-    def _repl(m):
+    def _repl(m: re.Match[str]) -> str:
         arg = m.group(1).strip()
         if len(arg) >= 2 and arg[0] in "\"'" and arg[-1] == arg[0]:
             arg = arg[1:-1]
@@ -278,7 +290,7 @@ def _css_gate_urls(canon, lowered, prop_is_url, ctx):
     return out
 
 
-def _css_sanitize_one(prop, raw_val, ctx):
+def _css_sanitize_one(prop: str, raw_val: str, ctx: CssContext) -> str | None:
     """One declaration -> 'prop:val' (canonical) or None. Never raises to caller."""
     prop = prop.strip().lower()
     prop = _css_decode_escapes(prop).strip().lower()
@@ -329,13 +341,14 @@ def _css_sanitize_one(prop, raw_val, ctx):
     return "%s:%s" % (prop, emitted)
 
 
-def _css_split_decls(block):
+def _css_split_decls(block: str) -> list[str]:
     """Split a declaration block on top-level ';', respecting url() and strings so a ';'
     inside url("a;b") or a quoted value doesn't desync. Bounded single pass."""
-    decls, buf = [], []
+    decls: list[str] = []
+    buf: list[str] = []
     i, n = 0, len(block)
     depth = 0
-    quote = None
+    quote: str | None = None
     while i < n:
         ch = block[i]
         if quote:
@@ -360,9 +373,9 @@ def _css_split_decls(block):
     return decls
 
 
-def _css_sanitize_declarations(block, ctx, max_decls):
+def _css_sanitize_declarations(block: str, ctx: CssContext, max_decls: int) -> str:
     """Shared core: 'p:v;p:v' -> sanitized 'p:v;p:v' (possibly ''). Per-decl fail-closed."""
-    out = []
+    out: list[str] = []
     for idx, decl in enumerate(_css_split_decls(block)):
         if idx >= max_decls:
             break
@@ -378,7 +391,7 @@ def _css_sanitize_declarations(block, ctx, max_decls):
     return ";".join(out)
 
 
-def sanitize_inline_style(value, ctx):
+def sanitize_inline_style(value: str | None, ctx: CssContext) -> str:
     """Sanitize one style="..." attribute body. Returns safe 'p:v;p:v' (possibly '').
     Never raises. HARD 4096-char cap BEFORE any normalization (DoS defense)."""
     try:
@@ -389,7 +402,7 @@ def sanitize_inline_style(value, ctx):
         return ""
 
 
-def _css_tokenize_rules(css):
+def _css_tokenize_rules(css: str) -> Iterator[_CssUnit]:
     """Yield top-level units, honoring strings/comments for brace matching:
        ('rule', selector, block)            qualified rule
        ('at',  at_keyword, prelude, block)  at-rule (block may be None)
@@ -447,7 +460,7 @@ def _css_tokenize_rules(css):
         i += 1
 
 
-def _css_read_block(css, open_idx):
+def _css_read_block(css: str, open_idx: int) -> tuple[str, int] | tuple[None, int]:
     """Given index of '{', return (inner_text, index_after_matching_'}') or (None, -1)
     if unterminated. Respects strings/comments and nested braces."""
     i, n = open_idx + 1, len(css)
@@ -485,7 +498,7 @@ _CSS_SEL_BAD = re.compile(r"(url\(|expression|javascript:|[<>{}\\])", re.I)
 _CSS_PRELUDE_OK = re.compile(r"^[\w \t()\[\]:,.%/*+-]*$")
 
 
-def _css_sanitize_selector(sel):
+def _css_sanitize_selector(sel: str) -> str | None:
     """Return safe selector text or None (drop rule)."""
     sel = sel.strip()
     if not sel or len(sel) > _CSS_SELECTOR_MAX:
@@ -495,8 +508,8 @@ def _css_sanitize_selector(sel):
     return sel
 
 
-def _css_sanitize_rules(css, ctx, depth, counter):
-    out = []
+def _css_sanitize_rules(css: str, ctx: CssContext, depth: int, counter: list[int]) -> str:
+    out: list[str] = []
     for unit in _css_tokenize_rules(css):
         if counter[0] >= _CSS_SHEET_RULES:
             break
@@ -531,7 +544,7 @@ def _css_sanitize_rules(css, ctx, depth, counter):
     return "".join(out)
 
 
-def sanitize_css_stylesheet(css, ctx):
+def sanitize_css_stylesheet(css: str | None, ctx: CssContext) -> str:
     """Sanitize <style> text content. Returns safe CSS (possibly ''). Guarantees no
     '<'/'>' in output (so it can't break out of <style>). Never raises."""
     try:
@@ -545,7 +558,7 @@ def sanitize_css_stylesheet(css, ctx):
         return ""
 
 
-def _safe_url(val):
+def _safe_url(val: str | None) -> str | None:
     if not val:
         return None
     v = _CTRL.sub("", val)
@@ -557,23 +570,23 @@ _FOLD_CLOSE = "</details>"
 
 
 class _San(HTMLParser):
-    def __init__(self, load_images, fold=True):
+    def __init__(self, load_images: bool, fold: bool = True):
         super().__init__(convert_charrefs=True)
-        self.out = []
+        self.out: list[str] = []
         self.load_images = load_images
         self.fold = fold
         self.blocked_images = 0
         self.blocked_links = 0
         self._skip = 0          # nesting depth inside a dropped-with-content subtree
-        self._skip_tag = None
+        self._skip_tag: str | None = None
         self._bq_depth = 0      # blockquote nesting depth
         self._folded = False    # have we wrapped the trailing quote chain in a <details> yet
         self._has_content = False  # any visible text seen before the first top-level quote
         self.blocked_css_urls = 0  # remote url() blocked in CSS while load_images=False
         self._in_style = 0      # inside a <style> being captured
-        self._style_buf = []    # buffered raw CSS text
+        self._style_buf: list[str] = []    # buffered raw CSS text
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         if self._skip:
             if tag == self._skip_tag:
@@ -602,12 +615,12 @@ class _San(HTMLParser):
         clean = self._clean_attrs(tag, attrs)
         self.out.append("<" + tag + clean + ("/>" if tag in VOID else ">"))
 
-    def handle_startendtag(self, tag, attrs):
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
         if tag.lower() not in VOID:
             self.handle_endtag(tag)
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
         if tag == "style":
             if self._in_style:
@@ -628,7 +641,7 @@ class _San(HTMLParser):
             if tag == "blockquote" and self._bq_depth > 0:
                 self._bq_depth -= 1
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self._in_style:
             self._style_buf.append(data)
             return                       # never escape/measure buffered CSS
@@ -638,13 +651,13 @@ class _San(HTMLParser):
             self._has_content = True   # real text before the first quote -> there's something to fold under
         self.out.append(escape(data, quote=False))
 
-    def handle_comment(self, data):
+    def handle_comment(self, data: str) -> None:
         return  # drop comments (conditional comments, hidden payloads)
 
-    def _clean_attrs(self, tag, attrs):
+    def _clean_attrs(self, tag: str, attrs: list[tuple[str, str | None]]) -> str:
         allowed = ATTRS.get("*", set()) | ATTRS.get(tag, set())
         urlattr = URL_ATTR.get(tag)
-        parts = []
+        parts: list[str] = []
         for name, val in attrs:
             name = (name or "").lower()
             if name == "style":
@@ -695,8 +708,19 @@ class _San(HTMLParser):
             parts.append('rel="noopener noreferrer nofollow" target="_blank"')
         return (" " + " ".join(parts)) if parts else ""
 
+    def finish(self) -> str:
+        """All of it, once fed and closed."""
+        if self._in_style and self._style_buf:     # unclosed <style>: flush so the rest of the doc isn't swallowed
+            css = sanitize_css_stylesheet("".join(self._style_buf), self)
+            if css:
+                self.out.append("<style>" + css + "</style>")
+        out = "".join(self.out)
+        if self._folded:
+            out += _FOLD_CLOSE           # the fold wrapper opened mid-stream; close it at the end
+        return out
 
-def without_fold(html):
+
+def without_fold(html: str) -> str:
     """`html`, sanitized before replies stopped carrying the fold, without it: a draft's stored
     quote. sanitize closes the fold at the very end of what it returns."""
     head, opened, rest = html.partition(_FOLD_OPEN)
@@ -706,7 +730,7 @@ def without_fold(html):
     return head + (body + after if closed else rest)
 
 
-def sanitize(html, load_images=False, fold=True):
+def sanitize(html: str | None, load_images: bool = False, fold: bool = True) -> tuple[str, dict[str, int]]:
     """Return (clean_html, info). Never raises on malformed input. `fold` is for reading: it puts a
     quoted chain behind a toggle the reader's stylesheet draws, which mail going out must not carry."""
     p = _San(load_images, fold)
@@ -716,12 +740,5 @@ def sanitize(html, load_images=False, fold=True):
     except Exception:
         # parser blew up on something pathological — fail closed to escaped text
         return escape(html or "", quote=False), {"blocked_images": 0, "blocked_links": 0, "blocked_css_urls": 0}
-    if p._in_style and p._style_buf:     # unclosed <style>: flush so the rest of the doc isn't swallowed
-        css = sanitize_css_stylesheet("".join(p._style_buf), p)
-        if css:
-            p.out.append("<style>" + css + "</style>")
-    out = "".join(p.out)
-    if p._folded:
-        out += _FOLD_CLOSE           # the fold wrapper opened mid-stream; close it at the end
-    return out, {"blocked_images": p.blocked_images, "blocked_links": p.blocked_links,
+    return p.finish(), {"blocked_images": p.blocked_images, "blocked_links": p.blocked_links,
                  "blocked_css_urls": getattr(p, "blocked_css_urls", 0)}

@@ -2,7 +2,7 @@
 import html
 import re
 
-from mailmind.content.mime import holds_no_parts, walk
+from mailmind.content.mime import AnyMessage, Parsed, decoded, holds_no_parts, walk
 
 BODY_CHARS = 3000
 
@@ -17,13 +17,13 @@ INVISIBLE = re.compile("[​‌‍⁠﻿͏­‎‏]")
 _FTS_CAP = 100_000  # bound a single body's indexed text
 
 
-def snippet_of(body_text):
+def snippet_of(body_text: str | None) -> str:
     """A clean one-paragraph preview for the list/river: decode stray entities, drop invisible
     padding (incl. &zwnj;/&nbsp; spacers once decoded), collapse whitespace."""
     return " ".join(INVISIBLE.sub("", html.unescape(body_text or "")).split())[:280]
 
 
-def strip_jsonld(t):
+def strip_jsonld(t: str | None) -> str:
     """Some senders embed a JSON-LD block (schema.org structured data) in their text part.
     Remove each balanced [..]/{..} block carrying an @context, so previews read as prose."""
     out = t or ""
@@ -55,24 +55,25 @@ def strip_jsonld(t):
     return out
 
 
-def body_text_of(parsed):
+def body_text_of(parsed: Parsed) -> str:
     """Plain-text body for indexing: prefer text/plain, else strip tags from html."""
     t = parsed.get("text")
-    if not t and parsed.get("html"):
-        h = _COMMENT.sub(" ", parsed["html"])
+    marked_up = parsed.get("html")
+    if not t and marked_up:
+        h = _COMMENT.sub(" ", marked_up)
         h = _NOTEXT.sub(" ", h)
         t = html.unescape(_TAG.sub(" ", h))
     return strip_jsonld(t or "")[:_FTS_CAP]
 
 
-def text_body(msg):
+def text_body(msg: AnyMessage) -> str:
     plain, htmltxt = None, None
     for part in walk(msg):
         container = part.get_content_maintype() == "multipart" and not holds_no_parts(part)
         if container or part.get_filename():
             continue
         try:
-            payload = part.get_payload(decode=True)
+            payload = decoded(part)
             if payload is None:
                 continue
             text = payload.decode(part.get_content_charset() or "utf-8", "replace")
@@ -98,7 +99,7 @@ _NONCONTENT_RE = re.compile(r"(?is)<(script|style|head|title|noscript)\b[^>]*>.*
 _COMMENT_RE = re.compile(r"(?is)<!--.*?-->")
 
 
-def html_to_snippet_text(htmltxt):
+def html_to_snippet_text(htmltxt: str) -> str:
     h = _NONCONTENT_RE.sub(" ", htmltxt)
     h = _COMMENT_RE.sub(" ", h)
     return html.unescape(re.sub(r"<[^>]+>", " ", h))

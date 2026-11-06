@@ -10,6 +10,8 @@ the cost governor raises when it holds a call back (OverLimit, Deferred).
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from mailmind.content.mime import Parsed
+
 # The statuses worth sending again: a timeout, a conflict, a rate limit, an overload, a server
 # error. Both adapters retry these, twice; any other 4xx says the request itself won't do.
 RETRIED = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
@@ -146,7 +148,7 @@ class UsageLedger(Protocol):
 class Mail(Protocol):
     """What the Assistant reads of the mail, which belongs to the Mailbox and to Accounts. Every port it declares only reads: a
     plan's confirm runs through the mail's own contexts."""
-    def fetch_body(self, pk: int) -> dict | None: ...
+    def fetch_body(self, pk: int) -> Parsed | None: ...
     def pk_now(self, c, key: str, folder: str) -> int | None: ...
     def accounts(self) -> list[dict]: ...
     def get_message(self, c, pk: int) -> Any: ...

@@ -2,16 +2,16 @@
 import html as _html
 
 
-def html_escape(s):
+def html_escape(s: str | None) -> str:
     return _html.escape(s or "")
 
 
-def own_html(new_text):
+def own_html(new_text: str | None) -> str:
     """The HTML a reply or forward opens with: what you typed, before the quote."""
     return f"<div>{html_escape(new_text or '').replace(chr(10), '<br>')}</div><br>"
 
 
-def quote_tail(new_text, text, html):
+def quote_tail(new_text: str | None, text: str | None, html: str | None) -> tuple[str | None, str | None]:
     """(tail_text|None, tail_html|None): what reply_bodies or forward_bodies added after what
     you typed, kept so a reopened draft can send its quote again without quoting twice."""
     own = new_text or ""

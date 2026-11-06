@@ -19,6 +19,8 @@ class Invites:
             return None, None
         try:
             payload, _ct = mime.extract_part(raw, cal["part_id"])
+            if payload is None:
+                return None, None
             return self._reader.parse(payload.decode("utf-8", "replace")), cal["part_id"]
         except Exception:
             return None, None

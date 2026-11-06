@@ -34,7 +34,9 @@ class StoredInvites:
                 if self._folders.role_by_name(r["folder"]) in skipped_roles:
                     continue
                 try:
-                    payload, _ct = mime.extract_part(_body(c, r["pk"]), r["part_id"])
+                    payload, _ct = mime.extract_part(_body(c, r["pk"]) or b"", r["part_id"])
+                    if payload is None:
+                        continue
                     text = payload.decode("utf-8", "replace")
                 except Exception:
                     continue
