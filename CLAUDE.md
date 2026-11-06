@@ -294,7 +294,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes),
   `triage` (`Triage`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
   `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `draft_ahead` (`DraftAhead`) and
-  `bulk` (`BulkCommands`, a command in words, planned then confirmed). `domain` holds what it knows about the models and the features, and
+  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.triage`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
@@ -605,7 +605,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is
   good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
-  in is left where it went, and counted as `gone`. Each message goes through its own route (`filing.do_write`, `do_trash`,
+  in is left where it went, and counted as `gone`. `Filing.carry_out` sends each message through its own route (`filing.do_write`, `do_trash`,
   `attention.snoozing.snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
   never reaches its own home (`_DO_APART`, `_DO_ALREADY`), and each message counts once, by the copy search would show.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `filing.do_thread_file`) resolves

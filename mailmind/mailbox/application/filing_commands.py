@@ -7,7 +7,7 @@ from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.commands import UNREACHABLE, MailCommands
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.offline_queue import OfflineQueue
-from mailmind.mailbox.application.ports import Accounts, StoredMail
+from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.undo import Undo
@@ -21,7 +21,7 @@ class Filing:
     PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
 
     def __init__(self, store: StoredMail, accounts: Accounts, commands: MailCommands, offline: OfflineQueue, ingest: Ingest,
-                 undo: Undo, stats: LiveStats, folders: Folders):
+                 undo: Undo, stats: LiveStats, folders: Folders, attention: Attention):
         self._store = store
         self._accounts = accounts
         self._commands = commands
@@ -30,6 +30,7 @@ class Filing:
         self._undo = undo
         self._stats = stats
         self._folders = folders
+        self._attention = attention
 
     def _readmut_enqueue(self, op, pk, dest, undo_group, mutation_id):
         """IMAP was unreachable — durably queue this move-type mutation, take the message out of the
@@ -266,3 +267,44 @@ class Filing:
         server or won't, and its message is listed again; or a person asked it again or dropped it."""
         self._stats.invalidate()
         sse.publish("commands-changed", {})  # a queued move landed: the counts and lists may differ
+
+    def _carry_out_one(self, verb, one):
+        """One message of a plan, through the route a click on that message would take."""
+        if verb == "trash":
+            return self.do_trash(one)
+        if verb in ("read", "unread"):
+            return self.do_write("/api/seen", {**one, "seen": verb == "read"})
+        if verb == "star":
+            return self.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
+        return self.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
+
+    def carry_out(self, verb, preset, messages, undo_group=None):
+        """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
+        in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
+        right for the Inbox may not be for wherever it went."""
+        c = self._store.conn()
+        try:
+            pks = [p for p in (self._store.pk_in(c, key, folder) for key, folder in messages) if p is not None]
+        finally:
+            c.close()
+        group = undo_group or "plan:" + secrets.token_hex(6)
+        done = {"ok": True, "verb": verb, "count": 0, "failed": 0, "gone": len(messages) - len(pks),
+                "queued": 0, "undoable": False}
+        if verb == "snooze":
+            if pks:
+                res, _ = self._attention.snooze({"pks": pks, "preset": preset, "undo_group": group})
+                done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
+            return done
+        for pk in pks:
+            try:
+                res = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
+            except Exception as e:                 # the rest still go: this run has no second try
+                print(f"[do] {verb} failed: {type(e).__name__}", flush=True)
+                res = {}
+            if res.get("ok"):
+                done["count"] += 1
+                done["queued"] += res.get("status") == "queued"
+                done["undoable"] = done["undoable"] or bool(res.get("undoable"))
+            else:
+                done["failed"] += 1
+        return done

@@ -19,7 +19,7 @@ def _scrubbed(what, failed, answer):
     return route
 
 
-def routes(assistant):
+def routes(assistant, mailbox):
     r = Routes()
 
     @r.get("/api/briefing")          # what is stored of the "Today" card; POST writes it
@@ -45,7 +45,10 @@ def routes(assistant):
 
     @r.post("/api/ai/do-confirm")    # carry out the plan a preview froze
     def do_confirm(req):
-        return assistant.bulk.confirm(req.body)
+        plan = assistant.bulk.take(str(req.body.get("plan") or ""))
+        if plan is None:
+            return {"ok": False, "error": "this plan has expired", "expired": True}, 410
+        return mailbox.filing.carry_out(plan.verb, plan.preset, plan.messages, req.body.get("undo_group"))
 
     # read-only: NL command → validated, capped action PREVIEW
     r.post("/api/ai/do-plan")(_scrubbed("do-plan error", "plan failed", lambda req: assistant.bulk.plan(req.body)))

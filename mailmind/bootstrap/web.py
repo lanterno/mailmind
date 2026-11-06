@@ -18,5 +18,5 @@ __all__ = ["AI_OVER_HEADER", "H", "post_body_cap"]
 handler.bind(Routes(static.routes(), events.routes(), export.routes(), debug.routes(mailbox, background, assistant),
                     mailbox_routes.routes(mailbox), attention_routes.routes(attention), curation_routes.routes(curation),
                     discovery_routes.routes(discovery), calendar_routes.routes(calendar), compose_routes.routes(compose),
-                    assistant_routes.routes(assistant), accounts_routes.routes(accounts, mailbox)),
+                    assistant_routes.routes(assistant, mailbox), accounts_routes.routes(accounts, mailbox)),
              lambda: assistant.governor().saw_someone())

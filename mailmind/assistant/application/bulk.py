@@ -5,12 +5,11 @@ through the same injection-safe search grammar and what it resolves to is frozen
 is READ-ONLY: it never mutates. The client shows a mandatory confirm gate, and only an explicit click sends the plan's
 id back to be carried out.
 """
-import secrets
 from datetime import datetime
 
 from mailmind.assistant.application import plans
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Mail, NotSent, Search
+from mailmind.assistant.application.ports import NotSent, Search
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -67,10 +66,8 @@ class BulkCommands:
     _DO_APART = {"sent", "drafts", "trash", "junk"}      # a command reaches these only if its filter names a folder
     _DO_ALREADY = {"archive": {"archive", "all"}, "trash": {"trash"}, "junk": {"junk"}}     # a verb's own home: nothing to do
 
-    def __init__(self, calls: Calls, connect, mail: Mail, search: Search):
+    def __init__(self, calls: Calls, search: Search):
         self._calls = calls
-        self._connect = connect
-        self._mail = mail
         self._search = search
         self._DO_PLANS = plans.PlanBook()
 
@@ -116,46 +113,7 @@ class BulkCommands:
                 "count": count, "cap": cap, "capped": count > cap,
                 "plan": frozen.id, "sample": sample}, 200
 
-    def _do_one(self, verb, one):
-        """One message of a plan, through the route a click on that message would take."""
-        if verb == "trash":
-            return self._mail.do_trash(one)
-        if verb in ("read", "unread"):
-            return self._mail.do_write("/api/seen", {**one, "seen": verb == "read"})
-        if verb == "star":
-            return self._mail.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
-        return self._mail.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
-
-    def confirm(self, body):
-        """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
-        in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
-        right for the Inbox may not be for wherever it went. Returns (result, code)."""
-        plan = self._DO_PLANS.take(str(body.get("plan") or ""))
-        if plan is None:
-            return {"ok": False, "error": "this plan has expired", "expired": True}, 410
-        c = self._connect()
-        try:
-            pks = [p for p in (self._mail.pk_in(c, key, folder) for key, folder in plan.messages) if p is not None]
-        finally:
-            c.close()
-        group = body.get("undo_group") or "plan:" + secrets.token_hex(6)
-        done = {"ok": True, "verb": plan.verb, "count": 0, "failed": 0, "gone": len(plan.messages) - len(pks),
-                "queued": 0, "undoable": False}
-        if plan.verb == "snooze":
-            if pks:
-                res, _ = self._mail.snooze({"pks": pks, "preset": plan.preset, "undo_group": group})
-                done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
-            return done, 200
-        for pk in pks:
-            try:
-                res = self._do_one(plan.verb, {"pk": pk, "undo_group": group})
-            except Exception as e:                 # the rest still go: this run has no second try
-                print(f"[do] {plan.verb} failed: {type(e).__name__}", flush=True)
-                res = {}
-            if res.get("ok"):
-                done["count"] += 1
-                done["queued"] += res.get("status") == "queued"
-                done["undoable"] = done["undoable"] or bool(res.get("undoable"))
-            else:
-                done["failed"] += 1
-        return done, 200
+    def take(self, plan_id):
+        """What a preview froze, once, or None when its plan has expired. The Assistant only says what it was: the mail's
+        own contexts carry it out."""
+        return self._DO_PLANS.take(plan_id)

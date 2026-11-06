@@ -157,22 +157,6 @@ class _Mail:
         from mailmind.bootstrap.mailbox import store
         return store.get_message(c, pk)
 
-    def pk_in(self, c, key, folder):
-        from mailmind.bootstrap.mailbox import store
-        return store.pk_in(c, key, folder)
-
-    def do_trash(self, one):
-        from mailmind.bootstrap import mailbox
-        return mailbox.filing.do_trash(one)
-
-    def do_write(self, path, one):
-        from mailmind.bootstrap import mailbox
-        return mailbox.filing.do_write(path, one)
-
-    def snooze(self, body):
-        from mailmind.bootstrap import attention
-        return attention.snoozing.snooze(body)
-
 
 class _Search:
     """What a bulk command asks of Discovery."""
@@ -203,4 +187,4 @@ rewriter = Rewriter(calls)
 asker = Asker(calls, _connect, _mail, BM25)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _connect, _mail)
 drafting = DraftAhead(calls, lambda: gateway(), answers, _connect, _mail, replies, _looks_human)
-bulk = BulkCommands(calls, _connect, _mail, _Search())
+bulk = BulkCommands(calls, _Search())

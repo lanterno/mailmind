@@ -184,6 +184,10 @@ class _Curation:
 
 
 class _Attention:
+    def snooze(self, body):
+        from mailmind.bootstrap import attention
+        return attention.snoozing.snooze(body)
+
     def on_ingest(self, c, account):
         from mailmind.bootstrap import attention
         return attention.muting.on_ingest(c, account)
@@ -262,7 +266,7 @@ queries = Queries(store, _attention, folders)
 bodies = Bodies(store, ingest, _Reader())
 undo = Undo(store, _directory, commands, offline, ingest, stats, folders,
             {"snooze": _reverse_snooze, "mute": _reverse_mute, "unblock": _reverse_block})
-filing = Filing(store, _directory, commands, offline, ingest, undo, stats, folders)
+filing = Filing(store, _directory, commands, offline, ingest, undo, stats, folders, _attention)
 
 
 def _kick(job):
