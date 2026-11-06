@@ -49,7 +49,7 @@ def put(c, mid="", *, account=A, folder="INBOX", irt="", refs="", gm="", subject
                                   "is_junk": is_junk})
     cols = {"in_reply_to": irt, "refs": refs, **cols}
     c.execute(f"UPDATE messages SET {', '.join(k + '=?' for k in cols)} WHERE pk=?", [*cols.values(), pk])
-    store.fts_index(c, pk)
+    discovery.index_message(c, pk)
     return pk
 
 

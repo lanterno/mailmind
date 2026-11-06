@@ -5,6 +5,7 @@ import pytest
 
 from mailmind.platform.db import check, migrate, migrations
 from mailmind.platform.db.migrations import m0038_contentless_search as m38
+from mailmind.bootstrap import discovery
 
 NEWEST = migrations.MIGRATIONS[-1][0]
 ACCOUNT = "ada@example.test"
@@ -32,7 +33,7 @@ def test_the_index_keeps_no_copy_of_the_mail(data_dir):
     import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", "Four more squares")
-    store.fts_index(c, pk)
+    discovery.index_message(c, pk)
     c.commit()
     assert c.execute("SELECT subject, body_text FROM msg_fts WHERE rowid=?", (pk,)).fetchone()[:] == (None, None)
     assert not c.execute("SELECT 1 FROM sqlite_master WHERE name='msg_fts_content'").fetchone()
@@ -76,7 +77,7 @@ def test_indexing_a_row_again_replaces_its_words(data_dir):
     import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", None)
-    store.fts_index(c, pk)
+    discovery.index_message(c, pk)
     store.fts_set_body(c, pk, "Four more squares")
     store.fts_set_body(c, pk, "Three more hexagons")
     assert hits(c, '"marigold"') == [pk] and hits(c, 'body_text : "hexagons"') == [pk]
@@ -89,9 +90,9 @@ def test_a_row_deleted_from_the_index_is_gone_and_one_it_never_held_is_no_harm(d
     import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", "Four more squares")
-    store.fts_index(c, pk)
-    store.fts_delete(c, pk)
-    store.fts_delete(c, pk + 41)
+    discovery.index_message(c, pk)
+    discovery.forget_message(c, pk)
+    discovery.forget_message(c, pk + 41)
     assert hits(c, '"marigold"') == []
     assert c.execute("SELECT count(*) FROM msg_fts").fetchone()[0] == 0
     c.execute("INSERT INTO msg_fts(msg_fts) VALUES('integrity-check')")
@@ -104,8 +105,8 @@ def test_ranking_still_counts_the_columns(data_dir):
     c = store.conn()
     in_body = add_message(c, 1, "Allotment rota", "the marigold border")
     in_subject = add_message(c, 2, "Marigold border", "Four more squares")
-    store.fts_index(c, in_body)
-    store.fts_index(c, in_subject)
+    discovery.index_message(c, in_body)
+    discovery.index_message(c, in_subject)
     got = c.execute(f"SELECT rowid FROM msg_fts WHERE msg_fts MATCH ? ORDER BY {discovery.BM25}", ('"marigold"',)).fetchall()
     assert [r[0] for r in got] == [in_subject, in_body]
     c.close()
