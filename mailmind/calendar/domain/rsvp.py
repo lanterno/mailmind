@@ -1,23 +1,27 @@
 """An iMIP RSVP (METHOD:REPLY): what it says and how it's keyed. Total: nothing here raises."""
+from collections.abc import Sequence
 from datetime import datetime, timezone
+
+from mailmind.calendar.domain.invite import Invite, Party
 
 PARTSTAT = {"accept": "ACCEPTED", "decline": "DECLINED", "tentative": "TENTATIVE"}
 VERB = {"accept": "Accepted", "decline": "Declined", "tentative": "Tentatively accepted"}
 
 
-def name_for(invite, me_email, fallback):
+def name_for(invite: Invite, me_email: str, fallback: str) -> str:
     """The CN the organizer used for me, if any."""
     for a in invite.get("attendees", []):
-        if (a.get("email") or "").lower() == me_email.lower() and a.get("name"):
-            return a["name"]
+        name = a.get("name")
+        if (a.get("email") or "").lower() == me_email.lower() and name:
+            return name
     return fallback
 
 
-def key_prefix(account, invite):
+def key_prefix(account: str, invite: str | int) -> str:
     return f"rsvp:{account}:{invite}:"
 
 
-def key(prefix, sent, partstat):
+def key(prefix: str, sent: Sequence[str], partstat: str) -> str:
     """The same answer again, a double click or a retry, finds the send already queued for it. A changed mind is a new
     send, even back to an earlier answer, since that one went out long ago. `sent` is the keys so far, newest first."""
     if sent and sent[0].rsplit(":", 2)[1] == partstat:
@@ -25,17 +29,17 @@ def key(prefix, sent, partstat):
     return f"{prefix}{partstat}:{len(sent)}"
 
 
-def _ics_esc(v):
+def _ics_esc(v: str | None) -> str:
     return (v or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
-def _fold(line):
+def _fold(line: str) -> str:
     """RFC5545 content line folding: lines SHOULD be <=75 octets; continuation = CRLF + SPACE.
     Folds on UTF-8 byte boundaries so a multibyte char is never split."""
     b = line.encode("utf-8")
     if len(b) <= 73:
         return line
-    out = []
+    out: list[str] = []
     while len(b) > 73:
         cut = 73
         while cut > 0 and (b[cut] & 0xC0) == 0x80:   # don't split a continuation byte
@@ -48,7 +52,7 @@ def _fold(line):
     return "\r\n ".join(out)
 
 
-def _ics_dt(iso):
+def _ics_dt(iso: str) -> str:
     """ISO datetime -> iCal form. Aware -> UTC basic 'YYYYMMDDTHHMMSSZ'; floating -> no Z. '' if unparseable."""
     try:
         d = datetime.fromisoformat(iso)
@@ -59,36 +63,37 @@ def _ics_dt(iso):
     return d.strftime("%Y%m%dT%H%M%S")
 
 
-def build_reply(invite, attendee_email, attendee_name, partstat):
+def build_reply(invite: Invite, attendee_email: str, attendee_name: str | None, partstat: str) -> str:
     """Build an iMIP METHOD:REPLY VCALENDAR responding to a parsed invite, for one attendee.
     partstat in {ACCEPTED, DECLINED, TENTATIVE}. Echoes UID/ORGANIZER/DTSTART so strict
     servers (Google, Exchange) can match the response to the original event. Total — never raises."""
-    org = (invite.get("organizer") or {})
+    org = invite.get("organizer") or Party()
     uid = (invite.get("uid") or "").strip()
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MailMind//iMIP//EN",
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MailMind//iMIP//EN",
          "CALSCALE:GREGORIAN", "METHOD:REPLY", "BEGIN:VEVENT"]
     if uid:
-        L.append(_fold("UID:" + uid))
-    L.append("DTSTAMP:" + dtstamp)
-    L.append("SEQUENCE:0")
+        lines.append(_fold("UID:" + uid))
+    lines.append("DTSTAMP:" + dtstamp)
+    lines.append("SEQUENCE:0")
     if invite.get("summary"):
-        L.append(_fold("SUMMARY:" + _ics_esc(invite["summary"])))
+        lines.append(_fold("SUMMARY:" + _ics_esc(invite["summary"])))
     if invite.get("all_day"):
         d = (invite.get("start_iso") or "")[:10].replace("-", "")
         if len(d) == 8:
-            L.append("DTSTART;VALUE=DATE:" + d)
+            lines.append("DTSTART;VALUE=DATE:" + d)
     else:
         ds = _ics_dt(invite.get("start_iso") or "")
         if ds:
-            L.append("DTSTART:" + ds)
+            lines.append("DTSTART:" + ds)
         de = _ics_dt(invite.get("end_iso") or "")
         if de:
-            L.append("DTEND:" + de)
-    if org.get("email"):
-        cn = (';CN="%s"' % _ics_esc(org["name"])) if org.get("name") else ""
-        L.append(_fold("ORGANIZER%s:mailto:%s" % (cn, org["email"])))
+            lines.append("DTEND:" + de)
+    org_email, org_name = org.get("email"), org.get("name")
+    if org_email:
+        cn = (';CN="%s"' % _ics_esc(org_name)) if org_name else ""
+        lines.append(_fold("ORGANIZER%s:mailto:%s" % (cn, org_email)))
     acn = (';CN="%s"' % _ics_esc(attendee_name)) if attendee_name else ""
-    L.append(_fold("ATTENDEE%s;PARTSTAT=%s:mailto:%s" % (acn, partstat, attendee_email)))
-    L += ["END:VEVENT", "END:VCALENDAR"]
-    return "\r\n".join(L) + "\r\n"
+    lines.append(_fold("ATTENDEE%s;PARTSTAT=%s:mailto:%s" % (acn, partstat, attendee_email)))
+    lines += ["END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(lines) + "\r\n"

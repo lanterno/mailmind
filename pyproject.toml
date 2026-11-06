@@ -55,7 +55,14 @@ venvPath = "."
 venv = ".venv"
 # The proposal asks this of the kernel, content, every domain and every application package. A package joins
 # when it reaches zero, and from then on stays there.
-strict = ["mailmind/kernel", "mailmind/content", "mailmind/accounts/domain", "mailmind/assistant/domain", "mailmind/attention/domain"]
+strict = [
+    "mailmind/kernel",
+    "mailmind/content",
+    "mailmind/accounts/domain",
+    "mailmind/assistant/domain",
+    "mailmind/attention/domain",
+    "mailmind/calendar/domain",
+]
 
 [tool.importlinter]
 # The package's own layers. Which legacy modules it imports is the ratchet's job
