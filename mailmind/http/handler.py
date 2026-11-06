@@ -13,6 +13,7 @@ from mailmind.assistant.api import AIOff, OverLimit, allowing_over
 from mailmind.compose.api import MAX_SEND_POST
 from mailmind.http.routing import ANSWERED, Request, Routes
 from mailmind.platform import perimeter, profile, settings
+from mailmind.platform.logging import for_request
 
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 
@@ -50,6 +51,11 @@ class H(BaseHTTPRequestHandler):
 
     def log_message(self, *a):
         pass
+
+    def handle_one_request(self):
+        """One request, through either door: what's logged while it runs carries its id."""
+        with for_request():
+            super().handle_one_request()
 
     def send_response_only(self, code, message=None):
         self._status, self._named = code, set()

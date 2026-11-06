@@ -5,7 +5,8 @@ rounds, and the delay before the first. Each job runs on a lane, a thread of its
 its rounds one after another, never two at once, so a round that runs long pushes the next one
 back instead of piling up behind it. A round may return the seconds until its next round, when it
 knows better than the interval (a backlog to work through, a cycle spread across accounts).
-One that raises is logged and counted, and the job goes on at its interval.
+One that raises is logged and counted, and the job goes on at its interval. What a round logs carries
+an id of that round's.
 
 `kick(name)` runs a job's next round now, `run(name)` runs one in the caller's thread (what a
 test does), and `snapshot()` is what /api/debug/jobs shows: each job's timing and how its last
@@ -18,6 +19,8 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from mailmind.platform.logging import for_round
 
 
 @dataclass
@@ -74,17 +77,18 @@ class Scheduler:
             job.last_started = self._clock()
             began = time.monotonic()
             nxt = None
-            try:
-                nxt = job.round()
-                job.last_error = None
-            except Exception as e:
-                job.failures += 1
-                job.last_error = type(e).__name__
-                print(f"[jobs] {name} failed: {type(e).__name__}: {e}", flush=True)
-            finally:
-                job.runs += 1
-                job.running = False
-                job.last_took = time.monotonic() - began
+            with for_round(name):
+                try:
+                    nxt = job.round()
+                    job.last_error = None
+                except Exception as e:
+                    job.failures += 1
+                    job.last_error = type(e).__name__
+                    print(f"[jobs] {name} failed: {type(e).__name__}: {e}", flush=True)
+                finally:
+                    job.runs += 1
+                    job.running = False
+                    job.last_took = time.monotonic() - began
         return job.every if nxt is None else max(0.0, float(nxt))
 
     def kick(self, name: str) -> None:
