@@ -28,6 +28,7 @@ python3 ingest.py all 90          # pull last 90 days; `ingest.py <email> <days>
 python3 summarize.py 2000 3       # summarize up to 2000 messages, 3 workers
 python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
+python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
 Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
@@ -688,7 +689,7 @@ asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanen
 `failed`. Each row holds the calls, their tokens and `cost_micros`. `domain.pricing` computes the
 cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
 dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
-`feature`: `triage`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`,
+`feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`,
 `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
 that fails is logged by class name and never fails the call.
@@ -723,6 +724,25 @@ back anyway raises `Deferred(reason)`. Nothing is counted for it, and `_noted` d
 as a failure. Nothing in the governor is durable: a restart closes the breaker, and the limit
 holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`, and the
 tests start each one afresh with `forget()`.
+
+A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7): `BATCH_MIN`
+messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
+`summarize.batch_submit` sends it and `batch_collect` brings the answers in, both from `assess_round`, which
+collects first since that sends no mail and the answers are paid for. `python3 -m mailmind assess --batch` does
+the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
+did; a batch already out is still brought in.
+- One at a time (migration 36: `ai_batches`, and `ai_batch_items` by message key). `needs_summary` leaves out what a
+  batch holds, and while one is out everything older than the newest it took (`cutoff_ts`), which waits for the next
+  batch rather than going at full price.
+- The limit. A batch's cost is only known when its answers are in, so it takes what fits in `1/BATCH_SHARE` of what
+  today leaves by `pricing.batch_estimate`, which errs high. `CostGovernor.room` counts the estimates of batches
+  still out (`UsageLedger.reserved`) against background work, not against someone asking, so a day with a batch out
+  and heavy use can pass the limit by up to that share. Answers count on the day they are collected.
+- Sending is never retried: the API has no idempotency key, so another try could pay twice, and the next round tries
+  anyway. A row is committed as `submitting` first. One that fails is dropped, and one a crash left is dropped after
+  `BATCH_SEND_GIVE_UP`; a batch that reached the API in that window is paid for and never collected.
+- A batch holds mail, so `batch_collect` deletes it from the API once its answers are stored, trying again each
+  round until it goes. A message with no answer (errored, expired, canceled) waits again.
 
 The brief, the delta and the review are read and written apart:
 - A GET of `/api/briefing`, `/api/briefing/since` or `/api/review` reads only what is stored. When

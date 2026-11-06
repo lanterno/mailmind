@@ -227,6 +227,10 @@ automatically.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at Anthropic's list prices. The sync menu shows what today cost so far against the
   daily limit, and `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
+  A backlog (a first import, or after an outage) goes to the Message Batches API at half price,
+  one batch at a time, while new mail is still triaged as it arrives, so a large import can leave
+  older mail without a summary for up to a day. Anthropic holds a batch until MailMind has brought
+  its answers in, then MailMind deletes it. The sync menu says how many messages are out.
   MailMind spends at most $15 a day unless `"ai_daily_limit_usd"` in `mailmind.config.json`
   names another amount. At the limit, triage and pre-drafting stop until the next day,
   anything you ask the AI for asks first whether to go over, and a brief not yet written waits
@@ -644,9 +648,8 @@ Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promise
 real Dovecot server in Docker. `just` on its own lists every recipe. uv installs those dev
 tools from `pyproject.toml` on first use, as it does the app's own packages.
 
-Separately, `scripts/backfill.sh` is a resilient summarization backfill — it
-re-runs `summarize.py` until every non-junk message has a summary, backing off
-when Claude rate-limits.
+Separately, `python3 -m mailmind assess --batch` (`just backfill`) sends every message with no
+summary yet as a batch, within today's limit. Run it again, or let the app, to bring in the answers.
 
 ## Privacy & contributing
 
