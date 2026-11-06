@@ -175,7 +175,8 @@ can't pass for one.
 `messages.recipients` is the decoded To and Cc as text, for search. `message_recipients` (migration 35,
 `store.set_recipients`) holds each address of each copy, written at ingest and again when a body is stored,
 and goes with the copy. It is what `server.contacts_known` asks. Mail stored before it was read from the text,
-which was cut at 2000 characters then, until that mail is next opened.
+which was cut at 2000 characters then, or for a column that was cut from the raw message where one is stored;
+with none, the whole list comes when a body is stored.
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
 (`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative; its
