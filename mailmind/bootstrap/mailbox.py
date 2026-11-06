@@ -31,6 +31,7 @@ from mailmind.mailbox.application.queries import Queries
 from mailmind.mailbox.application.realtime import Realtime
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.mailbox.application.syncing import Syncing
 from mailmind.mailbox.application.undo import Undo
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import ReadOnlySession
@@ -41,6 +42,15 @@ from mailmind.bootstrap import accounts         # the connection's TLS, pin and 
 from mailmind.bootstrap.accounts import config           # the credential, likewise
 
 store.bind_index(fts)
+
+_server = None
+
+
+def attach(server):
+    """Name the running server module."""
+    global _server
+    _server = server
+
 
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers
@@ -133,6 +143,9 @@ class _Accounts:
 
     def quiet_error(self, e):
         return accounts.quiet_error(e)
+
+    def preload_creds(self):
+        return accounts.preload_creds()
 
 
 class _Curation:
@@ -239,3 +252,12 @@ bodies = Bodies(store, ingest, _Reader())
 undo = Undo(store, _directory, commands, offline, ingest, stats, folders,
             {"snooze": _reverse_snooze, "mute": _reverse_mute, "unblock": _reverse_block})
 filing = Filing(store, _directory, commands, offline, ingest, undo, stats, folders)
+
+
+def _kick(job):
+    """A job's next round now. The server's job table is handed in by `attach`, since the server may run as __main__."""
+    if _server:
+        _server._kick(job)
+
+
+syncing = Syncing(store, _directory, ingest, warm, folders, stats, _attention, _kick)

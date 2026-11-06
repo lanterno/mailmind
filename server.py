@@ -24,10 +24,8 @@ from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap.mailbox import ingest
-from mailmind.bootstrap.mailbox import warm
 from mailmind.bootstrap.mailbox import offline
 import summarize
-from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.compose.domain import limits
@@ -42,7 +40,6 @@ from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.accounts.domain import provider
-from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
@@ -53,6 +50,7 @@ discovery.attach(sys.modules[__name__])
 calendar.attach(sys.modules[__name__])
 attention.attach(sys.modules[__name__])
 compose.attach(sys.modules[__name__])
+mailbox.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -63,216 +61,6 @@ CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutat
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 
 
-_sync = {"running": False, "last": None, "result": "idle"}
-_status = {}                              # email -> {"health": ok|syncing|error, "msg": str}
-_sync_lock = threading.Lock()
-_sync_asked = []                          # syncs asked for while one ran: each a set of accounts, or None for all
-
-
-# ----------------------------------------------------------------------------- sync
-def sync_accounts(emails=None):
-    """Sync the given account emails (or all when None). Emits realtime events. Caller
-    must hold the _sync single-flight guard (sync_once / sync_guarded)."""
-    new = 0
-    hc = store.conn()
-    try:
-        for a in accounts.accounts():
-            if emails is not None and a["email"] not in emails:
-                continue
-            _status[a["email"]] = {"health": "syncing", "msg": ""}
-            try:
-                kept, junk, _ = ingest.sync_new(a)
-                new += kept
-                _status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
-                store.record_sync_result(hc, a["email"], True); hc.commit()
-                sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
-                if kept > 0:
-                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
-            except Exception as e:
-                _status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
-                store.record_sync_result(hc, a["email"], False, type(e).__name__, sync_errors.kind_of(e)); hc.commit()
-                print(f"[sync] {a['email']}: {type(e).__name__}: {e}", flush=True)
-    finally:
-        hc.close()
-    return new
-
-
-def account_health_json():
-    """Per-account durable sync health (last ok/error + coarse kind), merged with the in-flight
-    _status. Pure read; no IMAP, no IMAP gate."""
-    c = store.conn()
-    rows = store.account_health(c)
-    c.close()
-    out = []
-    for r in rows:
-        if (r["folder"] or "INBOX") != "INBOX":
-            continue
-        live = _status.get(r["account"], {})
-        healthy = bool(r["last_ok_ts"]) and not r["last_error"]
-        out.append({"account": r["account"], "last_ok_ts": r["last_ok_ts"],
-                    "last_error_ts": r["last_error_ts"], "last_error_kind": r["last_error_kind"],
-                    "last_error": r["last_error"], "sync_count": r["sync_count"],
-                    "healthy": healthy, "live": live.get("health", "")})
-    return {"ok": True, "accounts": out, "generated": now_iso()}
-
-
-def do_sync_retry(body):
-    """Clear an account's recorded sync error and re-run its sync via the existing single-flight."""
-    acct = (body.get("account") or "").strip()
-    if acct not in {a["email"] for a in accounts.accounts()}:
-        return {"ok": False, "error": "unknown account"}, 400
-    c = store.conn()
-    store.clear_sync_error(c, acct); c.commit(); c.close()
-    threading.Thread(target=lambda: sync_guarded({acct}), daemon=True).start()
-    return {"ok": True, "account": acct}, 200
-
-
-def sync_once():
-    sync_guarded(None)
-
-
-def sync_rounds():
-    """The background sync's round function. Its first round resolves the credentials still
-    waiting (1Password's) before it syncs, so a long-running server never has to ask again."""
-    warmed = False
-
-    def sync_round():
-        nonlocal warmed
-        if not warmed:
-            warmed = True
-            n = accounts.preload_creds()  # 0 when every credential is plaintext
-            if n:
-                print(f"Warmed {n} 1Password-backed credential(s).", flush=True)
-        sync_once()
-    return sync_round
-
-
-def sync_guarded(emails):
-    """Single-flight sync of `emails` (or all). Both the 300s loop and the IDLE dispatcher route
-    through here so syncs never overlap. A sync asked for while one runs isn't dropped: the
-    running one goes round again as it ends, once for every such ask, so mail IDLE heard about
-    in the meantime is fetched now rather than at the next scheduled sync."""
-    with _sync_lock:
-        if _sync["running"]:
-            _sync_asked.append(None if emails is None else frozenset(emails))
-            return
-        _sync["running"] = True
-    try:
-        while True:
-            _sync_round(emails)
-            with _sync_lock:
-                if not _sync_asked:
-                    _sync["running"] = False
-                    return
-                asked = _sync_asked[:]
-                _sync_asked.clear()
-            emails = None if None in asked else set().union(*asked)
-    except BaseException:
-        with _sync_lock:
-            _sync["running"] = False
-        raise
-
-
-def _sync_round(emails):
-    """One sync of `emails` (or all). Wakes due snoozes first. New mail kicks the assess job,
-    which triages it outside this single-flight."""
-    attention.snoozing.wake_due()
-    new = sync_accounts(emails)
-    if new:
-        mailbox.folders.invalidate()         # new mail → let the rail re-pull unread badges now, not after the TTL
-        _kick("assess")
-    _sync["result"] = f"{new} new"
-    _sync["last"] = now_iso()
-    print(f"[sync] {_sync['result']}", flush=True)
-    try:
-        warm.warm_tick(emails)        # optional background folder warming (OFF unless MAILMIND_WARM_FOLDERS)
-    except Exception as e:
-        print(f"[warm] tick error: {type(e).__name__}: {e}", flush=True)
-
-
-# --- periodic auto-reconcile ------------------------------------------------
-# Incremental sync only ADDS new mail; it never notices messages removed on the
-# server (deleted/moved in webmail, other clients, server-side filters), so their
-# rows linger as ghosts and the message list shows phantoms. A dedicated low-rate
-# loop prunes them — ONE account per tick (round-robin) so each hold of the IMAP gate is a
-# single account, taken NON-blocking so a live user op is never stalled (mirrors the
-# body-backfill loop), on its own timer so the work never piggybacks a user-triggered
-# (IDLE) sync. reconcile_account is a SAFE pure-prune (never prunes on IMAP error,
-# UIDVALIDITY change, or an OK-but-empty SEARCH against a non-empty store).
-def _reconcile_secs():
-    try:
-        return int(os.environ.get("MAILMIND_RECONCILE_SECS", "1800"))  # full-cycle target; 0 disables
-    except ValueError:
-        print("[reconcile] bad MAILMIND_RECONCILE_SECS — using 1800", flush=True)
-        return 1800
-
-
-_RECONCILE_INTERVAL = _reconcile_secs()
-
-
-def _reconcile_folders(acct, dry_run=False, force=False, priority=gates.Priority.INTERACTIVE, wait=True):
-    """Reconcile each folder a sync has stored for `acct`, each as a job of its own on the
-    account's gate, so a long run never holds it across folders. Returns one result for the
-    account: the counts added up, the first folder's error, and how many folders it reached. With
-    wait=False it stops at the first folder whose gate is busy (gates.Busy if that's the first)."""
-    out = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0, "pruned": 0,
-           "error": None, "folders": 0}
-    for folder in ingest.reconciled_folders(acct["email"]):
-        try:
-            res = gates.run(acct["email"], lambda f=folder: ingest.reconcile_account(
-                acct, force=force, dry_run=dry_run, folder=f), priority=priority, wait=wait)
-        except gates.Busy:
-            if not out["folders"]:
-                raise
-            break                                     # a user op came: the rest wait for next time
-        out["folders"] += 1
-        for k in ("live", "stored", "ghosts", "pruned"):
-            out[k] += res[k]
-        out["error"] = out["error"] or res["error"]
-    return out
-
-
-def _auto_reconcile_one(acct):
-    """Prune one account's ghosts, folder by folder, yielding to any live user op: its IMAP gate
-    is taken without waiting (skip this tick if a user op holds it — caught next cycle), then
-    publish so open lists drop the pruned phantoms."""
-    try:
-        res = _reconcile_folders(acct, priority=gates.Priority.MAINTENANCE, wait=False)
-    except gates.Busy:
-        return                                        # user op live — yield, retry next cycle
-    if not res.get("pruned"):
-        return
-    with open(settings.current().reconcile_audit, "a") as f:
-        f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
-                            "account": res["account"], "pruned": res["pruned"],
-                            "live": res["live"]}) + "\n")
-    mailbox.stats.invalidate()
-    mailbox.folders.invalidate(acct["email"])                # folder badge counts changed
-    try:
-        sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
-    except Exception:
-        pass
-    print(f"[reconcile] auto: {acct['email']} pruned {res['pruned']} ghost row(s)", flush=True)
-
-
-def reconcile_rounds():
-    """A ghost pruner's round function, with its own place in the round-robin: each round prunes
-    one account and returns the seconds until the next, so the full cycle spans about
-    MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
-    rr = 0
-
-    def reconcile_round():
-        nonlocal rr
-        accts = accounts.accounts()
-        n = len(accts) or 1
-        if accts:
-            try:
-                _auto_reconcile_one(accts[rr % len(accts)])
-            except Exception as e:
-                print(f"[reconcile] loop error: {type(e).__name__}: {e}", flush=True)
-            rr += 1
-        return max(30, _RECONCILE_INTERVAL // n)       # spread the full cycle across accounts
-    return reconcile_round
 
 
 # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
@@ -334,58 +122,6 @@ def _kick(job):
         JOBS.kick(job)
 
 
-BACKFILL_RETRY = 6 * 3600     # a body the server didn't give is asked for again after this long
-BACKFILL_UNREACHABLE = 60     # the round after one whose server couldn't be reached
-_backfill_missed = {}         # pk -> when backfill may ask for its body again
-
-
-def backfill_round():
-    """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
-    apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
-    there is a backlog, ten minutes once caught up (new mail lands body-less).
-
-    A body the server didn't give (deleted elsewhere and not yet pruned here, or refused) waits
-    BACKFILL_RETRY before it is asked for again, so the next round reaches older mail. A server
-    that can't be reached ends the round, and the next comes in BACKFILL_UNREACHABLE."""
-    now = time.time()
-    for pk in [pk for pk, at in _backfill_missed.items() if at <= now]:
-        del _backfill_missed[pk]
-    c = store.conn()
-    try:
-        rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
-                         "AND pending_removal IS NULL AND pk NOT IN (SELECT value FROM json_each(?)) "
-                         "ORDER BY ts DESC LIMIT 12", (json.dumps(list(_backfill_missed)),)).fetchall()
-    finally:
-        c.close()                        # always close, even if the SELECT raises
-    if not rows:
-        return 600
-    tried, wait = [], 8                  # drain a backlog briskly
-    for r in rows:
-        try:
-            gates.run(r["account"], lambda: ingest.fetch_body(r["pk"]),
-                      priority=gates.Priority.MAINTENANCE, wait=False)
-        except gates.Busy:
-            break                        # a user op is live — yield and retry next cycle
-        except commands.UNREACHABLE:
-            wait = BACKFILL_UNREACHABLE  # the server's down: ask nothing more of it this round
-            break
-        except Exception:
-            pass
-        tried.append(r["pk"])
-        time.sleep(1.5)                  # gentle pacing between IMAP fetches
-    if tried:
-        c = store.conn()
-        try:
-            missed = [x["pk"] for x in c.execute(
-                "SELECT pk FROM messages WHERE body_text IS NULL AND pk IN (SELECT value FROM json_each(?))",
-                (json.dumps(tried),))]
-        finally:
-            c.close()
-        for pk in missed:
-            _backfill_missed[pk] = now + BACKFILL_RETRY
-    return wait
-
-
 # ----------------------------------------------------------------------------- helpers
 def deep_link(row, wmap=None):
     """The message in its provider's web client (ProviderProfile.deep_link), else the account's
@@ -433,29 +169,8 @@ def digest_json(qs):
     return {"items": items, "stats": st, "accounts": accts, "send_accounts": send_accounts,
             "aliases": amap, "signatures": config.signature_map(),
             "signature_default": config.signature_default(),
-            "status": _status, "sync": _sync, "ai": summarize.status(), "profile": profile.current().value,
+            "status": mailbox.syncing._status, "sync": mailbox.syncing._sync, "ai": summarize.status(), "profile": profile.current().value,
             "generated": now_iso()}
-
-
-# ----------------------------------------------------------------------------- curation ops
-def do_reconcile(account, dry_run, force=False):
-    """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
-    force prunes even where the server's SEARCH came back empty against stored mail."""
-    accounts.preload_creds()
-    accts = [accounts.get(account)] if account and account != "all" else accounts.accounts()
-    results = [_reconcile_folders(a, dry_run=dry_run, force=force) for a in accts]
-    if not dry_run:
-        stamp = now_iso()
-        with open(settings.current().reconcile_audit, "a") as f:
-            for r in results:
-                if r.get("pruned"):
-                    f.write(json.dumps({"kind": "reconcile", "ts": stamp,
-                                        "account": r["account"], "pruned": r["pruned"],
-                                        "live": r["live"]}) + "\n")
-        mailbox.stats.invalidate()
-    return {"ok": True, "dry_run": dry_run, "results": results,
-            "total_ghosts": sum(r["ghosts"] for r in results),
-            "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}
 
 
 def _safe_filename(name):
@@ -1155,7 +870,7 @@ def account_trust_cert(body):
     if not config.forget_tls_pins(email):
         return {"ok": False, "error": "not found"}, 404
     if email in {a["email"] for a in accounts.accounts()}:    # a disabled one waits until enabled
-        return do_sync_retry({"account": email})
+        return mailbox.syncing.do_sync_retry({"account": email})
     return {"ok": True, "account": email}, 200
 
 
@@ -1168,7 +883,7 @@ def account_mutate(action, body):
     if action == "delete":
         em = body.get("email")
         if config.remove_account(em):
-            _status.pop(em, None)
+            mailbox.syncing._status.pop(em, None)
             return {"ok": True, "removed": em}
         return {"ok": False, "error": "not found"}
     return {"ok": False, "error": "unknown action"}
@@ -1401,7 +1116,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/cleanup/sender":
                 self._json(curation.cleanup.sender(q))
             elif u.path == "/api/account-health":
-                self._json(account_health_json())
+                self._json(mailbox.syncing.account_health_json())
             elif u.path == "/api/debug/pool":
                 from mailmind.bootstrap.mailbox import pool
                 self._json({"ok": True, **pool.stats()})
@@ -1501,10 +1216,10 @@ class H(BaseHTTPRequestHandler):
                 res, code = mailbox.undo.undo_last()
                 self._json(res, code)
             elif u.path == "/api/refresh":
-                threading.Thread(target=sync_once, daemon=True).start()
+                threading.Thread(target=mailbox.syncing.sync_once, daemon=True).start()
                 self._json({"ok": True, "msg": "sync started"})
             elif u.path == "/api/reconcile":
-                self._json(do_reconcile(b.get("account", "all"), bool(b.get("dry_run", False)),
+                self._json(mailbox.syncing.do_reconcile(b.get("account", "all"), bool(b.get("dry_run", False)),
                                         force=b.get("force") is True))
             elif u.path == "/api/sweep":
                 self._json(curation.sweeps.run(b.get("account", "all"), bool(b.get("dry_run", False))))
@@ -1540,7 +1255,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/replylater":
                 self._json(*attention.followups.reply_later(b))
             elif u.path == "/api/sync-retry-account":
-                self._json(*do_sync_retry(b))
+                self._json(*mailbox.syncing.do_sync_retry(b))
             elif u.path == "/api/ai/summarize":
                 try:
                     res, code = ai_summarize(b)
@@ -1694,15 +1409,15 @@ def schedule(jobs):
     jobs.add("snooze", attention.clocked.round, every=60, first=60)
     if nosync():
         return
-    jobs.add("sync", sync_rounds(), every=SYNC_INTERVAL, first=0)
+    jobs.add("sync", mailbox.syncing.sync_rounds(), every=SYNC_INTERVAL, first=0)
     jobs.add("assess", assess_round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
-    jobs.add("backfill", backfill_round, every=600, first=45)              # old mail, full-text searchable
+    jobs.add("backfill", mailbox.syncing.backfill_round, every=600, first=45)              # old mail, full-text searchable
     if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
         jobs.add("draft-ahead", draft_ahead_rounds(), every=DRAFT_TICK_INTERVAL,
                  first=DRAFT_TICK_STARTUP_DELAY)                           # top-K reply pre-gen (AI-polite)
-    if _RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
-        jobs.add("reconcile", reconcile_rounds(), every=max(30, _RECONCILE_INTERVAL),
-                 first=min(120, _RECONCILE_INTERVAL))
+    if mailbox.syncing._RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
+        jobs.add("reconcile", mailbox.syncing.reconcile_rounds(), every=max(30, mailbox.syncing._RECONCILE_INTERVAL),
+                 first=min(120, mailbox.syncing._RECONCILE_INTERVAL))
     if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
         jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
@@ -1727,7 +1442,7 @@ def _after_draft_removed(gone):
 
 def _after_idle(changed):
     """InboxChanged: IDLE saw these accounts' INBOX change."""
-    sync_guarded(set(changed.accounts))
+    mailbox.syncing.sync_guarded(set(changed.accounts))
 
 
 class _Server(ThreadingHTTPServer):
