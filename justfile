@@ -94,9 +94,9 @@ check-frontend:
             sys.exit(f"unbalanced CSS braces in {path}")
     print(f"frontend ok: {len(scripts)} scripts parse, {len(styles)} stylesheets balanced, no inline script, no control bytes")
 
-# Type-check the TypeScript, run its tests, and check that the page's generated script is up to date (needs node)
+# Type-check the TypeScript, lint it, run its tests, and check that the page's generated script is up to date (needs node)
 check-web: _web-deps
-    cd web && npx tsc --noEmit && npx vitest run --silent && node scripts/gen-legacy.mjs --check
+    cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent && node scripts/gen-legacy.mjs --check
 
 # ── web ───────────────────────────────────────────────────────────────────────
 
