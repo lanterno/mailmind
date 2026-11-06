@@ -11,7 +11,6 @@ import os
 import re
 import dataclasses
 import json
-import time
 import secrets
 import threading
 import urllib.parse
@@ -32,60 +31,18 @@ from mailmind.content import mime
 from mailmind.bootstrap import legacy, mailbox
 from mailmind.kernel.when import now_iso
 from mailmind.platform import perimeter, profile, settings, sse, webroot
-from mailmind.platform.workers import gates, scheduler
-from mailmind.bootstrap.assistant import answers
+from mailmind.platform.workers import gates
 from mailmind.assistant.application.ports import AIOff
 from mailmind.assistant.application.ports import OverLimit
+from mailmind.bootstrap import background
 
 curation.attach(sys.modules[__name__])
-mailbox.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
-SYNC_INTERVAL = 300                       # seconds between automatic syncs
-ASSESS_INTERVAL = 300                     # seconds between the assess job's rounds, unless kicked
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 
 
-
-
-# Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
-# to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
-# NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
-def _expire_secs():
-    try:
-        return int(os.environ.get("MAILMIND_EXPIRE_SECS", "3600"))  # 0 disables
-    except ValueError:
-        print("[expire] bad MAILMIND_EXPIRE_SECS — using 3600", flush=True)
-        return 3600
-
-
-_EXPIRE_INTERVAL = _expire_secs()
-
-
-def forget_round():
-    """What's kept of a message no copy of has come back to in a month goes, and so do queue rows
-    finished a month ago."""
-    c = store.conn()
-    try:
-        store.forget_gone_messages(c, int(time.time()))
-        store.read_mut_forget_finished(c, int(time.time()))
-        answers.batch_forget_finished(c, int(time.time()))
-        c.commit()
-    finally:
-        c.close()
-
-
-def nosync():
-    """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
-    older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
-    return profile.current() is not profile.Profile.FULL
-
-
-def _kick(job):
-    """Run `job`'s next round now, if this process schedules it (read-only schedules no assess)."""
-    if job in JOBS.names():
-        JOBS.kick(job)
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -364,7 +321,7 @@ class H(BaseHTTPRequestHandler):
                 from mailmind.bootstrap.mailbox import pool
                 self._json({"ok": True, **pool.stats()})
             elif u.path == "/api/debug/jobs":    # the background jobs' timing and last outcomes
-                self._json({"ok": True, "profile": profile.current().value, "jobs": JOBS.snapshot(),
+                self._json({"ok": True, "profile": profile.current().value, "jobs": background.JOBS.snapshot(),
                             "generated": now_iso()})
             elif u.path == "/api/debug/ai":      # what AI cost each local day, by feature
                 days = max(1, min(366, int(q.get("days", ["30"])[0])))
@@ -641,53 +598,6 @@ class H(BaseHTTPRequestHandler):
             over.__exit__(None, None, None)
 
 
-# ----------------------------------------------------------------------------- boot
-JOBS = scheduler.Scheduler()             # the background jobs; legacy.start puts the running ones here
-
-
-def schedule(jobs):
-    """Put the background work on `jobs`, a Scheduler. Snooze wake always runs, since it needs no
-    mail server. Read-only, nothing else does: no sync, triage, backfill, pre-drafting, reconcile
-    or expiry."""
-    jobs.add("snooze", attention.clocked.round, every=60, first=60)
-    if nosync():
-        return
-    jobs.add("sync", mailbox.syncing.sync_rounds(), every=SYNC_INTERVAL, first=0)
-    jobs.add("assess", assistant.triage.round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
-    jobs.add("backfill", mailbox.syncing.backfill_round, every=600, first=45)              # old mail, full-text searchable
-    if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
-        jobs.add("draft-ahead", assistant.drafting.rounds(), every=assistant.drafting.DRAFT_TICK_INTERVAL,
-                 first=assistant.drafting.DRAFT_TICK_STARTUP_DELAY)                           # top-K reply pre-gen (AI-polite)
-    if mailbox.syncing._RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
-        jobs.add("reconcile", mailbox.syncing.reconcile_rounds(), every=max(30, mailbox.syncing._RECONCILE_INTERVAL),
-                 first=min(120, mailbox.syncing._RECONCILE_INTERVAL))
-    if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
-        jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
-    jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
-
-
-def _after_send(_sent):
-    """Compose's Sent or Failed: a queued send went out, or an attempt at one failed (with
-    SSE live the page doesn't poll the outbox, so a send given up on would still look pending)."""
-    mailbox.stats.invalidate()
-    sse.publish("outbox", {})       # nudge the client to refresh the outbox view instantly
-
-
-def _after_flags_changed(changed):
-    """FlagsChanged: mail read or starred elsewhere shows on a list that's open."""
-    sse.publish("flags-changed", {"account": changed.account, "folder": changed.folder, "count": changed.count})
-
-
-def _after_draft_removed(gone):
-    """Compose's DraftCopyRemoved: a send's draft left the server."""
-    mailbox.folders.list_changed(gone.account, gone.folder)
-
-
-def _after_idle(changed):
-    """InboxChanged: IDLE saw these accounts' INBOX change."""
-    mailbox.syncing.sync_guarded(set(changed.accounts))
-
-
 class _Server(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
         # A browser dropping a socket (reload, closed tab, unused preconnect) isn't a fault worth
@@ -700,7 +610,7 @@ class _Server(ThreadingHTTPServer):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         settings.configure(dataclasses.replace(settings.current(), port=int(sys.argv[1])))
-    legacy.start(sys.modules[__name__])  # the schema, the workers' wiring, and the workers
+    legacy.start()  # the schema, the workers' wiring, and the workers
     port = settings.current().port
     print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)
     _Server(("127.0.0.1", port), H).serve_forever()

@@ -36,7 +36,7 @@ def serve(port=None):
         settings.configure(dataclasses.replace(settings.current(), port=port))
     server = legacy.server_module()
     app, before_shutdown = build(server)      # first, so the startup lines name the SDK and who asked for IMAPClient
-    legacy.start(server)
+    legacy.start()
     port = settings.current().port
     print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)
     serving.Server(serving.config(app, port=port), before_shutdown).run()

@@ -44,15 +44,6 @@ from mailmind.bootstrap.accounts import config           # the credential, likew
 
 store.bind_index(fts)
 
-_server = None
-
-
-def attach(server):
-    """Name the running server module."""
-    global _server
-    _server = server
-
-
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers
 _offered = {"imaplib"}
@@ -275,9 +266,9 @@ filing = Filing(store, _directory, commands, offline, ingest, undo, stats, folde
 
 
 def _kick(job):
-    """A job's next round now. The server's job table is handed in by `attach`, since the server may run as __main__."""
-    if _server:
-        _server._kick(job)
+    """A job's next round now."""
+    from mailmind.bootstrap import background
+    background._kick(job)
 
 
 syncing = Syncing(store, _directory, ingest, warm, folders, stats, _attention, _kick)
