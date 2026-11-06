@@ -2029,7 +2029,7 @@ function setComposePill(){ const p=$("#cmpPill"); const cmp=state.compose;
   if(!cmp||cmp.status==="idle"){ p.className="sendpill"; p.textContent=""; return; }
   p.className="sendpill show "+cmp.status; p.textContent={sending:"↑ Sending…"}[cmp.status]||""; }
 /* ---------- send-time checks: one synchronous look before an irreversible send ----------
-   The pure block below (between the markers) touches no DOM and no state; test_send_guard.py runs
+   The pure block below (between the markers) touches no DOM and no state; script_send_guard.py runs
    it in node. Lines are "confirm" (Send anyway after a short arm delay), "hard" (no way past it),
    or "soft" (shown only alongside the others, never stops a send). */
 let _guardArmT=null, _gsT=null;
@@ -2882,7 +2882,7 @@ function _contactCardClick(e){
 }
 
 /* ---------- reopening a saved draft (POST /api/draft/resume) ----------
-   The block between the markers touches no DOM and no state; test_draft_resume_ui.py runs it in node. */
+   The block between the markers touches no DOM and no state; script_draft_resume_ui.py runs it in node. */
 /* ---------- drafts ---------- */
 function adoptResume(cmp,r){   // a reply's or forward's first save: from now on it names its quote, threading and files itself, so the original's row can go
   if(!r.resume||cmp.resume)return;
