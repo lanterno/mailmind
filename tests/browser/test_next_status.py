@@ -6,6 +6,7 @@ import pytest
 from playwright.sync_api import expect
 
 from fixtures import world as w
+from mailmind.bootstrap import mailbox
 
 pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
@@ -59,7 +60,6 @@ def test_reconcile_says_when_theres_nothing_to_do(page, world):
 
 def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certificate(page, world):
     from mailmind.bootstrap.accounts import config
-    import server
     where = f"127.0.0.1:{world.server.port}"
 
     def bea(raw):
@@ -67,7 +67,7 @@ def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certific
     raw = config._raw()
     bea(raw)["tls_pins"] = {where: "sha256:" + "0" * 64}
     config.save(raw)                                      # as if Bridge had been reinstalled
-    server.sync_accounts({w.BEA})
+    mailbox.syncing.sync_accounts({w.BEA})
     opened(page)
     page.locator("#settingsBtn").click()
     row = page.locator(f'.set-row[data-email="{w.BEA}"]')

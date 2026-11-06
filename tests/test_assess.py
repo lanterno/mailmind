@@ -3,6 +3,7 @@ model never holds up a sync. A sync that brings new mail kicks it. While AI is o
 at all. Fictional mail and the fake Claude API only."""
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import mailbox
 
 
 def unsummarized():
@@ -43,10 +44,10 @@ def test_a_sync_with_new_mail_kicks_triage_and_asks_nothing_itself(app, world, a
     world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml",       # on the server only
                                                    Message_ID="<lunch-5@example.test>",
                                                    Subject="Re: Lunch, a table for three"))
-    server.sync_guarded({w.ADA})
-    assert (kicked, server._sync["result"], ai.requests) == (["assess"], "1 new", [])
-    server.sync_guarded({w.ADA})
-    assert (kicked, server._sync["result"]) == (["assess"], "0 new")
+    mailbox.syncing.sync_guarded({w.ADA})
+    assert (kicked, mailbox.syncing._sync["result"], ai.requests) == (["assess"], "1 new", [])
+    mailbox.syncing.sync_guarded({w.ADA})
+    assert (kicked, mailbox.syncing._sync["result"]) == (["assess"], "0 new")
 
 
 def test_a_kick_for_a_job_this_process_doesnt_run_is_ignored(monkeypatch):

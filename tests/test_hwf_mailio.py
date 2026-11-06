@@ -23,6 +23,7 @@ from mailmind.compose.domain import outbox_item
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import sending
 from mailmind.bootstrap import mailbox
+from mailmind.mailbox.application import syncing as syncing_module
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
@@ -115,7 +116,7 @@ class _Stop(BaseException):
 
 
 class _Sleeps:
-    """Stands in for the `time` module inside server.py: every sleep returns at once and is
+    """Stands in for the `time` module inside the Mailbox's Syncing: every sleep returns at once and is
     recorded, and the loop ends at the `stop_at`-th sleep of `8` seconds (the pause after a
     backfill cycle that found work)."""
 
@@ -1103,16 +1104,15 @@ def while_locked(fn):
 
 def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, monkeypatch):
     from mailmind.bootstrap.curation import rules
-    import server
     rules.set_expiry("loom.example.test", 1)
     pk = world.pk("bea-inbox-01-client.eml")                    # its body was never fetched
     n = len(world.server.commands)
 
     def background():
         got = {"prefetch": mailbox.bodies.message_body(pk, False, prefetch=True)}
-        server._auto_reconcile_one(acct())
+        mailbox.syncing._auto_reconcile_one(acct())
         curation.expiry.auto_one(acct())
-        got["backfill"] = server.backfill_round()               # yielded, its backlog left for the next round
+        got["backfill"] = mailbox.syncing.backfill_round()               # yielded, its backlog left for the next round
         return got
     finished, got = while_locked(background)
     assert finished and got == {"prefetch": {"ok": False, "busy": True}, "backfill": 8}
@@ -1281,54 +1281,51 @@ def test_hwf_junk_goes_to_the_special_use_junk_folder(app, world):
 
 
 def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
-    import server
-    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))   # no real pacing between fetches
-    monkeypatch.setattr(server, "_backfill_missed", {})          # world alone resets no module state
+    monkeypatch.setattr(syncing_module, "time", _Sleeps(stop_at=float("inf")))   # no real pacing between fetches
+    monkeypatch.setattr(mailbox.syncing, "_backfill_missed", {})          # world alone resets no module state
     waiting = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL ORDER BY ts DESC, pk DESC")
     stuck, older = waiting[:12], [r["pk"] for r in waiting[12:]]
     with world.server.lock:                                      # deleted elsewhere, not yet pruned here
         for r in stuck:
             world.server.mailbox(r["account"], r["folder"]).messages.pop(r["uid"])
     for _ in range(2):                                           # two backfill rounds
-        server.backfill_round()
+        mailbox.syncing.backfill_round()
     fetched = q("SELECT pk FROM messages WHERE body_text IS NOT NULL")
     assert {r["pk"] for r in fetched} & set(older)
-    missed = dict(server._backfill_missed)
+    missed = dict(mailbox.syncing._backfill_missed)
     assert set(missed) == {r["pk"] for r in stuck}               # each waits its turn, once
-    assert all(at >= time.time() + server.BACKFILL_RETRY - 60 for at in missed.values())
+    assert all(at >= time.time() + mailbox.syncing.BACKFILL_RETRY - 60 for at in missed.values())
 
 
 def test_hwf_backfill_asks_again_for_a_missed_body_once_its_wait_is_over(world, monkeypatch):
-    import server
-    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))
-    monkeypatch.setattr(server, "_backfill_missed", {})
+    monkeypatch.setattr(syncing_module, "time", _Sleeps(stop_at=float("inf")))
+    monkeypatch.setattr(mailbox.syncing, "_backfill_missed", {})
     [newest] = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL "
                  "ORDER BY ts DESC, pk DESC LIMIT 1")
     with world.server.lock:
         kept = world.server.mailbox(newest["account"], newest["folder"]).messages.pop(newest["uid"])
-    server.backfill_round()
-    assert newest["pk"] in server._backfill_missed
+    mailbox.syncing.backfill_round()
+    assert newest["pk"] in mailbox.syncing._backfill_missed
     with world.server.lock:                                      # it comes back, as a flaky server's would
         world.server.mailbox(newest["account"], newest["folder"]).messages[newest["uid"]] = kept
-    server._backfill_missed[newest["pk"]] = 0                    # its wait is over
+    mailbox.syncing._backfill_missed[newest["pk"]] = 0                    # its wait is over
     while q("SELECT 1 FROM messages WHERE pk=? AND body_text IS NULL", newest["pk"]):
-        assert server.backfill_round() == 8
-    assert newest["pk"] not in server._backfill_missed
+        assert mailbox.syncing.backfill_round() == 8
+    assert newest["pk"] not in mailbox.syncing._backfill_missed
 
 
 def test_hwf_backfill_stops_its_round_when_the_server_cant_be_reached(world, monkeypatch):
     from mailmind.bootstrap.mailbox import ingest
-    import server
-    monkeypatch.setattr(server, "time", _Sleeps(stop_at=float("inf")))
-    monkeypatch.setattr(server, "_backfill_missed", {})
+    monkeypatch.setattr(syncing_module, "time", _Sleeps(stop_at=float("inf")))
+    monkeypatch.setattr(mailbox.syncing, "_backfill_missed", {})
     asked = []
 
     def down(pk):
         asked.append(pk)
         raise ConnectionRefusedError()
     monkeypatch.setattr(ingest, "fetch_body", down)
-    assert server.backfill_round() == server.BACKFILL_UNREACHABLE
-    assert len(asked) == 1 and server._backfill_missed == {}     # nothing set aside: it wasn't the message
+    assert mailbox.syncing.backfill_round() == mailbox.syncing.BACKFILL_UNREACHABLE
+    assert len(asked) == 1 and mailbox.syncing._backfill_missed == {}     # nothing set aside: it wasn't the message
 
 
 def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, world):

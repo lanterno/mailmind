@@ -171,7 +171,6 @@ def test_an_undo_in_another_tab_brings_the_row_back(page, app, world):
 
 def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
     from mailmind.bootstrap import accounts
-    import server
     gone = "ada-archive-01-old-thread.eml"
     opened(page)
     folder(page, "Archive").click()
@@ -183,7 +182,7 @@ def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
         world.server.mailbox(w.ADA, "Archive").messages.pop(world.uid(gone))
 
     def pruned():                         # the ghost pruner's round, which yields while the page reads
-        server._auto_reconcile_one(accounts.get(w.ADA))
+        mailbox.syncing._auto_reconcile_one(accounts.get(w.ADA))
         return world.pk(gone) is None
     until(page, pruned, "the ghost pruned")
     expect(listed).to_have_count(0)
@@ -302,7 +301,6 @@ def test_gmails_all_mail_is_named_so_and_g_a_opens_it(page, world):
 
 def test_a_changed_certificate_is_shown_in_settings_and_trusted_from_there(page, world):
     from mailmind.bootstrap.accounts import config
-    import server
     where = f"127.0.0.1:{world.server.port}"
 
     def bea(raw):
@@ -310,7 +308,7 @@ def test_a_changed_certificate_is_shown_in_settings_and_trusted_from_there(page,
     raw = config._raw()
     bea(raw)["tls_pins"] = {where: "sha256:" + "0" * 64}
     config.save(raw)                                      # as if Bridge had been reinstalled
-    server.sync_accounts({w.BEA})
+    mailbox.syncing.sync_accounts({w.BEA})
     opened(page)
     page.locator("#settingsBtn").click()
     row = page.locator(f'.set-row[data-email="{w.BEA}"]')

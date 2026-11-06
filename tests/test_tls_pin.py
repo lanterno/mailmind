@@ -9,6 +9,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.accounts.domain import tls_pin
+from mailmind.bootstrap import mailbox
 
 WRONG = "sha256:" + "0" * 64
 
@@ -101,9 +102,8 @@ def test_testing_an_account_whose_certificate_changed_says_so(app, world):
 
 
 def test_a_changed_certificate_shows_in_health_and_trusting_it_again_syncs(app, world):
-    import server
     pin(world, w.ADA, imap(world), WRONG)
-    server.sync_accounts({w.ADA})
+    mailbox.syncing.sync_accounts({w.ADA})
     health = {a["account"]: a for a in app.get("/api/account-health").json["accounts"]}
     assert (health[w.ADA]["last_error_kind"], health[w.ADA]["last_error"]) == ("TLS_PIN", "TLSPinMismatch")
     r = app.post("/api/accounts/trust-cert", {"email": w.ADA})

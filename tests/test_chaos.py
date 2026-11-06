@@ -10,6 +10,7 @@ import pytest
 from fixtures import world as w
 from mailmind.platform.workers import gates
 from mailmind.mailbox.domain.events import InboxChanged
+from mailmind.bootstrap import mailbox
 
 
 def wait_until(cond, timeout=5.0):
@@ -180,18 +181,17 @@ def stored(message_id):
 def test_an_idle_event_during_a_sync_isnt_lost(app, world, monkeypatch):
     """IDLE hears Ada's new mail while a sync of Bea runs. The running sync goes round again for
     Ada as it ends, instead of leaving her mail for the next scheduled sync, minutes away."""
-    import server
     from mailmind.platform import bus
     running, release = threading.Event(), threading.Event()
-    sync = server.sync_accounts
+    sync = mailbox.syncing.sync_accounts
 
     def slow_first(emails=None):
         if not running.is_set():
             running.set()
             release.wait(10)
         return sync(emails)
-    monkeypatch.setattr(server, "sync_accounts", slow_first)
-    first = threading.Thread(target=lambda: server.sync_guarded({w.BEA}), daemon=True)
+    monkeypatch.setattr(mailbox.syncing, "sync_accounts", slow_first)
+    first = threading.Thread(target=lambda: mailbox.syncing.sync_guarded({w.BEA}), daemon=True)
     first.start()
     try:
         assert running.wait(5)
@@ -204,4 +204,4 @@ def test_an_idle_event_during_a_sync_isnt_lost(app, world, monkeypatch):
         first.join(10)
     assert not first.is_alive()
     assert (stored("<late-1@example.test>"), stored("<late-2@example.test>")) == (1, 1)
-    assert not server._sync["running"]
+    assert not mailbox.syncing._sync["running"]

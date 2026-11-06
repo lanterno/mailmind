@@ -26,6 +26,7 @@ from mailmind.bootstrap import curation
 from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import mailbox
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -121,15 +122,14 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
 def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.curation import rules
-    import server
     rules.set_expiry("nobody.example.test", 72)              # so expiry has work that needs IMAP
     ada = accounts.get(w.ADA)
     since = len(world.server.commands)
     with gate.held_elsewhere():                              # a user op holds the lock
-        server._auto_reconcile_one(ada)
+        mailbox.syncing._auto_reconcile_one(ada)
         curation.expiry.auto_one(ada)
     assert world.server.commands[since:] == []               # both skipped this cycle
-    server._auto_reconcile_one(ada)
+    mailbox.syncing._auto_reconcile_one(ada)
     curation.expiry.auto_one(ada)
     assert len(world.server.commands_for(w.ADA, "LOGIN")) >= 2   # and run once the lock is free
 
@@ -144,7 +144,7 @@ def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypat
         jobs.append(account)
         return real(account, fn, **kw)
     monkeypatch.setattr(server.gates, "run", counted)
-    server._auto_reconcile_one(accounts.get(w.ADA))              # never holds the gate across folders
+    mailbox.syncing._auto_reconcile_one(accounts.get(w.ADA))              # never holds the gate across folders
     assert len(ingest.reconciled_folders(w.ADA)) > 1
     assert jobs == [w.ADA] * len(ingest.reconciled_folders(w.ADA))
 

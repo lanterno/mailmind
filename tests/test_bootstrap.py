@@ -59,7 +59,7 @@ def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
     from mailmind.bootstrap import legacy
     from mailmind.platform import bus
     synced = []
-    monkeypatch.setattr(server, "sync_guarded", synced.append)
+    monkeypatch.setattr(mailbox.syncing, "sync_guarded", synced.append)
     legacy.wire(server)
     bus.publish(InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
     assert synced == [{"ada@example.test", "cy@example.test"}]
@@ -186,25 +186,23 @@ def test_read_only_schedules_snooze_wake_alone(monkeypatch):
 
 def test_a_job_switched_off_is_left_out(monkeypatch):
     import server
-    monkeypatch.setattr(server, "_RECONCILE_INTERVAL", 0)
+    monkeypatch.setattr(mailbox.syncing, "_RECONCILE_INTERVAL", 0)
     monkeypatch.setattr(server, "_EXPIRE_INTERVAL", 0)
     assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "assess",
                                                                                       "backfill", "forget"]
 
 
 def test_a_short_reconcile_cycle_still_waits_30_seconds_between_rounds(monkeypatch):
-    import server
-    monkeypatch.setattr(server, "_RECONCILE_INTERVAL", 10)
+    monkeypatch.setattr(mailbox.syncing, "_RECONCILE_INTERVAL", 10)
     assert ("reconcile", 30, 10) in scheduled(monkeypatch)
 
 
 def test_the_sync_jobs_first_round_resolves_the_credentials_and_no_other_does(monkeypatch):
     from mailmind.bootstrap import accounts
-    import server
     calls = []
     monkeypatch.setattr(accounts, "preload_creds", lambda: calls.append("credentials") or 0)
-    monkeypatch.setattr(server, "sync_once", lambda: calls.append("sync"))
-    sync_round = server.sync_rounds()
+    monkeypatch.setattr(mailbox.syncing, "sync_once", lambda: calls.append("sync"))
+    sync_round = mailbox.syncing.sync_rounds()
     sync_round()
     sync_round()
     assert calls == ["credentials", "sync", "sync"]
