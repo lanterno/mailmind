@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
+from mailmind.bootstrap.discovery import forget_message, index_message
 from mailmind.content.text import snippet_of
 from mailmind.kernel import attention
 from mailmind.mailbox.domain import identity
@@ -149,7 +150,7 @@ def get_message_by_msgid(c, account, message_id):
 
 def delete_message(c, pk):
     row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
-    fts_delete(c, pk)                       # drop the FTS row first (single delete chokepoint)
+    forget_message(c, pk)                       # drop the FTS row first (single delete chokepoint)
     c.execute("DELETE FROM summaries WHERE message_pk=?", (pk,))
     c.execute("DELETE FROM messages WHERE pk=?", (pk,))
     if row and row["message_key"] is not None:
@@ -350,9 +351,6 @@ def get_body(c, pk):
 
 
 # ------------------------------------------------------------------------- FTS
-# Standalone FTS5 over (subject, from_name, from_addr, snippet, body_text); rowid=pk.
-# Standalone (not external-content) so deletes are a plain DELETE WHERE rowid — no
-# old-values-required footgun. Helpers are defensive: a missing index never breaks ingest.
 RECIPIENT_ROWS_MAX = 5000
 RECIPIENTS_CHARS = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
@@ -370,22 +368,6 @@ def _recipients_of(parsed):
     return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:RECIPIENTS_CHARS]
 
 
-def fts_index(c, pk):
-    """(Re)index one message from its current columns. Idempotent (delete+insert)."""
-    try:
-        r = c.execute("SELECT subject,from_name,from_addr,recipients,snippet,body_text "
-                      "FROM messages WHERE pk=?", (pk,)).fetchone()
-        if not r:
-            return
-        c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))
-        c.execute("INSERT INTO msg_fts(rowid,subject,from_name,from_addr,recipients,snippet,body_text) "
-                  "VALUES(?,?,?,?,?,?,?)",
-                  (pk, r["subject"] or "", r["from_name"] or "", r["from_addr"] or "",
-                   r["recipients"] or "", r["snippet"] or "", r["body_text"] or ""))
-    except sqlite3.OperationalError:
-        pass  # index not present yet (pre-migration) — safe to skip
-
-
 def fts_set_body(c, pk, body_text):
     """Fill body_text once a body is fetched, derive a list/river snippet if none was
     captured at ingest, and refresh the FTS row."""
@@ -394,14 +376,7 @@ def fts_set_body(c, pk, body_text):
     c.execute("UPDATE messages SET body_text=?, "
               "snippet=CASE WHEN snippet IS NULL OR snippet='' THEN ? ELSE snippet END "
               "WHERE pk=?", (bt, snip, pk))
-    fts_index(c, pk)
-
-
-def fts_delete(c, pk):
-    try:
-        c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))
-    except sqlite3.OperationalError:
-        pass
+    index_message(c, pk)
 
 
 _FLAG_COLS = {"seen", "flagged", "answered", "draft", "deleted"}
@@ -435,7 +410,7 @@ def upsert_message(c, m):
         {**m, "message_key": key},
     )
     pk = cur.fetchone()[0]
-    fts_index(c, pk)                        # keep the search index in sync on insert + update
+    index_message(c, pk)                        # keep the search index in sync on insert + update
     # A copy of a message already assessed needs no second call: moved, moved back or a second folder's.
     c.execute("""INSERT OR IGNORE INTO summaries(message_pk, summary, importance, category, action, model, created_at)
                  SELECT ?, summary, importance, category, action, model, created_at

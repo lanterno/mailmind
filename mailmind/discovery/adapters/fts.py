@@ -1,8 +1,13 @@
-"""A QuerySpec as SQLite full-text search and SQL.
+"""A QuerySpec as SQLite full-text search and SQL, and what keeps that index up to date.
+
+The index keeps no copy of the mail (migration 38), with rowid=pk. Writing it is defensive: a missing index never
+breaks ingest.
 
 Injection-safe: FTS column specs are fixed literals; every value is FTS-quoted (embedded " doubled) and
 the whole MATCH string is passed as one bound parameter; structured values are bound `?` params.
 """
+import sqlite3
+
 from mailmind.discovery.domain.query import Kind
 
 # How much a hit counts in each msg_fts column: subject, from_name, from_addr, recipients, snippet,
@@ -63,3 +68,26 @@ def visible(where):
     """`where`, leaving out snoozed mail unless the query asks about it. A snoozed message is out of
     sight until it wakes, in a search and in what a command acts on."""
     return where if any("m.snoozed_until" in w for w in where) else where + ["m.snoozed_until IS NULL"]
+
+
+def index_message(c, pk):
+    """(Re)index one message from its current columns. Idempotent (delete+insert)."""
+    try:
+        r = c.execute("SELECT subject,from_name,from_addr,recipients,snippet,body_text "
+                      "FROM messages WHERE pk=?", (pk,)).fetchone()
+        if not r:
+            return
+        c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))
+        c.execute("INSERT INTO msg_fts(rowid,subject,from_name,from_addr,recipients,snippet,body_text) "
+                  "VALUES(?,?,?,?,?,?,?)",
+                  (pk, r["subject"] or "", r["from_name"] or "", r["from_addr"] or "",
+                   r["recipients"] or "", r["snippet"] or "", r["body_text"] or ""))
+    except sqlite3.OperationalError:
+        pass  # index not present yet (pre-migration) — safe to skip
+
+
+def forget_message(c, pk):
+    try:
+        c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))
+    except sqlite3.OperationalError:
+        pass

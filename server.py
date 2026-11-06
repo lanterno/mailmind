@@ -1562,7 +1562,7 @@ def _reverse_held(d):
                 store.set_snooze(c, pk, pu)
             else:
                 store.clear_snooze(c, pk)
-            store.fts_index(c, pk)
+            discovery.index_message(c, pk)
         c.commit()
         c.close()
         return True, d.get("account"), None

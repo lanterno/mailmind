@@ -23,6 +23,7 @@ import threads
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
+from mailmind.bootstrap import discovery
 
 CUTOFF_DAYS = 90
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
@@ -199,7 +200,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
         store.set_recipients(c, pk, r["recipient_addrs"])
         c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
                   (r["in_reply_to"], r["refs"], r["recipients"], pk))
-        store.fts_index(c, pk)               # refresh FTS so recipients is searchable immediately
+        discovery.index_message(c, pk)               # refresh FTS so recipients is searchable immediately
         if invite:                           # Today & next reads invites from stored bodies only
             try:
                 _keep_body(c, pk, invite, mime.parse(invite))
