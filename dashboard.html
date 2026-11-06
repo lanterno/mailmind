@@ -3170,7 +3170,7 @@ function aiLineHtml(){   // the sync menu's line about AI
   const a=state.ai; if(!a)return "";
   if(a.engine==="none") return `<div class="sm-sub sm-ai">${ico("wind")}<span>AI is off · no API key</span></div>`;
   const spent=a.spent_today_micros, lim=a.limit_micros,
-    what="Claude API · "+a.model+(spent>0?` · ${usd(spent)}${lim?" of "+usd(lim):""} today`:"");
+    what="Claude API · "+a.model+(spent>0?` · ${usd(spent)}${lim?" of "+usd(lim):""} today`:"")+(a.batch_waiting?` · ${a.batch_waiting} out in a batch`:"");
   return `<div class="sm-sub sm-ai${aiFailing()?" err":""}">${ico("wind")}<span>${esc(what)}${aiFailing()?` · last call failed: ${esc(a.last_error)}`:""}</span></div>
     <div class="sm-sub sm-ai m">${ico("lock")}<span>${AI_PRIVACY}</span></div>`;
 }
