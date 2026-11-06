@@ -1,4 +1,8 @@
 """Finding mail by what a person types, and what a bulk command's filter may reach. Local SQL: it never touches IMAP."""
+from collections.abc import Mapping
+from typing import Any
+
+from mailmind.discovery.application.ports import AccountNames, SearchIndex
 from mailmind.discovery.domain import guard
 from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
@@ -6,11 +10,11 @@ from mailmind.kernel.when import now_iso, rel_time
 
 
 class Search:
-    def __init__(self, index, accounts):
+    def __init__(self, index: SearchIndex, accounts: AccountNames):
         self._index = index
         self._accounts = accounts
 
-    def answer(self, qs):
+    def answer(self, qs: Mapping[str, list[str]]) -> dict[str, Any]:
         """Local FTS5 + operator search across synced mail."""
         q = (qs.get("q", [""])[0] or "").strip()
         if not q:
@@ -39,7 +43,8 @@ class Search:
         return {"ok": True, "query": q, "scope": scope, "items": items,
                 "offset": offset, "has_more": has_more, "generated": now_iso()}
 
-    def reach(self, spec, cap, apart, sample_size):
+    def reach(self, spec: QuerySpec, cap: int, apart: set[str],
+              sample_size: int) -> tuple[int | None, list[tuple[str, str]], list[dict[str, str]], int]:
         """Exact COUNT + a capped set of (message key, folder) + a sample for a validated filter, leaving out the
         folders that play the roles in `apart`. Read-only; the messages come from OUR db, never the model.
 
@@ -56,5 +61,5 @@ class Search:
                    "when": rel_time(r["date_iso"])} for r in rows[:sample_size]]
         return count, messages, sample, matched
 
-    def sweeps_whole_mailbox(self, matched):
+    def sweeps_whole_mailbox(self, matched: int) -> bool:
         return guard.sweeps_whole_mailbox(matched, self._index.total())

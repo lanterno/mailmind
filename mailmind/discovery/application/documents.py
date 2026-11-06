@@ -1,18 +1,21 @@
 """The Document Hub: one findable place for every real attachment (PDF/image/doc/…) across all accounts. Pure local SQL
 over the attachments table (metadata only: filename/type/size, no body/IMAP fetch). Downloads reuse the existing
 /api/message/<pk>/attachment/<part_id> route."""
+from collections.abc import Mapping
+from typing import Any
 from urllib.parse import quote
 
+from mailmind.discovery.application.ports import AccountNames, StoredDocuments
 from mailmind.discovery.domain import documents
 from mailmind.kernel.when import rel_time
 
 
 class DocumentHub:
-    def __init__(self, mail, accounts):
+    def __init__(self, mail: StoredDocuments, accounts: AccountNames):
         self._mail = mail
         self._accounts = accounts
 
-    def page(self, qs):
+    def page(self, qs: Mapping[str, list[str]]) -> dict[str, Any]:
         """Real attachments across accounts, newest first: the `limit` from `offset` of those that match
         `kind` and `q` (`matched` counts them), with per-kind facet counts of them all. Read-only SQL."""
         try:
@@ -28,7 +31,10 @@ class DocumentHub:
         enabled = set(self._accounts.emails())      # match every other corpus-wide endpoint
         if not enabled:
             return {"ok": True, "total": 0, "matched": 0, "shown": 0, "facets": {}, "docs": []}
-        docs, facets, seen, matched = [], {}, set(), 0
+        docs: list[dict[str, Any]] = []
+        facets: dict[str, int] = {}
+        seen: set[tuple[Any, ...]] = set()
+        matched = 0
         for r in self._mail.attachments(enabled):
             if not documents.is_document(r["content_type"]):
                 continue

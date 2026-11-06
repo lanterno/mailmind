@@ -65,6 +65,7 @@ strict = [
     "mailmind/discovery/domain",
     "mailmind/mailbox/domain",
     "mailmind/calendar/application",
+    "mailmind/discovery/application",
 ]
 
 [tool.importlinter]
