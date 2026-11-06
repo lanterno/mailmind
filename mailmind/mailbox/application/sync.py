@@ -294,12 +294,15 @@ class Ingest:
             if not full and wm:
                 self._refresh_flags(s, acct, folder, modseq)
             c = self._store.conn()
-            if scan == "synced" and modseq:                # a whole scan has just read every flag
-                self._store.set_modseq(c, acct["email"], folder, modseq)
-            self._store.thread_stored(c, acct["email"], stored)   # new mail joins its conversations
-            self._attention.on_ingest(c, acct["email"])  # keep new members of muted threads silent
-            self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
-            c.commit(); c.close()
+            try:                                           # what fails here rolls back, and holds no lock past this
+                if scan == "synced" and modseq:            # a whole scan has just read every flag
+                    self._store.set_modseq(c, acct["email"], folder, modseq)
+                self._store.thread_stored(c, acct["email"], stored)   # new mail joins its conversations
+                self._attention.on_ingest(c, acct["email"])  # keep new members of muted threads silent
+                self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
+                c.commit()
+            finally:
+                c.close()
             return result
         finally:
             try:
@@ -332,11 +335,13 @@ class Ingest:
             stored = []
             self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False, stored=stored)
             c = self._store.conn()
-            self._store.thread_stored(c, acct["email"], stored)
-            self._attention.on_ingest(c, acct["email"])
-            self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
-            c.commit()
-            c.close()
+            try:
+                self._store.thread_stored(c, acct["email"], stored)
+                self._attention.on_ingest(c, acct["email"])
+                self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
+                c.commit()
+            finally:
+                c.close()
             return 1
         finally:
             try:
