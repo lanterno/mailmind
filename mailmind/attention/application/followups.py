@@ -1,0 +1,75 @@
+"""Threads waiting on someone: follow-ups, nudges and the Reply-Later stack."""
+import time
+
+from mailmind.attention.domain import followups
+from mailmind.kernel.when import now_iso
+from mailmind.platform import sse
+
+
+class FollowUps:
+    def __init__(self, book, threads, accounts, screen):
+        self._book = book
+        self._threads = threads
+        self._accounts = accounts
+        self._screen = screen
+
+    def tick(self):
+        """Resolve met commitments, expire stale ones, then promote/detect Waiting threads. Pure-local SQL (no IMAP),
+        so it rides the always-on 60s loop and works read-only, as the snooze does."""
+        now = int(time.time())
+        with self._book.transaction() as c:
+            before = self._book.due_followup_keys(c)
+            for acct in set(self._accounts.emails()):
+                self._book.resolve_followups(c, acct)     # resolve FIRST (answered flips clear before re-detect)
+            self._book.expire_followups(c, now, followups.EXPIRE_DAYS)
+            self._book.followup_promote_due(c, now, followups.GRACE_DAYS)
+            self._book.followup_detect_received(c, now, followups.GRACE_DAYS, followups.EXPIRE_DAYS)
+            after = self._book.due_followup_keys(c)
+        if after != before:                               # set comparison catches swaps, not just count deltas
+            self._screen.stats_changed()
+            sse.publish("followup", {"count": len(after)})
+
+    def dismiss(self, body):
+        """(result, code)."""
+        with self._book.transaction() as c:
+            acct, tid = self._threads.target(c, body)
+            if not tid:
+                return {"ok": False, "error": "bad target"}, 400
+            self._book.dismiss_followup(c, acct, tid, now_iso())
+        self._screen.stats_changed()
+        sse.publish("followup", {"account": acct})
+        return {"ok": True, "thread_id": tid}, 200
+
+    def reply_later(self, body):
+        """Pin/un-pin a thread to the Reply-Later stack. on=true pins (supersedes auto-nudges), on=false clears.
+        (result, code)."""
+        with self._book.transaction() as c:
+            acct, tid = self._threads.target(c, body)
+            if not tid:
+                return {"ok": False, "error": "bad target"}, 400
+            on = body.get("on", True)
+            if on:
+                anchor = int(body["pk"]) if body.get("pk") is not None else None
+                self._book.set_replylater(c, acct, tid, anchor, now_iso())
+            else:
+                self._book.clear_replylater(c, acct, tid)
+        sse.publish("followup", {"account": acct})
+        return {"ok": True, "thread_id": tid, "on": bool(on)}, 200
+
+
+class Clocked:
+    """The job that runs every minute. Database only, so it runs read-only too."""
+    def __init__(self, snoozing, follow_ups):
+        self._snoozing = snoozing
+        self._follow_ups = follow_ups
+
+    def round(self):
+        """Wake due snoozes, then bring the follow-ups up to date; one step failing doesn't stop the other."""
+        try:
+            self._snoozing.wake_due()
+        except Exception as e:
+            print(f"[snooze] tick error: {type(e).__name__}", flush=True)
+        try:
+            self._follow_ups.tick()
+        except Exception as e:
+            print(f"[followup] tick error: {type(e).__name__}", flush=True)

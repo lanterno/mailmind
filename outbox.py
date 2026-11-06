@@ -28,6 +28,7 @@ from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
+from mailmind.bootstrap import attention
 
 MAX_ATTEMPTS = 5
 _BACKOFF_BASE = 20      # secs; doubles per attempt
@@ -232,7 +233,7 @@ def _side_effects(oid, row, acct):
             tid = (orig["thread_id"] if orig else None) or row["orig_thread_id"]
             c = store.conn()
             if tid:
-                store.followup_record_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
+                attention.book.followup_record_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
                                            _now(), datetime.now(timezone.utc).isoformat())
             c.commit(); c.close()
             _commit(lambda c: store.outbox_set(c, oid, followup_recorded=1))

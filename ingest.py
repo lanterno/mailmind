@@ -24,6 +24,7 @@ from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
 from mailmind.bootstrap import discovery
+from mailmind.bootstrap import attention
 
 CUTOFF_DAYS = 90
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
@@ -292,8 +293,8 @@ def sync_folder(acct, folder, full=False, recent=None):
         if scan == "synced" and modseq:                # a whole scan has just read every flag
             store.set_modseq(c, acct["email"], folder, modseq)
         threads.recompute_threads(c, acct["email"])   # regroup conversations for new mail
-        store.apply_mute_on_ingest(c, acct["email"])  # keep new members of muted threads silent
-        store.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
+        attention.muting.on_ingest(c, acct["email"])  # keep new members of muted threads silent
+        attention.book.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
         c.commit(); c.close()
         return result
     finally:
@@ -327,8 +328,8 @@ def ingest_message(acct, folder, message_id):
         _process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False)
         c = store.conn()
         threads.recompute_threads(c, acct["email"])
-        store.apply_mute_on_ingest(c, acct["email"])
-        store.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
+        attention.muting.on_ingest(c, acct["email"])
+        attention.book.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
         c.commit()
         c.close()
         return 1

@@ -23,7 +23,7 @@ import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from datetime import datetime, timedelta
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 import store
@@ -34,7 +34,7 @@ import warm
 import readmutq
 import summarize
 import mailops
-from mailmind.bootstrap import calendar, curation, discovery
+from mailmind.bootstrap import attention, calendar, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
 import compose
@@ -50,7 +50,7 @@ from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
-from mailmind.kernel import attention
+from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import ago, now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
@@ -61,6 +61,7 @@ from mailmind.platform.workers.singleflight import SingleFlight
 curation.attach(sys.modules[__name__])
 discovery.attach(sys.modules[__name__])
 calendar.attach(sys.modules[__name__])
+attention.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -211,7 +212,7 @@ def sync_guarded(emails):
 def _sync_round(emails):
     """One sync of `emails` (or all). Wakes due snoozes first. New mail kicks the assess job,
     which triages it outside this single-flight."""
-    wake_snoozed()
+    attention.snoozing.wake_due()
     new = sync_accounts(emails)
     if new:
         _invalidate_folders()         # new mail → let the rail re-pull unread badges now, not after the TTL
@@ -337,67 +338,6 @@ def forget_round():
         c.close()
 
 
-def wake_snoozed():
-    """Resurface messages whose snooze time has passed: clear the snooze, mark unread,
-    and push a realtime event so they pop back into the inbox view. Database only: the unread mark
-    reaches the server through the queue, or the next sync that read the flags would take it back."""
-    now = int(time.time())
-    c = store.conn()
-    due = store.due_snoozes(c, now)
-    marked = False
-    for r in due:
-        store.clear_snooze(c, r["pk"])
-        if r["seen"]:
-            marked = store.queue_flags(c, r, {"seen": False}, f"wake:{r['pk']}:{now}", now_iso()) or marked
-    c.commit()
-    c.close()
-    if marked:
-        _flags_queued()
-    if due:
-        invalidate_stats()
-        sse.publish("snooze-wake", {"count": len(due),
-                                         "accounts": sorted(set(r["account"] for r in due))})
-        print(f"[snooze] woke {len(due)} message(s)", flush=True)
-
-
-FOLLOWUP_DAYS = 3        # grace window before a sent-no-reply / unanswered thread surfaces as "Waiting"
-FOLLOWUP_EXPIRE_DAYS = 14   # cap how long a received nudge nags (a reply from another client is locally invisible)
-
-
-def followups_tick():
-    """Resolve met commitments, expire stale ones, then promote/detect Waiting threads. Pure-local
-    SQL (no IMAP), so it rides the always-on 60s loop and works under NOSYNC — same caveat as snooze."""
-    now = int(time.time())
-    c = store.conn()
-    try:
-        before = store.due_followup_keys(c)
-        for acct in {x["email"] for x in accounts.accounts()}:
-            store.resolve_followups(c, acct)              # resolve FIRST (answered flips clear before re-detect)
-        store.expire_followups(c, now, FOLLOWUP_EXPIRE_DAYS)
-        store.followup_promote_due(c, now, FOLLOWUP_DAYS)
-        store.followup_detect_received(c, now, FOLLOWUP_DAYS, FOLLOWUP_EXPIRE_DAYS)
-        c.commit()
-        after = store.due_followup_keys(c)
-    finally:
-        c.close()
-    if after != before:                                   # set comparison catches swaps, not just count deltas
-        invalidate_stats()
-        sse.publish("followup", {"count": len(after)})
-
-
-def snooze_round():
-    """Wake due snoozes, then bring the follow-ups up to date. Database only, so it runs read-only
-    too; one step failing doesn't stop the other."""
-    try:
-        wake_snoozed()
-    except Exception as e:
-        print(f"[snooze] tick error: {type(e).__name__}", flush=True)
-    try:
-        followups_tick()
-    except Exception as e:
-        print(f"[followup] tick error: {type(e).__name__}", flush=True)
-
-
 def nosync():
     """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
     older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
@@ -514,7 +454,7 @@ def rel_time_future(ts):
 
 def _attention(r):
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
-    return attention.answers(r["importance"], r["category"], r["action"])
+    return verdict.answers(r["importance"], r["category"], r["action"])
 
 
 def digest_json(qs):
@@ -849,9 +789,9 @@ def folders_for(account):
     snoozed = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
                         "AND pending_removal IS NULL",
                         (account,)).fetchone()[0]
-    muted = store.muted_count(c, account)
-    waiting = store.waiting_count(c, account)
-    replylater = store.replylater_count(c, account)
+    muted = attention.book.muted_count(c, account)
+    waiting = attention.book.waiting_count(c, account)
+    replylater = attention.book.replylater_count(c, account)
     c.close()
     return {"ok": True, "account": account, "folders": out, "snoozed": snoozed,
             "muted": muted, "waiting": waiting, "replylater": replylater}
@@ -888,7 +828,7 @@ def muted_in(account, offset, limit):
     """The 'Muted' virtual view: one row per muted thread (its latest message), so the user
     can find + unmute. Pure-local read (no IMAP)."""
     c = store.conn()
-    all_rows = store.list_muted(c, account)
+    all_rows = attention.book.list_muted(c, account)
     c.close()
     total = len(all_rows)
     rows = all_rows[offset:offset + limit]
@@ -908,7 +848,7 @@ def muted_in(account, offset, limit):
 def waiting_in(account, offset, limit):
     """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
     c = store.conn()
-    all_rows = store.list_waiting(c, account)
+    all_rows = attention.book.list_waiting(c, account)
     c.close()
     total = len(all_rows)
     rows = all_rows[offset:offset + limit]
@@ -936,7 +876,7 @@ def waiting_in(account, offset, limit):
 def replylater_in(account, offset, limit):
     """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
     c = store.conn()
-    all_rows = store.list_replylater(c, account)
+    all_rows = attention.book.list_replylater(c, account)
     c.close()
     total = len(all_rows)
     rows = all_rows[offset:offset + limit]
@@ -1460,16 +1400,16 @@ def _reverse_held(d):
                 if pk is None:
                     continue
             if pu:
-                store.set_snooze(c, pk, pu)
+                attention.book.set_snooze(c, pk, pu)
             else:
-                store.clear_snooze(c, pk)
+                attention.book.clear_snooze(c, pk)
             discovery.index_message(c, pk)
         c.commit()
         c.close()
         return True, d.get("account"), None
     if kind == "mute":                              # unmute + mark unread again what it marked read
         c = store.conn()
-        store.unmute_thread(c, d["account"], d["thread_id"])
+        attention.book.unmute_thread(c, d["account"], d["thread_id"])
         for pk, prev in d.get("prev_seen", []):     # an entry from when muting told the server nothing
             store.set_local_flags(c, pk, seen=int(prev or 0))
         marked, when = False, now_iso()
@@ -2112,172 +2052,6 @@ def draft_resume(body):
             "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200
 
 
-# --------------------------------------------------------------------- snooze
-def _snooze_until(body):
-    """Resolve a wake time (unix secs) from {preset} or {until}, in the server's LOCAL tz
-    (server == the user's machine). Returns None if invalid."""
-    now = datetime.now().astimezone()
-    preset = body.get("preset")
-    if preset:
-        if preset == "later_today":
-            t = (now + timedelta(hours=3)).replace(minute=0, second=0, microsecond=0)
-            if t.date() > now.date():           # +3h ran past midnight → "later today" shouldn't wake you
-                t = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)  # at 2am; next morning instead
-        elif preset == "tomorrow":
-            t = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
-        elif preset == "weekend":
-            d = (5 - now.weekday()) % 7 or 7        # upcoming Saturday
-            t = (now + timedelta(days=d)).replace(hour=8, minute=0, second=0, microsecond=0)
-        elif preset == "next_week":
-            d = (7 - now.weekday()) % 7 or 7        # upcoming Monday
-            t = (now + timedelta(days=d)).replace(hour=8, minute=0, second=0, microsecond=0)
-        else:
-            return None
-        return int(t.timestamp())
-    until = body.get("until")
-    if until is not None:
-        try:
-            u = int(until)
-        except (TypeError, ValueError):
-            try:
-                u = int(datetime.fromisoformat(str(until)).astimezone().timestamp())
-            except Exception:
-                return None
-        if now.timestamp() < u <= now.timestamp() + 366 * 86400:   # future, within a year
-            return u
-    return None
-
-
-def _snooze_pks(c, body):
-    if body.get("thread_id") and body.get("account"):
-        return [r["pk"] for r in c.execute(
-            "SELECT pk FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL",
-            (body["account"], body["thread_id"]))]
-    if isinstance(body.get("pks"), list):
-        return [int(x) for x in body["pks"]][:_DO_CAP]   # cap the one bulk-array endpoint server-side, not just at plan time
-    if body.get("pk") is not None:
-        return [int(body["pk"])]
-    return []
-
-
-def do_snooze(body):
-    until = _snooze_until(body)
-    if until is None:
-        return {"ok": False, "error": "bad snooze time"}, 400
-    c = store.conn()
-    pks = _snooze_pks(c, body)
-    prev, where = [], []
-    for pk in pks:
-        r = store.get_message(c, pk)
-        prev.append(r["snoozed_until"] if r else None)
-        where.append([r["message_key"], r["folder"]] if r else None)   # pk isn't stable: the stack outlives it
-        store.set_snooze(c, pk, until)
-    c.commit()
-    c.close()
-    if pks:
-        undo_push({"kind": "snooze", "pks": pks, "where": where, "prev_until": prev, "label": "Snoozed"},
-                  body.get("undo_group"))
-    invalidate_stats()
-    return {"ok": True, "count": len(pks), "until": until}, 200
-
-
-def do_unsnooze(body):
-    c = store.conn()
-    pks = _snooze_pks(c, body)
-    for pk in pks:
-        store.clear_snooze(c, pk)
-    c.commit()
-    c.close()
-    invalidate_stats()
-    return {"ok": True, "count": len(pks)}, 200
-
-
-def _mute_target(c, body):
-    """Resolve (account, thread_id) from {account, thread_id} or {pk}. Validates the account."""
-    acct = body.get("account")
-    tid = body.get("thread_id")
-    if body.get("pk") is not None and not (acct and tid):
-        row = store.get_message(c, int(body["pk"]))
-        if not row:
-            return None, None
-        acct = acct or row["account"]
-        tid = tid or row["thread_id"]   # NO synthetic pk: fallback — a pk-keyed mute would never
-        #   match the real thread_id and would not survive reconcile/reset_folder (the durable-key
-        #   invariant). recompute_threads gives every visible message a real id, so this is safe.
-    if not acct or acct not in {a["email"] for a in accounts.accounts()} or not tid:
-        return None, None
-    return acct, tid
-
-
-def do_mute(body):
-    c = store.conn()
-    acct, tid = _mute_target(c, body)
-    if not tid:
-        c.close()
-        return {"ok": False, "error": "bad mute target"}, 400
-    if store.is_muted(c, acct, tid):     # already muted: don't recapture prev_seen (it would be
-        c.close()                        #   the post-mute all-seen state, breaking undo) — no-op
-        return {"ok": True, "thread_id": tid}, 200
-    unread = store.muted_thread_seen(c, acct, tid, now_iso())   # the ones Undo marks unread again
-    store.mute_thread(c, acct, tid, now_iso())
-    c.commit()
-    c.close()
-    undo_push({"kind": "mute", "account": acct, "thread_id": tid,
-               "unread": unread, "label": "Muted"}, body.get("undo_group"))
-    invalidate_stats()
-    sse.publish("mute", {"account": acct})
-    if unread:
-        _flags_queued()
-    return {"ok": True, "thread_id": tid}, 200
-
-
-def do_unmute(body):
-    c = store.conn()
-    acct, tid = _mute_target(c, body)
-    if not tid:
-        c.close()
-        return {"ok": False, "error": "bad mute target"}, 400
-    store.unmute_thread(c, acct, tid)
-    c.commit()
-    c.close()
-    invalidate_stats()
-    sse.publish("mute", {"account": acct})
-    return {"ok": True, "thread_id": tid}, 200
-
-
-def do_dismiss_followup(body):
-    c = store.conn()
-    acct, tid = _mute_target(c, body)        # same (account,thread_id) resolution + account validation
-    if not tid:
-        c.close()
-        return {"ok": False, "error": "bad target"}, 400
-    store.dismiss_followup(c, acct, tid, now_iso())
-    c.commit()
-    c.close()
-    invalidate_stats()
-    sse.publish("followup", {"account": acct})
-    return {"ok": True, "thread_id": tid}, 200
-
-
-def do_replylater(body):
-    """Pin/un-pin a thread to the Reply-Later stack. on=true pins (supersedes auto-nudges), on=false clears."""
-    c = store.conn()
-    acct, tid = _mute_target(c, body)        # reuse the (account,thread_id)/pk resolver + account validation
-    if not tid:
-        c.close()
-        return {"ok": False, "error": "bad target"}, 400
-    on = body.get("on", True)
-    if on:
-        anchor = int(body["pk"]) if body.get("pk") is not None else None
-        store.set_replylater(c, acct, tid, anchor, now_iso())
-    else:
-        store.clear_replylater(c, acct, tid)
-    c.commit()
-    c.close()
-    sse.publish("followup", {"account": acct})
-    return {"ok": True, "thread_id": tid, "on": bool(on)}, 200
-
-
 # --------------------------------------------------------------------- AI bridge
 def ai_summarize(body):
     """On-demand thread/message summary via claude. Returns (result, code)."""
@@ -2602,7 +2376,7 @@ def _thread_anchor_pk(c, account, thread_id):
 def _reply_worthy(c, pk):
     """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
     opened mail; gates KICKS only, never serving."""
-    r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {attention.reply_worthy_sql('')}", (pk,)).fetchone()
+    r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
     return bool(r)
 
 
@@ -2663,7 +2437,7 @@ FROM messages m
 JOIN summaries s ON s.message_pk = m.pk
 WHERE m.folder = 'INBOX'
   AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
-  AND """ + attention.reply_worthy_sql() + """
+  AND """ + verdict.reply_worthy_sql() + """
   AND m.ts >= ?
   AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
   AND (COALESCE(m.thread_id,'') = '' OR m.pk = (
@@ -2896,7 +2670,7 @@ def do_plan_confirm(body):
             "queued": 0, "undoable": False}
     if plan.verb == "snooze":
         if pks:
-            res, _ = do_snooze({"pks": pks, "preset": plan.preset, "undo_group": group})
+            res, _ = attention.snoozing.snooze({"pks": pks, "preset": plan.preset, "undo_group": group})
             done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
         return done, 200
     for pk in pks:
@@ -3355,17 +3129,17 @@ class H(BaseHTTPRequestHandler):
                     res, code = {"ok": False, "error": str(ve)}, 400
                 self._json(res, code)
             elif u.path == "/api/snooze":
-                self._json(*do_snooze(b))
+                self._json(*attention.snoozing.snooze(b))
             elif u.path == "/api/unsnooze":
-                self._json(*do_unsnooze(b))
+                self._json(*attention.snoozing.unsnooze(b))
             elif u.path == "/api/mute":
-                self._json(*do_mute(b))
+                self._json(*attention.muting.mute(b))
             elif u.path == "/api/unmute":
-                self._json(*do_unmute(b))
+                self._json(*attention.muting.unmute(b))
             elif u.path == "/api/followups/dismiss":
-                self._json(*do_dismiss_followup(b))
+                self._json(*attention.followups.dismiss(b))
             elif u.path == "/api/replylater":
-                self._json(*do_replylater(b))
+                self._json(*attention.followups.reply_later(b))
             elif u.path == "/api/sync-retry-account":
                 self._json(*do_sync_retry(b))
             elif u.path == "/api/ai/summarize":
@@ -3518,7 +3292,7 @@ def schedule(jobs):
     """Put the background work on `jobs`, a Scheduler. Snooze wake always runs, since it needs no
     mail server. Read-only, nothing else does: no sync, triage, backfill, pre-drafting, reconcile
     or expiry."""
-    jobs.add("snooze", snooze_round, every=60, first=60)
+    jobs.add("snooze", attention.clocked.round, every=60, first=60)
     if nosync():
         return
     jobs.add("sync", sync_rounds(), every=SYNC_INTERVAL, first=0)
