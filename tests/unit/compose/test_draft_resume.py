@@ -1,95 +1,88 @@
 """Reopening a saved draft (compose's resume helpers): a reply or forward draft already holds its
 quote or forwarded section, so it must come back split into your text and that tail, and go out
-again with each part once. Hermetic — temp database and config, and every IMAP or SMTP call is
-replaced with a recorder, so nothing can leave. All addresses are fictional.
-Run: python3 tests/unit/compose/script_draft_resume.py"""
-import os
-import sys
-
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-sys.path.insert(0, ROOT)
+again with each part once. Every IMAP or SMTP call a save or a send makes is replaced with a
+recorder (`calls`), so nothing can leave. All addresses are fictional."""
 import base64
-import dataclasses
 import hashlib
-import http.client
 import imaplib
+import itertools
 import json
-import tempfile
-import threading
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 
+import pytest
+
+import app_client
+from mailmind.bootstrap import accounts, mailbox
+from mailmind.bootstrap.compose import book, drafts, outbox, sending
 from mailmind.bootstrap.mailbox import store
+from mailmind.compose import api as compose
+from mailmind.compose.domain import limits
+from mailmind.content import mime
+from mailmind.content.headers import addr_chip
+from mailmind.content.quote import own_html, quote_tail
+from mailmind.kernel import addresses
 from mailmind.platform import settings
 from mailmind.platform.db import migrations
 from mailmind.platform.workers import gates
 
-_CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"},
-                        {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}
-
-
-def _home():
-    """A new temp data directory holding only the config, made the app's for every module."""
-    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
-    with open(settings.current().config, "w") as f:
-        json.dump(_CONFIG, f)
-
-
-_home()                                               # before anything opens a file
-from mailmind.compose import api as compose
-from mailmind.content import mime
-from mailmind.bootstrap.compose import outbox
-from mailmind.content.headers import addr_chip
-from mailmind.content.quote import own_html, quote_tail
-from mailmind.kernel import addresses
-from mailmind.bootstrap import accounts
-from mailmind.bootstrap import mailbox
-from mailmind.bootstrap.compose import book
-from mailmind.bootstrap.compose import sending
-from mailmind.compose.domain import limits
-from mailmind.bootstrap.compose import drafts
-from mailmind.bootstrap import web
-from mailmind.bootstrap import old_door
-
 ACCT = "ada@example.test"
+CONFIG = {"accounts": [{"email": ACCT, "type": "imap", "host": "imap.example.test"},
+                       {"email": "zed@example.test", "type": "imap", "host": "imap.example.test"}]}
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
         "subject": "Plans", "to": ACCT, "cc": "cy@example.test",
         "text": "Shall we meet Saturday?\nThe map is attached.", "html": "<p>Shall we meet <b>Saturday</b>?</p>"}
 OWN = "Saturday works.\n\n-- \nAda"
-_uid = [100]
-CALLS = {}
 
 
-def _fresh(uidv=777, appenduid=True):
-    """A new temp database, and recorders in place of every IMAP call a draft save makes.
-    appenduid=False is a server that names no UID for what was appended."""
-    _home()
-    store.init()
-    CALLS.clear()
-    CALLS.update(append=[], delete=[], sent=[])
+class Calls:
+    """What the recorders heard, and how the server they stand in for answers: `uidv` is the UIDVALIDITY it names
+    (None: it names none), and with `appenduid` False it names no UID for what was appended."""
+
+    def __init__(self):
+        self.appended, self.deleted, self.sent = [], [], []
+        self.uidv, self.appenduid = 777, True
+        self.uids = itertools.count(101)
+
+
+@pytest.fixture
+def home(data_dir):
+    """A data directory holding the schema and the config, with nothing kept in memory from another test."""
+    with open(settings.current().config, "w") as f:
+        json.dump(CONFIG, f)
+    app_client.reset_state()
+    yield data_dir
+    app_client.reset_state()
+
+
+@pytest.fixture
+def recorders(monkeypatch):
+    """Recorders in place of every IMAP call a draft save makes, and of the outbox."""
+    calls = Calls()
 
     def append(acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None, message_id=None, tried=None):
-        _uid[0] += 1
-        CALLS["append"].append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
-                                "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
-                                "prev_folder": prev_folder})
-        return "Drafts", (_uid[0] if appenduid else None), uidv, None
+        uid = next(calls.uids)
+        calls.appended.append({"account": acct["email"], "raw": raw, "prev_uid": prev_uid,
+                               "prev_uidvalidity": prev_uidvalidity, "prev_msgid": prev_msgid,
+                               "prev_folder": prev_folder})
+        return "Drafts", (uid if calls.appenduid else None), calls.uidv, None
 
     def delete(acct, folder, uid, uidvalidity=None):
-        CALLS["delete"].append((acct["email"], folder, uid, uidvalidity))
+        calls.deleted.append((acct["email"], folder, uid, uidvalidity))
+
     def enqueue(built, meta):
-        CALLS["sent"].append((built, meta))
-        return len(CALLS["sent"]), True
-    mailbox.copies.append_to_drafts = append
-    mailbox.copies.delete_draft_uid = delete
-    outbox.enqueue = enqueue
-    mailbox.ingest.fetch_body = _real_fetch_body
-    drafts._live = lambda acct, folder, uid: True           # the server still holds the copy
+        calls.sent.append((built, meta))
+        return len(calls.sent), True
+    monkeypatch.setattr(mailbox.copies, "append_to_drafts", append)
+    monkeypatch.setattr(mailbox.copies, "delete_draft_uid", delete)
+    monkeypatch.setattr(outbox, "enqueue", enqueue)
+    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: True)     # the server still holds the copy
+    return calls
 
 
-_real_fetch_body = mailbox.ingest.fetch_body
-_real_draft_live = drafts._live
-_real_append = mailbox.copies.append_to_drafts
+@pytest.fixture
+def calls(home, recorders):
+    return recorders
 
 
 def _save(account=ACCT, draft_id=None, **kw):
@@ -140,10 +133,10 @@ def _synced(raw, uid, account=ACCT, folder="Drafts"):
     return pk
 
 
-def _saved_and_synced(**kw):
+def _saved_and_synced(calls, **kw):
     """Save a draft through do_draft, then sync back exactly the bytes appended. (pk, save result)"""
     res = _save(**kw)
-    return _synced(CALLS["append"][-1]["raw"], res["uid"] if res["uid"] is not None else 555), res
+    return _synced(calls.appended[-1]["raw"], res["uid"] if res["uid"] is not None else 555), res
 
 
 def _resume(pk):
@@ -172,9 +165,9 @@ def _payload(r, **over):
             **over}
 
 
-def _sent(i=-1):
+def _sent(calls, i=-1):
     """(parsed message, meta, built) of a send the outbox recorder caught."""
-    built, meta = CALLS["sent"][i]
+    built, meta = calls.sent[i]
     return message_from_bytes(built["raw"], policy=policy.default), meta, built
 
 
@@ -184,9 +177,9 @@ def _parts(m):
     return (compose.lf(text.get_content()) if text else None), (html.get_content() if html else None)
 
 
-def _reply_resumed(**kw):
+def _reply_resumed(calls, **kw):
     opk = _original()
-    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
+    pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
                               to=["Bo Park <bo@example.test>"], **kw)
     r, code = _resume(pk)
     assert code == 200, r
@@ -207,10 +200,13 @@ def _round_trip(text, html=None, attachments=()):
     return mime.parse(raw)
 
 
-def test_own_html_is_where_reply_and_forward_html_start():
-    for fn in (compose.reply_bodies, compose.forward_bodies):
-        _, html = fn('a & <b> "q"\nline', ORIG)
-        assert html.startswith(own_html('a & <b> "q"\nline')), (fn.__name__, html[:80])
+@pytest.mark.parametrize("fn", [compose.reply_bodies, compose.forward_bodies], ids=["reply", "forward"])
+def test_own_html_is_where_reply_and_forward_html_start(fn):
+    _, html = fn('a & <b> "q"\nline', ORIG)
+    assert html.startswith(own_html('a & <b> "q"\nline')), html[:80]
+
+
+def test_own_html_keeps_line_breaks():
     assert own_html("a\nb") == "<div>a<br>b</div><br>"
 
 
@@ -227,21 +223,19 @@ def test_quote_tail_of_fresh_reply_and_forward():
     assert quote_tail("other", "text", "<p>x</p>") == (None, None)
 
 
-def test_recorded_tail_survives_a_real_round_trip():
-    bad = []
-    origs = [ORIG, {**ORIG, "text": "no newline at the end", "html": None},
-             {**ORIG, "text": None, "html": "<p>only <a href='https://x.example.test'>html</a></p>"},
-             {**ORIG, "text": "", "html": None}]
-    for o in origs:
-        for own in ("", "\n\n\n", OWN, 'a & <b> "q"'):
-            for fn in (compose.reply_bodies, compose.forward_bodies):
-                text, html = fn(own, o)
-                tail, _ = quote_tail(own, text, html)
-                p = _round_trip(text, html)
-                got = compose.resume_split(p["text"], {"own_text": own, "tail_text": tail}, False)
-                if got != (own, tail, "tail"):
-                    bad.append((fn.__name__, own, o.get("text"), got))
-    assert not bad, bad
+@pytest.mark.parametrize("fn", [compose.reply_bodies, compose.forward_bodies], ids=["reply", "forward"])
+@pytest.mark.parametrize("own", ["", "\n\n\n", OWN, 'a & <b> "q"'], ids=["empty", "blank_lines", "with_a_signature", "markup"])
+@pytest.mark.parametrize("o", [
+    pytest.param(ORIG, id="text_and_html"),
+    pytest.param({**ORIG, "text": "no newline at the end", "html": None}, id="no_final_newline"),
+    pytest.param({**ORIG, "text": None, "html": "<p>only <a href='https://x.example.test'>html</a></p>"}, id="html_only"),
+    pytest.param({**ORIG, "text": "", "html": None}, id="empty_text"),
+])
+def test_recorded_tail_survives_a_real_round_trip(o, own, fn):
+    text, html = fn(own, o)
+    tail, _ = quote_tail(own, text, html)
+    p = _round_trip(text, html)
+    assert compose.resume_split(p["text"], {"own_text": own, "tail_text": tail}, False) == (own, tail, "tail")
 
 
 def test_resave_three_times_is_stable():
@@ -279,26 +273,33 @@ def test_pasted_quote_cuts_only_the_last_copy():
     assert (own, t, how) == (mine, tail, "tail"), (own, how)
 
 
-def test_whole_drops_one_trailing_newline():
-    assert compose.resume_split("Hello\n\n", None, False) == ("Hello\n", "", "whole")
-    assert compose.resume_split("Hello", None, False) == ("Hello", "", "whole")
-    assert compose.resume_split("a\r\nb\r\n", {"own_text": None, "tail_text": None}, False) == ("a\nb", "", "whole")
+@pytest.mark.parametrize("text, record, want", [
+    ("Hello\n\n", None, ("Hello\n", "", "whole")),
+    ("Hello", None, ("Hello", "", "whole")),
+    ("a\r\nb\r\n", {"own_text": None, "tail_text": None}, ("a\nb", "", "whole")),
+])
+def test_whole_drops_one_trailing_newline(text, record, want):
+    assert compose.resume_split(text, record, False) == want
 
 
-def test_no_text_and_not_exact_is_none():
-    assert compose.resume_split(None, {"own_text": "Mine", "tail_text": None}, False) is None
-    assert compose.resume_split(None, None, False) is None
+@pytest.mark.parametrize("record", [{"own_text": "Mine", "tail_text": None}, None])
+def test_no_text_and_not_exact_is_none(record):
+    assert compose.resume_split(None, record, False) is None
 
 
-def test_addr_chip_round_trips():
+@pytest.mark.parametrize("name", ["Bo Park", "Park, Bo", 'Bo "B" Park', "Dr. Bo", "bo@work", "(Bo)", "back\\slash",
+                                  "semi;colon", "Zoë Ünal", "x<y>"])
+def test_addr_chip_round_trips(name):
     addr = "bo@example.test"
-    assert addr_chip("", addr) == addr and addr_chip("BO@example.test", addr) == addr
-    for name in ("Bo Park", "Park, Bo", 'Bo "B" Park', "Dr. Bo", "bo@work", "(Bo)", "back\\slash",
-                 "semi;colon", "Zoë Ünal", "x<y>"):
-        chip = addr_chip(name, addr)
-        assert addresses.parse_addr_list([chip]) == [(name, addr)], (name, chip, addresses.parse_addr_list([chip]))
-    assert addr_chip("Bo Park", addr) == "Bo Park <bo@example.test>"
-    assert addr_chip("Park, Bo", addr) == '"Park, Bo" <bo@example.test>'
+    chip = addr_chip(name, addr)
+    assert addresses.parse_addr_list([chip]) == [(name, addr)], chip
+
+
+@pytest.mark.parametrize("name, chip", [("", "bo@example.test"), ("BO@example.test", "bo@example.test"),
+                                        ("Bo Park", "Bo Park <bo@example.test>"),
+                                        ("Park, Bo", '"Park, Bo" <bo@example.test>')])
+def test_addr_chip_forms(name, chip):
+    assert addr_chip(name, "bo@example.test") == chip
 
 
 def test_thread_ids_validate_dedupe_and_cap():
@@ -312,58 +313,53 @@ def test_thread_ids_validate_dedupe_and_cap():
     assert compose.thread_ids("<x@example.test>\r\nBcc: evil@example.test", "")[0] == "<x@example.test>"
 
 
-def test_from_change_never_passes_the_old_uid():
-    _fresh()
+def test_from_change_never_passes_the_old_uid(calls):
     did = _save()["draft_id"]
     old_uid = _row(did)["uid"]
     _save(account="zed@example.test", draft_id=did)
-    last = CALLS["append"][-1]
+    last = calls.appended[-1]
     assert last["account"] == "zed@example.test" and last["prev_uid"] is None, last
     assert last["prev_uidvalidity"] is None and last["prev_msgid"] is None, last
     assert old_uid != _row(did)["uid"]
 
 
-def test_from_change_deletes_the_old_copy_in_its_own_account():
-    _fresh()
+def test_from_change_deletes_the_old_copy_in_its_own_account(calls):
     did = _save()["draft_id"]
     old_uid = _row(did)["uid"]
     _save(account="zed@example.test", draft_id=did)
-    assert CALLS["delete"] == [(ACCT, "Drafts", old_uid, 777)], CALLS["delete"]
+    assert calls.deleted == [(ACCT, "Drafts", old_uid, 777)], calls.deleted
 
 
-def test_from_change_then_two_saves_keeps_the_row_in_step():
-    _fresh()
+def test_from_change_then_two_saves_keeps_the_row_in_step(calls):
     did = _save()["draft_id"]
     _save(account="zed@example.test", draft_id=did)
     row = _row(did)
     assert row["account"] == "zed@example.test", dict(row)
     _save(account="zed@example.test", draft_id=did, text="Saturday at ten.")
-    last = CALLS["append"][-1]
+    last = calls.appended[-1]
     assert last["account"] == "zed@example.test" and last["prev_uid"] == row["uid"], last
-    assert len(CALLS["delete"]) == 1, CALLS["delete"]          # only the From change removed anything
+    assert len(calls.deleted) == 1, calls.deleted          # only the From change removed anything
 
 
-def test_from_change_removes_the_old_copy_only_after_the_new_one_is_saved():
-    _fresh()
+def test_from_change_removes_the_old_copy_only_after_the_new_one_is_saved(calls, monkeypatch):
     did = _save()["draft_id"]
     seen, record = [], mailbox.copies.delete_draft_uid
-    mailbox.copies.delete_draft_uid = lambda *a, **k: (seen.append(len(CALLS["append"])), record(*a, **k))
+    monkeypatch.setattr(mailbox.copies, "delete_draft_uid", lambda *a, **k: (seen.append(len(calls.appended)), record(*a, **k)))
     _save(account="zed@example.test", draft_id=did)
     assert seen == [2], seen                                    # both appends had run
 
 
-def test_failed_save_under_a_new_from_keeps_the_old_copy():
-    _fresh()
+def test_failed_save_under_a_new_from_keeps_the_old_copy(calls, monkeypatch):
     did = _save()["draft_id"]
     old = dict(_row(did))
 
     def unreachable(acct, raw, **kw):
         raise OSError("connection refused")
-    mailbox.copies.append_to_drafts = unreachable
+    monkeypatch.setattr(mailbox.copies, "append_to_drafts", unreachable)
     res, code = drafts.save({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
-                                 "subject": "Plans", "text": "Saturday works.", "draft_id": did})
+                             "subject": "Plans", "text": "Saturday works.", "draft_id": did})
     assert code == 200 and res["ok"] and res["pushed"] is False, (code, res)   # the journal holds it
-    assert CALLS["delete"] == [], CALLS["delete"]
+    assert calls.deleted == [], calls.deleted
     now = dict(_row(did))
     assert {k: now[k] for k in ("account", "folder", "uid", "message_id", "raw_sha")} == {
         k: old[k] for k in ("account", "folder", "uid", "message_id", "raw_sha")}
@@ -382,21 +378,19 @@ def _other_folder_draft(uid=5):
     return drafts.info(row)["draft_id"]
 
 
-def test_copy_in_another_drafts_folder_is_removed_there():
-    _fresh()
+def test_copy_in_another_drafts_folder_is_removed_there(calls):
     did = _other_folder_draft()
     _save(draft_id=did, text="Rewritten.")
-    last = CALLS["append"][-1]
+    last = calls.appended[-1]
     assert (last["prev_uid"], last["prev_folder"]) == (5, "Old drafts"), last
-    assert CALLS["delete"] == [(ACCT, "Old drafts", 5, 777)], CALLS["delete"]
+    assert calls.deleted == [(ACCT, "Old drafts", 5, 777)], calls.deleted
     _save(draft_id=did, text="Rewritten again.")                # now tracked in Drafts: replaced in place
-    assert CALLS["append"][-1]["prev_folder"] == "Drafts" and len(CALLS["delete"]) == 1, CALLS
+    assert calls.appended[-1]["prev_folder"] == "Drafts" and len(calls.deleted) == 1, calls.deleted
 
 
-def test_received_mail_a_row_points_at_is_never_removed():
+def test_received_mail_a_row_points_at_is_never_removed(calls):
     """Until 2026-11 Edit registered a row for anything in a folder whose name held "draft", so old
     rows may name received mail."""
-    _fresh()
     c = store.conn()
     store.set_uidvalidity(c, ACCT, "Bank drafts", 912)
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, draft) "
@@ -414,17 +408,16 @@ def test_received_mail_a_row_points_at_is_never_removed():
     c.commit()
     c.close()
     _save(draft_id=did, text="Forwarding this to Bo.")
-    assert CALLS["delete"] == [], CALLS["delete"]                # the statement stays where it is
+    assert calls.deleted == [], calls.deleted                # the statement stays where it is
     saved = _row(did)
     _save(account="zed@example.test", draft_id=did, text="From the other account.")
-    assert CALLS["delete"] == [(ACCT, "Drafts", saved["uid"], 777)], CALLS["delete"]   # only MailMind's own copy
+    assert calls.deleted == [(ACCT, "Drafts", saved["uid"], 777)], calls.deleted   # only MailMind's own copy
 
 
-def test_a_copy_mailmind_saved_is_removed_even_unflagged():
-    _fresh()
+def test_a_copy_mailmind_saved_is_removed_even_unflagged(calls):
     did = _save()["draft_id"]                                   # no messages row: never synced
     _save(account="zed@example.test", draft_id=did)
-    assert len(CALLS["delete"]) == 1 and CALLS["delete"][0][0] == ACCT, CALLS["delete"]
+    assert len(calls.deleted) == 1 and calls.deleted[0][0] == ACCT, calls.deleted
 
 
 class _FakeDraftsIMAP:
@@ -456,33 +449,27 @@ class _FakeDraftsIMAP:
         pass
 
 
-def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
-    connect = accounts.connect
-    try:
-        for prev_folder, touched in (("Old drafts", False), ("Drafts", True), (None, True)):
-            fake = _FakeDraftsIMAP()
-            accounts.connect = lambda acct, **kw: fake
-            got = _real_append({"email": ACCT}, b"Subject: x\r\n\r\nhi\r\n", prev_uid=5, prev_uidvalidity=777,
-                               prev_msgid="<old@example.test>", prev_folder=prev_folder)
-            assert got[:3] == ("Drafts", 9, 777), got
-            uids = [c for c in fake.calls if c[0] == "uid"]
-            assert bool(uids) is touched, (prev_folder, fake.calls)
-            if prev_folder == "Old drafts":                     # not even searched for by Message-ID
-                assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
-    finally:
-        accounts.connect = connect
+@pytest.mark.parametrize("prev_folder, touched", [("Old drafts", False), ("Drafts", True), (None, True)])
+def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere(prev_folder, touched, home, monkeypatch):
+    fake = _FakeDraftsIMAP()
+    monkeypatch.setattr(accounts, "connect", lambda acct, **kw: fake)
+    got = mailbox.copies.append_to_drafts({"email": ACCT}, b"Subject: x\r\n\r\nhi\r\n", prev_uid=5, prev_uidvalidity=777,
+                                          prev_msgid="<old@example.test>", prev_folder=prev_folder)
+    assert got[:3] == ("Drafts", 9, 777), got
+    assert bool([c for c in fake.calls if c[0] == "uid"]) is touched, fake.calls
+    if prev_folder == "Old drafts":                     # not even searched for by Message-ID
+        assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
 
 
-def test_unvouched_old_copy_is_left_alone():
-    _fresh(uidv=None)                                           # the server named no UIDVALIDITY
+def test_unvouched_old_copy_is_left_alone(calls):
+    calls.uidv = None                                           # the server named no UIDVALIDITY
     did = _save()["draft_id"]
     _save(account="zed@example.test", draft_id=did)
-    assert CALLS["delete"] == [], CALLS["delete"]
-    assert CALLS["append"][-1]["prev_uid"] is None
+    assert calls.deleted == [], calls.deleted
+    assert calls.appended[-1]["prev_uid"] is None
 
 
-def test_other_apps_draft_registers_with_folder_uidvalidity():
-    _fresh()
+def test_other_apps_draft_registers_with_folder_uidvalidity(calls):
     c = store.conn()
     store.set_uidvalidity(c, ACCT, "Drafts", 4242)
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject) "
@@ -496,8 +483,7 @@ def test_other_apps_draft_registers_with_folder_uidvalidity():
     assert (d["uid"], d["uidvalidity"], d["mode"]) == (9, 4242, "new"), dict(d)
 
 
-def test_vanished_draft_row_is_tracked_again():
-    _fresh()
+def test_vanished_draft_row_is_tracked_again(calls):
     did = _save()["draft_id"]
     c = store.conn()
     book.draft_delete(c, did)                                  # sent or discarded in another tab
@@ -505,9 +491,9 @@ def test_vanished_draft_row_is_tracked_again():
     c.close()
     res = _save(draft_id=did, text="Saturday at ten.")
     assert res["draft_id"] != did and _row(res["draft_id"]) is not None, res
-    assert CALLS["append"][-1]["prev_uid"] is None
+    assert calls.appended[-1]["prev_uid"] is None
     again = _save(draft_id=res["draft_id"], text="Saturday at eleven.")
-    assert again["draft_id"] == res["draft_id"] and CALLS["append"][-1]["prev_uid"] == res["uid"], again
+    assert again["draft_id"] == res["draft_id"] and calls.appended[-1]["prev_uid"] == res["uid"], again
 
 
 def _cols():
@@ -521,15 +507,13 @@ def _cols():
 SIDECAR = {"own_text", "tail_text", "tail_html", "bcc", "raw_sha"}
 
 
-def test_migration_20_is_idempotent():
-    _fresh()
+def test_migration_20_is_idempotent(home):
     store.init()
     cols, v = _cols()
     assert v >= 20 and SIDECAR <= cols, (v, cols)
 
 
-def test_v19_database_gains_the_columns():
-    _fresh()
+def test_v19_database_gains_the_columns(home):
     c = store.conn()
     for col in SIDECAR:
         c.execute(f"ALTER TABLE drafts DROP COLUMN {col}")
@@ -545,42 +529,38 @@ def test_v19_database_gains_the_columns():
     assert (row["uid"], row["mode"], row["own_text"], row["bcc"]) == (3, "reply", None, None), dict(row)
 
 
-def test_new_draft_records_its_text():
-    _fresh()
+def test_new_draft_records_its_text(calls):
     res = _save(text="Saturday works.\r\nSee you.")
     row = _row(res["draft_id"])
     assert row["own_text"] == "Saturday works.\nSee you." and row["tail_text"] is None, dict(row)
     assert row["tail_html"] is None and row["bcc"] is None, dict(row)
-    assert row["raw_sha"] == hashlib.sha256(CALLS["append"][-1]["raw"]).hexdigest()
+    assert row["raw_sha"] == hashlib.sha256(calls.appended[-1]["raw"]).hexdigest()
 
 
-def test_reply_draft_records_text_quote_and_html():
-    _fresh()
+def test_reply_draft_records_text_quote_and_html(calls):
     opk = _original()
     res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
     row = _row(res["draft_id"])
-    raw = CALLS["append"][-1]["raw"]
+    raw = calls.appended[-1]["raw"]
     assert row["own_text"] == OWN and row["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026"), dict(row)
     assert row["tail_text"].count("wrote:") == 1 and "> Shall we meet Saturday?" in row["tail_text"]
     assert row["tail_html"].startswith("<div>On Mon") and "<blockquote" in row["tail_html"], row["tail_html"]
     assert compose.lf(mime.parse(raw)["text"]) == OWN + row["tail_text"]
 
 
-def test_forward_draft_records_the_banner():
-    _fresh()
+def test_forward_draft_records_the_banner(calls):
     opk = _original()
     res = _save(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     row = _row(res["draft_id"])
     assert row["own_text"] == "FYI" and row["tail_text"].startswith("\n\n---------- Forwarded message"), dict(row)
     assert "From: Bo Park <bo@example.test>" in row["tail_text"], row["tail_text"]
-    files = [a["filename"] for a in mime.parse(CALLS["append"][-1]["raw"])["attachments"]]
+    files = [a["filename"] for a in mime.parse(calls.appended[-1]["raw"])["attachments"]]
     assert files == ["map.pdf"], files
 
 
-def test_bcc_is_kept_beside_the_draft_not_in_it():
-    _fresh()
+def test_bcc_is_kept_beside_the_draft_not_in_it(calls):
     res = _save(bcc=['"Park, Cy" <cy@example.test>', "dee@example.test"])
-    raw = CALLS["append"][-1]["raw"]
+    raw = calls.appended[-1]["raw"]
     head = raw.split(b"\r\n\r\n", 1)[0]
     assert b"\nBcc:" not in b"\n" + head and b"cy@example.test" not in raw, head
     row = _row(res["draft_id"])
@@ -588,10 +568,9 @@ def test_bcc_is_kept_beside_the_draft_not_in_it():
     assert row["raw_sha"] == hashlib.sha256(raw).hexdigest()
 
 
-def test_reply_draft_reopens_with_quote_files_bcc_and_thread():
-    _fresh()
+def test_reply_draft_reopens_with_quote_files_bcc_and_thread(calls):
     opk = _original()
-    pk, res = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
+    pk, res = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN,
                                 to=["Bo Park <bo@example.test>"], cc=["cy@example.test"], bcc=["Dee <dee@example.test>"],
                                 attachments=[{"filename": "notes.txt", "content_type": "text/plain",
                                               "b64": base64.b64encode(b"bring water").decode()}])
@@ -607,10 +586,9 @@ def test_reply_draft_reopens_with_quote_files_bcc_and_thread():
     assert r["notes"] == {"inline": 0, "bcc_dropped": 0, "plain": False}, r["notes"]
 
 
-def test_forward_draft_reopens_with_its_files_as_chips():
-    _fresh()
+def test_forward_draft_reopens_with_its_files_as_chips(calls):
     opk = _original()
-    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    pk, _ = _saved_and_synced(calls, mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, code = _resume(pk)
     assert code == 200 and (r["mode"], r["text"], r["split"]) == ("forward", "FYI", "exact"), r
     assert r["tail_text"].startswith("\n\n---------- Forwarded message ----------"), r["tail_text"]
@@ -618,10 +596,9 @@ def test_forward_draft_reopens_with_its_files_as_chips():
     assert (r["orig_pk"], r["in_reply_to"]) == (None, ""), r
 
 
-def test_original_deleted_still_reopens():
-    _fresh()
+def test_original_deleted_still_reopens(calls):
     opk = _original()
-    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
+    pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
     c = store.conn()
     store.delete_message(c, opk)                                # archived: the local row is gone
     c.commit()
@@ -631,10 +608,9 @@ def test_original_deleted_still_reopens():
     assert r["in_reply_to"] == "<orig1@example.test>" and r["text"] == OWN, r
 
 
-def test_original_renumbered_found_by_message_id():
-    _fresh()
+def test_original_renumbered_found_by_message_id(calls):
     opk = _original(uid=7)
-    pk, _ = _saved_and_synced(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
+    pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN)
     c = store.conn()
     store.delete_message(c, opk)
     c.commit()
@@ -644,48 +620,46 @@ def test_original_renumbered_found_by_message_id():
     assert _resume(pk)[0]["orig_pk"] == npk
 
 
-def test_raw_sha_proves_the_version_without_a_uid():
-    _fresh(appenduid=False)
-    pk, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+def test_raw_sha_proves_the_version_without_a_uid(calls):
+    calls.appenduid = False
+    pk, res = _saved_and_synced(calls, text="Mine.", bcc=["dee@example.test"])
     assert res["uid"] is None
     r, _ = _resume(pk)
     assert (r["split"], r["text"], r["bcc"]) == ("exact", "Mine.", ["dee@example.test"]), r
 
 
-def test_changed_copy_uses_the_recorded_tail_and_drops_bcc():
-    _fresh(appenduid=False)
+def test_changed_copy_uses_the_recorded_tail_and_drops_bcc(calls):
+    calls.appenduid = False
     opk = _original()
     res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN, bcc=["dee@example.test"])
-    raw = b"X-Rewritten-By: bridge\r\n" + CALLS["append"][-1]["raw"]   # the server's copy isn't byte-for-byte ours
+    raw = b"X-Rewritten-By: bridge\r\n" + calls.appended[-1]["raw"]   # the server's copy isn't byte-for-byte ours
     r, code = _resume(_synced(raw, 601))
     assert code == 200 and (r["split"], r["text"], r["draft_id"]) == ("tail", OWN, res["draft_id"]), r
     assert r["tail_text"].count("wrote:") == 1, r["tail_text"]
     assert r["bcc"] == [] and r["notes"]["bcc_dropped"] == 1, r
 
 
-def _resaved_elsewhere(old_text, new_text, uid=555):
+def _resaved_elsewhere(calls, old_text, new_text, uid=555):
     """Another app re-saved MailMind's last copy under the same Message-ID, at a new UID."""
-    raw = CALLS["append"][-1]["raw"].replace(old_text.encode(), new_text.encode())
+    raw = calls.appended[-1]["raw"].replace(old_text.encode(), new_text.encode())
     return _synced(raw, uid)
 
 
-def test_copy_resaved_elsewhere_is_the_one_the_next_save_replaces():
-    _fresh()
-    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
-    pk = _resaved_elsewhere("Mine.", "Mine, from my phone.")
+def test_copy_resaved_elsewhere_is_the_one_the_next_save_replaces(calls):
+    _, res = _saved_and_synced(calls, text="Mine.", bcc=["dee@example.test"])
+    pk = _resaved_elsewhere(calls, "Mine.", "Mine, from my phone.")
     r, code = _resume(pk)
     assert code == 200 and (r["draft_id"], r["split"], r["text"]) == (res["draft_id"], "whole", "Mine, from my phone."), r
     assert r["notes"]["bcc_dropped"] == 1, r
     row = _row(res["draft_id"])
     assert (row["folder"], row["uid"], row["uidvalidity"]) == ("Drafts", 555, 777), dict(row)   # what a send deletes
     _save(draft_id=res["draft_id"], text="Mine, from my phone. Edited.")
-    assert CALLS["append"][-1]["prev_uid"] == 555, CALLS["append"][-1]
+    assert calls.appended[-1]["prev_uid"] == 555, calls.appended[-1]
 
 
-def test_record_of_a_replaced_copy_is_never_taken_for_the_new_one():
-    _fresh()
-    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
-    pk = _resaved_elsewhere("Mine.", "Mine, from my phone.")
+def test_record_of_a_replaced_copy_is_never_taken_for_the_new_one(calls):
+    _, res = _saved_and_synced(calls, text="Mine.", bcc=["dee@example.test"])
+    pk = _resaved_elsewhere(calls, "Mine.", "Mine, from my phone.")
     _resume(pk)
     row = _row(res["draft_id"])
     assert (row["own_text"], row["bcc"], row["raw_sha"]) == (None, None, None), dict(row)
@@ -693,11 +667,10 @@ def test_record_of_a_replaced_copy_is_never_taken_for_the_new_one():
     assert (r["split"], r["text"], r["bcc"]) == ("whole", "Mine, from my phone.", []), r
 
 
-def test_reply_resaved_elsewhere_keeps_its_recorded_quote():
-    _fresh()
+def test_reply_resaved_elsewhere_keeps_its_recorded_quote(calls):
     opk = _original()
     res = _save(mode="reply", in_reply_to_pk=opk, subject="Re: Plans", text=OWN, to=["Bo Park <bo@example.test>"])
-    pk = _resaved_elsewhere("Saturday works.", "Sunday works.")
+    pk = _resaved_elsewhere(calls, "Saturday works.", "Sunday works.")
     r, _ = _resume(pk)
     assert (r["split"], r["text"]) == ("tail", OWN.replace("Saturday", "Sunday")), r
     assert _row(res["draft_id"])["tail_html"], "the quote's HTML is still vouched for"
@@ -705,9 +678,8 @@ def test_reply_resaved_elsewhere_keeps_its_recorded_quote():
     assert (r2["split"], r2["text"], r2["tail_text"]) == ("tail", r["text"], r["tail_text"]), r2
 
 
-def test_a_save_that_moved_the_row_meanwhile_is_not_re_pointed_over():
-    _fresh()
-    _, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+def test_a_save_that_moved_the_row_meanwhile_is_not_re_pointed_over(calls):
+    _, res = _saved_and_synced(calls, text="Mine.", bcc=["dee@example.test"])
     did = res["draft_id"]
     seen = _row(did)
     _save(draft_id=did, text="Newer, from another tab.", bcc=["dee@example.test"])   # lands after the read
@@ -724,19 +696,18 @@ def test_a_save_that_moved_the_row_meanwhile_is_not_re_pointed_over():
     assert (_row(did)["uid"], _row(did)["own_text"]) == (556, None)
 
 
-def test_same_bytes_without_a_uid_are_tracked_at_the_uid_they_got():
-    _fresh(appenduid=False)
-    pk, res = _saved_and_synced(text="Mine.", bcc=["dee@example.test"])
+def test_same_bytes_without_a_uid_are_tracked_at_the_uid_they_got(calls):
+    calls.appenduid = False
+    pk, res = _saved_and_synced(calls, text="Mine.", bcc=["dee@example.test"])
     r, _ = _resume(pk)
     assert (r["split"], r["bcc"]) == ("exact", ["dee@example.test"]), r
     row = _row(res["draft_id"])
     assert (row["uid"], row["own_text"], row["bcc"]) == (555, "Mine.", '["dee@example.test"]'), dict(row)
     _save(draft_id=res["draft_id"], text="Mine, edited.")
-    assert CALLS["append"][-1]["prev_uid"] == 555, CALLS["append"][-1]
+    assert calls.appended[-1]["prev_uid"] == 555, calls.appended[-1]
 
 
-def test_other_apps_draft_opens_whole_as_plain_text():
-    _fresh()
+def test_other_apps_draft_opens_whole_as_plain_text(calls):
     opk = _original()
 
     def body(m):
@@ -755,34 +726,27 @@ def test_other_apps_draft_opens_whole_as_plain_text():
     assert r["notes"] == {"inline": 1, "bcc_dropped": 0, "plain": True}, r["notes"]
 
 
-def test_many_files_come_back_in_order_from_one_parse():
-    _fresh()
+def test_many_files_come_back_in_order_from_one_parse(calls, monkeypatch):
     files = [{"filename": f"f{i}.bin", "content_type": "application/octet-stream",
               "b64": base64.b64encode(bytes([i]) * 3000).decode()} for i in range(40)]
-    pk, _ = _saved_and_synced(text="Many.", attachments=files)
-    real = mime.extract_part
+    pk, _ = _saved_and_synced(calls, text="Many.", attachments=files)
 
     def per_part(raw, part_id):
         raise AssertionError("re-parsed the whole draft for one file")
-    mime.extract_part = per_part
-    try:
-        r, code = _resume(pk)
-    finally:
-        mime.extract_part = real
+    monkeypatch.setattr(mime, "extract_part", per_part)
+    r, code = _resume(pk)
     assert code == 200 and [f["filename"] for f in r["files"]] == [f"f{i}.bin" for i in range(40)], r
     assert all(base64.b64decode(f["b64"]) == bytes([i]) * 3000 for i, f in enumerate(r["files"]))
 
 
-def test_html_only_draft_is_refused():
-    _fresh()
+def test_html_only_draft_is_refused(calls):
     raw = _foreign([lambda m: m.set_content("<p>Only <a href='https://x.example.test'>formatted</a></p>",
                                             subtype="html")])
     r, code = _resume(_synced(raw, 10))
     assert code == 422 and "only has formatted text" in r["error"], (code, r)
 
 
-def test_attached_email_is_refused():
-    _fresh()
+def test_attached_email_is_refused(calls):
     inner = EmailMessage()
     inner["Subject"] = "Old thread"
     inner.set_content("hello")
@@ -810,16 +774,14 @@ def _mixed(*parts):
     return _foreign([body])
 
 
-def test_text_after_a_file_is_refused_not_dropped():
-    _fresh()
+def test_text_after_a_file_is_refused_not_dropped(calls):
     raw = _mixed(_part(b"\xff\xd8jpeg", maintype="image", subtype="jpeg", filename="a.jpg", disposition="inline"),
                  _part("And the important part: meet at 5pm at the north gate."))
     r, code = _resume(_synced(raw, 12))
     assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
 
 
-def test_nameless_file_is_refused_unless_marked_an_attachment():
-    _fresh()
+def test_nameless_file_is_refused_unless_marked_an_attachment(calls):
     r, code = _resume(_synced(_mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf")), 13))
     assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
     raw = _mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf", disposition="attachment"))
@@ -827,16 +789,13 @@ def test_nameless_file_is_refused_unless_marked_an_attachment():
     assert code == 200 and [f["filename"] for f in r["files"]] == ["part-2"], (code, r)
 
 
-def test_empty_extra_text_is_no_loss():
-    _fresh()
+def test_empty_extra_text_is_no_loss(calls):
     r, code = _resume(_synced(_mixed(_part(b"%PDF-1.4", maintype="application", subtype="pdf", filename="a.pdf"),
                                      _part("\n")), 15))
     assert code == 200 and r["text"] == "Here is the first photo:", (code, r)
 
 
-def test_empty_first_text_cannot_hide_a_second():
-    _fresh()
-
+def test_empty_first_text_cannot_hide_a_second(calls):
     def body(m):
         m.set_content("")
         m.make_mixed()
@@ -858,18 +817,16 @@ def _apple_rich(tail_html):
             b"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + tail_html + b"\r\n--B--\r\n--A--\r\n")
 
 
-def test_apple_rich_text_draft_with_a_file_reopens_as_plain_text():
-    _fresh()
-    for n, tail in enumerate((b'<div class="">See you at 5pm</div>', b"<html><body></body></html>")):
-        r, code = _resume(_synced(_apple_rich(tail), 30 + n))
-        assert code == 200, (code, r)
-        assert (r["text"], [f["filename"] for f in r["files"]]) == ("Here is the plan:\n\nSee you at 5pm", ["plan.pdf"]), r
-        assert r["notes"]["plain"] is True, r["notes"]
+@pytest.mark.parametrize("uid, tail", [(30, b'<div class="">See you at 5pm</div>'), (31, b"<html><body></body></html>")],
+                         ids=["words_in_the_last_part", "nothing_in_the_last_part"])
+def test_apple_rich_text_draft_with_a_file_reopens_as_plain_text(uid, tail, calls):
+    r, code = _resume(_synced(_apple_rich(tail), uid))
+    assert code == 200, (code, r)
+    assert (r["text"], [f["filename"] for f in r["files"]]) == ("Here is the plan:\n\nSee you at 5pm", ["plan.pdf"]), r
+    assert r["notes"]["plain"] is True, r["notes"]
 
 
-def test_html_beside_the_text_with_words_of_its_own_is_refused():
-    _fresh()
-
+def test_html_beside_the_text_with_words_of_its_own_is_refused(calls):
     def body(m):
         m.set_content("Here is the plan:")
         m.add_attachment(b"%PDF-1.4", maintype="application", subtype="pdf", filename="plan.pdf")
@@ -878,8 +835,7 @@ def test_html_beside_the_text_with_words_of_its_own_is_refused():
     assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
 
 
-def test_outlook_style_invite_is_refused_a_named_one_is_a_file():
-    _fresh()
+def test_outlook_style_invite_is_refused_a_named_one_is_a_file(calls):
     ics = "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n"
 
     def inline(m):
@@ -895,18 +851,16 @@ def test_outlook_style_invite_is_refused_a_named_one_is_a_file():
     assert code == 200 and [f["filename"] for f in r["files"]] == ["invite.ics"], (code, r)
 
 
-def test_a_file_typed_multipart_is_saved_and_reopened_as_a_file():
-    _fresh()
+def test_a_file_typed_multipart_is_saved_and_reopened_as_a_file(calls):
     page = {"filename": "page.mhtml", "content_type": "multipart/related", "b64": base64.b64encode(b"MIME page").decode()}
-    pk, _ = _saved_and_synced(text="The page.", attachments=[page])
+    pk, _ = _saved_and_synced(calls, text="The page.", attachments=[page])
     r, code = _resume(pk)
     assert code == 200 and [(f["filename"], f["content_type"]) for f in r["files"]] == [
         ("page.mhtml", "application/octet-stream")], (code, r)
     assert base64.b64decode(r["files"][0]["b64"]) == b"MIME page"
 
 
-def test_data_in_a_boundaryless_multipart_part_is_refused_not_dropped():
-    _fresh()
+def test_data_in_a_boundaryless_multipart_part_is_refused_not_dropped(calls):
     raw = (b"From: Ada <ada@example.test>\r\nTo: bo@example.test\r\nSubject: Page\r\nMessage-ID: <mh1@example.test>\r\n"
            b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"M\"\r\n\r\n"
            b"--M\r\nContent-Type: text/plain\r\n\r\nThe page.\r\n"
@@ -916,39 +870,29 @@ def test_data_in_a_boundaryless_multipart_part_is_refused_not_dropped():
     assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
 
 
-def test_files_over_the_cap_are_refused():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
-                                                        "b64": base64.b64encode(b"x" * 64).decode()}])
-    cap, limits.MAX_ATTACH_BYTES = limits.MAX_ATTACH_BYTES, 32
-    try:
-        r, code = _resume(pk)
-    finally:
-        limits.MAX_ATTACH_BYTES = cap
+def test_files_over_the_cap_are_refused(calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Big.", attachments=[{"filename": "a.bin", "content_type": "application/octet-stream",
+                                                                "b64": base64.b64encode(b"x" * 64).decode()}])
+    monkeypatch.setattr(limits, "MAX_ATTACH_BYTES", 32)
+    r, code = _resume(pk)
     assert code == 422 and "more than 25 MB" in r["error"], (code, r)
 
 
-def test_draft_whose_saves_would_be_too_large_is_refused():
-    _fresh()
+def test_draft_whose_saves_would_be_too_large_is_refused(calls, monkeypatch):
     opk = _original()
-    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    pk, _ = _saved_and_synced(calls, mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, code = _resume(pk)
     assert code == 200, r
     need = (sum(len(f["b64"]) for f in r["files"]) + len(json.dumps(r["text"])) + len(json.dumps(r["tail_text"]))
             + limits.RESUME_HEADROOM)
-    cap = limits.MAX_SEND_POST
-    try:
-        limits.MAX_SEND_POST = need
-        assert _resume(pk)[1] == 200
-        limits.MAX_SEND_POST = need - len(r["tail_text"]) // 2      # the files alone would still fit
-        r, code = _resume(pk)
-    finally:
-        limits.MAX_SEND_POST = cap
+    monkeypatch.setattr(limits, "MAX_SEND_POST", need)
+    assert _resume(pk)[1] == 200
+    monkeypatch.setattr(limits, "MAX_SEND_POST", need - len(r["tail_text"]) // 2)      # the files alone would still fit
+    r, code = _resume(pk)
     assert code == 422 and "too large for MailMind to save or send" in r["error"], (code, r)
 
 
-def test_bad_pk_unknown_and_not_a_draft():
-    _fresh()
+def test_bad_pk_unknown_and_not_a_draft(calls):
     opk = _original()
     assert drafts.resume({"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
     assert drafts.resume({})[1] == 400
@@ -957,40 +901,18 @@ def test_bad_pk_unknown_and_not_a_draft():
     assert code == 400 and r["error"] == "That message isn’t a draft.", r
 
 
-def test_resume_route_requires_csrf():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Mine.")
-    srv = old_door._Server(("127.0.0.1", 0), web.H)
-    port = srv.server_address[1]
-    before = settings.current()
-    settings.configure(dataclasses.replace(before, port=port))
-    t = threading.Thread(target=srv.serve_forever, daemon=True)
-    t.start()
-    try:
-        def post(headers):
-            h = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-            h.request("POST", "/api/draft/resume", json.dumps({"pk": pk}),
-                      {"Content-Type": "application/json", **headers})
-            resp = h.getresponse()
-            out = resp.status, json.loads(resp.read() or b"{}")
-            h.close()
-            return out
-        origin = {"Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"}
-        assert post(origin)[0] == 403
-        code, body = post({**origin, "X-CSRF-Token": web.H.CSRF})
-        assert code == 200 and body["text"] == "Mine.", (code, body)
-    finally:
-        srv.shutdown()
-        srv.server_close()
-        settings.configure(before)
+def test_resume_route_requires_csrf(app, recorders):
+    pk, _ = _saved_and_synced(recorders, text="Mine.")
+    assert app.post("/api/draft/resume", {"pk": pk}, headers={"X-CSRF-Token": None}).status == 403
+    r = app.post("/api/draft/resume", {"pk": pk})
+    assert r.status == 200 and r.json["text"] == "Mine.", r.body
 
 
-def test_resumed_reply_sends_one_quote():
-    _fresh()
-    opk, r = _reply_resumed(bcc=["dee@example.test"])
+def test_resumed_reply_sends_one_quote(calls):
+    opk, r = _reply_resumed(calls, bcc=["dee@example.test"])
     res, code = sending.send(_payload(r))
     assert code == 200 and res["ok"], res
-    m, meta, built = _sent()
+    m, meta, built = _sent(calls)
     text, html = _parts(m)
     assert text.count("wrote:") == 1 and text.startswith(OWN + "\n\nOn Mon, 02 Feb 2026"), text
     assert html.count("<blockquote") == 1 and html.startswith(own_html(OWN)), html
@@ -1000,14 +922,13 @@ def test_resumed_reply_sends_one_quote():
     assert meta["in_reply_to_pk"] == opk and meta["draft_id"] == r["draft_id"], meta
 
 
-def test_resumed_forward_sends_each_file_once():
-    _fresh()
+def test_resumed_forward_sends_each_file_once(calls):
     opk = _original()
-    pk, _ = _saved_and_synced(mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
+    pk, _ = _saved_and_synced(calls, mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, _ = _resume(pk)
     res, code = sending.send(_payload(r, to=["dee@example.test"]))
     assert code == 200, res
-    m, meta, _ = _sent()
+    m, meta, _ = _sent(calls)
     files = [p.get_filename() for p in m.iter_attachments()]
     text, _ = _parts(m)
     assert files == ["map.pdf"], files
@@ -1015,104 +936,91 @@ def test_resumed_forward_sends_each_file_once():
     assert m["In-Reply-To"] is None and meta["in_reply_to_pk"] is None, meta
 
 
-def test_send_never_fetches_the_original():
-    _fresh()
-    _, r = _reply_resumed()
+def test_send_never_fetches_the_original(calls, monkeypatch):
+    _, r = _reply_resumed(calls)
 
     def refuse(pk):
         raise AssertionError(f"fetched pk {pk}")
-    mailbox.ingest.fetch_body = refuse
+    monkeypatch.setattr(mailbox.ingest, "fetch_body", refuse)
     res, code = sending.send(_payload(r))
     assert code == 200 and res["ok"], res
 
 
-def test_renumbered_original_still_gets_answered():
-    _fresh()
-    opk, r = _reply_resumed()
+def test_renumbered_original_still_gets_answered(calls):
+    opk, r = _reply_resumed(calls)
     c = store.conn()
     store.delete_message(c, opk)
     c.commit()
     c.close()
     npk = _original(uid=8)
     sending.send(_payload(r))
-    assert _sent()[1]["in_reply_to_pk"] == npk
+    assert _sent(calls)[1]["in_reply_to_pk"] == npk
 
 
-def test_deleted_original_sends_threaded_without_answered():
-    _fresh()
-    opk, r = _reply_resumed()
+def test_deleted_original_sends_threaded_without_answered(calls):
+    opk, r = _reply_resumed(calls)
     c = store.conn()
     store.delete_message(c, opk)
     c.commit()
     c.close()
     res, code = sending.send(_payload(r))
     assert code == 200, res
-    m, meta, _ = _sent()
+    m, meta, _ = _sent(calls)
     assert str(m["In-Reply-To"]) == "<orig1@example.test>" and meta["in_reply_to_pk"] is None, meta
 
 
-def test_changed_tail_sends_plain_text():
-    _fresh()
-    _, r = _reply_resumed()
+def test_changed_tail_sends_plain_text(calls):
+    _, r = _reply_resumed(calls)
     p = _payload(r)
     p["resume"]["tail_text"] = r["tail_text"].replace("Saturday", "Sunday")
     sending.send(p)
-    text, html = _parts(_sent()[0])
+    text, html = _parts(_sent(calls)[0])
     assert html is None and text == OWN + p["resume"]["tail_text"], (text, html)
 
 
-def test_whole_resume_sends_as_typed():
-    _fresh()
+def test_whole_resume_sends_as_typed(calls):
     raw = _foreign([lambda m: m.set_content("On my way.\n\n> Shall we meet?\n")],
                    [("In-Reply-To", "<orig1@example.test>")])
     r, _ = _resume(_synced(raw, 12))
     assert r["split"] == "whole", r
     sending.send(_payload(r, text=r["text"] + "\nSee you."))
-    m, _, _ = _sent()
+    m, _, _ = _sent(calls)
     text, html = _parts(m)
     assert html is None and text == "On my way.\n\n> Shall we meet?\nSee you.\n", repr(text)
     assert str(m["In-Reply-To"]) == "<orig1@example.test>"
 
 
-def test_resave_three_times_keeps_one_quote_and_the_bcc():
-    _fresh()
-    _, r = _reply_resumed(bcc=["dee@example.test"])
+def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
+    _, r = _reply_resumed(calls, bcc=["dee@example.test"])
     for i in range(3):
         res, code = drafts.save(_payload(r, text=r["text"] + f"\nEdit {i}."))
         assert code == 200 and res["ok"], res
-        r, code = _resume(_synced(CALLS["append"][-1]["raw"], res["uid"]))
+        r, code = _resume(_synced(calls.appended[-1]["raw"], res["uid"]))
         assert code == 200 and r["split"] == "exact", r
     assert r["text"] == OWN + "\nEdit 0.\nEdit 1.\nEdit 2." and r["bcc"] == ["dee@example.test"], r
-    text, html = _parts(message_from_bytes(CALLS["append"][-1]["raw"], policy=policy.default))
+    text, html = _parts(message_from_bytes(calls.appended[-1]["raw"], policy=policy.default))
     assert text.count("wrote:") == 1 and html.count("<blockquote") == 1, (text, html)
 
 
-def test_bad_resume_shape_is_400():
-    _fresh()
-    _, r = _reply_resumed()
+def test_bad_resume_shape_is_400(calls):
+    _, r = _reply_resumed(calls)
     res, code = sending.send(_payload(r, resume="x"))
     assert (code, res["error"]) == (400, "bad draft data"), res
-    assert CALLS["sent"] == []
+    assert calls.sent == []
 
 
-def test_unflagged_reply_still_needs_its_original():
-    _fresh()
+def test_unflagged_reply_still_needs_its_original(calls):
     res, code = sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
     assert (code, res["error"]) == (400, "missing original message"), res
 
 
-def test_replaced_copy_is_refused_and_drafts_resynced():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Old words.")
+def test_replaced_copy_is_refused_and_drafts_resynced(calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Old words.")
     synced = []
-    real = mailbox.ingest.sync_folder
-    mailbox.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full))
-    drafts._live = lambda acct, folder, uid: False
-    try:
-        r, code = _resume(pk)
-    finally:
-        mailbox.ingest.sync_folder = real
+    monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full)))
+    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: False)
+    r, code = _resume(pk)
     assert code == 409 and "changed since the list loaded" in r["error"], (code, r)
     c = store.conn()
     gone = store.get_message(c, pk) is None
@@ -1120,9 +1028,8 @@ def test_replaced_copy_is_refused_and_drafts_resynced():
     assert gone and synced == [(ACCT, "Drafts", True)], synced
 
 
-def test_a_draft_waiting_in_the_outbox_is_not_reopened():
-    _fresh()
-    pk, res = _saved_and_synced(text="Send this tomorrow.")
+def test_a_draft_waiting_in_the_outbox_is_not_reopened(calls):
+    pk, res = _saved_and_synced(calls, text="Send this tomorrow.")
     c = store.conn()
     oid, _ = book.outbox_insert(c, {"account": ACCT, "idempotency_key": "k-later", "message_id": "<later@example.test>",
                                      "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Plans",
@@ -1139,57 +1046,46 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened():
     assert _resume(pk)[1] == 200                                # cancelled: free to edit
 
 
-def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
-    _fresh()
-    for change in ("sent", "saved"):
-        pk, res = _saved_and_synced(text="Mine.")
+@pytest.mark.parametrize("change", ["sent", "saved"])
+def test_a_copy_replaced_or_sent_while_edit_waited_is_refused(change, calls, monkeypatch):
+    pk, res = _saved_and_synced(calls, text="Mine.")
 
-        def meanwhile(acct, folder, uid, change=change, did=res["draft_id"]):
-            c = store.conn()                                    # between the probe and the lock
-            if change == "sent":
-                book.draft_delete(c, did)
-            else:
-                c.execute("UPDATE drafts SET uid=uid+1000 WHERE id=?", (did,))
-            c.commit()
-            c.close()
-            return True
-        drafts._live = meanwhile
-        synced = []
-        real = mailbox.ingest.sync_folder
-        mailbox.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append(full)
-        try:
-            r, code = _resume(pk)
-        finally:
-            mailbox.ingest.sync_folder = real
-        assert code == 409 and "changed since the list loaded" in r["error"] and synced == [True], (change, code, r)
+    def meanwhile(acct, folder, uid):
+        c = store.conn()                                    # between the probe and the lock
+        if change == "sent":
+            book.draft_delete(c, res["draft_id"])
+        else:
+            c.execute("UPDATE drafts SET uid=uid+1000 WHERE id=?", (res["draft_id"],))
+        c.commit()
+        c.close()
+        return True
+    monkeypatch.setattr(drafts, "_live", meanwhile)
+    synced = []
+    monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append(full))
+    r, code = _resume(pk)
+    assert code == 409 and "changed since the list loaded" in r["error"] and synced == [True], (code, r)
 
 
-def test_save_and_send_cleanup_move_the_row_under_the_lock():
-    _fresh()
+def test_save_and_send_cleanup_move_the_row_under_the_lock(calls, monkeypatch):
     held, real_settle, real_delete = [], book.draft_settle_push, book.draft_delete
-    book.draft_settle_push = lambda c, *a: (held.append(("settle", gates.held(ACCT))), real_settle(c, *a))[1]
-    book.draft_delete = lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1]
-    try:
-        did = _save()["draft_id"]
-        outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
-                                        "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
-                                    {"email": ACCT})
-    finally:
-        book.draft_settle_push, book.draft_delete = real_settle, real_delete
+    monkeypatch.setattr(book, "draft_settle_push", lambda c, *a: (held.append(("settle", gates.held(ACCT))), real_settle(c, *a))[1])
+    monkeypatch.setattr(book, "draft_delete", lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1])
+    did = _save()["draft_id"]
+    outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
+                             "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
+                         {"email": ACCT})
     assert held == [("settle", True), ("delete", True)], held
-    assert _row(did) is None and len(CALLS["delete"]) == 1, CALLS["delete"]
+    assert _row(did) is None and len(calls.deleted) == 1, calls.deleted
 
 
-def test_unreachable_server_opens_the_local_copy():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Mine.")
-    drafts._live = lambda acct, folder, uid: None
+def test_unreachable_server_opens_the_local_copy(calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Mine.")
+    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: None)
     r, code = _resume(pk)
     assert code == 200 and r["text"] == "Mine.", r
 
 
-def test_headers_that_wont_parse_fall_back_to_their_raw_values():
-    _fresh()
+def test_headers_that_wont_parse_fall_back_to_their_raw_values(calls):
     opk = _original()
     raw = (b"From: Ada <ada@example.test>\r\nTo: Bo Park <bo@example.test>\r\nSubject: Re: Plans\r\n"
            b"Bcc: =?utf-8?q?Cy=0D=0AX?= <cy@example.test>, dee@example.test\r\n"
@@ -1203,29 +1099,26 @@ def test_headers_that_wont_parse_fall_back_to_their_raw_values():
     assert (r["mode"], r["orig_pk"], r["to"]) == ("reply", opk, ["Bo Park <bo@example.test>"]), r
 
 
-def test_long_subject_reopens_as_drafted_however_often_it_is_saved():
-    _fresh()
+def test_long_subject_reopens_as_drafted_however_often_it_is_saved(calls):
     subj = "Re: Notes from the quarterly planning meeting about the north gate renovation and the budget review"
-    pk, res = _saved_and_synced(subject=subj, text="Notes.")
+    pk, res = _saved_and_synced(calls, subject=subj, text="Notes.")
     for uid in (701, 702, 703):
         r, code = _resume(pk)
         assert code == 200 and r["subject"] == subj, (code, r["subject"])
         _save(draft_id=res["draft_id"], subject=r["subject"], text=r["text"])
-        pk = _synced(CALLS["append"][-1]["raw"], uid)
+        pk = _synced(calls.appended[-1]["raw"], uid)
     res, code = sending.send(_payload(_resume(pk)[0], in_reply_to_pk=None))
-    assert code == 200 and str(_sent()[0]["Subject"]) == subj, str(_sent()[0]["Subject"])
+    assert code == 200 and str(_sent(calls)[0]["Subject"]) == subj, str(_sent(calls)[0]["Subject"])
 
 
-def test_comments_nested_past_any_parser_still_give_bare_addresses():
-    _fresh()
+def test_comments_nested_past_any_parser_still_give_bare_addresses(calls):
     raw = (b"From: Ada <ada@example.test>\r\nTo: Bo <bo@example.test>\r\nSubject: x\r\n"
            b"Bcc: " + b"(" * 3000 + b"cy@example.test, dee@example.test\r\nMessage-ID: <deep1@example.test>\r\n\r\nhi\r\n")
     r, code = _resume(_synced(raw, 40))
     assert code == 200 and r["bcc"] == ["cy@example.test", "dee@example.test"], (code, r)
 
 
-def test_a_part_header_that_wont_parse_is_unreadable_not_a_500():
-    _fresh()
+def test_a_part_header_that_wont_parse_is_unreadable_not_a_500(calls):
     raw = (b"From: Ada <ada@example.test>\r\nTo: bo@example.test\r\nSubject: y\r\nMessage-ID: <deep2@example.test>\r\n"
            b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"M\"\r\n\r\n"
            b"--M\r\nContent-Type: text/plain\r\n\r\nHi\r\n--M\r\nContent-Type: text/plain\r\n"
@@ -1234,8 +1127,7 @@ def test_a_part_header_that_wont_parse_is_unreadable_not_a_500():
     assert code == 422 and "can’t read this draft" in r["error"], (code, r)
 
 
-def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
-    _fresh()
+def test_raw_utf8_headers_come_back_as_text_and_send_cleanly(calls):
     raw = ("From: Ada <ada@example.test>\r\nTo: José Ñúñez <jose@bücher.example>, Bo <bo@example.test>\r\n"
            "Cc: =?utf-8?q?Zo=C3=AB?= <zoe@example.test>\r\nSubject: Re: Plans\r\n"
            "Message-ID: <utf1@example.test>\r\n\r\nOn it.\r\n").encode()
@@ -1244,32 +1136,35 @@ def test_raw_utf8_headers_come_back_as_text_and_send_cleanly():
     assert r["cc"] == ["Zoë <zoe@example.test>"], r["cc"]
     res, code = sending.send(_payload(r, in_reply_to_pk=None))
     assert code == 200, res
-    m, _, built = _sent()
+    m, _, built = _sent(calls)
     assert b"unknown-8bit" not in built["raw"] and b"xn--bcher-kva.example" in built["raw"], built["raw"][:400]
     assert m["To"].addresses[0].display_name == "José Ñúñez", str(m["To"])
 
 
-def test_unreadable_draft_is_422_and_only_a_dead_server_502():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Mine.")
-    for exc, want in ((OSError("no route to host"), 502), (imaplib.IMAP4.error("FETCH BAD"), 502),
-                      (ValueError("address parts cannot contain CR or LF"), 422), (RecursionError(), 422)):
-        def fetch(pk, exc=exc):
-            raise exc
-        mailbox.ingest.fetch_body = fetch
-        r, code = _resume(pk)
-        assert code == want, (exc, code, r)
-        assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
-    mailbox.ingest.fetch_body = _real_fetch_body
-    real = mime.parse
+@pytest.mark.parametrize("exc, want", [
+    pytest.param(OSError("no route to host"), 502, id="no_route"),
+    pytest.param(imaplib.IMAP4.error("FETCH BAD"), 502, id="server_refused"),
+    pytest.param(ValueError("address parts cannot contain CR or LF"), 422, id="bad_address"),
+    pytest.param(RecursionError(), 422, id="too_deep"),
+])
+def test_unreadable_draft_is_422_and_only_a_dead_server_502(exc, want, calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Mine.")
+
+    def fetch(pk):
+        raise exc
+    monkeypatch.setattr(mailbox.ingest, "fetch_body", fetch)
+    r, code = _resume(pk)
+    assert code == want, (code, r)
+    assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
+
+
+def test_a_body_that_wont_parse_is_unreadable(calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Mine.")
 
     def parse(raw):
         raise ValueError("address parts cannot contain CR or LF")
-    mime.parse = parse                                     # a body cached by an older Python
-    try:
-        r, code = _resume(pk)
-    finally:
-        mime.parse = real
+    monkeypatch.setattr(mime, "parse", parse)              # a body cached by an older Python
+    r, code = _resume(pk)
     assert code == 422 and "can’t read this draft" in r["error"], (code, r)
 
 
@@ -1298,72 +1193,62 @@ class _FakeIMAP:
         self.calls.append(("logout",))
 
 
-def test_draft_live_reads_uidvalidity_and_uid():
-    _fresh()
+@pytest.fixture
+def draft_live(home, monkeypatch):
+    """draft_live(fake, uid): what the probe says of `uid` in Drafts, on the connection `fake`."""
     c = store.conn()
     store.set_uidvalidity(c, ACCT, "Drafts", 777)
     c.commit()
     c.close()
-    acct = {"email": ACCT}
-    real = accounts.connect
-    try:
-        def check(fake, uid=42):
-            accounts.connect = lambda a, timeout=60: fake
-            return _real_draft_live(acct, "Drafts", uid)
-        fake = _FakeIMAP(["42"])
-        assert check(fake) is True
-        assert fake.calls[0] == ("select", '"Drafts"', True) and fake.calls[1] == ("uid", "SEARCH", None, "UID", "42")
-        assert check(_FakeIMAP(["41"])) is False
-        assert check(_FakeIMAP(["42"], uidv=888)) is False                      # UIDs rolled
-        assert check(_FakeIMAP(["42"], select="NO")) is None
-        assert check(_FakeIMAP(["42"], boom=True)) is None
-        assert check(_FakeIMAP(["42"], search="NO"), uid=7) is None             # not "gone"
-        assert check(_FakeIMAP(["42"]), uid=None) is None
-    finally:
-        accounts.connect = real
+
+    def ask(fake, uid=42):
+        monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: fake)
+        return drafts._live({"email": ACCT}, "Drafts", uid)
+    return ask
 
 
-def test_draft_live_is_a_short_stateless_probe():
-    _fresh()
-    timeouts, real = [], accounts.connect
-    try:
-        fake = _FakeIMAP(["42"])
-        accounts.connect = lambda a, timeout=60: (timeouts.append(timeout), fake)[1]
-        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is True
-        assert timeouts and timeouts[0] <= 15 and fake.calls[-1] == ("logout",), (timeouts, fake.calls)
-        fake = _FakeIMAP(["42"], boom=True)
-        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is None and fake.calls[-1] == ("logout",)
-
-        def refused(a, timeout=60):
-            raise OSError("no route to host")
-        accounts.connect = refused
-        assert _real_draft_live({"email": ACCT}, "Drafts", 42) is None
-    finally:
-        accounts.connect = real
+def test_draft_live_reads_uidvalidity_and_uid(draft_live):
+    fake = _FakeIMAP(["42"])
+    assert draft_live(fake) is True
+    assert fake.calls[0] == ("select", '"Drafts"', True) and fake.calls[1] == ("uid", "SEARCH", None, "UID", "42")
 
 
-def test_edit_probes_the_server_without_holding_the_ops_lock():
-    _fresh()
-    pk, _ = _saved_and_synced(text="Mine.")
+@pytest.mark.parametrize("fake, uid, want", [
+    pytest.param(dict(uids=["41"]), 42, False, id="another_uid"),
+    pytest.param(dict(uids=["42"], uidv=888), 42, False, id="uids_rolled"),
+    pytest.param(dict(uids=["42"], select="NO"), 42, None, id="select_refused"),
+    pytest.param(dict(uids=["42"], boom=True), 42, None, id="connection_reset"),
+    pytest.param(dict(uids=["42"], search="NO"), 7, None, id="search_refused_is_not_gone"),
+    pytest.param(dict(uids=["42"]), None, None, id="no_uid"),
+])
+def test_draft_live_answers(fake, uid, want, draft_live):
+    assert draft_live(_FakeIMAP(**fake), uid) is want
+
+
+def test_draft_live_is_a_short_stateless_probe(home, monkeypatch):
+    timeouts = []
+    fake = _FakeIMAP(["42"])
+    monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: (timeouts.append(timeout), fake)[1])
+    assert drafts._live({"email": ACCT}, "Drafts", 42) is True
+    assert timeouts and timeouts[0] <= 15 and fake.calls[-1] == ("logout",), (timeouts, fake.calls)
+
+
+def test_draft_live_logs_out_after_a_reset(home, monkeypatch):
+    fake = _FakeIMAP(["42"], boom=True)
+    monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: fake)
+    assert drafts._live({"email": ACCT}, "Drafts", 42) is None and fake.calls[-1] == ("logout",)
+
+
+def test_draft_live_with_no_connection_is_unknown(home, monkeypatch):
+    def refused(a, timeout=60):
+        raise OSError("no route to host")
+    monkeypatch.setattr(accounts, "connect", refused)
+    assert drafts._live({"email": ACCT}, "Drafts", 42) is None
+
+
+def test_edit_probes_the_server_without_holding_the_ops_lock(calls, monkeypatch):
+    pk, _ = _saved_and_synced(calls, text="Mine.")
     held = []
-    drafts._live = lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1]
+    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1])
     r, code = _resume(pk)
     assert code == 200 and held == [False], (code, held)
-
-
-if __name__ == "__main__":
-    import sys
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    failed = 0
-    for fn in fns:
-        try:
-            fn()
-            print("PASS", fn.__name__)
-        except AssertionError as e:
-            failed += 1
-            print("FAIL", fn.__name__, repr(e))
-        except Exception as e:
-            failed += 1
-            print("ER:U", fn.__name__, repr(e))
-    print("\n%d/%d passed" % (len(fns) - failed, len(fns)))
-    sys.exit(1 if failed else 0)
