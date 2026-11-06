@@ -159,9 +159,11 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`api/client.ts`, typed by `api/types.gen.ts`).
   `web/next.html` and `web/src/main.tsx` are the React app at `/next` (React 19 with the React Compiler, TanStack Query, React Aria Components), beside the page and on its
   stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
-  (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), and `features/mailbox` holds the rail, the list, the reader
-  and filing. So far it reads, searches, files, stars and undoes; it has no composer, brief or bulk commands yet, and links back to `/` for those. A value hooks read
-  outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler doesn't take a method named `use` for a hook.
+  (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
+  and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
+  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. So far it reads, searches, files, snoozes, mutes, summarizes, marks, saves views, writes mail
+  and shows the outbox tray; it has no brief, Ask, Do or settings yet, and links back to `/` for those. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
+  doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
