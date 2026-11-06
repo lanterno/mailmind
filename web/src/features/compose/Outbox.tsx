@@ -1,5 +1,5 @@
 // The tray the top bar's ↑ opens: changes waiting for a server, and what the outbox holds, each with its way out.
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
@@ -85,9 +85,10 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     void qc.invalidateQueries({ queryKey: ["outbox"] });
     void qc.invalidateQueries({ queryKey: ["pending"] });
   };
+  const onOpened = useEffectEvent(again);
   useEffect(() => {
     if (!open) return;
-    again();
+    onOpened();
     const onDown = (e: MouseEvent) => {
       if (!(e.target as Element).closest?.("#outboxFly,#outboxBtn")) setOpen(false);
     };

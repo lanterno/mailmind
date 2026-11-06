@@ -54,8 +54,6 @@ export default defineConfig([
     },
   },
   { files: ["src/features/mailbox/MailFrame.tsx"], rules: { "no-restricted-syntax": "off" } },
-  // One finding on its `[open]` effect, to become a disable on that line with the rest: the file was being edited elsewhere.
-  { files: ["src/features/compose/Outbox.tsx"], rules: { "react-hooks/exhaustive-deps": "off" } },
   {
     files: PURE,
     rules: {
