@@ -1,4 +1,4 @@
-"""Conversation threading (threads.recompute_threads) on a temporary database: Gmail's thread id
+"""Conversation threading (store.recompute_threads) on a temporary database: Gmail's thread id
 first, then the Message-ID / In-Reply-To / References graph, then the message alone. A thread
 never spans accounts and never forms on a subject. Once a thread has an id it keeps it as replies
 arrive, because mutes, follow-ups and thread summaries are keyed on it; when two threads merge,
@@ -32,8 +32,8 @@ def add(c, mid, *, account=A, irt="", refs="", gm="", subject="Hello"):
 
 
 def recompute(c, account=A):
-    import threads
-    threads.recompute_threads(c, account)
+    from mailmind.bootstrap.mailbox import store
+    store.recompute_threads(c, account)
     c.commit()
 
 

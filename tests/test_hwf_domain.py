@@ -59,8 +59,8 @@ def put(c, mid="", *, account=A, folder="INBOX", irt="", refs="", gm="", subject
 
 
 def recompute(c, account=A):
-    import threads
-    threads.recompute_threads(c, account)
+    from mailmind.bootstrap.mailbox import store
+    store.recompute_threads(c, account)
 
 
 def tid(c, pk):
