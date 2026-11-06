@@ -2472,29 +2472,16 @@ def cleanup_execute(body):
     targets = _cleanup_sweep_targets(c, from_addr)
     c.close()
     swept = fail = queued = 0
-
-    def trash(pk):
-        """(ok, undo), or None when IMAP was down and the move went to the offline queue."""
-        try:
-            ok, _msg, undo = mailops.trash_message(pk)
-            return ok, undo
-        except mailops._UNREACHABLE:            # IMAP down → durable offline queue (no IMAP here)
-            _readmut_enqueue("trash", pk, None, grp, None)
-            return None
     for t in targets[:_CLEANUP_SWEEP_CAP]:
         try:
-            done = gates.run(t["account"], lambda: trash(t["pk"]),   # one message at a time, like /api/trash
-                             priority=gates.Priority.INTERACTIVE)
-            if done is None:
-                queued += 1
-                continue
-            ok, undo = done
-            if ok:
-                swept += 1
-                undo_push(undo, grp)
-            else:
-                fail += 1
+            res = do_trash({"pk": t["pk"], "undo_group": grp})   # one message at a time, as a click on it would
         except Exception:
+            res = {}
+        if res.get("status") == "queued":
+            queued += 1
+        elif res.get("ok"):
+            swept += 1
+        else:
             fail += 1
     ingest.reclassify(block_token)               # what stays, in other folders, reads as blocked too
     invalidate_stats()
