@@ -37,10 +37,12 @@ import mailops
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
-from mailmind.compose.api import build_message, forward_bodies, lf, reference_chain, reply_bodies, resume_split, thread_ids
+from mailmind.compose.api import build_message, lf, resume_split, thread_ids
+from mailmind.compose.application.composing import composer_key
+from mailmind.compose.domain import limits
+from mailmind.compose.domain.errors import Refused
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
-from mailmind.content.quote import own_html, quote_tail
 import summarize_thread
 import summarize_briefing
 import summarize_review
@@ -60,6 +62,7 @@ curation.attach(sys.modules[__name__])
 discovery.attach(sys.modules[__name__])
 calendar.attach(sys.modules[__name__])
 attention.attach(sys.modules[__name__])
+compose.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -69,9 +72,6 @@ ASSESS_YIELD = 45                         # seconds a round waits while the user
 STATS_TTL = 90                            # seconds to cache the live per-account stats
 CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
-MAX_ATTACH_BYTES = 25 << 20               # 25 MB total decoded attachment budget
-# /api/send body cap must hold MAX_ATTACH_BYTES AFTER base64 (~4/3) + JSON overhead.
-MAX_SEND_POST = 38 << 20                  # 38 MB > 25 MB*4/3 (≈33.5 MB) + headroom
 
 
 _sync = {"running": False, "last": None, "result": "idle"}
@@ -1487,196 +1487,6 @@ def _safe_filename(name):
 
 
 # --------------------------------------------------------------------- compose/send
-def _decode_attachments(items):
-    """Decode client base64 attachments -> [{filename,content_type,data}], capped."""
-    if items is None:
-        items = []
-    if not isinstance(items, list):
-        raise ValueError("bad attachments")
-    out, total = [], 0
-    for a in items:
-        if not isinstance(a, dict):
-            raise ValueError("bad attachment")
-        try:
-            data = base64.b64decode(a.get("b64") or "", validate=True)
-        except Exception:
-            raise ValueError("bad attachment encoding")
-        total += len(data)
-        if total > MAX_ATTACH_BYTES:
-            raise ValueError("attachments too large")
-        ct = str(a.get("content_type") or "application/octet-stream")
-        if ct.lower().startswith("multipart/"):          # a browser types .mhtml multipart/related: written
-            ct = "application/octet-stream"              # as one, it has no boundary and every reader skips it
-        out.append({"filename": a.get("filename") or "attachment", "content_type": ct, "data": data})
-    return out
-
-
-def _extract_attachments(raw):
-    """Pull real attachment parts (filename+bytes) out of a stored RFC822 message,
-    for re-attaching on forward. Inline cid images are skipped."""
-    from email import policy as _pol
-    try:
-        msg = email.message_from_bytes(raw or b"", policy=_pol.default)
-    except Exception:
-        return []
-    out, total = [], 0
-    for part in mime.walk(msg):
-        if part.get_content_maintype() == "multipart":
-            continue
-        disp = (part.get_content_disposition() or "").lower()
-        fn = part.get_filename()
-        cid = (part.get("Content-ID") or "").strip()
-        attached_email = part.get_content_type() == "message/rfc822"
-        if disp == "attachment" or (fn and disp != "inline" and not cid) or attached_email:
-            data = mime.part_bytes(part)
-            total += len(data)
-            if total > MAX_ATTACH_BYTES:
-                break
-            out.append({"filename": fn or ("message.eml" if attached_email else "attachment"),
-                        "content_type": part.get_content_type(), "data": data})
-    return out
-
-
-class _Http(Exception):
-    def __init__(self, code, msg):
-        self.code, self.msg = code, msg
-
-
-def _compose_spec(body):
-    """Shared by send + save-draft: resolve account, decode attachments, assemble
-    reply/forward bodies + threading. Returns (spec, in_reply_to_pk, acct). Raises _Http."""
-    mode = body.get("mode", "new")
-    try:
-        acct = accounts.get((body.get("account") or "").strip())   # From: only a configured account
-    except KeyError:
-        raise _Http(400, "unknown sending account")
-    text = body.get("text") or ""
-    own = text                      # what you typed, before any quote is added
-    tail_text = tail_html = None
-    html = None
-    in_reply_to = references = None
-    in_reply_to_pk = None
-    forwarded = []                  # the original's files a forward added to the payload's
-    subject = body.get("subject") or ""
-    attachments = _decode_attachments(body.get("attachments"))
-    resume = body.get("resume")
-    if resume is not None:
-        # A reopened draft (draft_resume) goes out as drafted: your text plus the quote or forwarded
-        # section it already carried, its own threading headers, and only the files in the payload.
-        # The original is never fetched, re-quoted or re-attached.
-        if not isinstance(resume, dict):
-            raise _Http(400, "bad draft data")
-        own = lf(text)
-        tail = lf(str(resume.get("tail_text") or ""))
-        text = own + tail
-        if tail:   # the quote's HTML only when this draft's record vouches for that exact quote
-            try:
-                did = int(body.get("draft_id"))
-            except (TypeError, ValueError):
-                did = None
-            c = store.conn()
-            dr = compose.book.draft_get(c, did) if did else None
-            c.close()
-            if dr and dr["tail_html"] and lf(dr["tail_text"] or "") == tail:
-                # built and sanitized by us at that save; never re-sanitized
-                tail_html = sanitize.without_fold(dr["tail_html"])
-                html = own_html(own) + tail_html
-        tail_text = tail or None
-        in_reply_to, references = thread_ids(resume.get("in_reply_to"), resume.get("references"))
-        if mode in ("reply", "replyall") and in_reply_to:   # by Message-ID: a pk may have been renumbered
-            c = store.conn()
-            orow = store.get_message_by_msgid(c, acct["email"], in_reply_to)
-            if not orow:                                    # From changed: it is another account's
-                named = store.get_message(c, body["in_reply_to_pk"]) if isinstance(body.get("in_reply_to_pk"), int) else None
-                orow = named if named and named["message_id"] == in_reply_to else None
-            c.close()
-            in_reply_to_pk = orow["pk"] if orow else None
-    elif mode in ("reply", "replyall", "forward"):
-        try:
-            opk = int(body.get("in_reply_to_pk"))
-        except (TypeError, ValueError):
-            raise _Http(400, "missing original message")
-        c = store.conn()
-        orow = store.get_message(c, opk)
-        c.close()
-        if not orow:
-            raise _Http(404, "original message not found")
-        try:
-            parsed = gates.run(orow["account"], lambda: ingest.fetch_body(opk),
-                               priority=gates.Priority.INTERACTIVE) or {}
-        except Exception as e:
-            print(f"[compose] original fetch failed for pk {opk}: {_sanitize_conn_error(e)}", flush=True)
-            raise _Http(502, "could not load the original message")
-        orig = {"from_name": orow["from_name"], "from_addr": orow["from_addr"],
-                "subject": orow["subject"], "date": parsed.get("date"),
-                "to": parsed.get("to"), "cc": parsed.get("cc"),
-                "text": parsed.get("text"), "html": parsed.get("html")}
-        if mode == "forward":
-            text, html = forward_bodies(text, orig)
-            if body.get("forward_attachments", True):
-                c = store.conn(); raw = store.get_body(c, opk); c.close()
-                existing = sum(len(a["data"]) for a in attachments)
-                for a in _extract_attachments(raw):
-                    if existing + len(a["data"]) > MAX_ATTACH_BYTES:
-                        break
-                    existing += len(a["data"])
-                    attachments.append(a)
-                    forwarded.append(a)
-        else:
-            text, html = reply_bodies(text, orig)
-            in_reply_to = orow["message_id"]
-            references = reference_chain(orow["message_id"], orow["refs"], orow["in_reply_to"])
-            in_reply_to_pk = opk
-        tail_text, tail_html = quote_tail(own, text, html)
-    spec = {
-        "account": acct["email"], "account_name": acct.get("alias") or acct["email"],
-        "to": body.get("to") or [], "cc": body.get("cc") or [], "bcc": body.get("bcc") or [],
-        "subject": subject, "text": text, "html": html, "attachments": attachments,
-        "in_reply_to": in_reply_to, "references": references,
-        "own": own, "tail": {"text": tail_text, "html": tail_html},   # recorded by do_draft; build_message ignores them
-        "forwarded": forwarded,
-    }
-    return spec, in_reply_to_pk, acct
-
-
-def do_send(body):
-    """Validate a compose/reply/forward request, build the message, enqueue it."""
-    import uuid
-    send_after = 0
-    try:                                  # send-later: epoch secs; 0/absent = now (after the grace window)
-        sa = int(body.get("send_after") or 0)
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "bad send time"}, 400
-    if sa:                                # refused before _compose_spec, so no original-body fetch
-        now = time.time()
-        if sa <= now:                     # never quietly turn a missed schedule into "send now"
-            return {"ok": False, "error": "that send time has passed"}, 400
-        if sa >= now + 366 * 86400:
-            return {"ok": False, "error": "pick a send time within a year"}, 400
-        send_after = sa
-    try:
-        spec, in_reply_to_pk, acct = _compose_spec(body)
-        built = build_message(spec)       # validates addresses/headers; raises ValueError
-    except _Http as h:
-        return {"ok": False, "error": h.msg}, h.code
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}, 400
-    draft_id = body.get("draft_id")
-    if not draft_id and _composer_key(body):    # a first save whose answer the composer never heard
-        c = store.conn()
-        try:
-            found = compose.book.draft_by_key(c, _composer_key(body))
-        finally:
-            c.close()
-        draft_id = found["id"] if found else None
-    meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
-            "in_reply_to_pk": in_reply_to_pk, "orig_message_id": spec["in_reply_to"],
-            "subject": spec["subject"], "draft_id": draft_id, "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
-    oid, created = compose.outbox.enqueue(built, meta)
-    return {"ok": True, "outbox_id": oid, "queued": created, "scheduled": bool(send_after),
-            "recipients": len(built["envelope"])}, 200
-
-
 def do_draft(body):
     """Save (APPEND, dedup-on-resave) or delete a draft. Returns (result, code)."""
     profile.refuse_writes("a draft save")    # a draft lives on the server; nothing queues it yet
@@ -1705,18 +1515,18 @@ def do_draft(body):
                 _draft_list_changed(row["account"], row["folder"])
         return {"ok": True, "deleted": True}, 200
     try:
-        spec, in_reply_to_pk, acct = _compose_spec(body)
+        spec, in_reply_to_pk, acct = compose.composing.spec(body)
         # nothing to save? avoid littering the Drafts folder with an empty message
         if not (spec["subject"].strip() or (spec["text"] or "").strip()
                 or spec["to"] or spec["cc"] or spec["bcc"] or spec["attachments"]):
             return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}, 200
         built = build_message(spec, draft=True)
-    except _Http as h:
+    except Refused as h:
         return {"ok": False, "error": h.msg}, h.code
     except ValueError as e:
         return {"ok": False, "error": str(e)}, 400
     did = int(body["draft_id"]) if body.get("draft_id") else None
-    key = _composer_key(body)
+    key = composer_key(body)
 
     def replaces():
         """The row this save takes over: the one it names, or for a first save the one an earlier
@@ -1815,11 +1625,6 @@ def _draft_list_changed(account, folder):
     sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
-def _composer_key(body):
-    """The composer's idempotency key, as a save or a send gives it."""
-    return str(body.get("idempotency_key") or "").strip()[:200] or None
-
-
 _RESUME_MODES = ("new", "reply", "replyall", "forward")
 _RESUME_HEADROOM = 64 << 10                              # the rest of a save: chips, subject, keys
 _RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
@@ -1860,15 +1665,15 @@ def _draft_live(acct, folder, uid):
 def _resume_files(msg, parsed, elsewhere):
     """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
     many were pictures in the text: every part must come back as the text or a file, or this
-    raises _Http(422). Headers parse as they're read, so a hostile one raises here as well."""
+    raises Refused(422). Headers parse as they're read, so a hostile one raises here as well."""
     import mimetypes
     lost = "Part of this draft is something MailMind can’t reopen without losing it." + elsewhere
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
-        raise _Http(422, "This draft has an email attached as a file, which MailMind can’t "
+        raise Refused(422, "This draft has an email attached as a file, which MailMind can’t "
                          "reattach yet." + elsewhere)
     if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
            for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
-        raise _Http(422, lost)
+        raise Refused(422, lost)
     leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
     listed = {int(a["part_id"]) for a in parsed["attachments"]}
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
@@ -1880,7 +1685,7 @@ def _resume_files(msg, parsed, elsewhere):
     for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
         ct = p.get_content_type()
         if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
-            raise _Http(422, "This draft is a calendar invite, which MailMind can’t send on as "
+            raise Refused(422, "This draft is a calendar invite, which MailMind can’t send on as "
                              "one." + elsewhere)
         if i in listed or p is body or id(p) in covered:
             continue                                     # a file, the text, or formatting of that same text
@@ -1889,15 +1694,15 @@ def _resume_files(msg, parsed, elsewhere):
             continue
         if not (p.get_payload(decode=True) or b"").strip():
             continue                                     # nothing in it to lose
-        raise _Http(422, lost)
+        raise Refused(422, lost)
     files, total, inline = [], 0, 0
     for a in parsed["attachments"]:
         part = leaves[int(a["part_id"]) - 1]
         data = part.get_payload(decode=True) or b""
         ct = (part.get_content_type() or "application/octet-stream").lower()
         total += len(data)
-        if total > MAX_ATTACH_BYTES:
-            raise _Http(422, "This draft’s files add up to more than 25 MB, more than MailMind "
+        if total > limits.MAX_ATTACH_BYTES:
+            raise Refused(422, "This draft’s files add up to more than 25 MB, more than MailMind "
                              "can send." + elsewhere)
         name = a["filename"]
         if a["content_id"] and a["is_inline"]:
@@ -1987,7 +1792,7 @@ def draft_resume(body):
         return unreadable, 422
     try:
         files, inline = _resume_files(msg, parsed, elsewhere)
-    except _Http as h:
+    except Refused as h:
         return {"ok": False, "error": h.msg}, h.code
     except Exception as e:
         print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
@@ -2006,10 +1811,10 @@ def draft_resume(body):
                                       "so its links and formatting aren’t lost."}, 422
     own, tail, how = split
     # every save and send of it carries the files as base64 and the text and quote as JSON: past
-    # MAX_SEND_POST each one would be refused, and edits made in the composer lost on close
+    # limits.MAX_SEND_POST each one would be refused, and edits made in the composer lost on close
     size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode())
                                                    for t in (own, tail))
-    if size + _RESUME_HEADROOM > MAX_SEND_POST:
+    if size + _RESUME_HEADROOM > limits.MAX_SEND_POST:
         return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
                                       "and the text it quotes." + elsewhere}, 422
     irt, refs = thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
@@ -2205,7 +2010,7 @@ DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
 def post_body_cap(path):
     """The most a POST to `path` may carry, in bytes, checked against its Content-Length before
     the body is read: 38 MB where mail and its attachments go up, 1 MB everywhere else."""
-    return MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
+    return limits.MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
 
 
 _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/stats",
@@ -2878,7 +2683,7 @@ class H(BaseHTTPRequestHandler):
         data, _ = mime.extract_part(raw, part_id)
         if data is None:
             return self._json({"ok": False, "error": "no such part"}, 404)
-        if len(data) > MAX_ATTACH_BYTES:
+        if len(data) > limits.MAX_ATTACH_BYTES:
             return self._json({"ok": False, "error": "too large"}, 413)
         ctype = (att["content_type"] or "application/octet-stream").split(";")[0].strip()
         # never inline-render active types from the top frame; force download regardless
@@ -3066,7 +2871,7 @@ class H(BaseHTTPRequestHandler):
         try:
             if u.path == "/api/send":
                 try:
-                    res, code = do_send(b)
+                    res, code = compose.sending.send(b)
                 except ValueError as ve:           # our own validation messages are secret-free
                     res, code = {"ok": False, "error": str(ve)}, 400
                 except Exception as ex:            # never leak a raw exception on the send route

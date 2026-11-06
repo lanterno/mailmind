@@ -1,13 +1,23 @@
-"""Binds Compose. Legacy modules and the command line reach it through this module: `outbox`, `transport`,
-and `book`, its tables."""
+"""Binds Compose. Legacy modules and the command line reach it through this module: `sending`, `composing`,
+`outbox`, `transport`, and `book`, its tables."""
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.bootstrap.mailbox import copies
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
+from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.outbox import Outbox
+from mailmind.compose.application.sending import Sending
 from mailmind.mailbox.domain import roles
 
-__all__ = ["book", "outbox", "transport"]
+__all__ = ["attach", "book", "composing", "outbox", "sending", "transport"]
+
+_server = None
+
+
+def attach(server):
+    """Name the running server module, which still holds the folder list and what the page is told."""
+    global _server
+    _server = server
 
 
 class _Credentials:
@@ -49,9 +59,37 @@ class _Messages:
         finally:
             c.close()
 
+    def message(self, pk):
+        import store
+        c = store.conn()
+        try:
+            return store.get_message(c, pk)
+        finally:
+            c.close()
+
+    def by_msgid(self, account, message_id):
+        import store
+        c = store.conn()
+        try:
+            return store.get_message_by_msgid(c, account, message_id)
+        finally:
+            c.close()
+
+    def body(self, pk):
+        import store
+        c = store.conn()
+        try:
+            return store.get_body(c, pk)
+        finally:
+            c.close()
+
     def remove_copies(self, c, account, folder, uids):
         import store
         store.delete_by_uids(c, account, folder, uids)
+
+    def fetch_body(self, pk):
+        import ingest
+        return ingest.fetch_body(pk)
 
 
 class _Effects:
@@ -74,7 +112,12 @@ class _Screen:
     def names_drafts(self, folder):
         return roles.names_drafts(folder)
 
+    def quiet_error(self, e):
+        return _server._sanitize_conn_error(e) if _server else type(e).__name__
+
 
 transport = SmtpTransport(_Credentials())
 _accounts, _mail, _screen = _Accounts(), _Messages(), _Screen()
 outbox = Outbox(book, transport, copies, _accounts, _mail, _Effects(), _screen)
+composing = Composing(book, _accounts, _mail, _screen)
+sending = Sending(composing, outbox, book)
