@@ -435,7 +435,7 @@
   .flood-chip{font-size:10px;font-weight:500;padding:1px 6px;border-radius:var(--r-xs);background:var(--sel);color:var(--mute)}
   .flood-chip.hot{background:color-mix(in srgb,var(--ember) 14%,transparent);color:var(--ember)}          /* rarely-opened */
   .flood-chip.multi{background:color-mix(in srgb,var(--ai) 14%,transparent);color:var(--ai)}          /* cross-account (AI insight) */
-  .flood-chip.lu1{background:color-mix(in srgb,var(--keep) 16%,transparent);color:var(--keep)}           /* one-click likely */
+  .flood-chip.lu1{background:color-mix(in srgb,var(--keep) 16%,transparent);color:color-mix(in srgb,var(--keep) 80%,var(--ink))}           /* one-click likely */
   .flood-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
   .flood-score{font-family:var(--font-mono);font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
   .flood-go{background:var(--sel);border:none;border-radius:var(--r-sm);color:var(--soft);font:inherit;font-size:11px;font-weight:600;padding:5px 10px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
@@ -446,7 +446,7 @@
   .do-line.rev .ic{color:var(--keep)} .do-line.irrev .ic{color:var(--err)}
   .do-line b{color:var(--ink);font-weight:600}
   .do-line .tag{margin-left:auto;flex:none;font-size:10px;font-weight:600;padding:1px 7px;border-radius:var(--r-pill);align-self:center}
-  .do-line.rev .tag{background:color-mix(in srgb,var(--keep) 16%,transparent);color:var(--keep)}
+  .do-line.rev .tag{background:color-mix(in srgb,var(--keep) 16%,transparent);color:color-mix(in srgb,var(--keep) 80%,var(--ink))}
   .do-line.irrev .tag{background:color-mix(in srgb,var(--err) 16%,transparent);color:var(--err)}
   .do-scopetoggle{display:flex;gap:6px;margin:3px 0 0 21px}
   .do-scopetoggle button{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
