@@ -143,7 +143,7 @@ def test_an_upgrade_keeps_every_row_and_every_value(tmp_path, version):
 @pytest.mark.parametrize("version", range(NEWEST + 1))
 def test_the_mail_can_be_searched_after_an_upgrade(tmp_path, version):
     """Below m6 there was no index; m6 builds it, from the body text and recipients it reads out
-    of the stored mail. From m6 on, the index ingest built is carried through."""
+    of the stored mail. m38 builds it again from the messages."""
     path, _ = upgraded(tmp_path, version)
     search = "SELECT rowid FROM msg_fts WHERE msg_fts MATCH ? ORDER BY rowid"
     assert query(path, search, ("marigold",)) == [(1,)]
