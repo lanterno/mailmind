@@ -57,50 +57,50 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_route_requires_csrf` | `tests/unit/discovery/script_contacts_known.py` |
 | `test_never_waits_on_the_imap_lock` | `tests/unit/discovery/script_contacts_known.py` |
 
-## `test_css_sanitizer.py`: `tests/unit/content/script_css_sanitizer.py`
+## `test_css_sanitizer.py`: `tests/unit/content/test_css_sanitizer.py`
 
 | Test | Now |
 |---|---|
-| `test_escaped_url_keyword_is_gated` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_escaped_url_paren_is_gated` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_split_url_letters_decoded` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_residual_backslash_after_decode_drops` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_emit_copy_equals_match_copy_no_reexpand` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_multi_url_data_plus_remote_drops_entire_decl` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_remote_url_blocked_counts_once` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_data_svg_url_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_javascript_url_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_data_png_url_kept_without_consent` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_remote_url_kept_with_consent` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_url_on_nonurl_property_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_expression_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_behavior_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_moz_binding_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_angle_bracket_in_value_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_var_function_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_position_fixed_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_position_absolute_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_position_escaped_fixed_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_position_relative_kept` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_viewport_height_curtain_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_percent_height_curtain_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_zindex_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_transform_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_import_rule_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_font_face_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_style_breakout_neutralized` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_media_query_recurses_and_keeps_safe` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_media_with_url_prelude_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_keyframes_dropped` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_selector_with_angle_bracket_drops_rule` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_oversized_inline_dropped_fast` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_unterminated_comment_no_hang` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_unterminated_brace_no_hang` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_newsletter_inline_styles_survive` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_newsletter_data_image_hero_survives` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_newsletter_stylesheet_survives` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_font_casing_preserved` | `tests/unit/content/script_css_sanitizer.py` |
-| `test_text_shadow_and_box_shadow_kept` | `tests/unit/content/script_css_sanitizer.py` |
+| `test_escaped_url_keyword_is_gated` | `tests/unit/content/test_css_sanitizer.py` `test_escaped_url_is_gated[escaped_url_keyword]` |
+| `test_escaped_url_paren_is_gated` | `tests/unit/content/test_css_sanitizer.py` `test_escaped_url_is_gated[escaped_url_paren]` |
+| `test_split_url_letters_decoded` | `tests/unit/content/test_css_sanitizer.py` `test_escaped_url_is_gated[split_url_letters]` |
+| `test_residual_backslash_after_decode_drops` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_emit_copy_equals_match_copy_no_reexpand` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_multi_url_data_plus_remote_drops_entire_decl` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_remote_url_blocked_counts_once` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_data_svg_url_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped_even_with_consent[data_svg_url]` |
+| `test_javascript_url_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped_even_with_consent[javascript_url]` |
+| `test_data_png_url_kept_without_consent` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_remote_url_kept_with_consent` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_url_on_nonurl_property_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped_even_with_consent[url_on_nonurl_property]` |
+| `test_expression_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[expression]` |
+| `test_behavior_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[behavior]` |
+| `test_moz_binding_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[moz_binding]` |
+| `test_angle_bracket_in_value_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[angle_bracket_in_value]` |
+| `test_var_function_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped_even_with_consent[var_function]` |
+| `test_position_fixed_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[position_fixed]` |
+| `test_position_absolute_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[position_absolute]` |
+| `test_position_escaped_fixed_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[position_escaped_fixed]` |
+| `test_position_relative_kept` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_viewport_height_curtain_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[viewport_height_curtain], test_dropped[viewport_min_height_curtain]` |
+| `test_percent_height_curtain_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[percent_height_curtain]` |
+| `test_zindex_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[zindex]` |
+| `test_transform_dropped` | `tests/unit/content/test_css_sanitizer.py` `test_dropped[transform]` |
+| `test_import_rule_dropped` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_font_face_dropped` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_style_breakout_neutralized` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_media_query_recurses_and_keeps_safe` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_media_with_url_prelude_dropped` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_keyframes_dropped` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_selector_with_angle_bracket_drops_rule` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_oversized_inline_dropped_fast` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_unterminated_comment_no_hang` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_unterminated_brace_no_hang` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_newsletter_inline_styles_survive` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_newsletter_data_image_hero_survives` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_newsletter_stylesheet_survives` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_font_casing_preserved` | `tests/unit/content/test_css_sanitizer.py` |
+| `test_text_shadow_and_box_shadow_kept` | `tests/unit/content/test_css_sanitizer.py` |
 
 ## `test_draft_resume.py`: `tests/unit/compose/script_draft_resume.py`
 
