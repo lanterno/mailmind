@@ -27,8 +27,6 @@ CROSSINGS = {
     ("assessments", "mailbox"),     # a copy that arrives takes what was said of its message, in the one transaction
     ("summaries", "mailbox"),       # likewise; and a message that goes takes its verdict with it
     ("snoozes", "mailbox"),         # a copy filed elsewhere leaves its snooze where it was
-    ("draft_ahead", "mailbox"),     # threads._rekey moves what's kept under a thread id, all in one transaction
-    ("outbox", "mailbox"),          # likewise
     ("messages", "attention"),      # a snooze writes messages.snoozed_until
     ("msg_fts", "platform"),        # the upgrade check asks the index to check itself, on a copy
 }
