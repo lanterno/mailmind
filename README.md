@@ -139,7 +139,7 @@ and the Claude API.
   destructive verbs live on `#`/Delete/Backspace, and `z` — or a floating Undo
   button — reverses archive, delete, junk, move, snooze and mute, server-side. A reversal the
   server refuses is never reported as done, and when a group comes back only in part, what
-  couldn't be restored stays for the next `z`. Undo survives a restart.
+  couldn't be restored stays for the next `z`. Undo survives a restart, and reaches back 50 actions or 24 hours.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
   without opening it.
 - **Conversations file whole.** On a conversation — its row, the thread reader, `e`/`d`
@@ -318,9 +318,16 @@ automatically.
   autosave runs every 8 seconds, and a signature-only body is never saved to your Drafts
   folder. Saves of one message go in turn and leave one copy, whatever overlaps them, and the
   Drafts list follows at once: a replaced, discarded or sent draft leaves it, on the server first.
+- **Drafts that don't need the server.** A save lands on this machine first, so writing goes on
+  whether the server is there or not, and read-only too. The server's copy follows when you close the message or
+  save, and at most once a minute while you type, and a short reply sent within the minute never
+  touches your Drafts folder. A draft that can't reach its server waits in the outbox panel, with Edit and Discard,
+  and goes by itself once it can. A discard waits the same way, and a crash mid-save never leaves a second copy.
 - **Drafts that don't lose your words.** What you type during a save is saved next. If the
   save that closes a message fails, the message stays a click away, and reopening it there
-  (or by Undo Send) saves it when you close it again.
+  (or by Undo Send) saves it when you close it again. If you changed a draft in another window, a
+  save that hasn't seen that says so instead of overwriting it, and if another app changed it, you
+  keep both.
 - **Drafts reopen as you left them.** Edit on a saved reply or forward brings back your text,
   with the quote or forwarded section folded below it, plus every file, the Bcc and the thread.
   All of it is read from the draft's own copy on the server, so sending it never needs the

@@ -257,7 +257,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
   logged and counted, and the job goes on. `mailmind.bootstrap.background.schedule(jobs)` is the job table: `snooze` in
-  every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
+  every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`background._kick`). With AI off, or triage held back
   by the cost governor (see AI calls), it tries nothing: `assistant.triage.summarize_pending` returns 0
@@ -575,7 +575,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
   which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
   member of `commands.UNREACHABLE`, so a move or a flag change queues as it does offline, and
-  both queues' drains wait for a full run. What nothing queues (a draft, a sweep) answers 409 through
+  both queues' drains wait for a full run. What nothing queues (a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
   `_imap_mutate` returns `(False, None)`, and trash, archive, junk and move answer `ok: false`
@@ -627,16 +627,34 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.
   `Sending.send` refuses a `send_after` that has passed instead of sending now.
+- A draft is local first (decision D5, migration 40). `Drafts.save` writes a save to `draft_journal`, one row a draft
+  (the newest replaces the last), and that alone makes it saved, whatever the server is doing. The row is what the draft
+  still asks of its server: a save's bytes and record, or `discard`. An autosave (`autosave: true`) comes due a minute after
+  the last push (`PUSH_EVERY`). Any other save tries at once, on the account's gate for `PUSH_WAIT`, and answers
+  `pushed: true`, or else `pushed: false` and the `draft-push` job (`Drafts.push_round`) has it, backing off from 20 s to 15
+  minutes for as long as it takes. A push that lands deletes the row only if no newer save has replaced it. Read-only the job
+  doesn't run, so saves and discards wait for a full run.
+- A try sets `tried` to its Message-ID before the APPEND. The next try looks for that copy in Drafts: it stands if it is
+  this very save, and goes if a newer one has taken over. A discard takes it too, and the row leaves only after the copy
+  has (a server that refuses has the last word: the row goes, and the copy stays listed).
+- A save names the `version` it saw (`base_version`). One that never saw the latest gets a 409 with `conflict: true`, unless
+  the last save was this composer's (`saved_by`), whose answer was lost. Autosave then stops, a closing save fails into
+  `state.failedSend`, and only a save someone asks for leaves `base_version` out and overwrites.
+- A send about to go holds its draft: the job leaves it, a save answers 423, and delivery removes the copy and the row, the
+  journal with it. One scheduled more than a minute off lets the copy catch up.
+- Reopening prefers the journal when the copy opened is the one pushed. Where another app changed it, `Drafts._keep_apart`
+  gives the waiting save a row of its own, so both stay. `/api/outbox` also answers `drafts` (`Drafts.waiting`), what should
+  have reached its server and hasn't, for the tray, and `/api/draft/resume` opens one by `draft_id`.
 - Reopening a draft (`/api/draft/resume` → `Drafts.resume`) reads the draft's own bytes, never
-  the original. At each save `Drafts.save` records beside the `drafts` row what the composer held
+  the original. At each push `Drafts._push` records beside the `drafts` row what the composer held
   (migration 20: `own_text`, `tail_text`, `tail_html`, `bcc`, `raw_sha`). That record is
   trusted only for the very copy it describes, the same UID or the same sha256. The composer
   sends `resume` (threading and the quote's text) on every save and send. `Composing.spec`
-  then builds `own + tail`, with HTML only where the row vouches for that exact tail. The
+  then builds `own + tail`, with HTML only where the journal or the row vouches for that exact tail (`book.draft_quote`). The
   original is looked up by `(account, Message-ID)` for `\Answered` only. `Drafts._live`, the
   "is this copy still there" probe, is a stateless 10-second connection outside the IMAP gate.
   Under the gate `Drafts.resume` re-reads the `drafts` row and answers 409 if it is gone or moved,
-  so `Drafts.save` and the outbox's draft cleanup also change that row only under the gate. Edit
+  so `Drafts._push` and the outbox's draft cleanup also move that row's copy only under the gate. Edit
   answers 423 while a queued or sending outbox row holds the draft. A save appends the new copy
   first and only then removes the old one (`Copies.append_to_drafts`), wherever it was, so one that
   fails or a crash leaves the old copy, at worst beside the new.
@@ -658,7 +676,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
   It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at
   every edit, never `cmp.dirty=true`. A closing save that fails goes to `state.failedSend`, with the
-  float's Edit. On the server `Drafts.save` reads the row it replaces under the gate, and a first
+  float's Edit. On the server a first
   save finds an earlier one's row by the composer's key (`drafts.idempotency_key`, migration 26),
   as `Sending.send` does when it has no `draft_id`.
 - A composer replaced after an `await` (Undo Send, a failed send's Edit → `makeRoom`) must
