@@ -260,7 +260,7 @@ def views_remove(view_id):
 
 def export(fmt, out, account, attachments):
     """Write the synced mail out, or with `plan` say what that would hold. Touches no mail server."""
-    import export as exporter
+    from mailmind.platform.db import export as exporter
     if fmt == "plan":
         p = exporter.plan(account)
         print(f"{p['total']} messages, {p['bodies']} with full bodies, across {len(p['groups'])} folders:")

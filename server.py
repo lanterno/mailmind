@@ -371,7 +371,8 @@ class H(BaseHTTPRequestHandler):
     def _serve_db_export(self):
         """Stream a consistent SQLite snapshot (checkpoint + .backup) as a download, chunked so a
         large DB never buffers in memory. Read-only: cannot touch the live DB. Temp file removed after."""
-        import export, tempfile, shutil
+        import tempfile, shutil
+        from mailmind.platform.db import export
         tmp = tempfile.mkdtemp(prefix="mm-export-")
         try:
             path = export.export_db(tmp)
@@ -495,7 +496,7 @@ class H(BaseHTTPRequestHandler):
                             "batch": assistant.triage.batch_status(),
                             "generated": now_iso()})
             elif u.path == "/api/export/plan":
-                import export
+                from mailmind.platform.db import export
                 self._json(export.plan(q.get("account", [None])[0]))
             elif u.path == "/api/export":
                 return self._serve_db_export()

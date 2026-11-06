@@ -24,8 +24,8 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from email import policy as _policy
 
-from mailmind.bootstrap.mailbox import store
 from mailmind.platform import settings
+from mailmind.platform.db import database
 
 _BAD = re.compile(r'[\x00-\x1f/\\:*?"<>|]+')        # path separators + control + shell-hostile
 
@@ -43,7 +43,7 @@ def _safe(name, fallback):
 def _ro_conn():
     """Checkpoint the WAL into the main db, then open a READ-ONLY connection. Read-only mode
     means the export physically cannot write/corrupt the live DB even on a bug."""
-    c = store.conn()
+    c = database.connect(settings.current().db)
     try:
         c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         c.commit()
