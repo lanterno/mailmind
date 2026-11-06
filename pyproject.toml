@@ -99,6 +99,44 @@ type = "layers"
 layers = ["mailmind.compose.adapters", "mailmind.compose.application", "mailmind.compose.domain"]
 
 [[tool.importlinter.contracts]]
+# bootstrap binds the use cases and hands them to the routers, so a route never names one.
+name = "http reaches a context only through its api"
+type = "forbidden"
+source_modules = ["mailmind.http"]
+forbidden_modules = ["mailmind.accounts.domain",
+                   "mailmind.accounts.application",
+                   "mailmind.assistant.domain",
+                   "mailmind.assistant.application",
+                   "mailmind.attention.domain",
+                   "mailmind.attention.application",
+                   "mailmind.calendar.domain",
+                   "mailmind.calendar.application",
+                   "mailmind.compose.domain",
+                   "mailmind.compose.application",
+                   "mailmind.curation.domain",
+                   "mailmind.curation.application",
+                   "mailmind.discovery.domain",
+                   "mailmind.discovery.application",
+                   "mailmind.mailbox.domain",
+                   "mailmind.mailbox.application",
+                   "mailmind.content"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+# tests/test_architecture.py says the same of the standard library's I/O, which the graph doesn't hold.
+name = "a domain imports only the standard library, the kernel and content"
+type = "forbidden"
+source_modules = ["mailmind.accounts.domain",
+                 "mailmind.assistant.domain",
+                 "mailmind.attention.domain",
+                 "mailmind.calendar.domain",
+                 "mailmind.compose.domain",
+                 "mailmind.curation.domain",
+                 "mailmind.discovery.domain",
+                 "mailmind.mailbox.domain"]
+forbidden_modules = ["mailmind.platform", "fastapi", "pydantic", "anthropic", "imapclient", "uvicorn", "anyio"]
+
+[[tool.importlinter.contracts]]
 name = "only bootstrap picks an adapter"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel"]
