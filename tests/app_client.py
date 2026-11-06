@@ -17,7 +17,7 @@ CSRF = "test-csrf-token"
 
 # Modules whose private globals hold process state between requests, and instances (`module:name`)
 # whose private attributes do.
-STATEFUL = ("server", "summarize", "summarize_briefing", "summarize_review", "summarize_thread",
+STATEFUL = ("server", "mailmind.bootstrap.assistant:calls", "summarize_briefing", "summarize_review", "summarize_thread",
             "mailmind.bootstrap.mailbox:pool", "mailmind.bootstrap.mailbox:warm", "mailmind.bootstrap.mailbox:realtime", "mailmind.bootstrap.mailbox:stats", "mailmind.bootstrap.mailbox:folders", "mailmind.bootstrap.mailbox:syncing",
             "mailmind.curation.application.unsubscribe")
 _SIMPLE = (dict, list, set, int, float, str, bool, type(None))

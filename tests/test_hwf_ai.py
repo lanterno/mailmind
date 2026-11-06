@@ -138,7 +138,7 @@ def present(app, monkeypatch):
 # -- the gateway ----------------------------------------------------------------------------------
 
 def test_hwf_triage_retries_a_failed_call_but_stores_an_unusable_reply_once(world, ai):
-    import summarize
+    from mailmind.bootstrap import assistant
 
     def reply(req):
         if "Subject: Contract draft v2" in req.prompt:
@@ -147,22 +147,22 @@ def test_hwf_triage_retries_a_failed_call_but_stores_an_unusable_reply_once(worl
             return fa.answer({})                     # a reply with nothing usable in it
         return None
     ai.responder = reply
-    summarize.summarize_pending(limit=100, workers=1)
+    assistant.triage.summarize_pending(limit=100, workers=1)
     assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(QUILT)) == [{"model": "parse-error"}]
     assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(CLIENT)) == []
     ai.requests.clear()
-    summarize.summarize_pending(limit=100, workers=1)
+    assistant.triage.summarize_pending(limit=100, workers=1)
     assert [r.prompt.count("Subject: Contract draft v2") for r in ai.requests] == [1]
 
 
 def test_hwf_only_the_text_after_the_last_fallback_block_counts(data_dir, ai):
-    import summarize
+    from mailmind.bootstrap import assistant
     hop = {"type": "fallback", "from": {"model": "claude-opus-5-5"}, "to": {"model": "claude-opus-4-8"}}
     ai.queue((200, {"type": "message", "role": "assistant", "stop_reason": "end_turn", "content": [
         {"type": "text", "text": '{"summary": "first try'}, hop,
         {"type": "text", "text": '{"summary": "second try'}, hop,
         {"type": "text", "text": '{"summary": "final", "importance": 3, "category": "info"}'}]}))
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)["summary"] == "final"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "final"
 
 
 def test_hwf_api_schema_reads_defs_as_names_not_keywords():
@@ -530,10 +530,9 @@ def test_hwf_the_tick_yields_for_45s_after_interactive_ai(app, world, ai, monkey
 
 
 def test_hwf_the_tick_waits_while_an_interactive_call_runs(app, world, ai, monkeypatch, present):
-    import summarize
     from mailmind.bootstrap import assistant
     summarize_as(world.pk(QUILT), 5, "personal")
-    with assistant.governor().call("interactive", "rewrite", summarize.MODEL, None):   # one in flight
+    with assistant.governor().call("interactive", "rewrite", assistant.calls.MODEL, None):   # one in flight
         run_tick(app, monkeypatch, cycles=2)
         assert drafts(ai) == []
     run_tick(app, monkeypatch, cycles=1)                       # 120s after it ended
@@ -631,8 +630,8 @@ def test_hwf_a_degenerate_review_falls_back_but_keeps_the_ai_picks(app, world, a
 
 
 def test_without_a_key_triage_sends_no_mail(world, anthropic_api):
-    import summarize
-    summarize.summarize_pending(limit=3, workers=1)
+    from mailmind.bootstrap import assistant
+    assistant.triage.summarize_pending(limit=3, workers=1)
     assert anthropic_api.requests == []
 
 

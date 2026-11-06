@@ -17,9 +17,9 @@ def unsummarized():
 
 def test_with_ai_off_a_round_tries_nothing(app, world, anthropic_api, monkeypatch):
     import server
-    import summarize
+    from mailmind.bootstrap import assistant
     tried = []
-    monkeypatch.setattr(summarize, "summarize_one", tried.append)
+    monkeypatch.setattr(assistant.triage, "summarize_one", tried.append)
     waiting = unsummarized()
     assert waiting > 0
     assert server.assess_round() is None

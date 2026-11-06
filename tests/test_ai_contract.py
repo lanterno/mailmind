@@ -12,6 +12,7 @@ import json
 import pytest
 
 from fakes import anthropic_api as fa
+from mailmind.assistant.application.ports import AIOff
 
 TRANSPORTS = ["sdk", "urllib"]
 
@@ -26,10 +27,9 @@ def transport(request, data_dir, monkeypatch):
     """AI through this transport, with no model override, structured output on and the key in
     the environment only (no config file yet). The last call's outcome, which status() reports,
     is this test's own: the app's tests take the module's as it was at import."""
-    import summarize
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(summarize, "_last", {"ok": None, "ts": 0, "error": ""})
-    monkeypatch.setattr(summarize, "MODEL", None)
+    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})
+    monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
     monkeypatch.delenv("MAILMIND_MODEL", raising=False)
     assistant.use(request.param)
@@ -55,8 +55,8 @@ def answer(obj, **extra):
 # ── what a request carries ────────────────────────────────────────────────────
 
 def test_a_request_carries_the_key_the_version_and_the_refusal_fallback(api):
-    import summarize
-    summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+    from mailmind.bootstrap import assistant
+    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     [req] = api.requests
     assert req.key == fa.KEY
     assert req.headers["anthropic-version"] == "2026-10-21"
@@ -67,15 +67,15 @@ def test_a_request_carries_the_key_the_version_and_the_refusal_fallback(api):
 
 
 def test_the_schema_goes_out_closed_and_without_bounds(api):
-    import summarize
-    summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+    from mailmind.bootstrap import assistant
+    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     fmt = api.requests[0].body["output_config"]["format"]
     assert fmt["type"] == "json_schema"
     sent = fmt["schema"]
     assert sent["additionalProperties"] is False and sent["required"] == ["summary", "importance", "category"]
     assert sent["properties"]["importance"] == {"type": "integer"}
     assert sent["properties"]["category"]["enum"][0] == "action-needed"
-    assert summarize.TRIAGE_SCHEMA["properties"]["importance"]["maximum"] == 5   # the original is untouched
+    assert assistant.triage.TRIAGE_SCHEMA["properties"]["importance"]["maximum"] == 5   # the original is untouched
 
 
 def test_nested_objects_are_closed_and_property_names_kept():
@@ -90,71 +90,71 @@ def test_nested_objects_are_closed_and_property_names_kept():
 
 
 def test_triage_runs_at_low_effort_and_the_rest_at_medium(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 4, "category": "personal"}))
-    summarize.summarize_one(ROW)
-    summarize.call_claude_json("Draft a reply.", {"type": "object", "properties": {"body": {"type": "string"}}})
+    assistant.triage.summarize_one(ROW)
+    assistant.calls.call_claude_json("Draft a reply.", {"type": "object", "properties": {"body": {"type": "string"}}})
     assert [r.body["output_config"]["effort"] for r in api.requests] == ["low", "medium"]
 
 
 def test_a_model_override_and_the_models_without_effort_or_fallback(api, monkeypatch):
-    import summarize
-    monkeypatch.setattr(summarize, "MODEL", "claude-haiku-4-5")
-    summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
-    monkeypatch.setattr(summarize, "MODEL", "claude-haiku-5-5")
-    summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+    from mailmind.bootstrap import assistant
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-4-5")
+    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")
+    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     old, new = api.requests
     assert old.body["model"] == "claude-haiku-4-5" and "effort" not in old.body["output_config"]
     assert new.body["model"] == "claude-haiku-5-5" and new.body["output_config"]["effort"] == "medium"
     assert "fallbacks" not in old.body and "fallbacks" not in new.body
     assert "anthropic-beta" not in old.headers and "anthropic-beta" not in new.headers
-    assert summarize.model_label() == "claude-haiku-5-5"
+    assert assistant.calls.model_label() == "claude-haiku-5-5"
 
 
 def test_without_schemas_no_format_goes_out_and_loose_json_is_read(api, monkeypatch):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.answer('Here you go: {"summary": "loose", "importance": 2, "category": "info"}'))
     monkeypatch.setenv("MAILMIND_NO_SCHEMA", "1")
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)["summary"] == "loose"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "loose"
     assert "format" not in api.requests[0].body["output_config"]
 
 
 # ── how replies come back ─────────────────────────────────────────────────────
 
 def test_triage_stores_the_structured_reply(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 9,
                          "category": "action-needed", "action": "Reply by Friday"}))
-    assert summarize.summarize_one(ROW) == (7, ("Mira asks for the table.", 5, "action-needed",
+    assert assistant.triage.summarize_one(ROW) == (7, ("Mira asks for the table.", 5, "action-needed",
                                                 "Reply by Friday", "claude-opus-5-5"))
 
 
 def test_a_plain_text_call_returns_the_text(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.answer("  The thread is about a market stall.  "))
-    assert summarize.call_claude("Summarize this thread.") == "The thread is about a market stall."
+    assert assistant.calls.call_claude("Summarize this thread.") == "The thread is about a market stall."
     body = api.requests[0].body
     assert "output_config" in body and "format" not in body["output_config"]
 
 
 def test_a_refusal_reads_as_an_empty_reply(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue((200, {"stop_reason": "refusal", "content": [],
                      "stop_details": {"type": "refusal", "category": "cyber"}}),
               (200, {"stop_reason": "refusal", "content": []}))
-    _, payload = summarize.summarize_one(ROW)       # triage first: it yields for 45s after any other call
+    _, payload = assistant.triage.summarize_one(ROW)       # triage first: it yields for 45s after any other call
     assert payload is not None and payload[-1] == "parse-error"   # stored once, not retried forever
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA) == {}
+    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA) == {}
 
 
 def test_only_the_answer_after_a_fallback_block_counts(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue((200, {"type": "message", "model": "claude-opus-5-5", "stop_reason": "end_turn", "content": [
         {"type": "text", "text": '{"summary": "half'},
         {"type": "fallback", "from": {"model": "claude-opus-5-5"}, "to": {"model": "claude-opus-4-8"},
          "trigger": {"type": "refusal"}},
         {"type": "text", "text": '{"summary": "whole", "importance": 3, "category": "info"}'}]}))
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)["summary"] == "whole"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "whole"
 
 
 def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
@@ -179,34 +179,34 @@ def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
 # ── errors and retries ────────────────────────────────────────────────────────
 
 def test_a_rate_limit_is_retried(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.error(429, "rate_limit_error", "slow down", NOW_RETRY))
-    assert summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)["summary"] == "stub summary"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "stub summary"
     assert len(api.requests) == 2
 
 
 def test_a_bad_key_raises_without_a_retry_and_without_the_key(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.error(401, "authentication_error", "invalid x-api-key"))
     with pytest.raises(RuntimeError) as e:
-        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     assert "401" in str(e.value) and "invalid x-api-key" in str(e.value) and "sk-ant" not in str(e.value)
     assert e.value.status == 401 and e.value.permanent
     assert len(api.requests) == 1
 
 
 def test_a_failed_triage_is_left_for_the_next_run(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.error(400, "invalid_request_error", "bad"))
-    assert summarize.summarize_one(ROW) == (7, None)
+    assert assistant.triage.summarize_one(ROW) == (7, None)
 
 
 def test_a_persistent_overload_gives_up_after_two_retries(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     busy = fa.error(529, "overloaded_error", "Overloaded", NOW_RETRY)
     api.queue(busy, busy, busy)
     with pytest.raises(RuntimeError, match="529") as e:
-        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     assert not e.value.permanent
     assert len(api.requests) == 3
 
@@ -223,23 +223,22 @@ def test_an_unreachable_api_raises(transport):
 # ── the key, and AI on or off ─────────────────────────────────────────────────
 
 def test_ai_is_on_with_a_key_and_off_without_one(api, monkeypatch):
-    import summarize
-    assert summarize.engine() == "api" and summarize.model_label() == "claude-opus-5-5"
+    from mailmind.bootstrap import assistant
+    assert assistant.calls.engine() == "api" and assistant.calls.model_label() == "claude-opus-5-5"
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert summarize.engine() == "none"
+    assert assistant.calls.engine() == "none"
     monkeypatch.setenv("MAILMIND_AI", "api")                     # no longer read: there is one engine
-    assert summarize.engine() == "none"
+    assert assistant.calls.engine() == "none"
 
 
 def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monkeypatch, transport):
-    import summarize
     from mailmind.bootstrap import assistant
     config(data_dir, anthropic_api_key="sk-ant-config-key")
     with pytest.raises(RuntimeError, match="401"):              # the fake knows only its own key
-        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
     via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
-    assert summarize.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
+    assert assistant.calls.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
     monkeypatch.setenv("MAILMIND_TEST_KEY", "sk-ant-env-ref-key")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_KEY"})
     assert assistant.key() == ("sk-ant-env-ref-key", "mailmind.config.json")
@@ -248,56 +247,55 @@ def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monke
 
 
 def test_the_startup_line_says_when_there_is_no_key(transport, data_dir, monkeypatch):
-    import summarize
+    from mailmind.bootstrap import assistant
     via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert summarize.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.calls.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
                                            "set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert summarize.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.calls.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
                                            "the anthropic_api_key in mailmind.config.json can't be read")
 
 
 def test_a_config_key_that_cannot_be_read_is_no_key(api, data_dir):
-    import summarize
     from mailmind.bootstrap import assistant
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert assistant.key() == ("", "mailmind.config.json") and summarize.engine() == "none"   # not the environment's
+    assert assistant.key() == ("", "mailmind.config.json") and assistant.calls.engine() == "none"   # not the environment's
 
 
-# ── what the UI is told (summarize.status) ───────────────────────────────────
+# ── what the UI is told (assistant.calls.status) ───────────────────────────────────
 
 def test_status_names_the_engine_the_model_and_the_key_source(api):
-    import summarize
-    st = summarize.status()
+    from mailmind.bootstrap import assistant
+    st = assistant.calls.status()
     assert (st["engine"], st["model"], st["key_from"]) == ("api", "claude-opus-5-5", "ANTHROPIC_API_KEY")
 
 
 def test_status_records_a_rejected_key_then_a_good_call(api):
-    import summarize
+    from mailmind.bootstrap import assistant
     api.queue(fa.error(401, "authentication_error", "invalid x-api-key"))
     with pytest.raises(RuntimeError):
-        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
-    st = summarize.status()
+        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    st = assistant.calls.status()
     assert st["last_ok"] is False and st["last_error"] == "the API key was rejected" and st["last_ts"]
-    assert summarize.call_claude("Say hi.") == fa.STUB_TEXT
-    st = summarize.status()
+    assert assistant.calls.call_claude("Say hi.") == fa.STUB_TEXT
+    st = assistant.calls.status()
     assert st["last_ok"] is True and st["last_error"] == ""
 
 
 def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, anthropic_api):
-    import summarize
-    before = summarize.status()
+    from mailmind.bootstrap import assistant
+    before = assistant.calls.status()
     assert (before["engine"], before["model"], before["key_from"]) == ("none", "", "")
-    with pytest.raises(summarize.AIOff):
-        summarize.call_claude_json("Triage this.", summarize.TRIAGE_SCHEMA)
-    with pytest.raises(summarize.AIOff):
-        summarize.call_claude("Summarize this thread.")
+    with pytest.raises(AIOff):
+        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    with pytest.raises(AIOff):
+        assistant.calls.call_claude("Summarize this thread.")
     assert anthropic_api.requests == []
-    after = summarize.status()
+    after = assistant.calls.status()
     assert (after["last_ok"], after["last_ts"], after["last_error"]) == \
         (before["last_ok"], before["last_ts"], before["last_error"])
-    assert summarize.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
+    assert assistant.triage.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
 
 
 # ── which door talks through which ────────────────────────────────────────────

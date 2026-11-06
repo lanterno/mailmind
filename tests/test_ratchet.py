@@ -37,7 +37,7 @@ def listed():
 
 def test_the_legacy_modules_are_the_apps_root_modules():
     names = legacy_modules()
-    assert {"server", "summarize"} <= names
+    assert {"server", "ask"} <= names
     assert not {n for n in names if n.startswith("test")}
 
 

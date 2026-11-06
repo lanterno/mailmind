@@ -31,8 +31,8 @@ def execute(sql, *args):
 
 
 def assess():
-    import summarize
-    return summarize.summarize_pending(limit=100, workers=1)
+    from mailmind.bootstrap import assistant
+    return assistant.triage.summarize_pending(limit=100, workers=1)
 
 
 def copies(key):

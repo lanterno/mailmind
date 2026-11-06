@@ -123,10 +123,10 @@ def test_mute_hides_a_thread_marks_it_read_and_undo_restores_it(app, golden, wor
 # ── follow-ups and Reply Later ─────────────────────────────────────────────
 
 def test_waiting_follow_ups_and_dismissal(app, golden, world, ai):
-    import summarize
+    from mailmind.bootstrap import assistant
     # A received thread waits on you only once AI has called it important or action-needed; the
     # fake API calls every message action-needed.
-    golden.note("messages summarized", summarize.summarize_pending(limit=100, workers=1))
+    golden.note("messages summarized", assistant.triage.summarize_pending(limit=100, workers=1))
     attention.followups.tick()
     golden.note("follow-ups at Monday noon", rows(
         "SELECT account, thread_id, kind, state, due_ts FROM followups ORDER BY account, thread_id"))
@@ -163,8 +163,8 @@ def test_reply_later_records_when_the_thread_last_moved(app, world):
 
 
 def test_a_received_nudge_stops_after_the_expiry_window(app, world, ai):
-    import summarize
-    summarize.summarize_pending(limit=100, workers=1)
+    from mailmind.bootstrap import assistant
+    assistant.triage.summarize_pending(limit=100, workers=1)
     quilt = world.row("ada-archive-01-old-thread.eml")      # from Lin, read, unanswered, 20 Oct
     attention.followups.tick()
     assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == [{"state": "due"}]

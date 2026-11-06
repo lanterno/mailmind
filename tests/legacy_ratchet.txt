@@ -6,6 +6,4 @@
 # when its import goes. Add one only with a reason, and only in mailmind.bootstrap, the one place
 # new code may reach legacy code. When the legacy modules are gone, so is every line.
 mailmind.bootstrap.cli export
-mailmind.bootstrap.cli summarize
 mailmind.bootstrap.legacy server
-mailmind.bootstrap.legacy summarize

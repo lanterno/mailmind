@@ -89,9 +89,8 @@ def clock():
 @pytest.fixture(params=["sdk", "urllib"])
 def gateway(request, data_dir, ai, clock, monkeypatch):
     """The app's gateway, through each transport, with the ledger in this test's database."""
-    import summarize
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(summarize, "_last", {"ok": None, "ts": 0, "error": ""})
+    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})
     assistant.use(request.param)
     yield assistant.gateway()
     assistant.use("urllib")
@@ -194,8 +193,8 @@ def summarize_as(pk, importance, category):
 
 
 def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
-    import summarize
-    summarize.summarize_pending(limit=1, workers=1)
+    from mailmind.bootstrap import assistant
+    assistant.triage.summarize_pending(limit=1, workers=1)
     lunch = world.pk(LUNCH)
     summarize_as(lunch, 5, "action-needed")
     assert app.post("/api/ai/summarize", {"pk": lunch}).status == 200
@@ -240,13 +239,12 @@ def test_the_status_says_what_today_cost_and_the_debug_route_lists_each_day(app,
 
 def test_a_ledger_that_cant_be_read_leaves_the_status_without_a_spend(data_dir, monkeypatch, capsys):
     import sqlite3
-    import summarize
     from mailmind.bootstrap import assistant
 
     def broken(day):
         raise sqlite3.OperationalError("database is locked")
     monkeypatch.setattr(assistant.LEDGER, "spent", broken)
-    assert summarize.status()["spent_today_micros"] is None
+    assert assistant.calls.status()["spent_today_micros"] is None
     assert "[ai] the usage ledger can't be read: OperationalError" in capsys.readouterr().out
 
 
