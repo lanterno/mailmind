@@ -72,7 +72,7 @@ def seed(path):
     c.row_factory = sqlite3.Row             # as fts_index reads its rows
     c.execute("PRAGMA foreign_keys=ON")
     try:
-        for t in sorted(tables(c), key=lambda t: (t != "messages", t != "message_identity")):    # what the rest refer to first
+        for t in sorted(tables(c), key=lambda t: (t != "messages", t != "message_identity", t != "ai_batches")):    # what the rest refer to first
             columns = [(r["name"], r["type"]) for r in c.execute(f'PRAGMA table_info("{t}")')]
             for i in range(ROWS):
                 row = {name: made_up(t, name, kind, i) for name, kind in columns}

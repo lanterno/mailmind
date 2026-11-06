@@ -203,7 +203,7 @@ def test_forget_is_a_fresh_start():
     gov.forget()
     assert gov.held_back("background", "triage", "m", MODEL) is None
     assert gov.held_back("speculative", "draft-ahead", "m", MODEL) is None
-    assert gov.snapshot() == {"spent_today_micros": 0, "limit_micros": 10_000, "interactive_running": 0,
+    assert gov.snapshot() == {"spent_today_micros": 0, "limit_micros": 10_000, "reserved_micros": 0, "interactive_running": 0,
                               "since_interactive": None, "since_seen": 0.0, "breaker": []}
 
 
@@ -322,7 +322,7 @@ def test_at_the_limit_triage_waits_for_tomorrow(app, world, ai):
 
 def test_the_debug_route_shows_the_governor(app):
     assert app.get("/api/debug/ai").json["governor"] == {
-        "spent_today_micros": 0, "limit_micros": 15_000_000, "interactive_running": 0,
+        "spent_today_micros": 0, "limit_micros": 15_000_000, "reserved_micros": 0, "interactive_running": 0,
         "since_interactive": None, "since_seen": 0.0, "breaker": []}
 
 
