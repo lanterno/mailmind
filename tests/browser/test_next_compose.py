@@ -150,6 +150,7 @@ def test_the_compose_button_opens_a_new_message_at_to_and_keys_stay_out_of_the_w
     assert page.evaluate("document.activeElement.classList.contains('ci')")
     page.keyboard.type("e")                                 # into To, and no archive
     expect(to(page)).to_have_value("e")
+    page.keyboard.press("Backspace")                        # half an address would be saved on closing, and refused
     page.keyboard.press("Escape")
     expect(subject(page)).to_be_hidden()
     clean(page)
