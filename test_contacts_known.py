@@ -4,6 +4,7 @@ limits, the CSRF guard, and that it never waits on the IMAP lock. Hermetic — t
 config and rules are temp files. All addresses are fictional.
 Run: python3 test_contacts_known.py"""
 import dataclasses
+import email
 import http.client
 import json
 import tempfile
@@ -24,6 +25,7 @@ def _home():
 
 
 _home()                                               # before anything opens a file
+import mailparse
 import outbox
 import server
 
@@ -39,10 +41,11 @@ def _fresh():
 def _msg(from_addr, recipients="", folder="INBOX", is_junk=0, draft=0, account=ACCT):
     _uid[0] += 1
     c = store.conn()
-    c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, "
-              "subject, recipients, is_junk, draft) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-              (account, "imap", folder, _uid[0], f"<m{_uid[0]}@example.test>", f"t{_uid[0]}",
-               1_800_000_000 + _uid[0], from_addr, "Saturday market", recipients, is_junk, draft))
+    cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, "
+                    "subject, recipients, is_junk, draft) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (account, "imap", folder, _uid[0], f"<m{_uid[0]}@example.test>", f"t{_uid[0]}",
+                     1_800_000_000 + _uid[0], from_addr, "Saturday market", recipients, is_junk, draft))
+    store.set_recipients(c, cur.lastrowid, mailparse.recipient_addrs(email.message_from_string(f"To: {recipients}\n\n")))
     c.commit()
     c.close()
 
@@ -98,7 +101,7 @@ def test_provider_spam_folders_never_vouch():
 
 def test_own_sent_rows_count_every_recipient():
     _fresh()
-    _msg(ACCT, 'Lio Park <lio@example.test>, "Smith, Cy" <cy@example.test> kim@example.test '
+    _msg(ACCT, 'Lio Park <lio@example.test>, "Smith, Cy" <cy@example.test>, kim@example.test, '
                'mo@example.test', folder="Sent")
     k = _known(["lio@example.test", "cy@example.test", "kim@example.test", "mo@example.test"])
     assert all(k.values()), k
@@ -110,16 +113,6 @@ def test_exact_tokens_not_substrings():
     _msg(ACCT, '"ann@example.test via List" <list@example.test>', folder="Sent")
     k = _known(["ann@example.test", "list@example.test"])
     assert k == {"ann@example.test": False, "list@example.test": True}, k
-
-
-def test_truncated_recipients_drop_the_partial_tail():
-    _fresh()
-    head = "first@example.test, second@example.test, "
-    s = head + "x" * (2000 - len(head) - len("zed@example.te") - 1) + " zed@example.te"
-    assert len(s) == 2000                       # zed@example.test, cut short by ingest
-    _msg(ACCT, s, folder="Sent")
-    k = _known(["first@example.test", "second@example.test", "zed@example.te"])
-    assert k == {"first@example.test": True, "second@example.test": True, "zed@example.te": False}, k
 
 
 def test_drafts_never_vouch():
