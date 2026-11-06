@@ -2,6 +2,7 @@
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { get } from "../../api/client";
 import type { GetAnswers } from "../../api/types.gen";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
@@ -17,6 +18,7 @@ function initialTab(): InboxTab {
 const DIGEST_TITLE = { needs: "Needs you", tidy: "Safe to file" };
 const LANE_TITLE = { feed: "Feed", papertrail: "Paper Trail" };
 const inboxTab = createStore<InboxTab>(initialTab());
+const prefetched = new Set<number>();
 const grouping = createStore(groupedPref());
 
 export function setInboxTab(tab: InboxTab) {
@@ -56,6 +58,16 @@ export function useMailbox() {
   const markedRows = all.filter((r) => marks.has(r.pk));
   const views = useViews().data?.views ?? [];
 
+  // The next two rows' bodies, so moving down shows them at once. The server skips one it would have to wait for.
+  const at = rows.findIndex((r) => r.pk === openPk);
+  const nextTwo = openPk === null || at < 0 ? [] : rows.slice(at + 1, at + 3).map((r) => r.pk);
+  useEffect(() => {
+    for (const pk of nextTwo) {
+      if (prefetched.has(pk)) continue;
+      prefetched.add(pk);
+      get(`/api/message/${pk}/body?prefetch=1`).catch(() => prefetched.delete(pk));
+    }
+  }, [nextTwo.join()]);
 
   const isWhole = (r: Row) => !searching && isConversation(r, grouped, r.folder);
   const opening = (r: Row): Opened =>
