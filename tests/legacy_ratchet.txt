@@ -11,7 +11,6 @@ mailmind.bootstrap.cli export
 mailmind.bootstrap.cli ingest
 mailmind.bootstrap.cli store
 mailmind.bootstrap.cli summarize
-mailmind.bootstrap.cli views
 mailmind.bootstrap.curation accounts
 mailmind.bootstrap.curation ingest
 mailmind.bootstrap.curation mailops

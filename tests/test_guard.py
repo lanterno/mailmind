@@ -128,7 +128,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import config
     from mailmind.bootstrap.curation import rules
     import store
-    import views
+    from mailmind.bootstrap.discovery import views
     from mailmind.platform import settings
     assert settings.current().home == str(data_dir)
     c = store.conn()
