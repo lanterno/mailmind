@@ -109,6 +109,13 @@ def test_a_negation_alone_excludes_what_it_names(app, world):
 
 
 
+@pytest.mark.parametrize("query,fragment", [("-before:2026-11-02", "m.ts >= ?"), ("-after:2026-11-02", "m.ts < ?"),
+                                            ("before:2026-11-02", "m.ts < ?"), ("after:2026-11-02", "m.ts >= ?")])
+def test_not_before_a_time_is_after_it(query, fragment):
+    import search
+    assert search.build(query)[1] == [fragment]
+
+
 def test_excluding_a_category_keeps_mail_that_has_none(app, world):
     _, everything = senders(app, "in:INBOX")
     assert senders(app, "in:INBOX%20-category:info")[1] == everything     # nothing is summarized here
