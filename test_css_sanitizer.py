@@ -1,6 +1,6 @@
 """Attack corpus for the CSS sanitizer. Each red-team payload must be neutralized;
    legitimate newsletter styling must survive.  Run: python3 test_css_sanitizer.py"""
-import sanitize_html as S
+from mailmind.content.sanitize import html as S
 
 
 class Ctx:

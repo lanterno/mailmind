@@ -1,4 +1,4 @@
-"""Regression gate for the HTML-email sanitizer (sanitize_html.py).
+"""Regression gate for the HTML-email sanitizer (mailmind.content.sanitize).
 
 The authoritative invariant: parse the sanitizer's OUTPUT the way a browser
 would (entities decoded) and assert NO real dangerous tag, event-handler
@@ -12,7 +12,7 @@ import sys
 import html as htmlmod
 from html.parser import HTMLParser
 
-import sanitize_html
+from mailmind.content import sanitize
 
 DANGEROUS_TAGS = {"script", "iframe", "object", "embed", "form", "svg", "math",
                   "base", "meta", "link", "frame", "frameset", "input", "style",
@@ -98,7 +98,7 @@ def run():
     for atk in ATTACKS:
         for li in (False, True):
             for variant in {atk, htmlmod.unescape(atk)}:
-                out, _ = sanitize_html.sanitize(variant, load_images=li)
+                out, _ = sanitize.sanitize(variant, load_images=li)
                 bad = real_leaks(out, li)
                 if bad:
                     leaks += 1
@@ -106,18 +106,18 @@ def run():
     # preservation
     keep_fail = 0
     for src, must in KEEP[:-1]:
-        out, _ = sanitize_html.sanitize(src)
+        out, _ = sanitize.sanitize(src)
         for m in must:
             if m not in out:
                 keep_fail += 1
                 print(f"  DROPPED safe content: {m!r} from {src}")
-    out, _ = sanitize_html.sanitize(KEEP[-1][0], load_images=True)
+    out, _ = sanitize.sanitize(KEEP[-1][0], load_images=True)
     if "data:image/png" not in out:
         keep_fail += 1
         print("  raster data-URI image not preserved with load_images=True")
     # robustness
     for junk in ["<p><b>unclosed", "<<<>>>", None, "", "<a href=", "</x></y>"]:
-        sanitize_html.sanitize(junk)  # must not raise
+        sanitize.sanitize(junk)  # must not raise
     print(f"\nsanitizer: {len(ATTACKS)} attack classes, 0 leaks expected -> {leaks} leaks; "
           f"{keep_fail} preservation failures")
     return leaks == 0 and keep_fail == 0

@@ -967,18 +967,18 @@ def test_hwf_mail_going_out_carries_no_reader_quote_fold(bodies):
 
 
 def test_hwf_the_reader_still_folds_a_quote():
-    import sanitize_html
-    assert '<details class="mm-quote">' in sanitize_html.sanitize(FOLDABLE["html"])[0]
+    from mailmind.content import sanitize
+    assert '<details class="mm-quote">' in sanitize.sanitize(FOLDABLE["html"])[0]
 
 
 def test_hwf_a_quote_stored_with_the_fold_loses_only_the_fold():
-    import sanitize_html
-    folded = sanitize_html.sanitize(FOLDABLE["html"])[0]
-    assert sanitize_html.without_fold(folded) == sanitize_html.sanitize(FOLDABLE["html"], fold=False)[0]
-    assert sanitize_html.without_fold(f"<blockquote>{folded}</blockquote>") == \
-        f'<blockquote>{sanitize_html.sanitize(FOLDABLE["html"], fold=False)[0]}</blockquote>'
+    from mailmind.content import sanitize
+    folded = sanitize.sanitize(FOLDABLE["html"])[0]
+    assert sanitize.without_fold(folded) == sanitize.sanitize(FOLDABLE["html"], fold=False)[0]
+    assert sanitize.without_fold(f"<blockquote>{folded}</blockquote>") == \
+        f'<blockquote>{sanitize.sanitize(FOLDABLE["html"], fold=False)[0]}</blockquote>'
     theirs = "<details><summary>Their own</summary>Kept</details>"
-    assert sanitize_html.without_fold(theirs) == theirs
+    assert sanitize.without_fold(theirs) == theirs
 
 
 def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
