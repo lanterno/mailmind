@@ -38,7 +38,6 @@ from mailmind.bootstrap import attention, calendar, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
 from mailmind.compose.api import build_message, forward_bodies, lf, reference_chain, reply_bodies, resume_split, thread_ids
-import smtpsend
 import outbox
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
@@ -1691,7 +1690,7 @@ def do_draft(body):
             if _draft_copy_ours_to_remove(row):
                 try:
                     acct = accounts.get(row["account"])
-                    removed = gates.run(acct["email"], lambda: smtpsend.delete_draft_uid(
+                    removed = gates.run(acct["email"], lambda: mailbox.copies.delete_draft_uid(
                         acct, row["folder"], row["uid"], row["uidvalidity"]), priority=gates.Priority.INTERACTIVE)
                 except Exception as e:
                     print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
@@ -1742,7 +1741,7 @@ def do_draft(body):
         if scope != gates.EVERY_ACCOUNT and scope_for(prev) != scope:
             return None
         same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
-        folder, uid, uidv, replaced = smtpsend.append_to_drafts(
+        folder, uid, uidv, replaced = mailbox.copies.append_to_drafts(
             acct, built["raw"],
             prev_uid=(prev["uid"] if same else None),
             prev_uidvalidity=(prev["uidvalidity"] if same else None),
@@ -1758,7 +1757,7 @@ def do_draft(body):
                 and (not same or (prev["folder"] and prev["folder"] != folder))
                 and _draft_copy_ours_to_remove(prev)):
             try:
-                if smtpsend.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
+                if mailbox.copies.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
                                              prev["uidvalidity"]):
                     gone.append((prev["account"], prev["folder"], prev["uid"]))
             except Exception as e:

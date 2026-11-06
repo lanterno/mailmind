@@ -22,7 +22,9 @@ from datetime import datetime, timezone
 
 import store
 import accounts
-import smtpsend
+from mailmind.bootstrap import compose
+from mailmind.bootstrap.mailbox import copies
+from mailmind.compose.api import Unanswered
 from mailmind.accounts.domain import provider
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import bus, profile
@@ -209,12 +211,12 @@ def _side_effects(oid, row, acct):
         # delivered before this run (a retry, or a crash's recovery): the last APPEND may have landed
         mid = row["message_id"] if row["delivered"] else None
         try:
-            gates.run(acct["email"], lambda: smtpsend.append_to_sent(acct, row["raw"], message_id=mid),
+            gates.run(acct["email"], lambda: copies.append_to_sent(acct, row["raw"], message_id=mid),
                       priority=gates.Priority.AFTER_USER)
             _commit(lambda c: store.outbox_set(c, oid, sent_appended=1))
         except Exception as e:
             unfiled = f"sent copy failed: {type(e).__name__}"
-            print(f"[outbox] Sent-copy failed for #{oid}: {smtpsend.sanitize_smtp_error(e)}", flush=True)
+            print(f"[outbox] Sent-copy failed for #{oid}: {compose.transport.sanitize_error(e)}", flush=True)
     replied_to = row["in_reply_to_pk"] or row["orig_message_id"]
     if replied_to and not row["answered_set"]:
         try:
@@ -242,12 +244,10 @@ def _side_effects(oid, row, acct):
     # the draft this message was composed from is superseded once it's truly sent
     if row["draft_id"] and not row["draft_deleted"]:
         try:
-            # accounts/smtpsend are module-level imports — a local `import` here would shadow
-            # them as function-locals and break every earlier reference with UnboundLocalError
             c = store.conn(); dr = store.draft_get(c, row["draft_id"]); c.close()
             if dr:
                 def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
-                    removed = draft_copy_is_ours(dr) and smtpsend.delete_draft_uid(
+                    removed = draft_copy_is_ours(dr) and copies.delete_draft_uid(
                         accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
 
                     def forget(c):
@@ -293,15 +293,15 @@ def send_one(oid):
     # the wire send and only finishes bookkeeping — so a crash after send never re-sends.
     if not row["delivered"]:
         try:
-            smtpsend.send(acct, row["raw"], json.loads(row["envelope"]),  # lock-free: SMTP != IMAP ops
+            compose.transport.send(acct, row["raw"], json.loads(row["envelope"]),  # lock-free: SMTP != IMAP ops
                           before_dot=lambda: _commit(lambda c: store.outbox_set(c, oid, wire_begun=1)))
-        except smtpsend.Unanswered:            # it may have gone out: a person decides, never a retry
+        except Unanswered:            # it may have gone out: a person decides, never a retry
             _commit(lambda c: QUEUE.give_up(c, row, UNSURE))
             print(f"[outbox] send #{oid} went unanswered; not sending it again", flush=True)
             bus.publish(Failed(oid, row["account"], True))
             return
         except Exception as e:
-            err, permanent = smtpsend.sanitize_smtp_error(e), smtpsend.permanent(e)
+            err, permanent = compose.transport.sanitize_error(e), compose.transport.permanent(e)
 
             def failed(c):                     # the server answered, or it never had the whole message
                 store.outbox_set(c, oid, wire_begun=0)

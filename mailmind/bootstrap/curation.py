@@ -89,11 +89,11 @@ class _Filing:
 class _SystemSend:
     def send(self, account, raw, recipients):
         import accounts
-        import smtpsend
+        from mailmind.bootstrap import compose
         acct = accounts.get(account)                      # a removed/stale account raises KeyError
         if not acct:
             return False
-        smtpsend.send(acct, raw, recipients)
+        compose.transport.send(acct, raw, recipients)
         return True
 
 

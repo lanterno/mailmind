@@ -15,7 +15,9 @@ from collections import Counter
 import imaplib
 
 from mailmind.accounts.domain import tls_pin
+from mailmind.mailbox.adapters.imap_names import imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
@@ -91,3 +93,6 @@ def open_session(acct, timeout=60):
     except imaplib.IMAP4.error as e:     # a login NO/BAD is the connection's fault, not a command's
         raise accounts.LoginUnreachable(str(e)) from e
     return session if profile.writes_allowed() else ReadOnlySession(session)
+
+
+copies = Copies(lambda acct, **kw: open_session(acct, **kw), imap_quote)
