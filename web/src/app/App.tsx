@@ -17,6 +17,7 @@ import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { FeedRiver, PaperTrail } from "../features/lanes/Lanes";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
 import { AccountAlert } from "../features/status/Status";
@@ -187,7 +188,11 @@ export function App() {
   const last = pages[pages.length - 1];
   const more = list.hasNextPage ? "+" : "";
   const noun = m.grouped && !searching && m.source?.kind !== "digest" ? "conversation" : "message";
-  const count = searching
+  const lane = source?.kind === "search" ? source.lane : undefined;
+  const laneNoun = lane === "feed" ? "newsletter" : "receipt";
+  const count = lane
+    ? `${all.length}${more} ${laneNoun}${all.length === 1 && !more ? "" : "s"}`
+    : searching
     ? `${all.length}${more} result${all.length === 1 && !more ? "" : "s"}`
     : `${all.length}${more} ${noun}${all.length === 1 && !more ? "" : "s"}${last?.syncing || last?.catchingUp ? " · reading the rest…" : ""}`;
 
@@ -200,6 +205,7 @@ export function App() {
   else if (last?.syncing) empty = <div className="nores" role="status">Reading this folder for the first time…</div>;
   else if (last?.syncFailed) empty = <div className="nores" role="status">Couldn’t sync this folder. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
 
+  const footer = list.hasNextPage ? <button className="load-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{searching ? "Load more results" : "Load 200 more"}</button> : null;
   const counts: Record<InboxTab, string> = {
     needs: String(all.filter((r) => r.needsYou).length),
     all: `${all.length}${more}`,
@@ -216,13 +222,18 @@ export function App() {
           <div className="listhead">
             <div className="lh1">
               <h1 className="lh-title" id="listTitle">{title}</h1>
-              {!searching && (
+              {!searching && source?.kind !== "digest" && (
                 <button className={m.grouped ? "thread-toggle on" : "thread-toggle"} id="threadToggle" title="Group into conversations" onClick={() => setGrouping(!m.grouped)}>
                   <Icon name={m.grouped ? "chat" : "list"} /> {m.grouped ? "Conversations" : "Messages"}
                 </button>
               )}
             </div>
-            {searching && source?.kind === "search" && (
+            {lane && (
+              <div className="client-ctx" id="clientCtx">
+                <Icon name={lane === "feed" ? "book" : "receipt"} /> <b>{title}</b> · {lane === "feed" ? "a calm reading river" : "receipts & invoices"} · all accounts
+              </div>
+            )}
+            {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
                 <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts ·{" "}
                 <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button>
@@ -265,7 +276,7 @@ export function App() {
           </div>
           <BulkBar m={m} />
           <NewMailPill />
-          {asked ? <AskPane at={asked} m={m} /> : <MessageList
+          {asked ? <AskPane at={asked} m={m} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
             openPk={m.openPk}
@@ -277,7 +288,7 @@ export function App() {
             onOpen={m.open}
             onFile={m.file}
             empty={empty}
-            footer={list.hasNextPage ? <button className="load-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{searching ? "Load more results" : "Load 200 more"}</button> : null}
+            footer={footer}
           />}
         </section>
         <Reader m={m} />

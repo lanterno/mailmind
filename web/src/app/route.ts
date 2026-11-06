@@ -5,11 +5,14 @@ import { useSyncExternalStore } from "react";
 export type ListSource =
   | { kind: "folder"; account: string; folder: string }
   | { kind: "allInboxes" }
-  | { kind: "search"; q: string; account: string }
+  | { kind: "search"; q: string; account: string; lane?: Lane }
   | ({ kind: "digest" } & DigestList);
 
 // Lists the digest answers rather than a folder holds: what needs you, what is safe to file, a topic from the brief.
 export type DigestList = { list: "needs" | "tidy" } | { list: "topic"; label: string };
+
+// Two built-in views read better as something other than rows. The query is the same either way.
+export type Lane = "feed" | "papertrail";
 
 export type Opened = { kind: "message"; pk: number } | { kind: "thread"; id: string; pk: number; account: string } | null;
 
@@ -27,6 +30,7 @@ export function pathOf({ source, opened, brief }: Route): string {
     path += "/search";
     query.set("q", source.q);
     if (source.account) query.set("account", source.account);
+    if (source.lane) query.set("lane", source.lane);
   }
   else if (source?.kind === "digest") path += source.list === "topic" ? `/brief/topic/${seg(source.label)}` : `/brief/${source.list}`;
   if (brief) query.set("brief", "1");
@@ -46,7 +50,10 @@ export function parseRoute(pathname: string, search: string): Route {
   let source: ListSource | null = null;
   if (parts[0] === "m" && parts[1] && parts[2]) source = { kind: "folder", account: parts[1], folder: parts[2] };
   else if (parts[0] === "all") source = { kind: "allInboxes" };
-  else if (parts[0] === "search") source = { kind: "search", q: q.get("q") ?? "", account: q.get("account") ?? "" };
+  else if (parts[0] === "search") {
+    const lane = q.get("lane");
+    source = { kind: "search", q: q.get("q") ?? "", account: q.get("account") ?? "", ...(lane === "feed" || lane === "papertrail" ? { lane } : {}) };
+  }
   else if (parts[0] === "brief" && (parts[1] === "needs" || parts[1] === "tidy")) source = { kind: "digest", list: parts[1] };
   else if (parts[0] === "brief" && parts[1] === "topic" && parts[2]) source = { kind: "digest", list: "topic", label: parts[2] };
   const pk = Number(q.get("m"));

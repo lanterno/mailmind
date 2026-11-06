@@ -91,8 +91,9 @@ function Views({ source, account }: { source: ListSource | null; account: string
       <div className="frail-acct">Views</div>
       {views.map((v) => {
         const q = viewQuery(v);
-        const to: ListSource = { kind: "search", q, account };
-        const on = source?.kind === "search" && source.q === q;
+        const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
+        const to: ListSource = { kind: "search", q, account, ...(lane ? { lane } : {}) };
+        const on = source?.kind === "search" && source.q === q && source.lane === lane;
         return (
           <a
             key={v.id}
@@ -106,7 +107,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
               go({ source: to, opened: null });
             }}
           >
-            <span className="ic2"><Icon name={v.id.startsWith("__lane_") ? "tag" : "search"} /></span><span className="fn">{v.name}</span>
+            <span className="ic2"><Icon name={lane === "feed" ? "book" : lane === "papertrail" ? "receipt" : "search"} /></span><span className="fn">{v.name}</span>
             {!v.builtin && <span className="vdel" aria-hidden="true" title="Remove view" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void remove(v.id); }}>×</span>}
           </a>
         );

@@ -22,3 +22,8 @@ button.rv-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .status-menu .sm-link{display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit}
 button.ask-src{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer}
 button.ask-src:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button.pt-row{width:100%;background:none;border-width:0 0 1px;border-style:solid;border-color:var(--line);font:inherit;color:inherit;text-align:left}
+.fr-open{all:unset;cursor:pointer}
+.fr-open:focus-visible,button.pt-row:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* The stylesheet hides the title under a context line; the page still needs its one heading. */
+.listhead:has(>.client-ctx:not(:empty)) .lh1.lh1{display:block;position:absolute;width:1px;height:1px;min-height:0;overflow:hidden;clip-path:inset(50%)}

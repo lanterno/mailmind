@@ -17,6 +17,7 @@ export interface Row {
   snippet: string;
   when: string;
   ts: number | null;
+  date: string;
   seen: boolean;
   flagged: boolean;
   hasAttach: boolean;
@@ -42,6 +43,7 @@ export function fromFolder(it: FolderRow, account: string, folder: string): Row 
     snippet: it.snippet,
     when: it.waiting_label || it.when,
     ts: it.ts ?? null,
+    date: "",
     seen: Boolean(it.seen),
     flagged: Boolean(it.flagged),
     hasAttach: Boolean(it.has_attach),
@@ -68,6 +70,7 @@ export function fromSearch(it: SearchRow): Row {
     snippet: it.snippet,
     when: it.when,
     ts: null,
+    date: it.date ?? "",
     seen: Boolean(it.seen),
     flagged: Boolean(it.flagged),
     hasAttach: Boolean(it.has_attach),
@@ -77,7 +80,7 @@ export function fromSearch(it: SearchRow): Row {
     threadId: "",
     count: 1,
     action: "",
-    summary: "",
+    summary: (it as { summary?: string }).summary ?? "",
     needsYou: Boolean(it.needs_you),
   };
 }

@@ -7,7 +7,7 @@ import { go, useRoute, type ListSource, type Opened, type Route } from "../../ap
 import { createStore, store, stored } from "../../lib/store";
 import { settingsOpen } from "../settings/open";
 import * as actions from "./actions";
-import { groupedPref, saveGroupedPref, useDigest, useFolders, useMessages } from "./data";
+import { groupedPref, saveGroupedPref, useDigest, useFolders, useMessages, useViews } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";
 
 function initialTab(): InboxTab {
@@ -15,6 +15,7 @@ function initialTab(): InboxTab {
   return saved === "all" || saved === "unread" ? saved : "needs";
 }
 const DIGEST_TITLE = { needs: "Needs you", tidy: "Safe to file" };
+const LANE_TITLE = { feed: "Feed", papertrail: "Paper Trail" };
 const inboxTab = createStore<InboxTab>(initialTab());
 const grouping = createStore(groupedPref());
 
@@ -53,6 +54,8 @@ export function useMailbox() {
   const rows = inInbox && !searching ? inTab(all, tab, openPk) : all;
   const openRow = openPk === null ? undefined : all.find((r) => r.pk === openPk);
   const markedRows = all.filter((r) => marks.has(r.pk));
+  const views = useViews().data?.views ?? [];
+
 
   const isWhole = (r: Row) => !searching && isConversation(r, grouped, r.folder);
   const opening = (r: Row): Opened =>
@@ -157,11 +160,12 @@ export function useMailbox() {
     inInbox,
     all,
     rows,
+    views,
     openPk,
     openRow,
     marks,
     markedRows,
-    title: allInboxes ? "All inboxes" : searching ? "Search" : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),
+    title: allInboxes ? "All inboxes" : source?.kind === "search" ? (source.lane ? LANE_TITLE[source.lane] : "Search") : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),
     hasMore: Boolean(list.hasNextPage),
     isWhole,
     open,

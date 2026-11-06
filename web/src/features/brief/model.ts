@@ -41,6 +41,7 @@ export function fromDigest(it: DigestItem): Row {
     subject: it.subject,
     snippet: "",
     when: it.when,
+    date: "",
     ts: null,        // sorted by what matters, so no day sections
     seen: Boolean(it.seen),
     flagged: Boolean(it.flagged),

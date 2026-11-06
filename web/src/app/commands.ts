@@ -5,6 +5,7 @@ import { composing } from "../features/compose/compose";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
+import { viewQuery } from "../features/mailbox/FolderRail";
 import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
 import { snoozeAsk } from "../features/mailbox/SnoozeMenu";
@@ -121,6 +122,10 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
   add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
   add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
+  for (const v of m.views) {
+    const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
+    add({ id: `view:${v.id}`, group: "Navigation", label: `View · ${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
+  }
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });
   add({ id: "search", group: "Commands", label: "Search", keys: ["/"], hint: "/", run: () => document.querySelector<HTMLInputElement>("#search")?.focus() });
