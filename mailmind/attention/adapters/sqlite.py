@@ -51,6 +51,15 @@ def due_snoozes(c, now_ts):
 
 
 # ----------------------------------------------------------- mute (silence a thread)
+def rekey_thread(c, account, survivor, absorbed):
+    """Thread `absorbed` merged into `survivor`: its mute and its follow-up move, in the merge's transaction. Where
+    `survivor` has its own, that one stays."""
+    c.execute("UPDATE OR IGNORE muted SET thread_id=? WHERE account=? AND thread_id=?", (survivor, account, absorbed))
+    c.execute("DELETE FROM muted WHERE account=? AND thread_id=?", (account, absorbed))
+    c.execute("UPDATE OR IGNORE followups SET thread_id=? WHERE account=? AND thread_id=?", (survivor, account, absorbed))
+    c.execute("DELETE FROM followups WHERE account=? AND thread_id=?", (account, absorbed))
+
+
 def mute_thread(c, account, thread_id, when):
     c.execute("INSERT OR IGNORE INTO muted(account, thread_id, muted_at) VALUES(?,?,?)",
               (account, thread_id, when))

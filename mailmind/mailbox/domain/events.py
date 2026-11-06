@@ -1,4 +1,4 @@
-"""What happens to mail (published on mailmind.platform.bus)."""
+"""What happens to mail. All but ConversationsMerged are published on mailmind.platform.bus, once the change has committed."""
 from dataclasses import dataclass
 
 
@@ -30,3 +30,13 @@ class FlagsChanged:
 class InboxChanged:
     """IDLE saw these accounts' INBOX change, a burst of signals coalesced into one. Whoever hears it syncs them."""
     accounts: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ConversationsMerged:
+    """Every message of thread `absorbed` now holds `survivor`: two threads joined, or one gained a Gmail thread id.
+    Whoever keeps something under a thread id moves it inside the transaction that rewrote the messages, on its
+    connection, so it never goes through the bus, whose handlers run after the commit and may fail on their own."""
+    account: str
+    survivor: str
+    absorbed: str

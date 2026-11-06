@@ -15,6 +15,9 @@ from collections import Counter
 import imaplib
 
 from mailmind.accounts.domain import tls_pin
+from mailmind.assistant.adapters import sqlite as assistant_store
+from mailmind.attention.adapters import sqlite as attention_store
+from mailmind.compose.adapters import sqlite as compose_store
 from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.imap_names import imap_quote
@@ -44,6 +47,17 @@ from mailmind.bootstrap import accounts         # the connection's TLS, pin and 
 from mailmind.bootstrap.accounts import config           # the credential, likewise
 
 store.bind_index(fts)
+
+
+def _conversations_merged(c, merged):
+    """Each context that keeps something under a thread id moves its own rows. A table keyed on a thread id joins here,
+    through its owner's rekey_thread. Plain calls on the merge's connection, not the bus: it must commit or roll back
+    with the messages it follows, and it must hold for whatever opens the store, wired or not (the command line)."""
+    for rekey in (attention_store.rekey_thread, assistant_store.rekey_thread, compose_store.rekey_thread):
+        rekey(c, merged.account, merged.survivor, merged.absorbed)
+
+
+store.bind_merges(_conversations_merged)
 
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers

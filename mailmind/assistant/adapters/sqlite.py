@@ -21,6 +21,16 @@ def save_thread_summary(c, row):
                    created_at=excluded.created_at""", row)
 
 
+def rekey_thread(c, account, survivor, absorbed):
+    """Thread `absorbed` merged into `survivor`: its summaries and the reply drafted ahead for it move, in the merge's
+    transaction. Where `survivor` has its own, that one stays."""
+    c.execute("UPDATE OR IGNORE thread_summaries SET thread_id=? WHERE account=? AND thread_id=?", (survivor, account, absorbed))
+    c.execute("DELETE FROM thread_summaries WHERE account=? AND thread_id=?", (account, absorbed))
+    c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
+              ("t:" + survivor, account, "t:" + absorbed))
+    c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + absorbed))
+
+
 # ------------------------------------------------------------------- the brief, the delta, the review
 def _forget_old_answers(c, table):
     """Each is read on the day it was written: a week keeps its table tiny."""

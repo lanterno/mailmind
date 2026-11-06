@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
 from mailmind.mailbox.domain import identity
+from mailmind.mailbox.domain.events import ConversationsMerged
 from mailmind.mailbox.domain.threading import Copy, Threader
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
@@ -12,11 +13,19 @@ from typing import Any
 
 
 _index: Any = None                               # what keeps the search index up to date: bound by mailmind.bootstrap.mailbox
+_merged: Any = None                              # who keeps state under a thread id: bound by mailmind.bootstrap.mailbox
 
 
 def bind_index(index):
     global _index
     _index = index
+
+
+def bind_merges(handler):
+    """`handler(c, event)` hears each ConversationsMerged, on the connection whose transaction made it. If it raises,
+    the merge doesn't happen: the caller's transaction never commits."""
+    global _merged
+    _merged = handler
 
 
 def conn():
@@ -479,24 +488,5 @@ def recompute_threads(c, account):
         for r in rows)
     for pk, tid in placed.given.items():
         c.execute("UPDATE messages SET thread_id=? WHERE pk=? AND (thread_id IS NULL OR thread_id<>?)", (tid, pk, tid))
-    for old, surv in placed.merged.items():
-        _rekey(c, account, old, surv)
-
-
-def _rekey(c, account, old, surv):
-    """Move the state kept under thread `old` to `surv`. Where `surv` has a row of its own already,
-    that row stays and `old`'s goes (UPDATE OR IGNORE, then DELETE)."""
-    for tbl in ("muted", "followups", "thread_summaries"):
-        try:
-            c.execute(f"UPDATE OR IGNORE {tbl} SET thread_id=? WHERE account=? AND thread_id=?",
-                      (surv, account, old))
-            c.execute(f"DELETE FROM {tbl} WHERE account=? AND thread_id=?", (account, old))
-        except Exception:
-            pass                              # table may not exist yet on a pre-migration DB
-    try:
-        c.execute("UPDATE OR IGNORE draft_ahead SET ref_key=? WHERE account=? AND ref_key=?",
-                  ("t:" + surv, account, "t:" + old))
-        c.execute("DELETE FROM draft_ahead WHERE account=? AND ref_key=?", (account, "t:" + old))
-        c.execute("UPDATE outbox SET orig_thread_id=? WHERE orig_account=? AND orig_thread_id=?", (surv, account, old))
-    except Exception:
-        pass
+    for absorbed, survivor in placed.merged.items():
+        _merged(c, ConversationsMerged(account, survivor, absorbed))

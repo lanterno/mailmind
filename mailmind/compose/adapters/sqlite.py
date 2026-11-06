@@ -10,6 +10,12 @@ def connect():
     return database.connect(settings.current().db)
 
 
+def rekey_thread(c, account, survivor, absorbed):
+    """Thread `absorbed` merged into `survivor`: a queued reply's follow-up lands on the survivor, in the merge's
+    transaction."""
+    c.execute("UPDATE outbox SET orig_thread_id=? WHERE orig_account=? AND orig_thread_id=?", (survivor, account, absorbed))
+
+
 def outbox_insert(c, row):
     """Insert a queued send. Returns (id, created): created=False if the
     idempotency_key already exists (a double-submit), so the caller never enqueues
