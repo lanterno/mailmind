@@ -291,3 +291,26 @@ def test_a_block_trashes_with_nothing_for_undo_to_reverse(app, world):
     from mailmind.bootstrap import mailbox
     assert mailbox.filing.trash_now(world.pk(RECEIPT)) is True
     assert undo_stack() == [] and boxes(world, RECEIPT) == ["Trash"]
+
+
+def test_an_outage_of_hours_leaves_a_move_waiting_and_its_message_hidden(app, world):
+    from datetime import timedelta
+
+    from mailmind.bootstrap.mailbox import commands
+    pk = world.pk(RECEIPT)
+    world.server.drop("SELECT", user=w.ADA, times=None)
+    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    for _ in range(12):
+        commands.drain()
+        app.clock.shift(timedelta(seconds=commands._BACKOFF_CAP + 1))
+    [row] = rows()
+    assert (row["state"], row["attempts"]) == ("queued", 12) and hidden(pk)
+    world.server.clear_faults()
+    commands.drain()
+    assert boxes(world, RECEIPT) == ["Archive"] and rows()[0]["state"] == "done"
+
+
+def test_a_queued_change_is_given_up_on_after_about_a_day_of_tries(app, world):
+    from mailmind.bootstrap.mailbox import commands
+    hours = sum(commands.QUEUE.backoff(n) for n in range(1, commands.MAX_ATTEMPTS)) / 3600
+    assert 23 < hours < 25
