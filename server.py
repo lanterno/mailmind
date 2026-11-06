@@ -45,7 +45,7 @@ import mailclass
 import manage
 import rules
 import views
-import sanitize_html
+from mailmind.content import sanitize
 import compose
 import smtpsend
 import outbox
@@ -797,7 +797,7 @@ def message_body(pk, load_images, prefetch=False):
     html, text = parsed.get("html"), parsed.get("text")
     if html and len(html) > 2_000_000:        # hard body cap before sanitize (DoS)
         html = html[:2_000_000]
-    safe_html, info = (sanitize_html.sanitize(html, load_images=load_images)
+    safe_html, info = (sanitize.sanitize(html, load_images=load_images)
                        if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
     if safe_html and "cid:" in safe_html:
         safe_html = _resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
@@ -1926,7 +1926,7 @@ def _compose_spec(body):
             c.close()
             if dr and dr["tail_html"] and compose.lf(dr["tail_text"] or "") == tail:
                 # built and sanitized by us at that save; never re-sanitized
-                tail_html = sanitize_html.without_fold(dr["tail_html"])
+                tail_html = sanitize.without_fold(dr["tail_html"])
                 html = compose.own_html(own) + tail_html
         tail_text = tail or None
         in_reply_to, references = compose.thread_ids(resume.get("in_reply_to"), resume.get("references"))
@@ -4286,7 +4286,7 @@ class H(BaseHTTPRequestHandler):
         self._send(200, body, found.ctype, headers)
 
     def _serve_attachment(self, pk, part_id):
-        if not re.match(r"^[0-9]+$", part_id or ""):     # only mailparse-style indices
+        if not re.match(r"^[0-9]+$", part_id or ""):     # only the part ids mime gives
             return self._json({"ok": False, "error": "bad part id"}, 400)
         c = store.conn(); row = store.get_message(c, pk); c.close()
         if not row:

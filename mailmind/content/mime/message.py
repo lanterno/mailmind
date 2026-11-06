@@ -2,7 +2,7 @@
 
 parse(raw_bytes) -> {
   "text": plain-text body or None,
-  "html": HTML body or None (UNSANITIZED — caller must run sanitize_html),
+  "html": HTML body or None (UNSANITIZED — caller must run content.sanitize),
   "attachments": [{part_id, filename, content_type, size, content_id, is_inline}],
   "to","cc","reply_to","date": header strings,
 }
