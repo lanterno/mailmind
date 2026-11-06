@@ -2,21 +2,85 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { GetAnswers } from "../../api/types.gen";
-import type { Opened } from "../../app/route";
+import { createStore } from "../../lib/store";
 import { fileSize } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
-import { armDwell, cancelDwell, markSeen, markUnread, setStar } from "./actions";
+import { armDwell, cancelDwell, markSeen } from "./actions";
+import { AiCard, summarize } from "./AiCard";
 import { useBody, useThread } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
-import type { Row } from "./rows";
+import { MoreMenu } from "./MoreMenu";
+import { ReadMenu } from "./ReadMenu";
+import { snoozeAsk } from "./SnoozeMenu";
+import type { Mailbox } from "./useMailbox";
 
 type Body = GetAnswers["/api/message/{pk}/body"];
 
-function Cab({ icon, label, title, onClick, danger, on, children }: { icon: string; label: string; title?: string; onClick: () => void; danger?: boolean; on?: boolean; children?: ReactNode }) {
+export const readFocus = createStore(false);
+const narrow = () => matchMedia("(max-width:820px)").matches;
+
+export function setReadFocus(on: boolean) {
+  const next = on && !narrow();     // a phone already shows one pane at a time
+  readFocus.set(next);
+  document.body.classList.toggle("read-focus", next);
+}
+
+function Cab({ ca, thread, icon, label, title, onClick, danger, on, children }: { ca: string; thread: boolean; icon: string; label: string; title?: string; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; danger?: boolean; on?: boolean; children?: ReactNode }) {
+  const verb = thread ? { "data-tca": ca } : { "data-ca": ca };
   return (
-    <button className={`cab${danger ? " cab-del" : ""}${on ? " on" : ""}`} title={title ?? label} aria-label={label} onClick={onClick}>
+    <button {...verb} className={`cab${danger ? " cab-del" : ""}${on ? " on" : ""}`} title={title ?? label} aria-label={label} onClick={onClick}>
       <span><Icon name={icon} className={on ? "fill" : undefined} /></span> {children ?? label}
     </button>
+  );
+}
+
+function ReaderNav({ m }: { m: Mailbox }) {
+  const focusing = readFocus.useValue();
+  const i = m.rows.findIndex((r) => r.pk === m.openPk), n = m.rows.length;
+  return (
+    <span className="rd-nav">
+      <button className="cab rd-focus" aria-pressed={focusing} title="Focus reading — hide folders and list (↵)" aria-label="Focus reading" onClick={() => setReadFocus(!focusing)}><span><Icon name="expand" /></span></button>
+      {i >= 0 && <span className="rd-pos">{i + 1} of {n}{m.hasMore ? "+" : ""}</span>}
+      <button className="cab" title="Previous (k)" aria-label="Previous message" disabled={i <= 0} onClick={() => m.move(-1)}><span><Icon name="up" /></span></button>
+      <button className="cab" title="Next (j)" aria-label="Next message" disabled={i < 0 || i >= n - 1} onClick={() => m.move(1)}><span><Icon name="down" /></span></button>
+    </span>
+  );
+}
+
+// The verbs both views share, ahead of filing.
+function Triage({ m, thread }: { m: Mailbox; thread: boolean }) {
+  const target = m.target();
+  const later = m.folder === "__replylater__", muted = m.folder === "__muted__", waiting = m.folder === "__waiting__";
+  return (
+    <>
+      <Cab ca="summarize" thread={thread} icon="wind" label="Summarize" title="AI summary (i)" onClick={() => { if (target) void summarize(target); }} />
+      <Cab ca="snooze" thread={thread} icon="clock" label="Snooze" title="Snooze (h)" onClick={(e) => { if (target && m.openPk !== null) snoozeAsk.set({ target, rows: [m.openPk], anchor: e.currentTarget, canUnsnooze: m.folder === "__snoozed__" }); }} />
+      {later
+        ? <Cab ca="rldone" thread={thread} icon="check" label="Done" title="Done — remove from Reply later" onClick={m.replyLaterDone} />
+        : <Cab ca="replylater" thread={thread} icon="bookmark" label="Reply later" title="Reply later (l)" onClick={m.replyLater}>Later</Cab>}
+      {muted
+        ? <Cab ca="unmute" thread={thread} icon="bell-off" label="Unmute" title="Unmute thread (w)" onClick={m.unmute} />
+        : <Cab ca="mute" thread={thread} icon="bell-off" label="Mute" title="Mute thread (w)" onClick={m.mute} />}
+      {waiting && <Cab ca="dismiss" thread={thread} icon="check" label="Done" title="Dismiss follow-up" onClick={m.dismissFollowup} />}
+    </>
+  );
+}
+
+function UpNext({ m, canArchive }: { m: Mailbox; canArchive: boolean }) {
+  const i = m.rows.findIndex((r) => r.pk === m.openPk);
+  if (i < 0) return null;
+  const next = m.rows[i + 1];
+  if (!next) return <div className="rd-next end">{m.hasMore ? "That’s the last one loaded — “Load more” at the end of the list keeps going." : "That’s the last one in this list."}</div>;
+  return (
+    <div className="rd-next">
+      <div className="rdn-t">
+        <span className="rdn-k">Up next</span>
+        <span className="rdn-who">{next.fromName || next.fromAddr}</span>
+        <span className="rdn-sj">{next.subject || "(no subject)"}</span>
+      </div>
+      {canArchive && <button className="cab" title="Archive this one and open the next (e)" onClick={() => m.fileOpen("archive")}><span><Icon name="archive" /></span> Archive &amp; next</button>}
+      <button className="cab" title="Next (j)" onClick={() => m.move(1)}><span>↓</span> Next</button>
+    </div>
   );
 }
 
@@ -88,30 +152,37 @@ function MailContent({ pk, minHeight, pad }: { pk: number; minHeight: number; pa
   );
 }
 
-interface VerbProps { row: Row | undefined; onFile: (kind: "archive" | "trash" | "junk") => void; onBack: () => void }
-
-function MessageView({ pk, row, onFile, onBack, folderTag }: VerbProps & { pk: number; folderTag: string }) {
-  const qc = useQueryClient();
+function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
   const { data: d } = useBody(pk, false);
+  const row = m.openRow;
   useEffect(() => {
-    if (row?.seen === false) armDwell(qc, pk);
+    if (row?.seen === false) armDwell(m.qc, pk);
     return cancelDwell;
-  }, [qc, pk, row?.seen]);
+  }, [m.qc, pk, row?.seen]);
   const flagged = row?.flagged ?? false;
+  const isDraft = Boolean(d?.is_draft);
   return (
     <>
       <div className="rd-actions">
-        <button className="cab rd-back" title="Back to list" onClick={onBack}><span><Icon name="left" /></span> List</button>
+        <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
+        {!isDraft && <Triage m={m} thread={false} />}
         <span className="rd-sp" aria-hidden="true" />
-        <Cab icon="archive" label="Archive" title="Archive (e)" onClick={() => onFile("archive")} />
-        <Cab icon="trash" label="Delete" title="Delete (d / #)" danger onClick={() => onFile("trash")} />
-        <Cab icon="ban" label="Junk" title="Mark junk (b)" onClick={() => onFile("junk")} />
-        {row && <Cab icon="star" label={flagged ? "Starred" : "Star"} title="Star (s)" on={flagged} onClick={() => void setStar(qc, row)} />}
-        <Cab icon="mail" label="Unread" title="Mark unread (u)" onClick={() => void markUnread(qc, pk)} />
+        {!isDraft && <Cab ca="archive" thread={false} icon="archive" label="Archive" title="Archive (e)" onClick={() => m.fileOpen("archive")} />}
+        <Cab ca="trash" thread={false} icon="trash" label="Delete" title="Delete (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")} />
+        {!isDraft && (
+          <>
+            <Cab ca="junk" thread={false} icon="ban" label="Junk" title="Mark junk (b)" onClick={() => m.fileOpen("junk")} />
+            <Cab ca="star" thread={false} icon="star" label={flagged ? "Starred" : "Star"} title="Star (s)" on={flagged} onClick={m.star} />
+            <Cab ca="unread" thread={false} icon="mail" label="Unread" title="Mark unread (u)" onClick={m.unread} />
+            <ReadMenu />
+            <MoreMenu />
+          </>
+        )}
+        <ReaderNav m={m} />
       </div>
       {d?.ok && (
         <>
-          <div className="rd-top"><span className="rd-tag">{folderTag}</span><span className="rd-when">{d.date}</span></div>
+          <div className="rd-top"><span className="rd-tag">{m.title}</span><span className="rd-when">{d.date}</span></div>
           <div className="rd-subj">{d.subject || "(no subject)"}</div>
           <div className="rd-from">
             <span className="rd-sender"><span className="nm">{d.from_name}</span> <span className="ad">{d.from_addr}</span></span>
@@ -119,7 +190,9 @@ function MessageView({ pk, row, onFile, onBack, folderTag }: VerbProps & { pk: n
           </div>
         </>
       )}
+      <AiCard target={m.target()} row={row} />
       <MailContent key={pk} pk={pk} minHeight={400} pad={30} />
+      <UpNext m={m} canArchive={!isDraft} />
     </>
   );
 }
@@ -154,25 +227,31 @@ function Member({ m, startsOpen }: { m: GetAnswers["/api/thread"]["items"][numbe
   );
 }
 
-function ConversationView({ opened, onFile, onBack }: VerbProps & { opened: Extract<Opened, { kind: "thread" }> }) {
+function ConversationView({ opened, m }: { opened: { id: string; account: string }; m: Mailbox }) {
   const { data: d, isError } = useThread(opened.account, opened.id);
   const items = d?.items ?? [];
   return (
     <>
       <div className="rd-actions">
-        <button className="cab rd-back" title="Back to list" onClick={onBack}><span><Icon name="left" /></span> List</button>
+        <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
+        <Triage m={m} thread />
         <span className="rd-sp" aria-hidden="true" />
-        <Cab icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => onFile("archive")}>Archive</Cab>
-        <Cab icon="trash" label="Delete conversation" title="Delete conversation (d / #)" danger onClick={() => onFile("trash")}>Delete</Cab>
+        <Cab ca="archive" thread icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => m.fileOpen("archive")}>Archive</Cab>
+        <Cab ca="trash" thread icon="trash" label="Delete conversation" title="Delete conversation (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")}>Delete</Cab>
+        <ReadMenu />
+        <MoreMenu />
+        <ReaderNav m={m} />
       </div>
       {isError && <div className="nores">Couldn’t load.</div>}
       {d && !d.ok && <div className="nores">error</div>}
       {items.length > 0 && (
         <>
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d!.count} messages</span></div>
+          <AiCard target={m.target()} row={m.openRow} />
           <div className="thread" id="thread">
-            {items.map((m, i) => <Member key={m.pk} m={m} startsOpen={i === items.length - 1} />)}
+            {items.map((x, i) => <Member key={x.pk} m={x} startsOpen={i === items.length - 1} />)}
           </div>
+          <UpNext m={m} canArchive />
         </>
       )}
       {!d && !isError && <div className="nores" role="status">Loading conversation…</div>}
@@ -180,13 +259,14 @@ function ConversationView({ opened, onFile, onBack }: VerbProps & { opened: Extr
   );
 }
 
-export function Reader({ opened, ...rest }: VerbProps & { opened: Opened; folderTag: string }) {
+export function Reader({ m }: { m: Mailbox }) {
+  const { opened } = m;
   if (!opened) return <section className="reader empty-pane" id="reader">Select a message to read its summary.</section>;
   return (
     <section className="reader" id="reader" aria-label="Message">
       {opened.kind === "message"
-        ? <MessageView key={opened.pk} pk={opened.pk} {...rest} />
-        : <ConversationView key={opened.id} opened={opened} {...rest} />}
+        ? <MessageView key={opened.pk} pk={opened.pk} m={m} />
+        : <ConversationView key={opened.id} opened={opened} m={m} />}
     </section>
   );
 }

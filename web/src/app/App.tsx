@@ -1,27 +1,30 @@
 // The app's one view: the rail, the list and the reader, and the keys that work across them.
-import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { fileRow, filing, readOnly, undo, undoFloat, markUnread, setStar, type Filing } from "../features/mailbox/actions";
-import { groupedPref, saveGroupedPref, useDigest, useFolders, useMessages } from "../features/mailbox/data";
+import { useEffect, useRef } from "react";
+import { post } from "../api/client";
+import { clearMarks, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { FolderRail } from "../features/mailbox/FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
-import { Reader } from "../features/mailbox/Reader";
-import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "../features/mailbox/rows";
+import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
+import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
+import type { InboxTab } from "../features/mailbox/rows";
+import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
+import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { OverLimitDialog } from "../lib/overLimit";
+import { stored } from "../lib/store";
 import { shortAddress } from "../lib/text";
-import { store, stored } from "../lib/store";
-import { Toaster } from "../lib/toast";
+import { toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
+import { buildCommands, commandForKey, goChord, type Command } from "./commands";
+import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
-import { go, useRoute, type Opened, type Route } from "./route";
+import { go } from "./route";
 import { Splitter } from "./Splitter";
 import { closeRailDrawer, RailScrim, TopBar, toggleRail } from "./TopBar";
+import { useQueryClient } from "@tanstack/react-query";
 
 const TABS: [InboxTab, string][] = [["needs", "Needs you"], ["all", "Everything"], ["unread", "Unread"]];
-
-function initialTab(): InboxTab {
-  const saved = stored("mm_inbox_tab");
-  return saved === "all" || saved === "unread" ? saved : "needs";
-}
+const GO_HINT = "Go to folder:  i·s·a·t·k·d·z·w·l";
+const narrow = () => matchMedia("(max-width:820px)").matches;
 
 function Floats() {
   const qc = useQueryClient();
@@ -39,102 +42,131 @@ function Floats() {
   );
 }
 
-export function App() {
-  useRealtime();
-  const qc = useQueryClient();
-  const route = useRoute();
-  const { source, opened } = route;
-  const digest = useDigest();
-  const accounts = digest.data?.accounts ?? [];
-  const aliases = digest.data?.aliases ?? {};
-  useEffect(() => readOnly.set(digest.data?.profile === "read-only"), [digest.data?.profile]);
+function BulkBar({ m }: { m: Mailbox }) {
+  const n = m.marks.size;
+  if (!n) return null;
+  const verb = (name: string, v: BulkVerb, icon?: string, danger?: boolean) => (
+    <button className={danger ? "bb bb-del" : "bb"} onClick={() => m.bulk(v)}>{icon && <Icon name={icon} />} {name}</button>
+  );
+  return (
+    <div className="bulkbar" id="bulkbar">
+      <span className="bcount">{n} selected</span>
+      {verb("Archive", "archive", "archive")}
+      {verb("Delete", "trash", "trash", true)}
+      {verb("Mark read", "read")}
+      {verb("Mark unread", "unread")}
+      {verb("Star", "star", "star")}
+      {verb("Junk", "junk", "ban", true)}
+      <button className="bb" onClick={(e) => snoozeAsk.set({ target: { pks: [...m.marks] }, rows: [...m.marks], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /> Snooze</button>
+      {verb("Mute", "mute", "bell-off")}
+      <button className="bclear" onClick={clearMarks}>Clear</button>
+    </div>
+  );
+}
 
-  // /next on its own opens the first account's Inbox.
-  useEffect(() => {
-    if (!source && accounts[0]) go({ source: { kind: "folder", account: accounts[0], folder: "INBOX" }, opened: null }, { replace: true });
-  }, [source, accounts[0]]);
+async function saveSearch(m: Mailbox) {
+  if (m.source?.kind !== "search") return;
+  const q = m.source.q.trim();
+  const name = (window.prompt("Name this view:", q.slice(0, 40)) ?? "").trim();
+  if (!q || !name) return;
+  try {
+    const d = await post("/api/views", { verb: "create", name, q });
+    if (!d.ok) {
+      toast(d.msg || "Couldn’t save");
+      return;
+    }
+    void m.qc.invalidateQueries({ queryKey: ["views"] });
+    toast(`Saved view · ${name}`);
+  } catch {
+    toast("Couldn’t save view");
+  }
+}
 
-  const [grouped, setGrouped] = useState(groupedPref);
-  const [tab, setTab] = useState(initialTab);
-  const list = useMessages(source, grouped, accounts);
-  const hidden = filing.useValue();
-  const folderName = source?.kind === "folder" ? source.folder : source?.kind === "allInboxes" ? "INBOX" : "";
-  const account = source?.kind === "folder" ? source.account : undefined;
-  const { data: folderData } = useFolders(account);
-  const inInbox = source?.kind === "allInboxes" || folderName.toUpperCase() === "INBOX";
-  const searching = source?.kind === "search";
-  const pages = list.data?.pages ?? [];
-  const all = pages.flatMap((p) => p.rows).filter((r) => !hidden.has(r.pk));
-  const openPk = opened?.pk ?? null;
-  const rows = inInbox ? inTab(all, tab, openPk) : all;
-  const last = pages[pages.length - 1];
-  const more = list.hasNextPage ? "+" : "";
-  const noun = grouped && !searching ? "conversation" : "message";
-  const isWhole = (r: Row) => !searching && isConversation(r, grouped, r.folder);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const reading = Boolean(opened);
-  useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
-  useEffect(closeRailDrawer, [source]);
-
-  const routeFor = (r: Row): Opened =>
-    isWhole(r) ? { kind: "thread", id: r.threadId, pk: r.pk, account: r.account } : { kind: "message", pk: r.pk };
-  const openRow = (r: Row) => go({ source, opened: routeFor(r) }, { replace: Boolean(opened) });
-
-  const afterFiling = (r: Pick<Row, "pk">): Route | null => {
-    if (opened?.pk !== r.pk) return null;
-    const i = rows.findIndex((x) => x.pk === r.pk);
-    const next = rows[i + 1] ?? rows[i - 1];
-    return { source, opened: next && i >= 0 ? routeFor(next) : null };
-  };
-  const file = (r: Pick<Row, "pk">, kind: Filing) => {
-    const whole = opened?.kind === "thread" && opened.pk === r.pk ? true : "threadId" in r ? isWhole(r as Row) : false;
-    void fileRow(qc, kind, r, whole, afterFiling(r));
-  };
-  const openRowData = openPk === null ? undefined : all.find((r) => r.pk === openPk);
-  const move = (by: number) => {
-    const i = rows.findIndex((r) => r.pk === openPk);
-    const target = rows[i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + by))];
-    if (target) openRow(target);
-  };
-
+// The keys. Nothing here fires while you type or while a menu or dialog has the focus, and a browser's own chords are left
+// alone, but ⌘K. The help overlay's setting (mm_nokeys) turns single keys off, as WCAG 2.1.4 asks.
+function useKeys(m: Mailbox, commands: Command[]) {
+  const chord = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        paletteOpen.set(!paletteOpen.get());
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const at = e.target as Element | null;
-      if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"]')) return;
-      const acted = (fn: () => void) => {
+      if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="alertdialog"]')) return;
+      if (at?.closest?.('[role="separator"]') && e.key.startsWith("Arrow")) return;
+      if (stored("mm_nokeys") === "1" && e.key !== "Escape") return;
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (chord.current !== null) {
+        clearTimeout(chord.current);
+        chord.current = null;
         e.preventDefault();
-        fn();
-      };
-      const target = openPk === null ? undefined : { pk: openPk };
-      switch (e.key) {
-        case "j": case "ArrowDown": return acted(() => move(1));
-        case "k": case "ArrowUp": return acted(() => move(-1));
-        case "/": return acted(() => document.querySelector<HTMLInputElement>("#search")?.focus());
-        case "[": return acted(toggleRail);
-        case "z": return acted(() => void undo(qc));
-        case "Escape": return opened ? acted(() => go({ source, opened: null })) : undefined;
-        case "e": return target && acted(() => file(openRowData ?? target, "archive"));
-        case "d": case "#": case "Delete": case "Backspace": return target && acted(() => file(openRowData ?? target, "trash"));
-        case "b": return target && acted(() => file(openRowData ?? target, "junk"));
-        case "s": return openRowData && acted(() => void setStar(qc, openRowData));
-        case "u": return target && acted(() => void markUnread(qc, target.pk));
+        goChord(m, key);
+        return;
+      }
+      if (key === "g") {
+        e.preventDefault();
+        toast(GO_HINT);
+        chord.current = setTimeout(() => { chord.current = null; }, 1800);
+        return;
+      }
+      if (key === "Escape") {
+        if (readFocus.get()) setReadFocus(false);
+        else if (m.marks.size) clearMarks();
+        else if (m.opened) m.close();
+        else if (m.source?.kind === "search") go({ source: m.source.account ? { kind: "folder", account: m.source.account, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
+        else return;
+        e.preventDefault();
+        return;
+      }
+      if (key === "Enter" && at?.closest?.("button,a[href]")) return;   // Enter on a control presses that control, nothing more
+      if (key === "Enter" && narrow()) return;
+      const command = commandForKey(commands, key);
+      if (command) {
+        e.preventDefault();
+        command.run();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   });
+}
 
-  const title = source?.kind === "allInboxes" ? "All inboxes" : searching ? "Search" : folderTitle(folderName, folderData?.folders);
-  const count = `${all.length}${more} ${noun}${all.length === 1 && !more ? "" : "s"}${last?.syncing || last?.catchingUp ? " · reading the rest…" : ""}`;
+export function App() {
+  useRealtime();
+  const m = useMailbox();
+  const { source, opened, accounts, aliases, all, rows, tab, list, folder, inInbox, searching, title } = m;
+  const prefs = readPrefs.useValue();
 
-  let empty: React.ReactNode = <div className="nores">Nothing here.</div>;
-  if (digest.isSuccess && !accounts.length) empty = <div className="nores firstrun"><div className="fr-h">Welcome to MailMind</div><div className="fr-b">No email accounts connected yet. Connect one in the <a href="/">current app</a>.</div></div>;
+  // /next on its own opens the first account's Inbox.
+  useEffect(() => {
+    if (!source && accounts[0]) go({ source: { kind: "folder", account: accounts[0], folder: "INBOX" }, opened: null }, { replace: true });
+  }, [source, accounts[0]]);
+  const reading = Boolean(opened);
+  useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
+  useEffect(closeRailDrawer, [source]);
+  useEffect(() => clearMarks(), [source]);
+  useEffect(() => document.body.style.setProperty("--measure", `${WIDTHS[prefs.width]}px`), [prefs.width]);
+
+  const commands = buildCommands(m, { toggleRail, saveSearch: () => void saveSearch(m) });
+  useKeys(m, commands);
+
+  const pages = list.data?.pages ?? [];
+  const last = pages[pages.length - 1];
+  const more = list.hasNextPage ? "+" : "";
+  const noun = m.grouped && !searching ? "conversation" : "message";
+  const count = searching
+    ? `${all.length}${more} result${all.length === 1 && !more ? "" : "s"}`
+    : `${all.length}${more} ${noun}${all.length === 1 && !more ? "" : "s"}${last?.syncing || last?.catchingUp ? " · reading the rest…" : ""}`;
+
+  let empty: React.ReactNode = <div className="nores">{searching ? "No matches." : "Nothing here."}</div>;
+  if (m.digest && !accounts.length) empty = <div className="nores firstrun"><div className="fr-h">Welcome to MailMind</div><div className="fr-b">No email accounts connected yet. Connect one in the <a href="/">current app</a>.</div></div>;
   else if (list.isError) empty = <div className="nores" role="status">Couldn’t load this list. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
   else if (list.isPending && source) empty = <div className="nores" role="status">Loading…</div>;
   else if (last?.error) empty = <div className="nores">{last.error}</div>;
-  else if (inInbox && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? "Nothing needs you." : "Nothing unread."} Everything else is in <button className="linkbtn" onClick={() => { setTab("all"); store("mm_inbox_tab", "all"); }}>Everything</button>.</div>;
+  else if (inInbox && !searching && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? "Nothing needs you." : "Nothing unread."} Everything else is in <button className="linkbtn" onClick={() => setInboxTab("all")}>Everything</button>.</div>;
   else if (last?.syncing) empty = <div className="nores" role="status">Reading this folder for the first time…</div>;
   else if (last?.syncFailed) empty = <div className="nores" role="status">Couldn’t sync this folder. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
 
@@ -154,22 +186,20 @@ export function App() {
             <div className="lh1">
               <h1 className="lh-title" id="listTitle">{title}</h1>
               {!searching && (
-                <button
-                  className={grouped ? "thread-toggle on" : "thread-toggle"}
-                  id="threadToggle"
-                  title="Group into conversations"
-                  onClick={() => {
-                    saveGroupedPref(!grouped);
-                    setGrouped(!grouped);
-                  }}
-                >
-                  <Icon name={grouped ? "chat" : "list"} /> {grouped ? "Conversations" : "Messages"}
+                <button className={m.grouped ? "thread-toggle on" : "thread-toggle"} id="threadToggle" title="Group into conversations" onClick={() => setGrouping(!m.grouped)}>
+                  <Icon name={m.grouped ? "chat" : "list"} /> {m.grouped ? "Conversations" : "Messages"}
                 </button>
               )}
             </div>
+            {searching && source?.kind === "search" && (
+              <div className="client-ctx" id="clientCtx">
+                <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts ·{" "}
+                <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button>
+              </div>
+            )}
             {inInbox && !searching && (
               <div className="lh-tabs" id="lhTabs" role="tablist" aria-label="Inbox">
-                {TABS.map(([id, label]) => (
+                {TABS.map(([id, label], i) => (
                   <button
                     key={id}
                     className="lh-tab"
@@ -178,9 +208,15 @@ export function App() {
                     aria-selected={tab === id}
                     aria-controls="rows"
                     tabIndex={tab === id ? 0 : -1}
-                    onClick={() => {
-                      setTab(id);
-                      store("mm_inbox_tab", id);
+                    onClick={() => setInboxTab(id)}
+                    onKeyDown={(e) => {
+                      const by = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+                      if (!by) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const next = TABS[(i + by + TABS.length) % TABS.length]![0];
+                      setInboxTab(next);
+                      document.getElementById(`tab-${next}`)?.focus();
                     }}
                   >
                     {label}<span className={id === "needs" && counts.needs !== "0" ? "n sun" : "n"}>{counts[id]}</span>
@@ -190,31 +226,27 @@ export function App() {
             )}
             <div className="lh-row"><span id="count">{list.isSuccess ? count : "—"}</span></div>
           </div>
+          <BulkBar m={m} />
           <MessageList
             rows={rows}
-            openPk={openPk}
+            openPk={m.openPk}
+            marks={m.marks}
             label={title}
-            folder={folderName}
-            isWhole={isWhole}
+            folder={folder}
+            isWhole={m.isWhole}
             accountChip={(r) => (source?.kind === "folder" ? null : aliases[r.account] || shortAddress(r.account))}
-            onOpen={openRow}
-            onFile={(r, kind) => file(r, kind)}
-            listRef={listRef}
+            onOpen={m.open}
+            onFile={m.file}
             empty={empty}
             footer={list.hasNextPage ? <button className="load-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{searching ? "Load more results" : "Load 200 more"}</button> : null}
           />
         </section>
-        <Reader
-          opened={opened}
-          row={openRowData}
-          folderTag={title}
-          onFile={(kind) => {
-            if (opened) file(openRowData ?? { pk: opened.pk }, kind);
-          }}
-          onBack={() => go({ source, opened: null })}
-        />
+        <Reader m={m} />
       </main>
       <RailScrim />
+      <SnoozeMenu onSnooze={m.snooze} onUnsnooze={m.unsnooze} />
+      <Palette commands={commands} />
+      <OverLimitDialog />
       <Floats />
       <Toaster />
     </>

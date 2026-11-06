@@ -32,3 +32,9 @@ export function dayGroup(ts: number, now: Date = new Date()): string {
   const days = Math.round((today.getTime() - day.getTime()) / 86400000);
   return days <= 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? "Past week" : "Earlier";
 }
+
+// Money the ledger counts, in millionths of a dollar, rounded up to the cent.
+export function usd(micros: number): string {
+  const cents = Math.ceil(micros / 10000);
+  return `$${Math.floor(cents / 100).toLocaleString("en-US")}.${String(cents % 100).padStart(2, "0")}`;
+}

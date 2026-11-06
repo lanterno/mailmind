@@ -2,33 +2,16 @@
 // link clicks, which is safe only because no script can run in it. So the attribute is exactly this, and guardFrames
 // strips allow-scripts off any frame that ever gets it.
 import { useEffect, useRef } from "react";
-import { stored } from "../../lib/store";
 import { theme as themeStore, type ThemeName } from "../../lib/theme";
 import { toast } from "../../lib/toast";
 import { linkRisk } from "./linkRisk";
 import { mailDoc, type FrameTheme, type MailPrefs } from "./mailDoc";
+import { FONTS, readPrefs, SIZES, type ReadPrefs } from "./readPrefs";
 
-const SIZE: Record<string, number> = { s: 15, m: 16.5, l: 18, xl: 20 };
-const FONT: Record<string, string> = {
-  sans: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
-  serif: '"Iowan Old Style",Charter,"Source Serif 4",Georgia,serif',
-  mono: 'ui-monospace,"SF Mono",Menlo,Consolas,monospace',
-};
 const MAX_HEIGHT = 5000;
 
-function readPrefs(): MailPrefs {
-  let saved: { size?: string; font?: string } = {};
-  try {
-    saved = JSON.parse(stored("mm_read") ?? "{}") ?? {};
-  } catch { /* a bad value is no setting */ }
-  const colors = stored("mm_mailtheme");
-  const font = saved.font && FONT[saved.font] ? saved.font : "sans";
-  return {
-    colors: colors === "dark" || colors === "original" ? colors : "auto",
-    font: FONT[font]!,
-    lineHeight: font === "mono" ? 1.55 : 1.62,
-    sizePx: SIZE[saved.size ?? "m"] ?? 16.5,
-  };
+function mailPrefs(p: ReadPrefs): MailPrefs {
+  return { colors: p.colors, font: FONTS[p.font], lineHeight: p.font === "mono" ? 1.55 : 1.62, sizePx: SIZES[p.size] };
 }
 
 function frameTheme(name: ThemeName): FrameTheme {
@@ -64,8 +47,8 @@ function wireLinks(frame: HTMLIFrameElement, senderDomain: string | undefined) {
 
 export function MailFrame({ body, minHeight, pad }: { body: MailBody; minHeight: number; pad: number }) {
   const name = themeStore.useValue();
-  const prefs = readPrefs();
-  const srcDoc = mailDoc(body, prefs, frameTheme(name));
+  const prefs = readPrefs.useValue();
+  const srcDoc = mailDoc(body, mailPrefs(prefs), frameTheme(name));
   const frame = useRef<HTMLIFrameElement>(null);
   const fit = () => {
     const f = frame.current;

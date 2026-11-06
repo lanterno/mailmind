@@ -80,3 +80,5 @@ export const useThread = (account: string | undefined, threadId: string | undefi
 // Conversations on or off, kept under the key the current page uses.
 export const groupedPref = () => stored("mm_threadview") !== "0";
 export const saveGroupedPref = (on: boolean) => store("mm_threadview", on ? "1" : "0");
+
+export const useViews = () => useQuery({ queryKey: ["views"], queryFn: () => get("/api/views") });

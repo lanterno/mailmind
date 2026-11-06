@@ -4,29 +4,32 @@
 import { useEffect, useRef } from "react";
 import { avatarHue, dayGroup, initialsOf } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
-import type { Filing } from "./actions";
+import { toggleMark, type Filing } from "./actions";
 import { inDaySections, type Row } from "./rows";
 
 const rowId = (pk: number) => `row-${pk}`;
 
-function RowItem({ row, whole, selected, showAccount, onOpen, onFile }: {
+function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }: {
   row: Row;
   whole: boolean;
   selected: boolean;
+  isMarked: boolean;
   showAccount: string | null;
   onOpen: () => void;
   onFile: (kind: Filing) => void;
 }) {
   const needs = Boolean(row.action);
   const what = whole ? " conversation" : "";
-  const className = `row cmsg${row.seen ? "" : " unread"}${needs ? " needs" : ""}${selected ? " sel" : ""}`;
+  const className = `row cmsg${row.seen ? "" : " unread"}${needs ? " needs" : ""}${selected ? " sel" : ""}${isMarked ? " marked" : ""}`;
   const act = (kind: Filing) => (e: React.MouseEvent) => {
     e.stopPropagation();
     onFile(kind);
   };
   return (
-    <div id={rowId(row.pk)} role="option" aria-selected={selected} className={className} data-pk={row.pk} data-tid={row.threadId || undefined} onClick={onOpen}>
-      <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span></div>
+    <div id={rowId(row.pk)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-pk={row.pk} data-tid={row.threadId || undefined} onClick={onOpen}>
+      <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span>
+        <span className={isMarked ? "cbx on" : "cbx"} aria-hidden="true" title="Select (x)" onClick={(e) => { e.stopPropagation(); toggleMark(row.pk); }}>{isMarked ? "✓" : ""}</span>
+      </div>
       <div className="cmsg-body">
         <div className="r1">
           <span className="from">{row.fromName}</span>
@@ -51,16 +54,16 @@ function RowItem({ row, whole, selected, showAccount, onOpen, onFile }: {
   );
 }
 
-export function MessageList({ rows, openPk, label, folder, isWhole, accountChip, onOpen, onFile, listRef, empty, footer }: {
+export function MessageList({ rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, empty, footer }: {
   rows: Row[];
   openPk: number | null;
+  marks: ReadonlySet<number>;
   label: string;
   folder: string;
   isWhole: (r: Row) => boolean;
   accountChip: (r: Row) => string | null;
   onOpen: (r: Row) => void;
   onFile: (r: Row, kind: Filing) => void;
-  listRef: React.RefObject<HTMLDivElement | null>;
   empty: React.ReactNode;
   footer: React.ReactNode;
 }) {
@@ -76,13 +79,13 @@ export function MessageList({ rows, openPk, label, folder, isWhole, accountChip,
   const active = openPk !== null && rows.some((r) => r.pk === openPk) ? rowId(openPk) : undefined;
   return (
     <div id="rows">
-      <div className="rows-box" ref={listRef} role="listbox" tabIndex={0} aria-label={label} aria-activedescendant={active}>
+      <div className="rows-box" role="listbox" tabIndex={0} aria-label={label} aria-activedescendant={active}>
         {rows.flatMap((row) => {
           const here = sections && row.ts !== null ? dayGroup(row.ts) : "";
           const heading = here && here !== section ? <div key={`g-${here}`} className="rgrp" role="presentation">{here}</div> : null;
           if (here) section = here;
           const item = (
-            <RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} />
+            <RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} />
           );
           return heading ? [heading, item] : [item];
         })}

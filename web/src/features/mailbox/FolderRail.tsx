@@ -4,7 +4,10 @@ import { Button, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-compone
 import { go, pathOf, type ListSource } from "../../app/route";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
-import { useFolders } from "./data";
+import { post } from "../../api/client";
+import { toast } from "../../lib/toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useFolders, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 
 const ALL = "__all__";
@@ -63,6 +66,55 @@ function RailRow({ source, on, icon, label, count }: { source: ListSource; on: b
   );
 }
 
+// A view that changes with the day says so in its query.
+export function viewQuery(v: { q: string; dynamic?: string }, now = new Date()): string {
+  if (v.dynamic !== "last7" && v.q !== "__LAST7__") return v.q;
+  return `after:${new Date(now.getTime() - 7 * 864e5).toISOString().slice(0, 10)}`;
+}
+
+function Views({ source, account }: { source: ListSource | null; account: string }) {
+  const qc = useQueryClient();
+  const { data } = useViews();
+  const views = data?.views ?? [];
+  if (!views.length) return null;
+  const remove = async (id: string) => {
+    try {
+      await post("/api/views", { verb: "delete", id });
+      void qc.invalidateQueries({ queryKey: ["views"] });
+      toast("View removed");
+    } catch {
+      toast("Couldn’t remove the view");
+    }
+  };
+  return (
+    <>
+      <div className="frail-acct">Views</div>
+      {views.map((v) => {
+        const q = viewQuery(v);
+        const to: ListSource = { kind: "search", q, account };
+        const on = source?.kind === "search" && source.q === q;
+        return (
+          <a
+            key={v.id}
+            className={on ? "frow on" : "frow"}
+            data-view={v.id}
+            href={pathOf({ source: to, opened: null })}
+            aria-current={on ? "page" : undefined}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              go({ source: to, opened: null });
+            }}
+          >
+            <span className="ic2"><Icon name={v.id.startsWith("__lane_") ? "tag" : "search"} /></span><span className="fn">{v.name}</span>
+            {!v.builtin && <span className="vdel" aria-hidden="true" title="Remove view" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void remove(v.id); }}>×</span>}
+          </a>
+        );
+      })}
+    </>
+  );
+}
+
 export function FolderRail({ accounts, aliases, source }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null }) {
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : source?.kind === "allInboxes" ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
@@ -90,6 +142,7 @@ export function FolderRail({ accounts, aliases, source }: { accounts: string[]; 
         ))}
         {data && <RailRow source={to("__snoozed__")} on={folder === "__snoozed__"} icon="clock" label="Snoozed" count={data.snoozed} />}
         {views.map(([name, icon, label, n]) => (n ? <RailRow key={name} source={to(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
+        <Views source={source} account={account ?? ""} />
       </nav>
     </aside>
   );
