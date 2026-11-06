@@ -140,6 +140,15 @@ check-web:
 gen-web:
     node web/scripts/gen-legacy.mjs
 
+# Write web/src/api/types.gen.ts from the JSON answers the whole test suite sees (about 7 minutes)
+gen-api:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    notes="$(mktemp)"
+    MAILMIND_RECORD_API="$notes" uv run pytest -q -p no:randomly
+    uv run python tests/gen_api_types.py "$notes" web/src/api/types.gen.ts
+    rm -f "$notes"
+
 # Everything a change should pass before committing
 verify: lint compile test check-frontend check-web
 
