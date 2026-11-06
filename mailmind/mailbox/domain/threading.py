@@ -10,18 +10,27 @@ lexicographically-smallest id in it, the ids its rows only refer to included), N
 member set, so a thread keeps the SAME id as replies arrive, and mints the same one again when
 it is synced whole after every copy went: its root is the same whichever rows were there first.
 
-An id is sticky once given. When a thread's rows take another id (two threads merged, or a
-thread that gained a Gmail thread id), the state kept under the id no row holds any more moves
-to the id its rows hold now, in the same transaction: mutes, follow-ups and Reply Later, thread
-summaries and the reply drafted ahead.
+Two ways in, and for mail that only arrives they end with the same threads under the same ids:
+  `conversations` and `place` take what just arrived and the ids of the threads it touches, which
+  is all a sync has to read: everything a thread holds is one thread already.
+  `regroup` takes every copy the account holds. It is the repair.
+
+An id is sticky once given, and goes only when a merge absorbs it (two threads joined, or a thread
+that gained a Gmail thread id). The survivor is a Gmail id over an rf: id, the smallest of several
+rf: ids, and of two Gmail threads joined by headers the one that comes later in store order. Whoever
+keeps state under the absorbed id moves it in the same transaction (events.ConversationsMerged).
 """
 import hashlib
 import re
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Collection, Iterable, Mapping
+from dataclasses import dataclass, field
 
 _ID = re.compile(r"<[^<>\s]+>")
 _WELL = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
+_GMAIL_NAME = "gm:"          # how a copy names its Gmail thread: no Message-ID starts so
+_THREAD_NODE = "\0"          # a thread among the ids in the union-find: no id starts so, and nothing mints from one
+
+REFERENCES_MAX = 1000        # how many of a References header count, nearest first: a forged one can be as long as it likes
 
 
 def _ids(blob: str | None) -> list[str]:
@@ -52,7 +61,16 @@ class Copy:
 
     def references(self) -> list[str]:
         """The ids it says it follows."""
-        return _ids(self.in_reply_to) + _ids(self.refs)
+        return _ids(self.in_reply_to) + _ids(self.refs)[-REFERENCES_MAX:]
+
+    def names(self) -> set[str]:
+        """Everything another copy can meet it by: two copies that share a name are one thread."""
+        names = set(self.references())
+        if self.key.startswith("<"):
+            names.add(self.key)
+        if self.thrid:
+            names.add(_GMAIL_NAME + self.thrid)
+        return names
 
 
 def _in_store_order(copies: Iterable[Copy]) -> list[Copy]:
@@ -81,10 +99,17 @@ class _UF:
         self.p[rb] = ra
 
 
+@dataclass(slots=True)
+class Conversation:
+    """Copies placed together: `arrivals`, and `held`, the ids of the threads they touch."""
+    root: str
+    arrivals: list[Copy] = field(default_factory=lambda: list[Copy]())
+    held: set[str] = field(default_factory=lambda: set[str]())
+
+
 @dataclass(frozen=True, slots=True)
 class Placement:
-    """`given`: each copy's thread id now, by pk. `merged`: each id that no copy holds any more, and the id its
-    copies took: one a split left on some copies still has them, and isn't here."""
+    """`given`: each copy's thread id now, by pk. `merged`: each id absorbed, and the id that absorbed it."""
     given: dict[int, str]
     merged: dict[str, str]
 
@@ -102,45 +127,77 @@ class Threader:
         h = hashlib.sha1(root.encode("utf-8", "replace")).hexdigest()[:16]
         return f"rf:{self._account}:{h}"
 
-    def regroup(self, copies: Iterable[Copy]) -> Placement:
-        """Every copy the account holds, regrouped from what each names."""
-        rows = _in_store_order(copies)
+    def conversations(self, arrivals: Iterable[Copy], touching: Mapping[str, Collection[str]]) -> list[Conversation]:
+        """Copies that belong together, with the threads they touch: `touching` says, for each name the arrivals
+        name, the ids of the threads that hold a copy naming it. Two threads touched by one conversation are one
+        thread from now on. An arrival's own rf: id counts as touched, for one whose references changed."""
+        arrivals = list(arrivals)
         uf = _UF()
-        # Tier 2 — union each row's self-id with its In-Reply-To / References parents.
-        for m in rows:
+        for m in arrivals:
             uf.union(m.key, m.key)
-            for p in m.references():
-                uf.union(m.key, p)
-        # Tier 1 — union all rows sharing a Gmail thrid (authoritative, same account).
-        thrid_groups: dict[str, list[Copy]] = {}
-        for m in rows:
-            if m.thrid:
-                thrid_groups.setdefault(m.thrid, []).append(m)
-        for members in thrid_groups.values():
-            for m in members[1:]:
-                uf.union(members[0].key, m.key)
-        # a component backed by a Gmail thrid gets the authoritative gm: label
-        root_thrid = {uf.find(members[0].key): g for g, members in thrid_groups.items()}
-        # STICKY thread_id: once a component has an rf: id, keep it as the thread grows (the union-find
-        # root is the lexicographically-smallest member id, which a new reply CAN change — so we must
-        # NOT re-derive it each time). Only a brand-new component with no prior id mints a fresh hash.
-        comp_existing: dict[str, set[str]] = {}
-        for m in rows:
-            if (m.thread_id or "").startswith("rf:"):
-                comp_existing.setdefault(uf.find(m.key), set()).add(m.thread_id or "")
-        given: dict[int, str] = {}
-        for m in rows:
+            for name in m.names():
+                uf.union(m.key, name)
+        for name, ids in touching.items():
+            for tid in ids:
+                uf.union(name, _THREAD_NODE + tid)
+        found: dict[str, Conversation] = {}
+        for m in arrivals:
             root = uf.find(m.key)
-            if root in root_thrid:
-                given[m.pk] = self._gmail_id(root_thrid[root])
-            elif comp_existing.get(root):
-                given[m.pk] = min(comp_existing[root])      # reuse the sticky id (deterministic if a merge joined two)
-            else:                                           # brand-new component: hash its root once
-                given[m.pk] = self._minted(root)
+            conversation = found.setdefault(root, Conversation(root))
+            conversation.arrivals.append(m)
+            if m.thread_id and m.thread_id.startswith("rf:"):
+                conversation.held.add(m.thread_id)
+        for name, ids in touching.items():
+            conversation = found.get(uf.find(name))
+            if conversation:
+                conversation.held.update(ids)
+        return list(found.values())
+
+    def _gmail_ids(self, conversation: Conversation) -> set[str]:
+        return ({self._gmail_id(m.thrid) for m in conversation.arrivals if m.thrid}
+                | {tid for tid in conversation.held if tid.startswith("gm:")})
+
+    def contested(self, conversations: Iterable[Conversation]) -> set[str]:
+        """The Gmail threads whose copies `place` must see, since it has to choose between them."""
+        return {tid for conversation in conversations if len(self._gmail_ids(conversation)) > 1
+                for tid in conversation.held if tid.startswith("gm:")}
+
+    def _survivor(self, conversation: Conversation, members: Iterable[Copy] = ()) -> str:
+        gmail = self._gmail_ids(conversation)
+        if len(gmail) > 1:                            # the later one, as a whole recompute of them would say
+            copies = [*conversation.arrivals, *(m for m in members if m.thread_id in conversation.held)]
+            thrids = list(dict.fromkeys(m.thrid for m in _in_store_order(copies) if m.thrid))
+            return self._gmail_id(thrids[-1]) if thrids else min(gmail)
+        if gmail:
+            return gmail.pop()
+        if conversation.held:
+            return min(conversation.held)             # reuse the sticky id (deterministic if a merge joined two)
+        return self._minted(conversation.root)        # brand-new: hash its root once
+
+    def place(self, conversations: Iterable[Conversation], members: Iterable[Copy] = ()) -> Placement:
+        """Where each conversation's arrivals go, and which ids that absorbs: every copy holding one takes the survivor.
+        `members`: the copies of the threads `contested` named."""
+        members = list(members)
+        given: dict[int, str] = {}
+        merged: dict[str, str] = {}
+        for conversation in conversations:
+            survivor = self._survivor(conversation, members)
+            given.update((m.pk, survivor) for m in conversation.arrivals)
+            merged.update((tid, survivor) for tid in conversation.held if tid != survivor)
+        return Placement(given, merged)
+
+    def regroup(self, copies: Iterable[Copy]) -> Placement:
+        """Every copy the account holds, regrouped from what each names. It trusts no id it finds but an rf: one, so a
+        gm: id whose every Gmail copy has gone gives way. An id absorbed here is one no copy holds any more: one a
+        split left on some copies still has them, and isn't in `merged`."""
+        rows = _in_store_order(copies)
+        given: dict[int, str] = {}
+        for conversation in self.conversations(rows, {}):
+            survivor = self._survivor(conversation)
+            given.update((m.pk, survivor) for m in conversation.arrivals)
         held = set(given.values())
         merged: dict[str, str] = {}
         for m in rows:
-            old = m.thread_id or ""
-            if old and old not in held:
-                merged.setdefault(old, given[m.pk])
+            if m.thread_id and m.thread_id not in held:
+                merged.setdefault(m.thread_id, given[m.pk])
         return Placement(given, merged)

@@ -70,6 +70,6 @@ class Muting:
         return True, d.get("account"), None
 
     def on_ingest(self, c: object, account: str) -> None:
-        """After recompute_threads assigns thread_ids, mark unseen members of any muted thread read, here and on the
+        """After threading assigns thread_ids, mark unseen members of any muted thread read, here and on the
         server, so freshly-arrived replies in a muted thread stay silent. In the caller's transaction."""
         self._mark_read(c, self._book.unread_in_muted_threads(c, account), now_iso())

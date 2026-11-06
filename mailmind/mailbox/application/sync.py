@@ -131,12 +131,13 @@ class Ingest:
 
 
     def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: str = "INBOX",
-                 with_body: bool = False, advance: bool = True) -> Stored:
+                 with_body: bool = False, advance: bool = True, stored: list[int] | None = None) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
         has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
         other folders get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
-        seen every UID up to a point may say the folder is synced to there."""
+        seen every UID up to a point may say the folder is synced to there.
+        `stored` gets the pks of what threading has yet to hear of."""
         rows: list[dict[str, Any]] = []
         max_uid, kept, junk = 0, 0, 0
         gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID
@@ -199,6 +200,8 @@ class Ingest:
             self._store.set_local_flags(c, pk, **r["flags"])
             self._store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
             self._store.set_recipients(c, pk, r["recipient_addrs"])
+            if stored is not None and self._store.needs_threading(c, pk, r["in_reply_to"], r["refs"]):
+                stored.append(pk)
             c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
                       (r["in_reply_to"], r["refs"], r["recipients"], pk))
             self._index.index_message(c, pk)               # refresh FTS so recipients is searchable immediately
@@ -281,7 +284,8 @@ class Ingest:
                     scan = "recent"
             else:
                 uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
-            result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"))
+            stored = []
+            result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored)
             if scan:
                 c = self._store.conn()
                 self._store.set_scan_state(c, acct["email"], folder, scan)
@@ -292,7 +296,7 @@ class Ingest:
             c = self._store.conn()
             if scan == "synced" and modseq:                # a whole scan has just read every flag
                 self._store.set_modseq(c, acct["email"], folder, modseq)
-            self._store.recompute_threads(c, acct["email"])   # regroup conversations for new mail
+            self._store.thread_stored(c, acct["email"], stored)   # new mail joins its conversations
             self._attention.on_ingest(c, acct["email"])  # keep new members of muted threads silent
             self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
             c.commit(); c.close()
@@ -325,9 +329,10 @@ class Ingest:
                 uid = None
             if uid is None:
                 return 0
-            self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False)
+            stored = []
+            self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False, stored=stored)
             c = self._store.conn()
-            self._store.recompute_threads(c, acct["email"])
+            self._store.thread_stored(c, acct["email"], stored)
             self._attention.on_ingest(c, acct["email"])
             self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
             c.commit()
