@@ -37,32 +37,32 @@ python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by f
 python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
-Tests — plain scripts, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
+Tests — the scripts are `tests/**/script_*.py`, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
 all through `tests/test_legacy_suites.py`, each in its own interpreter with a temp
 `MAILMIND_HOME`, because on import each makes a temp directory the data directory
 (`settings.configure`) and some replace module functions with fakes:
 
 ```bash
-python3 tests.py                  # classifier behaviour (27 assertions)
-python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
-python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
-python3 test_expire.py            # expiry rules (15)
-python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
-python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (16)
-python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
-python3 test_send_guard.py        # the composer's send-time checks, run in node (19)
-python3 test_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
-python3 test_draft_resume_ui.py   # the composer's reopen helpers, run in node (8)
-python3 test_hardening.py         # security and data-loss fixes, one test or more per fix (37)
+python3 tests/unit/curation/script_classifier.py                  # classifier behaviour (27 assertions)
+python3 tests/security/script_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
+python3 tests/unit/content/script_css_sanitizer.py     # CSS sanitizer unit tests (40)
+python3 tests/unit/curation/script_expire.py            # expiry rules (15)
+python3 tests/unit/calendar/script_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
+python3 tests/unit/discovery/script_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (16)
+python3 tests/unit/compose/script_send_after.py        # /api/send refuses passed and far-off send times (5)
+python3 tests/unit/compose/script_send_guard.py        # the composer's send-time checks, run in node (19)
+python3 tests/unit/compose/script_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
+python3 tests/unit/compose/script_draft_resume_ui.py   # the composer's reopen helpers, run in node (8)
+python3 tests/security/script_hardening.py         # security and data-loss fixes, one test or more per fix (37)
 ```
 
 `just test -k hardening` picks suites by file name; within a suite there is no single-test
-flag. `tests.py` and `tests_sanitize.py` are linear scripts —
-comment out cases or copy one into a REPL. `test_css_sanitizer.py`, `test_expire.py`,
-`test_upcoming.py`, `test_contacts_known.py`,
-`test_send_after.py`, `test_send_guard.py`, `test_draft_resume.py`, `test_draft_resume_ui.py` and
-`test_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
-renaming. `test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
+flag. `script_classifier.py` and `script_sanitize.py` are linear scripts —
+comment out cases or copy one into a REPL. `script_css_sanitizer.py`, `script_expire.py`,
+`script_upcoming.py`, `script_contacts_known.py`,
+`script_send_after.py`, `script_send_guard.py`, `script_draft_resume.py`, `script_draft_resume_ui.py` and
+`script_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
+renaming. `script_send_guard.py` and `script_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
 `/* draft-resume:pure:start */` …) out of `web/assets/legacy/pure.js` and run it in node. That file is written from
 `web/src/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
 twins beside them; edit those and run `just gen-web`. The send guard's two suites share
@@ -70,7 +70,11 @@ twins beside them; edit those and run `just gen-web`. The send guard's two suite
 
 ### The pytest suite in `tests/`
 
-The rest of `tests/` pins today's behaviour ahead of the refactor. Each test sees only fictional
+`tests/unit/<context>/` holds each context's tests, `contract/` one promise through every adapter (and the fakes against
+themselves), `security/` what must never get through, `characterization/` the app as it answers (goldens and the hard-won
+fixes) and `e2e/` the whole program. `tests/MAPPING.md` says where each of the old root suites' tests now lives.
+
+They pin today's behaviour ahead of the refactor. Each test sees only fictional
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
 MailMind module loads:
 
@@ -93,7 +97,7 @@ The fixtures, from the bottom up:
   this is. In the world's config Cy's Gmail asks for IMAPClient, so the new door's run reaches it
   through IMAPClient and the old door's through imaplib. Its CSRF token is fixed, and the clock
   is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves
-  it. `tests/test_front_door.py` runs each door as a program instead.
+  it. `tests/e2e/test_front_door.py` runs each door as a program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
   Without `ai` there is no key, and AI calls get a 401.
@@ -106,11 +110,11 @@ A known bug is a `xfail(strict=True)` test that states the right behaviour, so f
 fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
 `test_hwf_*.py` hold the hard-won fixes, one file per layer.
 
-`tests/test_queue_state_machine.py` runs Hypothesis over the offline queue and Undo: random moves, flag
+`tests/unit/mailbox/test_queue_state_machine.py` runs Hypothesis over the offline queue and Undo: random moves, flag
 changes, outages, refusals, crashes, syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
-`tests/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own:
+`tests/e2e/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
@@ -124,7 +128,7 @@ These tests are marked `browser` and skipped unless pytest runs with `--browser`
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
 to stay fast.
 
-`tests/test_mail_session_dovecot.py` holds the MailSession contract against a real server,
+`tests/contract/test_mail_session_dovecot.py` holds the MailSession contract against a real server,
 Dovecot 2.3 in Docker (pinned by digest), through each adapter, and checks what each call left
 through a connection of its own. Its tests are marked `dovecot` and skipped unless pytest runs
 with `--dovecot`; `just test-dovecot` runs them, and needs Docker running. One container serves
@@ -134,8 +138,8 @@ There is no build step. `pyproject.toml` declares the runtime packages and, in i
 the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
 `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
 then `lint-imports` (import-linter) on the `mailmind` package's layers, then `pyright`: basic rules across the package
-and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New pytest-native tests go in `tests/`;
-pytest's `--import-mode=importlib` keeps that directory from shadowing the root's `tests.py`.
+and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New tests are pytest-native, in the folder of `tests/` they belong to;
+pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
 `web/assets/legacy/pure.js` is what `web/src/compose` gives; it installs `web/node_modules` from the lockfile if they
@@ -155,7 +159,7 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its own
   commit, and the `uv.lock` change goes in the next. But `python3 server.py`, the old front door,
   is the kill switch while the new one carries daily use, so nothing it imports may import a
-  third-party package; `tests/test_front_door.py` checks that.
+  third-party package; `tests/e2e/test_front_door.py` checks that.
 - **The page runs as it stands.** `web/index.html` is the markup, `web/assets/styles/` the CSS (`fonts.css` the
   self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from system fonts), and `web/assets/legacy/` the
   scripts: `theme.js`, `pure.js` (written from `web/src/compose`) and `app.js`, ~310KB of classic script. No build is needed:
@@ -269,7 +273,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   numbers each event `<run>-<n>` and keeps the last 512. A tab resumes after the `Last-Event-ID`
   its EventSource sends; one the hub can't resume (an earlier run, or further back than it keeps)
   gets one `resync`. `sse.TOPICS` lists every topic and `publish` refuses any other;
-  `tests/test_sse.py` checks that `connectEvents` in `app.js` listens for each, and for
+  `tests/unit/platform/test_sse.py` checks that `connectEvents` in `app.js` listens for each, and for
   `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
   run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
@@ -345,8 +349,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   resets both before each test. It opens a session (`open_session(acct)`) the same way for both:
   TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
-  `tests/test_mail_session_contract.py` runs every case through each against the fake, and
-  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing_commands` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `offline`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
+  `tests/contract/test_mail_session_contract.py` runs every case through each against the fake, and
+  `tests/contract/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing_commands` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `offline`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
@@ -397,7 +401,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
-  every import of a root module from inside the package, and it is now empty; `tests/test_ratchet.py` fails when the
+  every import of a root module from inside the package, and it is now empty; `tests/unit/test_ratchet.py` fails when the
   code and the list differ.
 
 ### Routing
@@ -446,7 +450,7 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - A migration that builds a table afresh says so in `migrations.REBUILT`, as m38 does `msg_fts`: the upgrade check
   reports `rebuilt` rather than a change of count, and leaves out the index's own tables.
 - A migration that ends a table says so in `migrations.RETIRED`. The upgrade check then reports it
-  as retired rather than as rows lost, and `tests/test_db_upgrade.py` holds it to that.
+  as retired rather than as rows lost, and `tests/unit/platform/test_db_upgrade.py` holds it to that.
 - Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
   to `backups/mailmind-v{N}-{UTC time}.db` beside it, readable by its owner only, keeping the
   newest 3 (`backup.py` says how to roll back).
@@ -458,7 +462,7 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - `msg_fts` keeps no copy of the mail (m38: `content=''`, `contentless_delete=1`, SQLite 3.43 or newer, which `init`
   checks). Read rowids and ranks from it and columns from `messages`; its own columns read as NULL, and `snippet()`
   and `highlight()` have nothing to work on. `python3 -m mailmind db compact` (`just db-compact`) gives back freed room.
-- `tests/test_db_upgrade.py` upgrades a database seeded with data from every version. A
+- `tests/unit/platform/test_db_upgrade.py` upgrades a database seeded with data from every version. A
   migration that derives a column on purpose adds it to `DERIVED` there.
 
 ### Concurrency
@@ -494,7 +498,7 @@ again for it as it ends.
   A job that waits on a gate from inside a job raises `RuntimeError` instead of hanging; one that
   takes another account's gate with `wait=False` may.
 - Tests ask `gates.held(account)`, and hold the gate with `held_elsewhere()` from
-  `tests/gate.py`, which runs a job like any caller. `tests/test_chaos.py` holds what one
+  `tests/gate.py`, which runs a job like any caller. `tests/e2e/test_chaos.py` holds what one
   account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
 `mailbox.pool` (persistent per-account IMAP sessions) and `mailbox.warm` (multi-folder sync)
@@ -756,7 +760,7 @@ The new front door talks through the Anthropic SDK (`front.build` calls
 `UrllibModel`, since the old door runs with nothing installed. Only
 `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only the new door loads
 it. The two share the wire format (`adapters.wire`) and must behave the same:
-`tests/test_ai_contract.py` runs every case through each. The key is
+`tests/contract/test_ai_contract.py` runs every case through each. The key is
 `assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
 means no key, never a fall-through to the environment's. With no key the model is

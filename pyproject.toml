@@ -39,7 +39,7 @@ select = ["F"]
 testpaths = ["tests"]
 # The app's flat modules, and the helpers beside the tests (guard, fakes, fixtures).
 pythonpath = [".", "tests"]
-# importlib mode: test modules are imported by path, so tests/ never shadows the root's tests.py.
+# importlib mode: test modules are imported by path, so a folder like tests/unit/calendar never shadows a module.
 addopts = ["--import-mode=importlib", "-ra"]
 markers = [
     "browser: drives the page in Chromium; skipped unless pytest runs with --browser",
@@ -59,7 +59,7 @@ strict = ["mailmind/kernel", "mailmind/assistant/domain", "mailmind/attention/do
 
 [tool.importlinter]
 # The package's own layers. Which legacy modules it imports is the ratchet's job
-# (tests/test_ratchet.py), since those modules sit outside the package. External packages are
+# (tests/unit/test_ratchet.py), since those modules sit outside the package. External packages are
 # in the graph too, so a contract can say who may import one.
 root_packages = ["mailmind"]
 include_external_packages = true

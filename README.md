@@ -629,17 +629,17 @@ it altogether. **Nothing personal is committed.**
 ## Testing
 
 ```bash
-python3 tests.py               # behavioral classifier suite
-python3 tests_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
-python3 test_css_sanitizer.py  # CSS sanitizer unit tests
-python3 test_expire.py         # expiry rules: storage, matching, age selection
-python3 test_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
-python3 test_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
-python3 test_send_after.py     # send-later times: passed or far-off ones are refused
-python3 test_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
-python3 test_draft_resume.py   # reopened drafts: text and quote, files, Bcc, threading, refusals
-python3 test_draft_resume_ui.py # the composer's side of reopening a draft (needs node)
-python3 test_hardening.py      # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
+python3 tests/unit/curation/script_classifier.py               # behavioral classifier suite
+python3 tests/security/script_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
+python3 tests/unit/content/script_css_sanitizer.py  # CSS sanitizer unit tests
+python3 tests/unit/curation/script_expire.py         # expiry rules: storage, matching, age selection
+python3 tests/unit/calendar/script_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
+python3 tests/unit/discovery/script_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
+python3 tests/unit/compose/script_send_after.py     # send-later times: passed or far-off ones are refused
+python3 tests/unit/compose/script_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
+python3 tests/unit/compose/script_draft_resume.py   # reopened drafts: text and quote, files, Bcc, threading, refusals
+python3 tests/unit/compose/script_draft_resume_ui.py # the composer's side of reopening a draft (needs node)
+python3 tests/security/script_hardening.py      # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
 ```
 
 Each exits non-zero on failure. With [`just`](https://just.systems) and
