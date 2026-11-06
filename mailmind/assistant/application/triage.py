@@ -54,6 +54,9 @@ class Triage:
     BATCH_SHARE = 2            # a batch books at most 1/this of what today's limit leaves, the rest for whoever asks
     BATCH_SEND_GIVE_UP = 900   # seconds: a batch still being sent after this was cut off by a crash
 
+    ASSESS_BATCH = 300                        # messages triaged in one round
+    ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
+
     def __init__(self, calls: Calls, gateway, answers, connect):
         self._calls = calls
         self._gateway = gateway
@@ -247,3 +250,22 @@ class Triage:
                     "estimate_micros": out["estimate_micros"] if out else 0}
         finally:
             c.close()
+
+    def round(self):
+        """The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. It runs
+        on its own lane, so a slow model never holds up a sync, and with AI off it tries nothing. A full
+        batch means more are waiting, so the next round follows at once. While the user is using AI the
+        round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
+        waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
+        backlog goes out in the next batch rather than through this round's calls."""
+        log = lambda m: print(f"[assess] {m}", flush=True)     # noqa: E731
+        self.batch_collect(log)
+        why = self._gateway().held_back("triage", self._calls.MODEL)
+        if why:
+            return self.ASSESS_YIELD if why == "yielding" else None
+        if not os.environ.get("MAILMIND_NO_BATCHES"):
+            self.batch_submit(log=log)
+        done = self.summarize_pending(limit=self.ASSESS_BATCH, workers=self.WORKERS)
+        if done:
+            print(f"[assess] {done} summarized", flush=True)
+        return 0 if done >= self.ASSESS_BATCH else None

@@ -1,0 +1,373 @@
+"""Drafting ahead: an editable reply made ready for important action mail, while the user reads it (dwell kick),
+proactively for the top-K reply-worthy messages (background tick), and banked from on-demand generations. NEVER
+auto-sends: every path ends in the composer for review.
+
+The durable `draft_ahead` table is the ONLY cache (drafts survive restarts). It is keyed on
+(account, 't:<thread_id>'|'m:<message_id>'), natural keys, never pk, and every serve revalidates
+fingerprint + TTL + eligibility + thread-anchor, so a stale draft is never surfaced. Single-flight per key; the cost
+governor decides when it may run; fingerprint = thread state.
+"""
+import threading
+import time
+
+from mailmind.assistant.application.calls import Calls
+from mailmind.assistant.application.ports import Mail, NotSent
+from mailmind.assistant.application.reply_draft import ReplyDrafts
+from mailmind.assistant.domain import fingerprint
+from mailmind.kernel import attention as verdict
+from mailmind.platform import sse
+from mailmind.platform.workers.singleflight import SingleFlight
+
+_WARM = object()                                      # what warm() finds: a fresh draft is stored
+_DRAFT_CAND_SQL = """
+SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
+       m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
+FROM messages m
+JOIN summaries s ON s.message_pk = m.pk
+WHERE m.folder = 'INBOX'
+  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
+  AND """ + verdict.reply_worthy_sql() + """
+  AND m.ts >= ?
+  AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
+  AND (COALESCE(m.thread_id,'') = '' OR m.pk = (
+        SELECT m2.pk FROM messages m2 WHERE m2.account = m.account
+          AND m2.thread_id = m.thread_id ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1))
+  AND NOT EXISTS (SELECT 1 FROM muted mu
+        WHERE mu.account = m.account AND mu.thread_id = m.thread_id)
+ORDER BY s.importance DESC, m.ts DESC
+LIMIT 40
+"""
+
+
+class DraftAhead:
+    DRAFT_DB_TTL = 24 * 3600         # servable age; fp is the correctness gate, this is temporal-drift hygiene
+    DRAFT_FAIL_TTL = 60              # GET-route re-kick suppression (interactive dwell recovers fast)
+    DRAFT_FAIL_BASE = 300            # tick backoff after the 1st failure: 5 min…
+    DRAFT_FAIL_CAP = 6 * 3600        # …doubling per consecutive failure, capped at 6h (persisted in the table)
+    DRAFT_TICK_INTERVAL = 180        # one tick cycle per 3 min
+    DRAFT_TICK_STARTUP_DELAY = 120   # let the startup sync + summarize backlog settle first
+    DRAFT_TOPK = 6                   # maintain warm drafts for at most the 6 best candidates (batch=1 per cycle)
+    DRAFT_TOPK_PER_ACCOUNT = 2       # fairness across accounts
+    DRAFT_RECENCY_WINDOW = 3 * 86400 # only mail from the last 72h; older mail drafts on demand
+    DRAFT_TICK_TRIP = 3              # consecutive led-generation failures → circuit breaker…
+    DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
+
+    def __init__(self, calls: Calls, gateway, answers, connect, mail: Mail, replies: ReplyDrafts, looks_human):
+        self._calls = calls
+        self._gateway = gateway
+        self._answers = answers
+        self._connect = connect
+        self._mail = mail
+        self._replies = replies
+        self._looks_human = looks_human
+        self.DRAFT_FLIGHTS = SingleFlight()   # one generation at a time for each (account, ref_key)
+
+    def _draft_key(self, row):
+        """Natural draft identity (account, ref_key) — survives reconcile/reset_folder
+        delete+reinsert; NEVER messages.pk (same rule as muted/followups/read_mutations).
+        Thread-scoped ('t:') so two pks in one thread can never double-spend claude.
+        Returns None for keyless malformed mail (pre-gen refuses; on-demand still works)."""
+        tid = (row["thread_id"] or "").strip()
+        if tid:
+            return (row["account"], "t:" + tid)
+        mid = (row["message_id"] or "").strip()
+        if mid:
+            return (row["account"], "m:" + mid)
+        return None
+
+    def _tick_backoff_active(self, da, now):
+        """Persisted per-key exponential backoff (tick only — the GET keeps the flat 60s)."""
+        if not da or not da["fail_ts"]:
+            return False
+        wait = min(self.DRAFT_FAIL_CAP, self.DRAFT_FAIL_BASE * (2 ** max(0, da["fail_count"] - 1)))
+        return (now - da["fail_ts"]) < wait
+
+    def _draft_eligible(self, row):
+        """Replyable to a real human + not already handled. (The client pre-filters action/importance.)
+        Your own message isn't: draft_ahead_gc drops as moot a draft for a thread ending in a Sent copy."""
+        if not row or row["is_junk"] or row["answered"] or row["snoozed_until"]:
+            return False
+        if (row["from_addr"] or "").lower() == row["account"].lower() or "sent" in (row["folder"] or "").lower():
+            return False
+        local = (row["from_addr"] or "").split("@")[0].lower()
+        if not local or not self._looks_human(local):   # excludes no-reply/notifications/role senders
+            return False
+        return True
+
+    def _draft_fp(self, c, account, thread_id, pk):
+        """Thread-state hash. Stable across reconcile/reset_folder (built only from
+        message_id/ts/count — never pk); flips when a message arrives, leaves, or is swapped.
+        Captured BEFORE generation (load-bearing: the 10-40s TOCTOU window can then only
+        cause a regeneration, never a stale serve). body_fetched stays in the standalone form
+        (a backfilled body → a better draft) but is excluded from the thread form (body
+        backfill would churn-invalidate the whole table)."""
+        if thread_id:
+            rows = c.execute("SELECT message_id, ts FROM messages WHERE account=? AND thread_id=?",
+                             (account, thread_id)).fetchall()
+            if not rows:
+                return "t2:gone"
+            return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
+        r = c.execute("SELECT message_id, body_fetched FROM messages WHERE pk=?", (pk,)).fetchone()
+        return fingerprint.message(r["message_id"] if r else None, r["body_fetched"] if r else 0)
+
+    def _gen_draft_ahead(self, account, pk, source="dwell"):
+        """Background generation (single-flight per natural key). Writes the durable cache;
+        never sends. Returns True on led-success, None on a NEUTRAL bail (follower joined an
+        in-flight generation / message became ineligible / already warm), False ONLY when this
+        call led a generation that actually failed — the tick's circuit breaker counts False,
+        ignores None (a neutral must neither trip nor reset the consecutive-failure count)."""
+        c = self._connect()
+        try:
+            row = self._mail.get_message(c, int(pk))
+            key = self._draft_key(row) if row else None
+            if not row or key is None or not self._draft_eligible(row):
+                return None                               # neutral: nothing to (pre-)generate
+            acct = account or row["account"]
+            tid = row["thread_id"] or None
+            fp = self._draft_fp(c, acct, tid, int(pk))         # captured BEFORE the 10-40s generation: a mid-gen
+            mid = row["message_id"]                       # thread change → fp mismatch on read → regen, never a stale serve
+        finally:
+            c.close()
+
+        def warm():                                       # a draft for the thread as it is now
+            c = self._connect()
+            try:
+                da = self._answers.draft_ahead_get(c, key[0], key[1])
+            finally:
+                c.close()
+            fresh = da and da["body"] and da["fp"] == fp and (int(time.time()) - da["created_ts"]) < self.DRAFT_DB_TTL
+            return _WARM if fresh else None
+
+        def make():
+            ok = False
+            try:
+                res, code = self._replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
+                                              feature="draft-ahead")
+                now = int(time.time())
+                c = self._connect()
+                try:
+                    if code == 200 and res.get("ok") and res.get("body"):
+                        self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+                                              res.get("model"), int(pk), mid, source, now)
+                        self._answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
+                                                                      # no orphan sweeps — a reset_folder reingest may be mid-flight
+                        ok = True
+                    else:
+                        self._answers.draft_ahead_fail(c, key[0], key[1], now)
+                    c.commit()
+                finally:
+                    c.close()
+                if ok:
+                    try:
+                        sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                    except Exception:
+                        pass
+            except NotSent:
+                return None                                   # neutral: AI is off, or the governor said not now
+            except Exception as e:
+                print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                try:
+                    c = self._connect()
+                    self._answers.draft_ahead_fail(c, key[0], key[1], int(time.time()))
+                    c.commit()
+                    c.close()
+                except Exception:
+                    pass
+            return ok
+
+        # The lead re-checks warm() first: a generation that stored its draft between our read above and
+        # our taking the lead must not be paid for twice.
+        led = self.DRAFT_FLIGHTS.run(key, make, warm, wait=45)
+        return led if isinstance(led, bool) else None     # neutral: already warm, or joined another's run
+
+    def _thread_anchor_pk(self, c, account, thread_id):
+        """The thread's latest message — the only pk a thread draft may be served/kicked for
+        (never pair the thread-latest draft with a composer quoting an older message)."""
+        r = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? "
+                      "ORDER BY ts DESC, pk DESC LIMIT 1", (account, thread_id)).fetchone()
+        return r["pk"] if r else None
+
+    def _reply_worthy(self, c, pk):
+        """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
+        opened mail; gates KICKS only, never serving."""
+        r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
+        return bool(r)
+
+    def get(self, qs, kick_ok=False):
+        """GET /api/ai/draft-ahead?pk=[&peek=1] → cached draft (ready) / kicks generation
+        (generating) / none. peek=1 is strictly read-only (reports inflight, never kicks).
+        kick_ok=False also behaves like peek for the SPAWN decision — the kick spends a real
+        claude call, so it demands the CSRF token (a cross-site <img> flood must not be able
+        to burn generations). Never generates synchronously, never sends; fingerprint + TTL +
+        eligibility + thread-anchor are revalidated on EVERY serve so a stale draft is never
+        surfaced."""
+        try:
+            pk = int((qs.get("pk") or ["0"])[0])
+        except Exception:
+            return {"ok": False, "error": "bad pk"}, 400
+        peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
+        if not pk:
+            return {"ok": True, "status": "none"}, 200
+        c = self._connect()
+        try:
+            row = self._mail.get_message(c, pk)
+            if not row:
+                return {"ok": True, "status": "none"}, 200
+            acct = row["account"]
+            tid = row["thread_id"] or None
+            if tid and pk != self._thread_anchor_pk(c, acct, tid):
+                return {"ok": True, "status": "none"}, 200
+            if not self._draft_eligible(row):
+                return {"ok": True, "status": "none"}, 200
+            key = self._draft_key(row)
+            if key is None:
+                return {"ok": True, "status": "none"}, 200
+            fp = self._draft_fp(c, acct, tid, pk)
+            da = self._answers.draft_ahead_get(c, key[0], key[1])
+            now = int(time.time())
+            if da and da["body"] and da["fp"] == fp and (now - da["created_ts"]) < self.DRAFT_DB_TTL:
+                self._answers.draft_ahead_touch(c, key[0], key[1], now)
+                c.commit()
+                return {"ok": True, "status": "ready", "body": da["body"], "tone": da["tone"]}, 200
+            if self.DRAFT_FLIGHTS.busy(key):
+                return {"ok": True, "status": "generating"}, 200
+            if peek:
+                return {"ok": True, "status": "none"}, 200
+            if da and da["fail_ts"] and (now - da["fail_ts"]) < self.DRAFT_FAIL_TTL:
+                return {"ok": True, "status": "none"}, 200   # recently failed → back off (client falls to on-demand)
+            if not self._reply_worthy(c, pk):
+                return {"ok": True, "status": "none"}, 200
+            threading.Thread(target=self._gen_draft_ahead, args=(acct, pk), daemon=True).start()
+            return {"ok": True, "status": "generating"}, 200
+        finally:
+            c.close()
+
+    def _pick_draft_candidate(self):
+        """One tick's worth of work: the single best reply-worthy message that isn't already
+        warm/inflight/backing-off (batch=1). Pure SQL + Python — no AI cost. Steady state
+        finds nothing (fp dedup) and exits in ~1ms."""
+        now = int(time.time())
+        c = self._connect()
+        try:
+            rows = c.execute(_DRAFT_CAND_SQL, (now - self.DRAFT_RECENCY_WINDOW,)).fetchall()
+            picked, seen, warm_total, warm_acct = None, set(), 0, {}
+            for r in rows:
+                if warm_total >= self.DRAFT_TOPK:
+                    break                                            # warm set is full — nothing to do
+                if not self._draft_eligible(r):
+                    continue                                         # human-sender check (Python-only)
+                key = self._draft_key(r)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                da = self._answers.draft_ahead_get(c, key[0], key[1])
+                fp = self._draft_fp(c, r["account"], r["thread_id"] or None, r["pk"])
+                if da and da["body"] and da["fp"] == fp and now - da["created_ts"] < self.DRAFT_DB_TTL:
+                    warm_total += 1
+                    warm_acct[r["account"]] = warm_acct.get(r["account"], 0) + 1
+                    continue                                         # already warm — the restart-storm killer
+                if warm_acct.get(r["account"], 0) >= self.DRAFT_TOPK_PER_ACCOUNT:
+                    continue                                         # per-account fairness
+                if self._tick_backoff_active(da, now):
+                    continue                                         # persisted exponential backoff
+                if self.DRAFT_FLIGHTS.busy(key):
+                    continue
+                if picked is None:
+                    picked = r
+                    warm_total += 1
+                    warm_acct[r["account"]] = warm_acct.get(r["account"], 0) + 1
+            return picked
+        finally:
+            c.close()
+
+    def rounds(self):
+        """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
+        drafts at most one reply ahead, only when the cost governor would let it go (nobody is using
+        AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it), then
+        collects the expired drafts."""
+        fails, suspended_until = 0, 0.0
+
+        def draft_ahead_round():
+            nonlocal fails, suspended_until
+            now = time.time()
+            if now < suspended_until:
+                pass                                                 # circuit breaker open (an outage)
+            elif self._gateway().held_back("draft-ahead", self._calls.MODEL):
+                pass                                                 # yielding, away, at the limit, rejected
+            else:
+                cand = self._pick_draft_candidate()
+                if cand is not None:
+                    ok = self._gen_draft_ahead(cand["account"], cand["pk"], source="topk")
+                    if ok is True:
+                        fails = 0
+                    elif ok is False:                                # neutral (None) leaves the count untouched
+                        fails += 1
+                    if fails >= self.DRAFT_TICK_TRIP:
+                        suspended_until = time.time() + self.DRAFT_TICK_SUSPEND
+                        fails = 0
+                        print("[draft] tick suspended 30m after repeated failures", flush=True)
+                c = self._connect()
+                try:                                                 # close() rolls back a half-done GC — a leaked
+                    self._answers.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock
+                    c.commit()
+                finally:
+                    c.close()
+        return draft_ahead_round
+
+    def reply(self, body):
+        """Draft an editable reply to a thread/message via claude. Returns (result, code)."""
+        account = body.get("account")
+        thread_id = body.get("thread_id")
+        pk = body.get("pk")
+        tone = str(body.get("tone") or "balanced")[:16]
+        instruction = str(body.get("instruction") or "")[:400]
+        default_shape = (not instruction.strip()) and tone == "balanced"
+        row, fp, key = None, None, None
+        if pk is not None:
+            c = self._connect()
+            try:
+                row = self._mail.get_message(c, int(pk))
+                if not row:
+                    return {"ok": False, "error": "not found"}, 404
+                key = self._draft_key(row)
+                # fp captured BEFORE generation (same load-bearing rule as _gen_draft_ahead):
+                # a mid-generation thread change must mismatch on read → regenerate, never stale-serve.
+                fp = self._draft_fp(c, row["account"], row["thread_id"] or None, row["pk"])
+                # A fp-fresh banked draft answers a default-shaped request for free — the pre-gen
+                # paths already paid for it (and this covers SSE-outage strandings).
+                if default_shape and key is not None:
+                    da = self._answers.draft_ahead_get(c, key[0], key[1])
+                    if da and da["body"] and da["fp"] == fp and \
+                            (int(time.time()) - da["created_ts"]) < self.DRAFT_DB_TTL:
+                        self._answers.draft_ahead_touch(c, key[0], key[1], int(time.time()))
+                        c.commit()
+                        return {"ok": True, "body": da["body"], "tone": da["tone"] or tone,
+                                "model": da["model"] or "cache"}, 200
+            finally:
+                c.close()
+            account = account or row["account"]
+            thread_id = thread_id or row["thread_id"]      # prefer the whole thread for context
+            if not row["thread_id"]:
+                pk = row["pk"]                              # standalone message: draft from it alone
+            else:
+                pk = None
+        if not account or account not in {a["email"] for a in self._mail.accounts()}:
+            return {"ok": False, "error": "bad request"}, 400
+        # The mail is in its own account's rows. `account` is who's replying: From may name another.
+        res, code = self._replies.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
+                                      instruction=instruction, tone=tone, me=account)
+        # Bank a default-shaped success into the draft-ahead cache (the user already paid for
+        # this call; a closed-and-reopened composer or same-thread revisit is then free).
+        # Custom instruction / non-default tone are personal one-offs — never banked.
+        if code == 200 and res.get("ok") and res.get("body") and default_shape \
+                and row is not None and key is not None:
+            try:
+                c = self._connect()
+                self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+                                      res.get("model"), int(row["pk"]), row["message_id"],
+                                      "demand", int(time.time()))
+                c.commit()
+                c.close()
+            except Exception:
+                pass                                        # banking is best-effort; the reply itself already succeeded
+        return res, code
