@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Row } from "../mailbox/rows";
+import type { Row } from "../mailbox";
 import { extractAmount, fmtMoney, isRefund, ledger, monthName, parseMoney } from "./model";
 
 const row = (subject: string, date = "2026-11-02", snippet = "") => ({ pk: 1, subject, snippet, date }) as unknown as Row;
