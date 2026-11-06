@@ -16,8 +16,8 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.dirname(__file__))
 import accounts
 import mailclass
-import mailparse
-from mailparse import dec
+from mailmind.content import mime
+from mailmind.content.mime import dec
 import pool
 import store
 import threads
@@ -33,8 +33,8 @@ HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-
 
 def text_body(msg):
     plain, htmltxt = None, None
-    for part in mailparse.walk(msg):
-        container = part.get_content_maintype() == "multipart" and not mailparse.holds_no_parts(part)
+    for part in mime.walk(msg):
+        container = part.get_content_maintype() == "multipart" and not mime.holds_no_parts(part)
         if container or part.get_filename():
             continue
         try:
@@ -44,7 +44,7 @@ def text_body(msg):
             text = payload.decode(part.get_content_charset() or "utf-8", "replace")
         except Exception:
             continue
-        ct = "text/plain" if mailparse.holds_no_parts(part) else part.get_content_type()
+        ct = "text/plain" if mime.holds_no_parts(part) else part.get_content_type()
         if ct == "text/plain" and plain is None:
             plain = text
         elif ct == "text/html" and htmltxt is None:
@@ -76,7 +76,7 @@ def _has_invite(msg):
     """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
     try:
         return any(p.get_content_type() in ("text/calendar", "application/ics")
-                   or (p.get_filename() or "").lower().endswith(".ics") for p in mailparse.walk(msg))
+                   or (p.get_filename() or "").lower().endswith(".ics") for p in mime.walk(msg))
     except Exception:
         return False
 
@@ -196,7 +196,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             max_uid = max(max_uid, uid)
             flags = _flags_of(h.flags)
             msg = email.message_from_bytes(h.raw)
-            name, addr = mailparse.sender_of(msg)
+            name, addr = mime.sender_of(msg)
             has_lu = bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))
             subj = dec(msg.get("Subject", ""))
             b, conf, reason = mailclass.classify(addr.lower(), subj, dec(name), has_lu)
@@ -211,7 +211,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             except Exception:
                 iso, ts = None, 0
             rows.append({"uid": uid, "from_addr": addr.lower(), "from_name": dec(name),
-                         "unsub": mailparse.list_unsub(dec(msg.get("List-Unsubscribe")),
+                         "unsub": mime.list_unsub(dec(msg.get("List-Unsubscribe")),
                                                        dec(msg.get("List-Unsubscribe-Post"))),
                          "subject": subj, "date_iso": iso, "ts": ts, "bucket": b,
                          "confidence": conf, "reason": reason, "is_junk": isj, "flags": flags,
@@ -219,7 +219,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
                          "gmail_thread": h.gmail_thread,
                          "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
                          "refs": (msg.get("References") or "").replace("\n", " ").strip(),
-                         "recipient_addrs": mailparse.recipient_addrs(msg),
+                         "recipient_addrs": mime.recipient_addrs(msg),
                          "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:store.RECIPIENTS_CHARS]})
     c = store.conn()
     for r in rows:
@@ -254,7 +254,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
         store.fts_index(c, pk)               # refresh FTS so recipients is searchable immediately
         if invite:                           # Today & next reads invites from stored bodies only
             try:
-                _keep_body(c, pk, invite, mailparse.parse(invite))
+                _keep_body(c, pk, invite, mime.parse(invite))
             except Exception as e:
                 print(f"[ingest] keep invite {acct['email']} uid {r['uid']}: {e}", flush=True)
         c.commit()
@@ -441,14 +441,14 @@ def fetch_body(pk):
             except imaplib.IMAP4.error:       # refused: nothing to show, and nothing stored
                 raw = b""
         if not raw:
-            return mailparse.parse(b"")
-        parsed = mailparse.parse(raw)
+            return mime.parse(b"")
+        parsed = mime.parse(raw)
         c = store.conn()
         _keep_body(c, pk, raw, parsed)
         c.commit()
         c.close()
         return parsed
-    parsed = mailparse.parse(raw)
+    parsed = mime.parse(raw)
     _record_parts(pk, parsed)
     return parsed
 
@@ -483,7 +483,7 @@ def _keep_body(c, pk, raw, parsed):
     if parsed["attachments"]:
         c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
     c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))
-    store.set_recipients(c, pk, mailparse.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
+    store.set_recipients(c, pk, mime.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
     store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
 
 

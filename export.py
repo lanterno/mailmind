@@ -119,7 +119,7 @@ def export_eml(out, account=None, attachments=False):
     c = _ro_conn()
     n = 0
     try:
-        import mailparse
+        from mailmind.content import mime
         for r in _rows(c, account):
             raw, real = _raw_for(c, r)
             d = os.path.join(out, _safe(r["account"], "acct"), _safe(r["folder"] or "INBOX", "folder"))
@@ -129,8 +129,8 @@ def export_eml(out, account=None, attachments=False):
                 f.write(raw)
             if attachments and real:
                 try:
-                    for a in mailparse.parse(raw).get("attachments", []):
-                        payload, _ct = mailparse.extract_part(raw, a["part_id"])
+                    for a in mime.parse(raw).get("attachments", []):
+                        payload, _ct = mime.extract_part(raw, a["part_id"])
                         if not payload:
                             continue
                         ad = os.path.join(d, "att")

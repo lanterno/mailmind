@@ -50,7 +50,7 @@ import compose
 import smtpsend
 import outbox
 import search
-import mailparse
+from mailmind.content import mime
 import ics
 import summarize_thread
 import summarize_briefing
@@ -736,7 +736,7 @@ def _resolve_cids(pk, safe_html):
     c = store.conn(); raw = store.get_body(c, pk); c.close()
     if not raw:
         return safe_html
-    parts = mailparse.inline_parts(raw)        # {content_id: (content_type, bytes)}
+    parts = mime.inline_parts(raw)        # {content_id: (content_type, bytes)}
     if not parts:
         return safe_html
     used = [0]
@@ -768,7 +768,7 @@ def _invite_for(pk, parsed):
     if not raw:
         return None, None
     try:
-        payload, _ct = mailparse.extract_part(raw, cal["part_id"])
+        payload, _ct = mime.extract_part(raw, cal["part_id"])
         return ics.parse(payload.decode("utf-8", "replace")), cal["part_id"]
     except Exception:
         return None, None
@@ -1069,7 +1069,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
             continue
         try:
             raw = store.get_body(c, r["pk"])
-            payload, _ct = mailparse.extract_part(raw, r["part_id"])
+            payload, _ct = mime.extract_part(raw, r["part_id"])
             inv = ics.parse(payload.decode("utf-8", "replace"))
         except Exception:
             continue
@@ -1867,7 +1867,7 @@ def _extract_attachments(raw):
     except Exception:
         return []
     out, total = [], 0
-    for part in mailparse.walk(msg):
+    for part in mime.walk(msg):
         if part.get_content_maintype() == "multipart":
             continue
         disp = (part.get_content_disposition() or "").lower()
@@ -1875,7 +1875,7 @@ def _extract_attachments(raw):
         cid = (part.get("Content-ID") or "").strip()
         attached_email = part.get_content_type() == "message/rfc822"
         if disp == "attachment" or (fn and disp != "inline" and not cid) or attached_email:
-            data = mailparse.part_bytes(part)
+            data = mime.part_bytes(part)
             total += len(data)
             if total > MAX_ATTACH_BYTES:
                 break
@@ -2117,12 +2117,12 @@ def _cleanup_confirm_token(from_addr):
 
 
 def _parse_list_unsub(raw_bytes):
-    """From a raw RFC822 message → the resolvable unsubscribe method (`mailparse.list_unsub`)."""
+    """From a raw RFC822 message → the resolvable unsubscribe method (`mime.list_unsub`)."""
     try:
         msg = email.message_from_bytes(raw_bytes or b"")
     except Exception:
         return {"method": "none", "raw": ""}
-    return mailparse.list_unsub(mailparse.dec(msg.get("List-Unsubscribe")), mailparse.dec(msg.get("List-Unsubscribe-Post")))
+    return mime.list_unsub(mime.dec(msg.get("List-Unsubscribe")), mime.dec(msg.get("List-Unsubscribe-Post")))
 
 
 def _ip_is_forbidden(ip):
@@ -2253,7 +2253,7 @@ def _unsub_stored(c, rows):
         if m == "none":
             return _UNSUB_NONE                          # cached authoritative none → stop (no re-fetch)
         if m:
-            parsed = mailparse.list_unsub_stored(r["list_unsub_raw"])
+            parsed = mime.list_unsub_stored(r["list_unsub_raw"])
             if parsed["method"] != "none":
                 return parsed
         raw = store.get_body(c, r["pk"])
@@ -2319,7 +2319,7 @@ def _resolve_unsub(from_addr):
             return info, accts
         kept = store.sender_unsub_get(c, from_addr)
         if kept is not None:
-            return mailparse.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
+            return mime.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
         return _UNSUB_NONE, accts
     finally:
         c.close()
@@ -3184,7 +3184,7 @@ def draft_resume(body):
         return unreachable, 502
     try:
         msg = email.message_from_bytes(raw, policy=email.policy.default)
-        parsed = mailparse.parse(raw)
+        parsed = mime.parse(raw)
     except Exception as e:
         print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
         return unreadable, 422
@@ -4300,7 +4300,7 @@ class H(BaseHTTPRequestHandler):
         c.close()
         if not att or not raw:
             return self._json({"ok": False, "error": "no such part"}, 404)
-        data, _ = mailparse.extract_part(raw, part_id)
+        data, _ = mime.extract_part(raw, part_id)
         if data is None:
             return self._json({"ok": False, "error": "no such part"}, 404)
         if len(data) > MAX_ATTACH_BYTES:

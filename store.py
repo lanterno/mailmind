@@ -446,7 +446,7 @@ RECIPIENTS_CHARS = 20000     # of the To and Cc text kept for search: a long lis
 
 
 def set_recipients(c, pk, addrs):
-    """Who this copy of a message went to, one row each (`mailparse.recipient_addrs`). Bounded, since a
+    """Who this copy of a message went to, one row each (`mime.recipient_addrs`). Bounded, since a
     forged To can be as long as it likes."""
     c.execute("DELETE FROM message_recipients WHERE message_pk=?", (pk,))
     c.executemany("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)",
