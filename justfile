@@ -197,6 +197,10 @@ expire target="all":
 db-check-upgrade *args:
     {{py}} -m mailmind db check-upgrade {{args}}
 
+# Give back the room freed in the database file, with MailMind stopped (owner only)
+db-compact *args:
+    {{py}} -m mailmind db compact {{args}}
+
 # What the Claude API cost each day, by feature, from the usage ledger (`just ai-usage --days 30`)
 ai-usage *args:
     {{py}} -m mailmind ai usage {{args}}
