@@ -106,7 +106,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   one-dimensional verdict list, not an engine: `KEYS = (keep_senders, block_senders, keep_domains,
   block_domains)` and `add(token, verdict)`. There is no condition language, no action verb, no
   rules table, and no ingest-time evaluation beyond `curation.is_junk`. Where v1 hooks in:
-  **evaluate in `ingest.py` immediately after `isj = 1 if curation.is_junk(b) else 0`, and express
+  **evaluate in `Ingest._process` immediately after `isj = 1 if curation.is_junk(b) else 0`, and express
   conditions by reusing `QuerySpec`'s existing operator grammar** rather than inventing a
   second one — that keeps "create filter from search" a serialization step instead of a translation
   layer. Ship the local-action subset (auto-star / auto-read / auto-label) well before any IMAP
@@ -147,7 +147,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Speed and the connection layer
 
-- **Turn the connection pool on by default** · high value · effort M — `pool.py` is complete,
+- **Turn the connection pool on by default** · high value · effort M — `Pool` is complete,
   safety-reviewed and wired into three read call sites (`ingest.fetch_body`, `_live_folder_list`
   backing the folder rail, and `Sweeps.plan_stored` backing `/api/stats`), but `_targets()` reads
   `MAILMIND_POOL`, which is unset by default, so every op falls through to a fresh
@@ -162,7 +162,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   give each account's worker the connection it owns (the pool dissolved into it), and split the
   jobs that still pass `gates.EVERY_ACCOUNT`, which wait for every gate: a draft save whose old
   copy is in another account (it needs just the two accounts' gates, which `gates.run` can't take
-  yet), an undo with no account, and a message whose account `mailops.account_of` can't find.
+  yet), an undo with no account, and a message whose account `commands.account_of` can't find.
 - **Persist and document `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a

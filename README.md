@@ -34,7 +34,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    mailmind/accounts/          resolve credentials, open IMAP connections
         │
-   ingest.py                   pull INBOX headers + bodies, skip obvious junk
+   mailmind/mailbox/           pull INBOX headers + bodies, skip obvious junk
         │
    mailmind/curation/          classify each message (spam / marketing /
         │                      notifications / receipts / personal / protected)
@@ -46,10 +46,10 @@ mailmind.config.json          (your accounts + how to read their passwords)
                                        `python -m mailmind serve` (FastAPI on uvicorn)
 ```
 
-Around that spine sit the client modules: `mailops.py` (IMAP writes),
+Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP IDLE),
 `mailmind/compose/` (send), `mailmind.discovery` (FTS + operator
 grammar), `mailmind/content/` (reading a message, and the reader's
-whitelist sanitizer), `mailmind/calendar/` (invites), `realtime.py` (IMAP IDLE), and
+whitelist sanitizer), `mailmind/calendar/` (invites), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 The app is one view: a real folder-and-account client whose Inbox opens on

@@ -183,13 +183,13 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
 Pipeline, roughly in data-flow order:
 
 ```
-mailmind.config.json → mailmind.accounts → ingest.py → curation's classifier → mailmind.mailbox's store (SQLite)
+mailmind.config.json → mailmind.accounts → the Mailbox's Ingest → curation's classifier → mailmind.mailbox's store (SQLite)
                                                                 ↓
                                               summarize.py (Claude API) → server.py + web/
 ```
 
-Around that spine: `mailops.py` (IMAP writes), `mailmind.compose`
-(send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), `realtime.py` (IMAP IDLE), and the AI modules
+Around that spine: `mailmind.mailbox` (IMAP writes, IDLE), `mailmind.compose`
+(send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
 `discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
@@ -227,9 +227,9 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   directory; unset, it is the repo root. It must exist, and nothing creates it.
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
-  what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, `readmutq.Applied` and
-  `realtime.InboxChanged`.
-  It also hands each account event (below) to `realtime.reconcile`. `readmutq.Restored` (a
+  what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
+  `InboxChanged`.
+  It also hands each account event (below) to `realtime.reconcile`. `Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
   `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
   copy with state of its own.
@@ -344,7 +344,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
   `tests/test_mail_session_contract.py` runs every case through each against the fake, and
-  `tests/test_mail_session_dovecot.py` against Dovecot. The rest of the context is standard
+  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the legacy modules and the tests reach them: `commands`, `offline`, `ingest`, `pool`, `warm` and `realtime`. The rest of the context is standard
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
@@ -481,7 +481,7 @@ again for it as it ends.
 
 - A job is a function, not a block: it returns what its caller needs instead of setting the
   caller's variables.
-- Each names its account (a message's through `mailops.account_of`), or `gates.EVERY_ACCOUNT`
+- Each names its account (a message's through `commands.account_of`), or `gates.EVERY_ACCOUNT`
   for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
   MAINTENANCE. A run over every account is not work across accounts: `/api/sweep` goes through
   `Sweeps._each_account`, one job per account on its own gate, in turn. Reconcile
@@ -495,7 +495,7 @@ again for it as it ends.
   `tests/gate.py`, which runs a job like any caller. `tests/test_chaos.py` holds what one
   account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
-`pool.py` (persistent per-account IMAP sessions) and `warm.py` (multi-folder sync)
+`mailbox.pool` (persistent per-account IMAP sessions) and `mailbox.warm` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
 work with them unset.
 
@@ -503,7 +503,7 @@ IDLE's workers follow the configuration. `realtime.reconcile`, which the account
 retires the worker of an account removed, disabled or now reached another way (kind, host, port,
 TLS, credential), and starts one for each account without one, up to `MAX_IDLE_ACCOUNTS`. An alias
 or signature change leaves the worker be. A worker also checks its account after each IDLE cycle,
-so an edit of the file, which publishes nothing, still reaches it. `readmutq` gives up a queued
+so an edit of the file, which publishes nothing, still reaches it. The offline queue gives up a queued
 move whose account is gone, as the outbox does a send.
 
 `realtime.stop()` and a retirement only interrupt a worker's session (`MailSession.interrupt`, a
@@ -518,8 +518,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 
 ### Writes, undo, and offline
 
-- Mutations go through `mailops.py`. A connection failure raises a member of
-  `mailops._UNREACHABLE`, which the route catches and turns into a durable queue row via
+- Mutations go through `mailbox.commands`. A connection failure raises a member of
+  `commands.UNREACHABLE`, which the route catches and turns into a durable queue row via
   `store.read_mut_insert`. The message's row stays, marked `pending_removal` with the queue
   row's id (migration 23), and every list, search, the conversation view, the brief and the AI's
   inputs leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too.
@@ -529,12 +529,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   mark or star queues the same way (`_readmut_enqueue_flags`): the local row shows it at once,
   and the queue row's payload keeps the flags it replaced (`was`), which a refusal or a give-up
   puts back.
-- `readmutq.py` drains that queue when IMAP returns, using the `applied` flag as an
+- `mailbox.offline` drains that queue when IMAP returns, using the `applied` flag as an
   exactly-once gate. It and Compose's `Outbox` each run a `DurableQueue`, `QUEUE`, over their table:
   one claim wins a row, a failure backs off from 20 s doubling to 15 minutes, and the fifth
   goes to `error`, where a person's retry (`requeue`) starts the count again. `/api/pending` lists the
-  move queue's unapplied rows for the panel the outbox button opens; its Retry (`readmutq.retry`) marks the message or
-  shows the flags again, and its Discard (`readmutq.discard`, on the account's gate) gives them back and
+  move queue's unapplied rows for the panel the outbox button opens; its Retry (`offline.retry`) marks the message or
+  shows the flags again, and its Discard (`offline.discard`, on the account's gate) gives them back and
   takes the entry off the undo stack (`store.undo_forget_move`). The `forget` job removes rows finished a month
   ago (`store.read_mut_forget_finished`). The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
@@ -561,7 +561,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
   which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
-  member of `mailops._UNREACHABLE`, so a move or a flag change queues as it does offline, and
+  member of `commands.UNREACHABLE`, so a move or a flag change queues as it does offline, and
   both queues' drains wait for a full run. What nothing queues (a draft, a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
@@ -590,7 +590,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   before the flags and writes each change only where the row still holds the flags it read (a click may
   land meanwhile, since the sync takes no IMAP gate), skipping rows with a flag change still queued or a
   move pending. The mark stays behind those two and a refused search, so what was skipped is read again.
-  A sync that changed any publishes `ingest.FlagsChanged`, and the page reloads an open list on
+  A sync that changed any publishes `FlagsChanged`, and the page reloads an open list on
   `flags-changed`.
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `store.undo_push`,
   `undo_pop`, `undo_put_back`), so it outlives a restart and is the same through either door
@@ -598,7 +598,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   any server is asked to reverse it. Bulk actions push one grouped entry with children. `do_undo` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
   the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
-  (`mailops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
+  (`commands.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
   life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart.
 - A bulk command's confirm carries out a plan (`mailmind.assistant.application.plans`,
   `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
@@ -636,7 +636,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A reply or forward names its original by pk until its first save, whose answer carries `resume`
   (threading, the quote) and a forward's `files`; the composer then works from those, as a reopened
   draft does, and needs no row. The outbox row keeps the original's account, Message-ID and thread
-  (`orig_*`, migration 27), so `\Answered` (`mailops.mark_answered`) and the follow-up land after an
+  (`orig_*`, migration 27), so `\Answered` (`commands.mark_answered`) and the follow-up land after an
   archive deleted the row.
 - A copy that leaves the server takes its `messages` row with it, in the step that records the save,
   discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
