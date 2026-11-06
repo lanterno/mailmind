@@ -3,15 +3,20 @@ reverses, then the unsubscribe the newest message offers. That is an RFC 8058 on
 mailto: sent through the fake SMTP server, or a landing page handed back for the browser. The
 golden files are in tests/golden/http_cleanup/.
 
+A mailto: goes through the outbox, as anything sent does, so what it puts on the wire comes after Undo Send's window.
+
 The one-click POST would leave the machine, so `safe_http.one_click_post` is replaced here by a
 recorder; tests/unit/curation/test_unsub_post.py covers the real one against a local HTTPS server. The method
 is resolved from a stored body only, so each test opens a message first. It is resolved before
 the sweep, which deletes the rows it moves; most tests put the issue that carries the header in
 the Archive, which the sweep leaves alone, and the ones at the end keep it in the INBOX.
 """
+from datetime import timedelta
+
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap import accounts
 from mailmind.bootstrap.curation import safe_http
 from mailmind.bootstrap import mailbox
 
@@ -44,6 +49,13 @@ def pk_of(message_id):
         return c.execute("SELECT pk FROM messages WHERE message_id=?", (message_id,)).fetchone()["pk"]
     finally:
         c.close()
+
+
+def out(app):
+    """Undo Send's window passes, and what's queued goes."""
+    from mailmind.bootstrap.compose import outbox
+    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
+    outbox.drain()
 
 
 def archived_issue(world, app, **headers):
@@ -114,6 +126,7 @@ def test_a_mailto_unsubscribe_goes_out_by_smtp(app, golden, world, posts):
     token = preview(app, golden, LOOM)["confirm_token"]
     execute(app, golden, "clean up the Loom by mail", {"from_addr": LOOM, "do_unsubscribe": True,
                                                        "confirm_token": token})
+    out(app)
     import email
     for d in world.smtp.messages:
         golden.alias(email.message_from_bytes(d.data)["Message-ID"], "<message id>")
@@ -179,13 +192,57 @@ def test_a_mailto_unsubscribe_reaches_the_list(app, world, posts):
     archived_issue(world, app, **MAILTO)
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
+    assert world.smtp.messages == []                           # queued, like anything sent
+    out(app)
     assert [d.rcpts for d in world.smtp.messages] == [["unsubscribe@loom.example.test"]]
+
+
+def test_a_mailto_unsubscribe_shows_in_the_outbox_and_is_filed_in_sent(app, world, posts):
+    archived_issue(world, app, **MAILTO)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
+    [item] = app.get("/api/outbox").json["items"]
+    assert (item["subject"], item["to"], item["state"]) == ("unsubscribe ada", ["unsubscribe@loom.example.test"], "queued")
+    out(app)
+    [item] = app.get("/api/outbox").json["items"]
+    assert item["state"] == "sent"
+    [d] = world.smtp.messages
+    import email
+    mid = email.message_from_bytes(d.data)["Message-ID"]
+    from mailmind.bootstrap.compose import outbox
+    assert outbox._copies.in_sent(accounts.get(w.ADA), mid)
+
+
+def test_a_mailto_unsubscribe_waits_out_a_server_thats_away(app, world, posts):
+    archived_issue(world, app, **MAILTO)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert r["status"] == "mailto_sent"
+    world.smtp.fail("MAIL")
+    out(app)
+    assert world.smtp.messages == []
+    from mailmind.bootstrap.compose import outbox
+    app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+
+
+def test_a_mailto_unsubscribe_from_a_removed_account_is_skipped_not_a_failure_of_the_cleanup(app, world, posts, monkeypatch):
+    archived_issue(world, app, **MAILTO)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+
+    def gone(_):
+        raise KeyError("no such account")
+    monkeypatch.setattr(accounts, "get", gone)
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["ok"], r["status"]) == (True, "failed")
 
 
 def test_a_mailto_unsubscribe_ends_its_lines_with_crlf(app, world, posts):
     archived_issue(world, app, **MAILTO)
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
+    out(app)
     [d] = world.smtp.messages
     assert b"\n" not in d.data.replace(b"\r\n", b"")
 
@@ -202,6 +259,7 @@ def test_a_mailto_unsubscribe_is_a_whole_message_from_the_account(app, world, po
     archived_issue(world, app, **MAILTO)
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
+    out(app)
     [d] = world.smtp.messages
     import email
     m = email.message_from_bytes(d.data)
