@@ -1,39 +1,21 @@
 """The React app at /next, on the same world the current page's smoke tests use.
 
-It is built once for the session into a folder of its own, so a build on this machine doesn't matter, and every test
-here serves that one. Both front doors serve it, so each test runs twice, as app tests do.
+Every test here serves the build the `built` fixture made. Both front doors serve it, so each test runs twice, as app
+tests do.
 """
-import os
 import re
-import shutil
-import subprocess
 
 import pytest
 from playwright.sync_api import expect
 
+from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.platform import sse, webroot
+from mailmind.platform import sse
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 LUNCH = ("ada-inbox-01-lunch.eml", "ada-inbox-02-lunch-confirm.eml")
-
-
-@pytest.fixture(scope="session")
-def built(tmp_path_factory):
-    out = tmp_path_factory.mktemp("next-dist")
-    web = os.path.join(webroot.REPO, "web")
-    if not os.path.isdir(os.path.join(web, "node_modules")):
-        pytest.skip("web/node_modules isn't installed")
-    subprocess.run([shutil.which("npx"), "vite", "build", "--outDir", str(out), "--emptyOutDir"], cwd=web, check=True,
-                   capture_output=True)
-    return str(out)
-
-
-@pytest.fixture(autouse=True)
-def serve_the_build(built, monkeypatch):
-    monkeypatch.setattr(webroot, "DIST", built)
 
 
 def clean(page):
@@ -304,7 +286,7 @@ def test_axe_finds_nothing_on_the_list_or_the_reader(page, world):
     opened(page)
     row(page, world, RECEIPT).click()
     expect(page.locator("iframe.rd-iframe")).to_be_attached()
-    found = Axe().run(page.pw, context={"exclude": [["iframe.rd-iframe"]]}).response["violations"]
+    found = Axe().run(page.pw, options={"iframes": False}).response["violations"]
     assert {v["id"]: [n["target"] for n in v["nodes"]] for v in found} == {}
 
 
@@ -314,4 +296,256 @@ def test_it_meets_the_page_policy(page, world):
     expect(page.locator("iframe.rd-iframe")).to_be_visible()
     page.locator(".acct-sw").click()
     page.keyboard.press("Escape")
+    clean(page)
+
+
+def test_snooze_takes_it_off_the_list_by_preset_digit_and_undo_brings_it_back(page, world):
+    opened(page)
+    r = row(page, world, RECEIPT)
+    r.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("h")
+    expect(page.get_by_role("dialog", name="Snooze until")).to_be_visible()
+    page.keyboard.press("2")
+    expect(r).to_have_count(0)
+    expect(page.locator("#toast")).to_have_text("Snoozed")
+    page.locator('#folderrail .frow[data-folder="__snoozed__"]').click()
+    expect(page.locator("#listTitle")).to_have_text("Snoozed")
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    page.keyboard.press("z")
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(0)
+    clean(page)
+
+
+def test_mute_files_the_thread_away_and_tells_the_server_it_was_read(page, world):
+    opened(page)
+    r = page.locator("#rows .row[data-pk]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    r.click()
+    expect(page.locator("#thread .tmsg")).to_have_count(3)
+    page.keyboard.press("w")
+    expect(page.locator("#toast")).to_have_text("Muted")
+    expect(r).to_have_count(0)
+    page.locator('#folderrail .frow[data-folder="__muted__"]').click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    clean(page)
+
+
+def test_reply_later_keeps_the_row_moves_on_and_done_takes_it_out_of_the_stack(page, world):
+    opened(page)
+    r = row(page, world, RECEIPT)
+    r.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    first = page.url
+    page.keyboard.press("l")
+    expect(page.locator("#toast")).to_have_text("Saved to Reply later")
+    until(page, lambda: page.url != first, "it didn't move on")
+    expect(r).to_be_visible()
+    page.locator('#folderrail .frow[data-folder="__replylater__"]').click()
+    later = page.locator("#rows .row[data-pk]")
+    expect(later).to_have_count(1)
+    later.click()
+    expect(page.get_by_role("button", name="Done").first).to_be_visible()
+    page.keyboard.press("l")
+    expect(later).to_have_count(0)
+    clean(page)
+
+
+def test_marked_rows_file_together_and_one_undo_brings_them_all_back(page, world):
+    opened(page)
+    rows = page.locator("#rows .row[data-pk]")
+    before = rows.count()
+    names = (RECEIPT, "ada-inbox-03-newsletter.eml")
+    for name in names:
+        one = row(page, world, name)
+        one.hover()
+        one.locator(".cbx").click()
+    expect(page.locator(".bulkbar .bcount")).to_have_text("2 selected")
+    page.locator(".bulkbar .bb").filter(has_text="Archive").click()
+    expect(page.locator("#toast")).to_have_text("Archived 2")
+    until(page, lambda: all(mailbox(world, n) == "Archive" for n in names), "they weren't filed")
+    expect(rows).to_have_count(before - 2)
+    expect(page.locator(".bulkbar")).to_have_count(0)
+    page.keyboard.press("z")
+    until(page, lambda: all(mailbox(world, n) == "INBOX" for n in names), "one Undo didn't reverse both")
+    expect(rows).to_have_count(before)
+    clean(page)
+
+
+def test_x_marks_the_open_row_and_escape_clears_the_marks_first(page, world):
+    opened(page)
+    r = row(page, world, RECEIPT)
+    r.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("x")
+    expect(r).to_have_class(re.compile(r"\bmarked\b"))
+    page.keyboard.press("Escape")
+    expect(r).not_to_have_class(re.compile(r"\bmarked\b"))
+    expect(page.locator(".rd-subj")).to_be_visible()
+    clean(page)
+
+
+def test_the_palette_finds_and_runs_a_command_and_escape_closes_it(page, world):
+    opened(page)
+    page.keyboard.press("ControlOrMeta+k")
+    box = page.get_by_role("combobox", name="Command")
+    expect(box).to_be_focused()
+    box.fill("all inb")
+    expect(page.locator(".pi.sel")).to_contain_text("All inboxes")
+    box.press("Enter")
+    expect(page.locator("#listTitle")).to_have_text("All inboxes")
+    expect(box).to_have_count(0)
+    page.keyboard.press("ControlOrMeta+k")
+    expect(box).to_be_focused()
+    box.fill("zzzz nothing")
+    expect(page.locator(".pnone")).to_have_text("No matches.")
+    box.press("Escape")
+    expect(box).to_have_count(0)
+    clean(page)
+
+
+def test_g_then_a_letter_goes_to_that_folder_by_its_role(page, world):
+    opened(page)
+    page.keyboard.press("g")
+    expect(page.locator("#toast")).to_contain_text("Go to folder")
+    page.keyboard.press("t")
+    expect(page.locator("#listTitle")).to_have_text("Trash")
+    page.keyboard.press("g")
+    page.keyboard.press("z")
+    expect(page.locator("#listTitle")).to_have_text("Snoozed")
+    clean(page)
+
+
+def test_a_search_saves_as_a_view_in_the_rail_and_the_view_runs_it(page, world):
+    opened(page)
+    page.pw.on("dialog", lambda d: d.accept("From Lin"))
+    box = page.get_by_role("textbox", name="Search")
+    box.fill("from:lin")
+    box.press("Enter")
+    page.locator(".ctx-save").click()
+    expect(page.locator("#toast")).to_have_text("Saved view · From Lin")
+    view = page.locator("#folderrail .frow[data-view]").filter(has_text="From Lin")
+    expect(view).to_have_attribute("aria-current", "page")
+    page.locator('#folderrail .frow[data-folder="INBOX"]').click()
+    view.click()
+    expect(page.locator("#listTitle")).to_have_text("Search")
+    expect(box).to_have_value("from:lin")
+    page.keyboard.press("[")      # a narrow rail shows only icons, and no way to remove a view
+    view.hover()
+    view.locator(".vdel").click()
+    expect(view).to_have_count(0)
+    clean(page)
+
+
+def test_a_saved_summary_shows_at_once_with_no_call_and_a_full_one_comes_when_asked(page, world, ai):
+    import store
+    c = store.conn()
+    try:
+        store.save_summary(c, world.pk(RECEIPT), "Saved words", 3, "personal", "Keep the receipt", "claude-opus-5-5", "2026-11-02")
+        c.commit()
+    finally:
+        c.close()
+    opened(page)
+    row(page, world, RECEIPT).click()
+    stored = page.locator("#aiCard.stored")
+    expect(stored.locator(".ai-tldr")).to_have_text("Saved words")
+    expect(stored.locator(".ai-action")).to_have_text("→ Keep the receipt")
+    assert not ai.requests
+    ai.queue(fa.answer({"tldr": "Paid for thread.", "points": ["One order."], "action": "Keep it"}))
+    page.keyboard.press("i")
+    card = page.locator("#aiCard")
+    expect(card.locator(".ai-tldr")).to_have_text("Paid for thread.")
+    expect(card.locator(".ai-points li")).to_have_text(["One order."])
+    expect(card.locator(".ai-action")).to_have_text("→ Keep it")
+    clean(page)
+
+
+def test_reading_settings_change_a_plain_mail_and_stay_after_a_reload(page, world):
+    opened(page)
+    row(page, world, RECEIPT).click()
+    frame = page.locator("iframe.rd-iframe")
+    expect(frame).to_be_visible()
+    page.get_by_role("button", name="Reading settings").click()
+    menu = page.get_by_role("dialog", name="Reading settings")
+    menu.get_by_role("button", name="Mono").click()
+    expect(menu.get_by_role("button", name="Mono")).to_have_attribute("aria-pressed", "true")
+    until(page, lambda: "SF Mono" in (frame.get_attribute("srcdoc") or ""), "the frame kept its old face")
+    menu.get_by_role("button", name="Wide").click()
+    assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--measure')").strip() == "920px"
+    page.pw.reload()
+    expect(frame).to_be_visible()
+    assert "SF Mono" in frame.get_attribute("srcdoc")
+    clean(page)
+
+
+def test_a_narrow_pane_keeps_its_hidden_verbs_under_more(page, world):
+    page.set_viewport_size({"width": 700, "height": 800})
+    page.goto("/next")
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    row(page, world, RECEIPT).click()
+    more = page.get_by_role("button", name="More actions")
+    expect(more).to_be_visible()
+    more.click()
+    item = page.get_by_role("menuitem", name="Unread")
+    expect(item).to_be_visible()
+    item.click()
+    expect(page.locator("#toast")).to_have_text("Marked unread")
+    clean(page)
+
+
+def test_focus_reading_hides_the_list_and_enter_or_escape_ends_it(page, world):
+    opened(page)
+    r = row(page, world, RECEIPT)
+    r.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.locator("body").press("Enter")
+    expect(page.locator("body")).to_have_class(re.compile(r"\bread-focus\b"))
+    expect(r).to_be_hidden()
+    page.keyboard.press("Escape")
+    expect(page.locator("body")).not_to_have_class(re.compile(r"\bread-focus\b"))
+    expect(r).to_be_visible()
+    clean(page)
+
+
+def test_axe_finds_nothing_with_the_palette_and_the_menus_open(page, world):
+    from axe_playwright_python.sync_playwright import Axe
+    opened(page)
+    row(page, world, RECEIPT).click()
+    expect(page.locator("iframe.rd-iframe")).to_be_attached()
+    found = {}
+    page.get_by_role("button", name="Reading settings").click()
+    # React Aria keeps a visually hidden Dismiss button beside the dialog, which the region rule counts as content
+    beside_the_dialog = {"region": {"enabled": False}}
+    found["reading settings"] = Axe().run(page.pw, options={"iframes": False, "rules": beside_the_dialog}).response["violations"]
+    page.keyboard.press("Escape")
+    page.keyboard.press("h")
+    found["snooze"] = Axe().run(page.pw, options={"iframes": False}).response["violations"]
+    page.keyboard.press("Escape")
+    page.keyboard.press("ControlOrMeta+k")
+    found["palette"] = Axe().run(page.pw, options={"iframes": False}).response["violations"]
+    assert {k: {v["id"]: [n["target"] for n in v["nodes"]] for v in vs} for k, vs in found.items() if vs} == {}
+
+
+def test_at_the_daily_limit_a_summary_goes_only_when_you_say_so(page, world, ai):
+    import time
+    from mailmind.assistant.application.gateway import local_day
+    from mailmind.assistant.application.ports import Spend, Usage
+    from mailmind.bootstrap import assistant
+    now = time.time()
+    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+    ai.responder = lambda req: fa.answer({"tldr": "Over the limit, as asked.", "points": [], "action": ""})
+    opened(page)
+    row(page, world, RECEIPT).click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    ask = page.get_by_role("alertdialog", name="Today’s AI limit is reached")
+    page.keyboard.press("i")
+    expect(ask).to_contain_text("MailMind has spent $15.00 on AI today, and its daily limit is $15.00.")
+    ask.get_by_role("button", name="Not now").click()
+    expect(ask).to_be_hidden()
+    expect(page.locator("#aiCard .ai-err")).to_contain_text("Couldn’t summarize")
+    assert ai.requests == []
+    page.keyboard.press("i")
+    ask.get_by_role("button", name="Go over the limit").click()
+    expect(page.locator("#aiCard .ai-tldr")).to_have_text("Over the limit, as asked.")
+    assert all("status of 402" in p for p in page.problems)    # the two refusals the page asked about
+    page.problems.clear()
     clean(page)

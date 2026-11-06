@@ -6,6 +6,9 @@ here and listed in `page.blocked`, which `clean` holds empty, so no test sends a
 means the same day on both sides. `page.problems` collects uncaught errors, console errors and
 content security policy violations.
 """
+import os
+import shutil
+import subprocess
 from datetime import datetime, timezone
 
 import pytest
@@ -15,6 +18,25 @@ SANDBOX_REFUSAL = ("Blocked script execution in 'about:srcdoc' because the docum
 # What Chromium says of anything a content security policy refuses, or would refuse: a report-only
 # policy's violations come at the info level, not as errors.
 CSP_VIOLATION = "violates the following Content Security Policy directive"
+
+
+@pytest.fixture(scope="session")
+def built(tmp_path_factory):
+    """The React app, built once for the session into a folder of its own, so a build on this machine doesn't matter."""
+    from mailmind.platform import webroot
+    out = tmp_path_factory.mktemp("next-dist")
+    web = os.path.join(webroot.REPO, "web")
+    if not os.path.isdir(os.path.join(web, "node_modules")):
+        pytest.skip("web/node_modules isn't installed")
+    subprocess.run([shutil.which("npx"), "vite", "build", "--outDir", str(out), "--emptyOutDir"], cwd=web, check=True,
+                   capture_output=True)
+    return str(out)
+
+
+@pytest.fixture
+def serve_the_build(built, monkeypatch):
+    from mailmind.platform import webroot
+    monkeypatch.setattr(webroot, "DIST", built)
 
 
 @pytest.fixture(scope="session")
