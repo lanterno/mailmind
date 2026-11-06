@@ -340,9 +340,9 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_an_inline_only_invite_is_recorded_once_and_listed` | `tests/unit/calendar/script_upcoming.py` |
 | `test_waiting_names_who_a_sent_thread_waits_on` | `tests/unit/calendar/script_upcoming.py` |
 
-## `tests.py`: `tests/unit/curation/script_classifier.py`
+## `tests.py`: `tests/unit/curation/test_classifier.py`
 
-A linear script, moved whole. Its assertions keep their order.
+A linear script, now tables: `test_classify`, `test_is_junk` and `test_a_non_ascii_subject_does_not_crash`.
 
 ## `tests_sanitize.py`: `tests/security/script_sanitize.py`
 

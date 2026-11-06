@@ -1,20 +1,13 @@
-"""Behavioral tests for the mail classifier + learned-rules mechanism.
+"""Behavioural tests for the mail classifier + learned-rules mechanism.
 
-Hermetic: the rules layer is stubbed with a synthetic fixture so the suite
-passes in a clean clone (where mailmind_rules.json is absent) and never depends
-on any real account, employer, or contact. All addresses below are fictional.
-
-Run:  python3 tests/unit/curation/script_classifier.py      (exits non-zero on any failure)
-"""
-import os
-import sys
-
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-sys.path.insert(0, ROOT)
+The rules layer is a synthetic fixture, so this never depends on any real account, employer or
+contact. All addresses below are fictional; the free-mail, .edu, .gouv and ESP domains among them
+are the rules under test."""
+import pytest
 
 from mailmind.curation.domain import classifier as m
 
-# Stub the learned rules with a synthetic fixture (tests the MECHANISM only).
+# A synthetic rule book (tests the MECHANISM only).
 RULES = {
     "keep_senders": set(), "block_senders": set(),
     "keep_domains": {"work-example.test"}, "block_domains": {"spam-platform.test"},
@@ -67,23 +60,16 @@ CASES = [
 ]
 
 
-def run():
-    passed = failed = 0
-    for frm, subj, lu, expected, note in CASES:
-        got = m.classify(frm, subj, "", lu, rules=RULES)[0]
-        if got == expected:
-            passed += 1
-        else:
-            failed += 1
-            print(f"  FAIL  {frm:40} expected {expected:<22} got {got:<22} ({note})")
-    # invariants
-    assert m.is_junk(m.BLOCKED) and m.is_junk(m.SPAM) and m.is_junk(m.MKT) and m.is_junk(m.NOTIF)
-    assert not m.is_junk(m.PROTECTED) and not m.is_junk(m.RECEIPT) and not m.is_junk(m.PERSONAL)
-    # non-ASCII subjects must not crash
-    m.classify("user@example.com", "新年快乐 🎉 здравей", "", False, rules=RULES)
-    print(f"\n{passed} passed, {failed} failed (of {len(CASES)})")
-    return failed == 0
+@pytest.mark.parametrize("frm, subject, list_unsub, expected", [c[:4] for c in CASES], ids=[c[4] for c in CASES])
+def test_classify(frm, subject, list_unsub, expected):
+    assert m.classify(frm, subject, "", list_unsub, rules=RULES)[0] == expected
 
 
-if __name__ == "__main__":
-    sys.exit(0 if run() else 1)
+@pytest.mark.parametrize("bucket, junk", [(m.BLOCKED, True), (m.SPAM, True), (m.MKT, True), (m.NOTIF, True),
+                                          (m.PROTECTED, False), (m.RECEIPT, False), (m.PERSONAL, False)])
+def test_is_junk(bucket, junk):
+    assert bool(m.is_junk(bucket)) is junk
+
+
+def test_a_non_ascii_subject_does_not_crash():
+    assert m.classify("user@example.test", "新年快乐 🎉 здравей", "", False, rules=RULES)[0] == m.PERSONAL
