@@ -1,5 +1,7 @@
 // Everything you can do from here, in one list: the keys and the palette both read it, so a command means the same either
 // way and neither can drift from the other.
+import { composing } from "../features/compose/compose";
+import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
 import { readFocus, setReadFocus } from "../features/mailbox/Reader";
@@ -81,6 +83,13 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     });
   }
   if (on) {
+    const replying = (run: (pk: number) => unknown) => () => {
+      const pk = m.replyPk();
+      if (pk !== null) void run(pk);
+    };
+    add({ id: "reply", group: "Actions", label: "Reply", keys: ["r"], hint: "r", run: replying(answer) });
+    add({ id: "reply-all", group: "Actions", label: "Reply all", keys: ["a"], hint: "a", run: replying((pk) => composing.reply(pk, true)) });
+    add({ id: "forward", group: "Actions", label: "Forward", keys: ["f"], hint: "f", run: replying(composing.forward) });
     add({
       id: "later", group: "Actions", label: m.folder === "__replylater__" ? "Reply later — Done" : "Reply later", keys: ["l"], hint: "l",
       run: () => (m.folder === "__replylater__" ? m.replyLaterDone() : m.replyLater()),
@@ -94,6 +103,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     });
   }
 
+  add({ id: "compose", group: "Commands", label: "New message", keys: ["c"], hint: "c", run: () => void composing.open({ mode: "new" }) });
   add({ id: "undo", group: "Commands", label: "Undo last action", keys: ["z"], hint: "z", run: m.undo });
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });

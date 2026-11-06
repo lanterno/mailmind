@@ -1,9 +1,14 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ApiError, post } from "../../api/client";
 import type { GetAnswers } from "../../api/types.gen";
+import { composing, myAddresses } from "../compose/compose";
+import { answer, forget, useDraftAhead, useDraftChip } from "../compose/draftAhead";
+import { canQuickReply, QUICK } from "../compose/model";
 import { createStore } from "../../lib/store";
 import { fileSize } from "../../lib/text";
+import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { armDwell, cancelDwell, markSeen } from "./actions";
 import { AiCard, summarize } from "./AiCard";
@@ -44,6 +49,69 @@ function ReaderNav({ m }: { m: Mailbox }) {
       <button className="cab" title="Previous (k)" aria-label="Previous message" disabled={i <= 0} onClick={() => m.move(-1)}><span><Icon name="up" /></span></button>
       <button className="cab" title="Next (j)" aria-label="Next message" disabled={i < 0 || i >= n - 1} onClick={() => m.move(1)}><span><Icon name="down" /></span></button>
     </span>
+  );
+}
+
+// Reply says which of three it is: a draft written ahead, one being written, or just Reply.
+function Answering({ pk, thread, drafts }: { pk: number | null; thread: boolean; drafts: boolean }) {
+  const chip = useDraftChip(pk);
+  if (pk === null) return null;
+  const verb = (ca: string) => (thread ? { "data-tca": ca } : { "data-ca": ca });
+  return (
+    <>
+      {chip === "ready"
+        ? <button {...verb("draftready")} className="cab cab-draft" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)" onClick={() => void answer(pk)}><span><Icon name="wind" /></span> Draft ready</button>
+        : drafts && chip === "drafting"
+          ? <button {...verb("reply")} className="cab cab-drafting" title="AI is drafting a reply in the background — click for a plain reply now" onClick={() => { forget(pk); void composing.reply(pk); }}><span><Icon name="wind" /></span> Drafting…</button>
+          : <button {...verb("reply")} className="cab" title="Reply (r)" onClick={() => void composing.reply(pk)}><span><Icon name="reply" /></span> Reply</button>}
+      <Cab ca="replyall" thread={thread} icon="replyall" label="Reply all" title="Reply all (a)" onClick={() => void composing.reply(pk, true)}>All</Cab>
+      <Cab ca="forward" thread={thread} icon="forward" label="Forward" title="Forward (f)" onClick={() => void composing.forward(pk)} />
+    </>
+  );
+}
+
+function QuickReplies({ pk }: { pk: number }) {
+  return (
+    <div className="qr-row" role="group" aria-label="Quick replies">
+      <span className="qr-k"><Icon name="reply" />Quick reply</span>
+      {QUICK.map((q) => <button key={q.key} className="qr" data-qr={q.key} onClick={() => void composing.quickReply(pk, q.key)}>{q.chip}</button>)}
+    </div>
+  );
+}
+
+const SAID: Record<string, string> = { accept: "Accepted ✓", tentative: "Tentative ?", decline: "Declined ✕" };
+
+function Rsvp({ pk }: { pk: number }) {
+  const [said, setSaid] = useState<{ done: boolean; text: string } | null>(null);
+  const reply = async (decision: string) => {
+    setSaid({ done: false, text: "Sending RSVP…" });
+    try {
+      const r = await post("/api/invite/rsvp", { pk, decision }) as { ok: boolean; error?: string; organizer?: string; outbox_id?: number };
+      if (!r.ok) {
+        setSaid({ done: false, text: `Couldn’t RSVP: ${r.error ?? "error"}` });
+        toast(r.error ?? "RSVP failed");
+        return;
+      }
+      setSaid({ done: true, text: `${SAID[decision]} — reply sent to ${r.organizer || "organizer"}` });
+      toast(`RSVP: ${SAID[decision]}`);
+      if (r.outbox_id) composing.queued(r.outbox_id, "RSVP");
+    } catch (e) {
+      setSaid({ done: false, text: e instanceof ApiError ? `Couldn’t RSVP: ${e.message}` : "Couldn’t RSVP" });
+      toast("RSVP failed");
+    }
+  };
+  return (
+    <div className="inv-rsvp" data-rsvp-pk={pk}>
+      {said
+        ? <span className={said.done ? "inv-done" : "inv-sending"}>{said.text}</span>
+        : (
+          <>
+            <button className="inv-yes" data-rsvp="accept" onClick={() => void reply("accept")}>✓ Accept</button>
+            <button className="inv-maybe" data-rsvp="tentative" onClick={() => void reply("tentative")}>? Maybe</button>
+            <button className="inv-no" data-rsvp="decline" onClick={() => void reply("decline")}>✕ Decline</button>
+          </>
+        )}
+    </div>
   );
 }
 
@@ -109,6 +177,7 @@ function Invite({ d }: { d: Body }) {
       {v.location && <div className="inv-line"><Icon name="pin" /> {v.location}</div>}
       {v.organizer?.email && <div className="inv-line inv-sub">organizer: {v.organizer.name || v.organizer.email}</div>}
       {names && <div className="inv-line inv-sub">{attendees.length} attendee{attendees.length === 1 ? "" : "s"}: {names}{attendees.length > 8 ? ` +${attendees.length - 8}` : ""}</div>}
+      {(v.method === "REQUEST" || !v.method) && v.organizer?.email && <Rsvp pk={d.pk!} />}
       {d.invite_part != null && <div className="inv-actions"><a className="inv-dl" href={`/api/message/${d.pk}/attachment/${encodeURIComponent(d.invite_part)}`} download="invite.ics">＋ Add to calendar</a></div>}
     </div>
   );
@@ -161,11 +230,15 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
   }, [m.qc, pk, row?.seen]);
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
+  useDraftAhead(d ? pk : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
+  const quick = d?.ok && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
   return (
     <>
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
-        {!isDraft && <Triage m={m} thread={false} />}
+        {isDraft
+          ? <Cab ca="edit" thread={false} icon="pen" label="Edit" title="Edit draft" onClick={() => void composing.editDraft(pk)} />
+          : <><Answering pk={pk} thread={false} drafts /><Triage m={m} thread={false} /></>}
         <span className="rd-sp" aria-hidden="true" />
         {!isDraft && <Cab ca="archive" thread={false} icon="archive" label="Archive" title="Archive (e)" onClick={() => m.fileOpen("archive")} />}
         <Cab ca="trash" thread={false} icon="trash" label="Delete" title="Delete (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")} />
@@ -192,6 +265,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
       )}
       <AiCard target={m.target()} row={row} />
       <MailContent key={pk} pk={pk} minHeight={400} pad={30} />
+      {quick && <QuickReplies pk={pk} />}
       <UpNext m={m} canArchive={!isDraft} />
     </>
   );
@@ -230,10 +304,15 @@ function Member({ m, startsOpen }: { m: GetAnswers["/api/thread"]["items"][numbe
 function ConversationView({ opened, m }: { opened: { id: string; account: string }; m: Mailbox }) {
   const { data: d, isError } = useThread(opened.account, opened.id);
   const items = d?.items ?? [];
+  const replyPk = d?.reply_pk ?? null;
+  const latest = items.find((x) => x.pk === replyPk);
+  useDraftAhead(replyPk, false, m.folder === "__muted__");
+  const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
   return (
     <>
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
+        <Answering pk={replyPk} thread drafts={false} />
         <Triage m={m} thread />
         <span className="rd-sp" aria-hidden="true" />
         <Cab ca="archive" thread icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => m.fileOpen("archive")}>Archive</Cab>
@@ -251,6 +330,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
           <div className="thread" id="thread">
             {items.map((x, i) => <Member key={x.pk} m={x} startsOpen={i === items.length - 1} />)}
           </div>
+          {quick && <QuickReplies pk={replyPk!} />}
           <UpNext m={m} canArchive />
         </>
       )}

@@ -1,6 +1,8 @@
 // The mailbox as the app's parts see it: where you are, what the list shows now, and each thing you can do from here.
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { GetAnswers } from "../../api/types.gen";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
 import * as actions from "./actions";
@@ -56,6 +58,14 @@ export function useMailbox() {
   const open = (r: Row) => go({ source, opened: opening(r) }, { replace: Boolean(opened) });
   const close = () => go({ source, opened: null });
 
+  // A draft saved again is a new copy, and one discarded is gone: don't stay on a copy the list no longer has.
+  const inDrafts = folderData?.folders?.some((f) => f.name === folder && f.role === "drafts") ?? false;
+  const settled = list.isSuccess && !list.isFetching;
+  const copyGone = inDrafts && settled && opened?.kind === "message" && !all.some((r) => r.pk === opened.pk);
+  useEffect(() => {
+    if (copyGone) go({ source, opened: rows[0] ? opening(rows[0]) : null }, { replace: true });
+  }, [copyGone]);
+
   // Where to go once `pks` leave the list: on to the next, if what you were reading is among them.
   const afterLeaving = (pks: number[]): Route | null => {
     if (openPk === null || !pks.includes(openPk)) return null;
@@ -93,6 +103,9 @@ export function useMailbox() {
     if (opened.kind === "thread") return { account: opened.account, thread_id: opened.id };
     return { pk: opened.pk, thread_id: openRow?.threadId || null } as actions.Target;
   };
+
+  // What a reply answers: the message, or the conversation's latest that isn't yours.
+  const replyPk = (): number | null => (opened?.kind === "thread" ? qc.getQueryData<GetAnswers["/api/thread"]>(["thread", opened.account, opened.id])?.reply_pk ?? null : openPk);
 
   const file = (r: Pick<Row, "pk">, kind: actions.Filing) => {
     const whole = opened?.kind === "thread" && opened.pk === r.pk ? true : "threadId" in r ? isWhole(r as Row) : false;
@@ -146,6 +159,7 @@ export function useMailbox() {
     fileOpen,
     bulk,
     target,
+    replyPk,
     undo: () => void actions.undo(qc),
     star: () => {
       if (openRow) void actions.setStar(qc, openRow);

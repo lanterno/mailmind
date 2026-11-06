@@ -21,6 +21,7 @@ export interface Row {
   flagged: boolean;
   hasAttach: boolean;
   isJunk: boolean;
+  replyWorthy: boolean;
   bucket: string;
   threadId: string;
   count: number;
@@ -45,6 +46,7 @@ export function fromFolder(it: FolderRow, account: string, folder: string): Row 
     flagged: Boolean(it.flagged),
     hasAttach: Boolean(it.has_attach),
     isJunk: Boolean(it.is_junk),
+    replyWorthy: Boolean(it.reply_worthy),
     bucket: it.bucket,
     threadId: it.thread_id,
     count: it.count ?? 1,
@@ -70,6 +72,7 @@ export function fromSearch(it: SearchRow): Row {
     flagged: Boolean(it.flagged),
     hasAttach: Boolean(it.has_attach),
     isJunk: Boolean(it.is_junk),
+    replyWorthy: Boolean(it.reply_worthy),
     bucket: it.bucket,
     threadId: "",
     count: 1,

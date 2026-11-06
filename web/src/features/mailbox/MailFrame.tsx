@@ -10,11 +10,11 @@ import { FONTS, readPrefs, SIZES, type ReadPrefs } from "./readPrefs";
 
 const MAX_HEIGHT = 5000;
 
-function mailPrefs(p: ReadPrefs): MailPrefs {
+export function mailPrefs(p: ReadPrefs): MailPrefs {
   return { colors: p.colors, font: FONTS[p.font], lineHeight: p.font === "mono" ? 1.55 : 1.62, sizePx: SIZES[p.size] };
 }
 
-function frameTheme(name: ThemeName): FrameTheme {
+export function frameTheme(name: ThemeName): FrameTheme {
   const css = getComputedStyle(document.body), tk = (t: string) => css.getPropertyValue(t).trim();
   return { light: name !== "night", bg: tk("--bg"), panel: tk("--panel"), ink: tk("--ink"), primaryInk: tk("--primary-ink"), lineHi: tk("--line-hi"), mute: tk("--mute") };
 }

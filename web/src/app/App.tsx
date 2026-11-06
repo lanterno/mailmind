@@ -1,6 +1,8 @@
 // The app's one view: the rail, the list and the reader, and the keys that work across them.
 import { useEffect, useRef } from "react";
 import { post } from "../api/client";
+import { composing } from "../features/compose/compose";
+import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { FolderRail } from "../features/mailbox/FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
@@ -32,6 +34,7 @@ function Floats() {
   const build = newBuild.useValue();
   return (
     <>
+      <SendFloatView />
       <div className="send-float undo-float" id="undoFloat" hidden={!label}>
         <span>{label}</span><button id="ufUndo" onClick={() => void undo(qc)}>Undo · <kbd>z</kbd></button>
       </div>
@@ -88,6 +91,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
   const chord = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (composing.isOpen()) return;   // it has keys of its own
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         paletteOpen.set(!paletteOpen.get());
@@ -177,7 +181,7 @@ export function App() {
   };
   return (
     <>
-      <TopBar source={source} />
+      <TopBar source={source} readOnly={m.digest?.profile === "read-only"} />
       <main className="split">
         <FolderRail accounts={accounts} aliases={aliases} source={source} />
         <Splitter />
@@ -246,6 +250,11 @@ export function App() {
       <RailScrim />
       <SnoozeMenu onSnooze={m.snooze} onUnsnooze={m.unsnooze} />
       <Palette commands={commands} />
+      <ComposerModal
+        senders={m.digest?.send_accounts?.length ? m.digest.send_accounts : accounts}
+        aliases={aliases}
+        ai={m.digest?.ai?.engine !== "none"}
+      />
       <OverLimitDialog />
       <Floats />
       <Toaster />

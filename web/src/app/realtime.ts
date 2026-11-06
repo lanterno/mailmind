@@ -2,6 +2,7 @@
 // refetches in place, so it never yanks the reader or the row you're on.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { onDraftReady } from "../features/compose/draftAhead";
 import { createStore } from "../lib/store";
 
 export const newBuild = createStore(false);
@@ -24,6 +25,12 @@ export function useRealtime() {
       again("digest");
       again("folders");
     });
+    es.addEventListener("outbox", () => {
+      again("outbox");
+      again("pending");
+    });
+    es.addEventListener("commands-changed", () => again("pending"));
+    es.addEventListener("draft-ready", (e) => onDraftReady((JSON.parse((e as MessageEvent<string>).data) as { pk?: number }).pk));
     es.addEventListener("hello", (e) => {
       const { build } = JSON.parse((e as MessageEvent<string>).data) as { build?: string };
       if (build && build !== LOADED) newBuild.set(true);
