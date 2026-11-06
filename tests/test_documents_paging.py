@@ -8,7 +8,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 
 def _files(world, name, n, stem="report", ext="pdf", ctype="application/pdf"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         for i in range(n):
@@ -92,7 +92,7 @@ def test_a_kind_and_a_search_both_hold(app, world):
 
 def test_the_same_file_in_two_places_is_counted_once_across_pages(app, world):
     world.deliver(w.ADA, "Archive", world.server.messages(w.ADA, "INBOX")[world.row(NEWS)["uid"]].raw)
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         pks = [r["pk"] for r in c.execute("SELECT pk FROM messages WHERE message_id=?", (world.row(NEWS)["message_id"],))]

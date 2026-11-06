@@ -13,7 +13,7 @@ from mailmind.attention.domain import followups as follow_up_rules
 
 
 def rows(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]

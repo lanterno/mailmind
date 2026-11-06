@@ -77,7 +77,7 @@ NASTY = ['"', '""', '"""', "'", "\\", "-\"", "from:\"", ":", "::", "-:", "a:b:c"
 
 def test_no_query_raises_and_every_match_is_one_fts_accepts(data_dir):
     from mailmind.bootstrap import discovery
-    import store
+    from mailmind.bootstrap.mailbox import store
     rnd = random.Random(20261102)
     alphabet = string.printable + "éß\u202e\u0301"
     queries = NASTY + ["".join(rnd.choice(alphabet) for _ in range(rnd.randint(1, 40))) for _ in range(300)]

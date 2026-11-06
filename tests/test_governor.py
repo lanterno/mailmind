@@ -11,6 +11,7 @@ import pytest
 from mailmind.assistant.application.governor import (PRESENCE_SECONDS, TRIP_AFTER, YIELD_SECONDS,
                                                      CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
+from mailmind.bootstrap.assistant import answers
 
 
 class Clock:
@@ -285,13 +286,13 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
     ("/api/briefing/since", {"since": 0}),
     ("/api/review", {"account": "ada@example.test"})])
 def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, path, body):
-    import store
+    from mailmind.bootstrap.mailbox import store
     lunch = world.pk(LUNCH)
     if body.get("pk") == LUNCH:
         body = {**body, "pk": lunch}
     c = store.conn()
     try:                                               # triaged, so the brief has something to say
-        store.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
+        answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
                            "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:

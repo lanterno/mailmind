@@ -18,7 +18,7 @@ def acct(email=w.ADA):
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -196,7 +196,7 @@ def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, worl
 
 def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     server_flags(world, RECEIPT, add=(w.SEEN,))
     real = ingest._flags_of
 
@@ -319,7 +319,7 @@ def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
 
 def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     real = store.reconcile
 
     def sync_lands_first(c, account, folder, live, when, **kw):

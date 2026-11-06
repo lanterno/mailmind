@@ -12,7 +12,7 @@ DAY = 86400
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -21,7 +21,7 @@ def q(sql, *args):
 
 
 def execute(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute(sql, args)
@@ -138,7 +138,7 @@ def gone_since(key):
 
 
 def forget(now):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         n = store.forget_gone_messages(c, now)
@@ -149,7 +149,7 @@ def forget(now):
 
 
 def test_a_key_waits_a_month_for_a_copy_to_come_back(app, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     assess()
     row = world.row(LUNCH)
     key = row["message_key"]
@@ -168,7 +168,7 @@ def test_a_key_waits_a_month_for_a_copy_to_come_back(app, world, ai):
 
 
 def test_a_copy_that_comes_back_ends_the_wait(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     key = row["message_key"]
     c = store.conn()
@@ -182,7 +182,7 @@ def test_a_copy_that_comes_back_ends_the_wait(world):
 
 
 def test_a_key_with_a_copy_left_isnt_gone(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     world.deliver(w.ADA, "Archive", w.variant(LUNCH))
     c = store.conn()
@@ -194,7 +194,7 @@ def test_a_key_with_a_copy_left_isnt_gone(world):
 
 def test_the_forget_job_ends_a_key_long_gone(world):
     import server
-    import store
+    from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     c = store.conn()
     store.delete_message(c, row["pk"])
@@ -208,7 +208,7 @@ def test_the_forget_job_ends_a_key_long_gone(world):
 # -- a row an older commit wrote --------------------------------------------------------------------------
 
 def test_a_start_gives_a_key_to_a_row_an_older_commit_wrote(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     execute("UPDATE messages SET message_key=NULL WHERE pk=?", row["pk"])
     execute("INSERT INTO summaries(message_pk, summary, importance) VALUES (?, 'Said by the old one', 3)", row["pk"])
@@ -258,7 +258,7 @@ def test_migration_30_can_run_again(tmp_path):
 # -- where the API shows it -------------------------------------------------------------------------------
 
 def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     assess()
     row = world.row(LUNCH)
     pk, key = row["pk"], row["message_key"]

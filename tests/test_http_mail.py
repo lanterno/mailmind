@@ -72,7 +72,7 @@ def test_move_to_a_folder_and_undo(app, golden, world):
 
 
 def _pk_of(world, name):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT pk FROM messages WHERE message_id=? AND folder='INBOX'",
@@ -151,7 +151,7 @@ def test_a_server_without_move_gets_copy_store_expunge(app, golden, world):
 
 
 def test_an_unreachable_server_queues_the_move(app, golden, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-05-receipt.eml"
     world.server.drop("SELECT", user=w.ADA)
     act(app, golden, world, "archive while the server drops us", "/api/archive",

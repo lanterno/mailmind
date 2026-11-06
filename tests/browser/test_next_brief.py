@@ -8,6 +8,7 @@ from playwright.sync_api import expect
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.platform import sse
+from mailmind.bootstrap.assistant import answers
 
 pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
@@ -31,11 +32,11 @@ def until(page, check, what):
 
 
 def judge(world, *verdicts):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         for name, importance, category, action in verdicts:
-            store.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5", NOW)
+            answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5", NOW)
         c.commit()
     finally:
         c.close()

@@ -27,7 +27,7 @@ def listed(app, folder="INBOX"):
 
 
 def copy(world, name=RECEIPT, folder="INBOX"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT pk, seen, snoozed_until FROM messages WHERE account=? AND folder=? AND message_id=?",
@@ -74,7 +74,7 @@ def test_undo_of_a_snooze_finds_the_row_it_has_now(app, world):
 
 
 def test_undo_from_a_stack_written_before_the_rows_were_named(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = world.pk(RECEIPT)
     snooze(app, world)
     c = store.conn()
@@ -115,7 +115,7 @@ def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, worl
 
 def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, world):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     app.clock.shift(timedelta(hours=7))
@@ -130,7 +130,7 @@ def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, wo
 
 
 def test_a_forgotten_message_takes_its_snooze_with_it(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.platform import settings
     assert settings.current()
     c = store.conn()
@@ -199,7 +199,7 @@ def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app
 
 
 def test_two_copies_waking_together_each_get_the_mark(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     snooze(app, world, CI)
     c = store.conn()
     row = dict(c.execute("SELECT * FROM messages WHERE pk=?", (world.pk(CI),)).fetchone())

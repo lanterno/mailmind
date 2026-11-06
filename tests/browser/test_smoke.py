@@ -23,6 +23,7 @@ from playwright.sync_api import expect
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 pytestmark = pytest.mark.browser
 
@@ -236,7 +237,7 @@ def test_an_undo_that_restores_only_part_says_so_and_z_tries_the_rest(page, worl
     clean(page)
 
 def test_snooze_hides_the_message_until_it_is_due(page, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -268,12 +269,12 @@ def test_the_rail_counts_a_message_just_snoozed(page, world):
 def test_a_notification_shows_the_summary_it_has(page, world):
     # Triage skips junk, notifications included, so one has a summary only from before it was
     # reclassified. A stored summary shows whatever the bucket.
-    import store
+    from mailmind.bootstrap.mailbox import store
     ci = "ada-inbox-04-ci.eml"
     assert world.row(ci)["bucket"] == "automated-notifications"
     c = store.conn()
     try:
-        store.save_summary(c, world.pk(ci), "Quilt's build 412 passed.", 2, "info", "", "test",
+        answers.save_summary(c, world.pk(ci), "Quilt's build 412 passed.", 2, "info", "", "test",
                            "2026-11-02T12:00:00+00:00")
         c.commit()
     finally:
@@ -619,7 +620,7 @@ def test_a_send_during_a_first_save_leaves_no_copy_behind(page, app, world):
 
 
 def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     opened(page)
     pk = world.pk(LUNCH[1])
     page.evaluate(f"replyTo({pk},false)")
@@ -853,10 +854,10 @@ def spent_the_daily_limit():
 
 def lunch_needs_a_reply(world):
     """Lin's lunch message, triaged as needing a reply, so the brief has something to say."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed",
+        answers.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed",
                            "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:
@@ -976,14 +977,14 @@ def test_accessibility_does_not_get_worse(page, world, request):
 
 
 def test_the_page_takes_what_a_verdict_asks_from_the_server(page, world, anthropic_api):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         for name, importance, category, action in (
                 (LUNCH[1], 5, "action-needed", "Reply to Lin"),         # needs you, and on the agenda
                 ("ada-inbox-09-rfc2047-folded.eml", 1, "info", ""),     # safe to file
                 ("ada-inbox-05-receipt.eml", 3, "finance", "")):        # neither
-            store.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
+            answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
                                "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:
@@ -1009,7 +1010,7 @@ def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
 
 
 def _hub_files(world, n):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         for i in range(n):
@@ -1040,7 +1041,7 @@ def test_the_document_hub_shows_more_and_keeps_your_place(page, world):
 
 def test_the_document_hub_searches_files_it_has_not_loaded(page, world):
     _hub_files(world, 450)
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
@@ -1066,7 +1067,7 @@ def test_the_document_hub_shows_a_file_once_when_new_mail_moves_the_list(page, w
     rows = page.locator("#docList .doc-row")
     expect(rows).to_have_count(200)
     every = page.evaluate("_docMatched")
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         newer = c.execute("SELECT pk FROM messages WHERE ts > (SELECT ts FROM messages WHERE pk=?) ORDER BY ts DESC LIMIT 1",
@@ -1122,7 +1123,7 @@ def test_when_showing_more_fails_the_hub_keeps_what_it_has(page, world):
 
 def test_the_document_hub_filters_by_kind(page, world):
     _hub_files(world, 3)
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
@@ -1141,10 +1142,10 @@ def test_the_document_hub_filters_by_kind(page, world):
 
 
 def test_the_sync_menu_says_when_mail_is_out_in_a_batch(page, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
-    keys = [r["message_key"] for r in store.needs_summary(c, 3)]
-    store.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, 1)
+    keys = [r["message_key"] for r in answers.needs_summary(c, 3)]
+    answers.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, 1)
     c.close()
     page.goto("/")
     expect(page.locator("body")).to_be_visible()

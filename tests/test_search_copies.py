@@ -3,6 +3,7 @@ Gmail's and Proton's All Mail make a second, but it is one message to the person
 import urllib.parse
 
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 QUILT = "ada-inbox-11-html-cid.eml"             # Lin's quilt photo, in Ada's Inbox
 
@@ -66,7 +67,7 @@ def test_the_same_message_id_in_two_accounts_is_two_messages(app, world):
 
 
 def test_a_copy_on_its_way_out_leaves_the_other_to_be_found(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     in_new_folder(world, "Receipts", zebra())
     world.deliver(w.ADA, "INBOX", zebra())
     c = store.conn()
@@ -94,12 +95,12 @@ def test_a_ranked_search_still_ranks(app, world):
 
 
 def test_ask_counts_a_message_once(app, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     in_new_folder(world, "Receipts", zebra())
     world.deliver(w.ADA, "INBOX", zebra())
     c = store.conn()
     [pk] = [r["pk"] for r in c.execute("SELECT pk FROM messages WHERE folder='INBOX' AND subject='Zebra 1'")]
-    store.save_summary(c, pk, "Lin wrote about a zebra.", 3, "personal", "", "claude-opus-5-5", "2026-11-02T12:00:00+00:00")
+    answers.save_summary(c, pk, "Lin wrote about a zebra.", 3, "personal", "", "claude-opus-5-5", "2026-11-02T12:00:00+00:00")
     c.commit()
     c.close()
     assert app.post("/api/ai/ask", {"account": "all", "question": "zebra"}).status == 200

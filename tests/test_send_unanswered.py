@@ -14,7 +14,7 @@ def new(key):
 
 
 def row(oid):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return dict(c.execute("SELECT * FROM outbox WHERE id=?", (oid,)).fetchone())
@@ -101,7 +101,7 @@ def test_a_person_can_send_it_again_and_it_finishes_like_any_send(app, world):
 def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(app, world, monkeypatch):
     from mailmind.bootstrap.compose import outbox
     from mailmind.bootstrap.compose import transport
-    import store
+    from mailmind.bootstrap.mailbox import store
     oid = queued(app)
     real = transport.send
 
@@ -128,7 +128,7 @@ def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(
 def test_a_crash_before_the_message_went_is_tried_again_after_the_restart(app, world, monkeypatch):
     from mailmind.bootstrap.compose import outbox
     from mailmind.bootstrap.compose import transport
-    import store
+    from mailmind.bootstrap.mailbox import store
     oid = queued(app)
     real = transport.send
 

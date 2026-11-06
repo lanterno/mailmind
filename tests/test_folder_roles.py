@@ -167,7 +167,7 @@ def test_imaplib_is_what_the_parser_reads(world):
 
 
 def test_an_account_out_of_reach_shows_the_folders_it_has_stored(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.server.drop("LOGIN", user=w.BEA, times=None)          # Bridge down, before any list was cached
     r = app.get(f"/api/folders?account={w.BEA}")
     assert r.status == 200
@@ -185,7 +185,7 @@ def test_an_account_out_of_reach_shows_the_folders_it_has_stored(app, world):
 
 def test_stored_folders_play_their_roles_by_name(data_dir):
     import server
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.executemany("INSERT INTO sync_state(account, folder) VALUES (?, ?)",

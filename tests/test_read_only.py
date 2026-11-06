@@ -37,7 +37,7 @@ def read_only(monkeypatch):
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]

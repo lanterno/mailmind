@@ -24,7 +24,7 @@ OUTBOX_COLS = ("id", "account", "state", "attempts", "last_error", "delivered", 
 
 
 def rows(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]

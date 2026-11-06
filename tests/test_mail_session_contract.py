@@ -521,7 +521,7 @@ def test_a_read_only_process_examines_and_writes_nothing(world, kind, monkeypatc
 
 
 def test_no_command_goes_while_a_transaction_is_open(world, session):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute("INSERT INTO sync_state(account, folder, uidvalidity, last_uid) VALUES (?, 'Guarded', 1, 1)",

@@ -22,6 +22,7 @@ import pytest
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import curation
+from mailmind.bootstrap.assistant import answers
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 LUNCH_MID = "<lunch-3@lin.example.test>"
@@ -35,7 +36,7 @@ DRAFTING = "You are drafting a reply"
 # -- helpers --------------------------------------------------------------------------------------
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -44,7 +45,7 @@ def q(sql, *args):
 
 
 def execute(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute(sql, args)
@@ -55,10 +56,10 @@ def execute(sql, *args):
 
 def summarize_as(pk, importance, category="info", action=""):
     """Store the triage result a model would have given this message."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, pk, "Stub triage.", importance, category, action, "claude-opus-5-5",
+        answers.save_summary(c, pk, "Stub triage.", importance, category, action, "claude-opus-5-5",
                            datetime.now(timezone.utc).isoformat())
         c.commit()
     finally:
@@ -67,14 +68,14 @@ def summarize_as(pk, importance, category="info", action=""):
 
 def put_draft(account, ref_key, created, hit=None, c=None):
     """A banked draft row, created at `created` and last opened at `hit`."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     own = c is None
     c = store.conn() if own else c
     try:
-        store.draft_ahead_put(c, account, ref_key, "fp", "An old draft.", "balanced", "claude-opus-5-5", 1,
+        answers.draft_ahead_put(c, account, ref_key, "fp", "An old draft.", "balanced", "claude-opus-5-5", 1,
                               "<gone@example.test>", "dwell", created)
         if hit is not None:
-            store.draft_ahead_touch(c, account, ref_key, hit)
+            answers.draft_ahead_touch(c, account, ref_key, hit)
         c.commit()
     finally:
         if own:
@@ -445,11 +446,10 @@ def test_hwf_a_custom_draft_is_never_banked(app, world, ai):
 
 def test_hwf_a_failed_bank_write_still_returns_the_draft(app, world, ai, monkeypatch):
     import sqlite3
-    import store
 
     def full_disk(*a, **kw):
         raise sqlite3.OperationalError("database or disk is full")
-    monkeypatch.setattr(store, "draft_ahead_put", full_disk)
+    monkeypatch.setattr(answers, "draft_ahead_put", full_disk)
     r = app.post("/api/ai/draft-reply", {"pk": world.pk(QUILT)})
     assert r.status == 200 and r.json["body"]
 
@@ -576,7 +576,7 @@ def test_hwf_a_draft_whose_thread_ends_in_your_own_sent_copy_is_dropped(app, wor
 
 
 def test_hwf_draft_gc_evicts_by_last_use_counting_a_regeneration_as_use(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     now = int(time.time())
     c = store.conn()
     try:
@@ -585,7 +585,7 @@ def test_hwf_draft_gc_evicts_by_last_use_counting_a_regeneration_as_use(data_dir
         put_draft(w.ADA, "t:regenerated", created=now - 60, hit=now - 3000, c=c)     # rewritten a minute ago
         put_draft(w.ADA, "t:opened", created=now - 2600, hit=now - 5, c=c)           # old, but opened just now
         put_draft(w.ADA, "t:idle", created=now - 2500, c=c)                          # the least recently useful
-        store.draft_ahead_gc(c, now, orphans=False)
+        answers.draft_ahead_gc(c, now, orphans=False)
         c.commit()
         left = {r["ref_key"] for r in c.execute("SELECT ref_key FROM draft_ahead")}
     finally:
@@ -644,9 +644,8 @@ CACHED_READS = {     # each cached AI read, and the store read that finds its ca
 
 @pytest.mark.parametrize("which", list(CACHED_READS))
 def test_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatch, which):
-    import store
     summarize_as(world.pk(LUNCH), 5, "action-needed", "Reply")
-    real = getattr(store, CACHED_READS[which])
+    real = getattr(answers, CACHED_READS[which])
     reads, held, go = [], threading.Event(), threading.Event()
 
     def slow_first_read(*a, **kw):
@@ -656,7 +655,7 @@ def test_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatc
             held.set()
             go.wait(5)
         return row
-    monkeypatch.setattr(store, CACHED_READS[which], slow_first_read)
+    monkeypatch.setattr(answers, CACHED_READS[which], slow_first_read)
     first = threading.Thread(target=AI_READS[which], args=(app, world))
     first.start()
     held.wait(5)
@@ -717,7 +716,7 @@ def test_a_draft_survives_switching_the_from_account(app, world, ai):
 
 
 def test_the_review_counts_only_this_accounts_cleanups(app, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         curation.sqlite.unsub_log_put(c, "news@loom.example.test", "post", "ok", 200,

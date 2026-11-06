@@ -25,7 +25,7 @@ def thread_with_a_reply(world):
 
 
 def row_of(uid):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT * FROM messages WHERE account=? AND folder='INBOX' AND uid=?", (w.ADA, uid)).fetchone()
@@ -45,7 +45,7 @@ def test_muting_marks_the_unread_members_read_on_the_server(app, world):
 
 
 def test_muting_a_thread_already_read_asks_nothing_of_the_server(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
     c = store.conn()
     c.execute("UPDATE messages SET seen=1 WHERE account=? AND thread_id=?", (w.ADA, lunch["thread_id"]))
@@ -97,7 +97,7 @@ def test_undo_finds_the_row_after_a_renumber(app, world):
     ingest.sync_new(acct())
     assert app.post("/api/undo", {}).json["ok"]
     readmutq.drain()
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     r = c.execute("SELECT seen FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
                   (w.ADA, "<mute-reply@example.test>")).fetchone()
@@ -106,7 +106,7 @@ def test_undo_finds_the_row_after_a_renumber(app, world):
 
 
 def test_an_undo_written_before_this_only_changes_the_local_row(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
     pk = row_of(uid)["pk"]
     c = store.conn()
@@ -166,7 +166,7 @@ def test_read_only_mutes_and_the_mark_waits_in_the_queue(app, world, monkeypatch
 def test_finished_queue_rows_go_after_a_month(app, world):
     import readmutq
     import server
-    import store
+    from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
     assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
     readmutq.drain()

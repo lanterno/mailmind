@@ -27,6 +27,7 @@ from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import composing
 from mailmind.compose.domain import attachments
+from mailmind.bootstrap.assistant import answers
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -36,7 +37,7 @@ _uid = itertools.count(1)
 
 @pytest.fixture
 def db(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     yield c
     c.close()
@@ -45,7 +46,7 @@ def db(data_dir):
 def put(c, mid="", *, account=A, folder="INBOX", irt="", refs="", gm="", subject="Hello", ts=0,
         snippet="", bucket="other/personal-ish", is_junk=0, **cols):
     """Store one message as ingest does, then set any further columns (thread_id, answered, ...)."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = store.upsert_message(c, {"account": account, "kind": "gmail" if gm else "imap", "folder": folder,
                                   "uid": next(_uid), "message_id": mid, "gmail_thread": gm or None,
                                   "from_addr": "lin@example.test", "from_name": "Lin Mori", "subject": subject,
@@ -75,7 +76,7 @@ def hits(c, match):
 
 
 def rows(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -102,7 +103,7 @@ REPLY = (b"From: Lin Mori <lin@example.test>\r\nTo: Noor Haddad <noor@studio.exa
 
 
 def test_hwf_migrations_5_and_6_thread_and_index_mail_stored_before_them(data_dir, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     _db_at(monkeypatch, data_dir, 4, "v4.db")
     c = store.conn()
     ins = ("INSERT INTO messages(account, kind, folder, uid, message_id, in_reply_to, subject, from_addr) "
@@ -126,7 +127,7 @@ def test_hwf_migrations_5_and_6_thread_and_index_mail_stored_before_them(data_di
 
 
 def test_hwf_migration_10_rebuilds_a_search_index_that_lacks_recipients(data_dir, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     _db_at(monkeypatch, data_dir, 9, "v9.db")
     c = store.conn()
     c.executescript("DROP TABLE msg_fts; CREATE VIRTUAL TABLE msg_fts USING fts5("
@@ -145,7 +146,7 @@ def test_hwf_migration_10_rebuilds_a_search_index_that_lacks_recipients(data_dir
 
 
 def test_hwf_migration_18_drops_the_retired_notes_table(data_dir, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     _db_at(monkeypatch, data_dir, 17, "v17.db")
     c = store.conn()
     c.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)")
@@ -158,10 +159,10 @@ def test_hwf_migration_18_drops_the_retired_notes_table(data_dir, monkeypatch):
 # -- the search index and the text it holds -----------------------------------
 
 def test_hwf_every_delete_path_drops_the_search_row_summary_and_body(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     one, two, three = (put(db, f"<d{i}@example.test>", subject="Heron notes") for i in range(3))
     for pk in (one, two, three):
-        store.save_summary(db, pk, "s", 3, "info", "", "m", "now")
+        answers.save_summary(db, pk, "s", 3, "info", "", "m", "now")
         store.store_body(db, pk, b"Subject: Heron notes\r\n\r\nbody", "now")
     assert hits(db, '"heron"') == [one, two, three]
     store.delete_message(db, one)
@@ -175,7 +176,7 @@ def test_hwf_every_delete_path_drops_the_search_row_summary_and_body(db):
 
 
 def test_hwf_search_index_helpers_tolerate_a_database_without_the_index(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     db.execute("DROP TABLE msg_fts")
     pk = put(db, "<x@example.test>")                      # upsert indexes; a missing index is skipped
     store.fts_set_body(db, pk, "text")
@@ -215,7 +216,7 @@ def test_hwf_body_text_is_capped_at_100k_characters():
 
 
 def test_hwf_a_fetched_body_fills_only_an_empty_snippet(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     kept = put(db, "<k@example.test>", snippet="what ingest saw")
     empty = put(db, "<e@example.test>")
     for pk in (kept, empty):
@@ -249,7 +250,7 @@ def test_hwf_an_inbox_snippet_drops_invisible_preheader_padding(world):
 
 
 def test_hwf_an_upsert_of_a_stored_uid_keeps_its_sender_date_and_ids(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     first = {"account": A, "kind": "gmail", "folder": "INBOX", "uid": 7, "message_id": "<one@example.test>",
              "gmail_thread": "1781", "from_addr": "lin@example.test", "from_name": "Lin Mori", "subject": "Old",
              "date_iso": "2026-10-01T09:00:00+00:00", "ts": 100, "snippet": "old", "bucket": "other/personal-ish",
@@ -341,8 +342,7 @@ def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
 # -- the draft-ahead cache's hygiene ------------------------------------------
 
 def _ahead(c, ref, created, body="Sounds good."):
-    import store
-    store.draft_ahead_put(c, A, ref, "fp", body, "warm", "m", None, None, "dwell", created)
+    answers.draft_ahead_put(c, A, ref, "fp", body, "warm", "m", None, None, "dwell", created)
 
 
 def _ahead_keys(c):
@@ -350,31 +350,28 @@ def _ahead_keys(c):
 
 
 def test_hwf_draft_ahead_ages_out_after_a_week_unless_a_failure_is_recent(db):
-    import store
     for t in "ABCD":
         put(db, f"<{t}@example.test>", thread_id=t)
     _ahead(db, "t:A", NOW_TS - 8 * DAY)
     _ahead(db, "t:B", NOW_TS - 8 * DAY)
-    store.draft_ahead_fail(db, A, "t:B", NOW_TS - DAY)       # a failed regeneration keeps the row as backoff
-    store.draft_ahead_fail(db, A, "t:C", NOW_TS - DAY)       # failure-only rows persist the backoff
-    store.draft_ahead_fail(db, A, "t:D", NOW_TS - 8 * DAY)
-    store.draft_ahead_gc(db, NOW_TS)
+    answers.draft_ahead_fail(db, A, "t:B", NOW_TS - DAY)       # a failed regeneration keeps the row as backoff
+    answers.draft_ahead_fail(db, A, "t:C", NOW_TS - DAY)       # failure-only rows persist the backoff
+    answers.draft_ahead_fail(db, A, "t:D", NOW_TS - 8 * DAY)
+    answers.draft_ahead_gc(db, NOW_TS)
     assert _ahead_keys(db) == ["t:B", "t:C"]
 
 
 def test_hwf_draft_ahead_sweeps_orphans_only_when_asked_and_after_an_hour(db):
-    import store
     _ahead(db, "t:gone", NOW_TS - 2 * 3600)
     _ahead(db, "m:<gone@example.test>", NOW_TS - 2 * 3600)
     _ahead(db, "t:just-made", NOW_TS - 600)
-    store.draft_ahead_gc(db, NOW_TS, orphans=False)          # the opportunistic call sites: mid-sync safe
+    answers.draft_ahead_gc(db, NOW_TS, orphans=False)          # the opportunistic call sites: mid-sync safe
     assert _ahead_keys(db) == ["m:<gone@example.test>", "t:gone", "t:just-made"]
-    store.draft_ahead_gc(db, NOW_TS)
+    answers.draft_ahead_gc(db, NOW_TS)
     assert _ahead_keys(db) == ["t:just-made"]
 
 
 def test_hwf_draft_ahead_drops_a_draft_once_the_conversation_ended(db):
-    import store
     put(db, "<s1@example.test>", thread_id="SENT", ts=100)
     put(db, "<s2@example.test>", thread_id="SENT", ts=200, folder="Sent")      # a synced Sent copy: answered=0
     put(db, "<a1@example.test>", thread_id="ANSWERED", ts=100, answered=1)
@@ -386,17 +383,16 @@ def test_hwf_draft_ahead_drops_a_draft_once_the_conversation_ended(db):
     put(db, "<o@example.test>")
     for ref in ("t:SENT", "t:ANSWERED", "t:OPEN", "m:<j@example.test>", "m:<k@example.test>", "m:<o@example.test>"):
         _ahead(db, ref, NOW_TS - 60)
-    store.draft_ahead_fail(db, A, "t:FAILED", NOW_TS - 60)   # no body: only a backoff record, never moot
-    store.draft_ahead_gc(db, NOW_TS, orphans=False)
+    answers.draft_ahead_fail(db, A, "t:FAILED", NOW_TS - 60)   # no body: only a backoff record, never moot
+    answers.draft_ahead_gc(db, NOW_TS, orphans=False)
     assert _ahead_keys(db) == ["m:<o@example.test>", "t:FAILED", "t:OPEN"]
 
 
 def test_hwf_draft_ahead_keeps_the_500_most_recently_useful(db):
-    import store
     for i in range(502):
         _ahead(db, f"t:x{i:03}", NOW_TS - 1000 + i)
-    store.draft_ahead_touch(db, A, "t:x000", NOW_TS)          # oldest made, but just served
-    store.draft_ahead_gc(db, NOW_TS, orphans=False)
+    answers.draft_ahead_touch(db, A, "t:x000", NOW_TS)          # oldest made, but just served
+    answers.draft_ahead_gc(db, NOW_TS, orphans=False)
     keys = _ahead_keys(db)
     assert len(keys) == 500 and "t:x000" in keys and not {"t:x001", "t:x002"} & set(keys)
 
@@ -427,7 +423,7 @@ def test_hwf_an_outbox_insert_that_loses_a_race_returns_the_winners_row(db):
 
 
 def test_hwf_a_queued_mutation_insert_that_loses_a_race_returns_the_winners_row(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     row = {"account": A, "idempotency_key": "trash:k1", "op": "trash", "message_id": "<m@example.test>",
            "src_folder": "INBOX", "dest": "Trash", "payload": "{}", "next_attempt_at": 0, "created_at": "now"}
     mid, created = store.read_mut_insert(db, row)
@@ -505,7 +501,7 @@ def test_hwf_a_queued_reply_follows_its_thread_when_the_thread_takes_another_id(
 
 
 def test_hwf_a_message_without_an_id_keeps_a_thread_of_its_own_row(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = put(db, "")
     recompute(db)
     first = tid(db, pk)
@@ -535,7 +531,7 @@ def test_hwf_a_thread_that_joins_a_gmail_thread_keeps_its_mute(db):
 
 
 def test_hwf_a_thread_stored_again_whole_keeps_its_mute(db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     reply = put(db, "<r@example.test>", irt="<m@example.test>")     # the reply synced before its original
     recompute(db)
     root = put(db, "<m@example.test>")
@@ -877,7 +873,7 @@ def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
 
 def test_hwf_a_message_whose_part_rows_were_cleared_records_them_when_opened(world):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-07-forward-rfc822.eml"
     pk = world.pk(name)
     first = ingest.fetch_body(pk)["attachments"]
@@ -965,7 +961,7 @@ def test_hwf_a_quote_stored_with_the_fold_loses_only_the_fold():
 
 
 def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     fold = '<details class="mm-quote"><summary>··· quoted text</summary>'
     did = book.draft_upsert(c, {"id": None, "account": A, "folder": "Drafts", "uid": 7, "message_id": "<d@example.test>",

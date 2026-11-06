@@ -92,7 +92,7 @@ def test_migration_22_run_again_changes_nothing(tmp_path):
 
 
 def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     import summarize_thread
     path = str(data_dir / "mailmind.db")
     c = sqlite3.connect(path)

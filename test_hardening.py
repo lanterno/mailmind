@@ -16,7 +16,7 @@ import tempfile
 import threading
 import urllib.parse
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.platform import settings
 from mailmind.platform.workers import gates

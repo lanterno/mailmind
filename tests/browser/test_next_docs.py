@@ -25,7 +25,7 @@ def clean(page):
 
 
 def hub_files(world, n):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         for i in range(n):
@@ -37,7 +37,7 @@ def hub_files(world, n):
 
 
 def one_file(world, name, filename, part="one", kind="application/pdf"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
@@ -97,7 +97,7 @@ def test_the_hub_shows_a_file_once_when_new_mail_moves_the_list(page, world):
     rows = page.locator("#docList .doc-row")
     expect(rows).to_have_count(200)
     every = matched(page)
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         newer = c.execute("SELECT pk FROM messages WHERE ts > (SELECT ts FROM messages WHERE pk=?) ORDER BY ts DESC LIMIT 1",

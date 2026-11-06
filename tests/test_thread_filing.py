@@ -15,7 +15,7 @@ def boxes(world, name):
 
 
 def stack():
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return store.undo_entries(c)
@@ -24,7 +24,7 @@ def stack():
 
 
 def set_thread(world, name, thread_id):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     c.execute("UPDATE messages SET thread_id=? WHERE pk=?", (thread_id, world.pk(name)))
     c.commit()
@@ -105,7 +105,7 @@ def test_a_total_failure_is_not_ok_and_leaves_nothing_to_undo(app, world):
 
 
 def test_an_unreachable_server_queues_each_message(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.server.drop("SELECT", user=w.ADA, times=None)
     r = app.post("/api/thread/trash", {"pk": world.pk(CONFIRM)}).json
     assert (r["ok"], r["count"], r["queued"]) == (True, 2, 2)

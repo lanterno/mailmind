@@ -25,6 +25,7 @@ from mailmind.curation.application import cleanup
 from mailmind.bootstrap import curation
 from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
+from mailmind.bootstrap.assistant import answers
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -37,7 +38,7 @@ UTC = timezone.utc
 
 
 def rows(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -52,10 +53,10 @@ def pk_of(message_id, account=None):
 
 
 def summary(pk, importance, category, action=""):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, pk, "stub", importance, category, action, "test", "2026-11-02T12:00:00+00:00")
+        answers.save_summary(c, pk, "stub", importance, category, action, "test", "2026-11-02T12:00:00+00:00")
         c.commit()
     finally:
         c.close()
@@ -80,7 +81,7 @@ def server_boxes(world, name):
 # -- the IMAP lock: held for mail moves, never waited on where it would freeze the app -----
 
 def test_hwf_trash_moves_and_queues_under_the_imap_lock(app, world, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     held = lock_spy(world, "UID MOVE", user=w.ADA)
     assert app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json["ok"]
     assert held == [True]
@@ -390,7 +391,7 @@ def test_hwf_unsubscribe_comes_from_the_newest_message_with_a_stored_body(app, w
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID="<issue-219@loom.example.test>",
                                               Date="Mon, 02 Nov 2026 07:00:00 +0000",
                                               List_Unsubscribe="<mailto:stop-219@loom.example.test>"), (w.SEEN,))
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()        # mail from before ingest kept these headers: its body is all that can say
     c.execute("UPDATE messages SET list_unsub_raw=NULL, list_unsub_method=NULL WHERE lower(from_addr)=?", (LOOM,))
     c.commit()
@@ -430,7 +431,7 @@ def test_hwf_a_forward_leaves_inline_pictures_behind(app, world):
 def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
     from mailmind.bootstrap import accounts
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     saved = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],
                                     "subject": "Held", "text": "Going out."}).json
     ingest.sync_folder(accounts.get(w.ADA), "Drafts")
@@ -467,7 +468,7 @@ def test_hwf_a_search_the_index_rejects_answers_bad_query(app, world, monkeypatc
 # -- follow-ups -----------------------------------------------------------
 
 def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.deliver(w.ADA, "INBOX", b"From: Lin Mori <lin@example.test>\r\nTo: Ada Park <ada@example.test>\r\n"
                                   b"Subject: Fabric swatches\r\nDate: Wed, 28 Oct 2026 09:00:00 +0000\r\n"
                                   b"Message-ID: <swatches@lin.example.test>\r\n\r\nWhich of these?\r\n", (w.SEEN,))
@@ -556,7 +557,7 @@ def _swatch(key, **kw):
 
 
 def _draft_row(did):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return dict(book.draft_get(c, did))

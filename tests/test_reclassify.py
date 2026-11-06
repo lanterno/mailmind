@@ -2,6 +2,7 @@
 be, and leaves alone what no rule ever had a say in."""
 
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 NEWS = "ada-inbox-03-newsletter.eml"
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -9,7 +10,7 @@ RECEIPT = "ada-inbox-05-receipt.eml"
 
 
 def stored(world, name, folder="INBOX"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT * FROM messages WHERE account=? AND folder=? AND message_id=?",
@@ -57,11 +58,11 @@ def test_keeping_a_sender_brings_stored_mail_out_of_junk(app, world):
 
 
 def test_mail_brought_out_of_junk_is_offered_for_triage(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     rule(app, sender(world, NEWS), "keep")
     pk = stored(world, NEWS)["pk"]
     c = store.conn()
-    offered = [r["pk"] for r in store.needs_summary(c, 1000)]
+    offered = [r["pk"] for r in answers.needs_summary(c, 1000)]
     c.close()
     assert pk in offered
 
@@ -93,7 +94,7 @@ def test_mail_no_rule_had_a_say_in_stays_as_ingest_judged_it(app, world):
 
 
 def test_a_domain_rule_covers_its_sub_domains_and_no_lookalike(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     addr = sender(world, LUNCH)
     dom = domain(world, LUNCH)
     c = store.conn()

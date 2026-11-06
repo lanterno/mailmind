@@ -99,7 +99,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     needs no mail server: the outbox and the offline queue wait, and nothing syncs."""
     import realtime
     import server
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap import legacy
     from mailmind.platform import settings
     from mailmind.platform.db import migrations

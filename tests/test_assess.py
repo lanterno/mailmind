@@ -2,13 +2,14 @@
 model never holds up a sync. A sync that brings new mail kicks it. While AI is off it tries nothing
 at all. Fictional mail and the fake Claude API only."""
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 
 def unsummarized():
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        return len(store.needs_summary(c, 10_000))
+        return len(answers.needs_summary(c, 10_000))
     finally:
         c.close()
 

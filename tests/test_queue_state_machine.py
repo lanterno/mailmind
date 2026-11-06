@@ -60,7 +60,7 @@ class Machine(RuleBasedStateMachine):
         return {box for _, box, _, _ in self.world.where(name)["server"]}
 
     def pk_in_inbox(self, name):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             r = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=? "
@@ -70,7 +70,7 @@ class Machine(RuleBasedStateMachine):
             c.close()
 
     def rows(self):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return [dict(r) for r in c.execute("SELECT * FROM read_mutations ORDER BY id")]
@@ -119,7 +119,7 @@ class Machine(RuleBasedStateMachine):
     @rule()
     def undo(self):
         import server
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         entries = store.undo_entries(c)
         c.close()
@@ -195,7 +195,7 @@ class Machine(RuleBasedStateMachine):
 
     def restart(self):
         import readmutq
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         readmutq.QUEUE.reset_stuck(c)
         c.commit()
@@ -257,7 +257,7 @@ class Machine(RuleBasedStateMachine):
 
     @invariant()
     def a_row_is_hidden_only_by_a_change_on_its_way(self):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             stray = c.execute("SELECT pk, pending_removal FROM messages WHERE pending_removal IS NOT NULL AND "

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.mailbox.application.session import Headers
 from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file

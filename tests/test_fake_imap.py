@@ -206,7 +206,7 @@ def test_a_folder_name_with_spaces_and_quotes_round_trips(srv, data_dir):
 
 def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
     import mailops
-    import store
+    from mailmind.bootstrap.mailbox import store
     uid = srv.deliver(ADA, "INBOX", _mail(1))
     c = store.conn()
     pk = store.upsert_message(c, {"account": ADA, "kind": "imap", "folder": "INBOX", "uid": uid,
@@ -351,7 +351,7 @@ def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
 
 def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     srv.without.add("CONDSTORE")
     for n in range(3):
         srv.deliver(ADA, "INBOX", _mail(n), flags=["\\Seen"] if n == 0 else [])
@@ -372,7 +372,7 @@ def test_ingest_syncs_a_folder_then_only_what_is_new(srv, app):
 
 def test_ingest_resyncs_a_folder_whose_uidvalidity_changed(srv, app):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     for n in range(2):
         srv.deliver(ADA, "INBOX", _mail(n))
     ingest.sync_folder(app, "INBOX", full=True)

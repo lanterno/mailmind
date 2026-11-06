@@ -7,7 +7,7 @@ import json
 import tempfile
 import time
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.platform import settings
 
 _CONFIG = {"accounts": [{"email": "ada@example.test", "type": "imap", "host": "imap.example.test"}]}

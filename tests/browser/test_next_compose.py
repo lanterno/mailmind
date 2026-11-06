@@ -10,6 +10,7 @@ from playwright.sync_api import expect
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
@@ -228,7 +229,7 @@ def test_a_forward_saved_once_shows_its_files_as_its_own(page, world):
 
 
 def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     opened(page)
     pk = world.pk(LUNCH[1])
     row(page, world, LUNCH[1]).click()
@@ -713,10 +714,10 @@ def test_no_quick_replies_on_a_receipt(page, world):
 
 
 def lunch_needs_a_reply(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
+        answers.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:
         c.close()

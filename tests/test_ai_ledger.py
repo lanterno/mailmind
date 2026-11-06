@@ -8,6 +8,7 @@ import pytest
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
 # conftest.NOW, Monday 2 November 2026 at noon UTC (and TZ is UTC). Not imported: under importlib
@@ -23,7 +24,7 @@ def answer(text, input_tokens=0, output_tokens=0, cache_write=0, cache_read=0, *
 
 
 def rows():
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(
@@ -182,10 +183,10 @@ def test_a_ledger_that_fails_never_fails_the_call(gateway, ai, monkeypatch, caps
 # ── every feature names its calls ─────────────────────────────────────────────
 
 def summarize_as(pk, importance, category):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, pk, "Stub triage.", importance, category, "Reply", "claude-opus-5-5",
+        answers.save_summary(c, pk, "Stub triage.", importance, category, "Reply", "claude-opus-5-5",
                            datetime.now(timezone.utc).isoformat())
         c.commit()
     finally:

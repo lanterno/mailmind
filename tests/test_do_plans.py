@@ -15,7 +15,7 @@ FROM_LIN = "from:lin@example.test in:INBOX"
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -113,7 +113,7 @@ def test_a_message_moved_since_the_preview_is_left_where_it_went(app, world, ai)
 
 def test_a_message_with_a_move_on_its_way_is_left_alone(app, world, ai):
     plan = preview(app, ai)
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = world.pk(QUILT)
     c = store.conn()
     c.execute("UPDATE messages SET pending_removal=1 WHERE pk=?", (pk,))
@@ -304,7 +304,7 @@ def test_it_files_by_the_plans_verb(app, world, ai, verb, folder):
 @pytest.mark.parametrize("verb,column,value,seen_first", [("read", "seen", 1, 0), ("unread", "seen", 0, 1),
                                                           ("star", "flagged", 1, 0)])
 def test_it_marks_by_the_plans_verb(app, world, ai, verb, column, value, seen_first):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = world.pk(QUILT)
     c = store.conn()
     c.execute("UPDATE messages SET seen=?, flagged=0 WHERE pk=?", (seen_first, pk))

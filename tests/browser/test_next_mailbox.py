@@ -11,6 +11,7 @@ from playwright.sync_api import expect
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.platform import sse
+from mailmind.bootstrap.assistant import answers
 
 pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
@@ -437,10 +438,10 @@ def test_a_search_saves_as_a_view_in_the_rail_and_the_view_runs_it(page, world):
 
 
 def test_a_saved_summary_shows_at_once_with_no_call_and_a_full_one_comes_when_asked(page, world, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, world.pk(RECEIPT), "Saved words", 3, "personal", "Keep the receipt", "claude-opus-5-5", "2026-11-02")
+        answers.save_summary(c, world.pk(RECEIPT), "Saved words", 3, "personal", "Keep the receipt", "claude-opus-5-5", "2026-11-02")
         c.commit()
     finally:
         c.close()

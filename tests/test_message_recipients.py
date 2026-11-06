@@ -21,7 +21,7 @@ def _known(app, *addrs):
 
 
 def _rows(pk):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return sorted(r[0] for r in c.execute("SELECT addr FROM message_recipients WHERE message_pk=?", (pk,)))
@@ -30,7 +30,7 @@ def _rows(pk):
 
 
 def _pk(mid):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT pk FROM messages WHERE message_id=?", (f"<{mid}>",)).fetchone()[0]
@@ -79,7 +79,7 @@ def test_an_address_is_kept_in_lower_case(app, world):
 
 
 def test_storing_a_body_reads_its_whole_list_again(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.deliver(w.ADA, "Sent", _mail(", ".join(LONG)), (w.SEEN,))
     pk = _pk("sent-long@example.test")
     c = store.conn()
@@ -93,7 +93,7 @@ def test_storing_a_body_reads_its_whole_list_again(app, world):
 
 
 def test_a_copy_that_goes_takes_its_rows(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.deliver(w.ADA, "Sent", _mail("gone@a.example.test"), (w.SEEN,))
     pk = _pk("sent-long@example.test")
     assert _rows(pk) == ["gone@a.example.test"]
@@ -106,7 +106,7 @@ def test_a_copy_that_goes_takes_its_rows(app, world):
 
 
 def test_a_forged_list_of_any_length_is_bounded(app, world, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     monkeypatch.setattr(store, "RECIPIENT_ROWS_MAX", 10)
     world.deliver(w.ADA, "INBOX", _mail(", ".join(LONG), sender="stranger@b.example.test"))
     assert len(_rows(_pk("sent-long@example.test"))) == 10
@@ -124,7 +124,7 @@ def test_a_search_reaches_the_end_of_a_long_list(app, world):
 
 
 def test_the_text_kept_for_search_is_bounded(app, world, monkeypatch):
-    import store
+    from mailmind.bootstrap.mailbox import store
     monkeypatch.setattr(store, "RECIPIENTS_CHARS", 100)
     world.deliver(w.ADA, "Sent", _mail(", ".join(LONG)), (w.SEEN,))
     c = store.conn()

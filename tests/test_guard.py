@@ -68,7 +68,7 @@ def test_a_swallowed_refusal_is_still_recorded(refused):
 
 
 def test_a_module_path_left_pointing_at_the_repo_is_caught(refused):
-    import store
+    from mailmind.bootstrap.mailbox import store
     with pytest.raises(guard.Tripwire):                               # no data_dir here; refused whether
         store.conn()                                                  # or not the file exists in this checkout
     assert refused == [f"sqlite3.connect {os.path.join(ROOT, 'mailmind.db')!r}"]
@@ -127,7 +127,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import json
     from mailmind.bootstrap.accounts import config
     from mailmind.bootstrap.curation import rules
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap.discovery import views
     from mailmind.platform import settings
     assert settings.current().home == str(data_dir)

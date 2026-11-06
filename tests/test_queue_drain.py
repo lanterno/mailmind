@@ -22,7 +22,7 @@ def queue(app, world, op="archive", name=RECEIPT, account=w.ADA, mutation_id="m-
 
 
 def rows():
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [{k: r[k] for k in ("id", "op", "state", "attempts", "applied", "dest", "last_error",
@@ -89,7 +89,7 @@ def test_while_the_server_stays_away_it_backs_off_then_gives_up(app, world):
 
 def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
     import readmutq
-    import store
+    from mailmind.bootstrap.mailbox import store
     queue(app, world)
 
     mirror, crashed = readmutq._local_mirror, []
@@ -116,7 +116,7 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
 
 def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monkeypatch):
     import readmutq
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.platform import bus
     heard = []
 
@@ -164,7 +164,7 @@ def test_undo_after_the_queue_shipped_moves_it_back(app, world):
 
 
 def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk, thread = world.pk(RECEIPT), world.row(RECEIPT)["thread_id"]
     queue(app, world)
     listed = app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]

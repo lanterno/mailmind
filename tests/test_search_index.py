@@ -30,7 +30,7 @@ def before(tmp_path):
 
 
 def test_the_index_keeps_no_copy_of_the_mail(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", "Four more squares")
     discovery.index_message(c, pk)
@@ -74,7 +74,7 @@ def test_the_migration_again_changes_nothing(before):
 
 
 def test_indexing_a_row_again_replaces_its_words(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", None)
     discovery.index_message(c, pk)
@@ -87,7 +87,7 @@ def test_indexing_a_row_again_replaces_its_words(data_dir):
 
 
 def test_a_row_deleted_from_the_index_is_gone_and_one_it_never_held_is_no_harm(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     pk = add_message(c, 1, "Marigold border", "Four more squares")
     discovery.index_message(c, pk)
@@ -101,7 +101,7 @@ def test_a_row_deleted_from_the_index_is_gone_and_one_it_never_held_is_no_harm(d
 
 def test_ranking_still_counts_the_columns(data_dir):
     from mailmind.bootstrap import discovery
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     in_body = add_message(c, 1, "Allotment rota", "the marigold border")
     in_subject = add_message(c, 2, "Marigold border", "Four more squares")

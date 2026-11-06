@@ -119,7 +119,7 @@ def test_back_closes_the_composer_and_keeps_what_was_typed(page, world):
 
 
 def drafts(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute("SELECT subject FROM drafts")]

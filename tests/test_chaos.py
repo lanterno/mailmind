@@ -27,7 +27,7 @@ def per_account(monkeypatch):
 
 def unfetched(world, name):
     """`name`'s pk, its body not yet fetched: opening it goes to the server."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = world.pk(name)
     c = store.conn()
     try:
@@ -102,7 +102,7 @@ def test_the_outbox_worker_sends_on_while_another_accounts_sent_copy_hangs(app, 
     """The worker's drains don't wait for a busy account: a send that comes due while Bea's Sent
     copy hangs goes out at once, not after her server's 60-second timeout."""
     from mailmind.bootstrap.compose import outbox
-    import store
+    from mailmind.bootstrap.mailbox import store
 
     def send(who, key):
         return app.post("/api/send", {"account": who, "mode": "new", "to": ["Lin Mori <lin@example.test>"],
@@ -168,7 +168,7 @@ def late(n=1):
 
 
 def stored(message_id):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT COUNT(*) FROM messages WHERE message_id=?", (message_id,)).fetchone()[0]

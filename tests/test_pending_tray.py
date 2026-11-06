@@ -41,7 +41,7 @@ def row_flagged(world, name=RECEIPT):
 
 
 def state_of(mid):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         r = store.read_mut_get(c, mid)
@@ -98,7 +98,7 @@ def test_retry_takes_the_message_out_of_the_lists_again_and_the_move_lands(app, 
 
 def test_retry_of_a_flag_change_shows_it_and_a_new_refusal_puts_back_what_it_replaced(app, world):
     import readmutq
-    import store
+    from mailmind.bootstrap.mailbox import store
     mid = queue_star(app, world)
     assert row_flagged(world) == 1
     refused(world, "UID STORE")
@@ -142,7 +142,7 @@ def test_after_a_discard_undo_has_nothing_to_reverse(app, world):
 
 
 def test_discarding_one_of_a_group_leaves_undo_the_rest(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     a = queue_archive(app, world, RECEIPT, group="g-1")
     queue_archive(app, world, LUNCH, group="g-1")
     assert app.post("/api/pending/discard", {"id": a}).json["ok"]
@@ -169,7 +169,7 @@ def test_discard_of_a_given_up_move_clears_it_from_the_tray(app, world):
 
 
 def test_discard_reads_back_a_message_whose_row_went_when_it_was_queued(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     mid = queue_archive(app, world)
     message_id = world.row(RECEIPT)["message_id"]
     c = store.conn()                                  # as a move queued before migration 23 left it

@@ -161,7 +161,7 @@ class World:
 
     def pk(self, name):
         """The message's row in the database, by account, folder and UID."""
-        import store
+        from mailmind.bootstrap.mailbox import store
         acct, folder, uid = self.placed[name]
         c = store.conn()
         try:
@@ -194,7 +194,7 @@ class World:
         """Where the corpus message `name` is now, found by its Message-ID: on the server (account,
         mailbox, UID, flags) and in the database (account, folder, UID and the flag columns). A row
         a queued move is taking away (pending_removal) is listed nowhere, so it isn't here either."""
-        import store
+        from mailmind.bootstrap.mailbox import store
         mid = message_id(name)
         server = []
         with self.server.lock:
@@ -222,7 +222,7 @@ class World:
                           if (m.headers().get("Message-ID") or "").strip() == message_id)
 
     def row(self, name):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return dict(store.get_message(c, self.pk(name)))

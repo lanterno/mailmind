@@ -14,14 +14,14 @@ _uid = itertools.count(1)
 
 @pytest.fixture
 def db(data_dir):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     yield c
     c.close()
 
 
 def add(c, mid, *, account=A, irt="", refs="", gm="", subject="Hello"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = store.upsert_message(c, {"account": account, "kind": "gmail" if gm else "imap", "folder": "INBOX",
                                   "uid": next(_uid), "message_id": mid, "gmail_thread": gm or None,
                                   "from_addr": "lin@example.test", "from_name": "Lin", "subject": subject,

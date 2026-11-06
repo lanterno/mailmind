@@ -136,7 +136,7 @@ def _tripwire():
 def data_dir(tmp_path):
     """A temp directory holding this test's database, config, rules, views and audit trails."""
     from mailmind.platform import settings
-    import store
+    from mailmind.bootstrap.mailbox import store
     with settings.use(settings.Settings(home=str(tmp_path))):
         store.init()
         yield tmp_path
@@ -149,7 +149,7 @@ def world_template(tmp_path_factory):
     from fixtures import world
     from mailmind.platform import settings
     import sqlite3
-    import store
+    from mailmind.bootstrap.mailbox import store
     d = tmp_path_factory.mktemp("world-template")
     import time_machine
     with settings.use(settings.Settings(home=str(d))), FakeIMAPServer() as srv, \

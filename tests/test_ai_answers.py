@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import attention
+from mailmind.bootstrap.assistant import answers
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 LUNCH_MID = "<lunch-3@lin.example.test>"
@@ -18,7 +19,7 @@ WEEK = "A steady week: mail came in, some went out, and one thread from Lin is s
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -27,7 +28,7 @@ def q(sql, *args):
 
 
 def execute(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         c.execute(sql, args)
@@ -37,10 +38,10 @@ def execute(sql, *args):
 
 
 def summarize_as(pk, importance=5, category="action-needed", action="Reply"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, pk, "Stub triage.", importance, category, action, "claude-opus-5-5",
+        answers.save_summary(c, pk, "Stub triage.", importance, category, action, "claude-opus-5-5",
                            datetime.now(timezone.utc).isoformat())
         c.commit()
     finally:
@@ -77,7 +78,7 @@ def review_now(app):
 
 
 def waiting_on(pk, thread_id):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     attention.book.followup_record_sent(c, w.ADA, thread_id, pk, int(time.time()), "2026-11-01T00:00:00+00:00")
     c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (thread_id,))
@@ -251,7 +252,7 @@ def test_each_table_keeps_a_week(app, world, ai):
 
 
 def test_the_old_cache_is_gone_for_good(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.platform.db import migrate
     from mailmind.platform.settings import current
     migrate.init(current().db)                   # the next start's

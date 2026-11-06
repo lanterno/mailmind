@@ -14,7 +14,7 @@ import threading
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.platform import settings
 from mailmind.platform.db import migrations
 from mailmind.platform.workers import gates

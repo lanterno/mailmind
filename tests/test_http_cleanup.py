@@ -37,7 +37,7 @@ def posts(monkeypatch):
 
 
 def pk_of(message_id):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT pk FROM messages WHERE message_id=?", (message_id,)).fetchone()["pk"]
@@ -150,7 +150,7 @@ def test_cleanup_refusals(app, golden):
 
 
 def rows(sql):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql)]
@@ -234,7 +234,7 @@ def _clean_up_the_loom(app):
 
 
 def test_a_cleanup_with_the_server_away_queues_the_sweep_and_undo_takes_it_back(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     world.server.stop()
     r = _clean_up_the_loom(app)
     assert (r["swept"], r["sweep_queued"], r["sweep_failed"]) == (1, 1, 0)

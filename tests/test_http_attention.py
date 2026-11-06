@@ -8,6 +8,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import attention
+from mailmind.bootstrap.assistant import answers
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -19,17 +20,17 @@ def in_a_day():
 
 
 def verdict(world, name, importance, category, action):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        store.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
+        answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5",
                            "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:
         c.close()
 
 
-def answers(item):
+def verdicts(item):
     return tuple(item[f] for f in FLAGS)
 
 
@@ -58,7 +59,7 @@ def test_each_list_says_what_the_verdict_asks(app, world, route, importance, cat
     if route == "snoozed":
         assert app.post("/api/snooze", {"pk": pk, "until": in_a_day()}).json["ok"]
     [item] = [i for i in rows(app, world, route) if i["pk"] == pk]
-    assert answers(item) == expected
+    assert verdicts(item) == expected
 
 
 @pytest.mark.parametrize("route", ["folder", "search", "snoozed"])
@@ -67,13 +68,13 @@ def test_a_message_with_no_verdict_asks_nothing(app, world, route):
     if route == "snoozed":
         assert app.post("/api/snooze", {"pk": pk, "until": in_a_day()}).json["ok"]
     [item] = [i for i in rows(app, world, route) if i["pk"] == pk]
-    assert answers(item) == (False, False, False, False)
+    assert verdicts(item) == (False, False, False, False)
 
 
 def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     import ingest
     from mailmind.bootstrap import accounts
-    import store
+    from mailmind.bootstrap.mailbox import store
     import summarize_review
     lunch = world.row(LUNCH)
     c = store.conn()

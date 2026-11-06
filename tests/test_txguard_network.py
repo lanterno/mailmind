@@ -18,7 +18,7 @@ class Write:
         self.c = None
 
     def open(self):
-        import store
+        from mailmind.bootstrap.mailbox import store
         self.c = store.conn()
         self.c.execute("INSERT INTO sync_state(account, folder, uidvalidity, last_uid) "
                        "VALUES (?, 'Guarded', 1, 1)", (w.ADA,))

@@ -14,6 +14,7 @@ from urllib.parse import quote
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 
 def fetch(app, golden, path, label=None, **kw):
@@ -255,13 +256,13 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
     ("/api/briefing/since", {"since": 0}),
     ("/api/review", {"account": "ada@example.test"})])
 def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api, capfd, path, body):
-    import store
+    from mailmind.bootstrap.mailbox import store
     lunch = world.pk(LUNCH)
     if body.get("pk") == LUNCH:
         body = {**body, "pk": lunch}
     c = store.conn()
     try:                                               # triaged, so the brief has something to say
-        store.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
+        answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
                            "2026-11-02T11:00:00+00:00")
         c.commit()
     finally:

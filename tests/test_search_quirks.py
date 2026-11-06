@@ -62,7 +62,7 @@ def test_a_date_that_isnt_one_bounds_nothing(bad):
 
 
 def test_mail_from_this_evening_is_before_tomorrow_here(app, world, in_new_york):
-    import store
+    from mailmind.bootstrap.mailbox import store
     pk = world.pk(RECEIPT)
     evening = int(datetime(2026, 11, 2, 2, tzinfo=timezone.utc).timestamp())       # 21:00 on Nov 1 in New York
     c = store.conn()
@@ -126,7 +126,7 @@ def test_search_and_ask_rank_by_one_table():
 
 
 def test_the_table_covers_every_indexed_column_and_ranks_them(world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     columns = [r[1] for r in c.execute("PRAGMA table_info(msg_fts)")]
     c.close()

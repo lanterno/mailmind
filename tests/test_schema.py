@@ -53,7 +53,7 @@ def fresh_db(data_dir):
 
 
 def test_a_fresh_database_has_the_checked_in_schema(fresh_db, request):
-    import store
+    from mailmind.bootstrap.mailbox import store
     path = fresh_db()
     store.init()
     got = dump(path)
@@ -66,7 +66,7 @@ def test_a_fresh_database_has_the_checked_in_schema(fresh_db, request):
 
 
 def test_an_upgrade_from_the_previous_version_matches_a_fresh_database(fresh_db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.platform.db import migrate, migrations
     fresh = fresh_db()
     store.init()
@@ -87,7 +87,7 @@ def test_a_later_migration_doesnt_bring_back_a_table_one_retired(fresh_db):
 
 
 def test_init_again_keeps_the_schema_and_the_data(fresh_db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     path = fresh_db()
     store.init()
     before = dump(path)
@@ -105,7 +105,7 @@ def test_init_again_keeps_the_schema_and_the_data(fresh_db):
 
 
 def test_every_migration_can_run_twice(fresh_db):
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.platform.db import migrations
     path = fresh_db()
     store.init()

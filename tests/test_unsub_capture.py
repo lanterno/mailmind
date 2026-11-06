@@ -23,7 +23,7 @@ def posts(monkeypatch):
 
 
 def row(world, name=NEWS, folder="INBOX"):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute("SELECT * FROM messages WHERE account=? AND folder=? AND message_id=?",
@@ -34,7 +34,7 @@ def row(world, name=NEWS, folder="INBOX"):
 
 def forget_headers(world, name=NEWS):
     """The row as an older commit left it: nothing kept of its headers, and no body."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     pk = row(world, name)["pk"]
     c.execute("UPDATE messages SET list_unsub_raw=NULL, list_unsub_method=NULL WHERE pk=?", (pk,))
@@ -68,7 +68,7 @@ def test_a_header_folded_across_lines_is_read_whole(world):
            b"Content-Type: text/plain\r\n\r\nHello.\r\n")
     world.server.deliver(w.ADA, "INBOX", raw)
     ingest.sync_new(accounts.get(w.ADA))
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     r = c.execute("SELECT list_unsub_method FROM messages WHERE message_id='<folded@example.test>'").fetchone()
     c.close()
@@ -84,7 +84,7 @@ def test_a_url_folded_in_the_middle_comes_back_whole():
 
 
 def test_a_sender_with_no_stored_body_can_be_unsubscribed_from(app, world):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     c.execute("DELETE FROM bodies WHERE message_pk=?", (row(world)["pk"],))
     c.commit()
@@ -165,7 +165,7 @@ def test_trying_again_after_the_sweep_still_knows_the_way(app, world, posts):
 def test_a_list_that_stops_offering_a_way_is_taken_at_its_word(app, world):
     from mailmind.bootstrap import accounts
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     assert method(app) == "one-click"
     c = store.conn()
     assert curation.sqlite.sender_unsub_get(c, LOOM) is not None
@@ -184,7 +184,7 @@ def test_a_kept_newsletter_goes_back_to_being_a_newsletter_when_the_rule_goes(ap
     # Its List-Unsubscribe is all that says it's one, so that has to have been kept.
     from mailmind.bootstrap import accounts
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     addr = "pat@plain.example.test"
     world.server.deliver(w.ADA, "INBOX", (f"From: Pat <{addr}>\r\nTo: ada@example.test\r\nSubject: Monthly thoughts\r\n"
                                           "Message-ID: <plain@example.test>\r\nDate: Mon, 02 Nov 2026 09:00:00 +0000\r\n"

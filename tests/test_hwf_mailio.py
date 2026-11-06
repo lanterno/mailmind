@@ -33,7 +33,7 @@ def acct(email=w.ADA):
 
 
 def q(sql, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return [dict(r) for r in c.execute(sql, args)]
@@ -54,7 +54,7 @@ def stored(folder="INBOX", email=w.ADA):
 
 
 def watermark(folder="INBOX", email=w.ADA):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return store.get_watermark(c, email, folder)
@@ -252,7 +252,7 @@ def test_hwf_a_bounded_first_sync_takes_the_newest_uids(world):
 
 def test_hwf_rows_commit_one_by_one_and_the_watermark_moves_only_after_all(world, monkeypatch):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     wm = watermark()
     uids = [world.server.deliver(w.ADA, "INBOX", late(n)) for n in range(3)]
     real, seen = store.upsert_message, []
@@ -375,7 +375,7 @@ def test_hwf_a_refused_flag_read_leaves_the_mark_so_the_next_sync_asks_again(wor
 
 def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said_what_changed(world, monkeypatch):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
     name = "ada-inbox-02-lunch-confirm.eml"
     elsewhere(world, name)                            # flagged elsewhere; here it's marked read meanwhile
@@ -396,7 +396,7 @@ def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said
 
 def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(app, world):
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-02-lunch-confirm.eml"
     world.server.fail("LOGIN", user=w.ADA)            # so this one queues
     assert app.post("/api/flag", {"pk": world.pk(name), "flag": "flagged", "on": True}).json["status"] == "queued"
@@ -596,7 +596,7 @@ def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
 
 def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
     """UIDVALIDITY changed and no sync has seen it, so a stored UID may now be another message's."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     swept, kept = world.row("ada-inbox-04-ci.eml"), world.row("ada-inbox-01-lunch.eml")
     c = store.conn()
     c.execute("UPDATE messages SET uid=90001 WHERE pk=?", (swept["pk"],))
@@ -742,7 +742,7 @@ def test_hwf_a_new_draft_copy_replaces_the_old_with_no_uid_to_go_by(app, world):
 
 def test_hwf_a_crash_after_delivery_never_sends_twice(app, world, monkeypatch):
     from mailmind.bootstrap.compose import outbox
-    import store
+    from mailmind.bootstrap.mailbox import store
     oid = app.post("/api/send", new(idempotency_key="k-crash")).json["outbox_id"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     real = outbox._side_effects
@@ -871,7 +871,7 @@ def filed(world, folder, name="<filed@example.test>", flags=(w.SEEN,), special="
 
 def old_row(folder, uid, name="<filed@example.test>", email=w.ADA):
     """The `drafts` row Edit left, until 2026-11, on anything in a folder whose name held "draft"."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         did = book.draft_upsert(c, {"id": None, "account": email, "folder": folder, "uid": uid, "message_id": name,
@@ -1003,7 +1003,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 def forget_row(world, name):
     """The original's row goes, as reconcile pruning it, expiry or a queued archive would."""
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     store.delete_message(c, world.pk(name))
     c.commit()

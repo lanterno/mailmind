@@ -7,6 +7,7 @@ import pytest
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.bootstrap.assistant import answers
 
 TRANSPORTS = ["sdk", "urllib"]
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
@@ -141,16 +142,16 @@ def backlog(world, ai, monkeypatch):
 
 
 def _waiting():
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        return store.needs_summary(c, 1000)
+        return answers.needs_summary(c, 1000)
     finally:
         c.close()
 
 
 def _sql(q, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
         return c.execute(q, args).fetchall()
@@ -159,7 +160,7 @@ def _sql(q, *args):
 
 
 def _write(q, *args):
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     c.execute(q, args)
     c.commit()
@@ -347,11 +348,11 @@ def test_a_batch_that_wasnt_sent_gives_its_messages_back(backlog, ai):
 
 
 def test_a_crash_while_sending_gives_its_messages_back_in_time(backlog, ai):
-    import store
+    from mailmind.bootstrap.mailbox import store
     import summarize
     c = store.conn()
     keys = [r["message_key"] for r in _waiting()[:2]]
-    store.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, int(time.time()))
+    answers.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, int(time.time()))
     c.close()
     summarize.batch_collect()
     assert summarize.batch_status()["waiting"] == 2     # it may still be going
@@ -475,11 +476,11 @@ def test_the_switch_keeps_the_round_from_sending_one_and_still_brings_one_in(bac
 
 def test_with_ai_off_nothing_goes_and_nothing_is_touched(world, anthropic_api):
     import summarize
-    import store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
-    keys = [r["message_key"] for r in store.needs_summary(c, 2)]
-    store.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, int(time.time()))
-    store.batch_sent(c, 1, "msgbatch_x", 0)
+    keys = [r["message_key"] for r in answers.needs_summary(c, 2)]
+    answers.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, int(time.time()))
+    answers.batch_sent(c, 1, "msgbatch_x", 0)
     c.commit()
     c.close()
     assert summarize.batch_submit(at_least=1, keep=0) == 0
@@ -533,11 +534,11 @@ def test_the_command_brings_in_a_batch_that_ended(backlog, ai, capsys):
 
 
 def test_the_command_says_when_nothing_is_waiting(backlog, ai, capsys):
-    import store
+    from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap import legacy
     c = store.conn()
-    for r in store.needs_summary(c, 1000):
-        store.save_summary(c, r["pk"], "s", 2, "info", "", "m", "2026-11-02T12:00:00+00:00")
+    for r in answers.needs_summary(c, 1000):
+        answers.save_summary(c, r["pk"], "s", 2, "info", "", "m", "2026-11-02T12:00:00+00:00")
     c.commit()
     c.close()
     assert legacy.assess_batch() == 0
