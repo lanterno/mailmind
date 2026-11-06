@@ -232,6 +232,53 @@ export interface GetAnswers {
     };
     ok: boolean;
   };
+  "/api/debug/health": {
+    ai: {
+      batch: {
+        estimate_micros: number;
+        state: null;
+        waiting: number;
+      };
+      limit_micros: number;
+      today: {
+        calls: number;
+        cost_micros: number;
+        day: string;
+        features: {
+          rewrite?: {
+            calls: number;
+            cost_micros: number;
+          };
+        };
+      };
+    };
+    breakers: string[];
+    generated: string;
+    idle: {
+      accounts: number;
+      running: number;
+    };
+    jobs: {
+      every: number;
+      failures: number;
+      last_error: string;
+      last_started: number;
+      last_took: number;
+      name: string;
+      next_at: null;
+      running: boolean;
+      runs: number;
+    }[];
+    ok: boolean;
+    profile: string;
+    queues: {
+      commands: {
+        queued?: number;
+      };
+      drafts_waiting: number;
+      outbox: Record<string, never>;
+    };
+  };
   "/api/debug/jobs": {
     generated: string;
     jobs: ({
@@ -249,16 +296,16 @@ export interface GetAnswers {
     profile: string;
   };
   "/api/debug/pool": {
-    counters: {
+    counters?: {
       created: number;
       discard_dirty: number;
       reused: number;
       validate_fail: number;
     };
-    enabled: boolean;
+    enabled?: boolean;
     ok: boolean;
-    slots: Record<string, never>;
-    target: string;
+    slots?: Record<string, never>;
+    target?: string;
   };
   "/api/digest": {
     accounts: string[];
