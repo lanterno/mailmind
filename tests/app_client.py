@@ -15,18 +15,25 @@ from dataclasses import dataclass
 
 CSRF = "test-csrf-token"
 
-# Modules whose private globals hold process state between requests.
+# Modules whose private globals hold process state between requests, and instances (`module:name`)
+# whose private attributes do.
 STATEFUL = ("server", "summarize", "summarize_briefing", "summarize_review", "summarize_thread",
-            "pool", "warm", "realtime",
+            "warm", "realtime", "mailmind.bootstrap.mailbox:pool",
             "mailmind.curation.application.unsubscribe")
 _SIMPLE = (dict, list, set, int, float, str, bool, type(None))
 _pristine = {}
 
 
+def _holder(name):
+    module, _, attr = name.partition(":")
+    mod = importlib.import_module(module)
+    return getattr(mod, attr) if attr else mod
+
+
 def snapshot():
     """Record each stateful module's private globals once, as they were at import."""
     for name in STATEFUL:
-        mod = importlib.import_module(name)
+        mod = _holder(name)
         if name in _pristine:
             continue
         saved = {}
@@ -41,7 +48,7 @@ def reset_state():
     a reference to one keeps a live reference."""
     snapshot()
     for name, saved in _pristine.items():
-        mod = importlib.import_module(name)
+        mod = _holder(name)
         for k, v in saved.items():
             cur = getattr(mod, k, None)
             if isinstance(v, dict) and isinstance(cur, dict):

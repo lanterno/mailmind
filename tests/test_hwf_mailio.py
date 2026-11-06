@@ -1121,7 +1121,7 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
 # -- connections -----------------------------------------------------------
 
 def test_hwf_a_pooled_connection_is_checked_with_noop_and_dropped_after_an_error(world, monkeypatch):
-    import pool
+    from mailmind.bootstrap.mailbox import pool
     monkeypatch.setenv("MAILMIND_POOL", w.ADA)
     monkeypatch.setattr(pool, "_slots", {})
     a, logins = acct(), count(world, "LOGIN")
