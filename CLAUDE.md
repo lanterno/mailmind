@@ -261,7 +261,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   by the cost governor (see AI calls), it tries nothing: `summarize.summarize_pending` returns 0
   at once, and a round that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
-  A test calls the round itself (`server.backfill_round()`) or `jobs.run(name)`. It is
+  A test calls the round itself (`mailbox.syncing.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
   of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
@@ -344,7 +344,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
   `tests/test_mail_session_contract.py` runs every case through each against the fake, and
-  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the legacy modules and the tests reach them: `commands`, `offline`, `ingest`, `pool`, `warm` and `realtime`. The rest of the context is standard
+  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing_commands` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the legacy modules and the tests reach them: `commands`, `offline`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
@@ -355,26 +355,24 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
   `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
   the legacy modules and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
-  A folder's role goes through the server's own `_folder_role`, which `discovery.attach` names, since the server may run
-  as `__main__`; the account list through `accounts` and `config`, until
-  those contexts hold them. It is standard library only.
+  A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
+  It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
   matcher for the classifier, the Screener and expiry), `expiry`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
   binds them, and it's how the legacy modules and the command line reach Curation (`curation.cleanup.execute(body)`,
-  `curation.sweeps.sweep(acct)`). Filing still goes through the server's own functions, which `curation.attach` names,
-  since the server may run as `__main__`, and a message's rows through `store`, until the Mailbox holds them. A sweep's
+  `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token still comes
+  from the server, which `curation.attach` names, since the server may run as `__main__`. A sweep's
   `move_verified` is `mailbox.application.filing`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
   `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
   `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
   `mailmind.bootstrap.attention` binds them, and it's how the legacy modules reach Attention (`attention.muting.mute(body)`,
-  `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` still go through `store`, and undo and
-  what a change makes stale through the server's own functions, which `attention.attach` names, until the Mailbox holds
-  them. The lists the rail shows (`snoozed_in`, `muted_in`, `waiting_in`, `replylater_in`) stay in the server until then.
+  `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
+  what a change makes stale through the Mailbox (`mailbox.undo`, `mailbox.stats`).
   `mailmind.kernel.attention` is a different module, what a verdict asks of you, which `server.py` imports as `verdict`.
   It is standard library only.
 - `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `agenda`
@@ -392,8 +390,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the legacy modules, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
-  (`mailbox.copies`). A message's row through `store`, and what the server keeps about folders and tells the page through its own functions, which
-  `compose.attach` names, until the Mailbox and the routers hold them. It is standard library only.
+  (`mailbox.copies`). A message's row through `store`, and what's kept about folders through `mailbox.folders`. It is standard library only.
 - Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
@@ -475,7 +472,7 @@ offline queue and the thread summarizer. `MAILMIND_WORKERS` picks the gate:
 
 A job runs on its caller's thread either way, so context variables (`assistant.allowing_over()`)
 and txguard's per-thread record stay with it. The connection pool's per-account lock is taken
-*inside* the gate. The 300 s sync and IDLE's syncs don't take it yet. `server.sync_guarded` is
+*inside* the gate. The 300 s sync and IDLE's syncs don't take it yet. `mailbox.syncing.sync_guarded` is
 their single-flight: a sync asked for while one runs is recorded, and the running one goes round
 again for it as it ends.
 
@@ -485,7 +482,7 @@ again for it as it ends.
   for work across accounts, and a `gates.Priority`: INTERACTIVE, AFTER_USER, SYNC or
   MAINTENANCE. A run over every account is not work across accounts: `/api/sweep` goes through
   `Sweeps._each_account`, one job per account on its own gate, in turn. Reconcile
-  (`server._reconcile_folders`) goes further: one job per folder with a `sync_state` row
+  (`mailbox.syncing._reconcile_folders`) goes further: one job per folder with a `sync_state` row
   (`ingest.reconciled_folders`), so it never holds a gate across folders.
 - Background work passes `wait=False` and skips its turn on `gates.Busy`, so it never stalls
   the user. `deadline=` (seconds) raises `Busy` for a job not let in by then, and it never runs.
@@ -526,7 +523,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   The queue deletes the rows it marked once the move lands. A refusal (`apply_queued_mutation`
   returns `refused` or `no_folder`), a give-up or a removed account puts the row in `error` and
   clears the mark (`store.restore_pending`), and so does Undo of a move not yet applied. A read
-  mark or star queues the same way (`_readmut_enqueue_flags`): the local row shows it at once,
+  mark or star queues the same way (`filing._readmut_enqueue_flags`): the local row shows it at once,
   and the queue row's payload keeps the flags it replaced (`was`), which a refusal or a give-up
   puts back.
 - `mailbox.offline` drains that queue when IMAP returns, using the `applied` flag as an
@@ -576,12 +573,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A folder counts as synced (`ingest.folder_synced`) only when its `scan_state` (migration 24)
   is `synced`: a whole scan sets it, one cut to warming's newest messages sets `recent`, and an
   incremental sync, a failed scan or a one-message re-ingest leaves it be. Anything else, the
-  first open scans the folder whole, as a job of its own (`server._folder_sync`, one per folder at
+  first open scans the folder whole, as a job of its own (`mailbox.folders._folder_sync`, one per folder at
   a time) that the list request waits for up to `FIRST_SYNC_WAIT` seconds. Past that it answers
   with what is stored and `syncing: true`; a scan that failed answers `sync_failed: true`.
   Opening a folder already read, other than INBOX, catches it up the same way, an incremental
   sync waited for up to `CATCH_UP_WAIT` seconds (`catching_up: true` past that), at most once
-  every `CATCH_UP_EVERY` seconds unless `server._folder_touched` says MailMind put mail in it.
+  every `CATCH_UP_EVERY` seconds unless `mailbox.folders.touched` says MailMind put mail in it.
   Each sync ends by publishing `folder-synced` with how many it stored.
 - An incremental sync reads flags again (`ingest._refresh_flags`). On a CONDSTORE server it compares
   the select's HIGHESTMODSEQ with the mark in `sync_state.highest_modseq` (migration 31): nothing if they
@@ -595,7 +592,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `store.undo_push`,
   `undo_pop`, `undo_put_back`), so it outlives a restart and is the same through either door
   (decision D3). It keeps the newest `UNDO_MAX` entries, and an entry leaves it, committed, before
-  any server is asked to reverse it. Bulk actions push one grouped entry with children. `do_undo` tries every child, newest first; the ones it
+  any server is asked to reverse it. Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
   the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
   (`commands.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
@@ -604,12 +601,12 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is
   good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
-  in is left where it went, and counted as `gone`. Each message goes through its own route (`do_write`, `do_trash`,
+  in is left where it went, and counted as `gone`. Each message goes through its own route (`filing.do_write`, `do_trash`,
   `attention.snoozing.snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
   never reaches its own home (`_DO_APART`, `_DO_ALREADY`), and each message counts once, by the copy search would show.
-- Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
+- Whole-conversation archive/trash (`/api/thread/archive|trash` → `filing.do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
-  each through the per-message op (`do_write` / `do_trash`) under one undo group.
+  each through the per-message op (`filing.do_write` / `do_trash`) under one undo group.
 - Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.

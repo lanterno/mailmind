@@ -123,7 +123,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   still goes to `/api/search` as literal FTS — plus a labelled, dismissible "translated" chip so you
   can get the literal search back.
 - **Cross-account virtual folders** · medium value · effort M — `snoozed_in`, `muted_in`,
-  `waiting_in` and `replylater_in` are each `WHERE m.account=?`, and `folders_for(account)` counts
+  `waiting_in` and `replylater_in` are each `WHERE m.account=?`, and `Folders.of_account(account)` counts
   per account, so there is no all-accounts Snoozed to match the shipped all-inboxes ✉ dot. Saved
   lanes already work cross-account because they ride `/api/search`'s `scope` param — the four helpers
   and their `store.list_*` counterparts need the same branch.
