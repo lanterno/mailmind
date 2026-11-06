@@ -12,7 +12,6 @@ import re
 import dataclasses
 import json
 import time
-import shlex
 import math
 import base64
 import email.message
@@ -59,6 +58,7 @@ import summarize_review
 from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
+from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
@@ -3947,44 +3947,7 @@ _DO_PROMPT = (
 )
 
 
-# is:<x> values that meaningfully subset the mailbox (a content lane or a minority flag). NOT
-# "read" (usually most mail) — its inverse "unread" IS narrowing.
-_DO_NARROW_IS = {"newsletter", "newsletters", "marketing", "receipt", "receipts", "transactional",
-                 "notification", "notifications", "automated", "spam", "scam", "flagged", "unread", "junk"}
 _DO_BROAD_FRACTION = 0.6   # a filter resolving to >= this share of ALL mail is a whole-inbox sweep
-
-
-def _do_is_whole_inbox(filt, match):
-    """Reject a filter that would sweep (essentially) the whole mailbox. A positive FTS term
-    (match is not None) always narrows. Otherwise the filter MUST carry at least one POSITIVE,
-    subsetting operator (bucket/category/is:<lane|minority-flag>/has:attachment/before/after).
-    A bare folder/account SCOPE (in:INBOX, account:x) or a pure NEGATION (-is:junk, -in:Trash,
-    -has:attachment) spans nearly the whole mailbox and is NOT a scoped action — search.build
-    turns those into a non-empty WHERE with match=None, which the old presence-only guard missed."""
-    if not filt.strip():
-        return True
-    if match is not None:                # any positive FTS clause (from:/subject:/body:/bareword)
-        return False
-    try:
-        toks = shlex.split(filt)
-    except ValueError:
-        toks = filt.split()
-    for t in toks:
-        if t.startswith("-") and len(t) > 1:   # a negation never narrows on its own
-            continue
-        name, sep, val = t.partition(":")
-        if not sep or not val:
-            continue
-        ln, lv = name.lower(), val.lower()
-        if ln == "is" and lv in _DO_NARROW_IS:
-            return False
-        if ln in ("bucket", "category"):
-            return False
-        if ln == "has" and lv == "attachment":
-            return False
-        if ln in ("before", "after") and search._ts(val) is not None:
-            return False
-    return True                          # only scope/negation clauses → treat as whole-inbox
 
 
 def _do_total_messages():
@@ -4052,7 +4015,7 @@ def ai_do_plan(body):
     # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
     match, where, params = search.build(filt)
     where = search.visible(where)
-    if _do_is_whole_inbox(filt, match):                # empty / scope-only / negation-only → not a scoped action
+    if not QuerySpec.parse(filt).narrows():            # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP
     count, messages, sample = _do_resolve(match, where, params, cap)

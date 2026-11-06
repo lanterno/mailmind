@@ -55,7 +55,7 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "bootstrap, then http, then the contexts, then platform, then kernel: each imports only the layers below it"
 type = "layers"
-layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.assistant | mailmind.accounts | mailmind.mailbox", "mailmind.platform", "mailmind.kernel"]
+layers = ["mailmind.bootstrap", "mailmind.http", "mailmind.assistant | mailmind.accounts | mailmind.mailbox | mailmind.discovery", "mailmind.platform", "mailmind.kernel"]
 
 [[tool.importlinter.contracts]]
 name = "within the Assistant, adapters, then application, then domain"
@@ -74,10 +74,15 @@ type = "layers"
 layers = ["mailmind.mailbox.adapters", "(mailmind.mailbox.application)", "(mailmind.mailbox.domain)"]
 
 [[tool.importlinter.contracts]]
+name = "within Discovery, adapters, then domain"
+type = "layers"
+layers = ["mailmind.discovery.adapters", "mailmind.discovery.domain"]
+
+[[tool.importlinter.contracts]]
 name = "only bootstrap picks an adapter"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel"]
-forbidden_modules = ["mailmind.assistant.adapters", "mailmind.accounts.adapters", "mailmind.mailbox.adapters"]
+forbidden_modules = ["mailmind.assistant.adapters", "mailmind.accounts.adapters", "mailmind.mailbox.adapters", "mailmind.discovery.adapters"]
 
 [[tool.importlinter.contracts]]
 name = "only the SDK adapter reaches the Anthropic SDK"
