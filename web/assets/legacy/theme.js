@@ -1,0 +1,1 @@
+try{const t=localStorage.getItem("mm_theme");if(t!=="dark")document.body.classList.add("theme-light");if(t==="dusk")document.body.classList.add("theme-dusk");}catch(e){document.body.classList.add("theme-light");}
