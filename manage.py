@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
-import mailclass
+from mailmind.bootstrap import curation
 from mailmind.content import mime
 from mailmind.content.mime import dec
 import pool
@@ -53,7 +53,7 @@ def fetch_headers(s):
 
 def classify_rows(rows):
     for r in rows:
-        r["bucket"], r["conf"], r["reason"] = mailclass.classify(
+        r["bucket"], r["conf"], r["reason"] = curation.classify(
             r["from"], r["subject"], r["name"], r["bulk"])
     return rows
 
@@ -85,7 +85,7 @@ def plan_account(acct):
         by[r["bucket"]].append(r)
     res["in_inbox"] = len(rows)
     res["by_bucket"] = {b: len(rs) for b, rs in by.items()}
-    res["junk"] = sum(len(by[b]) for b in mailclass.JUNK_BUCKETS)
+    res["junk"] = sum(len(by[b]) for b in curation.JUNK_BUCKETS)
     res["keep"] = len(rows) - res["junk"]
     res["top_senders"] = {b: [s for s, _ in Counter(r["from"] for r in rs).most_common(4)]
                           for b, rs in by.items()}
@@ -111,11 +111,11 @@ def plan_account_db(acct):
         addr = (r["from_addr"] or "").lower()
         # The stored row keeps no List header, and a sweep reads them live. What ingest saw in them
         # shows in the bucket: the classifier's rules come first, so a rule made since still wins.
-        listed = r["bucket"] == mailclass.MKT or bool(r["list_unsub_raw"])
-        by[mailclass.classify(addr, r["subject"] or "", r["from_name"] or "", listed)[0]].append(addr)
+        listed = r["bucket"] == curation.MKT or bool(r["list_unsub_raw"])
+        by[curation.classify(addr, r["subject"] or "", r["from_name"] or "", listed)[0]].append(addr)
     res["in_inbox"] = len(rows)
     res["by_bucket"] = {b: len(v) for b, v in by.items()}
-    res["junk"] = sum(len(by[b]) for b in mailclass.JUNK_BUCKETS)
+    res["junk"] = sum(len(by[b]) for b in curation.JUNK_BUCKETS)
     res["keep"] = len(rows) - res["junk"]
     res["top_senders"] = {b: [s for s, _ in Counter(v).most_common(4)] for b, v in by.items()}
     return res
@@ -238,7 +238,7 @@ def sweep_account(acct, dry=False):
     p = plan_account(acct)
     if p["error"]:
         return {"account": acct["email"], "error": p["error"], "planned": 0}
-    junk_rows = [r for r in p["_rows"] if r["bucket"] in mailclass.JUNK_BUCKETS]
+    junk_rows = [r for r in p["_rows"] if r["bucket"] in curation.JUNK_BUCKETS]
     out = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
            "senders": len(set(r["from"] for r in junk_rows)), "moved": 0,
            "stragglers": [], "error": None}
@@ -445,11 +445,11 @@ def cmd_plan(accts, do_sweep=False, dry=False):
             print(f"{a['email']:30} ERROR: {p['error']}")
             continue
         print(f"\n=== {a['email']}  ({p['in_inbox']} in INBOX) ===")
-        for k in [mailclass.SPAM, mailclass.BLOCKED, mailclass.MKT, mailclass.NOTIF,
-                  mailclass.RECEIPT, mailclass.PROTECTED, mailclass.PERSONAL]:
+        for k in [curation.SPAM, curation.BLOCKED, curation.MKT, curation.NOTIF,
+                  curation.RECEIPT, curation.PROTECTED, curation.PERSONAL]:
             n = p["by_bucket"].get(k, 0)
             if n:
-                tag = " TRASH" if k in mailclass.JUNK_BUCKETS else " keep"
+                tag = " TRASH" if k in curation.JUNK_BUCKETS else " keep"
                 print(f"   {k:<24} {n:>5}{tag}   {', '.join(p['top_senders'].get(k, []))}")
         print(f"   -> would trash {p['junk']} / keep {p['keep']}")
         grand += p["junk"]

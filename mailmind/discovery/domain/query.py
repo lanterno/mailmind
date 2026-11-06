@@ -39,7 +39,7 @@ class Kind(Enum):
 
 FIELDS = frozenset({"from", "subject", "body", "to", "cc"})
 FLAGS = frozenset({"unread", "read", "flagged", "answered", "junk"})
-BUCKET_ALIAS = {                                  # shorthand -> the real mailclass bucket string
+BUCKET_ALIAS = {                                  # shorthand -> the real classifier bucket string
     "newsletter": "newsletters/marketing", "newsletters": "newsletters/marketing",
     "marketing": "newsletters/marketing",
     "receipt": "receipts/transactional", "receipts": "receipts/transactional",

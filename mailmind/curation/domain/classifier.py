@@ -23,7 +23,7 @@ Buckets:
 """
 import re
 
-from mailmind.bootstrap.curation import rules as rules_file
+from mailmind.curation.domain.rulebook import domain_listed
 
 SPAM = "spam/scam"
 BLOCKED = "blocked"                     # user said "always trash this sender/domain"
@@ -34,17 +34,6 @@ PROTECTED = "personal/protected"
 PERSONAL = "other/personal-ish"
 
 JUNK_BUCKETS = {SPAM, BLOCKED, MKT, NOTIF}
-
-# --- learned overrides (a sender/domain allow- & block-list the user grows) ---
-def _rules():
-    """mailmind_rules.json's keep and block lists, read again only when the file changes. A file
-    that can't be read leaves the last rules read well (rules.sets), so it never stops a sync."""
-    return rules_file.sets()
-
-
-def _domain_listed(domain, listed):
-    """True if domain equals or is a sub-domain of any entry in `listed`."""
-    return any(domain == d or domain.endswith("." + d) for d in listed)
 
 # --- sender-side signal vocabularies -----------------------------------------
 FREE_MAIL = {
@@ -168,7 +157,7 @@ def _is_protected_domain(domain, local):
     return False
 
 
-def _looks_human(local):
+def looks_human(local):
     """A local-part that looks like a person, not a role or a random mailer id."""
     if not local or local in ROLE_MKT or local in ROLE_MKT_WEAK or local in ROLE_NOTIF or local in ROLE_TXN:
         return False
@@ -198,8 +187,9 @@ def _is_scam(local, domain, subject, name):
     return False
 
 
-def classify(from_addr, subject="", from_name="", has_list_unsub=False):
-    """Return (bucket, confidence in {'high','med','low'}, reason)."""
+def classify(from_addr, subject="", from_name="", has_list_unsub=False, *, rules):
+    """Return (bucket, confidence in {'high','med','low'}, reason). `rules` is the rule book's keep and
+    block lists as sets."""
     subject = subject or ""
     name = from_name or ""
     local, domain = _split(from_addr)
@@ -210,14 +200,13 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
     # 0) learned overrides win over all heuristics — the user's explicit verdicts.
     #    Exact-sender rules beat domain rules (a blocked noreply@ overrides a
     #    kept whole-domain), and within each scope keep beats block.
-    rules = _rules()
     if full in rules["keep_senders"]:
         return PROTECTED, "high", "kept by rule (sender)"
     if full in rules["block_senders"]:
         return BLOCKED, "high", "blocked by rule (sender)"
-    if _domain_listed(domain, rules["keep_domains"]):
+    if domain_listed(domain, rules["keep_domains"]):
         return PROTECTED, "high", "kept by rule (domain)"
-    if _domain_listed(domain, rules["block_domains"]):
+    if domain_listed(domain, rules["block_domains"]):
         return BLOCKED, "high", "blocked by rule (domain)"
 
     # 1) spam/scam wins over the remaining heuristics (incl. gmail-sent scams)
@@ -255,7 +244,7 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
         return NOTIF, "med", "no-reply / notification address"
 
     # 6) a real person from a personal mailbox
-    if domain in FREE_MAIL and _looks_human(local):
+    if domain in FREE_MAIL and looks_human(local):
         return PERSONAL, "med", "person on a personal mailbox"
 
     # 7) genuinely ambiguous — keep, flag for a human glance

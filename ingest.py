@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 import accounts
-import mailclass
+from mailmind.bootstrap import curation
 from mailmind.content import mime
 from mailmind.content.mime import dec
 from mailmind.content.text import body_text_of, text_body
@@ -147,8 +147,8 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
             name, addr = mime.sender_of(msg)
             has_lu = bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))
             subj = dec(msg.get("Subject", ""))
-            b, conf, reason = mailclass.classify(addr.lower(), subj, dec(name), has_lu)
-            isj = 1 if mailclass.is_junk(b) else 0
+            b, conf, reason = curation.classify(addr.lower(), subj, dec(name), has_lu)
+            isj = 1 if curation.is_junk(b) else 0
             junk += isj
             kept += (1 - isj)
             try:
@@ -229,14 +229,14 @@ def reclassify(token):
                              (f"%@{token}", f"%.{token}")).fetchall()
         changed = 0
         for r in rows:
-            bucket, confidence, reason = mailclass.classify((r["from_addr"] or "").lower(), r["subject"] or "",
+            bucket, confidence, reason = curation.classify((r["from_addr"] or "").lower(), r["subject"] or "",
                                                             r["from_name"] or "",
                                                             (r["list_unsub_method"] or "none") != "none")
-            if not (mailclass.by_rule(reason) or mailclass.by_rule(r["reason"])):
+            if not (curation.by_rule(reason) or curation.by_rule(r["reason"])):
                 continue
             if (bucket, reason) != (r["bucket"], r["reason"]):
                 c.execute("UPDATE messages SET bucket=?, confidence=?, reason=?, is_junk=? WHERE pk=?",
-                          (bucket, confidence, reason, int(mailclass.is_junk(bucket)), r["pk"]))
+                          (bucket, confidence, reason, int(curation.is_junk(bucket)), r["pk"]))
                 changed += 1
         c.commit()
         return changed

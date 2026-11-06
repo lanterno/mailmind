@@ -41,7 +41,7 @@ import warm
 import readmutq
 import summarize
 import mailops
-import mailclass
+from mailmind.bootstrap import curation
 import manage
 from mailmind.bootstrap.curation import rules
 import views
@@ -640,9 +640,9 @@ def live_stats(account=None, refresh=False):
         out.append(p)
     data = {
         "accounts": out,
-        "buckets": [{"name": b, "is_junk": b in mailclass.JUNK_BUCKETS} for b in
-                    [mailclass.SPAM, mailclass.BLOCKED, mailclass.MKT, mailclass.NOTIF,
-                     mailclass.RECEIPT, mailclass.PROTECTED, mailclass.PERSONAL]],
+        "buckets": [{"name": b, "is_junk": b in curation.JUNK_BUCKETS} for b in
+                    [curation.SPAM, curation.BLOCKED, curation.MKT, curation.NOTIF,
+                     curation.RECEIPT, curation.PROTECTED, curation.PERSONAL]],
         "totals": {
             "in_inbox": sum(a["in_inbox"] for a in out),
             "junk": sum(a["junk"] for a in out),
@@ -2366,7 +2366,7 @@ def cleanup_senders(qs):
     for row in rows:
         addr = row["addr"]
         dom = addr.rpartition("@")[2]
-        if addr in decided_addr or mailclass._domain_listed(dom, decided_dom):   # a rule covers sub-domains
+        if addr in decided_addr or curation.domain_listed(dom, decided_dom):   # a rule covers sub-domains
             continue
         n = row["n"] or 0
         unseen = row["unseen"] or 0
@@ -2553,7 +2553,7 @@ def do_screener(account):
     for row in rows:
         addr = row["addr"]
         dom = addr.rpartition("@")[2]
-        if addr in decided_addr or mailclass._domain_listed(dom, decided_dom):   # kept or blocked, sub-domains too
+        if addr in decided_addr or curation.domain_listed(dom, decided_dom):   # kept or blocked, sub-domains too
             continue
         items.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
                       "count": row["n"], "when": rel_time(row["iso"])})
@@ -3588,7 +3588,7 @@ def _draft_eligible(row):
     if (row["from_addr"] or "").lower() == row["account"].lower() or "sent" in (row["folder"] or "").lower():
         return False
     local = (row["from_addr"] or "").split("@")[0].lower()
-    if not local or not mailclass._looks_human(local):   # excludes no-reply/notifications/role senders
+    if not local or not curation.looks_human(local):   # excludes no-reply/notifications/role senders
         return False
     return True
 
