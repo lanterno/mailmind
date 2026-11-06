@@ -20,6 +20,7 @@ export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }
     <div id="rows">
       <div className="feed-river">
         {m.rows.map((r) => (
+          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the pointer's shortcut: the button in its heading is the keyboard's way in
           <article key={r.pk} className={`fr-card${r.seen ? "" : " unread"}${r.pk === m.openPk ? " reading" : ""}`} data-pk={r.pk} onClick={() => m.open(r)}>
             <div className="fr-kicker">
               <span className="fr-pub">{r.fromName || r.fromAddr}</span><span className="fr-dot">·</span><span className="fr-when">{r.when}</span>

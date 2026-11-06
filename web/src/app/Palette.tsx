@@ -35,6 +35,7 @@ function Entries({ commands, close }: { commands: Command[]; close: () => void }
       <input
         className="pq"
         id="pq"
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- the palette was opened this moment, to type in
         autoFocus
         type="text"
         placeholder="Jump to a folder, run a command…  (↑↓ Enter)"
@@ -68,6 +69,7 @@ function Entries({ commands, close }: { commands: Command[]; close: () => void }
           const heading = !typed && c.group !== (shown[i - 1]?.group ?? "") ? <div key={`g-${c.group}`} className="pgrp" role="presentation">{c.group}</div> : null;
           return [
             heading,
+            // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the field, which takes the keys and names this through aria-activedescendant
             <div key={c.id} className={i === at ? "pi sel" : "pi"} role="option" aria-selected={i === at} id={`pi-${i}`} onClick={() => run(c)} onMouseMove={() => setPicked(i)}>
               <span className="pi-l">{c.label}</span>{c.hint && <kbd>{c.hint}</kbd>}
             </div>,

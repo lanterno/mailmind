@@ -20,6 +20,7 @@ export function Splitter() {
     store("mm_list_w", String(clamp(w)));
   };
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- a separator that takes focus is a widget in ARIA, which the rule doesn't know
     <div
       className={dragging ? "splitter drag" : "splitter"}
       id="splitter"
@@ -30,6 +31,7 @@ export function Splitter() {
       aria-valuemin={MIN}
       aria-valuemax={MAX}
       aria-valuenow={width}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- as above: the arrow keys resize it
       tabIndex={0}
       title="Drag to resize · ←/→ · double-click resets"
       onDoubleClick={() => settle(START)}

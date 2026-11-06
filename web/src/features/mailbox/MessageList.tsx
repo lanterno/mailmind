@@ -27,6 +27,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }
     onFile(kind);
   };
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the listbox, which names this through aria-activedescendant, and the app's keys act on it
     <div id={rowId(row.pk)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-pk={row.pk} data-tid={row.threadId || undefined} onClick={onOpen}>
       <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span>
         <span className={isMarked ? "cbx on" : "cbx"} aria-hidden="true" title="Select (x)" onClick={(e) => { e.stopPropagation(); toggleMark(row.pk); }}>{isMarked ? "✓" : ""}</span>
@@ -48,7 +49,9 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }
         {needs && <div className="r4"><span className="rchip need" title={row.action}><span className="visually-hidden">Next step: </span>{row.action}</span></div>}
       </div>
       <div className="racts" aria-hidden="true">
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the e key is the keyboard's */}
         <span className="ract" title={`Archive${what} (e)`} onClick={act("archive")}><Icon name="archive" /></span>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the d key is the keyboard's */}
         <span className="ract del" title={`Delete${what} (d)`} onClick={act("trash")}><Icon name="trash" /></span>
       </div>
     </div>

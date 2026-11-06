@@ -84,6 +84,7 @@ function Hub({ m }: { m: Mailbox }) {
   return (
     <>
       <div className="commit-hd"><Icon name="file" /> Documents <span className="sub" id="docCount">{first ? `· ${docs.length}${left > 0 ? ` of ${matched}` : ""}` : ""}</span></div>
+      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the hub was opened this moment, to search in */}
       <input className="doc-search" id="docSearch" autoFocus placeholder="Search files, senders, subjects…" aria-label="Search documents" value={typed} onChange={(e) => setTyped(e.target.value)} />
       <div className="doc-filters" id="docFilters">
         <button className={kind === "all" ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind("all")}>All <span className="c">{total}</span></button>

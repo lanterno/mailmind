@@ -188,6 +188,7 @@ function Inboxes() {
             {armed?.account === a.account && (
               <div className="armline">
                 ▸ sweep <b>{nameOf(a.account)}</b> · <b>{armed.planned}</b> msgs<br />
+                {/* eslint-disable-next-line jsx-a11y/no-autofocus -- it appears because of the click just made on Sweep, and answers that click */}
                 <button className="sweep" autoFocus onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={() => setArmed(null)}>Abort</button>
               </div>
             )}

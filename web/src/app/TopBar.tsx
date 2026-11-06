@@ -57,6 +57,7 @@ function RailToggle() {
 export function RailScrim() {
   const open = railOpen.useValue();
   useLayer(open, closeRailDrawer);
+  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a click away from the drawer: Back closes it from the keyboard (useLayer)
   return <div className={open ? "scrim on" : "scrim"} onClick={closeRailDrawer} />;
 }
 

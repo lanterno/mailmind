@@ -119,8 +119,10 @@ function ChipField({ c, field, label }: { c: Composer; field: Field; label: stri
         onBlur={close}
       />
       {box && items.length > 0 && (
+        // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- focus stays on the field, which takes the keys and names this through aria-activedescendant
         <div className="ac-menu" id={listId} role="listbox" aria-label={`Addresses for ${label}`} style={box} onMouseDown={(e) => e.preventDefault()}>
           {items.map((it, i) => (
+            // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the field, which takes the keys and names this through aria-activedescendant
             <div key={it.addr} id={`${listId}-${i}`} role="option" aria-selected={i === at} className={i === at ? "ac-item sel" : "ac-item"} onClick={() => accept(i)}>
               <span className="ac-nm">{it.name || it.addr}</span><span className="ac-ad">{it.addr}</span>
             </div>
@@ -342,13 +344,16 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
           </select>
         </div>
         <div className="cmp-row">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- a caption: the field's input is named by its aria-label */}
           <label>To</label>
           <ChipField c={c} field="to" label="To" />
           {!c.showCc && <button type="button" className="cmp-cclink" id="cmpCcToggle" onClick={() => { composing.showCopies(); setTimeout(() => document.querySelector<HTMLInputElement>("#cmpCc .ci")?.focus()); }}>Cc/Bcc</button>}
         </div>
         {c.showCc && (
           <>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- as To's */}
             <div className="cmp-row cmp-optrow" id="cmpCcRow"><label>Cc</label><ChipField c={c} field="cc" label="Cc" /></div>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- as To's */}
             <div className="cmp-row cmp-optrow" id="cmpBccRow"><label>Bcc</label><ChipField c={c} field="bcc" label="Bcc" /></div>
           </>
         )}
