@@ -41,7 +41,7 @@ python3 tests_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0
 python3 test_css_sanitizer.py     # CSS sanitizer unit tests (40)
 python3 test_expire.py            # expiry rules (15)
 python3 test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
-python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (17)
+python3 test_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (16)
 python3 test_send_after.py        # /api/send refuses passed and far-off send times (5)
 python3 test_send_guard.py        # the composer's send-time checks, run in node (19)
 python3 test_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
@@ -169,6 +169,13 @@ ranking weights, which Ask uses too.
 `mailparse.dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
 it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mailparse.walk` takes an
 attached email as one part of its message, as a reader does; what it holds isn't the outer message's.
+`mailparse.recipient_addrs` reads To and Cc as bare addresses before any encoded word is decoded, so a name
+can't pass for one.
+
+`messages.recipients` is the decoded To and Cc as text, for search. `message_recipients` (migration 35,
+`store.set_recipients`) holds each address of each copy, written at ingest and again when a body is stored,
+and goes with the copy. It is what `server.contacts_known` asks. Mail stored before it was read from the text,
+which was cut at 2000 characters then, until that mail is next opened.
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
 (`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative; its
