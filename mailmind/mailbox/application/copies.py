@@ -32,13 +32,16 @@ class Copies:
             except Exception:
                 pass
 
-    def append_to_drafts(self, acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None):
+    def append_to_drafts(self, acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None,
+                         message_id=None, tried=None):
         """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
         copy (single-UID expunge — NEVER a bulk expunge). Returns
         (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
         a crash never leaves none: at worst the old copy stays beside the new one. prev_folder: where the
         previous copy is; when that isn't this Drafts folder, nothing is deleted here (its UID means
-        nothing in this one), and the caller removes it there."""
+        nothing in this one), and the caller removes it there. tried: the Message-ID of a copy an earlier
+        try may have left, which it never heard of. If that's this very message (message_id) it stands, and
+        nothing is appended; if not, it goes once the new copy is there."""
         s = self._open_session(acct)
         try:
             drafts = find_role(s, "drafts") or "Drafts"
@@ -60,8 +63,16 @@ class Copies:
                     del_uid = ids[0] if ids else None
                 except Exception:
                     del_uid = None
-            new_uid = s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
-            if del_uid:
+            left = self._left_by(s, tried)
+            landed = left if left and tried == message_id else None
+            new_uid = landed or s.append(drafts, raw, flags=["\\Draft"], when=datetime.now().astimezone())
+            if left and not landed:
+                try:
+                    s.add_flags([left], ["\\Deleted"])
+                    s.expunge([left])
+                except Exception:
+                    pass
+            if del_uid and del_uid != new_uid:
                 try:
                     s.add_flags([del_uid], ["\\Deleted"])
                     s.expunge([del_uid])         # this UID alone, never a bulk EXPUNGE
@@ -69,6 +80,35 @@ class Copies:
                 except Exception:
                     pass
             return drafts, new_uid, uidv, removed
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
+
+    def _left_by(self, s, message_id):
+        """The UID of a copy of ours under this Message-ID in the selected folder, or None."""
+        if not message_id:
+            return None
+        try:
+            ids = s.uids("UNDELETED", "HEADER", "Message-ID", self._quote(message_id))
+        except imaplib.IMAP4.abort:
+            raise
+        except imaplib.IMAP4.error:
+            return None
+        return ids[0] if ids else None
+
+    def delete_left_copy(self, acct, message_id):
+        """Remove the copy a try may have left in Drafts, under a Message-ID only MailMind minted. True if one went."""
+        s = self._open_session(acct)
+        try:
+            s.select(find_role(s, "drafts") or "Drafts", readonly=False)
+            left = self._left_by(s, message_id)
+            if not left:
+                return False
+            s.add_flags([left], ["\\Deleted"])
+            s.expunge([left])
+            return True
         finally:
             try:
                 s.logout()

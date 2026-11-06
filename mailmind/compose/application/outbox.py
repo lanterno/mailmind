@@ -162,6 +162,11 @@ class Outbox:
                     def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
                         removed = self.draft_copy_is_ours(dr) and self._copies.delete_draft_uid(
                             self._accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
+                        c = self._book.connect()
+                        waiting = self._book.journal_get(c, row["draft_id"])
+                        c.close()
+                        if waiting is not None and waiting["tried"] and waiting["account"] == dr["account"]:
+                            self._copies.delete_left_copy(self._accounts.get(dr["account"]), waiting["tried"])
 
                         def forget(c):
                             self._book.draft_delete(c, row["draft_id"])
@@ -182,6 +187,8 @@ class Outbox:
         be flagged), one the server flags \\Draft, or one in a folder named Drafts. Received mail
         filed under "Contract drafts" stays, and a `drafts` row may well point at it: until now Edit
         was offered in any folder whose name held "draft"."""
+        if not d["uid"]:                         # a save still only in the journal: nothing to remove
+            return False
         if d["raw_sha"] or self._screen.names_drafts(d["folder"]):
             return True
         c = self._book.connect()

@@ -13,6 +13,9 @@ CREATE INDEX idx_commands_state ON mail_commands(state, next_attempt_at);
 -- index idx_draft_ahead_created
 CREATE INDEX idx_draft_ahead_created ON draft_ahead(created_ts);
 
+-- index idx_draft_journal_due
+CREATE INDEX idx_draft_journal_due ON draft_journal(due_at);
+
 -- index idx_followups_state
 CREATE INDEX idx_followups_state ON followups(account, state);
 
@@ -79,8 +82,11 @@ CREATE TABLE deltas( accounts TEXT NOT NULL, since_ts INTEGER NOT NULL, fingerpr
 -- table draft_ahead
 CREATE TABLE draft_ahead ( -- durable AI pre-draft cache; key (account,ref_key) NEVER pk account TEXT NOT NULL, ref_key TEXT NOT NULL, -- 't:<thread_id>' or 'm:<message_id>' fp TEXT NOT NULL DEFAULT '', -- thread-state hash captured BEFORE generation body TEXT, -- NULL => failure-only row, never servable tone TEXT, model TEXT, source TEXT NOT NULL DEFAULT 'dwell', -- 'dwell' | 'topk' | 'demand' src_pk INTEGER, -- advisory only: which message the draft answers src_message_id TEXT, created_ts INTEGER NOT NULL DEFAULT 0, last_hit_ts INTEGER, fail_ts INTEGER NOT NULL DEFAULT 0, fail_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account, ref_key) );
 
+-- table draft_journal
+CREATE TABLE draft_journal( draft_id INTEGER PRIMARY KEY REFERENCES drafts(id) ON DELETE CASCADE, version INTEGER NOT NULL, account TEXT NOT NULL, -- where the copy goes: From may have changed since the last discard INTEGER NOT NULL DEFAULT 0, -- 1: all that's left is to remove the copy message_id TEXT, raw BLOB, raw_sha TEXT, own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, tried TEXT, -- the Message-ID of a copy a try may have left saved_at INTEGER NOT NULL, due_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 );
+
 -- table drafts
-CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, folder TEXT, uid INTEGER, message_id TEXT, uidvalidity INTEGER, in_reply_to_pk INTEGER, mode TEXT, subject TEXT, created_at TEXT, updated_at TEXT , own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, raw_sha TEXT, idempotency_key TEXT);
+CREATE TABLE drafts ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, folder TEXT, uid INTEGER, message_id TEXT, uidvalidity INTEGER, in_reply_to_pk INTEGER, mode TEXT, subject TEXT, created_at TEXT, updated_at TEXT , own_text TEXT, tail_text TEXT, tail_html TEXT, bcc TEXT, raw_sha TEXT, idempotency_key TEXT, version INTEGER NOT NULL DEFAULT 0, saved_by TEXT, pushed_at INTEGER);
 
 -- table followups
 CREATE TABLE followups ( -- commitment tracking; keyed on (account,thread_id), NEVER pk account TEXT NOT NULL, thread_id TEXT NOT NULL, kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', anchor_pk INTEGER, first_sent_ts INTEGER, last_msg_ts INTEGER, due_ts INTEGER, created_at TEXT, resolved_at TEXT, PRIMARY KEY(account, thread_id) );
@@ -142,4 +148,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=39;
+PRAGMA user_version=40;

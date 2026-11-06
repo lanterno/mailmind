@@ -2,7 +2,7 @@
 import os
 import time
 
-from mailmind.bootstrap import assistant, attention, curation, mailbox
+from mailmind.bootstrap import assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import profile
@@ -62,6 +62,7 @@ def schedule(jobs):
     if nosync():
         return
     jobs.add("sync", mailbox.syncing.sync_rounds(), every=SYNC_INTERVAL, first=0)
+    jobs.add("draft-push", compose.drafts.push_round, every=compose.PUSH_TICK, first=5)    # saves to their servers
     jobs.add("assess", assistant.triage.round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
     jobs.add("backfill", mailbox.syncing.backfill_round, every=600, first=45)              # old mail, full-text searchable
     if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):

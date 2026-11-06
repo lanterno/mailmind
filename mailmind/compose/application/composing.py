@@ -53,7 +53,7 @@ class Composing:
                 except (TypeError, ValueError):
                     did = None
                 c = self._book.connect()
-                dr = self._book.draft_get(c, did) if did else None
+                dr = self._book.draft_quote(c, did) if did else None
                 c.close()
                 if dr and dr["tail_html"] and lf(dr["tail_text"] or "") == tail:
                     # built and sanitized by us at that save; never re-sanitized

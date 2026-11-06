@@ -130,3 +130,93 @@ def draft_repoint(c, seen, folder, uid, uidvalidity, forget=False):
 
 def draft_delete(c, did):
     c.execute("DELETE FROM drafts WHERE id=?", (did,))
+
+
+def draft_note_save(c, did, mode, in_reply_to_pk, subject, version, saved_by, updated_at):
+    """A save's facts about the composition. What says where the copy is waits for the push."""
+    c.execute("UPDATE drafts SET mode=?, in_reply_to_pk=?, subject=?, version=?, saved_by=?, updated_at=? WHERE id=?",
+              (mode, in_reply_to_pk, subject, version, saved_by, updated_at, did))
+
+
+def draft_settle_push(c, did, account, folder, uid, message_id, uidvalidity, pushed_at):
+    c.execute("""UPDATE drafts SET account=?, folder=?, uid=?, message_id=?, uidvalidity=?, pushed_at=? WHERE id=?""",
+              (account, folder, uid, message_id, uidvalidity, pushed_at, did))
+
+
+def draft_quote(c, did):
+    """The quote the draft's newest save holds: the journal's, or its copy's."""
+    r = c.execute("SELECT tail_text, tail_html FROM draft_journal WHERE draft_id=? AND raw IS NOT NULL", (did,)).fetchone()
+    return r or c.execute("SELECT tail_text, tail_html FROM drafts WHERE id=?", (did,)).fetchone()
+
+
+# ------------------------------------------------------------------- the journal: what a draft still asks of its server
+def journal_get(c, did):
+    return c.execute("SELECT * FROM draft_journal WHERE draft_id=?", (did,)).fetchone()
+
+
+def journal_put(c, did, version, account, message_id, raw, raw_sha, own_text, tail_text, tail_html, bcc, saved_at, due_at, attempts):
+    """This save replaces the one before it. `tried` stays: the copy a try may have left goes when this one lands."""
+    c.execute("""INSERT INTO draft_journal(draft_id,version,account,discard,message_id,raw,raw_sha,own_text,tail_text,tail_html,bcc,
+                                           saved_at,due_at,attempts)
+                 VALUES(?,?,?,0,?,?,?,?,?,?,?,?,?,?)
+                 ON CONFLICT(draft_id) DO UPDATE SET version=excluded.version, account=excluded.account, discard=0,
+                   message_id=excluded.message_id, raw=excluded.raw, raw_sha=excluded.raw_sha, own_text=excluded.own_text,
+                   tail_text=excluded.tail_text, tail_html=excluded.tail_html, bcc=excluded.bcc, saved_at=excluded.saved_at,
+                   due_at=excluded.due_at, attempts=excluded.attempts""",
+              (did, version, account, message_id, raw, raw_sha, own_text, tail_text, tail_html, bcc, saved_at, due_at, attempts))
+
+
+def journal_discard(c, did, version, account, now):
+    """All that's left to ask is that the copy goes, in place of any save still waiting."""
+    c.execute("""INSERT INTO draft_journal(draft_id,version,account,discard,saved_at,due_at)
+                 VALUES(?,?,?,1,?,?)
+                 ON CONFLICT(draft_id) DO UPDATE SET version=excluded.version, discard=1, message_id=NULL, raw=NULL, raw_sha=NULL,
+                   own_text=NULL, tail_text=NULL, tail_html=NULL, bcc=NULL, saved_at=excluded.saved_at,
+                   due_at=excluded.due_at, attempts=0""",
+              (did, version, account, now, now))
+
+
+def journal_tried(c, did, version, message_id):
+    """A try may reach the server from here on. False if the row or this version has gone meanwhile."""
+    return c.execute("UPDATE draft_journal SET tried=? WHERE draft_id=? AND version=? AND discard=0",
+                     (message_id, did, version)).rowcount == 1
+
+
+def journal_settled(c, did, version):
+    """The push of `version` landed. A save made since then stays to go, with no copy left to wonder about."""
+    if not c.execute("DELETE FROM draft_journal WHERE draft_id=? AND version=?", (did, version)).rowcount:
+        c.execute("UPDATE draft_journal SET tried=NULL, attempts=0 WHERE draft_id=?", (did,))
+
+
+def journal_failed(c, did, attempts, due_at):
+    c.execute("UPDATE draft_journal SET attempts=?, due_at=? WHERE draft_id=?", (attempts, due_at, did))
+
+
+# A send about to go holds its draft: the outbox has the bytes, and the copy is removed on delivery. One scheduled for
+# later leaves the copy to catch up in the meantime.
+_NOT_ABOUT_TO_GO = """NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=j.draft_id
+                                  AND o.state IN ('queued','sending') AND o.next_attempt_at <= ?)"""
+
+
+def journal_due(c, now, soon):
+    return c.execute(f"SELECT draft_id, discard FROM draft_journal j WHERE due_at<=? AND {_NOT_ABOUT_TO_GO} ORDER BY due_at",
+                     (now, soon)).fetchall()
+
+
+def journal_next_due(c, after, soon):
+    return c.execute(f"SELECT MIN(due_at) AS at FROM draft_journal j WHERE due_at>? AND {_NOT_ABOUT_TO_GO}",
+                     (after, soon)).fetchone()["at"]
+
+
+def journal_overdue(c, before):
+    """What should have reached its server by `before` and hasn't, for the tray. Any send of it is in the tray already."""
+    return c.execute("""SELECT j.draft_id, j.account, j.discard, j.saved_at, j.attempts, d.subject
+                        FROM draft_journal j JOIN drafts d ON d.id=j.draft_id
+                        WHERE (j.attempts>0 OR j.due_at<=?) AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=j.draft_id
+                                                                            AND o.state IN ('queued','sending'))
+                        ORDER BY j.saved_at DESC""", (before,)).fetchall()
+
+
+def journal_move(c, did, to_did):
+    """A save goes on as a draft of its own, leaving the other's copy be."""
+    c.execute("UPDATE draft_journal SET draft_id=?, tried=NULL WHERE draft_id=?", (to_did, did))
