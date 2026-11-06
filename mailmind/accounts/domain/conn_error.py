@@ -2,7 +2,7 @@
 from mailmind.accounts.domain import tls_pin
 
 
-def quiet(e):
+def quiet(e: BaseException) -> str:
     if isinstance(e, tls_pin.TLSPinMismatch):
         return "certificate changed"
     s = f"{type(e).__name__}: {e}".lower()

@@ -14,10 +14,10 @@ class TLSPinMismatch(ConnectionError):
     """The server presented a certificate other than the one pinned for it. Nothing was sent."""
 
 
-def fingerprint(der):
+def fingerprint(der: bytes | None) -> str:
     return "sha256:" + hashlib.sha256(der or b"").hexdigest()
 
 
-def endpoint(host, port):
+def endpoint(host: str | None, port: int | str) -> str:
     """The key a pin is kept under: the host as configured, and the port."""
     return f"{(host or '').strip().lower()}:{int(port)}"

@@ -14,9 +14,10 @@ seconds or 40 uses, against 600 seconds or 200 uses elsewhere; and it marks a me
 moves to Trash. An account of another kind served by a loopback STARTTLS server is taken for
 Bridge too.
 """
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from urllib.parse import quote
-from typing import Any
+from typing import Any, Self
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
 
@@ -41,13 +42,13 @@ class ProviderProfile:
     uidplus: bool | None = None
     idle: bool | None = None
 
-    def with_capabilities(self, capabilities):
+    def with_capabilities(self, capabilities: Iterable[object] | None) -> Self:
         """This profile with what a server's CAPABILITY list says (names, any case)."""
         caps = {str(c).upper() for c in capabilities or ()}
         return replace(self, special_use="SPECIAL-USE" in caps, condstore="CONDSTORE" in caps,
                        move="MOVE" in caps, uidplus="UIDPLUS" in caps, idle="IDLE" in caps)
 
-    def deep_link(self, *, account, message_id, subject, webmail=None):
+    def deep_link(self, *, account: str, message_id: str | None, subject: str | None, webmail: str | None = None) -> str:
         """A link that opens the message in the provider's own web client, "" when there is none.
         Proton's can only search by subject; another server's opens its webmail, when the config
         names one."""
@@ -64,7 +65,7 @@ _GMAIL = ProviderProfile("gmail", saves_sent=True, archive_is_label_removal=True
 _BRIDGE: dict[str, Any] = dict(bridge=True, bulk_expunge_unsafe=True, recycle_seconds=90, recycle_uses=40)
 
 
-def resolve(acct, capabilities=None):
+def resolve(acct: Mapping[str, Any], capabilities: Iterable[object] | None = None) -> ProviderProfile:
     """The profile for a config account (a dict with "kind", "host", "starttls"), with the
     server's CAPABILITY list when one is at hand."""
     kind = acct.get("kind") or "imap"

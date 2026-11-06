@@ -1,8 +1,52 @@
 """An account as `mailmind.config.json` holds it: an entry's defaults, what the API may show of it, and
 what an edit may change. Credential styles are mailmind.accounts.adapters.secrets's."""
+from collections.abc import Mapping
+from typing import Any, Required, TypedDict
+
+# An entry of the file, or what a request asked of one: JSON as it parsed, so what a key holds is the file's
+# word for it, Any on purpose. `normalized` says which keys the rest of the app may count on.
+type Entry = dict[str, Any]
+type Credential = str | dict[str, Any] | None
 
 
-TYPE_DEFAULTS = {
+class TypeDefaults(TypedDict):
+    host: str | None
+    port: int
+    starttls: bool
+    trash: str
+    strip_spaces: bool
+    smtp_host: str | None
+    smtp_port: int
+    smtp_starttls: bool
+
+
+class CredentialMask(TypedDict, total=False):
+    """A credential as the API may show it: its style and whether it's set, and only ever a pointer."""
+    style: Required[str | None]
+    set: Required[bool]
+    ref: str
+    var: str
+
+
+class MaskedRow(TypedDict):
+    """An account as the API may show it. The handler must NEVER serialize a raw entry."""
+    email: str | None
+    type: str
+    alias: str | None
+    host: str | None
+    port: int
+    starttls: bool
+    trash: str
+    smtp_host: str | None
+    smtp_port: int
+    smtp_starttls: bool
+    disabled: bool
+    defaults_applied: dict[str, bool]
+    credential: CredentialMask
+    signature: str
+
+
+TYPE_DEFAULTS: dict[str, TypeDefaults] = {
     "gmail":  {"host": "imap.gmail.com", "port": 993, "starttls": False,
                "trash": "[Gmail]/Trash", "strip_spaces": True,
                "smtp_host": "smtp.gmail.com", "smtp_port": 587, "smtp_starttls": True},
@@ -17,7 +61,7 @@ TYPE_DEFAULTS = {
 _SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_starttls")
 
 
-def normalized(a):
+def normalized(a: Entry) -> Entry | None:
     """An account's entry in the file as the rest of the app reads it, its type's defaults filled in.
     None for one that can't be used: disabled, or a generic IMAP account with no host."""
     if a.get("disabled"):
@@ -43,7 +87,7 @@ def normalized(a):
     }
 
 
-def mask_credential(cred):
+def mask_credential(cred: Credential) -> CredentialMask:
     """Public, secret-FREE descriptor of a credential. NEVER returns a value,
     length, prefix, or hash — only the style and whether something is set."""
     if isinstance(cred, str):
@@ -61,7 +105,7 @@ def mask_credential(cred):
     return {"style": "unknown", "set": False}
 
 
-def masked_row(entry):
+def masked_row(entry: Entry) -> MaskedRow:
     """Re-shape ONE raw account entry into the secret-free row the API returns.
     Echoes effective host/port/etc (with a defaults_applied flag) and masks the
     credential. The handler must NEVER serialize a raw entry directly."""
@@ -84,7 +128,7 @@ def masked_row(entry):
     }
 
 
-def find(raw, email):
+def find(raw: Entry, email: str | None) -> Entry | None:
     el = (email or "").strip().lower()
     for e in raw.get("accounts", []):
         if (e.get("email") or "").strip().lower() == el:
@@ -92,7 +136,7 @@ def find(raw, email):
     return None
 
 
-def credential_from(p):
+def credential_from(p: Entry | None) -> dict[str, Any] | None:
     """Build a stored credential dict from a request payload {style,value|ref|var}.
     Returns None to mean 'keep existing'. Raises ValueError on invalid input."""
     if not p:
@@ -118,14 +162,14 @@ def credential_from(p):
     return None  # style unchanged / not provided -> keep existing
 
 
-def clean_alias(a):
+def clean_alias(a: object) -> str | None:
     if a is None:
         return None
     a = "".join(ch for ch in str(a) if ch == " " or ch.isprintable())
     return a.strip()[:64]
 
 
-def clean_signature(s):
+def clean_signature(s: object) -> str:
     """Signatures are multiline plain text (non-secret) inserted into outgoing bodies.
     Preserve newlines + printable chars; strip control/bidi/zero-width smuggling; cap length."""
     if s is None:
@@ -134,7 +178,7 @@ def clean_signature(s):
     return out.strip()[:2000]
 
 
-def apply_fields(entry, p):
+def apply_fields(entry: Entry, p: Mapping[str, Any]) -> None:
     """Apply editable non-credential fields from payload p onto entry in place."""
     if "alias" in p:
         al = clean_alias(p.get("alias"))
@@ -159,7 +203,7 @@ def apply_fields(entry, p):
             entry[k] = p[k]
 
 
-def validate_new(entry):
+def validate_new(entry: Entry) -> None:
     email = (entry.get("email") or "").strip()
     if "@" not in email:
         raise ValueError("a valid email is required")
@@ -172,6 +216,6 @@ def validate_new(entry):
         raise ValueError("port must be 1–65535")
 
 
-def strip_for(entry):
+def strip_for(entry: Entry) -> bool:
     t = entry.get("type", "imap")
     return entry.get("strip_spaces", TYPE_DEFAULTS.get(t, TYPE_DEFAULTS["imap"])["strip_spaces"])
