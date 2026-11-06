@@ -19,6 +19,7 @@ import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
 import { snoozeAsk } from "./SnoozeMenu";
 import type { Mailbox } from "./useMailbox";
+import { SenderButton } from "../senders/ContactCard";
 
 type Body = GetAnswers["/api/message/{pk}/body"];
 
@@ -259,7 +260,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
           <div className="rd-top"><span className="rd-tag">{m.title}</span><span className="rd-when">{d.date}</span></div>
           <div className="rd-subj">{d.subject || "(no subject)"}</div>
           <div className="rd-from">
-            <span className="rd-sender"><span className="nm">{d.from_name}</span> <span className="ad">{d.from_addr}</span></span>
+            <SenderButton name={d.from_name ?? ""} addr={d.from_addr ?? ""} m={m} />
             {d.to ? ` · to ${d.to.slice(0, 80)}` : ""}
           </div>
         </>

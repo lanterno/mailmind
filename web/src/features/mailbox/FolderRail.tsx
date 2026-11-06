@@ -7,6 +7,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { post } from "../../api/client";
 import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useScreener } from "../senders/Screener";
 import { useFolders, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 
@@ -119,6 +120,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
 export function FolderRail({ accounts, aliases, source }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null }) {
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : source?.kind === "allInboxes" ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
+  const screener = useScreener(account).data?.total ?? 0;
   const folder = source?.kind === "folder" ? source.folder : "";
   const to = (name: string): ListSource => ({ kind: "folder", account: account!, folder: name });
   const current = source?.kind === "allInboxes" ? ALL : account ?? ALL;
@@ -143,6 +145,7 @@ export function FolderRail({ accounts, aliases, source }: { accounts: string[]; 
         ))}
         {data && <RailRow source={to("__snoozed__")} on={folder === "__snoozed__"} icon="clock" label="Snoozed" count={data.snoozed} />}
         {views.map(([name, icon, label, n]) => (n ? <RailRow key={name} source={to(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
+        {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
         <Views source={source} account={account ?? ""} />
       </nav>
     </aside>

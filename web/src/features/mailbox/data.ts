@@ -61,7 +61,7 @@ async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Prom
 export function useMessages(source: ListSource | null, grouped: boolean, accounts: string[]) {
   return useInfiniteQuery({
     queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : false],
-    enabled: Boolean(source) && (source?.kind !== "allInboxes" || accounts.length > 0),
+    enabled: Boolean(source) && (source?.kind !== "allInboxes" || accounts.length > 0) && !(source?.kind === "folder" && source.folder === "__screener__"),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);

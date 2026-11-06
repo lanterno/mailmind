@@ -22,6 +22,7 @@ export function useRealtime() {
     const mail = () => {
       again("messages");
       again("folders");
+      again("screener");
       clearTimeout(digestSoon);
       digestSoon = setTimeout(() => again("digest"), 400);
     };

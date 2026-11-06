@@ -18,6 +18,7 @@ import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
 import { FeedRiver, PaperTrail } from "../features/lanes/Lanes";
+import { ScreenerPane, useScreener } from "../features/senders/Screener";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
 import { AccountAlert } from "../features/status/Status";
@@ -189,8 +190,11 @@ export function App() {
   const more = list.hasNextPage ? "+" : "";
   const noun = m.grouped && !searching && m.source?.kind !== "digest" ? "conversation" : "message";
   const lane = source?.kind === "search" ? source.lane : undefined;
+  const screening = folder === "__screener__";
+  const screener = useScreener(screening ? m.account : undefined);
+  const toScreen = screener.data?.total ?? 0;
   const laneNoun = lane === "feed" ? "newsletter" : "receipt";
-  const count = lane
+  const count = screening ? `${toScreen} to screen` : lane
     ? `${all.length}${more} ${laneNoun}${all.length === 1 && !more ? "" : "s"}`
     : searching
     ? `${all.length}${more} result${all.length === 1 && !more ? "" : "s"}`
@@ -222,7 +226,7 @@ export function App() {
           <div className="listhead">
             <div className="lh1">
               <h1 className="lh-title" id="listTitle">{title}</h1>
-              {!searching && source?.kind !== "digest" && (
+              {!searching && !screening && source?.kind !== "digest" && (
                 <button className={m.grouped ? "thread-toggle on" : "thread-toggle"} id="threadToggle" title="Group into conversations" onClick={() => setGrouping(!m.grouped)}>
                   <Icon name={m.grouped ? "chat" : "list"} /> {m.grouped ? "Conversations" : "Messages"}
                 </button>
@@ -233,6 +237,7 @@ export function App() {
                 <Icon name={lane === "feed" ? "book" : "receipt"} /> <b>{title}</b> · {lane === "feed" ? "a calm reading river" : "receipts & invoices"} · all accounts
               </div>
             )}
+            {screening && <div className="client-ctx" id="clientCtx"><b>Screener</b> · {toScreen} new sender{toScreen === 1 ? "" : "s"} awaiting a decision</div>}
             {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
                 <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts ·{" "}
@@ -272,11 +277,11 @@ export function App() {
                 ))}
               </div>
             )}
-            <div className="lh-row"><span id="count">{asked ? (asked.state === "loading" ? "asking…" : asked.state === "answer" ? `${asked.answer.sources?.length ?? 0} source${asked.answer.sources?.length === 1 ? "" : "s"}` : "") : list.isSuccess ? count : "—"}</span></div>
+            <div className="lh-row"><span id="count">{asked ? (asked.state === "loading" ? "asking…" : asked.state === "answer" ? `${asked.answer.sources?.length ?? 0} source${asked.answer.sources?.length === 1 ? "" : "s"}` : "") : (screening ? screener.isSuccess : list.isSuccess) ? count : "—"}</span></div>
           </div>
           <BulkBar m={m} />
           <NewMailPill />
-          {asked ? <AskPane at={asked} m={m} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
+          {asked ? <AskPane at={asked} m={m} /> : screening ? <ScreenerPane account={m.account} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
             openPk={m.openPk}
