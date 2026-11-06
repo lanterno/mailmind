@@ -22,6 +22,7 @@ import itertools
 import os
 import threading
 import time
+from collections.abc import Callable
 
 EVERY_ACCOUNT = "*"
 
@@ -129,7 +130,7 @@ def _run_per_account(account, fn, priority, wait, deadline):
 
 # ── the façade ─────────────────────────────────────────────────────────────────────────────────
 
-def run(account, fn, *, priority, wait=True, deadline=None):
+def run[T](account: str, fn: Callable[[], T], *, priority: int, wait: bool = True, deadline: float | None = None) -> T:
     """Run fn() with `account`'s gate held, and return what it returns. The gate comes free when
     fn returns or raises. With wait=False a held gate raises Busy at once, and fn doesn't run;
     with a `deadline` (seconds), a gate not had by then raises Busy, and fn doesn't run.
@@ -143,7 +144,7 @@ def run(account, fn, *, priority, wait=True, deadline=None):
     return _run_global(account, fn, wait, deadline)
 
 
-def held(account=EVERY_ACCOUNT):
+def held(account: str = EVERY_ACCOUNT) -> bool:
     """Whether `account`'s gate is held now, by any job. For EVERY_ACCOUNT: whether any is."""
     if not per_account():
         return _lock.locked()

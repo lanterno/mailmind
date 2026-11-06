@@ -2,10 +2,12 @@
 import imaplib
 import time
 
+from mailmind.mailbox.application.session import MailSession
+
 MOVE_BATCH = 200
 
 
-def _move_one(s, uid, dest):
+def _move_one(s: MailSession, uid: str, dest: str) -> None:
     """One message: MOVE, or on a server without it a checked COPY, then \\Deleted and a UID
     EXPUNGE of this UID alone. A failure leaves it for the verification pass."""
     try:
@@ -16,12 +18,12 @@ def _move_one(s, uid, dest):
         pass
 
 
-def _still_in_inbox(s):
+def _still_in_inbox(s: MailSession) -> set[str]:
     s.select("INBOX")
     return {str(u) for u in s.uids("ALL")}
 
 
-def move_verified(s, uids, dest):
+def move_verified(s: MailSession, uids: list[str], dest: str) -> tuple[int, list[str]]:
     """Move uids (strings) to dest, then re-check INBOX and retry any that didn't leave.
     Returns (moved, stragglers). They go MOVE_BATCH at a time, in one MOVE where the server offers
     it, and copied together where it doesn't; a refused batch goes one message at a time

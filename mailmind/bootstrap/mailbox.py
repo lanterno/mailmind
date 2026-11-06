@@ -35,7 +35,7 @@ from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.syncing import Syncing
 from mailmind.mailbox.application.warm import Warming
-from mailmind.mailbox.application.session import ReadOnlySession
+from mailmind.mailbox.application.session import MailSession, ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 from mailmind.platform.undo import Undo
@@ -95,7 +95,7 @@ def describe():
         f"{k} for {counts[k]} account{'' if counts[k] == 1 else 's'} that asked" for k in rest])
 
 
-def open_session(acct, timeout=60):
+def open_session(acct, timeout=60) -> MailSession:
     """A logged-in MailSession for the account `acct` (a config.accounts() entry)."""
     if kind_for(acct) == "imaplib":
         return ImaplibSession(accounts.connect(acct, timeout=timeout))
