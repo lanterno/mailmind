@@ -5,9 +5,10 @@ import email
 import tempfile
 from datetime import datetime, timezone
 
-import rules
+from mailmind.bootstrap.curation import rules
 import manage
 from mailmind.platform import settings
+from mailmind.curation.domain import rulebook
 
 HOUR = 3600
 NOW = 1_800_000_000
@@ -20,22 +21,22 @@ def _fresh_rules_file():
 # ── matching ──────────────────────────────────────────────────────────────────
 def test_domain_matches_exact_and_subdomain():
     exp = {"notify-example.test": 72}
-    assert rules.expiry_hours("bot@notify-example.test", exp) == 72
-    assert rules.expiry_hours("bot@mail.notify-example.test", exp) == 72
+    assert rulebook.expiry_hours("bot@notify-example.test", exp) == 72
+    assert rulebook.expiry_hours("bot@mail.notify-example.test", exp) == 72
 
 def test_domain_does_not_match_lookalike():
     exp = {"notify-example.test": 72}
-    assert rules.expiry_hours("bot@evilnotify-example.test", exp) is None
-    assert rules.expiry_hours("notify-example.test@other.test", exp) is None
+    assert rulebook.expiry_hours("bot@evilnotify-example.test", exp) is None
+    assert rulebook.expiry_hours("notify-example.test@other.test", exp) is None
 
 def test_sender_entry_wins_over_domain():
     exp = {"notify-example.test": 72, "alerts@notify-example.test": 240}
-    assert rules.expiry_hours("alerts@notify-example.test", exp) == 240
-    assert rules.expiry_hours("other@notify-example.test", exp) == 72
+    assert rulebook.expiry_hours("alerts@notify-example.test", exp) == 240
+    assert rulebook.expiry_hours("other@notify-example.test", exp) == 72
 
 def test_no_rule_no_expiry():
-    assert rules.expiry_hours("someone@person.test", {"notify-example.test": 72}) is None
-    assert rules.expiry_hours("", {"notify-example.test": 72}) is None
+    assert rulebook.expiry_hours("someone@person.test", {"notify-example.test": 72}) is None
+    assert rulebook.expiry_hours("", {"notify-example.test": 72}) is None
 
 
 # ── age selection ─────────────────────────────────────────────────────────────

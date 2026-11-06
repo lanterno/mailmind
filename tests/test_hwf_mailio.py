@@ -631,7 +631,7 @@ FAR = 4_000_000_000                                              # a "now" long 
 
 def test_hwf_expiry_audits_before_it_moves(world):
     import manage
-    import rules
+    from mailmind.bootstrap.curation import rules
     rules.set_expiry("loom.example.test", 1)
     world.server.drop("UID MOVE", user=w.ADA)
     res = manage.expire_account(acct(), now=FAR)
@@ -643,7 +643,7 @@ def test_hwf_expiry_audits_before_it_moves(world):
 
 def test_hwf_expiry_prunes_the_local_row_by_message_id(world):
     import manage
-    import rules
+    from mailmind.bootstrap.curation import rules
     rules.set_expiry("thimble.example.test", 1)                 # the receipt's sender
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # the receipt is now UID 4 on the server
@@ -660,7 +660,7 @@ def test_hwf_a_sweep_still_moves_the_junk_when_the_server_refuses_move(world):
 
 def test_hwf_a_sweep_and_expiry_on_a_server_without_move_copy_then_expunge_one_uid(world):
     import manage
-    import rules
+    from mailmind.bootstrap.curation import rules
     world.server.without = {"MOVE"}
     since = world.mark()
     assert manage.sweep_account(acct())["moved"] == 3
@@ -676,7 +676,7 @@ def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
     import email.utils
     from datetime import datetime, timezone
     import manage
-    import rules
+    from mailmind.bootstrap.curation import rules
     rules.set_expiry("loom.example.test", 72)
     now = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
     hour, month = now - timedelta(hours=1), now - timedelta(days=30)
@@ -1108,7 +1108,7 @@ def while_locked(fn):
 
 
 def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, monkeypatch):
-    import rules
+    from mailmind.bootstrap.curation import rules
     import server
     rules.set_expiry("loom.example.test", 1)
     pk = world.pk("bea-inbox-01-client.eml")                    # its body was never fetched

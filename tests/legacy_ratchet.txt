@@ -10,7 +10,6 @@ mailmind.bootstrap.cli config
 mailmind.bootstrap.cli export
 mailmind.bootstrap.cli ingest
 mailmind.bootstrap.cli manage
-mailmind.bootstrap.cli rules
 mailmind.bootstrap.cli store
 mailmind.bootstrap.cli summarize
 mailmind.bootstrap.cli views

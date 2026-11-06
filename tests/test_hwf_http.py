@@ -115,7 +115,7 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
 
 def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
     import accounts
-    import rules
+    from mailmind.bootstrap.curation import rules
     import server
     rules.set_expiry("nobody.example.test", 72)              # so expiry has work that needs IMAP
     ada = accounts.get(w.ADA)
@@ -633,7 +633,7 @@ def test_a_save_whose_row_moved_accounts_while_it_waited_takes_the_wider_gate(ap
 
 
 def test_a_failed_rules_write_keeps_the_rules(app, world, monkeypatch):
-    import rules
+    from mailmind.bootstrap.curation import rules
     assert app.post("/api/rules", {"token": "lin@example.test", "verdict": "keep"}).json["ok"]
 
     class DiskFull:

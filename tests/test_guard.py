@@ -127,7 +127,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     import config
     import manage
     import mailclass
-    import rules
+    from mailmind.bootstrap.curation import rules
     import server
     import store
     import views

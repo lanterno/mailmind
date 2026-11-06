@@ -69,7 +69,7 @@ def execute(app, golden, label, body):
 
 
 def state(golden, world, label):
-    import rules
+    from mailmind.bootstrap.curation import rules
     golden.note(f"{label}: block rules", {k: v for k, v in rules.load().items() if k.startswith("block")})
     golden.note(f"{label}: where the newsletter is", world.where(NEWSLETTER))
 

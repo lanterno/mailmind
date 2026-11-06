@@ -41,7 +41,7 @@ def screener(page):
 
 
 def rules_now():
-    import rules
+    from mailmind.bootstrap.curation import rules
     return rules.load()
 
 

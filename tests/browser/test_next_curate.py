@@ -71,7 +71,7 @@ def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
 
 
 def test_shift_enter_blocks_and_a_chip_removes_its_rule(page, world):
-    import rules
+    from mailmind.bootstrap.curation import rules
     drawer(page)
     page.locator("#ruleInput").fill("pests.example.test")
     page.locator("#ruleInput").press("Shift+Enter")
@@ -103,7 +103,7 @@ def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
 
 
 def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, world):
-    import rules
+    from mailmind.bootstrap.curation import rules
     issues(world)
     d = drawer(page)
     row = d.locator(f'.flood-row[data-flood="{LOOM}"]')

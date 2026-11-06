@@ -19,6 +19,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.content.text import body_text_of, html_to_snippet_text, snippet_of, text_body
+from mailmind.curation.domain import rulebook
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -642,7 +643,7 @@ def test_hwf_the_short_esp_marker_still_counts_as_a_whole_label(data_dir, addr):
 
 def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
     import mailclass
-    import rules
+    from mailmind.bootstrap.curation import rules
 
     def write(data, stamp):
         path = data_dir / "mailmind_rules.json"
@@ -666,17 +667,16 @@ def test_hwf_a_malformed_rules_file_does_not_stop_sync(world):
 
 
 def test_hwf_expiry_takes_the_shortest_of_matching_domain_rules():
-    import rules
     expire = {"example.test": 72, "ci.example.test": 24, "noreply@ci.example.test": 240}
-    assert rules.expiry_hours("bot@ci.example.test", expire) == 24
-    assert rules.expiry_hours("bot@ci.example.test", {"example.test": 12, "ci.example.test": 24}) == 12
-    assert rules.expiry_hours("noreply@ci.example.test", expire) == 240
+    assert rulebook.expiry_hours("bot@ci.example.test", expire) == 24
+    assert rulebook.expiry_hours("bot@ci.example.test", {"example.test": 12, "ci.example.test": 24}) == 12
+    assert rulebook.expiry_hours("noreply@ci.example.test", expire) == 240
 
 
 def test_hwf_a_rule_change_reaches_stored_mail_only_when_it_is_stored_again(world):
     import accounts
     import ingest
-    import rules
+    from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "block")
     assert world.row("ada-inbox-01-lunch.eml")["bucket"] == "other/personal-ish"
     ingest.sync_folder(accounts.get(w.ADA), "INBOX", full=True)
@@ -695,14 +695,14 @@ def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
 
 
 def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):
-    import rules
+    from mailmind.bootstrap.curation import rules
     import server
     rules.add("example.test", "keep")
     assert [i["from_addr"] for i in server.do_screener(w.ADA)["items"]] == []
 
 
 def test_hwf_cleanup_skips_senders_a_parent_domain_rule_decided(world):
-    import rules
+    from mailmind.bootstrap.curation import rules
     import server
     for n in range(4):                                       # enough unread issues to rank as noise
         world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
@@ -736,7 +736,7 @@ def test_hwf_saved_views_are_written_owner_only_and_without_builtins(data_dir):
 
 def test_hwf_a_bad_edit_of_the_rules_keeps_the_rules_last_read(data_dir, capsys):
     import mailclass
-    import rules
+    from mailmind.bootstrap.curation import rules
     rules.add("lin@example.test", "keep")
     assert mailclass.classify("lin@example.test", "Win a prize now", "Lin", False)[2] == "kept by rule (sender)"
     with open(data_dir / "mailmind_rules.json", "w") as f:
@@ -748,7 +748,7 @@ def test_hwf_a_bad_edit_of_the_rules_keeps_the_rules_last_read(data_dir, capsys)
 
 
 def test_hwf_a_save_over_an_unreadable_rules_file_keeps_it_in_backups(data_dir):
-    import rules
+    from mailmind.bootstrap.curation import rules
     bad = '{"keep_senders": ["lin@example.test",]'
     with open(data_dir / "mailmind_rules.json", "w") as f:
         f.write(bad)
@@ -760,7 +760,7 @@ def test_hwf_a_save_over_an_unreadable_rules_file_keeps_it_in_backups(data_dir):
 
 
 def test_hwf_the_rules_file_is_written_owner_only(data_dir):
-    import rules
+    from mailmind.bootstrap.curation import rules
     old = os.umask(0o022)                                  # the usual umask, whatever the test runner's
     try:
         rules.add("lin@example.test", "keep")
