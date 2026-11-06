@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { avatarHue, dayGroup, fileSize, initialsOf, shortAddress } from "./text";
+import { avatarHue, dayGroup, fileSize, initialsOf, shortAddress, usd } from "./text";
 
 it("takes initials from capitalised words first", () => {
   expect(initialsOf("Library of Ash Hollow", "x@example.test")).toBe("LA");
@@ -26,3 +26,6 @@ it("sorts a message into a day's section", () => {
     .toEqual(["Today", "Yesterday", "Past week", "Earlier"]);
 });
 it("shortens an address to its name", () => expect(shortAddress("bo@example.test")).toBe("bo"));
+it("says money rounded up to the cent", () => {
+  expect([usd(0), usd(1), usd(15_000_000), usd(1_234_567_890)]).toEqual(["$0.00", "$0.01", "$15.00", "$1,234.57"]);
+});
