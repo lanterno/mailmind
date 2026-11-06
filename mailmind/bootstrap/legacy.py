@@ -1,8 +1,7 @@
-"""Wiring for the legacy modules at the repo root.
+"""What every way of running the app does first.
 
 Each front door calls `start()` before it serves, and the tests' app fixture calls
-`wire()`, so all of them put the app together the same way. This is the one module in the
-package that imports legacy modules; tests/legacy_ratchet.txt lists each import.
+`wire()`, so all of them put the app together the same way.
 """
 import threading
 
@@ -70,13 +69,6 @@ def unwire():
     """End wire()'s subscriptions."""
     while _wired:
         _wired.pop()()
-
-
-def server_module():
-    """The legacy server module, for a front door other than server.py itself. Imported here, at
-    call time: server imports this module, and run as __main__ it would load a second copy."""
-    import server
-    return server
 
 
 def _daemon(target):

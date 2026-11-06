@@ -1,9 +1,5 @@
 """Curation's wiring: the one place that binds its ports, to its own adapters and, until those contexts move, to
 the legacy modules behind filing and sending. The legacy modules reach Curation through here.
-
-Filing goes through the server module, which `attach` is handed rather than importing: `python3 server.py` runs
-as __main__, and an import here would load a second copy with state of its own. The commands that don't file
-(the command line's sweeps) never reach it.
 """
 from mailmind.bootstrap import mailbox
 from mailmind.curation.adapters import rules_file as rules
@@ -23,18 +19,16 @@ from mailmind.platform import sse
 from mailmind.platform.workers import gates
 
 __all__ = ["AUDIT", "BLOCKED", "EXPIRE", "JUNK_BUCKETS", "KEYS", "MKT", "NOTIF", "PERSONAL", "PROTECTED", "RECEIPT",
-           "SPAM", "arrival_ts", "attach", "by_rule", "classify", "cleanup", "decided", "domain_listed", "expiry",
+           "SPAM", "arrival_ts", "by_rule", "classify", "cleanup", "decided", "domain_listed", "expiry",
            "expiry_hours", "is_junk", "looks_human", "rules", "safe_http", "screener", "select_expired", "sqlite",
            "sweeps"]
 
 UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's gate to read one message's headers
-_server = None
 
-
-def attach(server):
-    """Name the running server module, the one with the routes' filing and the process's secret."""
-    global _server
-    _server = server
+def _csrf():
+    """This run's secret, the page's token."""
+    from mailmind.http.handler import H
+    return H.CSRF
 
 
 def classify(from_addr, subject="", from_name="", has_list_unsub=False):
@@ -164,7 +158,7 @@ _mail = sqlite.SenderMail(_MessageRows())
 _filing = _Filing()
 _boxes = _Mailboxes()
 cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp(), _SystemSend()), _filing, AUDIT,
-                  lambda: _server.CSRF)
+                  _csrf)
 screener = Screener(rules, _mail, _boxes, _filing)
 sweeps = Sweeps(rules, _mail, _boxes, AUDIT, _filing)
 expiry = Expiry(rules, _mail, _boxes, AUDIT, _filing)

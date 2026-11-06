@@ -9,33 +9,32 @@ through it, where the old door keeps imaplib for every account.
 """
 import dataclasses
 
-from mailmind.bootstrap import assistant, legacy, mailbox
+from mailmind.bootstrap import assistant, legacy, mailbox, web
 from mailmind.http import serving
 from mailmind.http.app import create_app
 from mailmind.http.bridge import HandlerBridge
 from mailmind.platform import settings
 
 
-def build(server):
-    """The ASGI app over the legacy server module, and the coroutine function to await when
+def build():
+    """The ASGI app over the handler, and the coroutine function to await when
     shutdown begins. A POST's body may hold up to the route's own cap, and the bridge reads no
-    other body: server.H reads none. The perimeter checks the page's token as server.H does, so
+    other body: the handler reads none. The perimeter checks the page's token as the handler does, so
     both see the same one. AI calls go through the Anthropic SDK from here on, and an account
     that asks for IMAPClient gets it."""
     assistant.use("sdk")
     mailbox.offer("imapclient")
 
     def body_cap(method, path):
-        return server.post_body_cap(path) if method == "POST" else 0
-    bridge = HandlerBridge(server.H, body_cap=body_cap)
-    return create_app(bridge, token=lambda: server.CSRF, body_cap=body_cap), bridge.close
+        return web.post_body_cap(path) if method == "POST" else 0
+    bridge = HandlerBridge(web.H, body_cap=body_cap)
+    return create_app(bridge, token=lambda: web.H.CSRF, body_cap=body_cap), bridge.close
 
 
 def serve(port=None):
     if port is not None:
         settings.configure(dataclasses.replace(settings.current(), port=port))
-    server = legacy.server_module()
-    app, before_shutdown = build(server)      # first, so the startup lines name the SDK and who asked for IMAPClient
+    app, before_shutdown = build()      # first, so the startup lines name the SDK and who asked for IMAPClient
     legacy.start()
     port = settings.current().port
     print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)

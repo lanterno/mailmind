@@ -1,0 +1,137 @@
+"""What the page asks of the Mailbox: its lists, a message opened, filing and the sync."""
+import re
+import threading
+import urllib.parse
+
+from mailmind.compose.api import MAX_ATTACH_BYTES
+from mailmind.content import mime
+from mailmind.http.routing import ANSWERED, Routes
+from mailmind.platform.workers import gates
+
+
+def _safe_filename(name):
+    """Never trust an email-supplied filename: strip path + control/quote/CRLF chars."""
+    name = (name or "attachment")
+    name = name.split("/")[-1].split("\\")[-1]
+    name = re.sub(r'[\x00-\x1f\x7f"\r\n]', "_", name).strip(" .") or "attachment"
+    return name[:255]
+
+
+def _attachment(h, mailbox, pk, part_id):
+    if not re.match(r"^[0-9]+$", part_id or ""):     # only the part ids mime gives
+        return h._json({"ok": False, "error": "bad part id"}, 400)
+    c = mailbox.store.conn(); row = mailbox.store.get_message(c, pk); c.close()
+    if not row:
+        return h._json({"ok": False, "error": "not found"}, 404)
+    gates.run(row["account"], lambda: mailbox.ingest.fetch_body(pk),   # ensure body + attachment metadata exist
+              priority=gates.Priority.INTERACTIVE)
+    c = mailbox.store.conn()
+    att = c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
+                    (pk, part_id)).fetchone()
+    raw = mailbox.store.get_body(c, pk)
+    c.close()
+    if not att or not raw:
+        return h._json({"ok": False, "error": "no such part"}, 404)
+    data, _ = mime.extract_part(raw, part_id)
+    if data is None:
+        return h._json({"ok": False, "error": "no such part"}, 404)
+    if len(data) > MAX_ATTACH_BYTES:
+        return h._json({"ok": False, "error": "too large"}, 413)
+    ctype = (att["content_type"] or "application/octet-stream").split(";")[0].strip()
+    # never inline-render active types from the top frame; force download regardless
+    fn = _safe_filename(att["filename"])
+    disp = "attachment; filename*=UTF-8''" + urllib.parse.quote(fn, safe="")
+    h._send_raw(200, data, ctype, {"Content-Disposition": disp})
+
+
+def routes(mailbox):
+    r = Routes()
+
+    @r.get("/api/digest")
+    def digest(req):
+        return mailbox.digest.answer(req.query)
+
+    @r.get("/api/stats")
+    def stats(req):
+        return mailbox.stats.live(req.arg("account"), req.arg("refresh", "0") == "1")
+
+    @r.get("/api/folders")
+    def folders(req):
+        account = req.arg("account")
+        if not account:
+            return {"ok": False, "error": "account required", "folders": []}, 400
+        return mailbox.folders.of_account(account)
+
+    @r.get("/api/messages")
+    def messages(req):
+        return mailbox.queries.messages_in(req.arg("account"), req.arg("folder", "INBOX"),
+                                           int(req.arg("offset", "0")), int(req.arg("limit", "80")),
+                                           group=(req.arg("group", "") == "thread"))
+
+    @r.get("/api/thread")
+    def thread(req):
+        return mailbox.queries.thread_json(req.arg("account"), req.arg("thread_id"))
+
+    @r.get("/api/pending")
+    def pending(req):
+        return mailbox.offline.list_open()
+
+    @r.get("/api/account-health")
+    def account_health(req):
+        return mailbox.syncing.account_health_json()
+
+    @r.matching("GET", lambda path: path.startswith("/api/message/") and "/attachment/" in path)
+    def attachment(req):
+        parts = req.path.split("/")     # ['', 'api', 'message', '<pk>', 'attachment', '<part_id>']
+        _attachment(req.handler, mailbox, int(parts[3]), parts[5])
+        return ANSWERED
+
+    @r.matching("GET", lambda path: path.startswith("/api/message/") and path.endswith("/body"))
+    def body(req):
+        return mailbox.bodies.message_body(int(req.path.split("/")[3]), req.arg("images", "0") == "1",
+                                           prefetch=(req.arg("prefetch", "0") == "1"))
+
+    @r.post("/api/pending/retry")
+    def pending_retry(req):
+        return mailbox.filing.do_pending_retry(int(req.body.get("id")))
+
+    @r.post("/api/pending/discard")
+    def pending_discard(req):
+        return mailbox.filing.do_pending_discard(int(req.body.get("id")))
+
+    @r.post("/api/trash")
+    def trash(req):
+        return mailbox.filing.do_trash(req.body)
+
+    @r.post("/api/thread/archive")
+    @r.post("/api/thread/trash")
+    def thread_file(req):
+        return mailbox.filing.do_thread_file(req.path, req.body)
+
+    @r.post("/api/flag")
+    @r.post("/api/seen")
+    @r.post("/api/archive")
+    @r.post("/api/move")
+    @r.post("/api/junk")
+    def write(req):
+        return mailbox.filing.do_write(req.path, req.body)
+
+    @r.post("/api/undo")
+    def undo(req):
+        return mailbox.undo.undo_last()
+
+    @r.post("/api/refresh")
+    def refresh(req):
+        threading.Thread(target=mailbox.syncing.sync_once, daemon=True).start()
+        return {"ok": True, "msg": "sync started"}
+
+    @r.post("/api/reconcile")
+    def reconcile(req):
+        return mailbox.syncing.do_reconcile(req.body.get("account", "all"), bool(req.body.get("dry_run", False)),
+                                            force=req.body.get("force") is True)
+
+    @r.post("/api/sync-retry-account")
+    def sync_retry(req):
+        return mailbox.syncing.do_sync_retry(req.body)
+
+    return r
