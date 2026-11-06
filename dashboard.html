@@ -2812,23 +2812,20 @@ function renderDoUI(kind, d){
       <button class="do-assearch" data-do-search>Show as search</button>
     </div></div>`;
 }
+const _DO_DONE={archive:"Archived",trash:"Trashed",junk:"Marked junk",snooze:"Snoozed"};
+/* The server carries out what the preview froze, by the plan's id: the page sends no list of messages.
+   Archive, trash, junk and snooze come back as one undo group; read, unread and star aren't Undo-tracked (the modal says so). */
 async function doConfirm(plan){
-  if(!plan||plan.intent!=="act"||!(plan.pks&&plan.pks.length))return;
+  if(!plan||plan.intent!=="act"||!plan.plan)return;
   state._doPlan=null; state._doArmed=false; closeDoPanel();
-  state.searching=false; state.searchItems=[];       // post-action view = the mailbox
-  state.cmarked.clear(); plan.pks.forEach(pk=>state.cmarked.add(pk));
-  if(plan.verb==="snooze"){
-    const grp=undoGroup();
-    try{ const r=await cpost("/api/snooze",{pks:plan.pks,preset:plan.snooze_preset||"tomorrow",undo_group:grp});
-      state.cmarked.clear();
-      if(r&&r.ok){ const n=r.count||plan.pks.length; toast(`Snoozed ${n}`); showUndoFloat(`Snoozed ${n}`); }
-      else toast("Couldn’t snooze");
-    }catch(e){ state.cmarked.clear(); toast("Couldn’t snooze"); }
-    loadFolders();
-  } else {
-    await cbulk(plan.verb);                           // archive/trash/junk → ONE undo group + float; read/unread/star apply per-pk (not Undo-tracked, noted in the modal)
-  }
-  clearSearch(false); state.doSeq++; loadCMessages();
+  clearSearch(false); state.doSeq++;                 // post-action view = the mailbox
+  toast(`${_DO_VERB_LABEL[plan.verb]||plan.verb} ${plan.capped?plan.cap:plan.count}…`);
+  try{
+    const r=await cpost("/api/ai/do-confirm",{plan:plan.plan,undo_group:undoGroup()}), done=_DO_DONE[plan.verb]||"Updated";
+    toast([`${done} ${r.count}`,...(r.failed?[`${r.failed} failed`]:[]),...(r.gone?[`${r.gone} had moved`]:[])].join(", "));
+    if(r.undoable)showUndoFloat(`${done} ${r.count}`);
+  }catch(e){ toast(e.status===410?"That preview has expired. Run the command again.":"Couldn’t finish that. Check what was done before trying again."); }
+  loadCMessages(); loadFolders();
 }
 async function runSearch(){
   const seq=++state.searchSeq, q=state.q.trim();
