@@ -1066,7 +1066,7 @@ async function inviteRsvp(pk, decision, rowEl){
     if(!r.ok){ if(rowEl)rowEl.innerHTML=`<span class="inv-sending">Couldn’t RSVP: ${esc(r.error||"error")}</span>`; toast(r.error||"RSVP failed"); return; }
     if(rowEl)rowEl.innerHTML=`<span class="inv-done">${esc(SENT)} — reply sent to ${esc(r.organizer||"organizer")}</span>`;
     toast(`RSVP: ${SENT}`);
-    showUndoFloat("RSVP sent");   // outbox grace window → Undo Send cancels it before it leaves
+    if(r.outbox_id)startUndoCountdown(r.outbox_id,null,0);   // the outbox's grace window: Undo cancels this RSVP, not what was last filed
   }catch(e){ if(rowEl)rowEl.innerHTML=`<span class="inv-sending">Couldn’t RSVP</span>`; toast("RSVP failed"); }
 }
 function attChip(pk,a){
@@ -2368,7 +2368,7 @@ function startUndoCountdown(oid, snap, rcpts){
     el.innerHTML=`<span>↑ Sending in ${left}s…</span><button id="sfUndo">Undo</button>`;
     $("#sfUndo").onclick=async()=>{ clearInterval(_undoIv);
       try{ const d=await cpost("/api/outbox/cancel",{id:oid});
-        if(d.ok){ hideSendFloat(); reopenSend(snap); toast("Send undone"); loadOutbox(); }
+        if(d.ok){ hideSendFloat(); if(snap)reopenSend(snap); toast(snap?"Send undone":"RSVP not sent"); loadOutbox(); }
         else { showSendFloat("sent","✓ Sent — too late to undo"); setTimeout(hideSendFloat,2200); } }
       catch(e){ showSendFloat("sent","✓ Sent"); setTimeout(hideSendFloat,2000); } }; };
   paint();
