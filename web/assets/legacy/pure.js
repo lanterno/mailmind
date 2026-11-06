@@ -5,7 +5,7 @@
 // into assets/legacy/pure.js the same way.
 function resumeOpts(d              )              { const t=d.tail_text||"";   // composeOpen options for a draft the server reopened
   return {mode:d.mode||"new", from:d.account, to:(d.to||[]).slice(), cc:(d.cc||[]).slice(), bcc:(d.bcc||[]).slice(),
-    subject:d.subject||"", subject0:d.subject||"", origPk:d.orig_pk!=null?d.orig_pk:null, draftId:d.draft_id,
+    subject:d.subject||"", subject0:d.subject||"", origPk:d.orig_pk!=null?d.orig_pk:null, draftId:d.draft_id, version:d.version??null,
     participants:(d.participants||[]).slice(), quote:t?{html:null,text:t.replace(/^\n+/,"")}:null, fwdAttach:0, noSig:true,
     resume:{in_reply_to:d.in_reply_to||"", references:d.references||"", tail_text:t}}; }
 function resumeFields(r                            )                       { return r?{resume:{in_reply_to:r.in_reply_to||"", references:r.references||"", tail_text:r.tail_text||""}}:{}; }
