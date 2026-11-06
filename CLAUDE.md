@@ -105,7 +105,7 @@ fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows
 changes, outages, refusals, crashes, syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
-`tests/browser/` drives the page in Chromium (Playwright) on the `app` fixture:
+`tests/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
@@ -157,6 +157,11 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
   `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), and a tab that loaded another build
   offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`api/client.ts`, typed by `api/types.gen.ts`).
+  `web/next.html` and `web/src/main.tsx` are the React app at `/next` (React 19 with the React Compiler, TanStack Query, React Aria Components), beside the page and on its
+  stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
+  (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), and `features/mailbox` holds the rail, the list, the reader
+  and filing. So far it reads, searches, files, stars and undoes; it has no composer, brief or bulk commands yet, and links back to `/` for those. A value hooks read
+  outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler doesn't take a method named `use` for a hook.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
