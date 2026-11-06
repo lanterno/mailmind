@@ -20,37 +20,50 @@ Type defaults (override per account as needed):
 """
 import os
 import threading
+from collections.abc import Callable, Mapping
+from typing import Any, Protocol
 
+from mailmind.accounts.application.ports import ConfigStore, Secrets
 from mailmind.accounts.domain import account, events
-from mailmind.platform import bus, settings
+from mailmind.accounts.domain.account import Entry, MaskedRow
+from mailmind.kernel.parsed import is_object
+from mailmind.platform import bus as _bus
+from mailmind.platform import settings
+
+
+class _Bus(Protocol):
+    def publish(self, event: object) -> None: ...
+
+
+bus: _Bus = _bus    # mailmind.platform.bus's own publish leaves its event unannotated, until the platform is typed too
 
 
 class Directory:
     TYPE_DEFAULTS = account.TYPE_DEFAULTS
 
-    def __init__(self, file, secrets, ai_key):
+    def __init__(self, file: ConfigStore, secrets: Secrets, ai_key: Callable[[], str | None]):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
         self._write_lock = threading.Lock()
 
-    def _raw(self):
+    def _raw(self) -> Entry:
         """The file's contents, a copy of the caller's own; parsed again only when the file changed."""
         return self._file.read()
 
-    def accounts(self):
+    def accounts(self) -> list[Entry]:
         """Return normalized account dicts from the config (disabled ones skipped)."""
         return [n for n in map(account.normalized, self._raw().get("accounts", [])) if n]
 
-    def alias_map(self):
+    def alias_map(self) -> dict[str, str | None]:
         """email -> alias for ALL accounts (incl. disabled), so historical DB rows
         still render with their friendly name. Built from the raw file."""
         return {e["email"]: ((e.get("alias") or "").strip() or None)
                 for e in self._raw().get("accounts", []) if e.get("email")}
 
-    def signature_default(self):
+    def signature_default(self) -> str:
         """The global default signature (used when an account has no per-account one)."""
         return account.clean_signature(self._raw().get("signature_default") or "")
 
-    def set_signature_default(self, text):
+    def set_signature_default(self, text: str) -> None:
         with self._write_lock:
             raw = self._raw()
             sg = account.clean_signature(text)
@@ -60,23 +73,23 @@ class Directory:
                 raw.pop("signature_default", None)
             self.save(raw)
 
-    def signature_map(self):
+    def signature_map(self) -> dict[str, str]:
         """email -> effective signature (per-account if set, else the global default), for ALL
         raw accounts so the composer can insert/swap without an extra round trip."""
         default = self.signature_default()
         return {e["email"]: (account.clean_signature(e.get("signature")) or default)
                 for e in self._raw().get("accounts", []) if e.get("email")}
 
-    def webmail_map(self):
+    def webmail_map(self) -> dict[str, str | None]:
         """email -> webmail base URL (optional per-account 'webmail' key), used as a
         best-effort 'Open original' target for IMAP accounts (e.g. Nextcloud Mail)."""
         return {e["email"]: (e.get("webmail") or "").strip() or None
                 for e in self._raw().get("accounts", []) if e.get("email")}
 
-    def resolve_credential(self, acct):
+    def resolve_credential(self, acct: Mapping[str, Any]) -> str:
         return self._secrets.resolve(acct.get("credential"), who=acct["email"], strip=acct.get("strip_spaces", False))
 
-    def preload(self):
+    def preload(self) -> int:
         """Resolve every op-backed credential once (one Touch ID), so a long-running
         server never has to prompt again."""
         ok = 0
@@ -90,14 +103,15 @@ class Directory:
                     print(f"  ! preload failed for {a['email']}: {e}")
         return ok
 
-    def tls_pin(self, email, endpoint, seen):
+    def tls_pin(self, email: str, endpoint: str, seen: str) -> str | None:
         """The certificate pinned for the account `email` at `endpoint`: the one pinned before, or
         `seen`, pinned now on first use (mailmind.accounts.domain.tls_pin). None when no account is
         saved under `email`, as for a draft being tested: nothing is pinned for it."""
         entry = account.find(self._raw(), email)
         if entry is None:
             return None
-        pinned = (entry.get("tls_pins") or {}).get(endpoint)
+        kept: dict[str, str] = entry.get("tls_pins") or {}
+        pinned = kept.get(endpoint)
         if pinned:
             return pinned
         with self._write_lock:
@@ -106,14 +120,14 @@ class Directory:
             if entry is None:
                 return None
             pins = entry.get("tls_pins")
-            if not isinstance(pins, dict):
+            if not is_object(pins):
                 pins = entry["tls_pins"] = {}
             if not pins.get(endpoint):
                 pins[endpoint] = seen
                 self.save(raw)
             return pins[endpoint]
 
-    def forget_tls_pins(self, email):
+    def forget_tls_pins(self, email: str | None) -> bool:
         """Trust the account's servers again: forget each certificate pinned for it, so the next
         connection pins the one it meets. Returns False when there is no such account."""
         with self._write_lock:
@@ -126,15 +140,15 @@ class Directory:
         bus.publish(events.AccountChanged(entry["email"]))
         return True
 
-    def masked_rows(self):
+    def masked_rows(self) -> list[MaskedRow]:
         return [account.masked_row(e) for e in self._raw().get("accounts", [])]
 
-    def save(self, raw):
+    def save(self, raw: Entry) -> None:
         """Atomically persist the whole config. Validates, fsyncs, chmod 600 before
         an atomic rename so a crash can never leave a partial/world-readable file."""
         self._file.write(raw)
 
-    def add_account(self, p):
+    def add_account(self, p: Mapping[str, Any]) -> MaskedRow:
         with self._write_lock:
             raw = self._raw()
             raw.setdefault("accounts", [])
@@ -153,7 +167,7 @@ class Directory:
         bus.publish(events.AccountAdded(entry["email"]))
         return account.masked_row(entry)
 
-    def update_account(self, email, p):
+    def update_account(self, email: str | None, p: Mapping[str, Any]) -> MaskedRow | None:
         with self._write_lock:
             raw = self._raw()
             entry = account.find(raw, email)
@@ -171,7 +185,7 @@ class Directory:
         bus.publish(events.AccountChanged(entry["email"]))
         return account.masked_row(entry)
 
-    def remove_account(self, email):
+    def remove_account(self, email: str | None) -> bool:
         with self._write_lock:
             raw = self._raw()
             entry = account.find(raw, email)
@@ -183,7 +197,7 @@ class Directory:
         bus.publish(events.AccountRemoved(entry["email"]))
         return True
 
-    def materialize(self, only=None):
+    def materialize(self, only: str | None = None) -> None:
         """Rewrite op/env/proton_bridge credentials as inline {plain:...} in
         mailmind.config.json, making it fully self-contained (no 1Password needed).
         The file is git-ignored. Pass an email to convert just one account."""
@@ -208,7 +222,7 @@ class Directory:
             self.save(raw)
         print(f"done — {changed} account(s) now self-contained in {os.path.basename(settings.current().config)}")
 
-    def check(self):
+    def check(self) -> None:
         """Resolve every account's credential and report ok/fail WITHOUT printing secrets."""
         for a in self.accounts():
             try:

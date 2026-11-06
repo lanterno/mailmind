@@ -1,9 +1,17 @@
 """What the settings page does to an account: try its login, trust its certificate again, change the file."""
 import time
+from collections.abc import Callable, Mapping
+from typing import Any
+
+from mailmind.accounts.application.directory import Directory
+from mailmind.accounts.application.ports import OpenSession
+from mailmind.accounts.domain.account import Entry
 
 
 class Connections:
-    def __init__(self, config, get, accounts, open_session, quiet_error, retry_sync, forget_status):
+    def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
+                 open_session: OpenSession, quiet_error: Callable[[BaseException], str],
+                 retry_sync: Callable[[Entry], tuple[dict[str, Any], int]], forget_status: Callable[[str | None], None]):
         self._config = config
         self._get = get
         self._accounts = accounts
@@ -12,7 +20,7 @@ class Connections:
         self._retry_sync = retry_sync
         self._forget_status = forget_status
 
-    def test(self, body):
+    def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Test a SAVED account ({email}) or an UNSAVED draft (no disk write).
         Errors are sanitized — never echoes the attempted password or server banner.
 
@@ -26,12 +34,12 @@ class Connections:
                 d = body["draft"]
                 ty = d.get("type", "imap")
                 td = self._config.TYPE_DEFAULTS.get(ty, self._config.TYPE_DEFAULTS["imap"])
-                cs = (d.get("credential") or {})
-                acct = {"email": d.get("email"), "kind": ty,
-                        "host": d.get("host") or td["host"], "port": int(d.get("port") or td["port"]),
-                        "starttls": bool(d.get("starttls", td["starttls"])),
-                        "strip_spaces": bool(d.get("strip_spaces", td["strip_spaces"])),
-                        "trash": td["trash"], "credential": {"plain": cs.get("value")}}
+                cs: Entry = d.get("credential") or {}
+                acct: Entry = {"email": d.get("email"), "kind": ty,
+                               "host": d.get("host") or td["host"], "port": int(d.get("port") or td["port"]),
+                               "starttls": bool(d.get("starttls", td["starttls"])),
+                               "strip_spaces": bool(d.get("strip_spaces", td["strip_spaces"])),
+                               "trash": td["trash"], "credential": {"plain": cs.get("value")}}
                 if not acct["host"]:
                     return {"ok": False, "error": "a host is required"}
                 if cs.get("style") != "plain" or not cs.get("value"):
@@ -52,12 +60,13 @@ class Connections:
         except KeyError:
             return {"ok": False, "error": "account not found"}
         except Exception as e:
+            draft: Entry = body.get("draft") or {}
             return {"ok": True, "connect": False,
-                    "email": body.get("email") or (body.get("draft") or {}).get("email"),
+                    "email": body.get("email") or draft.get("email"),
                     "error": self._quiet_error(e)}
 
 
-    def trust_cert(self, body):
+    def trust_cert(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Trust the account's servers again after its loopback certificate changed (Bridge reinstalled
         or reset): forget its pins, and sync it, which pins the certificate it meets now."""
         email = (body.get("email") or "").strip()
@@ -68,7 +77,7 @@ class Connections:
         return {"ok": True, "account": email}, 200
 
 
-    def change(self, action, body):
+    def change(self, action: str, body: Mapping[str, Any]) -> dict[str, Any]:
         if action == "add":
             return {"ok": True, "account": self._config.add_account(body)}
         if action == "edit":
