@@ -201,25 +201,25 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_the_signature_a_reopened_text_ends_with` | `tests/unit/compose/script_draft_resume_ui.py` |
 | `test_notes_wording` | `tests/unit/compose/script_draft_resume_ui.py` |
 
-## `test_expire.py`: `tests/unit/curation/script_expire.py`
+## `test_expire.py`: `tests/unit/curation/test_expire.py`
 
 | Test | Now |
 |---|---|
-| `test_domain_matches_exact_and_subdomain` | `tests/unit/curation/script_expire.py` |
-| `test_domain_does_not_match_lookalike` | `tests/unit/curation/script_expire.py` |
-| `test_sender_entry_wins_over_domain` | `tests/unit/curation/script_expire.py` |
-| `test_no_rule_no_expiry` | `tests/unit/curation/script_expire.py` |
-| `test_selects_only_older_than_limit` | `tests/unit/curation/script_expire.py` |
-| `test_exactly_at_limit_is_kept` | `tests/unit/curation/script_expire.py` |
-| `test_unknown_age_never_expires` | `tests/unit/curation/script_expire.py` |
-| `test_arrival_prefers_internaldate` | `tests/unit/curation/script_expire.py` |
-| `test_arrival_falls_back_to_date_header` | `tests/unit/curation/script_expire.py` |
-| `test_arrival_unknown_is_none` | `tests/unit/curation/script_expire.py` |
-| `test_expiry_survives_keep_block_edits` | `tests/unit/curation/script_expire.py` |
-| `test_remove_leaves_expiry_alone` | `tests/unit/curation/script_expire.py` |
-| `test_zero_hours_clears` | `tests/unit/curation/script_expire.py` |
-| `test_legacy_file_without_expiry_loads` | `tests/unit/curation/script_expire.py` |
-| `test_missing_file_loads_empty` | `tests/unit/curation/script_expire.py` |
+| `test_domain_matches_exact_and_subdomain` | `tests/unit/curation/test_expire.py` |
+| `test_domain_does_not_match_lookalike` | `tests/unit/curation/test_expire.py` |
+| `test_sender_entry_wins_over_domain` | `tests/unit/curation/test_expire.py` |
+| `test_no_rule_no_expiry` | `tests/unit/curation/test_expire.py` |
+| `test_selects_only_older_than_limit` | `tests/unit/curation/test_expire.py` |
+| `test_exactly_at_limit_is_kept` | `tests/unit/curation/test_expire.py` |
+| `test_unknown_age_never_expires` | `tests/unit/curation/test_expire.py` |
+| `test_arrival_prefers_internaldate` | `tests/unit/curation/test_expire.py` |
+| `test_arrival_falls_back_to_date_header` | `tests/unit/curation/test_expire.py` |
+| `test_arrival_unknown_is_none` | `tests/unit/curation/test_expire.py` |
+| `test_expiry_survives_keep_block_edits` | `tests/unit/curation/test_expire.py` |
+| `test_remove_leaves_expiry_alone` | `tests/unit/curation/test_expire.py` |
+| `test_zero_hours_clears` | `tests/unit/curation/test_expire.py` |
+| `test_legacy_file_without_expiry_loads` | `tests/unit/curation/test_expire.py` |
+| `test_missing_file_loads_empty` | `tests/unit/curation/test_expire.py` |
 
 ## `test_hardening.py`: `tests/security/script_hardening.py`
 
