@@ -37,32 +37,25 @@ python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by f
 python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
-Tests — the scripts are `tests/**/script_*.py`, each exits non-zero on failure. `just test` (`uv run pytest`) runs them
-all through `tests/test_legacy_suites.py`, each in its own interpreter with a temp
-`MAILMIND_HOME`, because on import each makes a temp directory the data directory
-(`settings.configure`) and some replace module functions with fakes:
+Tests — `just test` (`uv run pytest`) runs them all. `just test -k hardening` picks by file or test name, so `-k` also picks a
+single test: `just test -k test_a_rebound_name_reads_nothing`. These are the first to run for a change in what they cover, with
+the cases pytest collects for each (a test through `app` counts once per front door):
 
 ```bash
-python3 tests/unit/curation/script_classifier.py                  # classifier behaviour (27 assertions)
-python3 tests/security/script_sanitize.py         # HTML sanitizer: 24 attack classes, expects 0 leaks
-python3 tests/unit/content/script_css_sanitizer.py     # CSS sanitizer unit tests (40)
-python3 tests/unit/curation/script_expire.py            # expiry rules (15)
-python3 tests/unit/calendar/script_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (23)
-python3 tests/unit/discovery/script_contacts_known.py    # the "new to you" lookup: who counts as known, exact matching, CSRF (16)
-python3 tests/unit/compose/script_send_after.py        # /api/send refuses passed and far-off send times (5)
-python3 tests/unit/compose/script_send_guard.py        # the composer's send-time checks, run in node (19)
-python3 tests/unit/compose/script_draft_resume.py      # reopening a saved draft: split, files, Bcc, threading, refusals, saves (81)
-python3 tests/unit/compose/script_draft_resume_ui.py   # the composer's reopen helpers, run in node (8)
-python3 tests/security/script_hardening.py         # security and data-loss fixes, one test or more per fix (37)
+uv run pytest tests/unit/curation/test_classifier.py        # classifier behaviour (35)
+uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks (68)
+uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
+uv run pytest tests/unit/curation/test_expire.py            # expiry rules (19)
+uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (40)
+uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (19)
+uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
+uv run pytest tests/unit/compose/test_send_guard.py         # the composer's send-time checks, run in node (157)
+uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (147)
+uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's reopen helpers, run in node (25)
+uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (138)
 ```
 
-`just test -k hardening` picks suites by file name; within a suite there is no single-test
-flag. `script_classifier.py` and `script_sanitize.py` are linear scripts —
-comment out cases or copy one into a REPL. `script_css_sanitizer.py`, `script_expire.py`,
-`script_upcoming.py`, `script_contacts_known.py`,
-`script_send_after.py`, `script_send_guard.py`, `script_draft_resume.py`, `script_draft_resume_ui.py` and
-`script_hardening.py` collect callables from `globals()` whose names start with `test_`, so you can gate them by
-renaming. `script_send_guard.py` and `script_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
+`test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
 `/* draft-resume:pure:start */` …) out of `web/assets/legacy/pure.js` and run it in node. That file is written from
 `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
 twins beside them; edit those and run `just gen-web`. The send guard's two suites share

@@ -643,22 +643,21 @@ it altogether. **Nothing personal is committed.**
 ## Testing
 
 ```bash
-python3 tests/unit/curation/script_classifier.py               # behavioral classifier suite
-python3 tests/security/script_sanitize.py      # HTML sanitizer: 24 attack classes, expects 0 leaks
-python3 tests/unit/content/script_css_sanitizer.py  # CSS sanitizer unit tests
-python3 tests/unit/curation/script_expire.py         # expiry rules: storage, matching, age selection
-python3 tests/unit/calendar/script_upcoming.py       # Today & next: stored invites, repeats, updates, cancellations
-python3 tests/unit/discovery/script_contacts_known.py # "new" recipients lookup: matching, drafts, thin history, CSRF
-python3 tests/unit/compose/script_send_after.py     # send-later times: passed or far-off ones are refused
-python3 tests/unit/compose/script_send_guard.py     # send-time checks: attachment words, subject, reply-all (needs node)
-python3 tests/unit/compose/script_draft_resume.py   # reopened drafts: text and quote, files, Bcc, threading, refusals
-python3 tests/unit/compose/script_draft_resume_ui.py # the composer's side of reopening a draft (needs node)
-python3 tests/security/script_hardening.py      # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
+uv run pytest tests/unit/curation/test_classifier.py        # behavioral classifier suite
+uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks
+uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests
+uv run pytest tests/unit/curation/test_expire.py            # expiry rules: storage, matching, age selection
+uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next: stored invites, repeats, updates, cancellations
+uv run pytest tests/unit/discovery/test_contacts_known.py   # "new" recipients lookup: matching, drafts, thin history, CSRF
+uv run pytest tests/unit/compose/test_send_after.py         # send-later times: passed or far-off ones are refused
+uv run pytest tests/unit/compose/test_send_guard.py         # send-time checks: attachment words, subject, reply-all (needs node)
+uv run pytest tests/unit/compose/test_draft_resume.py       # reopened drafts: text and quote, files, Bcc, threading, refusals
+uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's side of reopening a draft (needs node)
+uv run pytest tests/security/test_hardening.py              # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
 ```
 
-Each exits non-zero on failure. With [`just`](https://just.systems) and
-[uv](https://docs.astral.sh/uv/) installed, `just test` runs all twelve under pytest,
-together with the pytest suite in `tests/`. That suite drives the app against fake IMAP,
+These need [uv](https://docs.astral.sh/uv/). With [`just`](https://just.systems) installed too, `just test` runs all of them
+together with the rest of the pytest suite in `tests/`. That suite drives the app against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
 `just test-full` also runs the browser tests (`just test-browser` runs only those), which click
