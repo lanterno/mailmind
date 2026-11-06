@@ -273,29 +273,29 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_future_time_is_scheduled` | `tests/unit/compose/test_send_after.py` |
 | `test_no_time_sends_now` | `tests/unit/compose/test_send_after.py` |
 
-## `test_send_guard.py`: `tests/unit/compose/script_send_guard.py`
+## `test_send_guard.py`: `tests/unit/compose/test_send_guard.py`
 
 | Test | Now |
 |---|---|
-| `test_strong_words_fire_in_every_mode` | `tests/unit/compose/script_send_guard.py` |
-| `test_weak_words_fire_only_where_allowed` | `tests/unit/compose/script_send_guard.py` |
-| `test_lookalikes_links_and_addresses_never_fire` | `tests/unit/compose/script_send_guard.py` |
-| `test_a_reply_about_their_file_never_warns` | `tests/unit/compose/script_send_guard.py` |
-| `test_long_unbroken_text_checks_fast` | `tests/unit/compose/script_send_guard.py` |
-| `test_the_word_is_echoed_as_typed` | `tests/unit/compose/script_send_guard.py` |
-| `test_typed_text_leaves_out_signature_and_quote` | `tests/unit/compose/script_send_guard.py` |
-| `test_text_on_either_side_of_your_signature_is_yours` | `tests/unit/compose/script_send_guard.py` |
-| `test_empty_subject` | `tests/unit/compose/script_send_guard.py` |
-| `test_an_inherited_subject_is_not_your_wording` | `tests/unit/compose/script_send_guard.py` |
-| `test_a_file_still_reading_is_the_only_line` | `tests/unit/compose/script_send_guard.py` |
-| `test_a_passed_send_time` | `tests/unit/compose/script_send_guard.py` |
-| `test_what_counts_as_attached` | `tests/unit/compose/script_send_guard.py` |
-| `test_reply_all_size` | `tests/unit/compose/script_send_guard.py` |
-| `test_a_wave_through_covers_up_to_that_many_people` | `tests/unit/compose/script_send_guard.py` |
-| `test_removable_counts_only_people_still_copied_in` | `tests/unit/compose/script_send_guard.py` |
-| `test_new_to_you_never_stops_a_send_alone` | `tests/unit/compose/script_send_guard.py` |
-| `test_names_list` | `tests/unit/compose/script_send_guard.py` |
-| `test_exact_wording_of_every_line` | `tests/unit/compose/script_send_guard.py` |
+| `test_strong_words_fire_in_every_mode` | `tests/unit/compose/test_send_guard.py` |
+| `test_weak_words_fire_only_where_allowed` | `tests/unit/compose/test_send_guard.py` |
+| `test_lookalikes_links_and_addresses_never_fire` | `tests/unit/compose/test_send_guard.py` |
+| `test_a_reply_about_their_file_never_warns` | `tests/unit/compose/test_send_guard.py` |
+| `test_long_unbroken_text_checks_fast` | `tests/unit/compose/test_send_guard.py` |
+| `test_the_word_is_echoed_as_typed` | `tests/unit/compose/test_send_guard.py` |
+| `test_typed_text_leaves_out_signature_and_quote` | `tests/unit/compose/test_send_guard.py` `test_typed_text_leaves_out_signature_and_quote, test_typed_text_leaves_out_signature_and_quote_and_their_blank_lines` |
+| `test_text_on_either_side_of_your_signature_is_yours` | `tests/unit/compose/test_send_guard.py` `test_text_on_either_side_of_your_signature_is_yours, test_text_below_your_signature_is_yours` |
+| `test_empty_subject` | `tests/unit/compose/test_send_guard.py` |
+| `test_an_inherited_subject_is_not_your_wording` | `tests/unit/compose/test_send_guard.py` |
+| `test_a_file_still_reading_is_the_only_line` | `tests/unit/compose/test_send_guard.py` |
+| `test_a_passed_send_time` | `tests/unit/compose/test_send_guard.py` |
+| `test_what_counts_as_attached` | `tests/unit/compose/test_send_guard.py` |
+| `test_reply_all_size` | `tests/unit/compose/test_send_guard.py` |
+| `test_a_wave_through_covers_up_to_that_many_people` | `tests/unit/compose/test_send_guard.py` |
+| `test_removable_counts_only_people_still_copied_in` | `tests/unit/compose/test_send_guard.py` |
+| `test_new_to_you_never_stops_a_send_alone` | `tests/unit/compose/test_send_guard.py` |
+| `test_names_list` | `tests/unit/compose/test_send_guard.py` |
+| `test_exact_wording_of_every_line` | `tests/unit/compose/test_send_guard.py` |
 
 ## `test_thread_file.py`
 
