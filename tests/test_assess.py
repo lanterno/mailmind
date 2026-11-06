@@ -4,6 +4,7 @@ at all. Fictional mail and the fake Claude API only."""
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import assistant
 
 
 def unsummarized():
@@ -16,24 +17,22 @@ def unsummarized():
 
 
 def test_with_ai_off_a_round_tries_nothing(app, world, anthropic_api, monkeypatch):
-    import server
     from mailmind.bootstrap import assistant
     tried = []
     monkeypatch.setattr(assistant.triage, "summarize_one", tried.append)
     waiting = unsummarized()
     assert waiting > 0
-    assert server.assess_round() is None
+    assert assistant.triage.round() is None
     assert (tried, anthropic_api.requests, unsummarized()) == ([], [], waiting)
 
 
 def test_a_round_triages_a_batch_and_comes_back_at_once_while_more_wait(app, world, ai, monkeypatch):
-    import server
     waiting = unsummarized()
-    monkeypatch.setattr(server, "ASSESS_BATCH", 3)
-    assert server.assess_round() == 0
+    monkeypatch.setattr(assistant.triage, "ASSESS_BATCH", 3)
+    assert assistant.triage.round() == 0
     assert unsummarized() == waiting - 3
-    monkeypatch.setattr(server, "ASSESS_BATCH", 300)
-    assert server.assess_round() is None
+    monkeypatch.setattr(assistant.triage, "ASSESS_BATCH", 300)
+    assert assistant.triage.round() is None
     assert unsummarized() == 0 and len(ai.requests) == waiting
 
 

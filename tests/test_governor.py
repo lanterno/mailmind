@@ -12,6 +12,7 @@ from mailmind.assistant.application.governor import (PRESENCE_SECONDS, TRIP_AFTE
                                                      CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import assistant
 
 
 class Clock:
@@ -311,13 +312,12 @@ def test_at_the_limit_reading_the_ai_cards_never_asks(app, world, ai):
 
 
 def test_at_the_limit_triage_waits_for_tomorrow(app, world, ai):
-    import server
     spend(15_000_000)                                      # the default limit, $15
     assert app.get("/api/debug/ai").json["governor"]["spent_today_micros"] == 15_000_000
-    server.assess_round()
+    assistant.triage.round()
     assert ai.requests == []
     app.clock.shift(timedelta(days=1))
-    server.assess_round()
+    assistant.triage.round()
     assert ai.requests                                     # a new day: triage goes again
 
 
@@ -328,14 +328,13 @@ def test_the_debug_route_shows_the_governor(app):
 
 
 def test_a_refused_key_stops_triage_but_not_a_click(app, world, ai):
-    import server
     from fakes import anthropic_api as fa
     ai.responder = lambda req: fa.error(401, "authentication_error", "invalid x-api-key")
     app.post("/api/ai/rewrite", REWRITE)
     assert len(ai.requests) == 1
     app.clock.shift(timedelta(seconds=YIELD_SECONDS))
     sent = len(ai.requests)
-    server.assess_round()
+    assistant.triage.round()
     assert len(ai.requests) == sent                        # the breaker is open for background work
     assert app.get("/api/debug/ai").json["governor"]["breaker"] == ["every feature"]
     app.post("/api/ai/rewrite", REWRITE)

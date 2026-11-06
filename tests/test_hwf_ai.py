@@ -23,6 +23,7 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import assistant
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 LUNCH_MID = "<lunch-3@lin.example.test>"
@@ -120,10 +121,9 @@ def run_tick(app, monkeypatch, cycles, step=None):
     """Run `cycles` rounds of a fresh pre-drafter in this thread, as the background job would: the
     frozen clock moves on before each, by the startup delay and then the interval, or by `step`
     seconds each time."""
-    import server
-    draft_ahead_round = server.draft_ahead_rounds()
+    draft_ahead_round = assistant.drafting.rounds()
     for i in range(cycles):
-        wait = server.DRAFT_TICK_STARTUP_DELAY if i == 0 else server.DRAFT_TICK_INTERVAL
+        wait = assistant.drafting.DRAFT_TICK_STARTUP_DELAY if i == 0 else assistant.drafting.DRAFT_TICK_INTERVAL
         app.clock.shift(timedelta(seconds=wait if step is None else step))
         draft_ahead_round()
 
@@ -360,11 +360,10 @@ def test_hwf_one_thread_pays_for_one_default_draft_served_only_at_its_newest(app
 
 
 def test_hwf_a_pre_draft_rechecks_the_cache_after_winning_the_lead(app, world, ai):
-    import server
     anchor = world.pk(LUNCH)
     assert app.post("/api/ai/draft-reply", {"pk": anchor}).status == 200
     ai.requests.clear()
-    assert server._gen_draft_ahead(w.ADA, anchor) is None
+    assert assistant.drafting._gen_draft_ahead(w.ADA, anchor) is None
     assert ai.requests == []
 
 
@@ -461,14 +460,13 @@ def test_hwf_a_failed_bank_write_still_returns_the_draft(app, world, ai, monkeyp
     [False, False, True, False, False, False, True, True],   # a success resets the count
 ])
 def test_hwf_the_tick_breaker_opens_after_three_failures_it_led(app, monkeypatch, present, outcomes):
-    import server
     ran = []
 
     def gen(account, pk, source="dwell"):
         ran.append(pk)
         return outcomes[len(ran) - 1]
-    monkeypatch.setattr(server, "_pick_draft_candidate", lambda: {"account": w.ADA, "pk": 1})
-    monkeypatch.setattr(server, "_gen_draft_ahead", gen)
+    monkeypatch.setattr(assistant.drafting, "_pick_draft_candidate", lambda: {"account": w.ADA, "pk": 1})
+    monkeypatch.setattr(assistant.drafting, "_gen_draft_ahead", gen)
     run_tick(app, monkeypatch, cycles=len(outcomes))
     assert len(ran) == 6                 # the third failure opens the breaker for the next 30 minutes
 

@@ -8,6 +8,7 @@ import pytest
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
+from mailmind.bootstrap import assistant
 
 TRANSPORTS = ["sdk", "urllib"]
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
@@ -434,12 +435,11 @@ def test_what_it_booked_is_released_when_its_answers_are_in(backlog, ai):
 
 def test_answers_are_brought_in_at_the_limit_and_while_someone_uses_ai(backlog, ai, monkeypatch):
     """They are paid for already, and bringing them in sends no mail."""
-    import server
     from mailmind.bootstrap import assistant
     assert assistant.triage.batch_submit() > 0
     ai.end_batch()
     monkeypatch.setattr(assistant.gateway(), "held_back", lambda *a, **k: "yielding")
-    assert server.assess_round() == server.ASSESS_YIELD
+    assert assistant.triage.round() == assistant.triage.ASSESS_YIELD
     assert assistant.triage.batch_status()["waiting"] == 0
     assert ai.deleted
 
@@ -447,22 +447,20 @@ def test_answers_are_brought_in_at_the_limit_and_while_someone_uses_ai(backlog, 
 # -- the round, and AI off -------------------------------------------------------
 
 def test_the_round_sends_the_backlog_and_triages_the_newest_at_once(backlog, ai):
-    import server
     before = _waiting()
-    server.assess_round()
+    assistant.triage.round()
     assert len(posts(ai)) == 1
     assert len([r for r in ai.requests if r.path == "/v1/messages"]) == 2
     assert len(_waiting()) == 0 and len(_sent(ai)) == len(before) - 2
 
 
 def test_the_switch_keeps_the_round_from_sending_one_and_still_brings_one_in(backlog, ai, monkeypatch):
-    import server
     from mailmind.bootstrap import assistant
     assert assistant.triage.batch_submit() > 0
     ai.end_batch()
     monkeypatch.setenv("MAILMIND_NO_BATCHES", "1")
     ai.requests.clear()
-    server.assess_round()
+    assistant.triage.round()
     assert ai.deleted                           # the one that was out came in
     assert not posts(ai)                        # and no other went, though mail is waiting
 

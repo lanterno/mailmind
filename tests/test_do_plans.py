@@ -8,6 +8,7 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.application import plans
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import assistant
 
 LUNCH_END = "ada-inbox-02-lunch-confirm.eml"    # Lin's last word: <lunch-3@...>, in Ada's Inbox
 LUNCH_START = "ada-inbox-01-lunch.eml"          # Lin's first: <lunch-1@...>, in Ada's Inbox too
@@ -132,8 +133,7 @@ def test_only_the_message_the_preview_counted_files_not_its_conversation(app, wo
 
 
 def test_a_capped_plan_files_the_newest(app, world, ai, monkeypatch):
-    import server
-    monkeypatch.setattr(server, "_DO_CAP", 1)
+    monkeypatch.setattr(assistant.bulk, "_DO_CAP", 1)
     plan = preview(app, ai)
     assert plan["capped"] is True and plan["count"] >= 2
     assert confirm(app, plan).json["count"] == 1
