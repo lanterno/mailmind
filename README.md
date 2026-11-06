@@ -176,7 +176,9 @@ and the Claude API.
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
   sender offers it, else a mailto from each account that got the mail, else the sender's page,
   opened in the browser. The way out comes from the headers ingest keeps, so a sender whose mail
-  was never opened can still be left, and a second try after the sweep still knows it.
+  was never opened can still be left, and a second try after the sweep still knows it. A mailto goes through the
+  outbox, so a server that's away only makes it wait, and it's filed in Sent. A preview stands for ten minutes and
+  for the way out it showed: after that, or if the list changed it, the block and sweep go ahead and nothing is sent.
 - **Expiry rules.** Give a sender or domain a shelf life — `python3 -m mailmind rules expire
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
   server checks hourly; `python3 -m mailmind expire --dry` previews. Expiry is independent of
@@ -285,8 +287,11 @@ automatically.
   goes out in a lane of its own, so one account's unreachable server holds up no other's. Where
   the server doesn't file sent mail itself, a Sent copy that fails is tried again with the same
   backoff, never sending the message twice or filing it twice, and the outbox says so if it
-  never lands. If the connection drops, or MailMind stops, just as the whole message has gone out, no one can
-  say whether the server took it: the outbox says it may have gone out and sends it again only if you ask.
+  never lands. Marking the original answered and removing the draft's copy are tried again the same way. A send
+  waiting on a retry says so, with Try now and Cancel. If the connection drops, or MailMind stops, just as the whole
+  message has gone out, no one can say whether the server took it: the outbox says it may have gone out and sends it
+  again only if you ask. On Gmail, which files sent mail itself, Send again looks in Sent first and leaves it at that
+  if the message is there.
 - **Undo Send** — a 10-second grace window with a live countdown that pulls the
   message back before it hits the wire and restores everything you'd written. If you're
   writing another message by then, it is saved to Drafts before the undone one takes its

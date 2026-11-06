@@ -566,10 +566,20 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   to `error` as `outbox_item.UNSURE`, listed `unsure`, and only a person's retry sends it again. Any answer clears the
   mark, and so does a failure before them. `DurableQueue(unsure=...)` makes `reset_stuck` do the same for a
   row a crash left with the mark set.
-- A Sent copy that fails puts the delivered row back in the queue, its tries counted from the
-  delivery, until it is filed or goes to `error`. The retry looks for the copy by Message-ID
-  first (`Copies.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as
-  `error` once it gives up, and `cancel_queued` never deletes a row past its gate.
+- `outbox.wait_kind` (migration 41) says what a queued send waits for: `grace` (Undo Send's window), `scheduled` (a time
+  someone picked) or `backoff` (a try failed). The list says `scheduled` or `retrying` from it, never from how far off the
+  row is due, and a retrying row offers Try now and Cancel.
+- What a delivered send still owes is each its own flag: its Sent copy, `\\Answered`, its draft's copy. One that fails
+  (a connection lost, not a refusal, which would answer the same again) puts the row back in the queue, its tries counted
+  from the delivery, and the next pass does only what's owed, until it is done or goes to `error`. The retry looks for the
+  copy by Message-ID first (`Copies.append_to_sent`). `outbox.list_recent` shows such a row as `sent`, or as `error` once a
+  Sent copy gives up (what else gives up asks nothing of anyone, so that row stays `sent`), and `cancel_queued` never
+  deletes a row past its gate.
+- On an account whose server files sent mail itself, a person's Retry of an `unsure` send looks in Sent first
+  (`Outbox._in_sent_already`, on the gate for `LOOK_IN_SENT_WAIT`). A copy there marks it delivered, only its bookkeeping
+  is left, and the answer says `gone: true`. A look that can't tell sends it again, as they were told it might.
+- A message MailMind sends for itself goes through the outbox too: a mailto unsubscribe (`SystemSend`), keyed
+  `unsub:<sender>:<account>`, waits out a server that's away and is filed in Sent.
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
@@ -914,6 +924,10 @@ Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `lis
 that can say: those columns, a stored body, or for older mail the two headers read off the server, within
 `UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
 so a second try after a cleanup's sweep still knows the way.
+
+The preview's `confirm_token` (`curation.domain.unsubscribe`) is `<time>.<hmac>`, over the sender, the way out it showed
+and where that goes, under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date
+or naming another way out sends nothing and answers `no_token`, and its block and sweep stand.
 
 ## Conventions
 
