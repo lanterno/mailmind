@@ -1,15 +1,18 @@
-"""Binds Compose. Legacy modules and the command line reach it through this module: `sending`, `composing`,
+"""Binds Compose. Legacy modules and the command line reach it through this module: `sending`, `drafts`, `composing`,
 `outbox`, `transport`, and `book`, its tables."""
+import imaplib
+
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.bootstrap.mailbox import copies
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
 from mailmind.compose.application.composing import Composing
+from mailmind.compose.application.drafts import Drafts
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
 from mailmind.mailbox.domain import roles
 
-__all__ = ["attach", "book", "composing", "outbox", "sending", "transport"]
+__all__ = ["attach", "book", "composing", "drafts", "outbox", "sending", "transport"]
 
 _server = None
 
@@ -83,6 +86,23 @@ class _Messages:
         finally:
             c.close()
 
+    def uidvalidity(self, account, folder):
+        import store
+        c = store.conn()
+        try:
+            return store.get_uidvalidity(c, account, folder)
+        finally:
+            c.close()
+
+    def remove(self, pk):
+        import store
+        c = store.conn()
+        try:
+            store.delete_message(c, pk)
+            c.commit()
+        finally:
+            c.close()
+
     def remove_copies(self, c, account, folder, uids):
         import store
         store.delete_by_uids(c, account, folder, uids)
@@ -90,6 +110,16 @@ class _Messages:
     def fetch_body(self, pk):
         import ingest
         return ingest.fetch_body(pk)
+
+    def sync_whole(self, acct, folder):
+        """Full: only a full scan brings back older UIDs."""
+        import ingest
+        return ingest.sync_folder(acct, folder, full=True)
+
+    def unreachable(self):
+        """What says a draft couldn't be read now, rather than that it can't be read at all."""
+        import mailops
+        return mailops._UNREACHABLE + (imaplib.IMAP4.error,)
 
 
 class _Effects:
@@ -112,8 +142,23 @@ class _Screen:
     def names_drafts(self, folder):
         return roles.names_drafts(folder)
 
+    def plays_drafts(self, account, folder):
+        return _server._plays_drafts(account, folder) if _server else roles.names_drafts(folder)
+
     def quiet_error(self, e):
         return _server._sanitize_conn_error(e) if _server else type(e).__name__
+
+    def touched(self, account, folder):
+        if _server:
+            _server._folder_touched(account, folder)
+
+    def list_changed(self, account, folder):
+        if _server:
+            _server._draft_list_changed(account, folder)
+
+    def stats_changed(self):
+        if _server:
+            _server.invalidate_stats()
 
 
 transport = SmtpTransport(_Credentials())
@@ -121,3 +166,4 @@ _accounts, _mail, _screen = _Accounts(), _Messages(), _Screen()
 outbox = Outbox(book, transport, copies, _accounts, _mail, _Effects(), _screen)
 composing = Composing(book, _accounts, _mail, _screen)
 sending = Sending(composing, outbox, book)
+drafts = Drafts(composing, outbox, book, _accounts, _mail, copies, _screen)

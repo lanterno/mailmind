@@ -102,3 +102,23 @@ class Copies:
                 s.logout()
             except Exception:
                 pass
+
+    def probe(self, acct, folder, uid, timeout):
+        """Whether this UID is there now: (the folder's uidvalidity, whether it is), or None when that can't
+        be told (unreachable, or a refusal, a busy server's NO, which says nothing). A stateless, read-only
+        look with a short timeout, like the account test, so it needs no IMAP gate: a black-holed host costs
+        the caller seconds, not a minute of every other mail operation."""
+        try:
+            s = self._open_session(acct, timeout=timeout)
+        except Exception:
+            return None
+        try:
+            cur = s.select(folder).uidvalidity
+            return cur, int(uid) in s.uids("UID", str(int(uid)))
+        except Exception:
+            return None
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass

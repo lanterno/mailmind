@@ -13,12 +13,7 @@ import dataclasses
 import json
 import time
 import base64
-import email.message
-import email.policy
-import email.utils
 import secrets
-import hashlib
-import imaplib
 import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -37,12 +32,8 @@ import mailops
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
-from mailmind.compose.api import build_message, lf, resume_split, thread_ids
-from mailmind.compose.application.composing import composer_key
 from mailmind.compose.domain import limits
-from mailmind.compose.domain.errors import Refused
 from mailmind.content import mime
-from mailmind.content.headers import addr_chip, header_chips, header_text
 import summarize_thread
 import summarize_briefing
 import summarize_review
@@ -50,7 +41,7 @@ from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
-from mailmind.kernel import addresses, attention as verdict
+from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import ago, now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
@@ -624,7 +615,7 @@ def message_body(pk, load_images, prefetch=False):
         # threading identifiers (from the stored row) so the client can build a reply
         "message_id": row["message_id"], "in_reply_to": row["in_reply_to"],
         "references": row["refs"],
-        **_draft_info(row),
+        **compose.drafts.info(row),
     }
 
 
@@ -637,38 +628,6 @@ def _plays_drafts(account, folder):
     if hit:
         return any(f["name"] == folder and f["role"] == "drafts" for f in hit["folders"])
     return folder_roles.names_drafts(folder)
-
-
-def _is_draft(row):
-    """A message is a draft if the server flags it \\Draft, or it sits in the account's Drafts."""
-    return bool(row["draft"]) or _plays_drafts(row["account"], row["folder"])
-
-
-def _draft_copy_ours_to_remove(d):
-    """The outbox's draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
-    return compose.outbox.draft_copy_is_ours(d) or _plays_drafts(d["account"], d["folder"])
-
-
-def _draft_info(row):
-    """For a draft, expose its draft_id + mode so the client can open it back into the composer.
-    Lazily registers a drafts row if one isn't tracked yet."""
-    if not _is_draft(row):
-        return {}
-    c = store.conn()
-    d = compose.book.draft_by_msgid(c, row["account"], row["message_id"])
-    if not d:
-        now = now_iso()
-        did = compose.book.draft_upsert(c, {"id": None, "account": row["account"], "folder": row["folder"],
-                                     "uid": row["uid"], "message_id": row["message_id"],
-                                     "uidvalidity": store.get_uidvalidity(c, row["account"], row["folder"]),
-                                     "in_reply_to_pk": None, "mode": "new",
-                                     "subject": row["subject"], "created_at": now, "updated_at": now})
-        c.commit()
-        mode = "new"
-    else:
-        did, mode = d["id"], (d["mode"] or "new")
-    c.close()
-    return {"draft_id": did, "draft_mode": mode, "is_draft": True}
 
 
 # --- folder rail: the live IMAP LIST + per-folder STATUS is ~140ms+ (a fresh
@@ -1487,372 +1446,10 @@ def _safe_filename(name):
 
 
 # --------------------------------------------------------------------- compose/send
-def do_draft(body):
-    """Save (APPEND, dedup-on-resave) or delete a draft. Returns (result, code)."""
-    profile.refuse_writes("a draft save")    # a draft lives on the server; nothing queues it yet
-    if body.get("delete") and body.get("draft_id"):
-        c = store.conn()
-        row = compose.book.draft_get(c, int(body["draft_id"]))
-        c.close()
-        if row:
-            removed = False
-            if _draft_copy_ours_to_remove(row):
-                try:
-                    acct = accounts.get(row["account"])
-                    removed = gates.run(acct["email"], lambda: mailbox.copies.delete_draft_uid(
-                        acct, row["folder"], row["uid"], row["uidvalidity"]), priority=gates.Priority.INTERACTIVE)
-                except Exception as e:
-                    print(f"[draft] delete failed: {_sanitize_conn_error(e)}", flush=True)
-            c = store.conn()
-            try:
-                compose.book.draft_delete(c, int(body["draft_id"]))
-                if removed:
-                    store.delete_by_uids(c, row["account"], row["folder"], [row["uid"]])
-                c.commit()
-            finally:
-                c.close()
-            if removed:
-                _draft_list_changed(row["account"], row["folder"])
-        return {"ok": True, "deleted": True}, 200
-    try:
-        spec, in_reply_to_pk, acct = compose.composing.spec(body)
-        # nothing to save? avoid littering the Drafts folder with an empty message
-        if not (spec["subject"].strip() or (spec["text"] or "").strip()
-                or spec["to"] or spec["cc"] or spec["bcc"] or spec["attachments"]):
-            return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}, 200
-        built = build_message(spec, draft=True)
-    except Refused as h:
-        return {"ok": False, "error": h.msg}, h.code
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}, 400
-    did = int(body["draft_id"]) if body.get("draft_id") else None
-    key = composer_key(body)
-
-    def replaces():
-        """The row this save takes over: the one it names, or for a first save the one an earlier
-        save under the composer's key made, whose answer the composer never got."""
-        c = store.conn()
-        try:
-            if did:
-                return compose.book.draft_get(c, did)
-            return compose.book.draft_by_key(c, key) if key else None
-        finally:
-            c.close()
-
-    def scope_for(row):
-        # an old copy in another account (From changed) is removed there too: the job spans both
-        return acct["email"] if row is None or row["account"] == acct["email"] else gates.EVERY_ACCOUNT
-
-    def save(scope):
-        """APPEND the new copy, drop the old one, and move the row with them. Returns the row's id
-        and the new copy's UID, or None if the row now needs a wider gate than `scope`."""
-        prev = replaces()    # under the gate: a save this one waited for has moved the row on
-        if scope != gates.EVERY_ACCOUNT and scope_for(prev) != scope:
-            return None
-        same = prev is not None and prev["account"] == acct["email"]   # From changed → prev's UID is another mailbox's
-        folder, uid, uidv, replaced = mailbox.copies.append_to_drafts(
-            acct, built["raw"],
-            prev_uid=(prev["uid"] if same else None),
-            prev_uidvalidity=(prev["uidvalidity"] if same else None),
-            prev_msgid=(prev["message_id"] if same else None),
-            prev_folder=(prev["folder"] if same else None))
-        _folder_touched(acct["email"], folder)       # its list shows the new copy on its next open
-        gone = [(acct["email"], folder, replaced)] if replaced else []   # and no longer the copies it replaced
-        # The old copy is in another mailbox (From changed) or another folder (a draft reopened
-        # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
-        # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
-        # does a message that isn't a draft at all.
-        if (prev and prev["uid"] and prev["uidvalidity"] is not None
-                and (not same or (prev["folder"] and prev["folder"] != folder))
-                and _draft_copy_ours_to_remove(prev)):
-            try:
-                if mailbox.copies.delete_draft_uid(accounts.get(prev["account"]), prev["folder"], prev["uid"],
-                                             prev["uidvalidity"]):
-                    gone.append((prev["account"], prev["folder"], prev["uid"]))
-            except Exception as e:
-                print(f"[draft] old copy not removed: {_sanitize_conn_error(e)}", flush=True)
-        # the row moves with the copy, under the same gate: Edit re-checks it under the gate
-        now = now_iso()
-        row = {"id": prev["id"] if prev else None, "account": acct["email"], "folder": folder, "uid": uid,
-               "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
-               "mode": body.get("mode", "new"), "subject": spec["subject"],
-               "created_at": now, "updated_at": now}
-        bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
-        c = store.conn()
-        try:
-            new_id = compose.book.draft_upsert(c, row)
-            compose.book.draft_set_resume(c, new_id, lf(spec["own"]),
-                                   lf(spec["tail"]["text"]) if spec["tail"]["text"] else None,
-                                   spec["tail"]["html"], json.dumps(bcc) if bcc else None,
-                                   hashlib.sha256(built["raw"]).hexdigest())
-            if key and not did:
-                compose.book.draft_set_key(c, new_id, key)
-            for account, in_folder, old_uid in gone:
-                store.delete_by_uids(c, account, in_folder, [old_uid])
-            c.commit()
-        finally:
-            c.close()
-        for account, in_folder, _ in gone:
-            _draft_list_changed(account, in_folder)
-        return new_id, uid
-    try:
-        scope = scope_for(replaces())
-        saved = gates.run(scope, lambda: save(scope), priority=gates.Priority.INTERACTIVE)
-        if saved is None:    # another save moved the row to another account while this one waited
-            saved = gates.run(gates.EVERY_ACCOUNT, lambda: save(gates.EVERY_ACCOUNT),
-                              priority=gates.Priority.INTERACTIVE)
-        new_id, uid = saved
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}, 400
-    except Exception as e:
-        print(f"[draft] save failed: {_sanitize_conn_error(e)}", flush=True)
-        return {"ok": False, "error": "could not save draft"}, 502
-    invalidate_stats()
-    answer = {"ok": True, "draft_id": new_id, "uid": uid, "message_id": built["message_id"]}
-    if body.get("resume") is None and spec["tail"]["text"]:
-        # From here on the composer names the quote, the threading and the files itself, as a
-        # reopened draft's does, so its saves and its send no longer need the original's row.
-        answer["resume"] = {"in_reply_to": spec["in_reply_to"] or "", "references": " ".join(spec["references"] or []),
-                            "tail_text": lf(spec["tail"]["text"])}
-        answer["files"] = [{"filename": a["filename"], "content_type": a["content_type"], "size": len(a["data"]),
-                            "b64": base64.b64encode(a["data"]).decode("ascii")} for a in spec["forwarded"]]
-    return answer, 200
-
-
 def _draft_list_changed(account, folder):
     """A copy left `folder` and its row went with it: a list of that folder on screen loads again,
     and through its catch-up shows the copy that replaced it."""
     sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
-
-
-_RESUME_MODES = ("new", "reply", "replyall", "forward")
-_RESUME_HEADROOM = 64 << 10                              # the rest of a save: chips, subject, keys
-_RESUME_ADDR = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
-
-
-_LIVE_TIMEOUT = 10
-
-
-def _draft_live(acct, folder, uid):
-    """Is this exact draft copy still on the server? True, False, or None when that can't be told
-    (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
-    replaced, and reopening it would put an older text over the newer one. A stateless, read-only
-    probe with a short timeout, like the account test, so it needs no IMAP gate: a black-holed
-    host costs Edit seconds, not a minute of every other mail operation."""
-    if uid is None:
-        return None
-    try:
-        s = mailbox.open_session(acct, timeout=_LIVE_TIMEOUT)
-    except Exception:
-        return None
-    try:                                                 # a refusal (a busy server's NO) says nothing: None
-        cur = s.select(folder).uidvalidity
-        c = store.conn()
-        known = store.get_uidvalidity(c, acct["email"], folder)
-        c.close()
-        if cur is not None and known is not None and cur != known:
-            return False                                 # every UID we hold for this folder is void
-        return int(uid) in s.uids("UID", str(int(uid)))
-    except Exception:
-        return None
-    finally:
-        try:
-            s.logout()
-        except Exception:
-            pass
-
-
-def _resume_files(msg, parsed, elsewhere):
-    """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
-    many were pictures in the text: every part must come back as the text or a file, or this
-    raises Refused(422). Headers parse as they're read, so a hostile one raises here as well."""
-    import mimetypes
-    lost = "Part of this draft is something MailMind can’t reopen without losing it." + elsewhere
-    if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
-        raise Refused(422, "This draft has an email attached as a file, which MailMind can’t "
-                         "reattach yet." + elsewhere)
-    if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
-           for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
-        raise Refused(422, lost)
-    leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
-    listed = {int(a["part_id"]) for a in parsed["attachments"]}
-    body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
-    covered = set()                                      # HTML that the text parse() read is the alternative to
-    for p in msg.walk():
-        if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
-            covered |= {id(x) for x in p.walk() if x.get_content_type() == "text/html"}
-    bodies = set()
-    for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
-        ct = p.get_content_type()
-        if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
-            raise Refused(422, "This draft is a calendar invite, which MailMind can’t send on as "
-                             "one." + elsewhere)
-        if i in listed or p is body or id(p) in covered:
-            continue                                     # a file, the text, or formatting of that same text
-        if ct == "text/html" and body is None and ct not in bodies:
-            bodies.add(ct)                               # formatted text only: refused below as such
-            continue
-        if not (p.get_payload(decode=True) or b"").strip():
-            continue                                     # nothing in it to lose
-        raise Refused(422, lost)
-    files, total, inline = [], 0, 0
-    for a in parsed["attachments"]:
-        part = leaves[int(a["part_id"]) - 1]
-        data = part.get_payload(decode=True) or b""
-        ct = (part.get_content_type() or "application/octet-stream").lower()
-        total += len(data)
-        if total > limits.MAX_ATTACH_BYTES:
-            raise Refused(422, "This draft’s files add up to more than 25 MB, more than MailMind "
-                             "can send." + elsewhere)
-        name = a["filename"]
-        if a["content_id"] and a["is_inline"]:
-            inline += 1                                  # a picture in the text: it comes back as a file
-            if re.fullmatch(r"inline-\d+", name):
-                name += mimetypes.guess_extension(ct or "") or ""
-        files.append({"filename": name, "content_type": ct,
-                      "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
-    return files, inline
-
-
-def draft_resume(body):
-    """Open a saved draft back into the composer from its own stored bytes: your text, the quote
-    or forwarded section it already carries (as text), every file as base64, To/Cc/Bcc as chips
-    and its own threading headers. The original is looked up by (account, Message-ID) for the
-    composer's sake only: sending a reopened draft never needs it. What MailMind recorded at its
-    last save (_m20_draft_resume) is trusted only for the very copy it saved. Returns (result, code)."""
-    try:
-        pk = int(body.get("pk"))
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "Missing draft."}, 400
-    c = store.conn()
-    row = store.get_message(c, pk)
-    c.close()
-    if not row:
-        return {"ok": False, "error": "That draft is no longer in Drafts."}, 404
-    if not _is_draft(row):
-        return {"ok": False, "error": "That message isn’t a draft."}, 400
-    try:
-        acct = accounts.get(row["account"])
-    except KeyError:
-        return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
-    unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
-    elsewhere = " Edit it in the app that made it."
-    unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
-    c = store.conn()
-    before = compose.book.draft_by_msgid(c, row["account"], row["message_id"])
-    queued = before is not None and compose.book.outbox_holds_draft(c, before["id"])
-    c.close()
-    if queued:                                           # reopened and sent again, it would go out twice
-        return {"ok": False, "error": "This draft is in the outbox, waiting to be sent. Cancel it there "
-                                      "first to change it."}, 423
-    live = _draft_live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
-
-    def reread_then_fetch():
-        """The 409 when the copy changed, else None once the body is fetched."""
-        # the probe ran before the gate: a save or a send that held it meanwhile may have replaced
-        # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
-        c = store.conn()
-        now = compose.book.draft_get(c, before["id"]) if before is not None else None
-        c.close()
-        moved = before is not None and (now is None or (now["uid"], now["message_id"])
-                                        != (before["uid"], before["message_id"]))
-        if live is False or moved:
-            c = store.conn()
-            store.delete_message(c, pk)
-            c.commit()
-            c.close()
-            try:                                         # full: only a full scan brings back older UIDs
-                ingest.sync_folder(acct, row["folder"], full=True)
-            except Exception as e:
-                print(f"[resume] drafts resync failed: {_sanitize_conn_error(e)}", flush=True)
-            return {"ok": False, "error": "This draft changed since the list loaded. "
-                                          "Open it again from the refreshed list."}, 409
-        ingest.fetch_body(pk)
-        return None
-    try:
-        changed = gates.run(acct["email"], reread_then_fetch, priority=gates.Priority.INTERACTIVE)
-    except mailops._UNREACHABLE + (imaplib.IMAP4.error,) as e:
-        print(f"[resume] fetch failed: {_sanitize_conn_error(e)}", flush=True)
-        return unreachable, 502
-    except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
-        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
-        return unreadable, 422
-    if changed:
-        return changed
-    c = store.conn()
-    raw = store.get_body(c, pk)
-    c.close()
-    if not raw:
-        return unreachable, 502
-    try:
-        msg = email.message_from_bytes(raw, policy=email.policy.default)
-        parsed = mime.parse(raw)
-    except Exception as e:
-        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
-        return unreadable, 422
-    try:
-        files, inline = _resume_files(msg, parsed, elsewhere)
-    except Refused as h:
-        return {"ok": False, "error": h.msg}, h.code
-    except Exception as e:
-        print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
-        return unreadable, 422
-    did = _draft_info(row)["draft_id"]                   # registers another app's draft
-    c = store.conn()
-    d = compose.book.draft_get(c, did)
-    cur = store.get_uidvalidity(c, row["account"], row["folder"])
-    c.close()
-    same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
-                 and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
-    exact = bool(same_copy or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
-    split = resume_split(parsed["text"], {"own_text": d["own_text"], "tail_text": d["tail_text"]}, exact)
-    if split is None:
-        return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
-                                      "so its links and formatting aren’t lost."}, 422
-    own, tail, how = split
-    # every save and send of it carries the files as base64 and the text and quote as JSON: past
-    # limits.MAX_SEND_POST each one would be refused, and edits made in the composer lost on close
-    size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode())
-                                                   for t in (own, tail))
-    if size + _RESUME_HEADROOM > limits.MAX_SEND_POST:
-        return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
-                                      "and the text it quotes." + elsewhere}, 422
-    irt, refs = thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
-    mode = d["mode"] if d["mode"] in _RESUME_MODES else "new"
-    if mode == "new" and irt:                            # MailMind's own new drafts never carry one
-        mode = "reply"
-    orig_pk, participants = None, []
-    if mode in ("reply", "replyall") and irt:
-        c = store.conn()
-        orow = store.get_message_by_msgid(c, row["account"], irt)
-        c.close()
-        if orow:
-            orig_pk = orow["pk"]
-            for a in [orow["from_addr"] or ""] + _RESUME_ADDR.findall(orow["recipients"] or ""):
-                a = a.strip().lower()
-                if a and a not in participants:
-                    participants.append(a)
-    def key(chip):
-        try:
-            return addresses.parse_addr_list([chip])[0][1].lower()
-        except (ValueError, IndexError):
-            return ""
-    hdr = header_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
-    had = {key(x) for x in hdr}
-    missing = [x for x in (json.loads(d["bcc"]) if d["bcc"] else []) if key(x) and key(x) not in had]
-    bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
-    if not same_copy:                                    # the next save or send replaces the copy opened
-        c = store.conn()
-        compose.book.draft_repoint(c, d, row["folder"], row["uid"], cur, forget=not exact)
-        c.commit()
-        c.close()
-    subject = header_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
-    return {"ok": True, "draft_id": did, "mode": mode, "account": row["account"],
-            "subject": subject if subject is not None else (row["subject"] or ""),
-            "to": header_chips(msg, "To"), "cc": header_chips(msg, "Cc"), "bcc": bcc,
-            "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
-            "orig_pk": orig_pk, "participants": participants, "files": files, "split": how,
-            "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200
 
 
 # --------------------------------------------------------------------- AI bridge
@@ -2927,7 +2524,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(do_write(u.path, b))
             elif u.path == "/api/draft":
                 try:
-                    res, code = do_draft(b)
+                    res, code = compose.drafts.save(b)
                 except ValueError as ve:
                     res, code = {"ok": False, "error": str(ve)}, 400
                 self._json(res, code)
@@ -2994,7 +2591,7 @@ class H(BaseHTTPRequestHandler):
                 self._json(res, code)
             elif u.path == "/api/draft/resume":      # read-only: a saved draft, back into the composer
                 try:
-                    res, code = draft_resume(b if isinstance(b, dict) else {})
+                    res, code = compose.drafts.resume(b if isinstance(b, dict) else {})
                 except Exception as ex:
                     print(f"[resume] error: {type(ex).__name__}", flush=True)
                     res, code = {"ok": False, "error": "Couldn’t open this draft."}, 500
