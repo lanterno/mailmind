@@ -77,6 +77,15 @@ def test_an_upgrade_from_the_previous_version_matches_a_fresh_database(fresh_db)
     assert dump(old) == dump(fresh)
 
 
+def test_a_later_migration_doesnt_bring_back_a_table_one_retired(fresh_db):
+    from mailmind.platform.db import migrate, migrations
+    path = fresh_db()
+    migrate.init(path, migrations.MIGRATIONS[:37])
+    assert "briefing_cache" not in dump(path)
+    migrate.init(path, [(38, lambda c: None)])
+    assert "briefing_cache" not in dump(path)
+
+
 def test_init_again_keeps_the_schema_and_the_data(fresh_db):
     import store
     path = fresh_db()

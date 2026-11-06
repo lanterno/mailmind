@@ -216,9 +216,9 @@ def test_a_new_database_starts_from_the_base_schema_with_no_migration_at_all(tmp
     assert "messages" in shape(path) and query(path, "PRAGMA user_version") == [(0,)]
 
 
-def test_a_database_with_a_migration_to_run_gets_what_the_base_schema_has_first(tmp_path):
+def test_a_database_older_than_the_frozen_migrations_gets_what_the_base_schema_has_first(tmp_path):
     path = str(tmp_path / "older.db")
-    migrate.init(path, migrations.MIGRATIONS[:30])
+    migrate.init(path, migrations.MIGRATIONS[:15])
     query(path, "DROP TABLE muted")
     migrate.init(path)
     assert "muted" in shape(path) and query(path, "PRAGMA user_version") == [(NEWEST,)]
