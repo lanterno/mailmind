@@ -24,6 +24,7 @@ from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.pool import Pool
+from mailmind.mailbox.application.realtime import Realtime
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import ReadOnlySession
@@ -156,3 +157,4 @@ offline = OfflineQueue(store, _directory, commands)
 pool = Pool(_directory, _open)
 ingest = Ingest(store, _directory, _open, pool, _Curation(), _Attention(), fts)
 warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
+realtime = Realtime(_directory, _open)

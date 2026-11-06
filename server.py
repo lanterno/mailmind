@@ -2735,7 +2735,7 @@ def _after_readmut(_settled):
 
 
 def _after_idle(changed):
-    """realtime.InboxChanged: IDLE saw these accounts' INBOX change."""
+    """InboxChanged: IDLE saw these accounts' INBOX change."""
     sync_guarded(set(changed.accounts))
 
 

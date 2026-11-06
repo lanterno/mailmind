@@ -24,3 +24,9 @@ class FlagsChanged:
     account: str
     folder: str
     count: int
+
+
+@dataclass(frozen=True)
+class InboxChanged:
+    """IDLE saw these accounts' INBOX change, a burst of signals coalesced into one. Whoever hears it syncs them."""
+    accounts: frozenset[str]
