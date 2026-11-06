@@ -1,5 +1,5 @@
 """On-demand AI summary of an email thread (or single message) via Claude — reuses
-summarize.call_claude (the Claude API). Cached in thread_summaries
+assistant.calls.call_claude (the Claude API). Cached in thread_summaries
 (content-fingerprinted, so a new reply invalidates it). Single-flight per
 (account,thread_id,scope) + a global concurrency cap so double-clicks never pile up Claude calls. Untrusted email is bounded and
 the prompt tells the model to treat it as data, not instructions.
@@ -10,11 +10,12 @@ from datetime import datetime, timezone
 
 from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap.mailbox import ingest
-import summarize as _sz
+from mailmind.bootstrap import assistant
 from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
 from mailmind.bootstrap.assistant import answers
+from mailmind.assistant.application.ports import NotSent
 
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
@@ -169,14 +170,14 @@ def summarize(account, thread_id, scope="thread", force=False):
                                 omit=(f", {omitted} older omitted" if omitted else ""),
                                 blocks="\n".join(blocks))
         try:
-            out = _sz.call_claude(prompt, feature="thread")
-        except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
+            out = assistant.calls.call_claude(prompt, feature="thread")
+        except NotSent:                         # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
             print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "summary unavailable", "retry": True}, 502
         parsed = _parse(out)
-        model = _sz.model_label()
+        model = assistant.calls.model_label()
         if parsed is None:                          # replied but not JSON: cache a safe fallback, don't loop
             parsed = {"tldr": subject, "points": [(rows[-1]["snippet"] or "")[:200]],
                       "action": "", "participants": []}

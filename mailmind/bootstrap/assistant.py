@@ -23,11 +23,13 @@ from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
+from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
+from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
 
-__all__ = ["allowing_over", "answers", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "use"]
+__all__ = ["allowing_over", "answers", "calls", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "triage", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -116,3 +118,12 @@ def use(transport: str) -> None:
 def transport() -> str:
     """How this process reaches the API, in words for the startup line."""
     return NAMES[_bound.transport]
+
+
+def _connect():
+    from mailmind.bootstrap.mailbox import store
+    return store.conn()
+
+
+calls = Calls(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status())
+triage = Triage(calls, lambda: gateway(), answers, _connect)

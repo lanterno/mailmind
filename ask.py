@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap import discovery
-import summarize as _sz
+from mailmind.bootstrap import assistant
+from mailmind.assistant.application.ports import NotSent
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
 CAND_LIMIT = 40         # FTS rows pulled before body-coverage selection
@@ -118,7 +119,7 @@ def ask(account, question):
     if not rows:
         return {"ok": True, "account": account, "question": question,
                 "answer": "I couldn’t find any messages matching that in your mail.",
-                "cited_pks": [], "sources": [], "model": _sz.model_label(),
+                "cited_pks": [], "sources": [], "model": assistant.calls.model_label(),
                 "generated": datetime.now(timezone.utc).isoformat()}, 200
 
     # body-coverage cascade + bounded packing; only packed pks are citable
@@ -141,13 +142,13 @@ def ask(account, question):
     if not blocks:
         return {"ok": True, "account": account, "question": question,
                 "answer": "I found related messages but none have readable text indexed yet.",
-                "cited_pks": [], "sources": [], "model": _sz.model_label(),
+                "cited_pks": [], "sources": [], "model": assistant.calls.model_label(),
                 "generated": datetime.now(timezone.utc).isoformat()}, 200
 
     prompt = _PROMPT.format(question=question, blocks="\n\n".join(blocks))
     try:
-        obj = _sz.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
-    except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
+        obj = assistant.calls.call_claude_json(prompt, ASK_SCHEMA, feature="ask")
+    except NotSent:                         # AI off, or over the daily limit: the route answers it
         raise
     except Exception:
         return {"ok": False, "error": "ask unavailable", "retry": True}, 502
@@ -177,5 +178,5 @@ def ask(account, question):
     } for pk in cited]
 
     return {"ok": True, "account": account, "question": question, "answer": answer,
-            "cited_pks": cited, "sources": sources, "model": _sz.model_label(),
+            "cited_pks": cited, "sources": sources, "model": assistant.calls.model_label(),
             "generated": datetime.now(timezone.utc).isoformat()}, 200

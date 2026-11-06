@@ -3,7 +3,8 @@ One schema-constrained call returning {"text": ...}; shares summarize_thread's 2
 input is UNTRUSTED data — the prompt forbids following instructions inside it; output is plain
 text only.
 """
-import summarize as _sz
+from mailmind.bootstrap import assistant
+from mailmind.assistant.application.ports import NotSent
 
 REWRITE_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
 
@@ -39,8 +40,8 @@ def rewrite(text, op, lang="English"):
     instr = instr.format(lang=(lang or "English")[:40])
     prompt = _PROMPT.format(instr=instr, text=text[:8000])
     try:
-        obj = _sz.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
-    except _sz.NotSent:                         # AI off, or over the daily limit: the route answers it
+        obj = assistant.calls.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
+    except NotSent:                         # AI off, or over the daily limit: the route answers it
         raise
     except Exception as e:
         print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)

@@ -10,11 +10,12 @@ import json
 from datetime import datetime, timezone
 
 from mailmind.bootstrap.mailbox import store
-import summarize as _sz
+from mailmind.bootstrap import assistant
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
 from mailmind.bootstrap.assistant import answers
+from mailmind.assistant.application.ports import NotSent
 
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
@@ -229,16 +230,16 @@ def build(accounts_set, force=False, generate=True):
         waiting_txt = "\n".join(f"- {w['subject']} → {w['to']}" for w in waiting) or "(nothing)"
         prompt = _PROMPT.format(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
         try:
-            obj = _sz.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
+            obj = assistant.calls.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
             ai = _clean(obj)
-            model = _sz.model_label()
+            model = assistant.calls.model_label()
             # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is
             # a few sentences; anything shorter falls back to the deterministic narrative (still useful).
             if len(ai["narrative"]) < 40 or len(ai["narrative"].split()) < 7:
                 fb = _fallback(stats, needs, waiting)
                 ai = {"narrative": fb["narrative"], "next": ai["next"] or fb["next"]}
                 model = "fallback"
-        except _sz.NotSent:                     # AI off, or over the daily limit: the route answers it
+        except NotSent:                     # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:
             print(f"[ai] review failed: {type(e).__name__}: {str(e)[:120]}", flush=True)

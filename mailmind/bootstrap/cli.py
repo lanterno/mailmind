@@ -50,16 +50,15 @@ def assess(limit, workers):
     """Summarize up to `limit` messages with no summary yet, now, at full price."""
     from mailmind.bootstrap import assistant
     from mailmind.bootstrap.mailbox import store
-    import summarize
     store.init()
-    if summarize.engine() == "none":
+    if assistant.calls.engine() == "none":
         print("AI is off: there is no API key, so nothing was summarized.")
         return
-    why = assistant.gateway().held_back("triage", summarize.MODEL)
+    why = assistant.gateway().held_back("triage", assistant.calls.MODEL)
     if why:
         print(f"Triage is held back ({why}), so nothing was summarized.")
         return
-    summarize.summarize_pending(limit, workers if workers is not None else summarize.WORKERS,
+    assistant.triage.summarize_pending(limit, workers if workers is not None else assistant.triage.WORKERS,
                                 log=lambda m: print(m, flush=True))
     print("stats:", store.stats(store.conn()))
 

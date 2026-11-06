@@ -3,9 +3,10 @@ context gather/trim + the global concurrency cap, and summarize's schema-constra
 model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft — never sends.
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """
-import summarize as _sz
+from mailmind.bootstrap import assistant
 import summarize_thread as _st
 from mailmind.bootstrap.mailbox import store
+from mailmind.assistant.application.ports import NotSent
 
 REPLY_SCHEMA = {
     "type": "object",
@@ -60,8 +61,8 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
     prompt = _PROMPT.format(ctx=("thread" if thread_id else "message"), me=(me or "the user"),
                             tone=tone_word, instr=instr, subject=subject, blocks="\n".join(blocks))
     try:
-        obj = _sz.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
-    except _sz.NotSent:                         # AI off, over the limit, or a draft ahead that must wait
+        obj = assistant.calls.call_claude_json(prompt, REPLY_SCHEMA, feature=feature)
+    except NotSent:                         # AI off, over the limit, or a draft ahead that must wait
         raise
     except Exception as e:                      # timeout / rate-limit: retryable
         print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -69,4 +70,4 @@ def draft(account, thread_id=None, pk=None, instruction="", tone="balanced", me=
     body = (obj.get("body") or "").strip() if isinstance(obj, dict) else ""
     if not body:
         return {"ok": False, "error": "no draft produced", "retry": True}, 502
-    return {"ok": True, "body": body[:6000], "tone": tone, "model": _sz.model_label()}, 200
+    return {"ok": True, "body": body[:6000], "tone": tone, "model": assistant.calls.model_label()}, 200

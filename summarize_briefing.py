@@ -9,11 +9,12 @@ import json
 from datetime import datetime, timezone
 
 from mailmind.bootstrap.mailbox import store
-import summarize as _sz
+from mailmind.bootstrap import assistant
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
 from mailmind.bootstrap.assistant import answers
+from mailmind.assistant.application.ports import NotSent
 
 TOP_N = 40
 CAP_TOTAL = 12000
@@ -271,14 +272,14 @@ def build_delta(accounts_set, since_ts, generate=True):
             lines.append(line)
         prompt = _DELTA_PROMPT.format(count=len(lines), items="\n".join(lines))
         try:
-            obj = _sz.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
-        except _sz.NotSent:                     # AI off, or over the daily limit: the route answers it
+            obj = assistant.calls.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
+        except NotSent:                     # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "delta unavailable", "retry": True}, 502
         headline, items = _clean_delta(obj) if isinstance(obj, dict) else ("", [])
-        model = _sz.model_label()
+        model = assistant.calls.model_label()
         if not headline:                        # replied but unusable -> deterministic, cached once
             headline, items = _delta_fallback(rows)
             model = "fallback"
@@ -339,14 +340,14 @@ def build(accounts_set, force=False, generate=True):
             lines.append(line)
         prompt = _PROMPT.format(items="\n".join(lines))
         try:
-            obj = _sz.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
-        except _sz.NotSent:                     # AI off, or over the daily limit: the route answers it
+            obj = assistant.calls.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
+        except NotSent:                     # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:                  # transport: retryable, do NOT cache
             print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
         narrative, groups = _clean(obj, valid) if isinstance(obj, dict) else ("", [])
-        model = _sz.model_label()
+        model = assistant.calls.model_label()
         if not narrative:                       # replied but unusable: cache a deterministic card
             fb = _fallback(rows)
             narrative, groups, model = fb["narrative"], fb["groups"], "fallback"

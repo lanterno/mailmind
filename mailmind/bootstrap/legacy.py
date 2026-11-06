@@ -15,7 +15,7 @@ from mailmind.platform.workers import scheduler
 from mailmind.bootstrap.mailbox import offline
 from mailmind.bootstrap.mailbox import realtime
 from mailmind.bootstrap.mailbox import store
-import summarize
+from mailmind.bootstrap import assistant
 from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import Restored
 from mailmind.mailbox.domain.events import FlagsChanged
@@ -86,7 +86,7 @@ def start(server, spawn=_daemon):
         spawn(offline.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
-    print(f"[ai] {summarize.describe_engine()}", flush=True)
+    print(f"[ai] {assistant.calls.describe_engine()}", flush=True)
     print(f"[imap] {mailbox.describe()}", flush=True)
 
 
@@ -97,12 +97,12 @@ def assess_batch() -> int:
         print("The read-only profile sends nothing out, so nothing was sent.")
         return 1
     store.init()
-    if summarize.engine() == "none":
+    if assistant.calls.engine() == "none":
         print("AI is off: there is no API key, so nothing was sent.")
         return 1
-    summarize.batch_collect(print)
-    sent = summarize.batch_submit(at_least=1, keep=0, log=print)
-    status = summarize.batch_status()
+    assistant.triage.batch_collect(print)
+    sent = assistant.triage.batch_submit(at_least=1, keep=0, log=print)
+    status = assistant.triage.batch_status()
     if status["waiting"]:
         print(f"{status['waiting']} messages are out in a batch. Most end within the hour, and all within a day; "
               "the app brings the answers in when it next runs, or run this again.")

@@ -25,7 +25,7 @@ from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap.mailbox import ingest
 from mailmind.bootstrap.mailbox import offline
-import summarize
+from mailmind.bootstrap import assistant
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.compose.domain import limits
@@ -35,7 +35,7 @@ import summarize_briefing
 import summarize_review
 from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
-from mailmind.bootstrap import assistant, legacy, mailbox
+from mailmind.bootstrap import legacy, mailbox
 from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.when import now_iso, rel_time
@@ -44,6 +44,9 @@ from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
 from mailmind.bootstrap.assistant import answers
+from mailmind.assistant.application.ports import AIOff
+from mailmind.assistant.application.ports import NotSent
+from mailmind.assistant.application.ports import OverLimit
 
 curation.attach(sys.modules[__name__])
 mailbox.attach(sys.modules[__name__])
@@ -100,13 +103,13 @@ def assess_round():
     waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
     backlog goes out in the next batch rather than through this round's calls."""
     log = lambda m: print(f"[assess] {m}", flush=True)     # noqa: E731
-    summarize.batch_collect(log)
-    why = assistant.gateway().held_back("triage", summarize.MODEL)
+    assistant.triage.batch_collect(log)
+    why = assistant.gateway().held_back("triage", assistant.calls.MODEL)
     if why:
         return ASSESS_YIELD if why == "yielding" else None
     if not os.environ.get("MAILMIND_NO_BATCHES"):
-        summarize.batch_submit(log=log)
-    done = summarize.summarize_pending(limit=ASSESS_BATCH, workers=summarize.WORKERS)
+        assistant.triage.batch_submit(log=log)
+    done = assistant.triage.summarize_pending(limit=ASSESS_BATCH, workers=assistant.triage.WORKERS)
     if done:
         print(f"[assess] {done} summarized", flush=True)
     return 0 if done >= ASSESS_BATCH else None
@@ -165,7 +168,7 @@ def digest_json(qs):
     return {"items": items, "stats": st, "accounts": accts, "send_accounts": send_accounts,
             "aliases": amap, "signatures": config.signature_map(),
             "signature_default": config.signature_default(),
-            "status": mailbox.syncing._status, "sync": mailbox.syncing._sync, "ai": summarize.status(), "profile": profile.current().value,
+            "status": mailbox.syncing._status, "sync": mailbox.syncing._sync, "ai": assistant.calls.status(), "profile": profile.current().value,
             "generated": now_iso()}
 
 
@@ -468,7 +471,7 @@ def _gen_draft_ahead(account, pk, source="dwell"):
                     sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
                 except Exception:
                     pass
-        except summarize.NotSent:
+        except NotSent:
             return None                                   # neutral: AI is off, or the governor said not now
         except Exception as e:
             print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -626,7 +629,7 @@ def draft_ahead_rounds():
         now = time.time()
         if now < suspended_until:
             pass                                                 # circuit breaker open (an outage)
-        elif assistant.gateway().held_back("draft-ahead", summarize.MODEL):
+        elif assistant.gateway().held_back("draft-ahead", assistant.calls.MODEL):
             pass                                                 # yielding, away, at the limit, rejected
         else:
             cand = _pick_draft_candidate()
@@ -734,8 +737,8 @@ def ai_do_plan(body):
     today = datetime.now().astimezone().date().isoformat()
     prompt = _DO_PROMPT.replace("{today}", today).replace("{cmd}", cmd)
     try:
-        plan = summarize.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
-    except summarize.NotSent:                 # AI off, or over the daily limit: the route answers it
+        plan = assistant.calls.call_claude_json(prompt, DO_PLAN_SCHEMA, feature="plan") or {}
+    except NotSent:                 # AI off, or over the daily limit: the route answers it
         raise
     except Exception:
         return {"ok": False, "error": "planner unavailable", "retry": True}, 502
@@ -1121,8 +1124,8 @@ class H(BaseHTTPRequestHandler):
                             "generated": now_iso()})
             elif u.path == "/api/debug/ai":      # what AI cost each local day, by feature
                 days = max(1, min(366, int(q.get("days", ["30"])[0])))
-                self._json({"ok": True, "days": summarize.usage(days), "governor": assistant.governor().snapshot(),
-                            "batch": summarize.batch_status(),
+                self._json({"ok": True, "days": assistant.calls.usage(days), "governor": assistant.governor().snapshot(),
+                            "batch": assistant.triage.batch_status(),
                             "generated": now_iso()})
             elif u.path == "/api/export/plan":
                 import export
@@ -1147,9 +1150,9 @@ class H(BaseHTTPRequestHandler):
                                 "signature_default": config.signature_default(), "generated": now_iso()})
             else:
                 self._send(404, b"not found", "text/plain")
-        except summarize.OverLimit as e:      # the page asks before it goes over
+        except OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
-        except summarize.AIOff:               # no key: nothing was sent, and nothing will be until one is set
+        except AIOff:               # no key: nothing was sent, and nothing will be until one is set
             self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[get] {u.path}: {type(e).__name__}: {e}", flush=True)
@@ -1255,7 +1258,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/summarize":
                 try:
                     res, code = ai_summarize(b)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] error: {type(ex).__name__}: {ex}", flush=True)
@@ -1264,7 +1267,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/draft-reply":
                 try:
                     res, code = ai_draft_reply(b)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] draft error: {type(ex).__name__}: {ex}", flush=True)
@@ -1273,7 +1276,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/rewrite":
                 try:
                     res, code = ai_rewrite(b)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] rewrite error: {type(ex).__name__}: {ex}", flush=True)
@@ -1282,7 +1285,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/ask":
                 try:
                     res, code = ai_ask(b)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] ask error: {type(ex).__name__}: {ex}", flush=True)
@@ -1293,7 +1296,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/ai/do-plan":     # read-only: NL command → validated, capped action PREVIEW
                 try:
                     res, code = ai_do_plan(b)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] do-plan error: {type(ex).__name__}: {ex}", flush=True)
@@ -1316,7 +1319,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing":   # write the "Today" card once, if none is stored
                 try:
                     res, code = ai_briefing(b if isinstance(b, dict) else {})
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
@@ -1325,7 +1328,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/review":   # write the Weekly Review once, if none is stored
                 try:
                     res, code = ai_review(b if isinstance(b, dict) else {})
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
@@ -1334,7 +1337,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing/since":   # write the "since you last looked" delta once
                 try:
                     res, code = ai_delta(b if isinstance(b, dict) else {})
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] delta error: {type(ex).__name__}: {ex}", flush=True)
@@ -1343,7 +1346,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/review/refresh":     # force re-run the Weekly Review (behind _mutation_guard)
                 try:
                     res, code = ai_review(b, force=True)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] review error: {type(ex).__name__}: {ex}", flush=True)
@@ -1352,7 +1355,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/briefing/refresh":   # force re-run (behind _mutation_guard)
                 try:
                     res, code = ai_briefing(b, force=True)
-                except (summarize.OverLimit, summarize.AIOff):   # the 402 (the page asks) or the 409
+                except (OverLimit, AIOff):   # the 402 (the page asks) or the 409
                     raise
                 except Exception as ex:
                     print(f"[ai] briefing error: {type(ex).__name__}: {ex}", flush=True)
@@ -1383,9 +1386,9 @@ class H(BaseHTTPRequestHandler):
         except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
             print(f"[post] {self.path}: read-only, refused {e}", flush=True)
             self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
-        except summarize.OverLimit as e:      # the page asks before it goes over
+        except OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
-        except summarize.AIOff:               # no key: nothing was sent, and nothing will be until one is set
+        except AIOff:               # no key: nothing was sent, and nothing will be until one is set
             self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
             print(f"[post] {self.path}: {type(e).__name__}: {e}", flush=True)
