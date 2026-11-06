@@ -15,7 +15,7 @@ function block([name, path]) {
   return `/* ${name}:pure:start */\n${js}/* ${name}:pure:end */\n`;
 }
 
-const text = `// Written by \`just gen-web\` from web/src/compose: edit those.\n"use strict";\n${BLOCKS.map(block).join("")}`;
+const text = `// Written by \`just gen-web\` from web/src/features/compose: edit those.\n"use strict";\n${BLOCKS.map(block).join("")}`;
 if (process.argv.includes("--check")) {
   if (readFileSync(OUT, "utf-8") !== text) {
     console.error("web/assets/legacy/pure.js is out of step with web/src: run `just gen-web`");

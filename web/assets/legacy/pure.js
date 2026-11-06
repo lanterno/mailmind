@@ -1,4 +1,4 @@
-// Written by `just gen-web` from web/src/compose: edit those.
+// Written by `just gen-web` from web/src/features/compose: edit those.
 "use strict";
 /* draft-resume:pure:start */
 // Reopening a saved draft: what the composer opens with and sends back. Pure, like sendGuard.ts, and written
