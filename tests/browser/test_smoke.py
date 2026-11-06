@@ -790,6 +790,42 @@ def test_do_confirmed_archives_then_undo(page, world, ai):
     clean(page)
 
 
+def do_plan_for(page, ai, flt, verb="archive"):
+    def reply(req):
+        if req.schema and "verb" in (req.schema.get("properties") or {}):
+            return fa.answer({"intent": "act", "filter": flt, "verb": verb})
+    ai.responder = reply
+    opened(page)
+    page.keyboard.press("/")
+    page.get_by_role("textbox", name="search").fill("!do that")
+    return page.locator("#doPanel .do-plan")
+
+
+def test_do_files_what_its_preview_counted_and_not_the_rest_of_the_conversation(page, world, ai):
+    plan = do_plan_for(page, ai, "from:lin@example.test in:INBOX subject:re")
+    expect(plan).to_contain_text("1 message")
+    plan.get_by_role("button", name=re.compile("^Archive 1")).click()
+    until(page, lambda: mailbox(world, LUNCH[0]) == "Archive" or mailbox(world, LUNCH[1]) == "Archive", "one archived")
+    expect(page.locator("#undoFloat")).to_contain_text("Archived 1")
+    assert sorted(mailboxes(world, LUNCH)) == ["Archive", "INBOX"]
+    clean(page)
+
+
+def test_do_says_when_its_preview_has_expired_and_moves_nothing(page, world, ai, app):
+    from datetime import timedelta
+    plan = do_plan_for(page, ai, "from:lin")
+    expect(plan.get_by_role("button", name=re.compile("^Archive"))).to_be_visible()
+    since = world.mark()
+    app.clock.shift(timedelta(minutes=11))
+    plan.get_by_role("button", name=re.compile("^Archive")).click()
+    expect(page.locator("#toast")).to_contain_text("expired")
+    assert world.writes(since) == []
+    assert mailboxes(world, LUNCH) == ["INBOX", "INBOX"]
+    assert all("status of 410" in p for p in page.problems)      # the refusal itself
+    page.problems.clear()
+    clean(page)
+
+
 def test_the_sync_menu_says_what_ai_cost_today(page, world, ai):
     import time
     from mailmind.assistant.application.gateway import local_day
