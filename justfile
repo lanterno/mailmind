@@ -62,10 +62,11 @@ test-dovecot *args:
     uv run pytest --dovecot tests/test_mail_session_dovecot.py {{args}}
 
 # Undefined names, unused imports and pyflakes' other checks, run by ruff; then the import rules
-# between the mailmind package's layers (import-linter; the contracts are in pyproject.toml)
+# between the mailmind package's layers (import-linter; the contracts are in pyproject.toml), then types (pyright)
 lint:
     uv run ruff check
     uv run lint-imports --no-cache --no-logo
+    uv run pyright
 
 # Byte-compile every module, and the mailmind package, without running them
 compile:

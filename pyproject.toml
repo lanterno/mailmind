@@ -46,6 +46,17 @@ markers = [
     "dovecot: runs against Dovecot in Docker; skipped unless pytest runs with --dovecot",
 ]
 
+[tool.pyright]
+include = ["mailmind"]
+exclude = ["mailmind/platform/db/migrations", "**/__pycache__"]    # frozen, never edited
+typeCheckingMode = "basic"
+pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"
+# The proposal asks this of the kernel, content, every domain and every application package. A package joins
+# when it reaches zero, and from then on stays there.
+strict = ["mailmind/kernel", "mailmind/assistant/domain", "mailmind/attention/domain"]
+
 [tool.importlinter]
 # The package's own layers. Which legacy modules it imports is the ratchet's job
 # (tests/test_ratchet.py), since those modules sit outside the package. External packages are
