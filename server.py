@@ -4257,7 +4257,7 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
             self.end_headers()
-            self.wfile.write(tab.opening())
+            self.wfile.write(tab.opening() + sse.hello(webroot.build()))
             self.wfile.flush()
             while True:
                 events = tab.next(sse.HEARTBEAT)

@@ -23,6 +23,14 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 
+HELLO = "hello"           # opens every stream, naming the build the server has now: not published
+
+
+def hello(build):
+    """A frame with no id, so a tab's place in the stream stays where it was."""
+    return f"event: {HELLO}\ndata: {json.dumps({'build': build})}\n\n".encode()
+
+
 TOPICS = frozenset({
     "sync-done",          # a sync finished for an account
     "new-mail",           # it brought new mail into INBOX
