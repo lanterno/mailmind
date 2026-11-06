@@ -61,7 +61,7 @@ def routes(mailbox):
 
     @r.get("/api/pending")
     def pending(req):
-        return mailbox.offline.list_open()
+        return mailbox.commands.list_open()
 
     @r.get("/api/account-health")
     def account_health(req):

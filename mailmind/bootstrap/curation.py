@@ -14,7 +14,7 @@ from mailmind.curation.application.screener import Screener
 from mailmind.curation.application.sweep import Sweeps
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import classifier
-from mailmind.mailbox.application import filing
+from mailmind.mailbox.application import bulk_moves
 from mailmind.platform import sse
 from mailmind.platform.workers import gates
 
@@ -56,8 +56,8 @@ class _Filing:
         return mailbox.filing.do_trash({"pk": pk, "undo_group": undo_group})
 
     def trash_now(self, pk):
-        from mailmind.bootstrap.mailbox import commands
-        trashed, _, _ = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, lambda: commands.trash_message(pk),
+        from mailmind.bootstrap.mailbox import server_ops
+        trashed, _, _ = gates.run(server_ops.account_of(pk) or gates.EVERY_ACCOUNT, lambda: server_ops.trash_message(pk),
                                   priority=gates.Priority.INTERACTIVE)
         return trashed
 
@@ -150,7 +150,7 @@ class _Mailboxes:
         return accounts.imap_quote(value)
 
     def move_verified(self, session, uids, dest):
-        return filing.move_verified(session, uids, dest)
+        return bulk_moves.move_verified(session, uids, dest)
 
 
 AUDIT = AuditFile()

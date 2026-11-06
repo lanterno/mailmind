@@ -11,7 +11,7 @@ from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
 from mailmind.platform.workers import scheduler
 
-from mailmind.bootstrap.mailbox import offline
+from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap.mailbox import realtime
 from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import assistant
@@ -94,7 +94,7 @@ def start(spawn=_daemon):
               "in their queues; snooze still runs)", flush=True)
     else:
         spawn(compose.outbox.worker_loop)
-        spawn(offline.worker_loop)
+        spawn(commands.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
     print(f"[ai] {assistant.calls.describe_engine()}", flush=True)

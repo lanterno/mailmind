@@ -16,7 +16,7 @@ import threading
 import time
 
 from mailmind.kernel.when import now_iso
-from mailmind.mailbox.application.commands import UNREACHABLE
+from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.mailbox.application.stats import LiveStats

@@ -118,12 +118,12 @@ class _Messages:
 class _Effects:
     """What a delivered send sets off elsewhere."""
     def account_of(self, pk):
-        from mailmind.bootstrap.mailbox import commands
-        return commands.account_of(pk)
+        from mailmind.bootstrap.mailbox import server_ops
+        return server_ops.account_of(pk)
 
     def mark_answered(self, pk, account, message_id):
-        from mailmind.bootstrap.mailbox import commands
-        return commands.mark_answered(pk, account, message_id)
+        from mailmind.bootstrap.mailbox import server_ops
+        return server_ops.mark_answered(pk, account, message_id)
 
     def followup_sent(self, c, account, thread_id, pk, now, at):
         from mailmind.bootstrap import attention

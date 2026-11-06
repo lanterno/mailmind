@@ -3,8 +3,8 @@ Mailbox's own (a snooze, a mute, a block) its own context reverses, handed in as
 import threading
 
 from mailmind.mailbox.application.commands import MailCommands
+from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.offline_queue import OfflineQueue
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
@@ -15,12 +15,12 @@ from mailmind.platform.workers import gates
 class Undo:
     UNDO_MAX = 25
 
-    def __init__(self, store: StoredMail, accounts: Accounts, commands: MailCommands, offline: OfflineQueue, ingest: Ingest,
+    def __init__(self, store: StoredMail, accounts: Accounts, server: ServerOps, commands: MailCommands, ingest: Ingest,
                  stats: LiveStats, folders: Folders, reversers):
         self._store = store
         self._accounts = accounts
+        self._server = server
         self._commands = commands
-        self._offline = offline
         self._ingest = ingest
         self._stats = stats
         self._folders = folders
@@ -73,7 +73,7 @@ class Undo:
             q = self._store.command_latest_by_msgid(c, d["account"], d["message_id"])
             if q is not None and not q["applied"]:
                 src = d.get("src_folder") or "INBOX"
-                cancelled = self._offline.QUEUE.cancel_unapplied(c, q["id"])
+                cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
                 if cancelled:
                     self._store.restore_pending(c, q["id"])
                 listed = cancelled and c.execute(
@@ -95,7 +95,7 @@ class Undo:
                     d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
                 c.close()
         if kind == "move":
-            ok, _ = self._commands.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
+            ok, _ = self._server.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
                                           unseen=bool(d.get("unseen")))
             if not ok:
                 return False, d["account"], d["src_folder"]
@@ -105,8 +105,8 @@ class Undo:
                 pass
             return True, d["account"], d["src_folder"]
         if kind == "gmail_archive":
-            allmail = self._commands.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
-            ok, _ = self._commands.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
+            allmail = self._server.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
+            ok, _ = self._server.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
             if not ok:
                 return False, d["account"], "INBOX"
             try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync

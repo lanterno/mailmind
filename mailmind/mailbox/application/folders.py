@@ -8,7 +8,7 @@ import re
 import threading
 import time
 
-from mailmind.mailbox.application.commands import UNREACHABLE
+from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest

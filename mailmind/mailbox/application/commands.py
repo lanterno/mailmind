@@ -1,458 +1,253 @@
-"""Changes to the mail on a server. Trash is a move to the account's Trash folder (reversible), and then the
-local row goes. A connection failure raises a member of UNREACHABLE, which the route turns into a row of the offline
-queue; a server's NO or BAD means the message didn't move."""
-import imaplib
+"""What couldn't reach a server, applied once it can be: moves and flag changes queued because IMAP was unreachable.
+
+The same machinery as Compose's outbox, a DurableQueue over the mail_commands table: a single worker thread, an atomic
+claim (queued to running), the `applied` flag as the exactly-once gate, exponential backoff, and running rows reset at
+boot. The one difference from the outbox: the primary op here is an IMAP op, so it runs as a job on the account's IMAP
+gate (the outbox's SMTP send holds none).
+"""
 import json
-import socket
-import ssl
+import time
+from datetime import datetime, timezone
 
-from mailmind.mailbox.application import session as mail_session
+from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.application.ports import Accounts, StoredMail
-from mailmind.platform import profile
-from typing import Any
-
-# Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
-# imaplib.IMAP4.abort subclasses IMAP4.error; socket.timeout subclasses OSError. A NON-abort
-# IMAP4.error is a command-level "NO/BAD" (folder gone, UID invalid, auth) = LOGICAL, not queued.
-# A read-only process (profile.ReadOnlyError) queues its changes too, for a full run to apply.
-UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort,
-               profile.ReadOnlyError)
-
-_FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
-         "draft": "\\Draft", "deleted": "\\Deleted"}
+from mailmind.mailbox.domain.events import Applied, Restored
+from mailmind.platform import bus, profile
+from mailmind.platform.workers import gates
+from mailmind.platform.workers.durable_queue import DurableQueue
 
 
-def _ignoring_refusal(command, *args):
-    """Run a session command whose refusal changes nothing here, as when imaplib handed a NO back
-    unraised; a lost connection still raises."""
-    try:
-        command(*args)
-    except imaplib.IMAP4.abort:
-        raise
-    except imaplib.IMAP4.error:
-        pass
-
-
-def _uid_by_msgid(s, mid):
-    """The live UID of a message in the session's selected folder, by RFC822 Message-ID, or None,
-    also when the server refuses the search."""
-    if not mid:
-        return None
-    try:
-        return s.by_message_id(mid)
-    except imaplib.IMAP4.abort:
-        raise
-    except imaplib.IMAP4.error:
-        return None
-
-
-def _mk_move_undo(row, dest, label):
-    """An undo descriptor for a move-type action; None when the message has no
-    Message-ID (can't be reliably found to move back)."""
-    mid = (row["message_id"] or "").strip()
-    if not mid:
-        return None
-    return {"kind": "move", "account": row["account"], "src_folder": row["folder"],
-            "dest_folder": dest, "message_id": mid, "label": label,
-            "subject": row["subject"], "thread_id": row["thread_id"]}
-
-
-def _seen_on_server(s, uid, otherwise):
-    """Whether the selected folder's message `uid` carries \\Seen, as the server says now; the
-    local row's word (`otherwise`) when it won't say."""
-    try:
-        flags = s.flags([uid]).get(int(uid))
-    except imaplib.IMAP4.abort:
-        raise
-    except imaplib.IMAP4.error:
-        return otherwise
-    return otherwise if flags is None else "\\seen" in {f.lower() for f in flags}
+def _now():
+    return int(time.time())
 
 
 class MailCommands:
     UNREACHABLE = UNREACHABLE
+    MAX_ATTEMPTS = 5
+    _BACKOFF_BASE = 20      # secs; doubles per attempt
+    _BACKOFF_CAP = 900
+    _POLL = 30
+    gates = gates
 
-    def __init__(self, store: StoredMail, accounts: Accounts, open_session, quote):
+    def __init__(self, store: StoredMail, accounts: Accounts, server: ServerOps):
         self._store = store
         self._accounts = accounts
-        self._open_session = open_session
-        self._quote = quote
+        self._server = server
+        self.QUEUE = DurableQueue("readmutq", "mail_commands", running="running", finished="done", finished_at="done_at",
+                                  gate="applied", connect=lambda: store.conn(), max_attempts=self.MAX_ATTEMPTS,
+                                  backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL)
 
-    def account_of(self, pk):
-        """The account the message `pk` is in, or None when there's no such message."""
+    def kick(self):
+        self.QUEUE.kick()
+
+
+    def _commit(self, fn):
+        """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
         c = self._store.conn()
         try:
-            r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
+            out = fn(c)
+            c.commit()
+            return out
         finally:
             c.close()
-        return r["account"] if r else None
 
 
-    def _do_imap(self, acct, fn):
-        """Open a session, run fn(session), log out. A connection failure raises (a member of
-        UNREACHABLE) so the caller can queue/retry; a clean command-level IMAP4.error from fn propagates
-        as a logical error."""
-        s = self._open_session(acct)        # OSError/timeout/ssl/abort here → UNREACHABLE propagates
+    def _commit_get(self, mid):
+        c = self._store.conn()
         try:
-            return fn(s)
+            return self._store.command_get(c, mid)
         finally:
-            try:
-                s.logout()
-            except Exception:
-                pass
+            c.close()
 
 
-    def _already_in(self, s, folder, mid, back_to):
-        """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
-        again after. A queued move asks before it moves: on a server without MOVE, a connection that
-        dropped after the COPY landed left the original behind, and moving it again would copy twice.
-        A copy flagged \\Deleted doesn't count: a refused EXPUNGE left it, and the next expunge from any
-        client takes it, so removing the original on its word would leave nothing."""
-        if not mid:
-            return False
+    def _local_mirror(self, row):
+        """Best-effort, idempotent: apply the same local DB change the inline path makes. A move-type
+        op drops the rows it marked pending_removal when it was queued, or, when there are none (a
+        sync stored the message again meanwhile, or it was queued before migration 23 and its row went
+        then), the source folder's row by Message-ID. A flag op sets flags on the row by Message-ID.
+        Re-running is harmless (delete of a gone row is a no-op; set_flags is idempotent)."""
+        c = self._store.conn()
         try:
-            try:
-                s.select(folder)
-            except imaplib.IMAP4.abort:
-                raise
-            except imaplib.IMAP4.error:
-                return False
-            try:
-                return bool(s.uids("UNDELETED", "HEADER", "Message-ID", self._quote(mid)))
-            except imaplib.IMAP4.abort:
-                raise
-            except imaplib.IMAP4.error:
-                return False
+            if row["kind"] == "flag":
+                r = self._flagged_row(c, row)
+                if r is None:
+                    return
+                flags = (json.loads(row["params"] or "{}").get("flags") or {})
+                self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+            else:
+                pks = self._store.pending_removal_pks(c, row["id"])
+                if not pks and row["message_id"]:
+                    r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                                  "ORDER BY pk DESC LIMIT 1",
+                                  (row["account"], row["src_folder"], row["message_id"])).fetchone()
+                    pks = [r["pk"]] if r else []
+                for pk in pks:
+                    self._store.delete_message(c, pk)
+            c.commit()
         finally:
-            s.select(back_to, readonly=False)
+            c.close()
 
 
-    def _imap_mutate(self, acct, fn) -> tuple[bool, Any]:
-        """Run a mutation's IMAP work via _do_imap. A connection-level failure (a UNREACHABLE member,
-        incl. IMAP4.abort) PROPAGATES so the route can queue it offline; a command-level IMAP4.error
-        (NO/BAD: no such folder, over quota, no permission) returns (False, None). The server still
-        holds the message where it was, so the caller keeps its local row and reports the failure.
-        Returns (ran_ok, fn_result)."""
-        profile.refuse_writes("an IMAP change")    # read-only: raised before any connection, so it queues
-        try:
-            return True, self._do_imap(acct, fn)
-        except imaplib.IMAP4.abort:
-            raise                                  # connection aborted mid-op → propagate (queue)
-        except imaplib.IMAP4.error:
-            return False, None                     # command NO/BAD → logical, swallow as today
+    def _flagged_row(self, c, row):
+        """The local row a queued flag change is for: the one in the folder it was asked in, else the
+        newest with its Message-ID, else the row it was asked on."""
+        if row["message_id"]:
+            r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                          "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+            return r or self._store.get_message_by_msgid(c, row["account"], row["message_id"])
+        pk = json.loads(row["params"] or "{}").get("pk")
+        return self._store.get_message(c, pk) if pk else None
 
 
-    def _resolve_dest(self, s, op, acct):
-        """Resolve a move-type op's destination folder on the live server (used by the drain worker
-        when the offline enqueue couldn't resolve it). None when the account has no such folder."""
-        if op == "trash":
-            return self._accounts.trash_folder(acct)
-        if op == "junk":
-            j = mail_session.find_role(s, "junk")
-            return j or self._accounts.profile(acct).junk_fallback
-        if op == "archive":
-            return mail_session.find_role(s, "archive", "all")
-        return None
+    def _give_back(self, c, row):
+        """The queued change `row` won't happen: a move's message is listed again, and a flag change's
+        row gets back the flags it had when the change was asked for."""
+        self._store.restore_pending(c, row["id"])
+        if row["kind"] == "flag":
+            r = self._flagged_row(c, row)
+            was = json.loads(row["params"] or "{}").get("was") or {}
+            if r is not None and was:
+                self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in was.items()})
 
 
-    def apply_queued_mutation(self, row):
-        """Worker entry for the offline read-mutation queue. Re-applies a queued mutation against the
-        live server, resolving the message by Message-ID (NOT the stale pk/uid — reconcile may have
-        re-numbered it). Returns None once the server holds the change, or when the message had
-        already left its folder (exactly-once: never retried forever). Returns a fixed reason when the
-        change didn't happen and no retry will make it: "refused" (the server answered NO or BAD) or
-        "no_folder" (the account has no folder to move it to); the message is still where it was.
-        Raises a UNREACHABLE member on connection failure (worker backs off + retries). Used ONLY by
-        the offline queue."""
-        acct = self._accounts.get(row["account"])
-        op, src, dest = row["kind"], row["src_folder"], row["dest"]
-        mid = (row["message_id"] or "").strip()
+    def _restore(self, c, row, error):
+        """The queued change `row` won't happen: to error, and the local row as the server has it."""
+        self.QUEUE.give_up(c, row, error)
+        self._give_back(c, row)
+
+
+    def _take_up(self, c, row):
+        """The given-up change `row` is asked for again: as when it was queued, a move's message leaves
+        the lists and a flag change shows, its `was` now the flags it replaces this time."""
         payload = json.loads(row["params"] or "{}")
-
-        def run(s):
-            s.select(src, readonly=False)
-            uid = _uid_by_msgid(s, mid) or (int(payload["uid"]) if payload.get("uid") else None)
-            if not uid:
-                return None                               # already gone → exactly-once done
-            if op == "flag":                              # a refusal raises IMAP4.error: refused, below
-                for k, v in (payload.get("flags") or {}).items():
-                    if k in _FLAG:
-                        (s.add_flags if v else s.remove_flags)([uid], [_FLAG[k]])
-            elif op == "archive" and payload.get("is_gmail"):
-                s.remove_labels([uid], ["\\Inbox"])       # Gmail archive = drop the Inbox label
-            else:                                          # trash / junk / move / non-Gmail archive
-                d = dest or self._resolve_dest(s, op, acct)     # resolve junk/archive folder online if not stored
-                if not d:
-                    return "no_folder"                     # no target: it stays (don't loop forever)
-                if d != dest and row["id"]:                # persist the resolved dest so undo can find it later
-                    cc = self._store.conn()
-                    self._store.command_set_dest(cc, row["id"], d)
-                    cc.commit()
-                    cc.close()
-                if self._already_in(s, d, mid, src):            # an earlier try's COPY landed, then its connection
-                    s.add_flags([uid], ["\\Deleted"])        # dropped: only the original is left
-                    s.expunge([uid])                       # to remove
-                else:
-                    s.move([uid], d)
-            return None
-
-        try:
-            return self._do_imap(acct, run)
-        except UNREACHABLE:
-            raise                                          # connection-level → worker retries with backoff
-        except imaplib.IMAP4.error:                        # command NO/BAD: it didn't happen, and won't
-            return "refused"
+        if row["kind"] == "flag":
+            r = self._flagged_row(c, row)
+            r = self._store.get_message(c, r["pk"]) if r is not None else None
+            if r is None:
+                return
+            flags = payload.get("flags") or {}
+            payload["was"] = {k: bool(r[k]) for k in flags}
+            self._store.command_set_params(c, row["id"], json.dumps(payload))
+            self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+            return
+        if row["message_id"]:
+            r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                          "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+        else:
+            r = self._store.get_message(c, payload.get("pk")) if payload.get("pk") else None
+        if r is not None:
+            self._store.mark_pending_removal(c, r["pk"], row["id"])
 
 
-    def trash_message(self, pk):
-        # read with a short-lived connection (don't hold it across the slow IMAP move)
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
-        if not row:
-            return False, "not found", None
-        acct = self._accounts.get(row["account"])
-        dest = self._accounts.trash_folder(acct)
-        marks_read = self._accounts.profile(acct).marks_trash_read
-
-        def op(s):
-            s.select(row["folder"], readonly=False)
-            unseen = marks_read and not _seen_on_server(s, row["uid"], bool(row["seen"]))
-            s.move([row["uid"]], dest)
-            return unseen
-
-        # UNREACHABLE (IMAP down) propagates → the route queues this offline. A command the server
-        # refuses leaves the message where it was, so the local row stays and the caller is told.
-        ran, unseen = self._imap_mutate(acct, op)
-        if not ran:
-            return False, "the server refused the move", None
-        c = self._store.conn()
-        self._store.delete_message(c, pk)
-        c.commit()
-        c.close()
-        undo = _mk_move_undo(row, dest, "Trashed")
-        if undo and unseen:          # the server marked it read on the way to Trash: undo unmarks it
-            undo["unseen"] = True
-        return True, "trashed", undo
-
-
-    def mark_answered(self, pk, account, message_id):
-        """\\Answered on the message a send replied to, wherever it is by now: where its row says, or
-        with no row left (archiving right after replying deletes it), in the inbox and the folders filing
-        moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does."""
+    def list_open(self, limit=100):
+        """What the pending-changes tray shows: the changes that haven't reached a server, and how many
+        wait and how many were given up on. A subject the row doesn't hold comes from its message."""
         c = self._store.conn()
         try:
-            row = self._store.get_message_by_msgid(c, account, message_id) or (self._store.get_message(c, pk) if pk else None)
+            items = []
+            for r in self._store.command_open(c, limit):
+                payload = json.loads(r["params"] or "{}")
+                subject = payload.get("subject")
+                if subject is None:
+                    found = self._flagged_row(c, r)
+                    found = self._store.get_message(c, found["pk"]) if found is not None else None
+                    subject = found["subject"] if found is not None else ""
+                items.append({"id": r["id"], "account": r["account"], "op": r["kind"], "folder": r["src_folder"],
+                              "dest": r["dest"], "flags": payload.get("flags"), "state": r["state"],
+                              "attempts": r["attempts"], "error": r["last_error"], "subject": subject,
+                              "next_attempt_at": r["next_attempt_at"], "created_at": r["created_at"]})
+            counts = self._store.command_open_counts(c)
         finally:
             c.close()
-        if row:
-            return self.set_flags(row["pk"], {"answered": True})
-        if not (account and message_id):
-            return False, "not found"
-        profile.refuse_writes("a flag change")
-        s = self._open_session(self._accounts.get(account))
-        try:
-            for role in ("inbox", "archive", "all", "trash", "junk"):
-                folder = mail_session.find_role(s, role)
-                if not folder:
-                    continue
+        return {"items": items, "waiting": counts.get("queued", 0) + counts.get("running", 0),
+                "stuck": counts.get("error", 0)}
+
+
+    def retry(self, mid):
+        """Ask again for a change the queue gave up on. False when it isn't one."""
+        def go(c):
+            row = self._store.command_get(c, mid)
+            if row is None or not self.QUEUE.requeue(c, mid):
+                return False
+            self._take_up(c, row)
+            return True
+        ok = self._commit(go)
+        if ok:
+            self.kick()
+        return ok
+
+
+    def discard(self, mid):
+        """Drop a change that hasn't reached a server: its message is as the server has it again, and
+        there is nothing for Undo to reverse. Returns the row, or None when it had reached one or is gone.
+        The caller holds the account's IMAP gate, so a try at it is over or hasn't begun."""
+        def go(c):
+            row = self._store.command_get(c, mid)
+            if row is None or not self.QUEUE.cancel_unapplied(c, mid):
+                return None
+            self._give_back(c, row)
+            if row["kind"] != "flag" and row["message_id"]:
+                self._store.undo_forget_move(c, row["account"], row["message_id"], row["src_folder"])
+            return row
+        return self._commit(go)
+
+
+    def apply_one(self, mid):
+        row = self._commit(lambda c: self.QUEUE.claim(c, mid))
+        if row is None:
+            return                       # lost the claim (cancelled / another worker) — mirror outbox
+        # exactly-once: a recovered row (applied=1, requeued by reset_stuck) skips the IMAP op and only
+        # finishes bookkeeping, so a crash after the op can never re-move/re-expunge.
+        if not row["applied"]:
+            def apply():                                         # IMAP op takes the account's gate (unlike SMTP)
+                fresh = self._commit_get(mid)                          # re-read under the gate: an undo may have
+                if fresh is None:                                #   cancelled (deleted) the row between claim and here
+                    return "cancelled", None
                 try:
-                    s.select(folder, readonly=False)
-                    uid = _uid_by_msgid(s, message_id)
-                    if uid:
-                        s.add_flags([uid], ["\\Answered"])
-                        return True, "ok"
-                except imaplib.IMAP4.abort:
-                    raise
-                except imaplib.IMAP4.error:
-                    continue
-            return False, "not found"
-        finally:
+                    self._accounts.get(fresh["account"])
+                except KeyError:
+                    return "removed", "account removed"
+                why = self._server.apply_queued_mutation(fresh)
+                if why:
+                    return "refused", why
+                self._commit(lambda c: self.QUEUE.mark_gate(c, mid))       # applied=1, before the gate lets a cancel in
+                return "applied", None
             try:
-                s.logout()
-            except Exception:
-                pass
+                outcome, why = self.gates.run(row["account"], apply, priority=self.gates.Priority.AFTER_USER)
+                if outcome in ("removed", "refused"):            # no retry can make it happen
+                    self._commit(lambda c: self._restore(c, row, why))
+                    bus.publish(Restored(mid, row["account"]))
+                    print(f"[readmutq] #{mid} won't apply ({why}); its message is listed again", flush=True)
+                if outcome != "applied":
+                    return
+            except UNREACHABLE as e:
+                err = type(e).__name__
 
-
-    def set_flags(self, pk, flags):
-        """flags: {'seen':True,'flagged':False,...} -> UID STORE +/-FLAGS, mirrored locally once the
-        server took it. A refusal (the UID gone, a read-only folder) leaves the local row as the server
-        has it, and answers (False, why)."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
-        if not row:
-            return False, "not found"
-        profile.refuse_writes("a flag change")
-        acct = self._accounts.get(row["account"])
-        s = self._open_session(acct)
+                def later(c):
+                    terminal, delay = self.QUEUE.retry_later(c, row, err, _now())
+                    if terminal:                                 # given up: the message is still as it was
+                        self._give_back(c, row)
+                    return terminal, delay
+                terminal, delay = self._commit(later)
+                if terminal:
+                    bus.publish(Restored(mid, row["account"]))
+                print(f"[readmutq] #{mid} unreachable ({err}); "
+                      f"{'giving up' if terminal else f'retry {delay}s'}", flush=True)
+                return
         try:
-            s.select(row["folder"], readonly=False)
-            for k, v in flags.items():
-                if k in _FLAG:
-                    (s.add_flags if v else s.remove_flags)([row["uid"]], [_FLAG[k]])
-        except imaplib.IMAP4.abort:
-            raise
-        except imaplib.IMAP4.error:
-            return False, "the server refused the flag change"
-        finally:
-            try:
-                s.logout()
-            except Exception:
-                pass
-        c = self._store.conn()
-        self._store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items() if k in _FLAG})
-        c.commit()
-        c.close()
-        return True, "ok"
+            self._local_mirror(row)
+            self._commit(lambda c: self.QUEUE.finish(c, mid, datetime.now(timezone.utc).isoformat()))
+            bus.publish(Applied(mid, row["account"]))
+            print(f"[readmutq] applied #{mid} {row['op']}", flush=True)
+        except Exception as e:
+            print(f"[readmutq] post-apply bookkeeping for #{mid} deferred: {type(e).__name__}", flush=True)
 
 
-    def archive_message(self, pk):
-        """Gmail: drop the \\Inbox label (stays in All Mail). Others: move to an
-        Archive folder if one exists."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
-        if not row:
-            return False, "not found", None
-        acct = self._accounts.get(row["account"])
-
-        def op(s):
-            s.select(row["folder"], readonly=False)
-            if self._accounts.profile(acct).archive_is_label_removal:
-                s.remove_labels([row["uid"]], ["\\Inbox"])     # refused: raises, and the message stays
-                return ("gmail", None)
-            arch = mail_session.find_role(s, "archive", "all")
-            if not arch:
-                return ("nofolder", None)
-            s.move([row["uid"]], arch)
-            return ("moved", arch)
-
-        ran, info = self._imap_mutate(acct, op)            # UNREACHABLE propagates → route queues
-        if not ran:                                   # refused: the message is still where it was
-            return False, "the server refused the archive", None
-        if info[0] == "nofolder":
-            return False, "no archive folder on this account", None
-        undo = None
-        if info[0] == "gmail":
-            mid = (row["message_id"] or "").strip()
-            if mid:   # reverse = re-add the \Inbox label, found by Message-ID in All Mail
-                undo = {"kind": "gmail_archive", "account": row["account"], "src_folder": "INBOX",
-                        "message_id": mid, "label": "Archived",
-                        "subject": row["subject"], "thread_id": row["thread_id"]}
-        elif info[0] == "moved":
-            undo = _mk_move_undo(row, info[1], "Archived")
-        c = self._store.conn()
-        self._store.delete_message(c, pk)
-        c.commit()
-        c.close()
-        return True, "archived", undo
+    def drain(self):
+        if not profile.writes_allowed():     # read-only: moves wait here for a full run (D4)
+            return
+        self.QUEUE.drain(self.apply_one, _now())       # one bad row is logged and never aborts the rest
 
 
-    def junk_message(self, pk):
-        """Move a message to the account's Junk/Spam folder (Gmail: [Gmail]/Spam)."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
-        if not row:
-            return False, "not found", None
-        acct = self._accounts.get(row["account"])
-
-        def op(s):
-            s.select(row["folder"], readonly=False)
-            junk = mail_session.find_role(s, "junk")
-            if not junk:
-                junk = self._accounts.profile(acct).junk_fallback
-            if not junk:
-                return ("nofolder", None)
-            s.move([row["uid"]], junk)
-            return ("moved", junk)
-
-        ran, info = self._imap_mutate(acct, op)            # UNREACHABLE propagates → route queues
-        if not ran:                                   # refused: the message is still where it was
-            return False, "the server refused the move", None
-        if info[0] == "nofolder":
-            return False, "no junk folder on this account", None
-        junk = info[1]
-        c = self._store.conn()
-        self._store.delete_message(c, pk)
-        c.commit()
-        c.close()
-        return True, "junked", _mk_move_undo(row, junk, "Marked junk")
-
-
-    def move_message(self, pk, dest):
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
-        if not row or not dest:
-            return False, "not found", None
-        acct = self._accounts.get(row["account"])
-        ran, _ = self._imap_mutate(acct, lambda s: (s.select(row["folder"], readonly=False), s.move([row["uid"]], dest)))
-        if not ran:                                   # refused: the message is still where it was
-            return False, "the server refused the move", None
-        c = self._store.conn()
-        self._store.delete_message(c, pk)
-        c.commit()
-        c.close()
-        return True, "moved", _mk_move_undo(row, dest, "Moved")
-
-
-    # ----------------------------------------------------------------- undo reverse ops
-    def move_by_msgid(self, account, search_folder, dest_folder, message_id, unseen=False):
-        """Reverse primitive: find a message by EXACT RFC822 Message-ID in search_folder
-        and move it to dest_folder. Fails (never guesses) if not found. unseen: take \\Seen off it
-        there, as it was before a server that marks trashed mail read (Proton) set it."""
-        acct = self._accounts.get(account)
-        s = self._open_session(acct)
-        try:
-            s.select(search_folder, readonly=False)
-            uid = _uid_by_msgid(s, message_id)              # the most recent copy if several
-            if uid is None:
-                return False, "message not found"
-            try:
-                s.move([uid], dest_folder)
-            except imaplib.IMAP4.abort:
-                raise
-            except imaplib.IMAP4.error:                     # a NO or BAD: it stays where it is
-                return False, "the server refused the move"
-            if unseen:
-                s.select(dest_folder, readonly=False)
-                back = _uid_by_msgid(s, message_id)
-                if back is not None:
-                    _ignoring_refusal(s.remove_flags, [back], ["\\Seen"])
-            return True, "moved back"
-        finally:
-            try:
-                s.logout()
-            except Exception:
-                pass
-
-
-    def relabel_by_msgid(self, account, search_folder, message_id, label="\\Inbox"):
-        """Gmail-archive reverse: re-add a label (default \\Inbox) to the message found by
-        Message-ID in search_folder (All Mail). A refusal answers (False, why): the label isn't there."""
-        acct = self._accounts.get(account)
-        s = self._open_session(acct)
-        try:
-            s.select(search_folder, readonly=False)
-            uid = _uid_by_msgid(s, message_id)
-            if uid is None:
-                return False, "message not found"
-            try:
-                s.add_labels([uid], [label])
-            except imaplib.IMAP4.abort:
-                raise
-            except imaplib.IMAP4.error:
-                return False, "the server refused the label"
-            return True, "relabeled"
-        finally:
-            try:
-                s.logout()
-            except Exception:
-                pass
-
-
-    def find_special(self, account, *roles):
-        """The folder playing the first of `roles` on an account's server (e.g. Gmail's All Mail)."""
-        return self._do_imap(self._accounts.get(account), lambda s: mail_session.find_role(s, *roles))
+    def worker_loop(self):
+        self.QUEUE.run_forever(self.drain)             # recovers rows a crash left running, then drains
