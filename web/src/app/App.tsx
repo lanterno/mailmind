@@ -17,6 +17,7 @@ import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { useSwipe } from "../features/mailbox/swipe";
 import { Curate } from "../features/curate/Curate";
 import { Docs } from "../features/docs/Docs";
 import { FeedRiver, PaperTrail } from "../features/lanes/Lanes";
@@ -54,6 +55,7 @@ function Floats() {
       <div className="send-float undo-float" id="undoFloat" data-react-aria-top-layer="true" hidden={!label}>
         <span>{label}</span><button id="ufUndo" onClick={() => void undo(qc)}>Undo · <kbd>z</kbd></button>
       </div>
+      <div id="swipeBadge" aria-hidden="true"><span className="sw-archive"><Icon name="archive" /> Archive</span><span className="sw-snooze"><Icon name="clock" /> Tomorrow</span></div>
       <div className="send-float build-float" id="buildFloat" role="status" data-react-aria-top-layer="true" hidden={!build}>
         MailMind was updated. <button id="buildReload" onClick={() => location.reload()}>Reload</button>
       </div>
@@ -185,6 +187,10 @@ export function App() {
   }, [source, accounts.join()]);
   useEffect(() => document.body.style.setProperty("--measure", `${WIDTHS[prefs.width]}px`), [prefs.width]);
 
+  useSwipe(
+    (pk) => m.file(all.find((r) => r.pk === pk) ?? { pk }, "archive"),
+    (pk) => m.snooze({ pk }, { preset: "tomorrow" }, [pk]),
+  );
   const commands = buildCommands(m, { toggleRail, saveSearch: () => void saveSearch(m) });
   useKeys(m, commands);
 

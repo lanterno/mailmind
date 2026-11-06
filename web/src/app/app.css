@@ -26,5 +26,7 @@ button.pt-row{width:100%;background:none;border-width:0 0 1px;border-style:solid
 .fr-open:focus-visible,button.pt-row:focus-visible,button.doc-body:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 button.doc-body{all:unset;box-sizing:border-box;display:block;flex:1;min-width:0;cursor:pointer}
 .curate-body{outline:none}
+#swipeBadge span{display:inline-flex;align-items:center;gap:7px}
+#swipeBadge.archive .sw-snooze,#swipeBadge.snooze .sw-archive{display:none}
 /* The stylesheet hides the title under a context line; the page still needs its one heading. */
 .listhead:has(>.client-ctx:not(:empty)) .lh1.lh1{display:block;position:absolute;width:1px;height:1px;min-height:0;overflow:hidden;clip-path:inset(50%)}
