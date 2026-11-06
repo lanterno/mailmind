@@ -527,16 +527,16 @@ except ValueError:
 
 
 def test_a_failed_read_answers_without_the_exception_text():
-    real = server.digest_json
+    real = mailbox.digest.answer
 
     def boom(q):
         raise RuntimeError("NO [AUTHENTICATIONFAILED] ada@example.test secret=hunter2 /home/ada/mailmind.db")
-    server.digest_json = boom
+    mailbox.digest.answer = boom
     try:
         with _live_server() as get:
             code, body = get("/api/digest", _PAGE)
     finally:
-        server.digest_json = real
+        mailbox.digest.answer = real
     assert code == 500, code
     assert json.loads(body) == {"ok": False, "error": "request failed"}, body
 
