@@ -5,6 +5,7 @@ import { rankByLabel } from "../lib/fuzzy";
 import { createStore } from "../lib/store";
 import { toast } from "../lib/toast";
 import type { Command } from "./commands";
+import { useLayer } from "../lib/backTrap";
 
 export const paletteOpen = createStore(false);
 
@@ -82,6 +83,7 @@ function Entries({ commands, close }: { commands: Command[]; close: () => void }
 export function Palette({ commands }: { commands: Command[] }) {
   const open = paletteOpen.useValue();
   const close = () => paletteOpen.set(false);
+  useLayer(open, close);
   return (
     <ModalOverlay className="palette show" isOpen={open} isDismissable onOpenChange={(o) => { if (!o) close(); }}>
       <Modal>

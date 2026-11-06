@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post } from "../../api/client";
 import type { GetAnswers } from "../../api/types.gen";
+import { useLayer } from "../../lib/backTrap";
 import { createStore } from "../../lib/store";
 import { shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
@@ -70,6 +71,7 @@ async function runCleanup(qc: QueryClient, p: Cleaning) {
 export function CleanupPanel() {
   const qc = useQueryClient();
   const p = cleaning.useValue();
+  useLayer(p !== null, () => cleaning.set(null));
   const d = p?.d, method = d?.unsub?.method ?? "none";
   const unsubWords = method === "one-click" ? <>Send a <b>one-click</b> unsubscribe to {d?.unsub?.https_host || "the sender"} — no email, no browser</>
     : method === "mailto" ? <>Email the list’s unsubscribe address <b>{d?.unsub?.mailto_to}</b> from your account</>
@@ -259,6 +261,7 @@ function Audit() {
 
 export function Curate() {
   const open = curateOpen.useValue();
+  useLayer(open, () => curateOpen.set(false));
   return (
     <>
       <ModalOverlay className="scrim on" isOpen={open} isDismissable onOpenChange={curateOpen.set}>

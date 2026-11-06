@@ -12,6 +12,7 @@ import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { useDigest } from "../mailbox/data";
 import { syncNow } from "../status/Status";
 import { settingsOpen } from "./open";
+import { useLayer } from "../../lib/backTrap";
 
 type Connection = NonNullable<GetAnswers["/api/accounts"]["accounts"]>[number];
 type Health = GetAnswers["/api/account-health"]["accounts"][number];
@@ -323,6 +324,7 @@ function Connections() {
 
 export function Settings() {
   const open = settingsOpen.useValue();
+  useLayer(open, () => settingsOpen.set(false));
   return (
     <ModalOverlay className="settings show" isOpen={open} isDismissable onOpenChange={settingsOpen.set}>
       <Modal className="modal-through">

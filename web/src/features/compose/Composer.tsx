@@ -12,6 +12,7 @@ import { frameTheme, mailPrefs } from "../mailbox/MailFrame";
 import { readPrefs } from "../mailbox/readPrefs";
 import { composing, draftTone, setDraftTone } from "./compose";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
+import { useLayer } from "../../lib/backTrap";
 
 const TITLES: Record<string, string> = { reply: "Reply", replyall: "Reply all", forward: "Forward" };
 const REWRITES: [string, string][] = [["shorten", "Shorten"], ["elaborate", "Elaborate"], ["formal", "Formal"], ["friendly", "Friendly"], ["fix", "Fix grammar"], ["translate", "Translate…"]];
@@ -386,6 +387,11 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
 
 export function ComposerModal({ senders, aliases, ai }: { senders: string[]; aliases: Record<string, string | null>; ai: boolean }) {
   const c = composing.view.useValue();
+  useLayer(Boolean(c), () => {
+    if (!composing.view.get()?.guard) return composing.close();
+    composing.dismissGuard();
+    return false;
+  });
   useEffect(() => {
     if (!c) return;
     const onKey = (e: KeyboardEvent) => {

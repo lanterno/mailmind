@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get } from "../../api/client";
+import { useLayer } from "../../lib/backTrap";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -96,6 +97,7 @@ function Hub({ m }: { m: Mailbox }) {
 
 export function Docs({ m }: { m: Mailbox }) {
   const open = docsOpen.useValue();
+  useLayer(open, () => docsOpen.set(false));
   return (
     <ModalOverlay className="commit-overlay show" isOpen={open} isDismissable onOpenChange={docsOpen.set}>
       <Modal className="modal-through">

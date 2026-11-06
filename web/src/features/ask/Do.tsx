@@ -5,6 +5,7 @@ import { go } from "../../app/route";
 import { clearSearchBox } from "../../app/TopBar";
 import { Icon } from "../../lib/ui/Icon";
 import { confirmPlan, doing, runDo, stopDoing, VERB_LABEL, type Doing } from "./ask";
+import { useLayer } from "../../lib/backTrap";
 
 const search = (account: string) => (q: string) => go({ source: { kind: "search", q, account }, opened: null });
 
@@ -73,6 +74,7 @@ function Body({ at, account }: { at: Doing; account: string }) {
 
 export function DoPanel({ account }: { account: string }) {
   const at = doing.useValue();
+  useLayer(at !== null, stopDoing);
   return (
     <ModalOverlay className="do-overlay show" isOpen={at !== null} isDismissable onOpenChange={(open) => { if (!open) stopDoing(); }}>
       <Modal className="modal-through">

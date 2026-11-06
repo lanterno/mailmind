@@ -7,6 +7,7 @@ import { filing } from "../mailbox/actions";
 import type { Mailbox } from "../mailbox/useMailbox";
 import { useReview, type Review } from "./data";
 import { COMMIT_CAP, commitments } from "./model";
+import { useLayer } from "../../lib/backTrap";
 
 export const panel = createStore<"commits" | "week" | null>(null);
 const close = () => panel.set(null);
@@ -124,6 +125,7 @@ function YourWeek({ m }: { m: Mailbox }) {
 
 export function Panels({ m }: { m: Mailbox }) {
   const open = panel.useValue();
+  useLayer(open !== null, () => panel.set(null));
   return (
     <>
       <Overlay open={open === "commits"} label="Commitments"><Commitments m={m} /></Overlay>

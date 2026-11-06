@@ -11,6 +11,7 @@ import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { Icon } from "../lib/ui/Icon";
 import { go, type ListSource } from "./route";
+import { useLayer } from "../lib/backTrap";
 
 // Wide windows: the control switches the rail between icons and icons with names. Narrower: it opens it as a drawer.
 const docked = matchMedia("(min-width:1101px)");
@@ -55,6 +56,7 @@ function RailToggle() {
 
 export function RailScrim() {
   const open = railOpen.useValue();
+  useLayer(open, closeRailDrawer);
   return <div className={open ? "scrim on" : "scrim"} onClick={closeRailDrawer} />;
 }
 

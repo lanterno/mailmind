@@ -1,6 +1,7 @@
 // Where you are lives in the URL, so a deep link, Back and a reload all come back to it. What the list shows is one
 // type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, or a search.
 import { useSyncExternalStore } from "react";
+import { navigate } from "../lib/backTrap";
 
 export type ListSource =
   | { kind: "folder"; account: string; folder: string }
@@ -80,10 +81,12 @@ function subscribe(fn: () => void) {
 
 export function go(route: Route, { replace = false } = {}) {
   const path = pathOf(route);
-  if (path === read()) return;
-  if (replace) history.replaceState(null, "", path);
-  else history.pushState(null, "", path);
-  listeners.forEach((fn) => fn());
+  navigate((overTrap) => {
+    if (path === read()) return;
+    if (replace || overTrap) history.replaceState(null, "", path);
+    else history.pushState(null, "", path);
+    listeners.forEach((fn) => fn());
+  });
 }
 
 let cached: Route = { source: null, opened: null };

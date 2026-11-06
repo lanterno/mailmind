@@ -4,6 +4,7 @@ import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { createStore, store, stored } from "../../lib/store";
 import { setTheme, theme, THEME_LABEL, type ThemeName } from "../../lib/theme";
 import { Icon } from "../../lib/ui/Icon";
+import { useLayer } from "../../lib/backTrap";
 
 export const helpOpen = createStore(false);
 const THEMES: ThemeName[] = ["day", "dusk", "night"];
@@ -64,6 +65,7 @@ function Keys() {
 
 export function Help() {
   const open = helpOpen.useValue();
+  useLayer(open, () => helpOpen.set(false));
   return (
     <ModalOverlay className="legend show" isOpen={open} isDismissable onOpenChange={helpOpen.set}>
       <Modal className="modal-through">
