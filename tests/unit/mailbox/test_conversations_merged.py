@@ -17,6 +17,18 @@ def db(data_dir):
     c.close()
 
 
+@pytest.fixture(params=["thread_stored", "recompute_threads"])
+def regroup(request):
+    """Either way a thread's id can change: what a sync does, or the repair."""
+    from mailmind.bootstrap.mailbox import store
+
+    def run(c):
+        getattr(store, request.param)(c, A)
+        c.commit()
+    run.quiet = lambda c: getattr(store, request.param)(c, A)
+    return run
+
+
 def add(c, mid, *, irt="", refs=""):
     from mailmind.bootstrap.mailbox import store
     pk = store.upsert_message(c, {"account": A, "kind": "imap", "folder": "INBOX", "uid": next(_uid), "message_id": mid,
@@ -27,17 +39,11 @@ def add(c, mid, *, irt="", refs=""):
     return pk
 
 
-def regroup(c):
-    from mailmind.bootstrap.mailbox import store
-    store.recompute_threads(c, A)
-    c.commit()
-
-
 def tid(c, pk):
     return c.execute("SELECT thread_id FROM messages WHERE pk=?", (pk,)).fetchone()[0]
 
 
-def two_threads(c):
+def two_threads(c, regroup):
     """Two threads: the id that will survive when a message joins them, and the one that will go."""
     p, q = add(c, "<p@example.test>"), add(c, "<q@example.test>")
     regroup(c)
@@ -63,17 +69,17 @@ def everything_kept(c):
             "outbox": [r[0] for r in c.execute("SELECT orig_thread_id FROM outbox")]}
 
 
-def test_each_context_moves_what_it_keeps(db):
-    survivor, absorbed = two_threads(db)
+def test_each_context_moves_what_it_keeps(db, regroup):
+    survivor, absorbed = two_threads(db, regroup)
     keep_everything_under(db, absorbed)
     add(db, "<j@example.test>", refs="<p@example.test> <q@example.test>")
     regroup(db)
     assert everything_kept(db) == dict.fromkeys(("muted", "followups", "thread_summaries", "draft_ahead", "outbox"), [survivor])
 
 
-def test_a_keeper_that_fails_rolls_the_merge_back(db, monkeypatch):
+def test_a_keeper_that_fails_rolls_the_merge_back(db, regroup, monkeypatch):
     from mailmind.bootstrap.mailbox import store
-    _, absorbed = two_threads(db)
+    _, absorbed = two_threads(db, regroup)
     keep_everything_under(db, absorbed)
     before = everything_kept(db)
     p = db.execute("SELECT pk FROM messages WHERE thread_id=?", (absorbed,)).fetchone()[0]
@@ -83,7 +89,8 @@ def test_a_keeper_that_fails_rolls_the_merge_back(db, monkeypatch):
         raise sqlite3.OperationalError("disk full")
     monkeypatch.setattr(store, "_merged", fails)
     add(db, "<j@example.test>", refs="<p@example.test> <q@example.test>")
+    db.commit()
     with pytest.raises(sqlite3.OperationalError):
-        store.recompute_threads(db, A)
+        regroup.quiet(db)
     db.rollback()
     assert tid(db, p) == absorbed and everything_kept(db) == before
