@@ -4,9 +4,7 @@ for non-junk. Usage: python -m mailmind sync [all|<email>] [days]
 """
 import sys
 import os
-import re
 import email
-import html
 import imaplib
 from email.parser import BytesHeaderParser
 from email.utils import parsedate_to_datetime
@@ -18,6 +16,7 @@ import accounts
 import mailclass
 from mailmind.content import mime
 from mailmind.content.mime import dec
+from mailmind.content.text import body_text_of, text_body
 import pool
 import store
 import threads
@@ -26,59 +25,8 @@ from mailmind.bootstrap import mailbox
 from mailmind.platform import bus
 
 CUTOFF_DAYS = 90
-BODY_CHARS = 3000
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
-
-
-def text_body(msg):
-    plain, htmltxt = None, None
-    for part in mime.walk(msg):
-        container = part.get_content_maintype() == "multipart" and not mime.holds_no_parts(part)
-        if container or part.get_filename():
-            continue
-        try:
-            payload = part.get_payload(decode=True)
-            if payload is None:
-                continue
-            text = payload.decode(part.get_content_charset() or "utf-8", "replace")
-        except Exception:
-            continue
-        ct = "text/plain" if mime.holds_no_parts(part) else part.get_content_type()
-        if ct == "text/plain" and plain is None:
-            plain = text
-        elif ct == "text/html" and htmltxt is None:
-            htmltxt = text
-    body = plain
-    if body is None and htmltxt is not None:
-        body = _html_to_snippet_text(htmltxt)
-    body = store._INVIS.sub("", (body or "").replace("\r\n", "\n").replace("\r", "\n"))
-    body = re.sub(r"[ \t\u00a0]+", " ", body).strip()
-    body = re.sub(r"\n\s*\n+", "\n\n", body)
-    return body[:BODY_CHARS]
-
-
-# non-content blocks whose TEXT must never leak into a preview (a bare tag-strip
-# leaves the CSS/JS body between the tags — the "ReadMsgBody{width:100%}" bug)
-_NONCONTENT_RE = re.compile(r"(?is)<(script|style|head|title|noscript)\b[^>]*>.*?</\1\s*>")
-_COMMENT_RE = re.compile(r"(?is)<!--.*?-->")
-
-
-def _html_to_snippet_text(htmltxt):
-    h = _NONCONTENT_RE.sub(" ", htmltxt)
-    h = _COMMENT_RE.sub(" ", h)
-    return html.unescape(re.sub(r"<[^>]+>", " ", h))
-
-
-
-
-def _has_invite(msg):
-    """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
-    try:
-        return any(p.get_content_type() in ("text/calendar", "application/ics")
-                   or (p.get_filename() or "").lower().endswith(".ics") for p in mime.walk(msg))
-    except Exception:
-        return False
 
 
 def _flags_of(flags):
@@ -235,7 +183,7 @@ def _process(session, acct, uids, folder="INBOX", with_body=False, advance=True)
                     raw = b""
                 msg = email.message_from_bytes(raw)
                 snippet = text_body(msg)
-                invite = raw if _has_invite(msg) else None
+                invite = raw if mime.has_invite(msg) else None
             except Exception:
                 snippet = ""
         pk = store.upsert_message(c, {
@@ -484,7 +432,7 @@ def _keep_body(c, pk, raw, parsed):
         c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
     c.execute("UPDATE messages SET recipients=? WHERE pk=?", (store._recipients_of(parsed), pk))
     store.set_recipients(c, pk, mime.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
-    store.fts_set_body(c, pk, store._body_text_of(parsed))   # full body + recipients now searchable
+    store.fts_set_body(c, pk, body_text_of(parsed))   # full body + recipients now searchable
 
 
 def reconciled_folders(email):

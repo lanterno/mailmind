@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
+from mailmind.content.text import snippet_of
 from mailmind.kernel import attention
 from mailmind.mailbox.domain import identity
 from mailmind.platform import settings
@@ -378,69 +379,6 @@ def get_body(c, pk):
 # Standalone FTS5 over (subject, from_name, from_addr, snippet, body_text); rowid=pk.
 # Standalone (not external-content) so deletes are a plain DELETE WHERE rowid — no
 # old-values-required footgun. Helpers are defensive: a missing index never breaks ingest.
-import re as _re
-
-_TAG = _re.compile(r"<[^>]+>")
-# Drop the *contents* of non-text elements before tag-stripping, else CSS rules,
-# <script> JSON-LD and <head> metadata leak into the "plain text" (and snippets).
-_NOTEXT = _re.compile(r"(?is)<(script|style|head|title)\b[^>]*>.*?</\1>")
-_COMMENT = _re.compile(r"(?s)<!--.*?-->")
-# Invisible "preheader padding" newsletters stuff after the hook line (zero-width spaces,
-# combining grapheme joiner, soft hyphen, BOM, bidi marks) — strip for a clean preview.
-_INVIS = _re.compile("[​‌‍⁠﻿͏­‎‏]")
-_FTS_CAP = 100_000  # bound a single body's indexed text
-
-
-def _snippet_of(body_text):
-    """A clean one-paragraph preview for the list/river: decode stray entities, drop invisible
-    padding (incl. &zwnj;/&nbsp; spacers once decoded), collapse whitespace."""
-    import html as _html
-    return " ".join(_INVIS.sub("", _html.unescape(body_text or "")).split())[:280]
-
-
-def _strip_jsonld(t):
-    """Some senders embed a JSON-LD block (schema.org structured data) in their text part.
-    Remove each balanced [..]/{..} block carrying an @context, so previews read as prose."""
-    out = t or ""
-    guard = 0
-    while "@context" in out and guard < 12:
-        guard += 1
-        idx = out.find("@context")
-        start = max(out.rfind("[", 0, idx), out.rfind("{", 0, idx))
-        if start < 0:
-            break
-        j = start - 1                      # extend back over a wrapping opener (e.g. the [ before {)
-        while j >= 0 and out[j] in "[{ \t\r\n":
-            if out[j] in "[{":
-                start = j
-            j -= 1
-        depth = 0
-        end = -1
-        for i in range(start, len(out)):
-            if out[i] in "[{":
-                depth += 1
-            elif out[i] in "]}":
-                depth -= 1
-                if depth == 0:
-                    end = i
-                    break
-        if end < 0:
-            break
-        out = out[:start] + " " + out[end + 1:]
-    return out
-
-
-def _body_text_of(parsed):
-    """Plain-text body for indexing: prefer text/plain, else strip tags from html."""
-    t = parsed.get("text")
-    if not t and parsed.get("html"):
-        import html as _html
-        h = _COMMENT.sub(" ", parsed["html"])
-        h = _NOTEXT.sub(" ", h)
-        t = _html.unescape(_TAG.sub(" ", h))
-    return _strip_jsonld(t or "")[:_FTS_CAP]
-
-
 RECIPIENT_ROWS_MAX = 5000
 RECIPIENTS_CHARS = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
@@ -478,7 +416,7 @@ def fts_set_body(c, pk, body_text):
     """Fill body_text once a body is fetched, derive a list/river snippet if none was
     captured at ingest, and refresh the FTS row."""
     bt = body_text or ""
-    snip = _snippet_of(bt)
+    snip = snippet_of(bt)
     c.execute("UPDATE messages SET body_text=?, "
               "snippet=CASE WHEN snippet IS NULL OR snippet='' THEN ? ELSE snippet END "
               "WHERE pk=?", (bt, snip, pk))

@@ -249,3 +249,10 @@ def inline_parts(raw_bytes):
     return out
 
 
+def has_invite(msg):
+    """Whether a message carries a calendar invite: a text/calendar or application/ics part, or an .ics file."""
+    try:
+        return any(p.get_content_type() in ("text/calendar", "application/ics")
+                   or (p.get_filename() or "").lower().endswith(".ics") for p in walk(msg))
+    except Exception:
+        return False
