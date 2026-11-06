@@ -14,7 +14,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 - **Send-time checks, second pass** · medium value · effort S — the strip (`guardCheck` /
   `showSendGuard`) covers subject, attachment wording and reply-all size, and chips carry a
-  "new" mark from `contacts_known`. Still missing:
+  "new" mark from `KnownContacts`. Still missing:
   - a near-miss line for an address one edit away from someone you write to;
   - a line when a Reply-To sends the reply somewhere other than the sender;
   - plus-addresses and unconfigured aliases (`you+tag@`) counted as yours rather than new;
@@ -33,7 +33,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   body for a cid to reference.
 - **Templates / snippets with `;trigger` expansion** · medium value · effort M — Completely absent:
   no storage file, no route, no compose-time expansion. The pattern to copy exists twice —
-  `views.py` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
+  `discovery.adapters.views_file` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
   this is a snippets store plus a keyup expander and `{{placeholder}}` tab-through in `#cmpBody`.
 - **Smart-paste link cleaning** · low value · effort S — No `paste` listener exists in
   the page and no tracking-parameter stripper exists in any module. A pure-client handler
@@ -77,7 +77,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   synthesis ships in three flavours, but the 60s tick only calls `wake_snoozed()` and
   `followups_tick()`, so `briefs` is never warmed before you open the tab, and the
   Notification API fires only for new mail. Second half: a claude pass over one sender's recent
-  threads, hung off the contact card — `contact_card()` is pure SQL relationship stats with no AI
+  threads, hung off the contact card — `Contacts.card` is pure SQL relationship stats with no AI
   call.
 - **Weekly Review v2** · effort M overall — three follow-ons of different shapes; treat separately:
   - **Answer "you handled N this week"** · medium value · effort S — unanswerable today because no
@@ -99,7 +99,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Search-as-you-type suggestions and clickable scoping** · high value · effort M — Roughly a
   quarter done: the contact card gives a working "more from this sender". Missing is any suggestion
   endpoint (`do_GET`'s chain has no `/api/suggest`), a debounced popover under `#search` completing
-  senders/domains from the same source `/api/contacts` indexes plus operator names from `search.py`'s
+  senders/domains from the same source `/api/contacts` indexes plus operator names from `QuerySpec`'s
   fixed grammar, and a "this conversation only" scope chip. The `#plist` palette combobox is the
   working precedent for the dropdown mechanics — it is a nav finder, not this.
 - **Incoming rules engine, and create-filter-from-search** · high value · effort L — `curation.domain.rulebook` is a
@@ -107,7 +107,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   block_domains)` and `add(token, verdict)`. There is no condition language, no action verb, no
   rules table, and no ingest-time evaluation beyond `curation.is_junk`. Where v1 hooks in:
   **evaluate in `ingest.py` immediately after `isj = 1 if curation.is_junk(b) else 0`, and express
-  conditions by reusing `search.build()`'s existing operator grammar** rather than inventing a
+  conditions by reusing `QuerySpec`'s existing operator grammar** rather than inventing a
   second one — that keeps "create filter from search" a serialization step instead of a translation
   layer. Ship the local-action subset (auto-star / auto-read / auto-label) well before any IMAP
   MOVE, and re-scope first: "+ Save view", the Screener and `/api/cleanup/execute` already cover the
@@ -118,7 +118,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   the Hub is a place rather than a ⌘K command.
 - **Prose search without the `!` prefix** · medium value · effort S — The hard part is built and
   proven: `ai_do_plan()` calls the model with `DO_PLAN_SCHEMA`, re-parses the returned filter through
-  `search.build()` (the AI never touches SQL), and `runDo()` drops the translated operators into the
+  `QuerySpec.parse` (the AI never touches SQL), and `runDo()` drops the translated operators into the
   real, editable search box. Missing is the search-shaped front door — bare prose with no prefix
   still goes to `/api/search` as literal FTS — plus a labelled, dismissible "translated" chip so you
   can get the literal search back.

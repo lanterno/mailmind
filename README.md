@@ -47,7 +47,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
 ```
 
 Around that spine sit the client modules: `mailops.py` (IMAP writes),
-`compose.py` + `smtpsend.py` + `outbox.py` (send), `search.py` (FTS + operator
+`compose.py` + `smtpsend.py` + `outbox.py` (send), `mailmind.discovery` (FTS + operator
 grammar), `threads.py`, `mailmind/content/` (reading a message, and the reader's
 whitelist sanitizer), `ics.py` (invites), `realtime.py` (IMAP IDLE), and
 the AI modules (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).

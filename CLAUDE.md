@@ -189,14 +189,14 @@ mailmind.config.json → config.py/accounts.py → ingest.py → curation's clas
 ```
 
 Around that spine: `mailops.py` (IMAP writes), `compose.py`/`smtpsend.py`/`outbox.py`
-(send), `search.py` (FTS + operator grammar), `threads.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
+(send), `mailmind.discovery` (FTS + operator grammar), `threads.py`, `ics.py`, `realtime.py` (IMAP IDLE), and the AI modules
 (`summarize*.py`, `draft_reply.py`, `rewrite.py`, `ask.py`).
 
-`search.build` reads a date with no zone at this machine's midnight. `search.visible` leaves snoozed mail out of
-a search and of what a command acts on, unless the query says `is:snoozed`. `search.BM25` is the one table of
-ranking weights, which Ask uses too. All three come from `mailmind.discovery`, below. A message is one search result
+`discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
+a search and of what a command acts on, unless the query says `is:snoozed`. `discovery.BM25` is the one table of
+ranking weights, which Ask uses too. All three come from `mailmind.bootstrap.discovery`, below. A message is one search result
 however many folders hold it: among the copies the query found, the one in the Inbox, else any but All Mail's
-(`server._in_folders_playing`, by what the last LIST said and else by name).
+(`StoredMail._in_folders_playing`, by what the last LIST said and else by name).
 
 `mailmind.content.mime`'s `dec` and `sender_of` are the one way to read a header off a compat32 message: they unfold
 it first, since `decode_header` and `parseaddr` both go wrong across a fold. `mime.walk` takes an
@@ -206,7 +206,7 @@ can't pass for one.
 
 `messages.recipients` is the decoded To and Cc as text, for search. `message_recipients` (migration 35,
 `store.set_recipients`) holds each address of each copy, written at ingest and again when a body is stored,
-and goes with the copy. It is what `server.contacts_known` asks. Mail stored before it was read from the text,
+and goes with the copy. It is what `discovery.known` asks. Mail stored before it was read from the text,
 which was cut at 2000 characters then, or for a column that was cut from the raw message where one is stored;
 with none, the whole list comes when a body is stored.
 
@@ -290,7 +290,7 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `text` (what a list shows and what search indexes), `headers` and `quote` (the part of a reply you typed, and the
   quote after it). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `when` (`now_iso`, `rel_time`) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `when` (`now_iso`, `rel_time`, `ago`) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
@@ -347,8 +347,16 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
-  account alone spans nearly everything, and a negation never narrows by itself. `adapters.fts.to_sql` turns one into
-  a MATCH and bound SQL, and `search.py` is what the legacy callers ask it through. It is standard library only.
+  account alone spans nearly everything, and a negation never narrows by itself. `domain` also holds `guard` (a filter
+  resolving to 60% of all mail is a sweep of the whole mailbox), `views`, `documents` and `known` (who the stored mail
+  vouches for, given the facts). `adapters` holds `fts` (`to_sql` turns a parsed query into a MATCH and bound SQL, and
+  `index_message` and `forget_message` keep the index up to date), `sqlite` (`StoredMail`, which reads `messages` and the
+  rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
+  `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
+  the legacy modules and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
+  A folder's role goes through the server's own `_folder_role`, which `discovery.attach` names, since the server may run
+  as `__main__`; the account list through `accounts` and `config`, and an address through the composer's parser, until
+  those contexts hold them. It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
   matcher for the classifier, the Screener and expiry), `expiry`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
