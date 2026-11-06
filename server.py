@@ -34,7 +34,7 @@ import warm
 import readmutq
 import summarize
 import mailops
-from mailmind.bootstrap import curation, discovery
+from mailmind.bootstrap import calendar, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
 import compose
@@ -43,7 +43,6 @@ import outbox
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
 from mailmind.content.quote import own_html, quote_tail
-import ics
 import summarize_thread
 import summarize_briefing
 import summarize_review
@@ -58,6 +57,7 @@ from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
+from mailmind.calendar.domain import rsvp
 
 curation.attach(sys.modules[__name__])
 discovery.attach(sys.modules[__name__])
@@ -659,7 +659,7 @@ def _invite_for(pk, parsed):
         return None, None
     try:
         payload, _ct = mime.extract_part(raw, cal["part_id"])
-        return ics.parse(payload.decode("utf-8", "replace")), cal["part_id"]
+        return calendar.ics.parse(payload.decode("utf-8", "replace")), cal["part_id"]
     except Exception:
         return None, None
 
@@ -951,7 +951,7 @@ def upcoming(account=None, now=None, limit=5, days=60):
         try:
             raw = store.get_body(c, r["pk"])
             payload, _ct = mime.extract_part(raw, r["part_id"])
-            inv = ics.parse(payload.decode("utf-8", "replace"))
+            inv = calendar.ics.parse(payload.decode("utf-8", "replace"))
         except Exception:
             continue
         if not inv or not inv.get("start_iso"):
@@ -974,9 +974,9 @@ def upcoming(account=None, now=None, limit=5, days=60):
             continue
         if inv.get("rrule") and not inv.get("recurrence_id"):
             inv = dict(inv, exdates=inv["exdates"] + moved.get(inv.get("uid"), []))
-        occ = ics.next_occurrence(inv, now)
+        occ = calendar.ics.next_occurrence(inv, now)
         if occ is None and inv.get("rrule"):                     # a rule ics can't expand: its first date
-            occ = ics.next_occurrence(dict(inv, rrule=""), now)
+            occ = calendar.ics.next_occurrence(dict(inv, rrule=""), now)
         if occ is None:
             continue
         start, end = (_local_naive(d) for d in occ)
@@ -1869,7 +1869,7 @@ def do_invite_rsvp(body):
             me_name = a["name"]
             break
     partstat = _RSVP_PARTSTAT[decision]
-    cal = ics.build_reply(invite, me_email, me_name, partstat)
+    cal = rsvp.build_reply(invite, me_email, me_name, partstat)
     summary = invite.get("summary") or "(no title)"
     subject = f"{_RSVP_VERB[decision]}: {summary}"
     text = (f"{me_name} has responded \"{partstat.title()}\" to the invitation "
