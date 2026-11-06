@@ -51,21 +51,6 @@ class _Accounts:
         return config.alias_map()
 
 
-class _Addresses:
-    """The composer's parser, until Compose holds it."""
-    def parse(self, raws):
-        import compose
-        return compose.parse_addr_list(raws)
-
-    def idna(self, domain):
-        import compose
-        return compose._idna_domain(domain)
-
-    def most(self):
-        import compose
-        return compose.MAX_RECIPIENTS
-
-
 class _KeptSenders:
     def kept(self):
         from mailmind.bootstrap import curation
@@ -80,4 +65,4 @@ views = SavedViews(views_file)
 search = Search(_mail, _Accounts())
 documents = DocumentHub(_mail, _Accounts())
 contacts = Contacts(_mail)
-known = KnownContacts(_mail, _Addresses(), _Accounts(), _Folders(), _KeptSenders())
+known = KnownContacts(_mail, _Accounts(), _Folders(), _KeptSenders())

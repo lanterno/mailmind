@@ -2,6 +2,7 @@
 SQL over mail already stored: no enrichment, no IMAP, no IMAP gate, and nothing leaves 127.0.0.1."""
 from mailmind.discovery.domain import known
 from mailmind.kernel.when import ago, rel_time
+from mailmind.kernel import addresses
 
 
 class Contacts:
@@ -33,9 +34,8 @@ class Contacts:
 
 
 class KnownContacts:
-    def __init__(self, mail, addresses, accounts, folders, rules):
+    def __init__(self, mail, accounts, folders, rules):
         self._mail = mail
-        self._addresses = addresses
         self._accounts = accounts
         self._folders = folders
         self._rules = rules
@@ -44,7 +44,7 @@ class KnownContacts:
         """The address mail to `raw` would actually go to, by compose's own parser, so a display
         name holding someone else's address can't stand in for it. None unless exactly one."""
         try:
-            pairs = self._addresses.parse([str(raw or "")[:320]])
+            pairs = addresses.parse_addr_list([str(raw or "")[:320]])
         except ValueError:
             return None
         if len(pairs) != 1:
@@ -57,7 +57,7 @@ class KnownContacts:
         local, dom = a.split("@")
         out = {a}
         try:
-            out.add(f"{local}@{self._addresses.idna(dom).lower()}")
+            out.add(f"{local}@{addresses.idna_domain(dom).lower()}")
         except ValueError:
             pass
         if "xn--" in dom:
@@ -79,7 +79,7 @@ class KnownContacts:
         `thin` means too little history to call anyone new. (result, code), like the contact card."""
         if not isinstance(addrs, list):
             return {"ok": False, "error": "addrs must be a list"}, 400
-        if len(addrs) > self._addresses.most():
+        if len(addrs) > addresses.MAX_RECIPIENTS:
             return {"ok": False, "error": "too many addresses"}, 400
         items, bad, want = {}, [], {}
         for raw in addrs:

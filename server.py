@@ -50,7 +50,7 @@ from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
 from mailmind.discovery.api import QuerySpec
-from mailmind.kernel import attention as verdict
+from mailmind.kernel import addresses, attention as verdict
 from mailmind.kernel.when import ago, now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
@@ -1769,7 +1769,7 @@ def do_draft(body):
                "message_id": built["message_id"], "uidvalidity": uidv, "in_reply_to_pk": in_reply_to_pk,
                "mode": body.get("mode", "new"), "subject": spec["subject"],
                "created_at": now, "updated_at": now}
-        bcc = [addr_chip(n, a) for n, a in compose.parse_addr_list(spec["bcc"])]   # validated by build
+        bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
         c = store.conn()
         try:
             new_id = store.draft_upsert(c, row)
@@ -2031,7 +2031,7 @@ def draft_resume(body):
                     participants.append(a)
     def key(chip):
         try:
-            return compose.parse_addr_list([chip])[0][1].lower()
+            return addresses.parse_addr_list([chip])[0][1].lower()
         except (ValueError, IndexError):
             return ""
     hdr = header_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself

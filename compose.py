@@ -19,62 +19,9 @@ from datetime import datetime, timezone
 
 from mailmind.content import sanitize
 from mailmind.content.quote import html_escape, own_html
+from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
 
-MAX_RECIPIENTS = 100
-# Codepoints that must never survive into a header value: C0/C1 controls, bidi
-# overrides/isolates, zero-width, and line/paragraph separators (homograph + smuggling).
-_DANGER = re.compile(
-    "[\x00-\x1f\x7f-\x9f​-‏‪-‮⁠⁦-⁩  ﻿]")
-# An addr-spec may not contain whitespace, separators, brackets, or control chars.
-_ADDR_BAD = re.compile(r'[\s,;:<>()\[\]\\"]|[\x00-\x1f\x7f]')
 _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
-
-
-def _clean(s):
-    """Strip dangerous codepoints from a free-text header value (subject/display name)."""
-    return _DANGER.sub("", (s or "").replace("\t", " ")).strip()
-
-
-def _idna_domain(domain):
-    """ASCII (IDNA) form of a domain, or raise ValueError. ASCII domains pass through."""
-    domain = (domain or "").strip().rstrip(".")
-    if not domain or "." not in domain and domain.lower() not in ("localhost",):
-        raise ValueError("invalid domain")
-    try:
-        return domain.encode("idna").decode("ascii")
-    except (UnicodeError, Exception):
-        raise ValueError(f"invalid domain: {domain!r}")
-
-
-def _validate_pair(name, addr):
-    """(clean_display_name, addr_spec_ascii) from an already-split (name, addr), or
-    raise ValueError. addr_spec is normalized to local@idna-domain."""
-    addr = (addr or "").strip()
-    if not addr or addr.count("@") != 1:
-        raise ValueError(f"not a valid address: {addr!r}")
-    # reject bidi/zero-width/control codepoints anywhere in the addr-spec (homograph +
-    # non-ASCII envelope that would crash smtplib's ascii encoder mid-transaction)
-    if _DANGER.search(addr):
-        raise ValueError(f"unsafe characters in address: {addr!r}")
-    local, _, domain = addr.rpartition("@")
-    if not local or _ADDR_BAD.search(local) or _ADDR_BAD.search(domain):
-        raise ValueError(f"not a valid address: {addr!r}")
-    return _clean(name), f"{local}@{_idna_domain(domain)}"
-
-
-def parse_addr_list(raw):
-    """Validate a raw recipient string OR a list of tokens -> [(name, addr_spec)].
-    Uses getaddresses so a comma inside a quoted display name is not mis-split."""
-    tokens = raw if isinstance(raw, list) else [raw or ""]
-    out, seen = [], set()
-    for name, addr in email.utils.getaddresses([t for t in tokens if t]):
-        dn, spec = _validate_pair(name, addr)   # validate the split pair directly
-        key = spec.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((dn, spec))
-    return out
 
 
 def _addr(name, spec):
@@ -123,7 +70,7 @@ def build_message(spec, draft=False):
     draft=True relaxes the require-a-recipient rule (a draft may be half-written) but
     still validates every typed address.
     """
-    from_name, from_spec = _validate_pair(spec.get("account_name") or "", spec["account"])
+    from_name, from_spec = validate_pair(spec.get("account_name") or "", spec["account"])
     from_domain = from_spec.rpartition("@")[2]
 
     to = parse_addr_list(spec.get("to") or [])
@@ -141,7 +88,7 @@ def build_message(spec, draft=False):
     if cc:
         m["Cc"] = [_addr(n, a) for n, a in cc]
     # NOTE: deliberately NO Bcc header — blind recipients live only in the envelope.
-    m["Subject"] = _clean(spec.get("subject") or "")
+    m["Subject"] = clean(spec.get("subject") or "")
     m["Date"] = email.utils.format_datetime(datetime.now(timezone.utc))
     mid = email.utils.make_msgid(domain=from_domain)
     m["Message-ID"] = mid
@@ -169,7 +116,7 @@ def build_message(spec, draft=False):
         extra = {}
         if att.get("params"):                # e.g. iMIP text/calendar; method=REPLY
             extra["params"] = {str(k): str(v) for k, v in att["params"].items()}
-        filename = _clean(att.get("filename") or "attachment")
+        filename = clean(att.get("filename") or "attachment")
         if (maintype, subtype) == ("message", "rfc822"):     # an attached email may not be base64 (RFC 2046)
             m.add_attachment(email.message_from_bytes(att["data"], policy=email.policy.default), filename=filename)
             continue
