@@ -62,7 +62,7 @@ from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
 from mailmind.accounts.domain import provider, tls_pin
 from mailmind.mailbox.domain import roles as folder_roles
-from mailmind.platform import perimeter, profile, settings, sse
+from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.db import txguard
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
@@ -4268,6 +4268,23 @@ class H(BaseHTTPRequestHandler):
         finally:
             tab.close()
 
+    def _serve_asset(self, path):
+        """One of the page's files, by ETag, compressed for a browser that takes it."""
+        found = webroot.asset(path)
+        if found is None:
+            return self._send(404, b"not found", "text/plain")
+        headers = [("ETag", found.etag), ("Cache-Control", found.cache), ("Vary", "Accept-Encoding")]
+        if self.headers.get("If-None-Match") == found.etag:
+            self.send_response(304)
+            for k, v in headers:
+                self.send_header(k, v)
+            return self.end_headers()
+        body = found.body
+        if found.gzipped and "gzip" in (self.headers.get("Accept-Encoding") or ""):
+            body = found.gzipped
+            headers.append(("Content-Encoding", "gzip"))
+        self._send(200, body, found.ctype, headers)
+
     def _serve_attachment(self, pk, part_id):
         if not re.match(r"^[0-9]+$", part_id or ""):     # only mailparse-style indices
             return self._json({"ok": False, "error": "bad part id"}, 400)
@@ -4343,10 +4360,11 @@ class H(BaseHTTPRequestHandler):
         over.__enter__()
         try:
             if u.path == "/":
-                with open(os.path.join(HERE, "dashboard.html"), "r", encoding="utf-8") as f:
-                    page = f.read().replace("__CSRF_TOKEN__", CSRF)
-                self._send(200, page.encode("utf-8"), "text/html; charset=utf-8",
-                           [("Content-Security-Policy-Report-Only", perimeter.page_policy(page))])
+                self._send(200, webroot.page(CSRF).encode("utf-8"), "text/html; charset=utf-8",
+                           [("Content-Security-Policy-Report-Only", perimeter.page_policy()),
+                            ("Cache-Control", "no-store")])     # it holds this run's token
+            elif u.path.startswith(webroot.PREFIX):
+                self._serve_asset(u.path)
             elif u.path == "/api/digest":
                 self._json(digest_json(q))
             elif u.path == "/api/briefing":     # what is stored of the "Today" card; POST writes it

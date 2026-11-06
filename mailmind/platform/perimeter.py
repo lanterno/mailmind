@@ -14,9 +14,6 @@ The API answers only the page's own requests, which browsers mark Sec-Fetch-Site
 Every answer, a refusal included, carries the headers `answer_headers` names, and the page the
 policy `page_policy` writes.
 """
-import base64
-import hashlib
-import re
 import secrets
 from dataclasses import dataclass
 
@@ -39,7 +36,6 @@ _API_HEADERS = (*_ANSWER_HEADERS, ("Cache-Control", "no-store"))
 
 # The page's inline scripts, which carry no attributes. A script this misses runs into the policy,
 # and the browser tests fail on that.
-_INLINE_SCRIPT = re.compile(r"<script>(.*?)</script>", re.S)
 
 @dataclass(frozen=True)
 class Refusal:
@@ -134,16 +130,14 @@ def answer_headers(path):
     return _API_HEADERS if _api(path) else _ANSWER_HEADERS
 
 
-def page_policy(html):
-    """The content security policy for the page `html`. Only its own inline scripts may run, named
-    by hash, so a script or event handler that gets into the page some other way can't. It may
-    reach only this server, take its styles and fonts from Google Fonts as well, and be framed by
-    no one. Images may come over https: a mail body's frame, a srcdoc document, inherits this
-    policy on top of its own, and shows remote images once asked to."""
-    hashes = " ".join(f"'sha256-{_digest(s)}'" for s in _INLINE_SCRIPT.findall(html))
+def page_policy():
+    """The content security policy for the page. Only script files from this server may run, so a
+    script or event handler that gets into the page some other way can't. It may reach only this
+    server, take its styles and fonts from Google Fonts as well, and be framed by no one. Images may come over https: a mail body's frame, a srcdoc
+    document, inherits this policy on top of its own, and shows remote images once asked to."""
     return "; ".join([
         "default-src 'none'",
-        "script-src " + (hashes or "'none'"),
+        "script-src 'self'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "img-src 'self' data: https:",
         "font-src 'self' data: https://fonts.gstatic.com",
@@ -154,12 +148,6 @@ def page_policy(html):
         "frame-ancestors 'none'",
         "object-src 'none'",
     ])
-
-
-def _digest(script):
-    """A script's hash as a browser takes it: of its text in UTF-8, every line break a newline."""
-    text = re.sub(r"\r\n?", "\n", script)
-    return base64.b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode("ascii")
 
 
 def refuse_get(path, headers, *, port):
