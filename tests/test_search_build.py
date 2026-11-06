@@ -1,4 +1,4 @@
-"""The search grammar (search.build): each operator's (FTS MATCH, WHERE fragments, params) triple,
+"""The search grammar (discovery.build): each operator's (FTS MATCH, WHERE fragments, params) triple,
 the promise that no input raises and every MATCH it builds is one SQLite accepts, and two known
 bugs in negation. The results these give over the world's mail are pinned in
 tests/golden/http_get/search_*.json.
@@ -61,13 +61,13 @@ TABLE = [
 
 @pytest.mark.parametrize("query,want", TABLE, ids=[q for q, _ in TABLE])
 def test_the_grammar(query, want):
-    import search
-    assert search.build(query) == want
+    from mailmind.bootstrap import discovery
+    assert discovery.build(query) == want
 
 
 def test_a_query_is_cut_at_512_characters():
-    import search
-    match, _, _ = search.build("x" * 600)
+    from mailmind.bootstrap import discovery
+    match, _, _ = discovery.build("x" * 600)
     assert match == '"' + "x" * 512 + '"'
 
 
@@ -76,7 +76,7 @@ NASTY = ['"', '""', '"""', "'", "\\", "-\"", "from:\"", ":", "::", "-:", "a:b:c"
 
 
 def test_no_query_raises_and_every_match_is_one_fts_accepts(data_dir):
-    import search
+    from mailmind.bootstrap import discovery
     import store
     rnd = random.Random(20261102)
     alphabet = string.printable + "éß\u202e\u0301"
@@ -84,7 +84,7 @@ def test_no_query_raises_and_every_match_is_one_fts_accepts(data_dir):
     c = store.conn()
     try:
         for q in queries:
-            match, where, params = search.build(q)
+            match, where, params = discovery.build(q)
             assert len(where) == len(params), q
             if match is not None:
                 c.execute("SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?", (match,)).fetchall()
@@ -112,8 +112,8 @@ def test_a_negation_alone_excludes_what_it_names(app, world):
 @pytest.mark.parametrize("query,fragment", [("-before:2026-11-02", "m.ts >= ?"), ("-after:2026-11-02", "m.ts < ?"),
                                             ("before:2026-11-02", "m.ts < ?"), ("after:2026-11-02", "m.ts >= ?")])
 def test_not_before_a_time_is_after_it(query, fragment):
-    import search
-    assert search.build(query)[1] == [fragment]
+    from mailmind.bootstrap import discovery
+    assert discovery.build(query)[1] == [fragment]
 
 
 def test_excluding_a_category_keeps_mail_that_has_none(app, world):

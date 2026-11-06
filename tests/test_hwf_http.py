@@ -456,8 +456,8 @@ def test_hwf_send_accounts_come_from_config_before_any_sync(app, world):
 
 
 def test_hwf_a_search_the_index_rejects_answers_bad_query(app, world, monkeypatch):
-    import search
-    monkeypatch.setattr(search, "build", lambda q: ('"', [], []))   # a MATCH string FTS5 can't parse
+    from mailmind.bootstrap import discovery
+    monkeypatch.setattr(discovery.fts, "to_sql", lambda spec: ('"', [], []))   # a MATCH string FTS5 can't parse
     r = app.get("/api/search?q=lunch")
     assert (r.status, r.json) == (200, {"ok": False, "error": "bad query"})
 

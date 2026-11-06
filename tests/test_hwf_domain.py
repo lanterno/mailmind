@@ -22,6 +22,7 @@ from mailmind.content.text import body_text_of, html_to_snippet_text, snippet_of
 from mailmind.curation.domain import rulebook
 from mailmind.bootstrap import curation
 from mailmind.discovery.domain import views as builtin
+from mailmind.bootstrap import discovery
 
 A = "ada@example.test"
 NOW_TS = 1_800_000_000
@@ -556,7 +557,6 @@ def test_hwf_a_thread_stored_again_whole_keeps_its_mute(db):
 # -- search ranking -----------------------------------------------------------
 
 def test_hwf_search_ranks_subject_over_sender_over_recipients_over_snippet(db):
-    import server
     # Every row has text of the same length in each column; "heron" sits in one column per row, and
     # newer rows would win a tie. bm25 gets 5 weights for 6 columns (subject 8, from_name 4,
     # from_addr 4, recipients 2, snippet 1, body_text 1 by default).
@@ -571,7 +571,7 @@ def test_hwf_search_ranks_subject_over_sender_over_recipients_over_snippet(db):
     for i in range(8):                                     # enough rows without it for a positive idf
         put(db, f"<f{i}@example.test>", subject="plain notes", snippet="a note at dawn", recipients="Noor Haddad")
     db.commit()
-    got = server.search_json({"q": ["heron"], "scope": ["all"]})
+    got = discovery.search.answer({"q": ["heron"], "scope": ["all"]})
     assert [i["pk"] for i in got["items"]] == pks
 
 

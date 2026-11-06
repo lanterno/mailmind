@@ -17,6 +17,8 @@ mailmind.bootstrap.curation mailops
 mailmind.bootstrap.curation pool
 mailmind.bootstrap.curation smtpsend
 mailmind.bootstrap.curation store
+mailmind.bootstrap.discovery accounts
+mailmind.bootstrap.discovery config
 mailmind.bootstrap.legacy outbox
 mailmind.bootstrap.legacy readmutq
 mailmind.bootstrap.legacy realtime

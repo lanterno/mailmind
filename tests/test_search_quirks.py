@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import pytest
 
-import search
+from mailmind.bootstrap import discovery
 from fakes import anthropic_api as fa
 from fixtures import world as w
 
@@ -30,7 +30,7 @@ def found(app, q, scope="all"):
 
 
 def bound(q):
-    _, where, params = search.build(q)
+    _, where, params = discovery.build(q)
     return where, params
 
 
@@ -112,9 +112,9 @@ def test_a_command_doesnt_reach_snoozed_mail(app, world, ai):
 
 
 def test_the_grammar_says_where_snoozed_mail_went():
-    assert search.visible(["m.seen = ?"]) == ["m.seen = ?", "m.snoozed_until IS NULL"]
-    where = search.build("is:snoozed")[1]
-    assert search.visible(where) == where
+    assert discovery.visible(["m.seen = ?"]) == ["m.seen = ?", "m.snoozed_until IS NULL"]
+    where = discovery.build("is:snoozed")[1]
+    assert discovery.visible(where) == where
 
 
 # -- ranking --------------------------------------------------------------
@@ -131,7 +131,7 @@ def test_the_table_covers_every_indexed_column_and_ranks_them(world):
     columns = [r[1] for r in c.execute("PRAGMA table_info(msg_fts)")]
     c.close()
     assert columns == ["subject", "from_name", "from_addr", "recipients", "snippet", "body_text"]
-    weights = [float(x) for x in search.BM25.removeprefix("bm25(msg_fts,").removesuffix(")").split(",")]
+    weights = [float(x) for x in discovery.BM25.removeprefix("bm25(msg_fts,").removesuffix(")").split(",")]
     assert len(weights) == len(columns)
     by = dict(zip(columns, weights))
     assert by["subject"] > by["from_addr"] == by["from_name"] > by["body_text"] > by["recipients"] > by["snippet"]

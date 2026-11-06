@@ -99,14 +99,14 @@ def test_a_row_deleted_from_the_index_is_gone_and_one_it_never_held_is_no_harm(d
 
 
 def test_ranking_still_counts_the_columns(data_dir):
-    import search
+    from mailmind.bootstrap import discovery
     import store
     c = store.conn()
     in_body = add_message(c, 1, "Allotment rota", "the marigold border")
     in_subject = add_message(c, 2, "Marigold border", "Four more squares")
     store.fts_index(c, in_body)
     store.fts_index(c, in_subject)
-    got = c.execute(f"SELECT rowid FROM msg_fts WHERE msg_fts MATCH ? ORDER BY {search.BM25}", ('"marigold"',)).fetchall()
+    got = c.execute(f"SELECT rowid FROM msg_fts WHERE msg_fts MATCH ? ORDER BY {discovery.BM25}", ('"marigold"',)).fetchall()
     assert [r[0] for r in got] == [in_subject, in_body]
     c.close()
 
