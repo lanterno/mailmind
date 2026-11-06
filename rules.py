@@ -5,19 +5,14 @@ API the driver uses to GROW it as the user makes keep/block decisions, so we
 never re-litigate the same sender. A domain entry also matches its sub-domains.
 
 Expiry rules are separate from keep/block: `expire github.com 72` moves INBOX mail
-from that sender/domain to Trash once it is older than 72 hours (manage.py expire,
+from that sender/domain to Trash once it is older than 72 hours (`python -m mailmind expire`,
 and the server's expire job). A kept sender can also expire — keep decides what
 the classifier shows, expiry decides how long it stays.
 
-  python3 rules.py list
-  python3 rules.py keep  <sender@x | domain.com>
-  python3 rules.py block <sender@x | domain.com>
-  python3 rules.py remove <sender@x | domain.com>
-  python3 rules.py expire <sender@x | domain.com> <hours>   # 0 clears
+`python -m mailmind rules` lists and changes them.
 """
 import copy
 import os
-import sys
 import json
 import tempfile
 import threading
@@ -183,32 +178,3 @@ def expiry_hours(addr, expire):
     dom = addr.partition("@")[2]
     hits = [h for t, h in expire.items() if _is_domain(t) and (dom == t or dom.endswith("." + t))]
     return min(hits) if hits else None
-
-
-def main():
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
-    if cmd == "list":
-        r = load()
-        for k in KEYS:
-            print(f"{k} ({len(r[k])}): {', '.join(r[k]) or '—'}")
-        print(f"{EXPIRE} ({len(r[EXPIRE])}): "
-              f"{', '.join(f'{t} {h}h' for t, h in r[EXPIRE].items()) or '—'}")
-    elif cmd == "expire" and len(sys.argv) == 4:
-        t, h = set_expiry(sys.argv[2], sys.argv[3])
-        print(f"  {t} -> {'expires after ' + str(h) + 'h' if h else 'no expiry'}")
-    elif cmd in ("keep", "block") and len(sys.argv) > 2:
-        import ingest                  # it reads the rules through the classifier
-        for tok in sys.argv[2:]:
-            t, where = add(tok, cmd)
-            print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
-    elif cmd == "remove" and len(sys.argv) > 2:
-        import ingest
-        for tok in sys.argv[2:]:
-            remove(tok)
-            print(f"  removed {tok}; {ingest.reclassify(tok)} stored messages classified again")
-    else:
-        print(__doc__)
-
-
-if __name__ == "__main__":
-    main()

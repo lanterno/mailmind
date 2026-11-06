@@ -12,14 +12,13 @@ Message-ID/threading), stamped with X-MailMind-* so a future reimport keeps thre
 Safety: the DB is opened mode=ro after a WAL checkpoint, so a bug here can never write or
 corrupt the live database. Grep this file for `accounts.connect` — there is none.
 
-  python3 export.py --format eml  --out /tmp/mail [--account me@x.com] [--attachments]
-  python3 export.py --format mbox --out /tmp/mail
-  python3 export.py --format db   --out /tmp/mail
+  python -m mailmind export --format eml  --out /tmp/mail [--account me@x.com] [--attachments]
+  python -m mailmind export --format mbox --out /tmp/mail
+  python -m mailmind export --format db   --out /tmp/mail
 """
 import os
 import re
 import sqlite3
-import argparse
 import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -197,28 +196,3 @@ def export_db(out):
     finally:
         src.close()
     return dest_path
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Local read-only mailbox export (no IMAP).")
-    ap.add_argument("--format", choices=["eml", "mbox", "db", "plan"], default="plan")
-    ap.add_argument("--out", default="/tmp/mailmind-export")
-    ap.add_argument("--account", default=None)
-    ap.add_argument("--attachments", action="store_true")
-    a = ap.parse_args()
-    if a.format == "plan":
-        p = plan(a.account)
-        print(f"{p['total']} messages, {p['bodies']} with full bodies, across {len(p['groups'])} folders:")
-        for g in p["groups"]:
-            print(f"  {g['account']:32} {g['folder']:24} {g['messages']:6}  ({g['bodies']} bodies)")
-    elif a.format == "eml":
-        print(f"exported {export_eml(a.out, a.account, a.attachments)} messages to {a.out}")
-    elif a.format == "mbox":
-        n, files = export_mbox(a.out, a.account)
-        print(f"exported {n} messages to {len(files)} mbox files under {a.out}")
-    elif a.format == "db":
-        print("wrote snapshot " + export_db(a.out))
-
-
-if __name__ == "__main__":
-    main()

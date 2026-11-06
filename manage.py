@@ -5,16 +5,7 @@ Fetches INBOX headers live, classifies with the unified mailclass, and moves
 junk to Trash with VERIFICATION (re-checks that each UID actually left the
 INBOX, retrying stragglers — the fix for the silent stale-UID move glitch).
 
-Usage:
-  python3 manage.py status [email|all]      # INBOX + Trash counts
-  python3 manage.py inventory [email|all]   # every folder + message/unseen counts
-  python3 manage.py plan   [email|all]      # classify + show what would be trashed
-  python3 manage.py sweep  [email|all] [--dry]   # move junk buckets to Trash (verified + audited)
-  python3 manage.py expire [email|all] [--dry]   # move INBOX mail past its expiry rule to Trash
-  python3 manage.py empty-trash [email|all]      # Gmail only (Proton refused — use native button)
-  python3 manage.py keep   <sender|domain> ...   # always keep (learned rule)
-  python3 manage.py block  <sender|domain> ...   # always trash (learned rule)
-  python3 manage.py rules                        # show the learned allow/block lists
+Each of these is a `python -m mailmind` command, which says how to run it.
 
 'all' covers every connected account. Default is 'all'.
 Every sweep appends what it trashed to sweep_audit.jsonl (account, sender, subject, reason).
@@ -31,7 +22,6 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts
-import ingest
 import mailclass
 import mailparse
 from mailparse import dec
@@ -416,7 +406,7 @@ def expire_account(acct, dry=False, now=None):
 def cmd_expire(accts, dry=False):
     expire = rules.load()[rules.EXPIRE]
     if not expire:
-        print("no expiry rules — add one with: python3 rules.py expire <sender|domain> <hours>")
+        print("no expiry rules — add one with: python -m mailmind rules expire <sender|domain> <hours>")
         return
     print("rules: " + ", ".join(f"{t} {h}h" for t, h in expire.items()))
     grand_p = grand_m = 0
@@ -499,50 +489,3 @@ def cmd_empty_trash(accts):
                 pass
         except Exception as e:
             print(f"{a['email']:30} ERROR: {type(e).__name__}: {e}")
-
-
-def resolve(target):
-    if target in (None, "all"):
-        return accounts.accounts()
-    return [accounts.get(target)]
-
-
-def main():
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    # rule edits need no IMAP connection
-    if cmd in ("keep", "block") and len(sys.argv) > 2:
-        for tok in sys.argv[2:]:
-            t, where = rules.add(tok, cmd)
-            print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
-        return
-    if cmd == "rules":
-        r = rules.load()
-        for k in rules.KEYS:
-            print(f"{k} ({len(r[k])}): {', '.join(r[k]) or '—'}")
-        print(f"{rules.EXPIRE} ({len(r[rules.EXPIRE])}): "
-              f"{', '.join(f'{t} {h}h' for t, h in r[rules.EXPIRE].items()) or '—'}")
-        return
-    target = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else "all"
-    dry = "--dry" in sys.argv
-    accts = resolve(target)
-    accounts.preload_creds()  # one Touch ID up front for all Gmail accounts
-    if cmd == "status":
-        cmd_status(accts)
-    elif cmd == "inventory":
-        cmd_inventory(accts)
-    elif cmd == "plan":
-        cmd_plan(accts, do_sweep=False)
-    elif cmd == "sweep":
-        cmd_plan(accts, do_sweep=True, dry=dry)
-    elif cmd == "sweep-ai":
-        cmd_sweep_ai(accts, dry=dry)
-    elif cmd == "expire":
-        cmd_expire(accts, dry=dry)
-    elif cmd == "empty-trash":
-        cmd_empty_trash(accts)
-    else:
-        print(__doc__)
-
-
-if __name__ == "__main__":
-    main()

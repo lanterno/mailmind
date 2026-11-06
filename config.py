@@ -409,20 +409,3 @@ def check():
             print(f"  ok    {'anthropic_api_key':42} ({len(assistant.config_key() or '')} chars)")
         except Exception as e:
             print(f"  FAIL  {'anthropic_api_key':42} {e}")
-
-
-if __name__ == "__main__":
-    import sys
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
-    if cmd == "materialize":
-        materialize(sys.argv[2] if len(sys.argv) > 2 else None)
-    elif cmd == "check":
-        check()
-    else:
-        for a in accounts():
-            c = a.get("credential")
-            style = "plain" if isinstance(c, (str,)) or (isinstance(c, dict) and "plain" in c) else \
-                    ("op" if isinstance(c, dict) and "op" in c else
-                     "env" if isinstance(c, dict) and "env" in c else
-                     "proton_bridge" if isinstance(c, dict) and c.get("proton_bridge") else "?")
-            print(f"  {a['email']:42} {a['kind']:6} {a['host']}:{a['port']}  cred={style}")

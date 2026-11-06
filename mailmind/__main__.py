@@ -1,14 +1,33 @@
-"""`python -m mailmind <command>`, run from the repo root.
+"""`python -m mailmind <command>`, run from the repo root. WHO is an account's address or `all`.
 
-  serve [port]           serve the app on http://127.0.0.1:<port> (default 8721) through the new
-                         front door
-  db check-upgrade       try the next start's migrations on a copy of the database, and report
-                         only row counts and integrity checks
-  db compact             give back the room freed in the database file, with MailMind stopped
-  ai usage [--days N]    what the Claude API cost each local day of the last N (default 7), by
-                         feature, from the usage ledger; it migrates nothing and calls nothing
-  assess --batch         send the mail with no summary yet as a batch, at half price, within today's
-                         limit, and bring in the answers of one that has ended
+  serve [port]                 serve the app on http://127.0.0.1:<port> (default 8721) through the
+                               new front door
+  check                        whether each account's credential resolves: ok or fail, never a secret
+  accounts [materialize [WHO]] the connected accounts; `materialize` writes stored secrets into the
+                               config file, making it self-contained
+  sync [WHO] [days]            pull mail from the servers into the database
+  assess [limit] [workers]     summarize the mail with no summary yet, at full price
+  assess --batch               send it as a batch at half price, within today's limit, and bring in
+                               the answers of one that has ended
+  status | inventory [WHO]     each INBOX and Trash count | every folder's counts
+  plan [WHO]                   classify the live Inbox and show what a sweep would trash
+  sweep [WHO] [--dry]          move junk to Trash, verified and audited; --dry only says what
+  sweep-ai [WHO] [--dry]       the same, trusting the AI's verdict
+  expire [WHO] [--dry]         move Inbox mail past its expiry rule to Trash
+  empty-trash [WHO]            empty Trash (Gmail only)
+  rules [list]                 the learned keep and block lists, and expiry
+  rules keep | block TOKEN...  always keep, or always trash, a sender or domain
+  rules remove TOKEN...        forget a keep or block (expiry stays)
+  rules expire TOKEN HOURS     expire a sender's or domain's Inbox mail after HOURS (0 clears)
+  views [list]                 the saved views, built-ins marked *
+  views add NAME QUERY | remove ID
+  export [--format F]          write the synced mail out (eml, mbox, db), or `plan` to see what that
+                               holds; touches no mail server
+  db check-upgrade             try the next start's migrations on a copy of the database, and report
+                               only row counts and integrity checks
+  db compact                   give back the room freed in the database file, with MailMind stopped
+  ai usage [--days N]          what the Claude API cost each local day of the last N (default 7), by
+                               feature, from the usage ledger; it migrates nothing and calls nothing
 """
 import argparse
 import os
@@ -16,11 +35,54 @@ import signal
 import sys
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(prog="python -m mailmind")
-    commands = parser.add_subparsers(dest="command", required=True)
+MAILBOX_COMMANDS = {"status": "INBOX and Trash counts", "inventory": "every folder's counts",
+                    "plan": "classify the live Inbox and show what a sweep would trash",
+                    "empty-trash": "empty Trash (Gmail only)"}
+DRY_COMMANDS = {"sweep": "move junk to Trash, verified and audited", "sweep-ai": "the same, trusting the AI's verdict",
+                "expire": "move Inbox mail past its expiry rule to Trash"}
+
+
+def parser():
+    top = argparse.ArgumentParser(prog="python -m mailmind", description=__doc__.split("\n", 1)[0])
+    commands = top.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve", help="serve the app on 127.0.0.1 (FastAPI on uvicorn)")
     serve.add_argument("port", nargs="?", type=int, help="default 8721")
+    commands.add_parser("check", help="whether each account's credential resolves")
+    people = commands.add_parser("accounts", help="the connected accounts")
+    people.add_argument("action", nargs="?", choices=["list", "materialize"], default="list")
+    people.add_argument("who", nargs="?", help="with materialize, just this account")
+    sync = commands.add_parser("sync", help="pull mail into the database")
+    sync.add_argument("who", nargs="?", default="all", help="an account's address, or all")
+    sync.add_argument("days", nargs="?", type=int, help="how far back")
+    assess = commands.add_parser("assess", help="triage the mail with no summary yet")
+    assess.add_argument("limit", nargs="?", type=int, default=200, help="how many at most (default 200)")
+    assess.add_argument("workers", nargs="?", type=int, help="how many at once")
+    assess.add_argument("--batch", action="store_true", help="through the Message Batches API, at half price")
+    for name, what in MAILBOX_COMMANDS.items():
+        commands.add_parser(name, help=what).add_argument("who", nargs="?", default="all", help="an account's address, or all")
+    for name, what in DRY_COMMANDS.items():
+        one = commands.add_parser(name, help=what)
+        one.add_argument("who", nargs="?", default="all", help="an account's address, or all")
+        one.add_argument("--dry", action="store_true", help="only say what it would do")
+    rules = commands.add_parser("rules", help="the learned rules").add_subparsers(dest="rules_command")
+    rules.add_parser("list", help="the keep and block lists, and expiry")
+    for verdict in ("keep", "block"):
+        rules.add_parser(verdict, help=f"always {verdict if verdict == 'keep' else 'trash'} a sender or domain").add_argument("tokens", nargs="+")
+    rules.add_parser("remove", help="forget a keep or block; expiry stays").add_argument("tokens", nargs="+")
+    expire = rules.add_parser("expire", help="expire a sender's or domain's Inbox mail after some hours")
+    expire.add_argument("token")
+    expire.add_argument("hours", type=int, help="0 clears")
+    views = commands.add_parser("views", help="the saved views").add_subparsers(dest="views_command")
+    views.add_parser("list", help="the saved views, built-ins marked *")
+    add = views.add_parser("add", help="save a view")
+    add.add_argument("name")
+    add.add_argument("query")
+    views.add_parser("remove", help="remove a view").add_argument("id")
+    export = commands.add_parser("export", help="write the synced mail out; touches no mail server")
+    export.add_argument("--format", choices=["eml", "mbox", "db", "plan"], default="plan")
+    export.add_argument("--out", default="/tmp/mailmind-export")
+    export.add_argument("--account", default=None)
+    export.add_argument("--attachments", action="store_true")
     db = commands.add_parser("db", help="the database").add_subparsers(dest="db_command", required=True)
     check = db.add_parser("check-upgrade", help="try the migrations on a copy of the database")
     check.add_argument("--db", help="the database to check (default: the data directory's)")
@@ -29,11 +91,12 @@ def main(argv=None):
     ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
-    assess = commands.add_parser("assess", help="triage the mail with no summary yet")
-    assess.add_argument("--batch", action="store_true", required=True,
-                        help="through the Message Batches API, at half price")
-    args = parser.parse_args(argv)
-    if args.command == "assess":
+    return top
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    if args.command == "assess" and args.batch:
         from mailmind.bootstrap import legacy
         sys.exit(legacy.assess_batch())
     if args.command == "ai":
@@ -46,6 +109,36 @@ def main(argv=None):
             sys.exit(compact.compact(path))
         from mailmind.platform.db import check as db_check
         sys.exit(db_check.check_upgrade(path))
+    if args.command != "serve":
+        from mailmind.bootstrap import cli
+        if args.command == "check":
+            return cli.check()
+        if args.command == "accounts":
+            return cli.materialize(args.who) if args.action == "materialize" else cli.list_accounts()
+        if args.command == "sync":
+            return cli.sync(args.who, args.days)
+        if args.command == "assess":
+            return cli.assess(args.limit, args.workers)
+        if args.command in MAILBOX_COMMANDS:
+            return cli.mailboxes(args.command, args.who)
+        if args.command in DRY_COMMANDS:
+            return cli.mailboxes(args.command, args.who, dry=args.dry)
+        if args.command == "rules":
+            if args.rules_command in ("keep", "block"):
+                return cli.rules_add(args.rules_command, args.tokens)
+            if args.rules_command == "remove":
+                return cli.rules_remove(args.tokens)
+            if args.rules_command == "expire":
+                return cli.rules_expire(args.token, args.hours)
+            return cli.rules_list()
+        if args.command == "views":
+            if args.views_command == "add":
+                return cli.views_add(args.name, args.query)
+            if args.views_command == "remove":
+                return cli.views_remove(args.id)
+            return cli.views_list()
+        if args.command == "export":
+            return cli.export(args.format, args.out, args.account, args.attachments)
     if args.command == "serve":
         try:
             from mailmind.bootstrap import front

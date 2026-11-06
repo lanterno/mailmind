@@ -402,22 +402,3 @@ def batch_status():
                 "estimate_micros": out["estimate_micros"] if out else 0}
     finally:
         c.close()
-
-
-def main():
-    store.init()
-    limit = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    workers = int(sys.argv[2]) if len(sys.argv) > 2 else WORKERS
-    if engine() == "none":
-        print("AI is off: there is no API key, so nothing was summarized.")
-        return
-    why = assistant.gateway().held_back("triage", MODEL)
-    if why:
-        print(f"Triage is held back ({why}), so nothing was summarized.")
-        return
-    summarize_pending(limit, workers, log=lambda m: print(m, flush=True))
-    print("stats:", store.stats(store.conn()))
-
-
-if __name__ == "__main__":
-    main()

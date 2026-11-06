@@ -6,12 +6,9 @@ caller-registered lanes) are merged in read-only at load time: they always appea
 and are never written to disk. User views persist to mailmind_views.json with the atomic-write
 discipline from config.save(). Modeled on rules.py.
 
-  python3 views.py list
-  python3 views.py add "Unread from Stripe" "from:stripe is:unread"
-  python3 views.py remove <id>
+`python -m mailmind views` lists and changes them.
 """
 import os
-import sys
 import json
 import tempfile
 import secrets
@@ -112,20 +109,3 @@ def reorder(ids):
     ordered = [cur[i] for i in ids if i in cur] + [v for k, v in cur.items() if k not in ids]
     save(ordered)
     return True
-
-
-def main():
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "list"
-    if cmd == "list":
-        for v in merged():
-            print(f"  {'*' if v['builtin'] else ' '} {v['id']:18} {v['name']:24} {v['q']}")
-    elif cmd == "add" and len(sys.argv) > 3:
-        print(add(sys.argv[2], sys.argv[3]))
-    elif cmd == "remove" and len(sys.argv) > 2:
-        print("removed" if remove(sys.argv[2]) else "not removed (builtin or missing)")
-    else:
-        print(__doc__)
-
-
-if __name__ == "__main__":
-    main()

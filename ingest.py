@@ -1,6 +1,6 @@
 """Ingest INBOX mail into SQLite — full (by date) or incremental (by UID
 watermark, for the sync daemon). Fetches headers, classifies, pulls body text
-for non-junk. Usage: python3 ingest.py [all|<email>] [days]
+for non-junk. Usage: python -m mailmind sync [all|<email>] [days]
 """
 import sys
 import os
@@ -557,21 +557,3 @@ def reconcile_account(acct, force=False, dry_run=False, folder="INBOX"):
 def sync_new(acct, folder="INBOX"):
     """Incremental sync of one folder: only UIDs above the stored watermark."""
     return sync_folder(acct, folder, full=False)
-
-
-def main():
-    store.init()
-    which = sys.argv[1] if len(sys.argv) > 1 else "all"
-    days = int(sys.argv[2]) if len(sys.argv) > 2 else CUTOFF_DAYS
-    accts = accounts.accounts() if which == "all" else [accounts.get(which)]
-    for a in accts:
-        try:
-            kept, junk, _ = ingest_account(a, days)
-            print(f"{a['email']:<32} kept {kept:>4}  (skipped {junk} junk)", flush=True)
-        except Exception as e:
-            print(f"{a['email']:<32} ERROR: {type(e).__name__}: {e}", flush=True)
-    print("stats:", store.stats(store.conn()))
-
-
-if __name__ == "__main__":
-    main()
