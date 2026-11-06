@@ -19,7 +19,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - a line when a Reply-To sends the reply somewhere other than the sender;
   - plus-addresses and unconfigured aliases (`you+tag@`) counted as yours rather than new;
   - the forward count. `forwardMsg`'s `fwdAttach` counts named inline parts without a
-    Content-ID, and Outlook's synthetic `invite.ics`, but `_extract_attachments` re-attaches
+    Content-ID, and Outlook's synthetic `invite.ics`, but `attachments.extract` re-attaches
     neither, so "see attached" on such a forward stays quiet when nothing goes out attached.
 - **Markdown body → clean HTML + text multipart** · high value · effort L — New messages still go
   out text/plain only: `compose.build_message` supports `add_alternative(spec["html"])`, but the
@@ -259,7 +259,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **An email attached to an email** · medium value · effort M — To the `email` package a
   message/rfc822 part is a container, so `mime.extract_part`'s `get_payload(decode=True) or
   b""` gives 0 bytes. The chip shows no size and the download is an empty .eml. `export_eml`
-  skips it. Forwarding with files (`server._extract_attachments`) sends it as an empty base64
+  skips it. Forwarding with files (`attachments.extract`) sends it as an empty base64
   message/rfc822 part, which RFC 2046 forbids, and a .eml attached in the composer goes out the
   same way. `parse()` also walks into it. The inner email's files are listed and forwarded as the
   outer's own. When the outer message has no text/plain, the inner email's text becomes the

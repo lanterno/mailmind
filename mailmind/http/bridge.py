@@ -1,6 +1,6 @@
 """Serve an `http.server` handler class over ASGI, without a socket.
 
-The legacy app is one `BaseHTTPRequestHandler` subclass. `HandlerBridge` hands it each request as
+The app is one `BaseHTTPRequestHandler` subclass. `HandlerBridge` hands it each request as
 the bytes a socket would have carried, on a daemon thread of its own as `ThreadingHTTPServer` does,
 so the handler parses the request line and headers itself and sees the real Host, Origin and
 token, and a handler still blocked when the process exits doesn't hold the exit. What the handler writes goes back out

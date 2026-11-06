@@ -87,7 +87,7 @@ The fixtures, from the bottom up:
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
   renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
-- `app` runs the app in-process through each front door in turn: `door=old` is `server.py`'s own
+- `app` runs the app in-process through each front door in turn: `door=old` is `mailmind.bootstrap.old_door`'s
   `ThreadingHTTPServer`, `door=new` the app `mailmind.bootstrap.front.build` makes, on uvicorn.
   So every app test runs twice, both runs share one golden file, and `app.door` says which run
   this is. In the world's config Cy's Gmail asks for IMAPClient, so the new door's run reaches it
@@ -139,8 +139,8 @@ pytest's `--import-mode=importlib` keeps that directory from shadowing the root'
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, runs its Vitest suites and checks that
 `web/assets/legacy/pure.js` is what `web/src/compose` gives; it installs `web/node_modules` from the lockfile if they
 are missing. `just gen-web` writes `pure.js`. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
-writes `web/src/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since `server.H`
-has no schema to generate from: run it when an answer's shape changes, and review the diff.
+writes `web/src/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
+have no schema to generate from: run it when an answer's shape changes, and review the diff.
 
 `just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
 brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
@@ -185,7 +185,7 @@ Pipeline, roughly in data-flow order:
 ```
 mailmind.config.json → mailmind.accounts → the Mailbox's Ingest → curation's classifier → mailmind.mailbox's store (SQLite)
                                                                 ↓
-                                              mailmind.assistant (Claude API) → server.py + web/
+                                              mailmind.assistant (Claude API) → mailmind.http + web/
 ```
 
 Around that spine: `mailmind.mailbox` (IMAP writes, IDLE), `mailmind.compose`
@@ -218,29 +218,26 @@ survives as a CSS specificity hook, not a mode.
 
 ### The `mailmind` package
 
-The app lives in `mailmind/`, and `server.py` is the one legacy module left at the repo root. It may import from the
-package freely; the reverse goes only through `mailmind.bootstrap`.
+The app lives in `mailmind/`. `server.py`, at the repo root, is only the old front door's entry point.
 
 - `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
   directory; unset, it is the repo root. It must exist, and nothing creates it.
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
-- `mailmind.bootstrap.legacy.wire(server)` subscribes the server, on `mailmind.platform.bus`, to
+- `mailmind.bootstrap.wiring.wire()` subscribes the app, on `mailmind.platform.bus`, to
   what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
   `InboxChanged`.
   It also hands each account event (below) to `realtime.reconcile`. `Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
-  `server.__main__` passes `sys.modules[__name__]`: importing `server` there would load a second
-  copy with state of its own.
-  `legacy.start(server)` is the startup both doors share: the profile check, the schema, `wire`,
+  `wiring.start()` is the startup both doors share: the profile check, the schema, `wire`,
   then the workers. Full, those are the outbox's and the read-mutation queue's drains, the
   scheduler's jobs and IDLE; read-only, the snooze job alone.
 - `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Its `build` picks the Anthropic SDK and offers IMAPClient to an account
   that asks for it (see the Mailbox paragraph); both doors print at startup which IMAP adapter
-  serves how many accounts (`[imap] ...`). Every route still runs in `server.H`:
+  serves how many accounts (`[imap] ...`). Every route runs in `mailmind.http.handler.H` (see Routing):
   `mailmind.http.bridge.HandlerBridge`,
   the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
   its own, and streams back what it writes, the event stream and the export included.
@@ -254,10 +251,10 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
 - `mailmind.platform.workers.scheduler.Scheduler` runs the background jobs. A job is a round (a
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
-  logged and counted, and the job goes on. `server.schedule(jobs)` is the job table: `snooze` in
+  logged and counted, and the job goes on. `mailmind.bootstrap.background.schedule(jobs)` is the job table: `snooze` in
   every profile, then `sync`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
-  and a sync that brought new mail kicks it (`server._kick`). With AI off, or triage held back
+  and a sync that brought new mail kicks it (`background._kick`). With AI off, or triage held back
   by the cost governor (see AI calls), it tries nothing: `assistant.triage.summarize_pending` returns 0
   at once, and a round (`assistant.triage.round`) that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
@@ -299,7 +296,7 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
   `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `draft_ahead` (`DraftAhead`) and
   `bulk` (`BulkCommands`, a command in words, planned then confirmed). `domain` holds what it knows about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
-  and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how `server.py`, the other
+  and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.triage`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
 - `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. So far it
@@ -348,7 +345,7 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
   TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
   `tests/test_mail_session_contract.py` runs every case through each against the fake, and
-  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing_commands` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the legacy modules and the tests reach them: `commands`, `offline`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
+  `tests/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, a change to the mail on a server), `offline_queue` (`OfflineQueue`, what couldn't reach one), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing_commands` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `offline`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
@@ -358,7 +355,7 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
   `index_message` and `forget_message` keep the index up to date), `sqlite` (`StoredMail`, which reads `messages` and the
   rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
   `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
-  the legacy modules and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
+  the routers and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
   A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
   It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
@@ -366,32 +363,32 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
-  binds them, and it's how the legacy modules and the command line reach Curation (`curation.cleanup.execute(body)`,
+  binds them, and it's how the routers and the command line reach Curation (`curation.cleanup.execute(body)`,
   `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token still comes
-  from the server, which `curation.attach` names, since the server may run as `__main__`. A sweep's
+  from the handler (`H.CSRF`). A sweep's
   `move_verified` is `mailbox.application.filing`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
   `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
   `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
-  `mailmind.bootstrap.attention` binds them, and it's how the legacy modules reach Attention (`attention.muting.mute(body)`,
+  `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention (`attention.muting.mute(body)`,
   `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
   what a change makes stale through the Mailbox (`mailbox.undo`, `mailbox.stats`).
-  `mailmind.kernel.attention` is a different module, what a verdict asks of you, which `server.py` imports as `verdict`.
+  `mailmind.kernel.attention` is a different module, what a verdict asks of you, which the modules that need both import as `verdict`.
   It is standard library only.
 - `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `agenda`
   (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
   REPLY and its idempotency key); `adapters` holds `ics_reader` (the hand-rolled reader of an invite's text, `parse` and
   `next_occurrence`, what the proposal's `IcsReader` port names) and `sqlite` (reads stored bodies and the outbox's keys, and
   writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
-  binds them, and it's how the legacy modules reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
+  binds them, and it's how the routers reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
   RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
   It is standard library only.
 - `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
   else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `resume` (a saved draft split back into your text, its quote and its
   files), `attachments`, `limits`, `outbox_item`, `events` and `errors`. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
   and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Sending`, `Drafts`
-  and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the legacy modules, the other contexts and the tests reach
+  and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the routers, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
   (`mailbox.copies`). A message's row through `store`, and what's kept about folders through `mailbox.folders`. It is standard library only.
@@ -399,18 +396,21 @@ package freely; the reverse goes only through `mailmind.bootstrap`.
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
-  every import of a legacy module from inside the package; `tests/test_ratchet.py` fails when the
-  code and the list differ. Only `mailmind.bootstrap` may appear in it, and it should only shrink.
+  every import of a root module from inside the package, and it is now empty; `tests/test_ratchet.py` fails when the
+  code and the list differ.
 
-### Routing — there is no router
+### Routing
 
-`server.py` is one `BaseHTTPRequestHandler` subclass. `do_GET` and `do_POST` are long
-`if/elif` chains comparing `u.path` against **literal strings**. There is no route table,
-no decorator registry, and no `getattr`-based dispatch anywhere in the file.
+`mailmind.http.handler.H` is one `BaseHTTPRequestHandler` subclass, which both doors serve: the old one on the standard
+library's server, the new one through `HandlerBridge`. `do_GET` and `do_POST` run the perimeter and the catches every route
+shares, then ask `mailmind.http.routing.Routes` for the route. A route names its path as a **literal string**
+(`@r.post("/api/snooze")`), in `mailmind/http/routers/<context>.py` or `http/static.py`, and takes a `Request`. It returns
+an object, `(object, code)`, or `ANSWERED` when it wrote the answer itself. A router gets its context's wiring as an
+argument (`routes(attention)`), and `mailmind.bootstrap.web` binds them all, since http may not import bootstrap. The
+routers run on the old door too, so they are plain tables, standard library only, and hold no schemas yet.
 
-Consequence: to find a route, grep the literal path. To confirm a handler is dead, grep
-its name — nothing can reach it dynamically. The new front door serves this same handler
-through `HandlerBridge`, so that holds there too.
+Consequence: to find a route, grep the literal path. A path that matches by shape (`@r.matching`, a message's body or
+attachment, `/api/accounts/<action>`) is asked only when no literal path answers.
 
 ### Schema migrations
 
@@ -515,7 +515,7 @@ about to wait on frees its descriptor number for the next socket opened.
 `read-only`) and of the older `MAILMIND_NOSYNC`, which still selects read-only: any value but
 empty, `0`, `false`, `no` or `off` turns it on, so a typo fails toward read-only, and read-only
 wins when the two disagree. A front door refuses to start on a profile name it doesn't know.
-`server.nosync()` asks the profile.
+`background.nosync()` asks the profile.
 
 ### Writes, undo, and offline
 
@@ -687,7 +687,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 ### Security model
 
 Every request passes `mailmind.platform.perimeter` before any route, through either door:
-`server.H`'s `do_GET` and `do_POST` call it, and so does the new door's `Perimeter` middleware.
+`H.do_GET` and `H.do_POST` call it, and so does the new door's `Perimeter` middleware.
 It is standard library only.
 
 - `refuse_host` — the Host must be this server's (127.0.0.1 or localhost on its port), and an
@@ -695,7 +695,7 @@ It is standard library only.
 - `refuse_cross_site` — under `/api/` only `Sec-Fetch-Site: same-origin` passes, so another
   site's no-cors `<img>`, a typed URL and a client that says nothing are all refused. `/` also
   opens from a typed URL or another site's top-level link.
-- `refuse_body` — a Content-Length over the route's cap (`server.post_body_cap`:
+- `refuse_body` — a Content-Length over the route's cap (`handler.post_body_cap`:
   `MAX_SEND_POST` for send and draft, `MAX_POST` otherwise), judged before the body is read.
 - `refuse_mutation` — every POST: the two checks above, then the `X-CSRF-Token` header
   compared with `secrets.compare_digest`, then an Origin, which must be this server's.
@@ -732,7 +732,7 @@ refuses CR, LF and NUL with `BadValue`, an `IMAP4.error` too: a sender can fold 
 header so the ID stored holds a line break.
 
 `CSRF` is a per-process token. `web/index.html` ships a `__CSRF_TOKEN__` placeholder in a
-`<meta>` tag that `server.py` substitutes at serve time; the frontend's `api()` helper
+`<meta>` tag that `webroot.page` substitutes at serve time; the frontend's `api()` helper
 attaches it to every request, GETs included.
 
 Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.sanitize` is
@@ -806,14 +806,14 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 - Yielding. Background and speculative calls don't start while an interactive one runs, or for
   45 seconds after one ends (`YIELD_SECONDS`).
 - Presence. A speculative call also needs someone to have used the app in the last 45 minutes.
-  `server._ui_touch` calls `saw_someone()` for every `/api/` request a person makes, except the
+  `H._ui_touch` calls `saw_someone()` for every `/api/` request a person makes, except the
   polling routes in `_UI_QUIET`. A start counts as someone here.
 - The daily limit is `assistant.limit_micros()`: the top-level `"ai_daily_limit_usd"`, a
   positive number, or $15 (decision D7). It counts everything the ledger holds for today, and a
   ledger that can't be read counts as over. At the limit, background and speculative calls raise
   `Deferred("limit")`. An interactive call raises `OverLimit`, which `H.do_GET` and `H.do_POST`
   answer as a 402 with `over_limit: true`. The page's `api()` asks (`askOverLimit`), then sends
-  the request again with `X-MailMind-AI-Over-Limit: allow` (`server.AI_OVER_HEADER`), which
+  the request again with `X-MailMind-AI-Over-Limit: allow` (`handler.AI_OVER_HEADER`), which
   runs it inside `assistant.allowing_over()`.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
   4xx in a row for one feature and model stop that pair. It stays open until the model in use

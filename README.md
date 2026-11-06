@@ -42,7 +42,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    mailmind/assistant/         summarize + score importance 1–5 with Claude
         │
-   server.py  +  web/ (the page)        the app on http://127.0.0.1:8721, served by
+   mailmind/http/  +  web/ (the page)   the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
 ```
 
