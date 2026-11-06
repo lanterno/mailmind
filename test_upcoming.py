@@ -1,4 +1,4 @@
-"""Today & next (server.upcoming): which calendar invites in fetched mail make the brief's list, when
+"""Today & next (calendar.agenda): which calendar invites in fetched mail make the brief's list, when
 a repeating one next happens (ics.next_occurrence), and the recipient the Waiting view names
 (server.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
@@ -12,6 +12,7 @@ import store
 from mailmind.mailbox.application.session import Headers
 from mailmind.platform import settings
 settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
+from mailmind.bootstrap import calendar
 from mailmind.bootstrap.calendar import ics
 import ingest
 from mailmind.content import mime
@@ -67,7 +68,7 @@ def _msg(cal=None, folder="INBOX", ts=None, account=ACCT, fetched=True, thread_i
 
 
 def _up(**kw):
-    return server.upcoming(now=NOW, **kw)["items"]
+    return calendar.agenda.upcoming(now=NOW, **kw)["items"]
 
 
 def test_lists_future_events_soonest_first_with_local_times():
