@@ -23,7 +23,7 @@ const SENSITIVE = /\b(sign[ -]?in|log[ -]?in|verify|confirm|account|password|res
 // Why a link deserves a warning, in words, or null.
 export function linkRisk(href: string, text: string, senderDomain: string | undefined): string | null {
   if (!/^https?:/i.test(href)) return null;
-  let host = "";
+  let host: string;
   try {
     host = new URL(href).hostname.replace(/^www\./, "").toLowerCase();
   } catch {

@@ -24,7 +24,8 @@ const BASE = "/next";
 const seg = encodeURIComponent;
 
 export function pathOf({ source, opened, brief }: Route): string {
-  let path = BASE, query = new URLSearchParams();
+  let path = BASE;
+  const query = new URLSearchParams();
   if (source?.kind === "folder") path += `/m/${seg(source.account)}/${seg(source.folder)}`;
   else if (source?.kind === "allInboxes") path += "/all";
   else if (source?.kind === "search") {

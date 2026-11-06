@@ -77,5 +77,6 @@ export function Scene({ p, seed = 11, par = "xMidYMax slice" }: { p: string; see
   const key = `${p}:${seed}`;
   let inner = painted.get(key);
   if (!inner) painted.set(key, inner = markup(p, seed));
+  // eslint-disable-next-line no-restricted-syntax -- this markup is built above from numbers and the literal `p` its two callers pass: nothing of a message's reaches it
   return <svg className="scene" viewBox="0 0 1200 320" preserveAspectRatio={par} aria-hidden="true" focusable="false" dangerouslySetInnerHTML={{ __html: inner }} />;
 }
