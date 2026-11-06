@@ -152,6 +152,41 @@ def test_without_the_preview_token_nothing_leaves(app, golden, world, posts):
     state(golden, world, "after")
 
 
+def test_a_preview_stands_for_ten_minutes(app, world, posts):
+    archived_issue(world, app, **ONE_CLICK)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    app.clock.shift(timedelta(minutes=10))
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["status"], len(posts)) == ("unsubscribed_oneclick", 1)
+
+
+def test_an_older_preview_sends_nothing_and_the_block_and_sweep_stand(app, world, posts):
+    archived_issue(world, app, **ONE_CLICK)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    app.clock.shift(timedelta(minutes=10, seconds=1))
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["ok"], r["status"], posts) == (True, "no_token", [])
+    assert r["blocked_token"] == LOOM and r["swept"]
+
+
+def test_a_list_that_changed_its_way_out_since_the_preview_needs_a_new_look(app, world, posts):
+    archived_issue(world, app, **ONE_CLICK)
+    token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
+    mid = "<issue-220@loom.example.test>"
+    world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, Date="Mon, 02 Nov 2026 11:00:00 +0000",
+                                              Subject="Issue 220", **MAILTO), (w.SEEN,))
+    assert app.get(f"/api/message/{pk_of(mid)}/body").status == 200
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["status"], posts, world.smtp.messages) == ("no_token", [], [])
+
+
+@pytest.mark.parametrize("token", ["1800000000", "not.a-token", "\u0663.abc", 17])
+def test_what_isnt_a_token_sends_nothing(app, world, posts, token):
+    archived_issue(world, app, **ONE_CLICK)
+    r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
+    assert (r["status"], posts) == ("no_token", [])
+
+
 def test_block_the_domain_without_unsubscribing(app, golden, world, posts):
     execute(app, golden, "block loom.example.test", {"from_addr": "News@Loom.example.test", "block_scope": "domain"})
     golden.note("one-click POSTs", list(posts))
