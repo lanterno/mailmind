@@ -1,36 +1,25 @@
 """Today & next (calendar.agenda): which calendar invites in fetched mail make the brief's list, when
 a repeating one next happens (ics.next_occurrence), and the recipient the Waiting view names
-(mailbox.queries.waiting_in). Hermetic — the database is a temp file and
-the messages are built here; nothing touches IMAP. All addresses are fictional.
-Run: python3 tests/unit/calendar/script_upcoming.py"""
+(mailbox.queries.waiting_in). The messages are built here; nothing touches IMAP. All addresses are
+fictional."""
+import itertools
 import os
-import sys
-
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-sys.path.insert(0, ROOT)
-import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
-from mailmind.bootstrap.mailbox import store
-from mailmind.mailbox.application.session import Headers
-from mailmind.platform import settings
-settings.configure(settings.Settings(home=tempfile.mkdtemp()))   # before anything opens a file
-from mailmind.bootstrap import calendar
+import pytest
+
+from mailmind.bootstrap import calendar, mailbox
 from mailmind.bootstrap.calendar import ics
-from mailmind.bootstrap.mailbox import ingest
+from mailmind.bootstrap.mailbox import ingest, store
 from mailmind.content import mime
-from mailmind.bootstrap import mailbox
+from mailmind.mailbox.application.session import Headers
 
 ACCT = "ada@example.test"
 NOW = datetime(2026, 10, 30, 12, 0)          # a fixed local "now"
-_uid = [0]
-
-
-def _fresh():
-    settings.configure(settings.Settings(home=tempfile.mkdtemp()))
-    store.init()
+_uid = itertools.count(1)
 
 
 def _ics(uid, start, end=None, summary="Studio sync", method="REQUEST", status="", all_day=False):
@@ -48,12 +37,12 @@ def _ics(uid, start, end=None, summary="Studio sync", method="REQUEST", status="
 
 def _msg(cal=None, folder="INBOX", ts=None, account=ACCT, fetched=True, thread_id=None, to=""):
     """One message; with `cal`, an invite whose .ics part is stored as fetch_body would store it."""
-    _uid[0] += 1
+    uid = next(_uid)
     c = store.conn()
     cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, "
                     "from_addr, subject, recipients) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (account, "imap", folder, _uid[0], f"<m{_uid[0]}@example.test>",
-                     thread_id or f"t{_uid[0]}", int((ts or NOW - timedelta(days=1)).timestamp()),
+                    (account, "imap", folder, uid, f"<m{uid}@example.test>",
+                     thread_id or f"t{uid}", int((ts or NOW - timedelta(days=1)).timestamp()),
                      "ren@example.test", "Invitation", to))
     pk = cur.lastrowid
     if cal is not None and fetched:
@@ -76,8 +65,7 @@ def _up(**kw):
     return calendar.agenda.upcoming(now=NOW, **kw)["items"]
 
 
-def test_lists_future_events_soonest_first_with_local_times():
-    _fresh()
+def test_lists_future_events_soonest_first_with_local_times(data_dir):
     later = _msg(_ics("b", NOW + timedelta(days=2), summary="Hike"))
     soon = _msg(_ics("a", NOW + timedelta(hours=3), NOW + timedelta(hours=3, minutes=30)))
     items = _up()
@@ -88,15 +76,23 @@ def test_lists_future_events_soonest_first_with_local_times():
     assert a["organizer"] == "Ren Takeda" and a["invite"] is True and a["account"] == ACCT
 
 
-def test_an_event_that_has_ended_drops_out_but_one_in_progress_stays():
-    _fresh()
+def test_an_event_that_has_ended_drops_out_but_one_in_progress_stays(data_dir):
     _msg(_ics("done", NOW - timedelta(hours=3), NOW - timedelta(hours=2)))
     on = _msg(_ics("now", NOW - timedelta(minutes=30), NOW + timedelta(minutes=30)))
     assert [x["pk"] for x in _up()] == [on]
 
 
-def test_utc_times_come_back_as_local_wall_clock():
-    _fresh()
+@pytest.fixture(params=["UTC", "Asia/Tokyo", "America/New_York"])
+def machine_zone(request):
+    """This machine's zone for the test: the suite's own UTC can't tell UTC from local time."""
+    os.environ["TZ"] = request.param
+    time.tzset()
+    yield request.param
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+
+
+def test_utc_times_come_back_as_local_wall_clock(machine_zone, data_dir):
     start = (NOW + timedelta(days=1)).astimezone().astimezone(timezone.utc)
     cal = _ics("z", start).replace("DTSTART:" + start.strftime("%Y%m%dT%H%M%S"),
                                    "DTSTART:" + start.strftime("%Y%m%dT%H%M%SZ"))
@@ -104,8 +100,7 @@ def test_utc_times_come_back_as_local_wall_clock():
     assert _up()[0]["start"] == (NOW + timedelta(days=1)).isoformat(timespec="minutes")
 
 
-def test_an_all_day_event_today_stays_until_midnight():
-    _fresh()
+def test_an_all_day_event_today_stays_until_midnight(data_dir):
     today = NOW.replace(hour=0)
     pk = _msg(_ics("d", today, all_day=True))
     items = _up()
@@ -113,16 +108,14 @@ def test_an_all_day_event_today_stays_until_midnight():
     assert items[0]["end"] == (today + timedelta(days=1)).isoformat(timespec="minutes")
 
 
-def test_an_update_replaces_the_original():
-    _fresh()
+def test_an_update_replaces_the_original(data_dir):
     _msg(_ics("u", NOW + timedelta(days=1), summary="Old time"), ts=NOW - timedelta(days=3))
     new = _msg(_ics("u", NOW + timedelta(days=2), summary="New time"), ts=NOW - timedelta(days=1))
     items = _up()
     assert [(x["pk"], x["summary"]) for x in items] == [(new, "New time")], items
 
 
-def test_a_cancellation_removes_the_event():
-    _fresh()
+def test_a_cancellation_removes_the_event(data_dir):
     _msg(_ics("c", NOW + timedelta(days=1)), ts=NOW - timedelta(days=3))
     _msg(_ics("c", NOW + timedelta(days=1), method="CANCEL", status="CANCELLED"), ts=NOW - timedelta(days=1))
     _msg(_ics("s", NOW + timedelta(days=1), status="CANCELLED"))
@@ -142,8 +135,7 @@ def _one(start, rid, **kw):
         "END:VEVENT", "RECURRENCE-ID:" + rid.strftime("%Y%m%dT%H%M%S") + "\r\nEND:VEVENT")
 
 
-def test_a_series_is_listed_at_its_next_occurrence():
-    _fresh()
+def test_a_series_is_listed_at_its_next_occurrence(data_dir):
     pk = _msg(_weekly(), ts=NOW - timedelta(days=20))
     _msg(_weekly("p", "Yoga", "EXDATE:" + NOW.strftime("%Y%m%dT%H%M%S") + "\r\n"), ts=NOW - timedelta(days=20))
     items = _up()
@@ -152,8 +144,7 @@ def test_a_series_is_listed_at_its_next_occurrence():
     assert items[0]["pk"] == pk and items[0]["recurrence"] == "Every week"
 
 
-def test_moving_or_cancelling_one_occurrence_leaves_the_series():
-    _fresh()
+def test_moving_or_cancelling_one_occurrence_leaves_the_series(data_dir):
     _msg(_weekly(), ts=NOW - timedelta(days=20))
     _msg(_one(NOW + timedelta(days=1), NOW, summary="Standup (moved)"), ts=NOW - timedelta(days=2))
     _msg(_one(NOW + timedelta(days=7), NOW + timedelta(days=7), method="CANCEL", status="CANCELLED"),
@@ -162,24 +153,21 @@ def test_moving_or_cancelling_one_occurrence_leaves_the_series():
         ("Standup (moved)", "2026-10-31T12:00"), ("Standup", "2026-11-13T12:00")]
 
 
-def test_cancelling_the_series_drops_its_moved_occurrences_too():
-    _fresh()
+def test_cancelling_the_series_drops_its_moved_occurrences_too(data_dir):
     _msg(_weekly(), ts=NOW - timedelta(days=20))
     _msg(_one(NOW + timedelta(days=1), NOW), ts=NOW - timedelta(days=2))
     _msg(_ics("s", NOW - timedelta(days=14), method="CANCEL", status="CANCELLED"), ts=NOW - timedelta(days=1))
     assert _up() == []
 
 
-def test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead():
-    _fresh()
+def test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead(data_dir):
     rule = "RRULE:FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1\r\n"
     _msg(_ics("a", NOW + timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     assert [x["start"] for x in _up()] == ["2026-11-02T12:00"]
 
 
-def test_trash_junk_unfetched_and_old_mail_are_not_read():
-    _fresh()
+def test_trash_junk_unfetched_and_old_mail_are_not_read(data_dir):
     _msg(_ics("t", NOW + timedelta(days=1)), folder="Trash")
     _msg(_ics("j", NOW + timedelta(days=1)), folder="Spam")
     _msg(_ics("f", NOW + timedelta(days=1)), fetched=False)
@@ -188,16 +176,14 @@ def test_trash_junk_unfetched_and_old_mail_are_not_read():
     assert _up() == []
 
 
-def test_account_filter_and_limit():
-    _fresh()
+def test_account_filter_and_limit(data_dir):
     mine = [_msg(_ics(f"m{i}", NOW + timedelta(days=i + 1))) for i in range(7)]
     _msg(_ics("x", NOW + timedelta(hours=1)), account="other@example.test")
     assert [x["pk"] for x in _up(account=ACCT)] == mine[:5]
     assert len(_up()) == 5 and _up()[0]["account"] == "other@example.test"
 
 
-def test_a_broken_calendar_part_is_skipped():
-    _fresh()
+def test_a_broken_calendar_part_is_skipped(data_dir):
     _msg("not a calendar at all")
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
     assert [x["pk"] for x in _up()] == [ok]
@@ -205,41 +191,57 @@ def test_a_broken_calendar_part_is_skipped():
 
 BERLIN = ZoneInfo("Europe/Berlin")
 SUN = datetime(2026, 11, 1, 12, 0, tzinfo=BERLIN)   # the Sunday after Berlin leaves summer time
+SAT = datetime(2026, 10, 31, 12, 0, tzinfo=BERLIN)
 
 
 def _next(rule, extra="", start="20261005T100000", end="20261005T103000", after=SUN):
     """Next occurrence of a Monday 10:00–10:30 Berlin event that first ran on Oct 5, as ISO strings."""
     tz = ";TZID=Europe/Berlin:" if "T" in start else ";VALUE=DATE:"
     inv = ics.parse("\r\n".join(["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:r", "SUMMARY:Standup",
-                                  "DTSTART" + tz + start, "DTEND" + tz + end] + ([f"RRULE:{rule}"] if rule else [])
-                                 + ([extra] if extra else []) + ["END:VEVENT", "END:VCALENDAR", ""]))
+                                 "DTSTART" + tz + start, "DTEND" + tz + end] + ([f"RRULE:{rule}"] if rule else [])
+                                + ([extra] if extra else []) + ["END:VEVENT", "END:VCALENDAR", ""]))
     got = ics.next_occurrence(inv, after)
     return got and (got[0].isoformat(timespec="minutes"), got[1].isoformat(timespec="minutes"))
 
 
-def test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving():
+def test_a_weekly_event_keeps_its_wall_clock_time_and_length_across_daylight_saving():
     assert _next("FREQ=WEEKLY") == ("2026-11-02T10:00+01:00", "2026-11-02T10:30+01:00")
-    assert _next("FREQ=WEEKLY;INTERVAL=2")[0] == "2026-11-02T10:00+01:00"     # Oct 5, 19, Nov 2
-    assert _next("FREQ=WEEKLY;INTERVAL=3")[0] == "2026-11-16T10:00+01:00"     # Oct 5, 26, Nov 16
-    assert _next("FREQ=WEEKLY;BYDAY=WE,MO")[0] == "2026-11-02T10:00+01:00"
 
 
-def test_count_until_and_exdate_end_or_skip_occurrences():
-    assert _next("FREQ=WEEKLY;COUNT=4") is None                              # Oct 5 – Oct 26
-    assert _next("FREQ=WEEKLY;COUNT=5")[0] == "2026-11-02T10:00+01:00"
-    assert _next("FREQ=WEEKLY;UNTIL=20261102T090000Z")[0] == "2026-11-02T10:00+01:00"   # inclusive
-    assert _next("FREQ=WEEKLY;UNTIL=20261102T085959Z") is None
-    assert _next("FREQ=WEEKLY", "EXDATE;TZID=Europe/Berlin:20261102T100000")[0] == "2026-11-09T10:00+01:00"
+@pytest.mark.parametrize("rule, start", [
+    ("FREQ=WEEKLY;INTERVAL=2", "2026-11-02T10:00+01:00"),     # Oct 5, 19, Nov 2
+    ("FREQ=WEEKLY;INTERVAL=3", "2026-11-16T10:00+01:00"),     # Oct 5, 26, Nov 16
+    ("FREQ=WEEKLY;BYDAY=WE,MO", "2026-11-02T10:00+01:00"),
+])
+def test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving(rule, start):
+    assert _next(rule)[0] == start
 
 
-def test_daily_monthly_and_yearly_rules():
-    sat = datetime(2026, 10, 31, 12, 0, tzinfo=BERLIN)
-    assert _next("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", after=sat)[0] == "2026-11-02T10:00+01:00"
-    assert _next("FREQ=MONTHLY")[0] == "2026-11-05T10:00+01:00"
-    assert _next("FREQ=MONTHLY;BYDAY=1TU")[0] == "2026-11-03T10:00+01:00"
-    assert _next("FREQ=MONTHLY;BYDAY=-1FR")[0] == "2026-11-27T10:00+01:00"
-    assert _next("FREQ=MONTHLY;BYMONTHDAY=31")[0] == "2026-12-31T10:00+01:00"   # November has no 31st
-    assert _next("FREQ=YEARLY")[0] == "2027-10-05T10:00+02:00"
+@pytest.mark.parametrize("rule, extra, start", [
+    ("FREQ=WEEKLY;COUNT=5", "", "2026-11-02T10:00+01:00"),
+    ("FREQ=WEEKLY;UNTIL=20261102T090000Z", "", "2026-11-02T10:00+01:00"),   # inclusive
+    ("FREQ=WEEKLY", "EXDATE;TZID=Europe/Berlin:20261102T100000", "2026-11-09T10:00+01:00"),
+])
+def test_count_until_and_exdate_end_or_skip_occurrences(rule, extra, start):
+    assert _next(rule, extra)[0] == start
+
+
+@pytest.mark.parametrize("rule", ["FREQ=WEEKLY;COUNT=4",     # Oct 5 – Oct 26
+                                  "FREQ=WEEKLY;UNTIL=20261102T085959Z"])
+def test_count_and_until_end_a_series(rule):
+    assert _next(rule) is None
+
+
+@pytest.mark.parametrize("rule, after, start", [
+    ("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", SAT, "2026-11-02T10:00+01:00"),
+    ("FREQ=MONTHLY", SUN, "2026-11-05T10:00+01:00"),
+    ("FREQ=MONTHLY;BYDAY=1TU", SUN, "2026-11-03T10:00+01:00"),
+    ("FREQ=MONTHLY;BYDAY=-1FR", SUN, "2026-11-27T10:00+01:00"),
+    ("FREQ=MONTHLY;BYMONTHDAY=31", SUN, "2026-12-31T10:00+01:00"),   # November has no 31st
+    ("FREQ=YEARLY", SUN, "2027-10-05T10:00+02:00"),
+])
+def test_daily_monthly_and_yearly_rules(rule, after, start):
+    assert _next(rule, after=after)[0] == start
 
 
 def test_an_occurrence_in_progress_is_still_next():
@@ -255,11 +257,10 @@ def test_an_all_day_series_and_a_floating_one():
     assert ics.next_occurrence(inv, datetime(2026, 11, 1, 12, 0))[0] == datetime(2026, 11, 2, 10, 0)
 
 
-def test_a_rule_it_cannot_read_gives_none_not_a_wrong_date():
-    assert _next("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1") is None
-    assert _next("FREQ=WEEKLY;BYDAY=XX") is None
-    assert _next("FREQ=HOURLY") is None
-    assert _next("FREQ=YEARLY;INTERVAL=9000") is None                        # past year 9999
+@pytest.mark.parametrize("rule", ["FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1", "FREQ=WEEKLY;BYDAY=XX", "FREQ=HOURLY",
+                                  "FREQ=YEARLY;INTERVAL=9000"])   # the last is past year 9999
+def test_a_rule_it_cannot_read_gives_none_not_a_wrong_date(rule):
+    assert _next(rule) is None
 
 
 def test_a_one_off_event_is_its_own_only_occurrence():
@@ -279,8 +280,7 @@ class _FakeSession:
         return self.raws[int(uid)]
 
 
-def test_ingest_keeps_an_invite_so_it_is_listed_unopened():
-    _fresh()
+def test_ingest_keeps_an_invite_so_it_is_listed_unopened(data_dir):
     def raw(n, cal=None):
         m = EmailMessage()
         m["From"], m["To"], m["Subject"] = "Ren <ren@example.test>", ACCT, "Invitation"
@@ -312,8 +312,7 @@ def _alt(cal, attach=False):
     return m.as_bytes()
 
 
-def test_an_inline_only_invite_is_recorded_once_and_listed():
-    _fresh()
+def test_an_inline_only_invite_is_recorded_once_and_listed(data_dir):
     cal = _ics("ol", NOW + timedelta(days=1), summary="Quarterly review")
     out = mime.parse(_alt(cal))["attachments"]
     assert [(a["filename"], a["content_type"], a["is_inline"]) for a in out] == [("invite.ics", "text/calendar", 1)], out
@@ -327,8 +326,7 @@ def test_an_inline_only_invite_is_recorded_once_and_listed():
     assert [(x["pk"], x["summary"]) for x in _up()] == [(pk, "Quarterly review")]
 
 
-def test_waiting_names_who_a_sent_thread_waits_on():
-    _fresh()
+def test_waiting_names_who_a_sent_thread_waits_on(data_dir):
     pk = _msg(thread_id="w1", to="Lio Park <lio@example.test>, Aoi <aoi@example.test>")
     c = store.conn()
     c.execute("INSERT INTO followups(account, thread_id, kind, state, anchor_pk, first_sent_ts, due_ts) "
@@ -337,21 +335,3 @@ def test_waiting_names_who_a_sent_thread_waits_on():
     c.close()
     items = mailbox.queries.waiting_in(ACCT, 0, 10)["items"]
     assert [(x["pk"], x["kind"], x["to"]) for x in items] == [(pk, "sent", "Lio Park <lio@example.test>")], items
-
-
-if __name__ == "__main__":
-    import sys
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    failed = 0
-    for fn in fns:
-        try:
-            fn()
-            print("PASS", fn.__name__)
-        except AssertionError as e:
-            failed += 1
-            print("FAIL", fn.__name__, repr(e))
-        except Exception as e:
-            failed += 1
-            print("ER:U", fn.__name__, repr(e))
-    print("\n%d/%d passed" % (len(fns) - failed, len(fns)))
-    sys.exit(1 if failed else 0)

@@ -312,33 +312,33 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_unreachable_imap_queues_each_message` | `tests/unit/mailbox/test_thread_filing.py` `test_an_unreachable_server_queues_each_message` |
 | `test_missing_or_bad_anchor` | `tests/unit/mailbox/test_thread_filing.py` `test_a_missing_or_bad_anchor` |
 
-## `test_upcoming.py`: `tests/unit/calendar/script_upcoming.py`
+## `test_upcoming.py`: `tests/unit/calendar/test_upcoming.py`
 
 | Test | Now |
 |---|---|
-| `test_lists_future_events_soonest_first_with_local_times` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_event_that_has_ended_drops_out_but_one_in_progress_stays` | `tests/unit/calendar/script_upcoming.py` |
-| `test_utc_times_come_back_as_local_wall_clock` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_all_day_event_today_stays_until_midnight` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_update_replaces_the_original` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_cancellation_removes_the_event` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_series_is_listed_at_its_next_occurrence` | `tests/unit/calendar/script_upcoming.py` |
-| `test_moving_or_cancelling_one_occurrence_leaves_the_series` | `tests/unit/calendar/script_upcoming.py` |
-| `test_cancelling_the_series_drops_its_moved_occurrences_too` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead` | `tests/unit/calendar/script_upcoming.py` |
-| `test_trash_junk_unfetched_and_old_mail_are_not_read` | `tests/unit/calendar/script_upcoming.py` |
-| `test_account_filter_and_limit` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_broken_calendar_part_is_skipped` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving` | `tests/unit/calendar/script_upcoming.py` |
-| `test_count_until_and_exdate_end_or_skip_occurrences` | `tests/unit/calendar/script_upcoming.py` |
-| `test_daily_monthly_and_yearly_rules` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_occurrence_in_progress_is_still_next` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_all_day_series_and_a_floating_one` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_rule_it_cannot_read_gives_none_not_a_wrong_date` | `tests/unit/calendar/script_upcoming.py` |
-| `test_a_one_off_event_is_its_own_only_occurrence` | `tests/unit/calendar/script_upcoming.py` |
-| `test_ingest_keeps_an_invite_so_it_is_listed_unopened` | `tests/unit/calendar/script_upcoming.py` |
-| `test_an_inline_only_invite_is_recorded_once_and_listed` | `tests/unit/calendar/script_upcoming.py` |
-| `test_waiting_names_who_a_sent_thread_waits_on` | `tests/unit/calendar/script_upcoming.py` |
+| `test_lists_future_events_soonest_first_with_local_times` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_event_that_has_ended_drops_out_but_one_in_progress_stays` | `tests/unit/calendar/test_upcoming.py` |
+| `test_utc_times_come_back_as_local_wall_clock` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_all_day_event_today_stays_until_midnight` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_update_replaces_the_original` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_cancellation_removes_the_event` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_series_is_listed_at_its_next_occurrence` | `tests/unit/calendar/test_upcoming.py` |
+| `test_moving_or_cancelling_one_occurrence_leaves_the_series` | `tests/unit/calendar/test_upcoming.py` |
+| `test_cancelling_the_series_drops_its_moved_occurrences_too` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead` | `tests/unit/calendar/test_upcoming.py` |
+| `test_trash_junk_unfetched_and_old_mail_are_not_read` | `tests/unit/calendar/test_upcoming.py` |
+| `test_account_filter_and_limit` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_broken_calendar_part_is_skipped` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving` | `tests/unit/calendar/test_upcoming.py` `test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving, test_a_weekly_event_keeps_its_wall_clock_time_and_length_across_daylight_saving` |
+| `test_count_until_and_exdate_end_or_skip_occurrences` | `tests/unit/calendar/test_upcoming.py` `test_count_until_and_exdate_end_or_skip_occurrences, test_count_and_until_end_a_series` |
+| `test_daily_monthly_and_yearly_rules` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_occurrence_in_progress_is_still_next` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_all_day_series_and_a_floating_one` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_rule_it_cannot_read_gives_none_not_a_wrong_date` | `tests/unit/calendar/test_upcoming.py` |
+| `test_a_one_off_event_is_its_own_only_occurrence` | `tests/unit/calendar/test_upcoming.py` |
+| `test_ingest_keeps_an_invite_so_it_is_listed_unopened` | `tests/unit/calendar/test_upcoming.py` |
+| `test_an_inline_only_invite_is_recorded_once_and_listed` | `tests/unit/calendar/test_upcoming.py` |
+| `test_waiting_names_who_a_sent_thread_waits_on` | `tests/unit/calendar/test_upcoming.py` |
 
 ## `tests.py`: `tests/unit/curation/test_classifier.py`
 
