@@ -12,6 +12,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.platform.profile import ReadOnlyError
+from mailmind.bootstrap.curation import safe_http
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 SCAM = "ada-inbox-12-scam.eml"
@@ -194,9 +195,8 @@ def test_a_sweep_is_refused_but_its_dry_run_still_plans(app, world, read_only):
 
 
 def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, world, read_only, monkeypatch):
-    import server
     posts = []
-    monkeypatch.setattr(server, "_unsub_oneclick_post", lambda url, _redirects=1: posts.append(url))
+    monkeypatch.setattr(safe_http, "one_click_post", lambda url, _redirects=1: posts.append(url))
     mid = "<issue-219@loom.example.test>"                             # one-click, filed where the sweep can't reach
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, List_Unsubscribe_Post="List-Unsubscribe=One-Click",
                                               Date="Mon, 02 Nov 2026 07:00:00 +0000"), (w.SEEN,))
@@ -213,9 +213,8 @@ def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, wor
 
 
 def test_the_unsubscribe_request_itself_refuses(read_only):
-    import server
     with pytest.raises(ReadOnlyError):
-        server._unsub_oneclick_post("https://loom.example.test/unsubscribe")
+        safe_http.one_click_post("https://loom.example.test/unsubscribe")
 
 
 def test_the_digest_names_the_profile_the_page_shows(app, world, read_only):

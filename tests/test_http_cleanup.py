@@ -3,7 +3,7 @@ reverses, then the unsubscribe the newest message offers. That is an RFC 8058 on
 mailto: sent through the fake SMTP server, or a landing page handed back for the browser. The
 golden files are in tests/golden/http_cleanup/.
 
-The one-click POST would leave the machine, so `_unsub_oneclick_post` is replaced here by a
+The one-click POST would leave the machine, so `safe_http.one_click_post` is replaced here by a
 recorder; tests/test_unsub_post.py covers the real one against a local HTTPS server. The method
 is resolved from a stored body only, so each test opens a message first. It is resolved before
 the sweep, which deletes the rows it moves; most tests put the issue that carries the header in
@@ -12,6 +12,7 @@ the Archive, which the sweep leaves alone, and the ones at the end keep it in th
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap.curation import safe_http
 
 LOOM = "news@loom.example.test"
 SPINDLE = "deals@spindle.example.test"
@@ -21,7 +22,6 @@ NEWSLETTER = "ada-inbox-03-newsletter.eml"
 @pytest.fixture
 def posts(monkeypatch):
     """The one-click POSTs the app made, answered as `posts.reply` says."""
-    import server
 
     class Posts(list):
         reply = (True, 200, "ok")
@@ -32,7 +32,7 @@ def posts(monkeypatch):
         made.append(url)
         return made.reply
 
-    monkeypatch.setattr(server, "_unsub_oneclick_post", post)
+    monkeypatch.setattr(safe_http, "one_click_post", post)
     return made
 
 

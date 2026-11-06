@@ -7,6 +7,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.platform.db.txguard import TxAcrossNetworkError
+from mailmind.bootstrap.curation import safe_http
 
 
 class Write:
@@ -112,13 +113,12 @@ def test_no_claude_api_request_is_made(world, ai, write, transport, monkeypatch)
 
 def test_no_unsubscribe_request_is_made_not_even_its_dns_lookup(data_dir, write, monkeypatch):
     import socket
-    import server
     looked_up = []
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **kw: looked_up.append(a) or [])
     write.open()
     with pytest.raises(TxAcrossNetworkError, match="^an unsubscribe request while"):
-        server._unsub_oneclick_post("https://loom.example.test/unsubscribe")
+        safe_http.one_click_post("https://loom.example.test/unsubscribe")
     assert looked_up == []
     write.end()
-    assert server._unsub_oneclick_post("https://loom.example.test/unsubscribe") == (False, 0, "dns")
+    assert safe_http.one_click_post("https://loom.example.test/unsubscribe") == (False, 0, "dns")
     assert looked_up

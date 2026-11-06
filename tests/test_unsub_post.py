@@ -1,4 +1,4 @@
-"""The one-click unsubscribe POST (`server._unsub_oneclick_post`), the one request MailMind makes to a
+"""The one-click unsubscribe POST (`safe_http.one_click_post`), the one request MailMind makes to a
 host a message names. It must refuse anything but https, refuse a host if any address it resolves
 to is private, loopback, link-local or otherwise internal, pin the connection to the address it
 vetted, follow at most one redirect and vet that one too.
@@ -14,6 +14,7 @@ import threading
 
 import pytest
 import trustme
+from mailmind.bootstrap.curation import safe_http
 
 HOST = "unsub.example.test"
 
@@ -78,11 +79,10 @@ def lists(ca, monkeypatch):
         ca.configure_trust(c)
         return c
 
-    import server
-    real_forbidden = server._ip_is_forbidden
+    real_forbidden = safe_http.ip_is_forbidden
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
     monkeypatch.setattr(ssl, "create_default_context", context)
-    monkeypatch.setattr(server, "_ip_is_forbidden", lambda ip: ip != "127.0.0.1" and real_forbidden(ip))
+    monkeypatch.setattr(safe_http, "ip_is_forbidden", lambda ip: ip != "127.0.0.1" and real_forbidden(ip))
     srv.url = lambda path: f"https://{HOST}:{srv.server_address[1]}{path}"
     yield srv
     srv.shutdown()
@@ -90,8 +90,7 @@ def lists(ca, monkeypatch):
 
 
 def post(url):
-    import server
-    return server._unsub_oneclick_post(url)
+    return safe_http.one_click_post(url)
 
 
 def test_a_one_click_post_says_only_what_rfc_8058_asks(lists):
@@ -162,5 +161,4 @@ def test_a_certificate_for_another_name_fails(lists, monkeypatch):
     ("8.8.8.8", False), ("1.1.1.1", False), ("2606:4700:4700::1111", False),
 ])
 def test_which_addresses_count_as_internal(ip, forbidden):
-    import server
-    assert server._ip_is_forbidden(ip) is forbidden
+    assert safe_http.ip_is_forbidden(ip) is forbidden

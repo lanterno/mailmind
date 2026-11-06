@@ -4,6 +4,7 @@ so trying again after the sweep still knows the way."""
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap.curation import safe_http
 
 NEWS = "ada-inbox-03-newsletter.eml"
 LOOM = "news@loom.example.test"
@@ -14,7 +15,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 def posts(monkeypatch):
     import server
     sent = []
-    monkeypatch.setattr(server, "_unsub_oneclick_post", lambda url, _redirects=1: (sent.append(url), (True, 200, None))[1])
+    monkeypatch.setattr(safe_http, "one_click_post", lambda url, _redirects=1: (sent.append(url), (True, 200, None))[1])
     monkeypatch.setattr(server, "_unsub_rate_gate", lambda: None)
     return sent
 
@@ -145,15 +146,14 @@ def test_the_newest_message_decides(app, world):
 
 
 def test_trying_again_after_the_sweep_still_knows_the_way(app, world, posts):
-    import server
     r1 = app.get(f"/api/cleanup/sender?addr={LOOM}").json
-    real = server._unsub_oneclick_post
-    server._unsub_oneclick_post = lambda url, _redirects=1: (False, 500, "nope")
+    real = safe_http.one_click_post
+    safe_http.one_click_post = lambda url, _redirects=1: (False, 500, "nope")
     try:
         first = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True,
                                                   "confirm_token": r1["confirm_token"]}).json
     finally:
-        server._unsub_oneclick_post = real
+        safe_http.one_click_post = real
     assert first["status"] == "failed" and first["swept"] >= 1
     assert row(world) is None                                     # the sweep took its row
     again = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True,
