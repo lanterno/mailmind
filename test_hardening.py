@@ -413,12 +413,12 @@ def test_a_request_can_only_star_or_mark_read():
     pk = _message()
     for flag in ("deleted", "draft", "answered", "Deleted", "bogus"):
         with _connection(_ScriptedIMAP()) as M:
-            res = server.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
+            res = mailbox.filing.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
         assert res["ok"] is False, (flag, res)
         assert M.calls == [], (flag, M.calls)
     for flag, imap in (("flagged", "(\\Flagged)"), ("seen", "(\\Seen)")):
         with _connection(_ScriptedIMAP()) as M:
-            res = server.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
+            res = mailbox.filing.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
         assert res["ok"] is True, (flag, res)
         assert ("STORE", str(_uid[0]), "+FLAGS", imap) in M.calls, (flag, M.calls)
 
@@ -475,11 +475,11 @@ def test_an_accepted_move_still_files_the_message():
 
 def test_the_route_reports_a_refusal_and_offers_no_undo():
     pk = _message()
-    depth = len(server.undo_entries())
+    depth = len(mailbox.undo.entries())
     with _connection(_refusing()):
-        res = server.do_write("/api/move", {"pk": pk, "dest": "Archive"})
+        res = mailbox.filing.do_write("/api/move", {"pk": pk, "dest": "Archive"})
     assert res["ok"] is False and res["undoable"] is False, res
-    assert len(server.undo_entries()) == depth
+    assert len(mailbox.undo.entries()) == depth
     assert _still_there(pk)
 
 
@@ -655,13 +655,13 @@ def test_trashing_the_same_message_offline_again_queues_it_again():
     mid = "<again@example.test>"
     real = _offline()
     try:
-        first = server.do_trash({"pk": _message(mid=mid)})
+        first = mailbox.filing.do_trash({"pk": _message(mid=mid)})
         assert first["ok"] and first.get("status") == "queued", first
         c = store.conn()
         offline.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
         c.commit()
         c.close()
-        second = server.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again
+        second = mailbox.filing.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again
     finally:
         accounts.connect = real
     rows = _queued(mid)
@@ -674,9 +674,9 @@ def test_a_resubmit_with_the_same_mutation_id_queues_once():
     pk = _message(mid=mid)
     real = _offline()
     try:
-        server.do_trash({"pk": pk, "mutation_id": "m-1"})
+        mailbox.filing.do_trash({"pk": pk, "mutation_id": "m-1"})
         pk2 = _message(mid=mid)
-        again = server.do_trash({"pk": pk2, "mutation_id": "m-1"})
+        again = mailbox.filing.do_trash({"pk": pk2, "mutation_id": "m-1"})
     finally:
         accounts.connect = real
     assert len(_queued(mid)) == 1, _queued(mid)

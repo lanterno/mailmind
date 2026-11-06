@@ -3,6 +3,7 @@ with Retry for what the queue gave up on and Discard for any of them."""
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap import mailbox
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -194,8 +195,7 @@ def test_discard_answers_404_once_the_change_reached_the_server(app, world):
 
 def test_discard_waits_for_a_try_under_the_gate_and_gives_up_as_busy(app, world, monkeypatch):
     import gate
-    import server
-    monkeypatch.setattr(server, "PENDING_WAIT", 0.05)
+    monkeypatch.setattr(mailbox.filing, "PENDING_WAIT", 0.05)
     mid = queue_archive(app, world)
     with gate.held_elsewhere(w.ADA):
         r = app.post("/api/pending/discard", {"id": mid})

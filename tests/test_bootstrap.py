@@ -9,6 +9,7 @@ from mailmind.platform.workers.scheduler import Scheduler
 from mailmind.compose.api import Sent
 from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import InboxChanged
+from mailmind.bootstrap import mailbox
 
 
 @pytest.fixture
@@ -32,9 +33,9 @@ def test_the_server_hears_what_the_workers_publish(unwired):
     import server
     from mailmind.bootstrap import legacy
     legacy.wire(server)
-    assert wiring() == [(server._after_send,), (server._after_readmut,), (server._after_idle,)]
+    assert wiring() == [(server._after_send,), (mailbox.filing.settled,), (server._after_idle,)]
     legacy.wire(server)                                       # wiring again replaces, never doubles
-    assert wiring() == [(server._after_send,), (server._after_readmut,), (server._after_idle,)]
+    assert wiring() == [(server._after_send,), (mailbox.filing.settled,), (server._after_idle,)]
     legacy.unwire()
     assert wiring() == [(), (), ()]
 

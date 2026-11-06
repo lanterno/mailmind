@@ -262,16 +262,15 @@ def test_a_message_the_server_refuses_is_counted_and_the_rest_go_on(app, world, 
 
 
 def test_a_message_that_raises_is_counted_and_the_rest_go_on(app, world, ai, monkeypatch):
-    import server
     plan = preview(app, ai)
-    real, calls = server.do_write, []
+    real, calls = mailbox.filing.do_write, []
 
     def once_broken(path, body):
         calls.append(path)
         if len(calls) == 1:
             raise RuntimeError("something odd")
         return real(path, body)
-    monkeypatch.setattr(server, "do_write", once_broken)
+    monkeypatch.setattr(mailbox.filing, "do_write", once_broken)
     r = confirm(app, plan).json
     assert (r["count"], r["failed"]) == (plan["count"] - 1, 1)
 

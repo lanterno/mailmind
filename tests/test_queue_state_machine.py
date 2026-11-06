@@ -16,6 +16,7 @@ from hypothesis import HealthCheck, settings as hsettings, strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule, run_state_machine_as_test
 
 from fixtures import world as w
+from mailmind.bootstrap import mailbox
 
 NAMES = ("ada-inbox-01-lunch.eml", "ada-inbox-03-newsletter.eml", "ada-inbox-05-receipt.eml")
 OPS = {"archive": "Archive", "trash": "Trash", "junk": "Junk"}
@@ -97,28 +98,25 @@ class Machine(RuleBasedStateMachine):
 
     @rule(name=st.sampled_from(NAMES), op=st.sampled_from(sorted(OPS)))
     def file_it(self, name, op):
-        import server
         pk = self.pk_in_inbox(name)
         if not pk or "INBOX" not in self.boxes(name):
             return
         self.mutation += 1
         self.allow(name, OPS[op])
         body = {"pk": pk, "mutation_id": f"m-{self.mutation}"}
-        got = server.do_trash(body) if op == "trash" else server.do_write(f"/api/{op}", body)
+        got = mailbox.filing.do_trash(body) if op == "trash" else mailbox.filing.do_write(f"/api/{op}", body)
         assert got["ok"] in (True, False)
 
     @rule(name=st.sampled_from(NAMES), flag=st.sampled_from(("flagged", "seen")), on=st.booleans())
     def flag_it(self, name, flag, on):
-        import server
         pk = self.pk_in_inbox(name)
         if not pk:
             return
         self.mutation += 1
-        server.do_write("/api/flag", {"pk": pk, "flag": flag, "on": on, "mutation_id": f"f-{self.mutation}"})
+        mailbox.filing.do_write("/api/flag", {"pk": pk, "flag": flag, "on": on, "mutation_id": f"f-{self.mutation}"})
 
     @rule()
     def undo(self):
-        import server
         from mailmind.bootstrap.mailbox import store
         c = store.conn()
         entries = store.undo_entries(c)
@@ -128,21 +126,19 @@ class Machine(RuleBasedStateMachine):
             for name in NAMES:
                 if w.message_id(name) == top.get("message_id"):
                     self.allow(name, top.get("src_folder"))
-        server.do_undo()
+        mailbox.undo.undo_last()
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows() or self.stuck_rows())
     def discard(self, which):
-        import server
         rows = self.open_rows() + self.stuck_rows()
-        server.do_pending_discard(rows[which % len(rows)]["id"])
+        mailbox.filing.do_pending_discard(rows[which % len(rows)]["id"])
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.stuck_rows())
     def retry(self, which):
-        import server
         rows = self.stuck_rows()
-        server.do_pending_retry(rows[which % len(rows)]["id"])
+        mailbox.filing.do_pending_retry(rows[which % len(rows)]["id"])
 
     # ── what the server and the process do ─────────────────────────────
 
