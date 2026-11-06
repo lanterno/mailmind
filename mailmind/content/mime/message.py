@@ -60,7 +60,18 @@ def _unfold(value: str | Header) -> str | Header:
 _UNSUB_POST, _UNSUB_RAW_MAX = " | POST:", 4000
 
 
-def list_unsub(lu: str | None, post: str | None = "") -> dict[str, str | None]:
+class UnsubWay(TypedDict):
+    """The way out of a list that a message's headers offer. `method` is `one-click`, `mailto`, `http-page` or `none`."""
+    method: str
+    https_uri: str | None
+    mailto_uri: str | None
+    mailto_to: str | None
+    mailto_subject: str | None
+    mailto_body: str | None
+    raw: str
+
+
+def list_unsub(lu: str | None, post: str | None = "") -> UnsubWay:
     """The way to unsubscribe that a message's headers offer, from List-Unsubscribe (`lu`, unfolded) and
     List-Unsubscribe-Post. RFC 2369 holds <mailto:…> and/or <https://…>; RFC 8058 one-click needs BOTH an
     https URI AND `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A bare https URI is a landing PAGE
@@ -93,7 +104,7 @@ def list_unsub(lu: str | None, post: str | None = "") -> dict[str, str | None]:
             "raw": raw_cache}
 
 
-def list_unsub_stored(raw: str | None) -> dict[str, str | None]:
+def list_unsub_stored(raw: str | None) -> UnsubWay:
     """What `list_unsub` said, from the `raw` it gave."""
     lu, _, post = (raw or "").partition(_UNSUB_POST)
     return list_unsub(lu, post)

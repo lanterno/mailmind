@@ -64,6 +64,7 @@ strict = [
     "mailmind/attention/domain",
     "mailmind/calendar/domain",
     "mailmind/compose/domain",
+    "mailmind/curation/domain",
     "mailmind/discovery/domain",
     "mailmind/mailbox/domain",
     "mailmind/accounts/application",

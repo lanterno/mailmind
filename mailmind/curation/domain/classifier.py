@@ -23,7 +23,7 @@ Buckets:
 """
 import re
 
-from mailmind.curation.domain.rulebook import domain_listed
+from mailmind.curation.domain.rulebook import RuleSets, domain_listed
 
 SPAM = "spam/scam"
 BLOCKED = "blocked"                     # user said "always trash this sender/domain"
@@ -140,7 +140,7 @@ FINANCE_RE = re.compile(r"(\bbank\b|\bbanque\b|paypal|wise\.com|revolut|\bn26\b|
                         r"stripe\.com$|\bvisa\b|mastercard)", re.I)
 
 
-def _split(addr):
+def _split(addr: str | None) -> tuple[str, str]:
     addr = (addr or "").strip().lower()
     if "@" not in addr:
         return "", ""
@@ -148,7 +148,7 @@ def _split(addr):
     return local, domain
 
 
-def _is_protected_domain(domain, local):
+def _is_protected_domain(domain: str, local: str) -> bool:
     if GOV_RE.search(domain) or EDU_RE.search(domain):
         return True
     # health / finance: protect unless it's an obvious marketing stream
@@ -157,7 +157,7 @@ def _is_protected_domain(domain, local):
     return False
 
 
-def looks_human(local):
+def looks_human(local: str | None) -> bool:
     """A local-part that looks like a person, not a role or a random mailer id."""
     if not local or local in ROLE_MKT or local in ROLE_MKT_WEAK or local in ROLE_NOTIF or local in ROLE_TXN:
         return False
@@ -173,7 +173,7 @@ def looks_human(local):
     return bool(re.search(r"[a-z]", local))
 
 
-def _is_scam(local, domain, subject, name):
+def _is_scam(local: str, domain: str, subject: str, name: str) -> bool:
     tld = domain.rsplit(".", 1)[-1] if "." in domain else ""
     blob = f"{subject} {name}"
     if STRONG_SCAM.search(blob):
@@ -187,7 +187,8 @@ def _is_scam(local, domain, subject, name):
     return False
 
 
-def classify(from_addr, subject="", from_name="", has_list_unsub=False, *, rules):
+def classify(from_addr: str, subject: str | None = "", from_name: str | None = "", has_list_unsub: bool = False, *,
+             rules: RuleSets) -> tuple[str, str, str]:
     """Return (bucket, confidence in {'high','med','low'}, reason). `rules` is the rule book's keep and
     block lists as sets."""
     subject = subject or ""
@@ -255,10 +256,10 @@ NOTIF_RE = re.compile(r"(no-?reply|do-?not-?reply|notification|notify|mailer-dae
 RE_FWD = re.compile(r"^\s*(re|fwd|fw|aw|wg|tr|rv|r[ée]f)\s*:", re.I)  # reply/forward prefixes (multi-lingual)
 
 
-def by_rule(reason):
+def by_rule(reason: str | None) -> bool:
     """Whether `reason`, as classify gave it, says one of the person's rules decided."""
     return "by rule" in (reason or "")
 
 
-def is_junk(bucket_name):
+def is_junk(bucket_name: str | None) -> bool:
     return bucket_name in JUNK_BUCKETS

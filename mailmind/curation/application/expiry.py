@@ -52,9 +52,9 @@ class Expiry:
             out["planned"] = len(targets)
             if dry or not targets:
                 return out
-            for t in targets:
-                t["bucket"], t["reason"] = "expired", f"expire rule: older than {t['hours']}h"
-            self._audit.swept(acct["email"], targets)       # log BEFORE moving so a crash still records intent
+            self._audit.swept(acct["email"], [      # log BEFORE moving so a crash still records intent
+                {"uid": t["uid"], "from": t["from"], "subject": t["subject"], "bucket": "expired",
+                 "reason": f"expire rule: older than {t['hours']}h"} for t in targets])
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
                                                           self._boxes.trash_folder(acct))
         except Exception as e:

@@ -5,71 +5,92 @@ Screener and expiry.
 Expiry rules are separate from keep and block: a kept sender can also expire. Keep decides what the
 classifier shows, expiry how long it stays.
 """
-KEYS = ("keep_senders", "block_senders", "keep_domains", "block_domains")
-EXPIRE = "expire_hours"   # {sender-or-domain: hours}
+from collections.abc import Collection, Iterable, Mapping
+from typing import Any, Final, Literal, TypedDict
+
+type ListKey = Literal["keep_senders", "block_senders", "keep_domains", "block_domains"]
+type RuleSets = Mapping[str, frozenset[str]]     # each of KEYS, as the classifier reads it
+
+KEYS: tuple[ListKey, ...] = ("keep_senders", "block_senders", "keep_domains", "block_domains")
+EXPIRE: Final = "expire_hours"   # {sender-or-domain: hours}
+_LISTS: dict[tuple[str, bool], ListKey] = {("keep", False): "keep_senders", ("block", False): "block_senders",
+                                           ("keep", True): "keep_domains", ("block", True): "block_domains"}
 
 
-def empty():
-    return {**{k: [] for k in KEYS}, EXPIRE: {}}
+class Rules(TypedDict):
+    keep_senders: list[str]
+    block_senders: list[str]
+    keep_domains: list[str]
+    block_domains: list[str]
+    expire_hours: dict[str, int]
 
 
-def no_sets():
-    return {k: frozenset() for k in KEYS}
+def empty() -> Rules:
+    return {"keep_senders": [], "block_senders": [], "keep_domains": [], "block_domains": [], "expire_hours": {}}
 
 
-def normalized(raw):
+def no_sets() -> RuleSets:
+    return {k: frozenset[str]() for k in KEYS}
+
+
+def normalized(raw: Any) -> Rules:
     """The rules a file held, lower-cased, without repeats, and only shelf lives that are positive. Raises
     on a shape that isn't rules (ValueError, TypeError, AttributeError)."""
-    out: dict = {k: list(dict.fromkeys(x.lower() for x in raw.get(k, []))) for k in KEYS}
-    out[EXPIRE] = {t.lower(): int(h) for t, h in (raw.get(EXPIRE) or {}).items() if int(h) > 0}
+    out = empty()
+    for k in KEYS:
+        out[k] = list(dict.fromkeys(x.lower() for x in raw.get(k, [])))
+    shelf_lives: dict[str, Any] = raw.get(EXPIRE) or {}
+    out[EXPIRE] = {t.lower(): int(h) for t, h in shelf_lives.items() if int(h) > 0}
     return out
 
 
-def as_sets(rules):
+def as_sets(rules: Rules) -> RuleSets:
     """The keep and block lists as frozensets, what the classifier reads."""
     return {k: frozenset(rules[k]) for k in KEYS}
 
 
-def for_saving(rules):
-    data: dict = {k: sorted(set(rules.get(k, []))) for k in KEYS}
+def for_saving(rules: Rules) -> Rules:
+    data = empty()
+    for k in KEYS:
+        data[k] = sorted(set(rules.get(k, [])))
     data[EXPIRE] = dict(sorted((rules.get(EXPIRE) or {}).items()))
     return data
 
 
-def is_domain(token):
+def is_domain(token: str) -> bool:
     return "@" not in token and "." in token
 
 
-def domain_listed(domain, listed):
+def domain_listed(domain: str, listed: Iterable[str]) -> bool:
     """True if domain equals or is a sub-domain of any entry in `listed`."""
     return any(domain == d or domain.endswith("." + d) for d in listed)
 
 
-def decided(addr, domain, rules):
+def decided(addr: str, domain: str, rules: Mapping[str, Collection[str]]) -> bool:
     """Whether a keep or block rule already covers this sender, by address or by domain."""
     return (addr in rules.get("keep_senders", []) or addr in rules.get("block_senders", [])
             or domain_listed(domain, rules.get("keep_domains", []))
             or domain_listed(domain, rules.get("block_domains", [])))
 
 
-def add(rules, token, verdict):
+def add(rules: Rules, token: str, verdict: str) -> ListKey:
     """Put `token` under `verdict` ('keep' or 'block') and take it out of the opposite one, so a token is
     never in both. Returns the list it went in."""
-    skind = "domains" if is_domain(token) else "senders"
-    rules[f"{verdict}_{skind}"].append(token)
-    other = "block" if verdict == "keep" else "keep"
-    rules[f"{other}_{skind}"] = [x for x in rules[f"{other}_{skind}"] if x != token]
-    return f"{verdict}_{skind}"
+    domain = is_domain(token)
+    placed, other = _LISTS[verdict, domain], _LISTS["block" if verdict == "keep" else "keep", domain]
+    rules[placed].append(token)
+    rules[other] = [x for x in rules[other] if x != token]
+    return placed
 
 
-def remove(rules, token):
+def remove(rules: Rules, token: str) -> None:
     """Drop a keep or block entry. Leaves any expiry rule alone: clear that with a shelf life of 0, so
     removing a keep chip can't silently stop expiry."""
     for k in KEYS:
         rules[k] = [x for x in rules[k] if x != token]
 
 
-def set_expiry(rules, token, hours):
+def set_expiry(rules: Rules, token: str, hours: int) -> None:
     """Expire INBOX mail from `token` (sender or domain) after `hours`; 0 clears."""
     if hours > 0:
         rules[EXPIRE][token] = hours
@@ -77,7 +98,7 @@ def set_expiry(rules, token, hours):
         rules[EXPIRE].pop(token, None)
 
 
-def expiry_hours(addr, expire):
+def expiry_hours(addr: str | None, expire: Mapping[str, int]) -> int | None:
     """Hours after which mail from `addr` expires under the `expire` map, or None.
     An exact sender entry wins over a domain entry; a domain also matches sub-domains."""
     addr = (addr or "").lower()
