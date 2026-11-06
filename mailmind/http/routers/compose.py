@@ -21,8 +21,8 @@ def routes(compose):
 
     @r.post("/api/outbox/retry")
     def outbox_retry(req):
-        ok = compose.outbox.retry(int(req.body.get("id")))
-        return {"ok": ok}, 200 if ok else 404
+        answer = compose.outbox.retry(int(req.body.get("id")))
+        return answer, 200 if answer["ok"] else 404
 
     @r.post("/api/outbox/cancel")
     def outbox_cancel(req):

@@ -37,6 +37,7 @@ class Outbox:
     _BACKOFF_CAP = 900
     _POLL = 30             # worker wakes at least this often to catch due retries
     SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
+    LOOK_IN_SENT_WAIT = 5  # how long a Retry waits for the account's gate, to look in Sent first
 
     def __init__(self, book, transport, copies, accounts, mail, effects, screen):
         self._book, self._transport, self._copies = book, transport, copies
@@ -71,16 +72,36 @@ class Outbox:
         self.QUEUE.kick()
 
     def retry(self, oid):
-        """A person's Retry. It may send what went out already if the row is an unsure one: they were told."""
+        """A person's Retry. On an unsure row it may send what went out already: they were told. Where the server
+        files sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left to do."""
+        went_out = self._in_sent_already(oid)
+
         def again(c):
             ok = self.QUEUE.requeue(c, oid)
             if ok:
                 self._book.outbox_set(c, oid, wire_begun=0, wait_kind="grace")
+                if went_out:
+                    self.QUEUE.mark_gate(c, oid)
             return ok
         ok = self._commit(again)
         if ok:
             self.kick()
-        return ok
+        return {"ok": True, "gone": True} if ok and went_out else {"ok": ok}
+
+    def _in_sent_already(self, oid):
+        """Is an unsure send in Sent? False whenever that can't be told, and they were told it might go twice."""
+        row = self._commit(lambda c: self._book.outbox_get(c, oid))
+        if row is None or row["state"] != "error" or not row["wire_begun"] or row["delivered"]:
+            return False
+        try:
+            acct = self._accounts.get(row["account"])
+            if not self._accounts.saves_sent(acct):
+                return False
+            return gates.run(acct["email"], lambda: self._copies.in_sent(acct, row["message_id"]),
+                             priority=gates.Priority.INTERACTIVE, deadline=self.LOOK_IN_SENT_WAIT)
+        except Exception as e:
+            print(f"[outbox] couldn't look in Sent for #{oid}: {type(e).__name__}", flush=True)
+            return False
 
     def list_recent(self, limit=50):
         c = self._book.connect()

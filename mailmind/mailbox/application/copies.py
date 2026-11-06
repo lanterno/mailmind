@@ -32,6 +32,18 @@ class Copies:
             except Exception:
                 pass
 
+    def in_sent(self, acct, message_id):
+        """Is a message under this Message-ID in the account's Sent?"""
+        s = self._open_session(acct)
+        try:
+            s.select(find_role(s, "sent") or "Sent")
+            return bool(s.uids("UNDELETED", "HEADER", "Message-ID", self._quote(message_id)))
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
+
     def append_to_drafts(self, acct, raw, prev_uid=None, prev_uidvalidity=None, prev_msgid=None, prev_folder=None,
                          message_id=None, tried=None):
         """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
