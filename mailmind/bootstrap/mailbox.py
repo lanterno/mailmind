@@ -30,14 +30,15 @@ from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.queries import Queries
 from mailmind.mailbox.application.realtime import Realtime
 from mailmind.mailbox.application.stats import LiveStats
+from mailmind.mailbox.application.reversal import Reversals
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.syncing import Syncing
-from mailmind.mailbox.application.undo import Undo
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
+from mailmind.platform.undo import Undo
 
 from mailmind.bootstrap import accounts         # the connection's TLS, pin and login, until they move into Accounts
 from mailmind.bootstrap.accounts import config           # the credential, likewise
@@ -264,8 +265,16 @@ stats = LiveStats(_directory, _Curation())
 folders = Folders(store, _directory, pool, ingest, _attention)
 queries = Queries(store, _attention, folders)
 bodies = Bodies(store, ingest, _Reader())
-undo = Undo(store, _directory, server_ops, commands, ingest, stats, folders,
-            {"snooze": _reverse_snooze, "mute": _reverse_mute, "unblock": _reverse_block})
+reversals = Reversals(store, _directory, server_ops, commands, ingest)
+
+
+def _after_undo():
+    stats.invalidate()
+    folders.invalidate()            # undo re-added or removed a message: refresh the rail's badges
+
+
+undo = Undo(store.conn, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
+                         "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
 filing = Filing(store, _directory, commands, ingest, undo, stats, folders, _attention)
 
 

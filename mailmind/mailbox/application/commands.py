@@ -20,7 +20,7 @@ from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.domain import command
 from mailmind.mailbox.domain.events import Applied, Restored
-from mailmind.platform import bus, profile
+from mailmind.platform import bus, profile, undo
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
@@ -29,6 +29,14 @@ _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk",
 
 def _now():
     return int(time.time())
+
+
+def _forget_undo(c, row):
+    """The move `row` won't happen, so there is nothing to reverse: the newest entry for it goes."""
+    if row["kind"] == "flag" or not row["message_id"]:
+        return
+    undo.forget(c, lambda e: (e.get("kind") in ("move", "gmail_archive") and e.get("account") == row["account"]
+                              and e.get("message_id") == row["message_id"] and e.get("src_folder") == row["src_folder"]))
 
 
 def _request_id(mutation_id):
@@ -237,8 +245,7 @@ class MailCommands:
     def _forget(self, c, row):
         """The change someone is waiting on won't happen, and they hear so now: as if it was never asked."""
         self._give_back(c, row)
-        if row["kind"] != "flag" and row["message_id"]:
-            self._store.undo_forget_move(c, row["account"], row["message_id"], row["src_folder"])
+        _forget_undo(c, row)
         self.QUEUE.cancel_unapplied(c, row["id"])
 
 
@@ -343,8 +350,7 @@ class MailCommands:
             if row is None or not self.QUEUE.cancel_unapplied(c, mid):
                 return None
             self._give_back(c, row)
-            if row["kind"] != "flag" and row["message_id"]:
-                self._store.undo_forget_move(c, row["account"], row["message_id"], row["src_folder"])
+            _forget_undo(c, row)
             return row
         return self._commit(go)
 

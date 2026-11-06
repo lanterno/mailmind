@@ -7,9 +7,9 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
-from mailmind.mailbox.application.undo import Undo
 from mailmind.mailbox.domain import command
 from mailmind.platform import sse
+from mailmind.platform.undo import Undo
 from mailmind.platform.workers import gates
 
 _FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}

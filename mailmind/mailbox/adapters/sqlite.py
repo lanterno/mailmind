@@ -1,5 +1,4 @@
-"""The mail MailMind has stored: messages, their bodies, per-folder sync state, the command log's rows and
-the undo stack. Every function but conn and init takes its caller's connection and leaves the commit to it."""
+"""The mail MailMind has stored: messages, their bodies, per-folder sync state, and the command log's rows. Every function but conn and init takes its caller's connection and leaves the commit to it."""
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -266,72 +265,6 @@ def set_uidvalidity(c, account, folder, uidvalidity):
            ON CONFLICT(account,folder) DO UPDATE SET uidvalidity=excluded.uidvalidity""",
         (account, folder, uidvalidity),
     )
-
-
-def undo_push(c, entry, group, keep):
-    """Put `entry` on top of the undo stack, or, when the top gathers `group`, add it to that
-    group's children. Then keep only the newest `keep` entries."""
-    top = c.execute("SELECT id, grp, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
-    if group and top is not None and top["grp"] == group:
-        held = json.loads(top["entry"])
-        held["children"].append(entry)
-        c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps(held), top["id"]))
-    elif group:
-        c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(?,?,?)",
-                  (group, json.dumps({"kind": "bulk", "group": group, "label": entry.get("label", "Updated"),
-                                      "children": [entry]}), datetime.now(timezone.utc).isoformat()))
-    else:
-        c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(NULL,?,?)",
-                  (json.dumps(entry), datetime.now(timezone.utc).isoformat()))
-    c.execute("DELETE FROM undo_entries WHERE id NOT IN (SELECT id FROM undo_entries ORDER BY id DESC LIMIT ?)",
-              (keep,))
-
-
-def undo_put_back(c, entry):
-    """Put an entry taken off the stack back on top: it, or what's left of its group, can be tried
-    again."""
-    c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(?,?,?)",
-              (entry.get("group") if entry.get("kind") == "bulk" else None, json.dumps(entry),
-               datetime.now(timezone.utc).isoformat()))
-
-
-def undo_pop(c):
-    """Take the newest entry off the undo stack: the entry, or None when the stack is empty."""
-    top = c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
-    if top is None:
-        return None
-    c.execute("DELETE FROM undo_entries WHERE id=?", (top["id"],))
-    return json.loads(top["entry"])
-
-
-def undo_forget_move(c, account, message_id, src_folder):
-    """A queued move was dropped, so there is nothing to reverse: take the newest entry for it off
-    the stack, or out of its group."""
-    def names(e):
-        return (e.get("kind") in ("move", "gmail_archive") and e.get("account") == account
-                and e.get("message_id") == message_id and e.get("src_folder") == src_folder)
-    for r in c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC").fetchall():
-        held = json.loads(r["entry"])
-        if held.get("kind") != "bulk":
-            if names(held):
-                c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
-                return
-            continue
-        children = held["children"]
-        hit = next((i for i in range(len(children) - 1, -1, -1) if names(children[i])), None)
-        if hit is None:
-            continue
-        del children[hit]
-        if children:
-            c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps(held), r["id"]))
-        else:
-            c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
-        return
-
-
-def undo_entries(c):
-    """The undo stack, oldest first."""
-    return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries ORDER BY id")]
 
 
 def get_scan_state(c, account, folder):
