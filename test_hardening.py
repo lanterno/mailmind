@@ -28,13 +28,14 @@ from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import ingest
 from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap.mailbox import offline
-import server
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
 import smtplib
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap import background
+from mailmind.bootstrap import web
+from mailmind.bootstrap import old_door
 store.init()
 
 
@@ -236,7 +237,7 @@ def test_replacing_a_draft_copy_never_bulk_expunges():
 @contextlib.contextmanager
 def _live_server():
     """The real handler on an ephemeral 127.0.0.1 port; yields get(path, headers) -> (status, body)."""
-    srv = server._Server(("127.0.0.1", 0), server.H)
+    srv = old_door._Server(("127.0.0.1", 0), web.H)
     port = srv.server_address[1]
     before = settings.current()
     settings.configure(dataclasses.replace(before, port=port))
@@ -265,7 +266,7 @@ def test_the_app_still_loads_on_its_own_host():
     with _live_server() as get:
         for host in ("127.0.0.1:PORT", "localhost:PORT"):
             code, body = get("/", {"Host": host})
-            assert code == 200 and server.CSRF.encode() in body, (host, code)
+            assert code == 200 and web.H.CSRF.encode() in body, (host, code)
         code, _ = get("/api/digest", {**_PAGE, "Origin": "http://127.0.0.1:PORT"})
         assert code == 200, code
 
@@ -275,7 +276,7 @@ def test_a_rebound_name_reads_nothing():
         for path in _READS:
             code, body = get(path, {"Host": "rebound.example.test:PORT"})
             assert code == 403, (path, code)
-            assert server.CSRF.encode() not in body, path
+            assert web.H.CSRF.encode() not in body, path
 
 
 def test_a_foreign_origin_reads_nothing():
@@ -357,7 +358,7 @@ def test_another_site_can_link_to_the_app_but_not_frame_it():
     with _live_server() as get:
         nav = {**_HOST, "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}
         code, body = get("/", {**nav, "Sec-Fetch-Dest": "document"})
-        assert code == 200 and server.CSRF.encode() in body, code
+        assert code == 200 and web.H.CSRF.encode() in body, code
         code, _ = get("/", {**nav, "Sec-Fetch-Dest": "iframe"})
         assert code == 403, code
         code, _ = get("/api/digest", {**nav, "Sec-Fetch-Dest": "document"})
@@ -373,7 +374,7 @@ def test_the_api_answers_only_the_pages_own_reads():
             code, _ = get("/api/digest", h)
             assert code == 403, (site, code)
             code, body = get("/", h)     # the page itself still opens
-            assert code == 200 and server.CSRF.encode() in body, (site, code)
+            assert code == 200 and web.H.CSRF.encode() in body, (site, code)
 
 
 def test_no_page_may_frame_the_app():

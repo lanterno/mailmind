@@ -301,11 +301,10 @@ def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, a
 # ── which door talks through which ────────────────────────────────────────────
 
 def test_the_new_front_door_talks_through_the_sdk():
-    import server
     from mailmind.bootstrap import assistant, front
     assistant.use("urllib")
     try:
-        front.build(server)
+        front.build()
         assert assistant.transport() == "the Anthropic SDK"
     finally:
         assistant.use("urllib")

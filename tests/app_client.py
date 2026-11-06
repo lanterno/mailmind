@@ -12,12 +12,15 @@ import os
 import threading
 import time
 from dataclasses import dataclass
+from mailmind.bootstrap import web
+from mailmind.bootstrap import old_door
+from mailmind.bootstrap import mailbox
 
 CSRF = "test-csrf-token"
 
 # Modules whose private globals hold process state between requests, and instances (`module:name`)
 # whose private attributes do.
-STATEFUL = ("server", "mailmind.bootstrap.background", "mailmind.bootstrap.assistant:calls", 
+STATEFUL = ("mailmind.bootstrap.background", "mailmind.bootstrap.assistant:calls", 
             "mailmind.bootstrap.mailbox:pool", "mailmind.bootstrap.mailbox:warm", "mailmind.bootstrap.mailbox:realtime", "mailmind.bootstrap.mailbox:stats", "mailmind.bootstrap.mailbox:folders", "mailmind.bootstrap.mailbox:syncing",
             "mailmind.curation.application.unsubscribe")
 _SIMPLE = (dict, list, set, int, float, str, bool, type(None))
@@ -61,7 +64,7 @@ def reset_state():
                 cur.update(v)
             else:
                 setattr(mod, k, v)
-    from mailmind.bootstrap import assistant, legacy, mailbox
+    from mailmind.bootstrap import assistant, legacy
     from mailmind.platform import sse
     legacy.unwire()                          # the server's subscriptions on the bus, as wire() made them
     sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
@@ -144,12 +147,11 @@ class AppClient:
 
 
 class RunningApp:
-    """The old front door: server.H on ThreadingHTTPServer, on a random loopback port, serving
+    """The old front door: web.H on ThreadingHTTPServer, on a random loopback port, serving
     from a background thread."""
 
     def __init__(self):
-        import server
-        self.httpd = server._Server(("127.0.0.1", 0), server.H)
+        self.httpd = old_door._Server(("127.0.0.1", 0), web.H)
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
                                        name="app-http", daemon=True)
@@ -164,14 +166,13 @@ class RunningApp:
 
 
 class RunningAsgiApp:
-    """The new front door: server.H behind FastAPI and uvicorn, as `python -m mailmind serve`
+    """The new front door: web.H behind FastAPI and uvicorn, as `python -m mailmind serve`
     builds it, on a random loopback port, serving from a background thread."""
 
     def __init__(self):
-        import server
         from asgi_server import Uvicorn
         from mailmind.bootstrap import front
-        app, before_shutdown = front.build(server)
+        app, before_shutdown = front.build()
         self.uvicorn = Uvicorn(app, before_shutdown=before_shutdown)
         self.port = self.uvicorn.port
 

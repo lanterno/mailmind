@@ -27,9 +27,10 @@ def _home():
 _home()                                               # before anything opens a file
 from mailmind.content import mime
 from mailmind.bootstrap.compose import outbox
-import server
 from mailmind.bootstrap import discovery
 from mailmind.bootstrap.compose import book
+from mailmind.bootstrap import web
+from mailmind.bootstrap import old_door
 
 ACCT = "ada@example.test"
 _uid = [0]
@@ -224,7 +225,7 @@ def test_items_carry_only_known_and_self():
 def test_route_requires_csrf():
     _fresh()
     _msg("lio@example.test")
-    srv = server._Server(("127.0.0.1", 0), server.H)
+    srv = old_door._Server(("127.0.0.1", 0), web.H)
     port = srv.server_address[1]
     before = settings.current()
     settings.configure(dataclasses.replace(before, port=port))
@@ -242,7 +243,7 @@ def test_route_requires_csrf():
         origin = {"Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"}
         code, _ = post(origin)
         assert code == 403, code
-        code, body = post({**origin, "X-CSRF-Token": server.CSRF})
+        code, body = post({**origin, "X-CSRF-Token": web.H.CSRF})
         assert code == 200 and body["items"]["lio@example.test"]["known"] is True, (code, body)
     finally:
         srv.shutdown()

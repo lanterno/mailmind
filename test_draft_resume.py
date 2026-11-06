@@ -34,7 +34,6 @@ _home()                                               # before anything opens a 
 from mailmind.compose import api as compose
 from mailmind.content import mime
 from mailmind.bootstrap.compose import outbox
-import server
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel import addresses
@@ -44,6 +43,8 @@ from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import sending
 from mailmind.compose.domain import limits
 from mailmind.bootstrap.compose import drafts
+from mailmind.bootstrap import web
+from mailmind.bootstrap import old_door
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -77,11 +78,11 @@ def _fresh(uidv=777, appenduid=True):
     mailbox.copies.append_to_drafts = append
     mailbox.copies.delete_draft_uid = delete
     outbox.enqueue = enqueue
-    server.ingest.fetch_body = _real_fetch_body
+    mailbox.ingest.fetch_body = _real_fetch_body
     drafts._live = lambda acct, folder, uid: True           # the server still holds the copy
 
 
-_real_fetch_body = server.ingest.fetch_body
+_real_fetch_body = mailbox.ingest.fetch_body
 _real_draft_live = drafts._live
 _real_append = mailbox.copies.append_to_drafts
 
@@ -952,7 +953,7 @@ def test_bad_pk_unknown_and_not_a_draft():
 def test_resume_route_requires_csrf():
     _fresh()
     pk, _ = _saved_and_synced(text="Mine.")
-    srv = server._Server(("127.0.0.1", 0), server.H)
+    srv = old_door._Server(("127.0.0.1", 0), web.H)
     port = srv.server_address[1]
     before = settings.current()
     settings.configure(dataclasses.replace(before, port=port))
@@ -969,7 +970,7 @@ def test_resume_route_requires_csrf():
             return out
         origin = {"Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"}
         assert post(origin)[0] == 403
-        code, body = post({**origin, "X-CSRF-Token": server.CSRF})
+        code, body = post({**origin, "X-CSRF-Token": web.H.CSRF})
         assert code == 200 and body["text"] == "Mine.", (code, body)
     finally:
         srv.shutdown()
@@ -1013,7 +1014,7 @@ def test_send_never_fetches_the_original():
 
     def refuse(pk):
         raise AssertionError(f"fetched pk {pk}")
-    server.ingest.fetch_body = refuse
+    mailbox.ingest.fetch_body = refuse
     res, code = sending.send(_payload(r))
     assert code == 200 and res["ok"], res
 
@@ -1098,13 +1099,13 @@ def test_replaced_copy_is_refused_and_drafts_resynced():
     _fresh()
     pk, _ = _saved_and_synced(text="Old words.")
     synced = []
-    real = server.ingest.sync_folder
-    server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full))
+    real = mailbox.ingest.sync_folder
+    mailbox.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full))
     drafts._live = lambda acct, folder, uid: False
     try:
         r, code = _resume(pk)
     finally:
-        server.ingest.sync_folder = real
+        mailbox.ingest.sync_folder = real
     assert code == 409 and "changed since the list loaded" in r["error"], (code, r)
     c = store.conn()
     gone = store.get_message(c, pk) is None
@@ -1147,12 +1148,12 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused():
             return True
         drafts._live = meanwhile
         synced = []
-        real = server.ingest.sync_folder
-        server.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append(full)
+        real = mailbox.ingest.sync_folder
+        mailbox.ingest.sync_folder = lambda acct, folder, full=False, recent=None: synced.append(full)
         try:
             r, code = _resume(pk)
         finally:
-            server.ingest.sync_folder = real
+            mailbox.ingest.sync_folder = real
         assert code == 409 and "changed since the list loaded" in r["error"] and synced == [True], (change, code, r)
 
 
@@ -1248,11 +1249,11 @@ def test_unreadable_draft_is_422_and_only_a_dead_server_502():
                       (ValueError("address parts cannot contain CR or LF"), 422), (RecursionError(), 422)):
         def fetch(pk, exc=exc):
             raise exc
-        server.ingest.fetch_body = fetch
+        mailbox.ingest.fetch_body = fetch
         r, code = _resume(pk)
         assert code == want, (exc, code, r)
         assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
-    server.ingest.fetch_body = _real_fetch_body
+    mailbox.ingest.fetch_body = _real_fetch_body
     real = mime.parse
 
     def parse(raw):
@@ -1297,10 +1298,10 @@ def test_draft_live_reads_uidvalidity_and_uid():
     c.commit()
     c.close()
     acct = {"email": ACCT}
-    real = server.accounts.connect
+    real = accounts.connect
     try:
         def check(fake, uid=42):
-            server.accounts.connect = lambda a, timeout=60: fake
+            accounts.connect = lambda a, timeout=60: fake
             return _real_draft_live(acct, "Drafts", uid)
         fake = _FakeIMAP(["42"])
         assert check(fake) is True
@@ -1312,15 +1313,15 @@ def test_draft_live_reads_uidvalidity_and_uid():
         assert check(_FakeIMAP(["42"], search="NO"), uid=7) is None             # not "gone"
         assert check(_FakeIMAP(["42"]), uid=None) is None
     finally:
-        server.accounts.connect = real
+        accounts.connect = real
 
 
 def test_draft_live_is_a_short_stateless_probe():
     _fresh()
-    timeouts, real = [], server.accounts.connect
+    timeouts, real = [], accounts.connect
     try:
         fake = _FakeIMAP(["42"])
-        server.accounts.connect = lambda a, timeout=60: (timeouts.append(timeout), fake)[1]
+        accounts.connect = lambda a, timeout=60: (timeouts.append(timeout), fake)[1]
         assert _real_draft_live({"email": ACCT}, "Drafts", 42) is True
         assert timeouts and timeouts[0] <= 15 and fake.calls[-1] == ("logout",), (timeouts, fake.calls)
         fake = _FakeIMAP(["42"], boom=True)
@@ -1328,10 +1329,10 @@ def test_draft_live_is_a_short_stateless_probe():
 
         def refused(a, timeout=60):
             raise OSError("no route to host")
-        server.accounts.connect = refused
+        accounts.connect = refused
         assert _real_draft_live({"email": ACCT}, "Drafts", 42) is None
     finally:
-        server.accounts.connect = real
+        accounts.connect = real
 
 
 def test_edit_probes_the_server_without_holding_the_ops_lock():

@@ -13,6 +13,7 @@ from mailmind.assistant.application.governor import (PRESENCE_SECONDS, TRIP_AFTE
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import assistant
+from mailmind.bootstrap import web
 
 
 class Clock:
@@ -252,7 +253,6 @@ REWRITE = {"op": "shorten", "text": "see you thursday"}
 
 
 def test_at_the_limit_an_interactive_request_asks_first_and_goes_when_allowed(app, world, ai):
-    import server
     from fakes import anthropic_api as fa
     with_limit(world, 0.01)                                # 10,000 micro-dollars
     status, body = fa.answer(json.dumps({"text": "Thursday."}))
@@ -267,9 +267,9 @@ def test_at_the_limit_an_interactive_request_asks_first_and_goes_when_allowed(ap
     assert len(ai.requests) == sent                        # nothing was sent
     ai_line = app.get("/api/digest").json["ai"]
     assert (ai_line["last_ok"], ai_line["last_error"]) == (True, "")   # held back is not a failure
-    r = app.post("/api/ai/rewrite", REWRITE, headers={server.AI_OVER_HEADER: "allow"})
+    r = app.post("/api/ai/rewrite", REWRITE, headers={web.AI_OVER_HEADER: "allow"})
     assert r.status == 200 and len(ai.requests) == sent + 1
-    assert app.post("/api/ai/rewrite", REWRITE, headers={server.AI_OVER_HEADER: "yes"}).status == 402
+    assert app.post("/api/ai/rewrite", REWRITE, headers={web.AI_OVER_HEADER: "yes"}).status == 402
 
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread

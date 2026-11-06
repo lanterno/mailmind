@@ -27,6 +27,8 @@ from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import old_door
+from mailmind.bootstrap import accounts
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 FOLDED = "ada-inbox-09-rfc2047-folded.eml"
@@ -120,7 +122,6 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
 
 
 def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
-    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.curation import rules
     rules.set_expiry("nobody.example.test", 72)              # so expiry has work that needs IMAP
     ada = accounts.get(w.ADA)
@@ -135,15 +136,13 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
 
 
 def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypatch):
-    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import ingest
-    import server
-    real, jobs = server.gates.run, []
+    real, jobs = gates.run, []
 
     def counted(account, fn, **kw):
         jobs.append(account)
         return real(account, fn, **kw)
-    monkeypatch.setattr(server.gates, "run", counted)
+    monkeypatch.setattr(gates, "run", counted)
     mailbox.syncing._auto_reconcile_one(accounts.get(w.ADA))              # never holds the gate across folders
     assert len(ingest.reconciled_folders(w.ADA)) > 1
     assert jobs == [w.ADA] * len(ingest.reconciled_folders(w.ADA))
@@ -429,7 +428,6 @@ def test_hwf_a_forward_leaves_inline_pictures_behind(app, world):
 
 
 def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
-    from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     saved = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],
@@ -487,8 +485,7 @@ def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, wo
 # -- the server's own plumbing ---------------------------------------------
 
 def test_hwf_a_browser_dropping_its_connection_prints_no_traceback(capsys):
-    import server
-    srv = object.__new__(server._Server)
+    srv = object.__new__(old_door._Server)
     try:
         raise ConnectionResetError("reset by peer")
     except ConnectionResetError:
@@ -568,16 +565,15 @@ def _draft_row(did):
 def test_saves_that_overlap_leave_one_copy_and_the_row_on_it(app, world, monkeypatch):
     # Both read the row they replace, so a read taken before the gate would expunge the UID the
     # first had already replaced, and leave the first's copy in Drafts with nothing tracking it.
-    import server
     drafts = world.server.mailbox(w.ADA, "Drafts")
     before = len(drafts.messages)
     did = app.post("/api/draft", _swatch("cmp-2")).json["draft_id"]
-    real, waiting = server.gates.run, []
+    real, waiting = gates.run, []
 
     def run(scope, job, **kw):
         waiting.append(scope)
         return real(scope, job, **kw)
-    monkeypatch.setattr(server.gates, "run", run)
+    monkeypatch.setattr(gates, "run", run)
     with gate.held_elsewhere(w.ADA):
         waiting.clear()
         saves = [threading.Thread(target=app.post, args=("/api/draft", _swatch("cmp-2", draft_id=did, text=text)))
@@ -617,9 +613,8 @@ def test_a_first_save_retried_from_another_account_moves_the_copy_there(app, wor
 def test_a_save_whose_row_moved_accounts_while_it_waited_takes_the_wider_gate(app, world, monkeypatch):
     # It asked for its own account's gate, and by its turn the row is in another account, whose
     # copy it must remove: it goes round again holding them all.
-    import server
     a = app.post("/api/draft", _swatch("cmp-5")).json
-    real, scopes = server.gates.run, []
+    real, scopes = gates.run, []
     b = {}
 
     def run(scope, job, **kw):
@@ -627,10 +622,10 @@ def test_a_save_whose_row_moved_accounts_while_it_waited_takes_the_wider_gate(ap
         if len(scopes) == 1:                                       # another tab's save gets in first
             b.update(app.post("/api/draft", _swatch("cmp-5", account=w.BEA, draft_id=a["draft_id"])).json)
         return real(scope, job, **kw)
-    monkeypatch.setattr(server.gates, "run", run)
+    monkeypatch.setattr(gates, "run", run)
     r = app.post("/api/draft", _swatch("cmp-5", draft_id=a["draft_id"], text="Back from Ada.")).json
     assert r["ok"] and r["draft_id"] == a["draft_id"]
-    assert scopes[0] == w.ADA and scopes[-1] == server.gates.EVERY_ACCOUNT
+    assert scopes[0] == w.ADA and scopes[-1] == gates.EVERY_ACCOUNT
     assert not world.server.find(w.BEA, "Drafts", b["message_id"])
     assert world.server.find(w.ADA, "Drafts", r["message_id"])
 

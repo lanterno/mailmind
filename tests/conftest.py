@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 import pytest
 
 import guard
+from mailmind.bootstrap import web
+from mailmind.bootstrap import mailbox
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ.pop("MAILMIND_PROFILE", None)
@@ -109,7 +111,6 @@ def _pristine_state():
 def _imap_adapters():
     """imaplib for every account and nothing else offered, as a process starts: a test that offers
     IMAPClient, or a new door an earlier test built, can't leave it to the next."""
-    from mailmind.bootstrap import mailbox
     mailbox.reset()
 
 
@@ -200,10 +201,9 @@ def app(request, world, monkeypatch):
     import dataclasses
     import time_machine
     import app_client
-    import server
     from mailmind.bootstrap import legacy
     app_client.reset_state()
-    monkeypatch.setattr(server, "CSRF", app_client.CSRF)
+    monkeypatch.setattr(web.H, "CSRF", app_client.CSRF)
     legacy.wire()                 # as server.__main__ does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
