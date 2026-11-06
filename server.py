@@ -4363,6 +4363,14 @@ class H(BaseHTTPRequestHandler):
                 self._send(200, webroot.page(CSRF).encode("utf-8"), "text/html; charset=utf-8",
                            [("Content-Security-Policy-Report-Only", perimeter.page_policy()),
                             ("Cache-Control", "no-store")])     # it holds this run's token
+            elif u.path == "/next" or u.path.startswith("/next/"):
+                built = webroot.next_page(CSRF)
+                if built is None:
+                    self._send(404, b"The new app isn't built. Run: just build-web\n", "text/plain; charset=utf-8")
+                else:
+                    self._send(200, built.encode("utf-8"), "text/html; charset=utf-8",
+                               [("Content-Security-Policy-Report-Only", perimeter.page_policy()),
+                                ("Cache-Control", "no-store")])
             elif u.path.startswith(webroot.PREFIX):
                 self._serve_asset(u.path)
             elif u.path == "/api/digest":

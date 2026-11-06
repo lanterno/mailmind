@@ -5,6 +5,8 @@ app with nothing installed and nothing built. `just build-web` writes the same f
 content, to `mailmind/http/dist`. That is what gets served while it is at least as new as every source
 file, so an edit or a checkout never leaves the app on old files.
 
+The React app at /next exists only as built: `web/src` doesn't run as it stands.
+
 Standard library only: python3 server.py uses it.
 """
 import dataclasses
@@ -76,6 +78,15 @@ def page(csrf):
         return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", build())
 
 
+def next_page(csrf):
+    """The React app's page, or None when nothing has built it."""
+    path = os.path.join(DIST, "next.html")
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", build())
+
+
 def asset(url_path):
     """The Asset at a URL path under PREFIX, or None for anything that isn't one of the page's files."""
     relative = url_path.removeprefix(PREFIX)
@@ -84,6 +95,9 @@ def asset(url_path):
         return None
     root = _root()
     path = os.path.join(root, "assets", *relative.split("/"))
+    if not os.path.isfile(path) and root != DIST:     # one of /next's, which only a build has
+        root = DIST
+        path = os.path.join(root, "assets", *relative.split("/"))
     if not os.path.isfile(path) or not os.path.realpath(path).startswith(os.path.realpath(root) + os.sep):
         return None
     stamp = _stamp(path)
