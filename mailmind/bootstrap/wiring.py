@@ -9,7 +9,7 @@ from mailmind.accounts.domain import events as account_events
 from mailmind.bootstrap import background, compose, mailbox
 from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
-from mailmind.platform.logging import setup as setup_logging
+from mailmind.platform.logging import get_logger, setup as setup_logging
 from mailmind.platform.workers import scheduler
 
 from mailmind.bootstrap.mailbox import commands
@@ -92,15 +92,15 @@ def start(spawn=_daemon):
     background.JOBS = jobs                   # what /api/debug/jobs reports
     if background.nosync():
         jobs.start(spawn)
-        print("(auto-sync disabled: the read-only profile writes nothing, so sends and moves wait "
-              "in their queues; snooze still runs)", flush=True)
+        get_logger().info("(auto-sync disabled: the read-only profile writes nothing, so sends and moves wait "
+                          "in their queues; snooze still runs)")
     else:
         spawn(compose.outbox.worker_loop)
         spawn(commands.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
-    print(f"[ai] {assistant.calls.describe_engine()}", flush=True)
-    print(f"[imap] {mailbox.describe()}", flush=True)
+    get_logger("ai").info("%(engine)s", {"engine": assistant.calls.describe_engine()})
+    get_logger("imap").info("%(adapters)s", {"adapters": mailbox.describe()})
 
 
 def assess_batch() -> int:

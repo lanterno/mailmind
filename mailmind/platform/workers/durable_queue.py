@@ -22,6 +22,8 @@ python3 server.py uses it.
 import threading
 import time
 
+from mailmind.platform.logging import get_logger
+
 QUEUED, ERROR = "queued", "error"
 
 
@@ -37,6 +39,7 @@ class DurableQueue:
         self.max_attempts, self.backoff_base, self.backoff_cap = max_attempts, backoff_base, backoff_cap
         self.poll, self.lane, self.unsure = poll, lane, unsure
         self._connect = connect
+        self._log = get_logger(name)
         self._kick = threading.Event()
         self._lanes, self._missed = {}, set()   # lane -> the thread running its rows; lanes a drain passed
         self._lanes_lock = threading.Lock()
@@ -166,7 +169,7 @@ class DurableQueue:
             try:
                 handle(id_)
             except Exception as e:
-                print(f"[{self.name}] {handle.__name__} #{id_} errored: {type(e).__name__}: {e}", flush=True)
+                self._log.error("%(handler)s #%(id)s errored", {"handler": handle.__name__, "id": id_}, exc_info=e)
 
     def _run_lane(self, lane, ids, handle):
         try:
@@ -199,7 +202,7 @@ class DurableQueue:
             finally:
                 c.close()
         except Exception as e:                   # the poll still comes
-            print(f"[{self.name}] next due: {type(e).__name__}", flush=True)
+            self._log.warning("next due", exc_info=e)
             return self.poll
 
     def run_forever(self, drain, stop=None):
@@ -224,4 +227,4 @@ class DurableQueue:
             try:
                 drain()
             except Exception as e:
-                print(f"[{self.name}] drain error: {type(e).__name__}: {e}", flush=True)
+                self._log.error("drain error", exc_info=e)

@@ -13,7 +13,9 @@ from mailmind.assistant.api import AIOff, OverLimit, allowing_over
 from mailmind.compose.api import MAX_SEND_POST
 from mailmind.http.routing import ANSWERED, Request, Routes
 from mailmind.platform import perimeter, profile, settings
-from mailmind.platform.logging import for_request
+from mailmind.platform.logging import for_request, get_logger
+
+log = get_logger("http")
 
 MAX_POST = 1 << 20                        # 1 MB cap for control routes
 
@@ -145,7 +147,7 @@ class H(BaseHTTPRequestHandler):
         except AIOff:               # no key: nothing was sent, and nothing will be until one is set
             self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
-            print(f"[get] {u.path}: {type(e).__name__}: {e}", flush=True)
+            log.error("GET %(path)s failed", {"path": u.path}, exc_info=e)
             self._json({"ok": False, "error": "request failed"}, 500)
         finally:
             over.__exit__(None, None, None)
@@ -173,14 +175,14 @@ class H(BaseHTTPRequestHandler):
         except (TypeError, ValueError):       # malformed request input (bad/missing int id/pk) → clean 400
             self._json({"ok": False, "error": "bad request"}, 400)
         except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
-            print(f"[post] {self.path}: read-only, refused {e}", flush=True)
+            log.info("POST %(path)s refused, read-only: %(what)s", {"path": u.path, "what": str(e)})
             self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
         except OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
         except AIOff:               # no key: nothing was sent, and nothing will be until one is set
             self._json(*_ai_off_answer())
         except Exception as e:                # scrub: log the detail, never echo it to the client
-            print(f"[post] {self.path}: {type(e).__name__}: {e}", flush=True)
+            log.error("POST %(path)s failed", {"path": u.path}, exc_info=e)
             self._json({"ok": False, "error": "request failed"}, 500)
         finally:
             over.__exit__(None, None, None)

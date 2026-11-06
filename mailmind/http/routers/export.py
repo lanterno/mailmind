@@ -5,6 +5,9 @@ import tempfile
 
 from mailmind.http.routing import ANSWERED, Routes
 from mailmind.platform.db import export
+from mailmind.platform.logging import get_logger
+
+log = get_logger("export")
 
 
 def _snapshot(h):
@@ -27,7 +30,7 @@ def _snapshot(h):
                     break
                 h.wfile.write(chunk)
     except Exception as e:
-        print(f"[export] db error: {type(e).__name__}: {e}", flush=True)
+        log.error("db error", exc_info=e)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

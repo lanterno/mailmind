@@ -1,5 +1,8 @@
 """What the page asks of Curation: the rules, the Screener, a sender's cleanup, sweeps and the audit trail."""
 from mailmind.http.routing import Routes
+from mailmind.platform.logging import get_logger
+
+log = get_logger("cleanup")
 
 
 def routes(curation):
@@ -34,7 +37,7 @@ def routes(curation):
         try:
             return curation.cleanup.execute(req.body)
         except Exception as ex:
-            print(f"[cleanup] error: {type(ex).__name__}: {ex}", flush=True)
+            log.error("error", exc_info=ex)
             return {"ok": False, "error": "cleanup failed"}, 500
 
     @r.post("/api/sweep")

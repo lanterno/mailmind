@@ -6,6 +6,7 @@ from mailmind.bootstrap import assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import profile
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import scheduler
 
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -19,7 +20,7 @@ def _expire_secs():
     try:
         return int(os.environ.get("MAILMIND_EXPIRE_SECS", "3600"))  # 0 disables
     except ValueError:
-        print("[expire] bad MAILMIND_EXPIRE_SECS — using 3600", flush=True)
+        get_logger("expire").warning("bad MAILMIND_EXPIRE_SECS — using 3600")
         return 3600
 
 

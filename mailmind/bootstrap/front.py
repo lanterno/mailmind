@@ -14,6 +14,7 @@ from mailmind.http import serving
 from mailmind.http.app import create_app
 from mailmind.http.bridge import HandlerBridge
 from mailmind.platform import settings
+from mailmind.platform.logging import get_logger
 
 
 def build():
@@ -37,5 +38,5 @@ def serve(port=None):
     app, before_shutdown = build()      # first, so the startup lines name the SDK and who asked for IMAPClient
     wiring.start()
     port = settings.current().port
-    print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)
+    get_logger().info("MailMind → http://127.0.0.1:%(port)s  (serving now)", {"port": port})
     serving.Server(serving.config(app, port=port), before_shutdown).run()

@@ -19,6 +19,10 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from mailmind.platform.logging import get_logger
+
+log = get_logger("bus")
+
 Handler = Callable[[Any], object]
 
 
@@ -59,8 +63,8 @@ class Bus:
                 handler(event)
             except Exception as e:
                 name = getattr(handler, "__qualname__", type(handler).__name__)
-                print(f"[bus] {name} failed on {type(event).__name__}: {type(e).__name__}",
-                      flush=True)
+                log.error("%(handler)s failed on %(event)s", {"handler": name, "event": type(event).__name__},
+                          exc_info=e)
 
     def subscribers(self, topic: type) -> tuple[Handler, ...]:
         """The handlers subscribed to `topic`, in order."""

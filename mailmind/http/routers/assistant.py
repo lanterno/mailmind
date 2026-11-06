@@ -3,6 +3,9 @@ can start a call is drafting ahead's kick, which needs the page's token."""
 from mailmind.assistant.api import AIOff, OverLimit
 from mailmind.http.routing import Routes
 from mailmind.platform import perimeter
+from mailmind.platform.logging import get_logger
+
+log = get_logger("ai")
 
 
 def _scrubbed(what, failed, answer):
@@ -14,7 +17,7 @@ def _scrubbed(what, failed, answer):
         except (OverLimit, AIOff):
             raise
         except Exception as ex:
-            print(f"[ai] {what}: {type(ex).__name__}: {ex}", flush=True)
+            log.error("%(what)s", {"what": what}, exc_info=ex)
             return {"ok": False, "error": failed}, 500
     return route
 

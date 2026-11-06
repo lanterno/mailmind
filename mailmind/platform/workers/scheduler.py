@@ -20,7 +20,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from mailmind.platform.logging import for_round
+from mailmind.platform.logging import for_round, get_logger
+
+log = get_logger("jobs")
 
 
 @dataclass
@@ -84,7 +86,7 @@ class Scheduler:
                 except Exception as e:
                     job.failures += 1
                     job.last_error = type(e).__name__
-                    print(f"[jobs] {name} failed: {type(e).__name__}: {e}", flush=True)
+                    log.warning("%(job)s failed", {"job": name}, exc_info=e)
                 finally:
                     job.runs += 1
                     job.running = False

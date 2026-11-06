@@ -15,13 +15,14 @@ under way, for a server that is about to stop: the event stream never ends on it
 import asyncio
 import concurrent.futures
 import io
-import logging
 import threading
 import urllib.parse
 
 import anyio
 
-log = logging.getLogger(__name__)
+from mailmind.platform.logging import get_logger
+
+log = get_logger("http.bridge")
 
 # Headers about this one connection. The ASGI server frames and closes the connection itself.
 _HOP_BY_HOP = {b"connection", b"keep-alive", b"proxy-connection", b"transfer-encoding", b"upgrade",
@@ -126,7 +127,7 @@ class HandlerBridge:
         except BrokenPipeError:
             pass                                # the client left; nothing more to send
         except Exception:
-            log.exception("handler failed on %s %s", scope.get("method"), scope.get("path"))
+            log.exception("handler failed on %(method)s %(path)s", {"method": scope.get("method"), "path": scope.get("path")})
         try:
             out.finish()
         except BrokenPipeError:
@@ -187,7 +188,7 @@ class _Exchange:
             raise
         except _CALL_FAILED as e:
             self.gone.set()
-            log.debug("response write dropped: %s", type(e).__name__)
+            log.debug("response write dropped", exc_info=e)
             raise BrokenPipeError("the server is shutting down") from e
 
     def _wait(self, future):

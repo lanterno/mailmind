@@ -9,7 +9,10 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("undo")
 
 KEEP_FOR = timedelta(hours=24)                # an entry older than this can't be undone (decision D3)
 
@@ -161,7 +164,7 @@ class Undo:
                     try:
                         ok, a, f = self._reverse_one(child)
                     except Exception as e:            # one member's trouble never stops the rest
-                        print(f"[undo] a group member: {self._quiet_error(e)}", flush=True)
+                        log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
                         ok = False
                     if ok:
                         acct, folder = a, f
@@ -189,5 +192,5 @@ class Undo:
         except Exception as e:
             if not kept:
                 self._undo_db(lambda c: put_back(c, entry))
-            print(f"[undo] error: {self._quiet_error(e)}", flush=True)
+            log.error("error: %(why)s", {"why": self._quiet_error(e)})
             return {"ok": False, "error": "couldn’t undo"}, 200
