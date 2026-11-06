@@ -883,6 +883,13 @@ class FakeIMAPServer:
             self.accounts[user] = acct
         return self.config_entry(user)
 
+    def add_folder(self, user, name, special=""):
+        """One more folder on an account, if it hasn't one by that name."""
+        with self.lock:
+            acct = self.accounts[user]
+            if name not in acct.mailboxes:
+                acct.mailboxes[name] = Mailbox(name, special, uidvalidity=next(self._uidv))
+
     def config_entry(self, user):
         acct = self.accounts[user]
         return {"email": user, "type": acct.kind, "host": "127.0.0.1", "port": self.port,

@@ -3,7 +3,7 @@
   "body": {
    "cap": 500,
    "capped": false,
-   "count": 4,
+   "count": 3,
    "filter": "from:lin",
    "intent": "act",
    "ok": true,
@@ -23,11 +23,6 @@
      "from": "Lin Mori",
      "subject": "Lunch on Thursday?",
      "when": "6d ago"
-    },
-    {
-     "from": "Lin Mori",
-     "subject": "Quilt pattern ideas",
-     "when": "1w ago"
     }
    ],
    "snooze_preset": "tomorrow",
@@ -50,7 +45,7 @@
   "body": {
    "cap": 200,
    "capped": false,
-   "count": 2,
+   "count": 1,
    "filter": "is:newsletter",
    "intent": "act",
    "ok": true,
@@ -60,11 +55,6 @@
      "from": "The Weekly Loom",
      "subject": "This week: five new patterns",
      "when": "5d ago"
-    },
-    {
-     "from": "Spindle Deals",
-     "subject": "20% off all yarn this weekend",
-     "when": "1w ago"
     }
    ],
    "snooze_preset": "tomorrow",

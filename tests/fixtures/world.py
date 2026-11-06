@@ -212,6 +212,15 @@ class World:
             c.close()
         return {"server": sorted(server), "db": db}
 
+    def where_id(self, message_id):
+        """Where on the server the message with this Message-ID is, as where()'s "server" list."""
+        with self.server.lock:
+            return sorted([user, box_name, uid, sorted(m.flags)]
+                          for user, acct in self.server.accounts.items()
+                          for box_name, box in acct.mailboxes.items()
+                          for uid, m in box.messages.items()
+                          if (m.headers().get("Message-ID") or "").strip() == message_id)
+
     def row(self, name):
         import store
         c = store.conn()

@@ -23,6 +23,12 @@ def q(sql, *args):
         c.close()
 
 
+def in_new_folder(world, folder, raw):
+    """Deliver to a folder of Ada's that the corpus doesn't have."""
+    world.server.add_folder(w.ADA, folder)
+    world.deliver(w.ADA, folder, raw)
+
+
 def preview(app, ai, verb="archive", flt=FROM_LIN, **more):
     ai.queue(fa.answer({"intent": "act", "verb": verb, "filter": flt, **more}))
     answer = app.post("/api/ai/do-plan", {"cmd": f"{verb} that"}).json
@@ -131,6 +137,87 @@ def test_a_capped_plan_files_the_newest(app, world, ai, monkeypatch):
     assert plan["capped"] is True and plan["count"] >= 2
     assert confirm(app, plan).json["count"] == 1
     assert len(lin_in_inbox()) == plan["count"] - 1
+
+
+# -- how far it reaches ------------------------------------------------------------------------------
+
+OLD_THREAD = "ada-archive-01-old-thread.eml"    # from Lin, in Ada's Archive
+
+
+def degraded(app, ai, verb, flt):
+    ai.queue(fa.answer({"intent": "act", "verb": verb, "filter": flt}))
+    return app.post("/api/ai/do-plan", {"cmd": f"{verb} that"}).json
+
+
+def test_archiving_leaves_out_what_is_archived_already(app, world, ai):
+    plan = preview(app, ai, flt="from:lin@example.test")
+    assert plan["count"] == len(lin_in_inbox())
+    r = confirm(app, plan).json
+    assert (r["count"], r["failed"]) == (plan["count"], 0)
+    assert folders(world, OLD_THREAD) == ["Archive"]
+
+
+def test_a_verb_never_reaches_its_own_home(app, world, ai):
+    assert degraded(app, ai, "archive", "from:lin@example.test in:Archive").get("empty") is True
+
+
+def test_other_verbs_reach_the_archive(app, world, ai):
+    plan = preview(app, ai, verb="trash", flt="from:lin@example.test")
+    assert plan["count"] == len(lin_in_inbox()) + 1
+    assert confirm(app, plan).json["failed"] == 0
+    assert folders(world, OLD_THREAD) == ["Trash"]
+
+
+@pytest.mark.parametrize("folder", ["Sent", "Drafts", "Trash", "Junk"])
+@pytest.mark.parametrize("verb", ["archive", "star", "read"])
+def test_a_filter_that_names_no_folder_leaves_these_alone(app, world, ai, folder, verb):
+    raw = w.variant(QUILT, Message_ID=f"<apart@{folder.lower()}.example.test>", Subject="Only here zebra")
+    world.deliver(w.ADA, folder, raw)
+    answer = degraded(app, ai, verb, "subject:zebra")
+    assert answer["intent"] == "search" and answer.get("empty") is True
+
+
+def test_naming_the_folder_reaches_it(app, world, ai):
+    world.deliver(w.ADA, "Sent", w.variant(QUILT, Message_ID="<apart@sent.example.test>", Subject="Only here zebra"))
+    plan = preview(app, ai, flt="subject:zebra in:Sent")
+    assert plan["count"] == 1 and confirm(app, plan).json["count"] == 1
+    assert [box for _, box, _, _ in world.where_id("<apart@sent.example.test>")] == ["Archive"]
+
+
+def test_a_folder_named_only_to_rule_it_out_reaches_nothing_more(app, world, ai):
+    world.deliver(w.ADA, "Sent", w.variant(QUILT, Message_ID="<apart@sent.example.test>", Subject="Only here zebra"))
+    assert degraded(app, ai, "archive", "subject:zebra -in:Archive").get("empty") is True
+
+
+def test_what_the_server_says_a_folder_is_beats_its_name(app, world, ai, monkeypatch):
+    import server
+    in_new_folder(world, "Filed", w.variant(QUILT, Message_ID="<odd@filed.example.test>", Subject="Only here zebra"))
+    assert preview(app, ai, flt="subject:zebra")["count"] == 1
+    monkeypatch.setitem(server._folder_list_cache, w.ADA, {"ts": 0, "folders": [{"name": "Filed", "role": "trash"}]})
+    assert degraded(app, ai, "archive", "subject:zebra").get("empty") is True
+
+
+def test_a_message_in_two_folders_counts_once_and_its_inbox_copy_is_the_one_filed(app, world, ai):
+    in_new_folder(world, "Receipts", w.raw(QUILT))
+    plan = preview(app, ai, flt="from:lin@example.test subject:quilt")
+    assert plan["count"] == 1
+    assert confirm(app, plan).json["count"] == 1
+    assert sorted(folders(world, QUILT)) == ["Archive", "Receipts"]
+
+
+def test_all_mail_is_the_copy_it_reaches_last(app, world, ai):
+    raw = w.variant(QUILT, Message_ID="<both@lin.example.test>", Subject="Only here zebra")
+    in_new_folder(world, "All Mail", raw)
+    in_new_folder(world, "Receipts", raw)
+    plan = preview(app, ai, verb="trash", flt="subject:zebra")
+    assert plan["count"] == 1 and confirm(app, plan).json["count"] == 1
+    assert sorted(box for _, box, _, _ in world.where_id("<both@lin.example.test>")) == ["All Mail", "Trash"]
+
+
+def test_all_mail_alone_can_be_trashed_but_is_already_archived(app, world, ai):
+    in_new_folder(world, "All Mail", w.variant(QUILT, Message_ID="<only@lin.example.test>", Subject="Only here zebra"))
+    assert degraded(app, ai, "archive", "subject:zebra").get("empty") is True
+    assert preview(app, ai, verb="trash", flt="subject:zebra")["count"] == 1
 
 
 # -- when it can't -----------------------------------------------------------------------------------
