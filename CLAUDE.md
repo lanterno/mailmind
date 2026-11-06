@@ -350,7 +350,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
   `tests/contract/test_mail_session_contract.py` runs every case through each against the fake, and
-  `tests/contract/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, the one path a change to the mail on a server takes), `server_ops` (`ServerOps`, what a try asks of the server, and the reversals), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing` (`Filing`, a person's filing, and the tray), `undo` (`Undo`), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `server_ops`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), which `Undo` is handed as `reversers`. The rest of the context is standard
+  `tests/contract/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, the one path a change to the mail on a server takes), `server_ops` (`ServerOps`, what a try asks of the server, and the reversals), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync, reconcile and the body backfill), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing` (`Filing`, a person's filing, and the tray), `reversal` (`Reversals`, what reverses a move), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `server_ops`, `ingest`, `syncing`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), and `Undo`, in `platform`, is handed each kind's reverser there. The rest of the context is standard
   library only.
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
@@ -548,7 +548,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   where a person's retry (`requeue`) starts the count again: the outbox's fifth, a command's hundred-and-first, about a
   day of tries. `/api/pending` lists the command log's unapplied rows for the panel the outbox button opens; its Retry
   (`commands.retry`) marks the message or shows the flags again, and its Discard (`commands.discard`, on the account's gate)
-  gives them back and takes the entry off the undo stack (`store.undo_forget_move`). The `forget` job removes rows finished a
+  gives them back and takes the entry off the undo stack (`undo.forget`). The `forget` job removes rows finished a
   month ago (`store.command_forget_finished`). The worker wakes
   when kicked and when the next queued row comes due (`until_due`), at least every 30 s. The
   outbox publishes `Failed` for an attempt that failed, as it does `Sent`. A send the
@@ -605,10 +605,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   move pending. The mark stays behind those two and a refused search, so what was skipped is read again.
   A sync that changed any publishes `FlagsChanged`, and the page reloads an open list on
   `flags-changed`.
-- Undo is a LIFO stack in the database (`undo_entries`, migration 25; `store.undo_push`,
-  `undo_pop`, `undo_put_back`), so it outlives a restart and is the same through either door
-  (decision D3). It keeps the newest `UNDO_MAX` entries, and an entry leaves it, committed, before
-  any server is asked to reverse it. Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
+- Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`),
+  so it outlives a restart and is the same through either door (decision D3). It holds 50 groups
+  (`Undo.UNDO_MAX`, an action alone counts as one) or 24 hours of them (`undo.KEEP_FOR`), whichever comes first, and an entry leaves it, committed, before
+  any server is asked to reverse it. It knows nothing of what an entry means: `mailmind.bootstrap.mailbox` hands it a reverser for each kind, the Mailbox's in `application.reversal` (`Reversals`). Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
   the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
   (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
