@@ -1,4 +1,7 @@
 """The Screener, and a person's verdict on a sender."""
+from collections.abc import Mapping
+from typing import Any
+
 from mailmind.curation.application.ports import FilingCommands, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain import rulebook
 from mailmind.kernel.when import rel_time
@@ -8,13 +11,13 @@ class Screener:
     def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, filing: FilingCommands):
         self._rules, self._mail, self._boxes, self._filing = rules, mail, boxes, filing
 
-    def queue(self, account):
+    def queue(self, account: str | None) -> dict[str, Any]:
         """First-contact gate: distinct INBOX senders NOT yet decided (no keep/block rule covering
         their address or domain). One human decision each → Allow (keep) or Screen-out (block)."""
         if not account or account not in self._boxes.known():
             return {"ok": True, "account": account, "items": [], "total": 0}
         r = self._rules.sets()
-        items = []
+        items: list[dict[str, Any]] = []
         for row in self._mail.inbox_senders(account):
             addr = row["addr"]
             dom = addr.rpartition("@")[2]
@@ -24,7 +27,7 @@ class Screener:
                           "count": row["n"], "when": rel_time(row["iso"])})
         return {"ok": True, "account": account, "items": items[:100], "total": len(items)}
 
-    def rule(self, b):
+    def rule(self, b: Mapping[str, Any]) -> dict[str, Any]:
         """A keep, block or remove from the person, on a sender or a domain."""
         token = (b.get("token") or "").strip().lower()
         verdict = b.get("verdict")

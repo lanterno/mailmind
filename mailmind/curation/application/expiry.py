@@ -3,11 +3,13 @@ whether or not the store is synced. Verified and audited, and the audit comes be
 import email
 import imaplib
 import time
+from typing import Any
 
 from mailmind.content import mime
 from mailmind.content.mime import dec
 from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain.expiry import arrival_ts, select_expired
+from mailmind.curation.domain.live import Aged
 from mailmind.curation.domain.rulebook import EXPIRE
 from mailmind.platform.workers import gates
 
@@ -19,11 +21,11 @@ class Expiry:
                  filing: FilingCommands):
         self._rules, self._mail, self._boxes, self._audit, self._filing = rules, mail, boxes, audit, filing
 
-    def account(self, acct, dry=False, now=None):
+    def account(self, acct: dict[str, Any], dry: bool = False, now: float | None = None) -> dict[str, Any]:
         """Move INBOX mail past its expiry rule to Trash — verified, audited, and pruned from the local DB
         by Message-ID. Errors are captured, not raised."""
         expire = self._rules.load()[EXPIRE]
-        out = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [], "error": None}
+        out: dict[str, Any] = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [], "error": None}
         if not expire:
             return out
         try:
@@ -33,7 +35,7 @@ class Expiry:
             return out
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
             s.select("INBOX")
-            uids = set()
+            uids: set[int] = set()
             for token in expire:                # coarse server-side filter; select_expired matches exactly
                 try:
                     uids.update(s.uids("FROM", self._boxes.quote(token)))
@@ -41,7 +43,7 @@ class Expiry:
                     raise
                 except imaplib.IMAP4.error:     # a refused search finds nothing
                     pass
-            rows = []
+            rows: list[Aged] = []
             for h in s.headers(sorted(uids), EXP_FIELDS, internaldate=True):
                 msg = email.message_from_bytes(h.raw)
                 rows.append({"uid": str(h.uid), "from": mime.sender_of(msg)[1].lower(),
@@ -69,7 +71,7 @@ class Expiry:
         self._mail.forget_expired(acct["email"], targets, stragglers)
         return out
 
-    def auto_one(self, acct):
+    def auto_one(self, acct: dict[str, Any]) -> None:
         """One account's turn in the background job. It gives way to anyone using the account's gate."""
         try:
             res = gates.run(acct["email"], lambda: self.account(acct),
@@ -84,7 +86,7 @@ class Expiry:
         self._filing.folders_changed(acct["email"], res["moved"])
         print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
 
-    def round(self):
+    def round(self) -> None:
         """One pass of the expiry rules over every account, when there are any rules."""
         if self._rules.load()[EXPIRE]:
             for a in self._boxes.all():

@@ -70,6 +70,7 @@ strict = [
     "mailmind/accounts/application",
     "mailmind/attention/application",
     "mailmind/calendar/application",
+    "mailmind/curation/application",
     "mailmind/discovery/application",
 ]
 

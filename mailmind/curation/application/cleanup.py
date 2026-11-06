@@ -3,6 +3,8 @@ and stand whatever the unsubscribe does; the unsubscribe can't be taken back, so
 import secrets
 import time
 import urllib.parse
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBookRepository, SenderMail
 from mailmind.curation.application.unsubscribe import Unsubscribing
@@ -14,14 +16,16 @@ MIN_COUNT = 3
 LIMIT = 40
 SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
 
+type Query = Mapping[str, Sequence[str]]      # a query string as the routes parse it
+
 
 class Cleanup:
     def __init__(self, rules: RuleBookRepository, mail: SenderMail, unsubscribing: Unsubscribing,
-                 filing: FilingCommands, audit: AuditLog, secret):
+                 filing: FilingCommands, audit: AuditLog, secret: Callable[[], str]):
         self._rules, self._mail, self._unsub = rules, mail, unsubscribing
         self._filing, self._audit, self._secret = filing, audit, secret
 
-    def reverse_block(self, d):
+    def reverse_block(self, d: Mapping[str, Any]) -> tuple[bool, str | None, None]:
         """Undo of a block: the rule goes, and what it decided is classified again."""
         try:
             self._rules.remove(d["token"])
@@ -30,7 +34,7 @@ class Cleanup:
             return False, d.get("account"), None
         return True, d.get("account"), None
 
-    def senders(self, qs):
+    def senders(self, qs: Query) -> dict[str, Any]:
         """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
         lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an
         already-decided sender never reappears."""
@@ -45,7 +49,7 @@ class Cleanup:
             limit = LIMIT
         r = self._rules.sets()
         now = time.time()
-        cands = []
+        cands: list[dict[str, Any]] = []
         for row in self._mail.noisy_senders(buckets, min_count):
             addr = row["addr"]
             dom = addr.rpartition("@")[2]
@@ -78,7 +82,7 @@ class Cleanup:
                            "candidate_messages": sum(x["count"] for x in cands)},
                 "senders": cands}
 
-    def sender(self, qs):
+    def sender(self, qs: Query) -> dict[str, Any]:
         """Mandatory-preview detail for ONE sender: authoritative unsubscribe method + the exact INBOX
         messages a sweep would move + a confirm_token that the execute route requires."""
         addr = ((qs.get("addr") or [""])[0]).strip().lower()
@@ -92,7 +96,7 @@ class Cleanup:
         capped = len(targets) > SWEEP_CAP
         affected = [{"pk": t["pk"], "account": t["account"], "folder": t["folder"],
                      "subject": t["subject"], "seen": t["seen"]} for t in targets[:SWEEP_CAP]]
-        unsub = {"method": info["method"]}
+        unsub: dict[str, str | None] = {"method": info["method"]}
         if info["method"] == "one-click" or info["method"] == "http-page":
             unsub["https_host"] = urllib.parse.urlparse(info["https_uri"] or "").hostname
         if info["method"] == "mailto":
@@ -103,7 +107,7 @@ class Cleanup:
                 "reversible": {"block": True, "sweep": True, "unsubscribe": False},
                 "confirm_token": unsubscribe.confirm_token(self._secret(), addr, info, time.time())}
 
-    def execute(self, body):
+    def execute(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Commit for ONE sender. ALWAYS-FIRST + reversible: a block rule + verified INBOX sweep to
         Trash (undo_push under one undo_group → a single `z` reverses both). THEN best-effort the chosen
         unsubscribe (irreversible; idempotent via unsub_log). Requires CSRF + strict-origin (route level)
@@ -144,8 +148,10 @@ class Cleanup:
 
         # 3) UNSUBSCRIBE (irreversible, best-effort) — only with a valid confirm_token; idempotent on
         #    TERMINAL outcomes only (a transient failure/no-method is never latched, so it stays retryable).
-        status, http_status, browser_url, method = "skipped", None, None, "none"
-        if do_unsub and token_ok:
+        status, method = "skipped", "none"
+        http_status: int | None = None
+        browser_url: str | None = None
+        if unsub is not None and token_ok:
             status, method, http_status, browser_url = self._unsub.attempt(from_addr, unsub)
         elif do_unsub and not token_ok:
             status = "no_token"                          # outbound refused; block+sweep still stand

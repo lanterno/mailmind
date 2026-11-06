@@ -10,28 +10,32 @@ import time
 from datetime import datetime, timezone
 
 from mailmind.content import mime
+from mailmind.content.mime import UnsubWay
 from mailmind.curation.application.ports import ListHeaders, SafeHttp, SenderMail, SystemSend
 from mailmind.curation.domain.unsubscribe import NO_METHOD, TERMINAL, parse_list_unsub
+from mailmind.kernel.row import Row
 from mailmind.platform import profile
 
 MIN_GAP = 3.0              # >= 3s between ANY two outbound unsubscribes (politeness)
-_rate = {"last": 0.0, "lock": threading.Lock()}
+_rate_lock = threading.Lock()
+_rate_last = 0.0
 
 
-def rate_gate():
+def rate_gate() -> None:
     """Process-global politeness: >= MIN_GAP between any two outbound unsubscribes."""
-    with _rate["lock"]:
-        wait = MIN_GAP - (time.time() - _rate["last"])
+    global _rate_last
+    with _rate_lock:
+        wait = MIN_GAP - (time.time() - _rate_last)
         if wait > 0:
             time.sleep(min(wait, MIN_GAP))
-        _rate["last"] = time.time()
+        _rate_last = time.time()
 
 
 class Unsubscribing:
     def __init__(self, mail: SenderMail, headers: ListHeaders, http: SafeHttp, send: SystemSend):
         self._mail, self._headers, self._http, self._send = mail, headers, http, send
 
-    def _from_server(self, row):
+    def _from_server(self, row: Row) -> UnsubWay | None:
         """Ask the server for one message's unsubscribe headers alone: mail from before ingest kept them,
         with no body stored. Caches what it hears; None if it can't say now."""
         raw = self._headers.read(row)
@@ -41,7 +45,7 @@ class Unsubscribing:
         self._mail.remember_unsub(row["pk"], parsed)
         return parsed if parsed["method"] != "none" else NO_METHOD
 
-    def resolve(self, from_addr):
+    def resolve(self, from_addr: str) -> tuple[UnsubWay, list[str]]:
         """Authoritative unsubscribe method for a sender = the newest message's List-Unsubscribe: from what's
         stored, else from the server for the newest message alone, else (a sweep took the sender's mail, and
         this is a second try) from what was last read. Returns (method info, the accounts it wrote to)."""
@@ -56,7 +60,7 @@ class Unsubscribing:
             return mime.list_unsub_stored(kept["raw"]), json.loads(kept["accounts"])
         return NO_METHOD, accts
 
-    def _mailto(self, info, acct_emails, key):
+    def _mailto(self, info: UnsubWay, acct_emails: list[str], key: str) -> bool:
         """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From), through
         the outbox, so a server that's away only makes it wait, and it's filed in Sent like anything else you send.
         Host/creds come from config keyed by the account email — never the request → no SMTP-SSRF."""
@@ -83,10 +87,12 @@ class Unsubscribing:
                 pass                                         # a removed or stale account: skip it, not the cleanup
         return sent > 0
 
-    def attempt(self, from_addr, resolved):
+    def attempt(self, from_addr: str, resolved: tuple[UnsubWay, list[str]]) -> tuple[str, str, int | None, str | None]:
         """Try the way `resolved` (what resolve gave) names. Returns (status, method, http status, a URL for
         the person to open)."""
-        status, http_status, browser_url, method = "skipped", None, None, "none"
+        status, method = "skipped", "none"
+        http_status: int | None = None
+        browser_url: str | None = None
         if not profile.writes_allowed():
             return "read_only", method, http_status, browser_url   # sends nothing outside; not latched, so retryable
         key = "unsub:" + from_addr
@@ -100,7 +106,7 @@ class Unsubscribing:
         method = info["method"]
         if method == "one-click":
             rate_gate()
-            ok, http_status, _reason = self._http.one_click_post(info["https_uri"])
+            ok, http_status, _reason = self._http.one_click_post(info["https_uri"] or "")
             status = "unsubscribed_oneclick" if ok else "failed"
         elif method == "mailto":
             rate_gate()

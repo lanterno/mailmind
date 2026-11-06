@@ -2,11 +2,14 @@
 anything moves, so a stored row can't send the wrong message anywhere."""
 import email
 from collections import Counter, defaultdict
+from collections.abc import Callable
+from typing import Any
 
 from mailmind.content import mime
 from mailmind.content.mime import dec
-from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailboxes, RuleBookRepository, SenderMail
+from mailmind.curation.application.ports import AuditLog, FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain import classifier
+from mailmind.curation.domain.live import Classified, Read
 from mailmind.curation.domain.rulebook import domain_listed
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
@@ -15,10 +18,10 @@ from mailmind.platform.workers import gates
 HDR_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "LIST-UNSUBSCRIBE", "LIST-ID")
 
 
-def fetch_headers(s):
+def fetch_headers(s: LiveSession) -> list[Read]:
     """Return list of {uid, from, name, subject, bulk} for the INBOX, which `s` selects."""
     s.select("INBOX")
-    rows = []
+    rows: list[Read] = []
     for h in s.headers(s.uids("ALL"), HDR_FIELDS):
         msg = email.message_from_bytes(h.raw)
         name, addr = mime.sender_of(msg)
@@ -34,25 +37,26 @@ class Sweeps:
                  filing: FilingCommands):
         self._rules, self._mail, self._boxes, self._audit, self._filing = rules, mail, boxes, audit, filing
 
-    def classify_rows(self, rows):
+    def classify_rows(self, rows: list[Read]) -> list[Classified]:
         sets = self._rules.sets()
+        out: list[Classified] = []
         for r in rows:
-            r["bucket"], r["conf"], r["reason"] = classifier.classify(
-                r["from"], r["subject"], r["name"], r["bulk"], rules=sets)
-        return rows
+            bucket, conf, reason = classifier.classify(r["from"], r["subject"], r["name"], r["bulk"], rules=sets)
+            out.append({**r, "bucket": bucket, "conf": conf, "reason": reason})
+        return out
 
-    def plan(self, acct):
+    def plan(self, acct: dict[str, Any]) -> dict[str, Any]:
         """Connect, classify the live INBOX, and RETURN structured per-bucket stats
         (no printing). Errors are captured, not raised."""
-        res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
-               "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
+        res: dict[str, Any] = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
+                               "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
         try:
             with self._boxes.borrow(acct) as s:      # pooled read: reuse the login (no fresh connect per call)
                 rows = self.classify_rows(fetch_headers(s))   # ctx-mgr ALWAYS closes → no socket leak on fetch error
         except Exception as e:
             res["error"] = f"{type(e).__name__}: {e}"
             return res
-        by = defaultdict(list)
+        by: defaultdict[str, list[Classified]] = defaultdict(list)
         for r in rows:
             by[r["bucket"]].append(r)
         res["in_inbox"] = len(rows)
@@ -64,17 +68,17 @@ class Sweeps:
         res["_rows"] = rows  # internal: used by the plan command and sweep, dropped before serialization
         return res
 
-    def plan_stored(self, acct):
+    def plan_stored(self, acct: dict[str, Any]) -> dict[str, Any]:
         """Stored twin of plan — NO IMAP, instant. Re-classifies the STORED INBOX rows with the same
         classifier (so it reflects current keep/block rules and matches what a live sweep would move).
         Accurate because auto-reconcile keeps the stored INBOX in sync with the server. Used by the
         Curate drawer (/api/stats), which was a ~3s live 8-account header scan; the Sweep buttons still
         re-verify live before moving anything."""
-        res = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
-               "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
+        res: dict[str, Any] = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
+                               "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
         rows = self._mail.stored_inbox(acct["email"])
         sets = self._rules.sets()
-        by = defaultdict(list)
+        by: defaultdict[str, list[str]] = defaultdict(list)
         for r in rows:
             addr = (r["from_addr"] or "").lower()
             # The stored row keeps no List header, and a sweep reads them live. What ingest saw in them
@@ -88,16 +92,16 @@ class Sweeps:
         res["top_senders"] = {b: [s for s, _ in Counter(v).most_common(4)] for b, v in by.items()}
         return res
 
-    def sweep(self, acct, dry=False):
+    def sweep(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
         """Dry-run plan or verified move of an account's junk buckets to Trash.
         Prunes matching local DB rows on a real run. Returns a result dict."""
         p = self.plan(acct)
         if p["error"]:
             return {"account": acct["email"], "error": p["error"], "planned": 0}
-        junk_rows = [r for r in p["_rows"] if r["bucket"] in classifier.JUNK_BUCKETS]
-        out = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
-               "senders": len(set(r["from"] for r in junk_rows)), "moved": 0,
-               "stragglers": [], "error": None}
+        junk_rows: list[Classified] = [r for r in p["_rows"] if r["bucket"] in classifier.JUNK_BUCKETS]
+        out: dict[str, Any] = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
+                               "senders": len(set(r["from"] for r in junk_rows)), "moved": 0,
+                               "stragglers": [], "error": None}
         if dry or not junk_rows:
             return out
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
@@ -118,7 +122,7 @@ class Sweeps:
         self._mail.forget_moved(acct["email"], junk_rows, stragglers)        # don't re-ghost swept mail
         return out
 
-    def sweep_ai(self, acct, dry=False):
+    def sweep_ai(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
         """AI-verdict sweep: trash INBOX messages MailMind flagged is_junk=1 (the AI
         classifier that reads the body — catches header-less newsletters the classifier's
         header sweep misses). Matched to the LIVE inbox by Message-ID so UIDs are always
@@ -127,13 +131,13 @@ class Sweeps:
         r = self._rules.sets()
         keep_senders, keep_domains = r["keep_senders"], r["keep_domains"]
 
-        def _keep_ruled(fa):
+        def _keep_ruled(fa: str | None) -> bool:
             fa = (fa or "").lower(); dom = fa.partition("@")[2]
             return fa in keep_senders or domain_listed(dom, keep_domains)
 
         junk_mids = self._mail.ai_junk_ids(acct["email"])
-        out = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
-               "kept_by_rule": 0, "error": None}
+        out: dict[str, Any] = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
+                               "kept_by_rule": 0, "error": None}
         if not junk_mids:
             return out
         try:
@@ -143,7 +147,8 @@ class Sweeps:
             return out
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
             live = fetch_headers(s)
-            targets, kept = [], 0
+            targets: list[Read] = []
+            kept = 0
             for h in live:
                 if h.get("mid") and h["mid"] in junk_mids:
                     if _keep_ruled(h["from"]):
@@ -169,7 +174,7 @@ class Sweeps:
         self._mail.forget_moved(acct["email"], targets, stragglers)
         return out
 
-    def _each_account(self, account, job):
+    def _each_account(self, account: str | None, job: Callable[[dict[str, Any]], dict[str, Any]]) -> list[dict[str, Any]]:
         """[job(acct)] for the account named, or for each account in turn when it names "all", each on
         its own account's gate alone: the accounts' work is independent, so a run over all of them
         never holds every gate at once, and one account's slow server holds up only its own turn."""
@@ -178,7 +183,7 @@ class Sweeps:
         return [gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE)
                 for a in self._boxes.all()]
 
-    def run(self, account, dry_run):
+    def run(self, account: str | None, dry_run: bool) -> dict[str, Any]:
         """A sweep the person asked for, of the account named or of "all"."""
         if not dry_run:
             profile.refuse_writes("a sweep")     # it moves mail, and its moves can't wait in a queue
