@@ -26,7 +26,8 @@ _data_dirs = {ROOT.lower()}
 # The owner's data at the repo root (CLAUDE.md, "Nothing personal is committed"), and the temp
 # files config.save and the saved views write beside it.
 PRIVATE = ("mailmind.db", "mailmind.db-*", "mailmind.config.json*", "mailmind_rules.json",
-           "mailmind_views.json", "*.jsonl", "*.sqlite", "*.db-journal", ".cfg-*.tmp", ".views-*.tmp")
+           "mailmind_views.json", "*.jsonl", "*.sqlite", "*.db-journal", ".cfg-*.tmp", ".views-*.tmp",
+           "mailmind.log", "mailmind.log.*")
 # A real AI call, a 1Password read and a Keychain read.
 PROGRAMS = ("claude", "op", "security")
 

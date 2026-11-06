@@ -27,7 +27,7 @@ def refused():
 
 @pytest.mark.parametrize("name", ["mailmind.db", "mailmind.db-wal", "mailmind.config.json",
                                   "mailmind_rules.json", "mailmind_views.json", "sweep_audit.jsonl",
-                                  "MAILMIND.DB", ".cfg-x.tmp"])
+                                  "mailmind.log", "mailmind.log.1", "MAILMIND.DB", ".cfg-x.tmp"])
 def test_opening_the_owners_data_is_refused(name, refused):
     with pytest.raises(guard.Tripwire):
         open(os.path.join(ROOT, name), "rb")

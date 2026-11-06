@@ -22,6 +22,7 @@ import pytest
 import guard
 from mailmind.bootstrap import web
 from mailmind.bootstrap import mailbox
+from mailmind.platform.logging import stop as stop_logging
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ.pop("MAILMIND_PROFILE", None)
@@ -112,6 +113,13 @@ def _imap_adapters():
     """imaplib for every account and nothing else offered, as a process starts: a test that offers
     IMAPClient, or a new door an earlier test built, can't leave it to the next."""
     mailbox.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_log_file():
+    """A test that started the app, or asked for the log file, leaves the next test's lines out of it."""
+    yield
+    stop_logging()
 
 
 @pytest.fixture(autouse=True)
