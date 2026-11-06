@@ -4,6 +4,7 @@ and test_threading_property.py holds the two to the same threads."""
 import hashlib
 import itertools
 import re
+import sqlite3
 
 import pytest
 
@@ -375,6 +376,30 @@ def test_mail_a_sync_stored_and_never_threaded_goes_with_the_next_one(world, thr
     monkeypatch.setattr(store, "thread_stored", real)
     world.deliver(w.ADA, "INBOX", reply_to("<first@example.test>", "<second@example.test>"))
     assert thread_of("<first@example.test>") == thread_of("<second@example.test>") == thread_of(parent)
+
+
+def test_a_merge_that_fails_in_a_sync_holds_no_lock_and_the_next_sync_does_it(world, thread_of, monkeypatch):
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest, store
+    a, b = w.message_id("ada-inbox-03-newsletter.eml"), w.message_id("ada-inbox-05-receipt.eml")
+    assert thread_of(a) != thread_of(b)
+    joined = (f"From: Lin <lin@example.test>\r\nTo: {w.ADA}\r\nSubject: Both\r\nDate: Mon, 02 Nov 2026 09:00:00 +0000\r\n"
+              f"Message-ID: <both@example.test>\r\nReferences: {a} {b}\r\n\r\nBoth of them.\r\n").encode()
+    real = store._merged
+
+    def fails(c, merged):
+        raise sqlite3.OperationalError("disk full")
+    monkeypatch.setattr(store, "_merged", fails)
+    with pytest.raises(sqlite3.OperationalError):
+        world.deliver(w.ADA, "INBOX", joined)
+    c = sqlite3.connect(world.dir / "mailmind.db", timeout=0)
+    c.execute("UPDATE sync_state SET last_sync=last_sync")       # no waiting: the write lock is free
+    c.commit()
+    c.close()
+    assert world_rows(w.ADA, "<both@example.test>")[0]["thread_id"] is None and thread_of(a) != thread_of(b)
+    monkeypatch.setattr(store, "_merged", real)
+    ingest.sync_folder(accounts.get(w.ADA), "INBOX")
+    assert thread_of("<both@example.test>") == thread_of(a) == thread_of(b)
 
 
 def test_mail_the_command_line_stored_goes_with_the_next_sync(world, thread_of):
