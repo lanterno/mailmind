@@ -1,6 +1,6 @@
 """Today & next (calendar.agenda): which calendar invites in fetched mail make the brief's list, when
 a repeating one next happens (ics.next_occurrence), and the recipient the Waiting view names
-(server.waiting_in). Hermetic — the database is a temp file and
+(mailbox.queries.waiting_in). Hermetic — the database is a temp file and
 the messages are built here; nothing touches IMAP. All addresses are fictional.
 Run: python3 test_upcoming.py"""
 import tempfile
@@ -16,7 +16,7 @@ from mailmind.bootstrap import calendar
 from mailmind.bootstrap.calendar import ics
 from mailmind.bootstrap.mailbox import ingest
 from mailmind.content import mime
-import server
+from mailmind.bootstrap import mailbox
 
 ACCT = "ada@example.test"
 NOW = datetime(2026, 10, 30, 12, 0)          # a fixed local "now"
@@ -330,7 +330,7 @@ def test_waiting_names_who_a_sent_thread_waits_on():
               "VALUES (?,?,?,?,?,?,?)", (ACCT, "w1", "sent", "due", pk, int(NOW.timestamp()), int(NOW.timestamp())))
     c.commit()
     c.close()
-    items = server.waiting_in(ACCT, 0, 10)["items"]
+    items = mailbox.queries.waiting_in(ACCT, 0, 10)["items"]
     assert [(x["pk"], x["kind"], x["to"]) for x in items] == [(pk, "sent", "Lio Park <lio@example.test>")], items
 
 
