@@ -132,8 +132,16 @@ check-frontend:
 build-web:
     cd web && npm ci --no-audit --no-fund && npx vite build
 
+# Type-check the TypeScript, run its tests, and check that the page's generated script is up to date (needs node)
+check-web:
+    cd web && (test -d node_modules || npm ci --no-audit --no-fund) && npx tsc --noEmit && npx vitest run --silent && node scripts/gen-legacy.mjs --check
+
+# Write the pure TypeScript modules as the classic script the page runs with no build
+gen-web:
+    node web/scripts/gen-legacy.mjs
+
 # Everything a change should pass before committing
-verify: lint compile test check-frontend
+verify: lint compile test check-frontend check-web
 
 # ── mail ──────────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ test sees another's leftovers.
 import http.client
 import importlib
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -59,6 +60,9 @@ def reset_state():
     assistant.use("urllib")                  # the old door's client; the new door's build picks the SDK
     mailbox.reset()                          # imaplib alone; the new door's build offers IMAPClient
     assistant.governor().forget()            # a restart: no interactive call lately, someone here now
+
+
+RECORD_API = os.environ.get("MAILMIND_RECORD_API")     # a file to note each JSON answer in, for `just gen-api`
 
 
 @dataclass
@@ -119,6 +123,9 @@ class AppClient:
         parsed = payload
         if hdrs.get("content-type", "").startswith("application/json"):
             parsed = json.loads(payload)
+        if RECORD_API and 200 <= r.status < 300 and isinstance(parsed, (dict, list)):
+            with open(RECORD_API, "a", encoding="utf-8") as f:       # for tests/gen_api_types.py
+                f.write(json.dumps([method, path, parsed]) + "\n")
         return Response(r.status, hdrs, parsed)
 
     def get(self, path, **kw):
