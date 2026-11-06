@@ -9,11 +9,12 @@ deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUS
 import json
 from datetime import datetime, timezone
 
-import store
+from mailmind.bootstrap.mailbox import store
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
+from mailmind.bootstrap.assistant import answers
 
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
@@ -187,7 +188,7 @@ def build(accounts_set, force=False, generate=True):
     accounts, day = ",".join(sorted(accounts_set)), datetime.now().astimezone().date().isoformat()
     c = store.conn()
     stats, needs, waiting = _aggregate(c, accounts_set, since_ts)
-    cached_row = store.get_review(c, accounts, day)
+    cached_row = answers.get_review(c, accounts, day)
     c.close()
     fp = _fingerprint(stats, needs, waiting)
 
@@ -210,7 +211,7 @@ def build(accounts_set, force=False, generate=True):
     def read():
         c = store.conn()
         try:
-            row = store.get_review(c, accounts, day)
+            row = answers.get_review(c, accounts, day)
         finally:
             c.close()
         return stored(row) if row else None
@@ -246,7 +247,7 @@ def build(accounts_set, force=False, generate=True):
         created = _now()
         c = store.conn()
         try:
-            store.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
+            answers.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
                               json.dumps(needs), json.dumps(waiting), model, created)
             c.commit()
         finally:

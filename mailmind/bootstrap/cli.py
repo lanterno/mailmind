@@ -34,7 +34,7 @@ def sync(who, days):
     """Pull `who`'s mail (an address, or every account) from the last `days` days."""
     from mailmind.bootstrap import accounts
     import ingest
-    import store
+    from mailmind.bootstrap.mailbox import store
     store.init()
     accts = accounts.accounts() if who == "all" else [accounts.get(who)]
     for a in accts:
@@ -49,7 +49,7 @@ def sync(who, days):
 def assess(limit, workers):
     """Summarize up to `limit` messages with no summary yet, now, at full price."""
     from mailmind.bootstrap import assistant
-    import store
+    from mailmind.bootstrap.mailbox import store
     import summarize
     store.init()
     if summarize.engine() == "none":

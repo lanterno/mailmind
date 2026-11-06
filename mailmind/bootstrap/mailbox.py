@@ -15,6 +15,8 @@ from collections import Counter
 import imaplib
 
 from mailmind.accounts.domain import tls_pin
+from mailmind.discovery.adapters import fts
+from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.imap_names import imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.mailbox.application.copies import Copies
@@ -24,6 +26,8 @@ from mailmind.platform.db import txguard
 
 from mailmind.bootstrap import accounts         # the connection's TLS, pin and login, until they move into Accounts
 from mailmind.bootstrap.accounts import config           # the credential, likewise
+
+store.bind_index(fts)
 
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers

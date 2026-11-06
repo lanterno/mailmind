@@ -29,7 +29,7 @@ class _Folders:
 class _Messages:
     """A message and its account, until the Mailbox and Accounts hold them."""
     def message(self, pk):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_message(c, pk)

@@ -15,7 +15,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap import discovery
 import summarize as _sz

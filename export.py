@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from email import policy as _policy
 
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.platform import settings
 
 _BAD = re.compile(r'[\x00-\x1f/\\:*?"<>|]+')        # path separators + control + shell-hostile

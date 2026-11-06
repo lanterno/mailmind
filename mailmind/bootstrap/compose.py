@@ -55,7 +55,7 @@ class _Messages:
     def original(self, pk, account=None, message_id=None):
         """The row of the message a send replies to: by Message-ID, since a pk may have been renumbered,
         else by the pk it was queued with. None once mail has moved out of every folder stored."""
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_message_by_msgid(c, account, message_id) or (store.get_message(c, pk) if pk else None)
@@ -63,7 +63,7 @@ class _Messages:
             c.close()
 
     def message(self, pk):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_message(c, pk)
@@ -71,7 +71,7 @@ class _Messages:
             c.close()
 
     def by_msgid(self, account, message_id):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_message_by_msgid(c, account, message_id)
@@ -79,7 +79,7 @@ class _Messages:
             c.close()
 
     def body(self, pk):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_body(c, pk)
@@ -87,7 +87,7 @@ class _Messages:
             c.close()
 
     def uidvalidity(self, account, folder):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             return store.get_uidvalidity(c, account, folder)
@@ -95,7 +95,7 @@ class _Messages:
             c.close()
 
     def remove(self, pk):
-        import store
+        from mailmind.bootstrap.mailbox import store
         c = store.conn()
         try:
             store.delete_message(c, pk)
@@ -104,7 +104,7 @@ class _Messages:
             c.close()
 
     def remove_copies(self, c, account, folder, uids):
-        import store
+        from mailmind.bootstrap.mailbox import store
         store.delete_by_uids(c, account, folder, uids)
 
     def fetch_body(self, pk):

@@ -19,6 +19,7 @@ import os
 import threading
 
 from mailmind.accounts.adapters import config_file, secrets
+from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
@@ -26,7 +27,7 @@ from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
 from mailmind.assistant.domain import limits
 
-__all__ = ["allowing_over", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "use"]
+__all__ = ["allowing_over", "answers", "config_key", "gateway", "governor", "key", "limit_micros", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"

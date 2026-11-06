@@ -14,7 +14,7 @@ from mailmind.platform.workers import scheduler
 
 import readmutq
 import realtime
-import store
+from mailmind.bootstrap.mailbox import store
 import summarize
 
 

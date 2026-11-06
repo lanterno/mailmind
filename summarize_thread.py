@@ -8,12 +8,13 @@ import re
 import json
 from datetime import datetime, timezone
 
-import store
+from mailmind.bootstrap.mailbox import store
 import ingest
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
+from mailmind.bootstrap.assistant import answers
 
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
@@ -142,7 +143,7 @@ def summarize(account, thread_id, scope="thread", force=False):
         return {"ok": False, "error": "nothing to summarize"}, 404
     fp = _fingerprint(rows)
     c = store.conn()
-    cached = store.get_thread_summary(c, account, thread_id, scope)
+    cached = answers.get_thread_summary(c, account, thread_id, scope)
     c.close()
     if cached and not force:
         return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
@@ -151,7 +152,7 @@ def summarize(account, thread_id, scope="thread", force=False):
     def read():                                     # a summary of the thread as it is now
         c = store.conn()
         try:
-            row = store.get_thread_summary(c, account, thread_id, scope)
+            row = answers.get_thread_summary(c, account, thread_id, scope)
         finally:
             c.close()
         if row is None or row["fingerprint"] != fp:
@@ -187,7 +188,7 @@ def summarize(account, thread_id, scope="thread", force=False):
                "action": parsed["action"], "participants": json.dumps(parsed["participants"]),
                "message_count": len(rows), "model": model, "created_at": _now()}
         c = store.conn()
-        store.save_thread_summary(c, row)
+        answers.save_thread_summary(c, row)
         c.commit()
         c.close()
         return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,

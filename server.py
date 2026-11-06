@@ -21,7 +21,7 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
 import ingest
@@ -48,6 +48,7 @@ from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import perimeter, profile, settings, sse, webroot
 from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
+from mailmind.bootstrap.assistant import answers
 
 curation.attach(sys.modules[__name__])
 discovery.attach(sys.modules[__name__])
@@ -321,7 +322,7 @@ def forget_round():
     try:
         store.forget_gone_messages(c, int(time.time()))
         store.read_mut_forget_finished(c, int(time.time()))
-        store.batch_forget_finished(c, int(time.time()))
+        answers.batch_forget_finished(c, int(time.time()))
         c.commit()
     finally:
         c.close()
@@ -1538,10 +1539,10 @@ def ai_draft_reply(body):
             # A fp-fresh banked draft answers a default-shaped request for free — the pre-gen
             # paths already paid for it (and this covers SSE-outage strandings).
             if default_shape and key is not None:
-                da = store.draft_ahead_get(c, key[0], key[1])
+                da = answers.draft_ahead_get(c, key[0], key[1])
                 if da and da["body"] and da["fp"] == fp and \
                         (int(time.time()) - da["created_ts"]) < DRAFT_DB_TTL:
-                    store.draft_ahead_touch(c, key[0], key[1], int(time.time()))
+                    answers.draft_ahead_touch(c, key[0], key[1], int(time.time()))
                     c.commit()
                     return {"ok": True, "body": da["body"], "tone": da["tone"] or tone,
                             "model": da["model"] or "cache"}, 200
@@ -1565,7 +1566,7 @@ def ai_draft_reply(body):
             and row is not None and key is not None:
         try:
             c = store.conn()
-            store.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+            answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
                                   res.get("model"), int(row["pk"]), row["message_id"],
                                   "demand", int(time.time()))
             c.commit()
@@ -1712,7 +1713,7 @@ def _gen_draft_ahead(account, pk, source="dwell"):
     def warm():                                       # a draft for the thread as it is now
         c = store.conn()
         try:
-            da = store.draft_ahead_get(c, key[0], key[1])
+            da = answers.draft_ahead_get(c, key[0], key[1])
         finally:
             c.close()
         fresh = da and da["body"] and da["fp"] == fp and (int(time.time()) - da["created_ts"]) < DRAFT_DB_TTL
@@ -1728,13 +1729,13 @@ def _gen_draft_ahead(account, pk, source="dwell"):
             c = store.conn()
             try:
                 if code == 200 and res.get("ok") and res.get("body"):
-                    store.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+                    answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
                                           res.get("model"), int(pk), mid, source, now)
-                    store.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
+                    answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
                                                                   # no orphan sweeps — a reset_folder reingest may be mid-flight
                     ok = True
                 else:
-                    store.draft_ahead_fail(c, key[0], key[1], now)
+                    answers.draft_ahead_fail(c, key[0], key[1], now)
                 c.commit()
             finally:
                 c.close()
@@ -1749,7 +1750,7 @@ def _gen_draft_ahead(account, pk, source="dwell"):
             print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
             try:
                 c = store.conn()
-                store.draft_ahead_fail(c, key[0], key[1], int(time.time()))
+                answers.draft_ahead_fail(c, key[0], key[1], int(time.time()))
                 c.commit()
                 c.close()
             except Exception:
@@ -1810,10 +1811,10 @@ def ai_draft_ahead_get(qs, kick_ok=False):
         if key is None:
             return {"ok": True, "status": "none"}, 200
         fp = _draft_fp(c, acct, tid, pk)
-        da = store.draft_ahead_get(c, key[0], key[1])
+        da = answers.draft_ahead_get(c, key[0], key[1])
         now = int(time.time())
         if da and da["body"] and da["fp"] == fp and (now - da["created_ts"]) < DRAFT_DB_TTL:
-            store.draft_ahead_touch(c, key[0], key[1], now)
+            answers.draft_ahead_touch(c, key[0], key[1], now)
             c.commit()
             return {"ok": True, "status": "ready", "body": da["body"], "tone": da["tone"]}, 200
         if DRAFT_FLIGHTS.busy(key):
@@ -1868,7 +1869,7 @@ def _pick_draft_candidate():
             if not key or key in seen:
                 continue
             seen.add(key)
-            da = store.draft_ahead_get(c, key[0], key[1])
+            da = answers.draft_ahead_get(c, key[0], key[1])
             fp = _draft_fp(c, r["account"], r["thread_id"] or None, r["pk"])
             if da and da["body"] and da["fp"] == fp and now - da["created_ts"] < DRAFT_DB_TTL:
                 warm_total += 1
@@ -1917,7 +1918,7 @@ def draft_ahead_rounds():
                     print("[draft] tick suspended 30m after repeated failures", flush=True)
             c = store.conn()
             try:                                                 # close() rolls back a half-done GC — a leaked
-                store.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock
+                answers.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock
                 c.commit()
             finally:
                 c.close()

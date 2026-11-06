@@ -10,7 +10,7 @@ import imaplib
 
 sys.path.insert(0, os.path.dirname(__file__))
 from mailmind.bootstrap import accounts
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import mailbox
 from mailmind.mailbox.application import session as mail_session

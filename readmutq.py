@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from mailmind.bootstrap import accounts
-import store
+from mailmind.bootstrap.mailbox import store
 import mailops
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates

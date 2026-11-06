@@ -5,7 +5,7 @@ The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructi
 """
 import summarize as _sz
 import summarize_thread as _st
-import store
+from mailmind.bootstrap.mailbox import store
 
 REPLY_SCHEMA = {
     "type": "object",

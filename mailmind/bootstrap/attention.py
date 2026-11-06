@@ -23,11 +23,11 @@ def attach(server):
 
 class _Messages:
     def get(self, c, pk):
-        import store
+        from mailmind.bootstrap.mailbox import store
         return store.get_message(c, pk)
 
     def queue_flags(self, c, row, flags, mutation_id, when):
-        import store
+        from mailmind.bootstrap.mailbox import store
         return store.queue_flags(c, row, flags, mutation_id, when)
 
 

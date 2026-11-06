@@ -8,11 +8,12 @@ text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks 
 import json
 from datetime import datetime, timezone
 
-import store
+from mailmind.bootstrap.mailbox import store
 import summarize as _sz
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.platform.workers.singleflight import SingleFlight
+from mailmind.bootstrap.assistant import answers
 
 TOP_N = 40
 CAP_TOTAL = 12000
@@ -250,7 +251,7 @@ def build_delta(accounts_set, since_ts, generate=True):
     def read():
         c = store.conn()
         try:
-            row = store.get_delta(c, accounts, since, fp)
+            row = answers.get_delta(c, accounts, since, fp)
         finally:
             c.close()
         if row is None:
@@ -282,7 +283,7 @@ def build_delta(accounts_set, since_ts, generate=True):
             headline, items = _delta_fallback(rows)
             model = "fallback"
         c = store.conn()
-        store.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, _now())
+        answers.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, _now())
         c.commit()
         c.close()
         return {"ok": True, "empty": False, "headline": headline,
@@ -301,7 +302,7 @@ def build(accounts_set, force=False, generate=True):
     accounts, day = _accounts_key(accounts_set), _today()
     c = store.conn()
     rows = _top_rows(c, accounts_set)
-    cached = store.get_brief(c, accounts, day)
+    cached = answers.get_brief(c, accounts, day)
     c.close()
     fp = _fingerprint(rows)
 
@@ -320,7 +321,7 @@ def build(accounts_set, force=False, generate=True):
     def read():
         c = store.conn()
         try:
-            row = store.get_brief(c, accounts, day)
+            row = answers.get_brief(c, accounts, day)
         finally:
             c.close()
         return stored(row) if row else None
@@ -351,7 +352,7 @@ def build(accounts_set, force=False, generate=True):
             narrative, groups, model = fb["narrative"], fb["groups"], "fallback"
         created = _now()
         c = store.conn()
-        store.save_brief(c, accounts, day, fp, narrative, json.dumps(_stored_groups(groups, rows)), model, created)
+        answers.save_brief(c, accounts, day, fp, narrative, json.dumps(_stored_groups(groups, rows)), model, created)
         c.commit()
         c.close()
         return _result(narrative, groups, model, created, False, False), 200

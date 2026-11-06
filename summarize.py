@@ -16,10 +16,11 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-import store
+from mailmind.bootstrap.mailbox import store
 from mailmind.assistant.application.ports import AIOff, HeldBack, ModelError, NotSent, OverLimit   # noqa: F401 (re-exported)
 from mailmind.assistant.domain import models, pricing
 from mailmind.bootstrap import assistant
+from mailmind.bootstrap.assistant import answers
 
 WORKERS = 4
 MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-5-5
@@ -241,8 +242,8 @@ def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
     if engine() == "none" or assistant.gateway().held_back("triage", MODEL):
         return 0
     c = store.conn()
-    out = store.batch_open(c)
-    rows = store.needs_summary(c, limit, newer_than=out["cutoff_ts"] if out else None)
+    out = answers.batch_open(c)
+    rows = answers.needs_summary(c, limit, newer_than=out["cutoff_ts"] if out else None)
     if not rows:
         c.close()
         return 0
@@ -255,7 +256,7 @@ def summarize_pending(limit=200, workers=WORKERS, log=lambda *_: None):
             if payload is None:
                 continue  # transient failure -> stays in needs_summary for next run
             s, imp, cat, act, model = payload
-            store.save_summary(c, pk, s, imp, cat, act, model,
+            answers.save_summary(c, pk, s, imp, cat, act, model,
                                datetime.now(timezone.utc).isoformat())
             c.commit()
             done += 1
@@ -280,9 +281,9 @@ def batch_submit(at_least=None, keep=None, log=lambda *_: None):
         return 0
     c = store.conn()
     try:
-        if store.batch_open(c):
+        if answers.batch_open(c):
             return 0
-        rows = [r for r in store.needs_summary(c, keep + BATCH_MAX) if r["message_key"] is not None]
+        rows = [r for r in answers.needs_summary(c, keep + BATCH_MAX) if r["message_key"] is not None]
     finally:
         c.close()
     if len(rows) < at_least:
@@ -303,17 +304,17 @@ def batch_submit(at_least=None, keep=None, log=lambda *_: None):
         return 0
     c = store.conn()
     try:
-        batch_id = store.batch_begin(c, BATCH_FEATURE, name, keys, estimate, cutoff, int(time.time()))
+        batch_id = answers.batch_begin(c, BATCH_FEATURE, name, keys, estimate, cutoff, int(time.time()))
         if batch_id is None:
             return 0
         try:
             remote_id = _send_batch(requests, name)
         except Exception as e:                  # it didn't go, so they wait; the next round tries again
-            store.batch_drop(c, batch_id)
+            answers.batch_drop(c, batch_id)
             c.commit()
             log(f"a batch of {len(requests)} wasn't sent: {type(e).__name__}")
             return 0
-        store.batch_sent(c, batch_id, remote_id, int(time.time()))
+        answers.batch_sent(c, batch_id, remote_id, int(time.time()))
         c.commit()
     finally:
         c.close()
@@ -323,7 +324,7 @@ def batch_submit(at_least=None, keep=None, log=lambda *_: None):
 
 def _store_answers(c, batch, results):
     """Each answer a batch brought, for each copy of its message and under its key. How many."""
-    keys, stored, when = store.batch_keys(c, batch["id"]), 0, datetime.now(timezone.utc).isoformat()
+    keys, stored, when = answers.batch_keys(c, batch["id"]), 0, datetime.now(timezone.utc).isoformat()
     for r in results:
         key = int(r.custom_id) if r.custom_id.isdigit() else None
         if key not in keys or r.reply is None:
@@ -331,9 +332,9 @@ def _store_answers(c, batch, results):
         row = c.execute("SELECT * FROM messages WHERE message_key=? LIMIT 1", (key,)).fetchone()
         obj = _object_in(r.reply.text)
         if row is not None:
-            store.save_summary(c, row["pk"], *_assessment(row, obj), when)
+            answers.save_summary(c, row["pk"], *_assessment(row, obj), when)
         elif obj.get("summary"):                # every copy has gone: it may come back
-            store.save_assessment(c, key, *_assessment({"subject": ""}, obj), when)
+            answers.save_assessment(c, key, *_assessment({"subject": ""}, obj), when)
         stored += 1
     return stored
 
@@ -346,12 +347,12 @@ def batch_collect(log=lambda *_: None):
     gw, now, stored = assistant.gateway(), int(time.time()), 0
     c = store.conn()
     try:
-        for b in store.batches_in_state(c, "submitting"):
+        for b in answers.batches_in_state(c, "submitting"):
             if b["created_at"] < now - BATCH_SEND_GIVE_UP:
-                store.batch_drop(c, b["id"])
+                answers.batch_drop(c, b["id"])
                 log("a batch was cut off while it was being sent; its messages are waiting again")
         c.commit()
-        out = store.batch_open(c)
+        out = answers.batch_open(c)
         due = out is not None and out["state"] == "running" and out["polled_at"] + BATCH_POLL <= now
         if due:
             try:
@@ -362,20 +363,20 @@ def batch_collect(log=lambda *_: None):
             except ModelError as e:
                 ended, results = False, None
                 if e.status == 404:             # another key's, or removed: nothing more will come of it
-                    store.batch_drop(c, out["id"])
+                    answers.batch_drop(c, out["id"])
                     log("the API no longer has a batch; its messages are waiting again")
                 else:
-                    store.batch_polled(c, out["id"], now)
+                    answers.batch_polled(c, out["id"], now)
                     log(f"couldn't read a batch: {type(e).__name__} {e.status}")
                 c.commit()
             if results is not None:
                 stored = _store_answers(c, out, results)
-                store.batch_collected(c, out["id"], now)
+                answers.batch_collected(c, out["id"], now)
                 log(f"a batch brought {stored} answers")
             elif not ended:
-                store.batch_polled(c, out["id"], now)
+                answers.batch_polled(c, out["id"], now)
             c.commit()
-        for b in store.batches_in_state(c, "collected"):
+        for b in answers.batches_in_state(c, "collected"):
             try:                                # what it holds is mail: it stays at the API no longer than needed
                 gw.discard_batch(b["remote_id"])
             except NotSent:
@@ -384,7 +385,7 @@ def batch_collect(log=lambda *_: None):
                 if e.status != 404:
                     log(f"couldn't remove a batch: {type(e).__name__} {e.status}")
                     continue
-            store.batch_discarded(c, b["id"])
+            answers.batch_discarded(c, b["id"])
             c.commit()
     except NotSent:
         pass
@@ -397,8 +398,8 @@ def batch_status():
     """What's out in a batch, with no call made: how many messages, and what it may cost."""
     c = store.conn()
     try:
-        out = store.batch_open(c)
-        return {"waiting": store.batch_waiting(c), "state": out["state"] if out else None,
+        out = answers.batch_open(c)
+        return {"waiting": answers.batch_waiting(c), "state": out["state"] if out else None,
                 "estimate_micros": out["estimate_micros"] if out else 0}
     finally:
         c.close()
