@@ -25,7 +25,7 @@ from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap.mailbox import ingest
-import warm
+from mailmind.bootstrap.mailbox import warm
 from mailmind.bootstrap.mailbox import offline
 import summarize
 from mailmind.bootstrap.mailbox import commands
