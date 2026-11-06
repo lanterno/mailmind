@@ -35,27 +35,27 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_status_without_a_key_follows_the_claude_command` | `tests/contract/test_ai_contract.py` `test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed` |
 | `test_a_forced_api_engine_without_a_key_is_none` | `tests/contract/test_ai_contract.py` `test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed` |
 
-## `test_contacts_known.py`: `tests/unit/discovery/script_contacts_known.py`
+## `test_contacts_known.py`: `tests/unit/discovery/test_contacts_known.py`
 
 | Test | Now |
 |---|---|
-| `test_received_non_junk_only` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_provider_spam_folders_never_vouch` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_own_sent_rows_count_every_recipient` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_exact_tokens_not_substrings` | `tests/unit/discovery/script_contacts_known.py` |
+| `test_received_non_junk_only` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_provider_spam_folders_never_vouch` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_own_sent_rows_count_every_recipient` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_exact_tokens_not_substrings` | `tests/unit/discovery/test_contacts_known.py` |
 | `test_truncated_recipients_drop_the_partial_tail` | `tests/unit/mailbox/test_message_recipients.py` `test_the_last_token_of_a_column_that_was_cut_is_left_out` |
-| `test_drafts_never_vouch` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_send_as_identity_in_a_synced_sent_folder` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_outbox_counts_only_delivered` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_idna_forms_match_both_ways` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_keep_senders_count_keep_domains_do_not` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_own_addresses_are_self` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_input_shape_and_limits` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_thin_history_flag` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_the_delivered_address_is_judged_not_the_display_name` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_items_carry_only_known_and_self` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_route_requires_csrf` | `tests/unit/discovery/script_contacts_known.py` |
-| `test_never_waits_on_the_imap_lock` | `tests/unit/discovery/script_contacts_known.py` |
+| `test_drafts_never_vouch` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_send_as_identity_in_a_synced_sent_folder` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_outbox_counts_only_delivered` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_idna_forms_match_both_ways` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_keep_senders_count_keep_domains_do_not` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_own_addresses_are_self` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_input_shape_and_limits` | `tests/unit/discovery/test_contacts_known.py` `test_input_shape_and_limits, test_input_that_is_no_list_is_refused` |
+| `test_thin_history_flag` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_the_delivered_address_is_judged_not_the_display_name` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_items_carry_only_known_and_self` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_route_requires_csrf` | `tests/unit/discovery/test_contacts_known.py` |
+| `test_never_waits_on_the_imap_lock` | `tests/unit/discovery/test_contacts_known.py` |
 
 ## `test_css_sanitizer.py`: `tests/unit/content/test_css_sanitizer.py`
 
