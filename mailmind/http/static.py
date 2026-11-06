@@ -5,7 +5,7 @@ from mailmind.platform import perimeter, webroot
 
 def _page(h, html):
     h._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
-            [("Content-Security-Policy-Report-Only", perimeter.page_policy()),
+            [("Content-Security-Policy", perimeter.page_policy()),
              ("Cache-Control", "no-store")])     # it holds this run's token
 
 
