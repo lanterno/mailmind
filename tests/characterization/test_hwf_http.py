@@ -221,12 +221,12 @@ def test_hwf_a_failed_undo_stays_on_the_stack_for_a_retry(app, world):
     assert server_boxes(world, RECEIPT) == [(w.ADA, "INBOX")]
 
 
-def test_hwf_undo_keeps_the_last_25_actions(app, world):
+def test_hwf_undo_keeps_the_last_50_actions(app, world):
     pk = world.pk(RECEIPT)
-    for _ in range(26):
+    for _ in range(51):
         assert app.post("/api/snooze", {"pk": pk, "preset": "tomorrow"}).json["ok"]
-    answers = [app.post("/api/undo", {}).json for _ in range(26)]
-    assert [a["ok"] for a in answers] == [True] * 25 + [False]
+    answers = [app.post("/api/undo", {}).json for _ in range(51)]
+    assert [a["ok"] for a in answers] == [True] * 50 + [False]
     assert answers[-1] == {"ok": False, "empty": True}
 
 

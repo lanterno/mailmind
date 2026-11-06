@@ -2,7 +2,12 @@
 process: what a push adds, how an undo group gathers its members, and what the stack keeps.
 tests/e2e/test_front_door.py undoes across a restart; the routes' undo is in test_http_mail.py and
 test_hwf_http.py."""
+from datetime import datetime, timedelta, timezone
+
+import time_machine
+
 from mailmind.bootstrap import mailbox
+from mailmind.bootstrap.mailbox import store
 
 
 def move(n):
@@ -43,3 +48,34 @@ def test_an_undo_that_fails_puts_its_entry_back_on_top(data_dir, monkeypatch):
     monkeypatch.setattr(mailbox.undo, "_reverse_one", lambda d: (False, d["account"], None))
     assert mailbox.undo.undo_last()[0]["ok"] is False
     assert ids(mailbox.undo.entries()) == ["<m1@example.test>", "<m2@example.test>"]
+
+
+def test_it_holds_fifty_groups_each_counting_once(data_dir):
+    for n in range(50):
+        mailbox.undo.push(move(n))
+    mailbox.undo.push(move(50), "g")
+    mailbox.undo.push(move(51), "g")
+    held = ids(mailbox.undo.entries())
+    assert len(held) == 50 and held[0] == "<m1@example.test>" and held[-1] == ["<m50@example.test>", "<m51@example.test>"]
+
+
+def test_an_entry_a_day_old_can_no_longer_be_undone(app, world):
+    """Whichever comes first, of 50 groups and 24 hours: Undo finds nothing, and asks no server."""
+    mailbox.undo.push(move(1))
+    app.clock.shift(timedelta(hours=23, minutes=59))
+    assert ids(mailbox.undo.entries()) == ["<m1@example.test>"]
+    app.clock.shift(timedelta(minutes=2))
+    assert mailbox.undo.entries() == []
+    answer = app.post("/api/undo", {}).json
+    assert answer["ok"] is False and answer["empty"] is True
+
+
+def test_a_new_entry_ends_what_has_grown_too_old(data_dir):
+    with time_machine.travel(datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc), tick=False) as clock:
+        mailbox.undo.push(move(1), "g")
+        clock.shift(timedelta(hours=25))
+        mailbox.undo.push(move(2), "g")                            # a new group: the old one has gone
+        assert ids(mailbox.undo.entries()) == [["<m2@example.test>"]]
+        c = store.conn()
+        assert c.execute("SELECT COUNT(*) FROM undo_entries").fetchone()[0] == 1
+        c.close()
