@@ -17,6 +17,7 @@ import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/mailbox/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
+import { Curate } from "../features/curate/Curate";
 import { Docs } from "../features/docs/Docs";
 import { FeedRiver, PaperTrail } from "../features/lanes/Lanes";
 import { ScreenerPane, useScreener } from "../features/senders/Screener";
@@ -313,6 +314,7 @@ export function App() {
       <Help />
       <Settings />
       <Docs m={m} />
+      <Curate />
       <OverLimitDialog />
       <ConfirmDialog />
       <Floats />

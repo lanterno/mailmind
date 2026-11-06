@@ -16,6 +16,7 @@ import { readAgain } from "../mailbox/actions";
 import { useDigest } from "../mailbox/data";
 import type { Mailbox } from "../mailbox/useMailbox";
 import { badAccounts, healthOf, nameOf, pillLabel, syncOf, type Digest } from "./model";
+import { curateOpen } from "../curate/open";
 
 const syncing = createStore(false);
 const reconciling = createStore(false);
@@ -114,7 +115,7 @@ function StatusMenu({ digest, label, close, m }: { digest: Digest; label: { cls:
       <div className="sm-acts">
         <button disabled={label.text === "Syncing…"} onClick={act(() => void syncNow(qc))}><span className="mi-ic" aria-hidden="true"><Icon name="refresh" /></span>Sync now</button>
         <button disabled={reconcilingNow} onClick={act(() => void reconcile(qc))}><span className="mi-ic" aria-hidden="true"><Icon name="restore" /></span>Reconcile<small>drop mail deleted elsewhere</small></button>
-        <a className="sm-link" href="/" onClick={close}><span className="mi-ic" aria-hidden="true"><Icon name="leaf" /></span>Curate<small>noisy senders, rules, audit: in the current app</small></a>
+        <button onClick={act(() => curateOpen.set(true))}><span className="mi-ic" aria-hidden="true"><Icon name="leaf" /></span>Curate<small>noisy senders, rules, audit</small></button>
         {bad.length > 0 && <button onClick={act(m.openSettings)}><span className="mi-ic" aria-hidden="true"><Icon name="sliders" /></span>Fix connections in Settings</button>}
         {ask && <button onClick={act(() => void Notification.requestPermission().then((p) => toast(p === "granted" ? "Notifications on" : "Notifications blocked")))}><span className="mi-ic" aria-hidden="true"><Icon name="bell" /></span>Turn on desktop notifications</button>}
       </div>

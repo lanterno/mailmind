@@ -1,7 +1,9 @@
 // Everything you can do from here, in one list: the keys and the palette both read it, so a command means the same either
 // way and neither can drift from the other.
 import { panel } from "../features/brief/Panels";
+import { doing } from "../features/ask/ask";
 import { composing } from "../features/compose/compose";
+import { curateOpen } from "../features/curate/open";
 import { docsOpen } from "../features/docs/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
@@ -124,6 +126,9 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
   add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
   add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => docsOpen.set(true) });
+  add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
+  add({ id: "curate", group: "Commands", label: "Curate — rules and audit", run: () => curateOpen.set(true) });
+  add({ id: "cleanup", group: "Commands", label: "Clean up senders (unsubscribe)", run: () => curateOpen.set(true) });
   for (const v of m.views) {
     const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
     add({ id: `view:${v.id}`, group: "Navigation", label: `View · ${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
