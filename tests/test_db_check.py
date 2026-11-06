@@ -103,3 +103,32 @@ def test_the_command_line_exits_with_the_verdict(tmp_path, capsys):
         main(["db", "check-upgrade", "--db", path])
     assert done.value.code == check.OK
     assert "every table kept its rows: yes" in capsys.readouterr().out
+
+
+def test_a_table_a_migration_retires_is_reported_and_is_no_loss(tmp_path):
+    path = database_at(tmp_path, 36)
+    c = sqlite3.connect(path)
+    c.execute("INSERT INTO briefing_cache(key, narrative) VALUES ('ada|2026-11-06|v2', ?)", (MARK,))
+    c.commit()
+    c.close()
+    code, report = run(path)
+    assert code == check.OK, report
+    [line] = [x for x in report.splitlines() if x.split()[:1] == ["briefing_cache"]]
+    assert line.split()[1:] == ["1", "-", "retired"]
+    assert "every table kept its rows: yes" in report and MARK not in report
+
+
+def test_a_table_no_migration_retired_is_a_loss(tmp_path, monkeypatch):
+    path = database_at(tmp_path, NEWEST - 1)
+    real = migrate.init
+
+    def init_that_drops_a_table(db, steps=None):
+        real(db, steps)
+        c = sqlite3.connect(db)
+        c.execute("DROP TABLE muted")
+        c.commit()
+        c.close()
+    monkeypatch.setattr(migrate, "init", init_that_drops_a_table)
+    code, report = run(path)
+    assert code == check.PROBLEM
+    assert "every table kept its rows: no (muted)" in report and MARK not in report

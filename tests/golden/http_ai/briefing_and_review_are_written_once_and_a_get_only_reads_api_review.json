@@ -35,7 +35,9 @@
     {
      "account": "ada@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 6,
      "pk": 6,
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
@@ -44,7 +46,9 @@
     {
      "account": "bea@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 18,
      "pk": 18,
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
@@ -53,7 +57,9 @@
     {
      "account": "cy@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 23,
      "pk": 23,
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
@@ -136,7 +142,9 @@
     {
      "account": "ada@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 6,
      "pk": 6,
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
@@ -145,7 +153,9 @@
     {
      "account": "bea@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 18,
      "pk": 18,
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
@@ -154,7 +164,9 @@
     {
      "account": "cy@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 23,
      "pk": 23,
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
@@ -208,7 +220,9 @@
     {
      "account": "ada@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 6,
      "pk": 6,
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
@@ -217,7 +231,9 @@
     {
      "account": "bea@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 18,
      "pk": 18,
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
@@ -226,7 +242,9 @@
     {
      "account": "cy@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 23,
      "pk": 23,
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
@@ -284,7 +302,9 @@
     {
      "account": "ada@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 6,
      "pk": 6,
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
@@ -293,7 +313,9 @@
     {
      "account": "bea@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 18,
      "pk": 18,
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
@@ -302,7 +324,9 @@
     {
      "account": "cy@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 23,
      "pk": 23,
      "subject": "Re: Guild meetup venue",
      "thread_id": "gm:cy@example.test:1800000000000000001",
@@ -378,7 +402,9 @@
     {
      "account": "bea@example.test",
      "action": "Reply today",
+     "folder": "INBOX",
      "importance": 5,
+     "key": 18,
      "pk": 18,
      "subject": "Contract draft v2",
      "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",

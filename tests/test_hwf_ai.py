@@ -636,7 +636,7 @@ def test_without_a_key_triage_sends_no_mail(world, anthropic_api):
 
 
 CACHED_READS = {     # each cached AI read, and the store read that finds its cache
-    "brief": "get_briefing", "delta": "get_briefing", "review": "get_briefing",
+    "brief": "get_brief", "delta": "get_delta", "review": "get_review",
     "thread summary": "get_thread_summary",
 }
 

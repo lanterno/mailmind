@@ -23,7 +23,7 @@ ACCOUNT = "ada@example.test"
 # change it.
 DERIVED = {("messages", "thread_id"): 5, ("messages", "body_text"): 6, ("messages", "recipients"): 10,
            ("thread_summaries", "fingerprint"): 22, ("messages", "message_key"): 30}
-DROPPED = {"notes": 18}                 # m18 retired the private notes, and their table
+DROPPED = migrations.RETIRED            # m18 retired the private notes, and m37 briefing_cache
 
 
 def mail(n, to, text, **headers):
@@ -189,3 +189,36 @@ def test_part_rows_go_only_for_a_message_with_an_email_attached(tmp_path):
     c.close()
     migrate.init(path)
     assert query(path, "SELECT message_pk, content_type FROM attachments") == [(1, "application/pdf")]
+
+
+@pytest.mark.parametrize("table,version", [(t, v) for t, v in migrations.RETIRED.items()])
+def test_a_table_a_migration_retired_stays_gone_on_the_next_start(tmp_path, table, version):
+    path = str(tmp_path / "started.db")
+    migrate.init(path, migrations.MIGRATIONS[:version - 1])
+    migrate.init(path)
+    assert table not in shape(path)
+    migrate.init(path)
+    assert table not in shape(path)
+
+
+def test_a_database_with_no_migration_to_run_is_left_alone(tmp_path):
+    path = str(tmp_path / "started.db")
+    migrate.init(path)
+    query(path, "DROP TABLE muted")          # the base schema creates it; only the next run could bring it back
+    migrate.init(path)
+    assert "muted" not in shape(path)
+    assert query(path, "PRAGMA user_version") == [(NEWEST,)]
+
+
+def test_a_new_database_starts_from_the_base_schema_with_no_migration_at_all(tmp_path):
+    path = str(tmp_path / "base.db")
+    migrate.init(path, [])
+    assert "messages" in shape(path) and query(path, "PRAGMA user_version") == [(0,)]
+
+
+def test_a_database_with_a_migration_to_run_gets_what_the_base_schema_has_first(tmp_path):
+    path = str(tmp_path / "older.db")
+    migrate.init(path, migrations.MIGRATIONS[:30])
+    query(path, "DROP TABLE muted")
+    migrate.init(path)
+    assert "muted" in shape(path) and query(path, "PRAGMA user_version") == [(NEWEST,)]
