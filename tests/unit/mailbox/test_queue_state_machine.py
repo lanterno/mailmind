@@ -203,10 +203,10 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import server_ops
 
         def effect(_real):
-            def die(_row):
+            def die(_row, _first_try=False):
                 raise Crash
             return die
-        self.crash_during(which, server_ops, "apply_queued_mutation", effect)
+        self.crash_during(which, server_ops, "apply", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
@@ -214,11 +214,11 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import server_ops
 
         def effect(real):
-            def die(row):
-                real(row)
+            def die(row, first_try=False):
+                real(row, first_try)
                 raise Crash
             return die
-        self.crash_during(which, server_ops, "apply_queued_mutation", effect)
+        self.crash_during(which, server_ops, "apply", effect)
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows())
@@ -226,10 +226,43 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import commands
 
         def effect(_real):
-            def die(_row):
+            def die(_c, _row):
                 raise Crash
             return die
         self.crash_during(which, commands, "_local_mirror", effect)
+
+    def crash_during_a_click(self, name, op, effect):
+        """A click dies mid-try: its command is already accepted, so the next start takes it up."""
+        from mailmind.bootstrap.mailbox import server_ops
+        pk = self.pk_in_inbox(name)
+        if not pk or "INBOX" not in self.boxes(name):
+            return
+        self.mutation += 1
+        self.allow(name, OPS[op])
+        body = {"pk": pk, "mutation_id": f"m-{self.mutation}"}
+        with mock.patch.object(server_ops, "apply", effect(server_ops.apply)):
+            try:
+                mailbox.filing.do_trash(body) if op == "trash" else mailbox.filing.do_write(f"/api/{op}", body)
+            except Crash:
+                pass
+        self.restart()
+
+    @rule(name=st.sampled_from(NAMES), op=st.sampled_from(sorted(OPS)))
+    def crash_in_a_click_before_the_server_is_asked(self, name, op):
+        def effect(_real):
+            def die(_row, _first_try=False):
+                raise Crash
+            return die
+        self.crash_during_a_click(name, op, effect)
+
+    @rule(name=st.sampled_from(NAMES), op=st.sampled_from(sorted(OPS)))
+    def crash_in_a_click_after_the_server_answered(self, name, op):
+        def effect(real):
+            def die(row, first_try=False):
+                real(row, first_try)
+                raise Crash
+            return die
+        self.crash_during_a_click(name, op, effect)
 
     @rule(folder=st.sampled_from(FOLDERS))
     def sync(self, folder):

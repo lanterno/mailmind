@@ -205,7 +205,7 @@ def test_a_folder_name_with_spaces_and_quotes_round_trips(srv, data_dir):
 # ── scripted trouble ────────────────────────────────────────────────────────────────────────────
 
 def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
-    from mailmind.bootstrap.mailbox import server_ops
+    from mailmind.bootstrap import mailbox
     from mailmind.bootstrap.mailbox import store
     uid = srv.deliver(ADA, "INBOX", _mail(1))
     c = store.conn()
@@ -218,8 +218,8 @@ def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
     c.close()
     srv.fail("UID MOVE", "NO [CANNOT] not today")
     srv.fail("UID COPY", "NO [OVERQUOTA] full")
-    ok, msg, undo = server_ops.trash_message(pk)
-    assert (ok, undo) == (False, None)
+    answer = mailbox.filing.do_trash({"pk": pk})
+    assert (answer["ok"], answer["undoable"]) == (False, False)
     assert list(srv.messages(ADA, "INBOX")) == [uid]
 
 

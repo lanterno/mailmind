@@ -8,6 +8,8 @@ commands.drain() itself and moves the frozen clock past the backoff.
 """
 from datetime import timedelta
 
+import pytest
+
 from fixtures import world as w
 from mailmind.mailbox.domain.events import Applied
 
@@ -20,6 +22,10 @@ def queue(app, world, op="archive", name=RECEIPT, account=w.ADA, mutation_id="m-
     r = app.post(f"/api/{op}", {"pk": world.pk(name), "mutation_id": mutation_id, **body}).json
     assert r["status"] == "queued", r
     return r
+
+
+class Crash(BaseException):
+    """The process died here: not an Exception, so no handler on the way out takes it for a failure."""
 
 
 def rows():
@@ -95,15 +101,17 @@ def test_a_crash_after_the_move_never_moves_it_twice(app, world, monkeypatch):
 
     mirror, crashed = commands._local_mirror, []
 
-    def crash_once(row):
+    def crash_once(c, row):
         if not crashed:
             crashed.append(row["id"])
-            raise RuntimeError("the process died here")
-        return mirror(row)
+            raise Crash
+        return mirror(c, row)
 
     monkeypatch.setattr(commands, "_local_mirror", crash_once)
-    drain()                                                            # moved, then "crashed"
-    assert (rows()[0]["state"], rows()[0]["applied"]) == ("running", 1)
+    with pytest.raises(Crash):
+        drain()                                                        # moved, then "crashed"
+    assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
+    assert (rows()[0]["state"], rows()[0]["applied"]) == ("running", 0)    # nothing of the settling was kept
     c = store.conn()
     commands.QUEUE.reset_stuck(c)                                      # what the worker does at boot
     c.commit()
@@ -121,14 +129,15 @@ def test_an_applied_move_is_published_once_even_across_a_crash(app, world, monke
     from mailmind.platform import bus
     heard = []
 
-    def crash(row):
-        raise RuntimeError("the process died here")
+    def crash(c, row):
+        raise Crash
     stop = bus.subscribe(Applied, heard.append)
     try:
         queue(app, world)
         mirror = commands._local_mirror
         monkeypatch.setattr(commands, "_local_mirror", crash)
-        drain()                                                        # moved, then "crashed": not yet
+        with pytest.raises(Crash):
+            drain()                                                    # moved, then "crashed": not yet
         assert heard == []
         monkeypatch.setattr(commands, "_local_mirror", mirror)
         c = store.conn()
@@ -185,15 +194,16 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
 def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, monkeypatch):
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import ingest
-    from mailmind.bootstrap.mailbox import commands
+    from mailmind.bootstrap.mailbox import server_ops
     ingest.sync_folder(accounts.get(w.ADA), "Archive", full=True)
     queue(app, world)
-    mirror = commands._local_mirror
+    apply = server_ops.apply
 
-    def archive_synced_first(row):
-        ingest.sync_new(accounts.get(w.ADA), "Archive")                # the moved copy is stored before
-        return mirror(row)
-    monkeypatch.setattr(commands, "_local_mirror", archive_synced_first)
+    def archive_synced_first(row, first_try=False):
+        answer = apply(row, first_try)
+        ingest.sync_new(accounts.get(w.ADA), "Archive")                # the moved copy is stored before the settling
+        return answer
+    monkeypatch.setattr(server_ops, "apply", archive_synced_first)
     drain()
     assert boxes(world, RECEIPT) == ([(w.ADA, "Archive")], [(w.ADA, "Archive")])
 

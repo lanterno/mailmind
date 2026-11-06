@@ -83,20 +83,12 @@ def server_boxes(world, name):
 
 # -- the IMAP lock: held for mail moves, never waited on where it would freeze the app -----
 
-def test_hwf_trash_moves_and_queues_under_the_imap_lock(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import store
+def test_hwf_trash_moves_under_the_imap_lock_and_queues_when_it_cant(app, world):
     held = lock_spy(world, "UID MOVE", user=w.ADA)
     assert app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json["ok"]
     assert held == [True]
-    queued, insert = [], store.command_insert
-
-    def spy(c, row):
-        queued.append(gates.held(w.ADA))
-        return insert(c, row)
-    monkeypatch.setattr(store, "command_insert", spy)
     world.server.drop("SELECT", user=w.ADA)
-    r = app.post("/api/trash", {"pk": world.pk(FOLDED)}).json
-    assert (r["status"], queued) == ("queued", [True])
+    assert app.post("/api/trash", {"pk": world.pk(FOLDED)}).json["status"] == "queued"
 
 
 def test_hwf_testing_an_account_never_waits_on_the_imap_lock(app, world):

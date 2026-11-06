@@ -30,6 +30,7 @@ with open(settings.current().config, "w") as f:
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import ingest
 from mailmind.bootstrap.mailbox import commands, server_ops
+from mailmind.mailbox.domain.command import ServerAnswer
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
@@ -435,7 +436,7 @@ def _still_there(pk):
     c = store.conn()
     row = store.get_message(c, pk)
     c.close()
-    return row is not None
+    return row is not None and row["pending_removal"] is None
 
 
 def _refusing():
@@ -445,12 +446,16 @@ def _refusing():
 
 
 def test_a_refused_move_keeps_the_message_and_says_so():
-    for name, op in (("trash", server_ops.trash_message), ("archive", server_ops.archive_message),
-                     ("junk", server_ops.junk_message), ("move", lambda pk: server_ops.move_message(pk, "Archive"))):
+    for name, op in (("trash", lambda pk: mailbox.filing.do_trash({"pk": pk})),
+                     ("archive", lambda pk: mailbox.filing.do_write("/api/archive", {"pk": pk})),
+                     ("junk", lambda pk: mailbox.filing.do_write("/api/junk", {"pk": pk})),
+                     ("move", lambda pk: mailbox.filing.do_write("/api/move", {"pk": pk, "dest": "Archive"}))):
         pk = _message()
+        depth = len(mailbox.undo.entries())
         with _connection(_refusing()):
-            ok, msg, undo = op(pk)
-        assert ok is False and undo is None, (name, ok, msg)
+            res = op(pk)
+        assert res["ok"] is False and res["undoable"] is False, (name, res)
+        assert len(mailbox.undo.entries()) == depth, name
         assert _still_there(pk), name
 
 
@@ -460,10 +465,10 @@ def test_a_refused_gmail_archive_keeps_the_message():
     accounts.get = lambda email: {**real(email), "kind": "gmail"}
     try:
         with _connection(_ScriptedIMAP(STORE=("NO", [b"label not removed"]))):
-            ok, _, undo = server_ops.archive_message(pk)
+            res = mailbox.filing.do_write("/api/archive", {"pk": pk})
     finally:
         accounts.get = real
-    assert ok is False and undo is None, ok
+    assert res["ok"] is False and res["undoable"] is False, res
     assert _still_there(pk)
 
 
@@ -472,8 +477,12 @@ def test_an_accepted_move_still_files_the_message():
     M = _ScriptedIMAP()
     M.list = lambda: _FOLDERS
     with _connection(M):
-        ok, _, undo = server_ops.archive_message(pk)
-    assert ok is True and undo and undo["dest_folder"] == "Archive", (ok, undo)
+        res = mailbox.filing.do_write("/api/archive", {"pk": pk})
+    assert res["ok"] is True and res["undoable"] is True, res
+    c = store.conn()
+    command = c.execute("SELECT dest, applied FROM mail_commands ORDER BY id DESC LIMIT 1").fetchone()
+    c.close()
+    assert (command["dest"], command["applied"]) == ("Archive", 1)
     assert not _still_there(pk)
 
 
@@ -585,17 +594,17 @@ def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync():
 
 @contextlib.contextmanager
 def _trash_probe():
-    """Replaces trash_message; yields the list of whether the IMAP gate was held at each call."""
-    held, real = [], server_ops.trash_message
+    """Stands in for a command's try; yields the list of whether the IMAP gate was held at each call."""
+    held, real = [], server_ops.apply
 
-    def probe(pk):
+    def probe(row, first_try=False):
         held.append(gates.held())
-        return True, "trashed", None
-    server_ops.trash_message = probe
+        return ServerAnswer(dest="Trash")
+    server_ops.apply = probe
     try:
         yield held
     finally:
-        server_ops.trash_message = real
+        server_ops.apply = real
 
 
 def test_cleanup_and_block_trash_mail_under_the_imap_lock():

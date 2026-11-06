@@ -201,6 +201,23 @@ def test_a_table_a_migration_retired_stays_gone_on_the_next_start(tmp_path, tabl
     assert table not in shape(path)
 
 
+def test_the_queue_s_rows_become_commands_with_their_ids(tmp_path):
+    """m39: `messages.pending_removal` names a row by id, and any open row may already have reached the server."""
+    path = str(tmp_path / "m39.db")
+    migrate.init(path, migrations.MIGRATIONS[:38])
+    c = sqlite3.connect(path)
+    c.execute("""INSERT INTO read_mutations(id, account, idempotency_key, op, message_id, src_folder, dest, payload,
+                   state, attempts, next_attempt_at, applied, created_at)
+                 VALUES (7, 'ada@example.test', 'k', 'trash', '<m@example.test>', 'INBOX', 'Trash', '{"uid": 3}',
+                   'queued', 2, 40, 0, 'now')""")
+    c.commit()
+    c.close()
+    migrate.init(path)
+    assert "read_mutations" not in shape(path)
+    assert query(path, """SELECT id, kind, params, state, attempts, next_attempt_at, applied, begun, outcome
+                          FROM mail_commands""") == [(7, "trash", '{"uid": 3}', "queued", 2, 40, 0, 1, None)]
+
+
 def test_a_database_with_no_migration_to_run_is_left_alone(tmp_path):
     path = str(tmp_path / "started.db")
     migrate.init(path)
