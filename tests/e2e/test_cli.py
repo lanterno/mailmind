@@ -116,3 +116,20 @@ def test_export_plans_and_writes(world, tmp_path, capsys):
     main(["export", "--format", "mbox", "--out", str(tmp_path), "--account", w.ADA])
     assert "mbox files under" in capsys.readouterr().out
     assert list(tmp_path.rglob("*.mbox"))
+
+
+def test_db_rethread_regroups_the_mail_and_writes_down_what_it_names(world, capsys):
+    from mailmind.bootstrap.mailbox import store
+    reply, parent = world.pk("ada-inbox-02-lunch-confirm.eml"), world.pk("ada-inbox-01-lunch.eml")
+    c = store.conn()
+    try:
+        c.execute("UPDATE messages SET thread_id='rf:broken' WHERE pk=?", (reply,))
+        c.execute("DELETE FROM thread_links WHERE message_pk=?", (reply,))
+        c.commit()
+        main(["db", "rethread", w.ADA])
+        assert w.ADA in capsys.readouterr().out
+        ids = dict(map(tuple, c.execute("SELECT pk, thread_id FROM messages WHERE pk IN (?,?)", (reply, parent))))
+        assert ids[reply] == ids[parent] != "rf:broken"
+        assert c.execute("SELECT count(*) FROM thread_links WHERE message_pk=?", (reply,)).fetchone()[0] > 0
+    finally:
+        c.close()
