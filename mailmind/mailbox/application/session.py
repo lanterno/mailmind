@@ -117,6 +117,9 @@ class ReadOnlySession:
     def select(self, folder, *, readonly=True):
         return self._session.select(folder, readonly=True)
 
+    def logout(self):                  # named, so a port that only logs out can see it past __getattr__
+        return self._session.logout()
+
     def __getattr__(self, name):
         if name in self._WRITES:
             def refused(*args, **kwargs):
