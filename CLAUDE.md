@@ -366,6 +366,16 @@ legacy modules may import from it freely; the reverse goes only through `mailmin
   `curation.sweeps.sweep(acct)`). Filing still goes through the server's own functions, which `curation.attach` names,
   since the server may run as `__main__`, and a message's rows through `store`, until the Mailbox holds them. A sweep's
   `move_verified` is `mailbox.application.filing`. It is standard library only.
+- `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
+  wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
+  `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
+  `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
+  `mailmind.bootstrap.attention` binds them, and it's how the legacy modules reach Attention (`attention.muting.mute(body)`,
+  `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` still go through `store`, and undo and
+  what a change makes stale through the server's own functions, which `attention.attach` names, until the Mailbox holds
+  them. The lists the rail shows (`snoozed_in`, `muted_in`, `waiting_in`, `replylater_in`) stay in the server until then.
+  `mailmind.kernel.attention` is a different module, what a verdict asks of you, which `server.py` imports as `verdict`.
+  It is standard library only.
 - `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `agenda`
   (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
   REPLY and its idempotency key); `adapters` holds `ics_reader` (the hand-rolled reader of an invite's text, `parse` and
@@ -585,7 +595,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is
   good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
   in is left where it went, and counted as `gone`. Each message goes through its own route (`do_write`, `do_trash`,
-  `do_snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
+  `attention.snoozing.snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
   never reaches its own home (`_DO_APART`, `_DO_ALREADY`), and each message counts once, by the copy search would show.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
@@ -646,14 +656,14 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   `needs_summary` offers one copy of each. A key with no copy left waits 30 days (`gone_at`) for one to
   come back, then the `forget` job ends it. `store.init` gives a key to a row an older commit wrote. Message
   rows in the API carry it as `key`, beside `pk`. New durable state about a message keys on it.
-- **A snooze outlives its row.** `store.set_snooze` writes `messages.snoozed_until` and a `snoozes` row
+- **A snooze outlives its row.** `attention.book.set_snooze` writes `messages.snoozed_until` and a `snoozes` row
   (migration 33, by key and folder), and `upsert_message` gives it to a copy that arrives in that folder, so a
   resync keeps it and a copy filed elsewhere isn't hidden. An Undo of filing brings it back; one come due with
-  no copy in its folder ends at `store.due_snoozes`. The undo entry names rows by key and folder too (`where`).
-  A message that wakes is unread on the server as well: `server.wake_snoozed` queues the mark for read mail
+  no copy in its folder ends at `attention.book.due_snoozes`. The undo entry names rows by key and folder too (`where`).
+  A message that wakes is unread on the server as well: `Snoozing.wake_due` queues the mark for read mail
   (`store.queue_flags`), or the next sync that read its flags would take it back.
-- **Muting tells the server too** (decision D6). `store.muted_thread_seen` queues `\\Seen` for the thread's
-  unread members and `apply_mute_on_ingest` for mail that arrives later, skipping one with a mark still open
+- **Muting tells the server too** (decision D6). `Muting.mute` queues `\\Seen` for the thread's
+  unread members and `Muting.on_ingest` for mail that arrives later, skipping one with a mark still open
   (a refused one waits in the tray). The undo entry names those members by key and folder, and Undo marks
   unread again only them.
 - **A thread id is sticky.** `threads.recompute_threads` mints an `rf:` id from the thread's
