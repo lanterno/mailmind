@@ -98,10 +98,10 @@ def test_a_full_process_gets_the_connection_itself(world):
 
 def test_it_opens_no_smtp_session(world, read_only):
     import accounts
-    import smtpsend
+    from mailmind.bootstrap.compose import transport
     before = len(world.smtp.commands)
     with pytest.raises(ReadOnlyError):
-        smtpsend.send(accounts.get(w.ADA), b"Subject: x\r\n\r\nx\r\n", ["lin@example.test"])
+        transport.send(accounts.get(w.ADA), b"Subject: x\r\n\r\nx\r\n", ["lin@example.test"])
     assert len(world.smtp.commands) == before and world.smtp.messages == []
 
 

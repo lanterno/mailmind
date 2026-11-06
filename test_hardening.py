@@ -29,8 +29,11 @@ import ingest
 import mailops
 import readmutq
 import server
-import smtpsend
+from mailmind.bootstrap.compose import transport
+from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import curation
+import smtplib
+import config
 store.init()
 
 
@@ -104,14 +107,14 @@ class _FakeSMTP:
 
 
 def _smtp_ctx(host, starttls):
-    real = smtpsend.smtplib.SMTP, smtpsend.smtplib.SMTP_SSL, smtpsend.config.resolve_credential
-    smtpsend.smtplib.SMTP = smtpsend.smtplib.SMTP_SSL = _FakeSMTP
-    smtpsend.config.resolve_credential = lambda acct: "app-password"
+    real = smtplib.SMTP, smtplib.SMTP_SSL, config.resolve_credential
+    smtplib.SMTP = smtplib.SMTP_SSL = _FakeSMTP
+    config.resolve_credential = lambda acct: "app-password"
     try:
-        smtpsend.smtp_connect({"email": "ada@example.test", "smtp_host": host,
+        transport.connect({"email": "ada@example.test", "smtp_host": host,
                                "smtp_port": 587 if starttls else 465, "smtp_starttls": starttls})
     finally:
-        smtpsend.smtplib.SMTP, smtpsend.smtplib.SMTP_SSL, smtpsend.config.resolve_credential = real
+        smtplib.SMTP, smtplib.SMTP_SSL, config.resolve_credential = real
     return _FakeSMTP.ctxs[-1]
 
 
@@ -203,17 +206,17 @@ def test_a_lost_connection_during_expunge_still_raises():
 
 
 def _with_connection(M, fn):
-    real = smtpsend.accounts.connect
-    smtpsend.accounts.connect = lambda acct, timeout=60: M
+    real = accounts.connect
+    accounts.connect = lambda acct, timeout=60: M
     try:
         return fn()
     finally:
-        smtpsend.accounts.connect = real
+        accounts.connect = real
 
 
 def test_deleting_a_draft_copy_never_bulk_expunges():
     M = _ScriptedIMAP(EXPUNGE=_BAD)
-    _with_connection(M, lambda: smtpsend.delete_draft_uid({"email": "ada@example.test"},
+    _with_connection(M, lambda: mailbox.copies.delete_draft_uid({"email": "ada@example.test"},
                                                           "Drafts", 41, 7))
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls
     assert "EXPUNGE-ALL" not in M.cmds()
@@ -221,7 +224,7 @@ def test_deleting_a_draft_copy_never_bulk_expunges():
 
 def test_replacing_a_draft_copy_never_bulk_expunges():
     M = _ScriptedIMAP(EXPUNGE=_BAD)
-    out = _with_connection(M, lambda: smtpsend.append_to_drafts(
+    out = _with_connection(M, lambda: mailbox.copies.append_to_drafts(
         {"email": "ada@example.test"}, b"Subject: hi\r\n\r\nbody", prev_uid=41, prev_uidvalidity=7))
     assert out == ("Drafts", 42, 7, None)                        # the EXPUNGE was refused: it is still there
     assert ("STORE", "41", "+FLAGS", "(\\Deleted)") in M.calls

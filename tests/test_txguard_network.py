@@ -68,19 +68,19 @@ def test_an_open_imap_connection_sends_no_command(world, write):
 
 def test_no_smtp_session_is_opened(world, write):
     import accounts
-    import smtpsend
+    from mailmind.bootstrap.compose import transport
     before = len(world.smtp.commands)
     write.open()
     with pytest.raises(TxAcrossNetworkError, match="^an SMTP connection while"):
-        smtpsend.send(accounts.get(w.ADA), b"Subject: x\r\n\r\nx\r\n", ["lin@example.test"])
+        transport.send(accounts.get(w.ADA), b"Subject: x\r\n\r\nx\r\n", ["lin@example.test"])
     assert len(world.smtp.commands) == before and world.smtp.messages == []
     write.end()
 
 
 def test_an_open_smtp_session_sends_nothing(world, write):
     import accounts
-    import smtpsend
-    s = smtpsend.smtp_connect(accounts.get(w.ADA))
+    from mailmind.bootstrap.compose import transport
+    s = transport.connect(accounts.get(w.ADA))
     try:
         before = len(world.smtp.commands)
         write.open()

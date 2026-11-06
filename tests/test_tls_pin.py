@@ -129,14 +129,14 @@ def test_a_move_while_the_certificate_is_wrong_waits_in_the_queue(app, world):
 
 def test_smtp_pins_its_own_endpoint_and_refuses_a_changed_certificate(world):
     import accounts
-    import smtpsend
+    from mailmind.bootstrap.compose import transport
     smtp = f"127.0.0.1:{world.smtp.port}"
-    smtpsend.smtp_connect(accounts.get(w.ADA)).quit()
+    transport.connect(accounts.get(w.ADA)).quit()
     assert pins(world)[smtp] == "sha256:" + world.smtp.cert_sha256
     pin(world, w.ADA, smtp, WRONG)
     auths = len([c for c in world.smtp.commands if c["command"] == "AUTH"])
     with pytest.raises(tls_pin.TLSPinMismatch):
-        smtpsend.smtp_connect(accounts.get(w.ADA))
+        transport.connect(accounts.get(w.ADA))
     assert len([c for c in world.smtp.commands if c["command"] == "AUTH"]) == auths
 
 

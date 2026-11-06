@@ -1,5 +1,5 @@
 """A scripted SMTP submission server on a loopback port, for tests that drive MailMind's real
-smtplib code (smtpsend.py, the outbox).
+smtplib code (compose.adapters.smtp, the outbox).
 
 It speaks what smtplib sends: EHLO/HELO, STARTTLS, AUTH PLAIN and LOGIN, MAIL FROM, RCPT TO,
 DATA (dot-stuffed), RSET, NOOP and QUIT. STARTTLS is required before AUTH, so a password never

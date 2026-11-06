@@ -99,10 +99,10 @@ def test_a_person_can_send_it_again_and_it_finishes_like_any_send(app, world):
 
 def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(app, world, monkeypatch):
     import outbox
-    import smtpsend
+    from mailmind.bootstrap.compose import transport
     import store
     oid = queued(app)
-    real = smtpsend.send
+    real = transport.send
 
     class Died(BaseException):
         pass
@@ -110,10 +110,10 @@ def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(
     def dies(acct, raw, envelope, before_dot=None):
         before_dot()
         raise Died
-    monkeypatch.setattr(smtpsend, "send", dies)
+    monkeypatch.setattr(transport, "send", dies)
     with pytest.raises(Died):
         outbox.send_one(oid)
-    monkeypatch.setattr(smtpsend, "send", real)
+    monkeypatch.setattr(transport, "send", real)
     assert (row(oid)["state"], row(oid)["wire_begun"]) == ("sending", 1)
     c = store.conn()
     outbox.QUEUE.reset_stuck(c)                                # what the worker does at boot
@@ -126,20 +126,20 @@ def test_a_crash_with_the_message_on_the_wire_isnt_sent_again_after_the_restart(
 
 def test_a_crash_before_the_message_went_is_tried_again_after_the_restart(app, world, monkeypatch):
     import outbox
-    import smtpsend
+    from mailmind.bootstrap.compose import transport
     import store
     oid = queued(app)
-    real = smtpsend.send
+    real = transport.send
 
     class Died(BaseException):
         pass
 
     def dies(acct, raw, envelope, before_dot=None):
         raise Died
-    monkeypatch.setattr(smtpsend, "send", dies)
+    monkeypatch.setattr(transport, "send", dies)
     with pytest.raises(Died):
         outbox.send_one(oid)
-    monkeypatch.setattr(smtpsend, "send", real)
+    monkeypatch.setattr(transport, "send", real)
     c = store.conn()
     outbox.QUEUE.reset_stuck(c)
     c.commit()

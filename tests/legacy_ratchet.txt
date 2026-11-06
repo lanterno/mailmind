@@ -17,11 +17,12 @@ mailmind.bootstrap.cli export
 mailmind.bootstrap.cli ingest
 mailmind.bootstrap.cli store
 mailmind.bootstrap.cli summarize
+mailmind.bootstrap.compose accounts
+mailmind.bootstrap.compose config
 mailmind.bootstrap.curation accounts
 mailmind.bootstrap.curation ingest
 mailmind.bootstrap.curation mailops
 mailmind.bootstrap.curation pool
-mailmind.bootstrap.curation smtpsend
 mailmind.bootstrap.curation store
 mailmind.bootstrap.discovery accounts
 mailmind.bootstrap.discovery config

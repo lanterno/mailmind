@@ -38,6 +38,8 @@ import server
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel import addresses
+import accounts
+from mailmind.bootstrap import mailbox
 
 ACCT = "ada@example.test"
 ORIG = {"from_name": "Bo Park", "from_addr": "bo@example.test", "date": "Mon, 2 Feb 2026 09:00:00 +0000",
@@ -68,8 +70,8 @@ def _fresh(uidv=777, appenduid=True):
     def enqueue(built, meta):
         CALLS["sent"].append((built, meta))
         return len(CALLS["sent"]), True
-    server.smtpsend.append_to_drafts = append
-    server.smtpsend.delete_draft_uid = delete
+    mailbox.copies.append_to_drafts = append
+    mailbox.copies.delete_draft_uid = delete
     server.outbox.enqueue = enqueue
     server.ingest.fetch_body = _real_fetch_body
     server._draft_live = lambda acct, folder, uid: True           # the server still holds the copy
@@ -77,7 +79,7 @@ def _fresh(uidv=777, appenduid=True):
 
 _real_fetch_body = server.ingest.fetch_body
 _real_draft_live = server._draft_live
-_real_append = server.smtpsend.append_to_drafts
+_real_append = mailbox.copies.append_to_drafts
 
 
 def _save(account=ACCT, draft_id=None, **kw):
@@ -334,8 +336,8 @@ def test_from_change_then_two_saves_keeps_the_row_in_step():
 def test_from_change_removes_the_old_copy_only_after_the_new_one_is_saved():
     _fresh()
     did = _save()["draft_id"]
-    seen, record = [], server.smtpsend.delete_draft_uid
-    server.smtpsend.delete_draft_uid = lambda *a, **k: (seen.append(len(CALLS["append"])), record(*a, **k))
+    seen, record = [], mailbox.copies.delete_draft_uid
+    mailbox.copies.delete_draft_uid = lambda *a, **k: (seen.append(len(CALLS["append"])), record(*a, **k))
     _save(account="zed@example.test", draft_id=did)
     assert seen == [2], seen                                    # both appends had run
 
@@ -347,7 +349,7 @@ def test_failed_save_under_a_new_from_keeps_the_old_copy():
 
     def unreachable(acct, raw, **kw):
         raise OSError("connection refused")
-    server.smtpsend.append_to_drafts = unreachable
+    mailbox.copies.append_to_drafts = unreachable
     res, code = server.do_draft({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
                                  "subject": "Plans", "text": "Saturday works.", "draft_id": did})
     assert code == 502 and not res["ok"], (code, res)
@@ -443,11 +445,11 @@ class _FakeDraftsIMAP:
 
 
 def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
-    connect = server.smtpsend.accounts.connect
+    connect = accounts.connect
     try:
         for prev_folder, touched in (("Old drafts", False), ("Drafts", True), (None, True)):
             fake = _FakeDraftsIMAP()
-            server.smtpsend.accounts.connect = lambda acct, **kw: fake
+            accounts.connect = lambda acct, **kw: fake
             got = _real_append({"email": ACCT}, b"Subject: x\r\n\r\nhi\r\n", prev_uid=5, prev_uidvalidity=777,
                                prev_msgid="<old@example.test>", prev_folder=prev_folder)
             assert got[:3] == ("Drafts", 9, 777), got
@@ -456,7 +458,7 @@ def test_append_to_drafts_leaves_drafts_alone_for_a_copy_elsewhere():
             if prev_folder == "Old drafts":                     # not even searched for by Message-ID
                 assert fake.calls == [("select", '"Drafts"'), ("append", '"Drafts"')], fake.calls
     finally:
-        server.smtpsend.accounts.connect = connect
+        accounts.connect = connect
 
 
 def test_unvouched_old_copy_is_left_alone():
