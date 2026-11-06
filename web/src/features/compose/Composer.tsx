@@ -6,7 +6,7 @@ import { get } from "../../lib/api/client";
 import { fileSize, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
-import { QuoteFrame } from "../mailbox/MailFrame";
+import { QuoteFrame } from "../mailbox";
 import { composing, draftTone, setDraftTone } from "./compose";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";

@@ -9,8 +9,8 @@ import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
-import { useDigest } from "../mailbox/data";
-import { syncNow } from "../status/Status";
+import { useDigest } from "../mailbox";
+import { syncNow } from "../status";
 import { settingsOpen } from "./open";
 import { useLayer } from "../../lib/backTrap";
 

@@ -3,7 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../lib/api/client";
 import type { PostAnswers } from "../../lib/api/types.gen";
-import { readAgain, offerUndo, undoGroup } from "../mailbox/actions";
+import { readAgain, offerUndo, undoGroup } from "../mailbox";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";

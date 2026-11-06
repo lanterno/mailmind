@@ -10,13 +10,11 @@ import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
-import { AI_PRIVACY } from "../assistant/Brief";
-import { eventWhen } from "../assistant/model";
-import { readAgain } from "../mailbox/actions";
-import { useDigest } from "../mailbox/data";
-import type { Mailbox } from "../mailbox/useMailbox";
+import { AI_PRIVACY, eventWhen } from "../assistant";
+import { readAgain, useDigest } from "../mailbox";
+import type { Mailbox } from "../mailbox";
 import { badAccounts, healthOf, nameOf, pillLabel, syncOf, type Digest } from "./model";
-import { curateOpen } from "../curation/open";
+import { curateOpen } from "../curation";
 
 const syncing = createStore(false);
 const reconciling = createStore(false);

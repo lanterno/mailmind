@@ -3,7 +3,7 @@
 import { Dialog, Popover } from "react-aria-components";
 import { createStore } from "../../lib/store";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
-import type { Snoozing, Target } from "../mailbox/actions";
+import type { Snoozing, Target } from "../mailbox";
 
 const PRESETS: [string, string][] = [["later_today", "Later today"], ["tomorrow", "Tomorrow 8am"], ["weekend", "This weekend"], ["next_week", "Next week"]];
 

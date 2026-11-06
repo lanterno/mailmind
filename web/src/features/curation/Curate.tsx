@@ -10,8 +10,7 @@ import { createStore } from "../../lib/store";
 import { shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { offerUndo, readAgain, undoGroup } from "../mailbox/actions";
-import { useDigest } from "../mailbox/data";
+import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { curateOpen } from "./open";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };

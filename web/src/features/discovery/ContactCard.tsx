@@ -7,8 +7,8 @@ import { go } from "../../app/route";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
-import { composing } from "../compose/compose";
-import type { Mailbox } from "../mailbox/useMailbox";
+import { composing } from "../compose";
+import type { Mailbox } from "../mailbox";
 
 function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void }) {
   const inside = useFocusFirst<HTMLDivElement>("button");

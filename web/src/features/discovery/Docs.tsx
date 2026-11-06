@@ -8,7 +8,7 @@ import { useLayer } from "../../lib/backTrap";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import type { Mailbox } from "../mailbox/useMailbox";
+import type { Mailbox } from "../mailbox";
 import { docsOpen } from "./open";
 
 const PAGE = 200;

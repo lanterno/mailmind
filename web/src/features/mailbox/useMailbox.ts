@@ -6,7 +6,7 @@ import { get } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
-import { settingsOpen } from "../settings/open";
+import { settingsOpen } from "../settings";
 import * as actions from "./actions";
 import { groupedPref, saveGroupedPref, useDigest, useFolders, useMessages, useViews } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";

@@ -1,7 +1,7 @@
 // The answer to a question, in the list's place, with the mail it cites. Opening a source leaves it on screen.
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
-import type { Mailbox } from "../mailbox/useMailbox";
+import type { Mailbox } from "../mailbox";
 import { ask, type Asking } from "./ask";
 
 export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {

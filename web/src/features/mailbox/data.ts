@@ -4,7 +4,7 @@ import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-q
 import { get } from "../../lib/api/client";
 import { sourceKey, type ListSource } from "../../app/route";
 import { store, stored } from "../../lib/store";
-import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant/model";
+import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
 const PAGE = 200, ALL_INBOXES_EACH = 40;

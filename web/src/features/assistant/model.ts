@@ -1,7 +1,7 @@
 // What the brief works out from the digest and the clock, with no DOM. The digest's rows say what the AI's verdict asks
 // of you; this only sorts and words them.
 import type { GetAnswers } from "../../lib/api/types.gen";
-import type { Row } from "../mailbox/rows";
+import type { Row } from "../mailbox";
 
 export type DigestItem = GetAnswers["/api/digest"]["items"][number];
 export type Upcoming = GetAnswers["/api/upcoming"]["items"][number];

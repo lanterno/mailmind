@@ -5,7 +5,7 @@ import { get, post } from "../../lib/api/client";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { readAgain } from "../mailbox/actions";
+import { readAgain } from "../mailbox";
 
 export const useScreener = (account: string | undefined) =>
   useQuery({ queryKey: ["screener", account], queryFn: () => get(`/api/screener?account=${encodeURIComponent(account!)}`), enabled: Boolean(account) });

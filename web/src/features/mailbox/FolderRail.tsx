@@ -7,7 +7,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { post } from "../../lib/api/client";
 import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { useScreener } from "../curation/Screener";
+import { useScreener } from "../curation";
 import { useFolders, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 

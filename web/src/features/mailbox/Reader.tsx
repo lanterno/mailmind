@@ -3,10 +3,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
-import { BriefPane } from "../assistant/Brief";
-import { composing, myAddresses } from "../compose/compose";
-import { answer, forget, useDraftAhead, useDraftChip } from "../compose/draftAhead";
-import { canQuickReply, QUICK } from "../compose/model";
+import { BriefPane } from "../assistant";
+import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
@@ -17,9 +15,9 @@ import { useBody, useThread } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
-import { snoozeAsk } from "../attention/SnoozeMenu";
+import { snoozeAsk } from "../attention";
 import type { Mailbox } from "./useMailbox";
-import { SenderButton } from "../discovery/ContactCard";
+import { SenderButton } from "../discovery";
 
 type Body = GetAnswers["/api/message/{pk}/body"];
 

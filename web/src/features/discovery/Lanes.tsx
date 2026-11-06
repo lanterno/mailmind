@@ -1,8 +1,7 @@
 // Two saved searches that read better as something other than rows: newsletters as a river, receipts as a ledger.
 import { useEffect } from "react";
 import { shortAddress } from "../../lib/text";
-import type { Row } from "../mailbox/rows";
-import type { Mailbox } from "../mailbox/useMailbox";
+import type { Row, Mailbox } from "../mailbox";
 import { fmtMoney, ledger, monthName } from "./model";
 
 const accountOf = (m: Mailbox, r: Row) => m.aliases[r.account] || shortAddress(r.account);

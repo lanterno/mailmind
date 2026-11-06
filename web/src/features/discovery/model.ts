@@ -1,5 +1,5 @@
 // Paper Trail: a local ledger read out of subjects and snippets. No AI and no network, so it never needs either.
-import type { Row } from "../mailbox/rows";
+import type { Row } from "../mailbox";
 
 const MONEY = /(?:[$€£]\s?\d[\d.,]*\d|\d[\d.,]*\d\s?(?:USD|EUR|GBP|EGP|CHF|AED))/gi;
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", EGP: "E£", CHF: "CHF", AED: "AED" };
