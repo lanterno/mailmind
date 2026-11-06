@@ -6,8 +6,11 @@ Every function here but Undo's methods takes its caller's connection and leaves 
 """
 import json
 import threading
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
+from mailmind.kernel.row import Connection
 from mailmind.platform import sse
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -15,6 +18,9 @@ from mailmind.platform.workers import gates
 log = get_logger("undo")
 
 KEEP_FOR = timedelta(hours=24)                # an entry older than this can't be undone (decision D3)
+
+type Entry = dict[str, Any]                   # what reverses one thing a person did: its kind says whose it is
+type Reverser = Callable[[Entry], tuple[bool, str | None, str | None]]     # (ok, the account it touched, the folder)
 
 
 def _now():
@@ -25,11 +31,11 @@ def _oldest_kept():
     return (datetime.now(timezone.utc) - KEEP_FOR).isoformat()
 
 
-def _expire(c):
+def _expire(c: Connection) -> None:
     c.execute("DELETE FROM undo_entries WHERE created_at < ?", (_oldest_kept(),))
 
 
-def push(c, entry, group, keep):
+def push(c: Connection, entry: Entry, group: str | None, keep: int) -> None:
     """Put `entry` on top of the undo stack, or, when the top gathers `group`, add it to that
     group's children. Then keep only the newest `keep` entries, none older than KEEP_FOR."""
     _expire(c)
@@ -48,14 +54,14 @@ def push(c, entry, group, keep):
               (keep,))
 
 
-def put_back(c, entry):
+def put_back(c: Connection, entry: Entry) -> None:
     """Put an entry taken off the stack back on top: it, or what's left of its group, can be tried
     again."""
     c.execute("INSERT INTO undo_entries(grp, entry, created_at) VALUES(?,?,?)",
               (entry.get("group") if entry.get("kind") == "bulk" else None, json.dumps(entry), _now()))
 
 
-def pop(c):
+def pop(c: Connection) -> Entry | None:
     """Take the newest entry off the undo stack: the entry, or None when none is left that may be undone."""
     _expire(c)
     top = c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
@@ -65,7 +71,7 @@ def pop(c):
     return json.loads(top["entry"])
 
 
-def forget(c, names):
+def forget(c: Connection, names: Callable[[Entry], bool]) -> None:
     """There is nothing to reverse any more: take the newest entry `names(entry)` is true of off the stack, or out of
     its group."""
     for r in c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC").fetchall():
@@ -87,7 +93,7 @@ def forget(c, names):
         return
 
 
-def entries(c):
+def entries(c: Connection) -> list[Entry]:
     """The undo stack, oldest first."""
     return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries WHERE created_at >= ? ORDER BY id",
                                                       (_oldest_kept(),))]
@@ -96,7 +102,8 @@ def entries(c):
 class Undo:
     UNDO_MAX = 50                             # a group counts as one (decision D3)
 
-    def __init__(self, connect, reversers, after, quiet_error):
+    def __init__(self, connect: Callable[[], Connection], reversers: Mapping[str, Reverser], after: Callable[[], object],
+                 quiet_error: Callable[[Exception], str]):
         """`reversers` maps an entry's kind to what reverses it, `after()` runs once something was, and `quiet_error(e)`
         is what may be said of an exception."""
         self._connect = connect
@@ -105,7 +112,7 @@ class Undo:
         self._quiet_error = quiet_error
         self._lock = threading.Lock()
 
-    def _undo_db(self, fn):
+    def _undo_db[T](self, fn: Callable[[Connection], T]) -> T:
         """Run fn(c) on the undo stack under its lock, commit, and return what fn returned."""
         with self._lock:
             c = self._connect()
@@ -117,7 +124,7 @@ class Undo:
                 c.close()
 
 
-    def push(self, desc, group=None):
+    def push(self, desc: Entry | None, group: str | None = None) -> None:
         """Push a reverse descriptor. With a group id, coalesce consecutive pushes into one
         bulk entry so a single Undo reverses the whole batch. The stack keeps the newest self.UNDO_MAX
         entries, in the database, so Undo still works after a restart."""
@@ -126,31 +133,31 @@ class Undo:
         self._undo_db(lambda c: push(c, desc, group, self.UNDO_MAX))
 
 
-    def push_within(self, c, desc, group=None):
+    def push_within(self, c: Connection, desc: Entry, group: str | None = None) -> None:
         """Push in the caller's transaction, which already holds the database's write lock."""
         push(c, desc, group, self.UNDO_MAX)
 
 
-    def entries(self):
+    def entries(self) -> list[Entry]:
         """The undo stack, oldest first."""
         return self._undo_db(entries)
 
 
-    def _reverse_one(self, d):
+    def _reverse_one(self, d: Entry) -> tuple[bool, str | None, str | None]:
         """Run one descriptor's inverse as a job on its account's IMAP gate. Returns (ok,
         affected_account, src_folder)."""
         return gates.run(d.get("account") or gates.EVERY_ACCOUNT, lambda: self._reverse_held(d),
                          priority=gates.Priority.INTERACTIVE)
 
 
-    def _reverse_held(self, d):
-        reverse = self._reversers.get(d.get("kind"))
+    def _reverse_held(self, d: Entry) -> tuple[bool, str | None, str | None]:
+        reverse = self._reversers.get(d.get("kind", ""))
         if reverse:
             return reverse(d)
         return False, d.get("account"), None
 
 
-    def undo_last(self):
+    def undo_last(self) -> tuple[dict[str, Any], int]:
         """Pop the last undoable action and reverse it. Returns (result, code)."""
         entry = self._undo_db(pop)                # off the stack before any server is asked
         if entry is None:
