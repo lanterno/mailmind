@@ -2,6 +2,7 @@
 // screen reader's place too. A row's own actions are for the mouse: an option can't hold a control, and the keyboard has
 // e and d.
 import { useEffect, useRef } from "react";
+import { minute } from "../../lib/clock";
 import { avatarHue, dayGroup, initialsOf } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { toggleMark, type Filing } from "./actions";
@@ -68,6 +69,7 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
   empty: React.ReactNode;
   footer: React.ReactNode;
 }) {
+  const now = minute.useValue();   // compiled, this list keeps its headings until an input changes: midnight is one
   const sections = inDaySections(rows, folder);
   const scrolled = useRef<number | null>(null);
   useEffect(() => {
@@ -76,21 +78,20 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
     document.getElementById(rowId(openPk))?.scrollIntoView({ block: "nearest" });
   }, [openPk, rows.length]);
   if (!rows.length) return <div id="rows">{above}{empty}</div>;
-  let section = "";
   const active = openPk !== null && rows.some((r) => r.pk === openPk) ? rowId(openPk) : undefined;
+  const items: React.ReactNode[] = [];
+  let section = "";
+  for (const row of rows) {
+    const here = sections && row.ts !== null ? dayGroup(row.ts, new Date(now)) : "";
+    if (here && here !== section) items.push(<div key={`g-${here}`} className="rgrp" role="presentation">{here}</div>);
+    if (here) section = here;
+    items.push(<RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} />);
+  }
   return (
     <div id="rows">
       {above}
       <div className="rows-box" role="listbox" tabIndex={0} aria-label={label} aria-activedescendant={active}>
-        {rows.flatMap((row) => {
-          const here = sections && row.ts !== null ? dayGroup(row.ts) : "";
-          const heading = here && here !== section ? <div key={`g-${here}`} className="rgrp" role="presentation">{here}</div> : null;
-          if (here) section = here;
-          const item = (
-            <RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} />
-          );
-          return heading ? [heading, item] : [item];
-        })}
+        {items}
       </div>
       {footer}
     </div>

@@ -30,7 +30,6 @@ function Entries({ commands, close }: { commands: Command[]; close: () => void }
     setPicked(next);
     list.current?.querySelector(`#pi-${next}`)?.scrollIntoView({ block: "nearest" });
   };
-  let group = "";
   return (
     <div className="pbox">
       <input
@@ -66,8 +65,7 @@ function Entries({ commands, close }: { commands: Command[]; close: () => void }
       <div className="plist" id="plist" role="listbox" aria-label="Commands" ref={list}>
         {!shown.length && <div className="pnone">No matches.</div>}
         {shown.map((c, i) => {
-          const heading = !typed && c.group !== group ? <div key={`g-${c.group}`} className="pgrp" role="presentation">{c.group}</div> : null;
-          group = c.group;
+          const heading = !typed && c.group !== (shown[i - 1]?.group ?? "") ? <div key={`g-${c.group}`} className="pgrp" role="presentation">{c.group}</div> : null;
           return [
             heading,
             <div key={c.id} className={i === at ? "pi sel" : "pi"} role="option" aria-selected={i === at} id={`pi-${i}`} onClick={() => run(c)} onMouseMove={() => setPicked(i)}>
