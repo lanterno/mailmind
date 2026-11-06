@@ -2,19 +2,26 @@
 import base64
 import email
 import email.policy
+import enum
 import hashlib
 import json
 import time
+from collections.abc import Mapping
+from typing import Any, Literal
 
-from mailmind.compose.application.composing import composer_key
+from mailmind.compose.application.composing import Composing, composer_key
+from mailmind.compose.application.outbox import Outbox
+from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
 from mailmind.compose.domain import limits
-from mailmind.compose.domain.builder import build_message, thread_ids
+from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.compose.domain.draft_journal import PUSH_EVERY, due_after_failing, due_after_typing
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.resume import MODES, PARTICIPANT, lf, resume_files, resume_split
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
 from mailmind.kernel import addresses
+from mailmind.kernel.parsed import as_int
+from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
 from mailmind.platform.workers import gates
@@ -25,32 +32,40 @@ PUSH_TICK = 10               # the push job looks at least this often
 WAITING_AFTER = 30           # the tray names a save this overdue
 HELD = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it."
 DISCARDED = "You discarded this draft. It leaves the server as soon as the server can be reached."
-_WIDER = object()            # the row now needs a wider gate than the job held
 
 
-def _now():
+class _Gate(enum.Enum):
+    WIDER = enum.auto()      # the row now needs a wider gate than the job held
+
+
+type Answer = tuple[dict[str, Any], int]     # what to say, and the HTTP status to say it with
+type Pushed = int | None | Literal[False]    # the new copy's UID (None if the server didn't say), or False: it has to wait
+
+
+def _now() -> int:
     return int(time.time())
 
 
-def _scope_of(row, waiting):
+def _scope_of(row: Row, waiting: Row) -> str:
     """An old copy in another account (From changed) is removed there too: the job spans both."""
     return waiting["account"] if row["account"] == waiting["account"] or not row["uid"] else gates.EVERY_ACCOUNT
 
 
 class Drafts:
-    def __init__(self, composing, outbox, book, accounts, mail, copies, screen):
+    def __init__(self, composing: Composing, outbox: Outbox, book: Book, accounts: Accounts, mail: Messages,
+                 copies: Copies, screen: Screen):
         self._composing, self._outbox, self._book = composing, outbox, book
         self._accounts, self._mail, self._copies, self._screen = accounts, mail, copies, screen
 
-    def is_draft(self, row):
+    def is_draft(self, row: Row) -> bool:
         """A message is a draft if the server flags it \\Draft, or it sits in the account's Drafts."""
         return bool(row["draft"]) or self._screen.plays_drafts(row["account"], row["folder"])
 
-    def _ours_to_remove(self, d):
+    def _ours_to_remove(self, d: Row) -> bool:
         """The outbox's draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
         return self._outbox.draft_copy_is_ours(d) or self._screen.plays_drafts(d["account"], d["folder"])
 
-    def info(self, row):
+    def info(self, row: Row) -> dict[str, Any]:
         """For a draft, expose its draft_id + mode so the client can open it back into the composer.
         Lazily registers a drafts row if one isn't tracked yet."""
         if not self.is_draft(row):
@@ -71,7 +86,7 @@ class Drafts:
         c.close()
         return {"draft_id": did, "draft_mode": mode, "is_draft": True}
 
-    def save(self, body):
+    def save(self, body: Mapping[str, Any]) -> Answer:
         """Save a draft, or discard it. Either is local and durable the moment it answers: the journal holds it, and
         the server's copy follows (decision D5). An autosave leaves that to the push job, at most every minute; any other
         save tries now, for a moment. Returns (result, code)."""
@@ -88,10 +103,11 @@ class Drafts:
             return {"ok": False, "error": h.msg}, h.code
         except ValueError as e:
             return {"ok": False, "error": str(e)}, 400
-        did, version, refused = self._accept(body, spec, built, acct, in_reply_to_pk)
-        if refused:
-            return refused
-        answer = {"ok": True, "draft_id": did, "version": version, "message_id": built["message_id"], "pushed": False}
+        accepted = self._accept(body, spec, built, acct, in_reply_to_pk)
+        if accepted[2] is not None:
+            return accepted[2]
+        did, version, _ = accepted
+        answer: dict[str, Any] = {"ok": True, "draft_id": did, "version": version, "message_id": built["message_id"], "pushed": False}
         if not body.get("autosave") and profile.writes_allowed():
             uid = self._try_push(did, priority=gates.Priority.INTERACTIVE, deadline=PUSH_WAIT)
             if uid is not False:
@@ -105,7 +121,8 @@ class Drafts:
                                 "b64": base64.b64encode(a["data"]).decode("ascii")} for a in spec["forwarded"]]
         return answer, 200
 
-    def _accept(self, body, spec, built, acct, in_reply_to_pk):
+    def _accept(self, body: Mapping[str, Any], spec: Composed, built: Built, acct: Account,
+                in_reply_to_pk: int | None) -> tuple[int, int, None] | tuple[None, None, Answer]:
         """Write the save to the journal, in one transaction with the draft's row. Returns (the row's id, its version,
         None), or (None, None, the answer) for a save that may not go in."""
         did = int(body["draft_id"]) if body.get("draft_id") else None
@@ -150,7 +167,7 @@ class Drafts:
         finally:
             c.close()
 
-    def _discard(self, did):
+    def _discard(self, did: int) -> Answer:
         """Discard a draft. A copy on the server goes first and the row after it, so a server that's away
         leaves the journal asking until it's back; with no copy there's nothing to wait for."""
         c = self._book.connect()
@@ -176,10 +193,9 @@ class Drafts:
         self._screen.outbox_changed()
         return {"ok": True, "deleted": True}, 200
 
-    def _try_push(self, did, *, priority, deadline=None, wait=True):
+    def _try_push(self, did: int, *, priority: int, deadline: float | None = None, wait: bool = True) -> Pushed:
         """Do what the journal asks for this draft, as a job on the gate. Returns the new copy's UID (None if the server
         didn't say), or False when it has to wait: for the gate, for a server, or because nothing is asked any more."""
-        scope = None
         try:
             c = self._book.connect()
             try:
@@ -190,10 +206,10 @@ class Drafts:
                 return False
             scope = _scope_of(row, waiting)
             done = gates.run(scope, lambda: self._on_gate(did, scope), priority=priority, wait=wait, deadline=deadline)
-            if done is _WIDER:                       # another save moved the row to another account while this waited
+            if done is _Gate.WIDER:                  # another save moved the row to another account while this waited
                 done = gates.run(gates.EVERY_ACCOUNT, lambda: self._on_gate(did, gates.EVERY_ACCOUNT),
                                  priority=priority, wait=wait, deadline=deadline)
-            return done
+            return False if done is _Gate.WIDER else done   # no gate is wider than every account's: it can't say so
         except gates.Busy:
             return False
         except Exception as e:
@@ -210,7 +226,7 @@ class Drafts:
             self._screen.outbox_changed()
             return False
 
-    def _on_gate(self, did, scope):
+    def _on_gate(self, did: int, scope: str) -> Pushed | _Gate:
         c = self._book.connect()
         try:
             waiting, row = self._book.journal_get(c, did), self._book.draft_get(c, did)
@@ -219,13 +235,13 @@ class Drafts:
         if waiting is None or row is None:           # a job this one waited for did it, or the draft has gone
             return False
         if scope != gates.EVERY_ACCOUNT and _scope_of(row, waiting) != scope:
-            return _WIDER
+            return _Gate.WIDER
         if waiting["discard"]:
             self._remove(row, waiting)
             return False
         return self._push(row, waiting)
 
-    def _push(self, prev, j):
+    def _push(self, prev: Row, j: Row) -> Pushed:
         """APPEND the save, drop the copy it replaces, and move the row with them. Returns the new copy's UID."""
         c = self._book.connect()
         try:
@@ -276,13 +292,13 @@ class Drafts:
         self._screen.outbox_changed()
         return uid
 
-    def _reach(self, email):
+    def _reach(self, email: str) -> Account | None:
         try:
             return self._accounts.get(email)
         except KeyError:
             return None
 
-    def _remove(self, row, j):
+    def _remove(self, row: Row, j: Row) -> None:
         """A discard's copy goes, and then the row. A connection that fails raises, and the journal asks again. A server
         that won't remove it has the last word: the row is forgotten, and the copy stays listed. An account that has gone
         has nothing left to ask."""
@@ -305,7 +321,7 @@ class Drafts:
             self._screen.list_changed(row["account"], row["folder"])
         self._screen.outbox_changed()
 
-    def push_round(self):
+    def push_round(self) -> int:
         """One round of the push job: whatever has come due. Returns the seconds until the next is."""
         now = _now()
         c = self._book.connect()
@@ -322,7 +338,7 @@ class Drafts:
             c.close()
         return PUSH_TICK if at is None or at <= now else min(PUSH_TICK, at - now)   # still due: its gate was busy
 
-    def waiting(self):
+    def waiting(self) -> list[dict[str, Any]]:
         """What the tray names: what should have reached its server by now and hasn't."""
         grace = WAITING_AFTER if profile.writes_allowed() else 0
         c = self._book.connect()
@@ -333,7 +349,7 @@ class Drafts:
         return [{"id": r["draft_id"], "account": r["account"], "subject": r["subject"] or "", "saved_at": r["saved_at"],
                  "attempts": r["attempts"], "discarding": bool(r["discard"])} for r in rows]
 
-    def _live(self, acct, folder, uid):
+    def _live(self, acct: Account, folder: str, uid: int | None) -> bool | None:
         """Is this exact draft copy still on the server? True, False, or None when that can't be told
         (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
         replaced, and reopening it would put an older text over the newer one. A stateless, read-only
@@ -350,7 +366,7 @@ class Drafts:
             return False                                     # every UID we hold for this folder is void
         return there
 
-    def resume(self, body):
+    def resume(self, body: Mapping[str, Any]) -> Answer:
         """Open a saved draft back into the composer from its own stored bytes: your text, the quote
         or forwarded section it already carries (as text), every file as base64, To/Cc/Bcc as chips
         and its own threading headers. The original is looked up by (account, Message-ID) for the
@@ -358,9 +374,8 @@ class Drafts:
         last save (_m20_draft_resume) is trusted only for the very copy it saved. Returns (result, code)."""
         if body.get("draft_id") and body.get("pk") is None:
             return self._resume_saved(body["draft_id"])
-        try:
-            pk = int(body.get("pk"))
-        except (TypeError, ValueError):
+        pk = as_int(body.get("pk"))
+        if pk is None:
             return {"ok": False, "error": "Missing draft."}, 400
         row = self._mail.message(pk)
         if not row:
@@ -385,7 +400,7 @@ class Drafts:
             return {"ok": False, "error": DISCARDED}, 409
         live = self._live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
 
-        def reread_then_fetch():
+        def reread_then_fetch() -> Answer | None:
             """The 409 when the copy changed, else None once the body is fetched."""
             # the probe ran before the gate: a save or a send that held it meanwhile may have replaced
             # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
@@ -422,6 +437,7 @@ class Drafts:
         d = self._book.draft_get(c, did)
         j = self._book.journal_get(c, did)
         c.close()
+        assert d is not None                               # info() has just made sure of it
         cur = self._mail.uidvalidity(row["account"], row["folder"])
         same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
                      and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
@@ -438,7 +454,7 @@ class Drafts:
             repoint = None
         return self._opened(raw, d, record, exact, row["account"], row["subject"], repoint)
 
-    def _resume_saved(self, draft_id):
+    def _resume_saved(self, draft_id: Any) -> Answer:
         """Open a draft by its journal, for one that may not be on the server yet."""
         try:
             did = int(draft_id)
@@ -456,7 +472,7 @@ class Drafts:
             return {"ok": False, "error": DISCARDED}, 409
         return self._opened(j["raw"], d, j, True, j["account"], d["subject"], None)
 
-    def _keep_apart(self, d, j):
+    def _keep_apart(self, d: Row, j: Row) -> None:
         """Another app changed the copy while a save waited here. Text can't be merged and neither may be lost, so the
         save goes on as a draft of its own, with no copy of the other's to replace."""
         c = self._book.connect()
@@ -472,7 +488,8 @@ class Drafts:
         finally:
             c.close()
 
-    def _opened(self, raw, d, record, exact, account, subject_then, repoint):
+    def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,
+                repoint: tuple[str, int, int | None, bool] | None) -> Answer:
         """A draft's bytes, in the composer's terms. `record` is what MailMind knows of those very bytes."""
         elsewhere = " Edit it in the app that made it."
         unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
@@ -505,7 +522,8 @@ class Drafts:
         mode = d["mode"] if d["mode"] in MODES else "new"
         if mode == "new" and irt:                            # MailMind's own new drafts never carry one
             mode = "reply"
-        orig_pk, participants = None, []
+        orig_pk: int | None = None
+        participants: list[str] = []
         if mode in ("reply", "replyall") and irt:
             orow = self._mail.by_msgid(account, irt)
             if orow:
@@ -514,14 +532,15 @@ class Drafts:
                     a = a.strip().lower()
                     if a and a not in participants:
                         participants.append(a)
-        def key(chip):
+        def key(chip: str) -> str:
             try:
                 return addresses.parse_addr_list([chip])[0][1].lower()
             except (ValueError, IndexError):
                 return ""
         hdr = header_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
         had = {key(x) for x in hdr}
-        missing = [x for x in (json.loads(record["bcc"]) if record["bcc"] else []) if key(x) and key(x) not in had]
+        recorded: list[str] = json.loads(record["bcc"]) if record["bcc"] else []
+        missing = [x for x in recorded if key(x) and key(x) not in had]
         bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
         if repoint:
             folder, uid, uidvalidity, forget = repoint

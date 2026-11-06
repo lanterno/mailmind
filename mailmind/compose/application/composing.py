@@ -1,26 +1,32 @@
 """What a save and a send share: a request made into the message it asks for."""
+from collections.abc import Mapping
+from typing import Any
+
+from mailmind.compose.application.ports import Accounts, Account, Book, Messages, Screen
 from mailmind.compose.domain import limits
-from mailmind.compose.domain.attachments import decode as attachments_of, extract
-from mailmind.compose.domain.builder import reference_chain, thread_ids
+from mailmind.compose.domain.attachments import Attachment, decode as attachments_of, extract
+from mailmind.compose.domain.builder import Composed, reference_chain, thread_ids
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.forward import forward_bodies
 from mailmind.compose.domain.reply import Original, reply_bodies
 from mailmind.compose.domain.resume import lf
 from mailmind.content import sanitize
+from mailmind.content.mime import Parsed
 from mailmind.content.quote import own_html, quote_tail
+from mailmind.kernel.parsed import as_int, is_object
 from mailmind.platform.workers import gates
 
 
-def composer_key(body):
+def composer_key(body: Mapping[str, Any]) -> str | None:
     """The composer's idempotency key, as a save or a send gives it."""
     return str(body.get("idempotency_key") or "").strip()[:200] or None
 
 
 class Composing:
-    def __init__(self, book, accounts, mail, screen):
+    def __init__(self, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
         self._book, self._accounts, self._mail, self._screen = book, accounts, mail, screen
 
-    def spec(self, body):
+    def spec(self, body: Mapping[str, Any]) -> tuple[Composed, int | None, Account]:
         """Shared by send + save-draft: resolve account, decode attachments, assemble
         reply/forward bodies + threading. Returns (spec, in_reply_to_pk, acct). Raises Refused."""
         mode = body.get("mode", "new")
@@ -30,11 +36,13 @@ class Composing:
             raise Refused(400, "unknown sending account")
         text = body.get("text") or ""
         own = text                      # what you typed, before any quote is added
-        tail_text = tail_html = None
-        html = None
-        in_reply_to = references = None
-        in_reply_to_pk = None
-        forwarded = []                  # the original's files a forward added to the payload's
+        tail_text: str | None = None
+        tail_html: str | None = None
+        html: str | None = None
+        in_reply_to: str | None = None
+        references: list[str] | None = None
+        in_reply_to_pk: int | None = None
+        forwarded: list[Attachment] = []    # the original's files a forward added to the payload's
         subject = body.get("subject") or ""
         attachments = attachments_of(body.get("attachments"))
         resume = body.get("resume")
@@ -42,16 +50,13 @@ class Composing:
             # A reopened draft (draft_resume) goes out as drafted: your text plus the quote or forwarded
             # section it already carried, its own threading headers, and only the files in the payload.
             # The original is never fetched, re-quoted or re-attached.
-            if not isinstance(resume, dict):
+            if not is_object(resume):
                 raise Refused(400, "bad draft data")
             own = lf(text)
             tail = lf(str(resume.get("tail_text") or ""))
             text = own + tail
             if tail:   # the quote's HTML only when this draft's record vouches for that exact quote
-                try:
-                    did = int(body.get("draft_id"))
-                except (TypeError, ValueError):
-                    did = None
+                did = as_int(body.get("draft_id"))
                 c = self._book.connect()
                 dr = self._book.draft_quote(c, did) if did else None
                 c.close()
@@ -68,16 +73,15 @@ class Composing:
                     orow = named if named and named["message_id"] == in_reply_to else None
                 in_reply_to_pk = orow["pk"] if orow else None
         elif mode in ("reply", "replyall", "forward"):
-            try:
-                opk = int(body.get("in_reply_to_pk"))
-            except (TypeError, ValueError):
+            opk = as_int(body.get("in_reply_to_pk"))
+            if opk is None:
                 raise Refused(400, "missing original message")
             orow = self._mail.message(opk)
             if not orow:
                 raise Refused(404, "original message not found")
             try:
-                parsed = gates.run(orow["account"], lambda: self._mail.fetch_body(opk),
-                                   priority=gates.Priority.INTERACTIVE) or {}
+                parsed: Parsed | dict[str, Any] = gates.run(orow["account"], lambda: self._mail.fetch_body(opk),
+                                                            priority=gates.Priority.INTERACTIVE) or {}
             except Exception as e:
                 print(f"[compose] original fetch failed for pk {opk}: {self._screen.quiet_error(e)}", flush=True)
                 raise Refused(502, "could not load the original message")
@@ -102,7 +106,7 @@ class Composing:
                 references = reference_chain(orow["message_id"], orow["refs"], orow["in_reply_to"])
                 in_reply_to_pk = opk
             tail_text, tail_html = quote_tail(own, text, html)
-        spec = {
+        spec: Composed = {
             "account": acct["email"], "account_name": acct.get("alias") or acct["email"],
             "to": body.get("to") or [], "cc": body.get("cc") or [], "bcc": body.get("bcc") or [],
             "subject": subject, "text": text, "html": html, "attachments": attachments,

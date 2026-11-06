@@ -17,17 +17,23 @@ The Message-ID + raw bytes are built once and reused, so the Sent copy matches t
 """
 import json
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
+from mailmind.compose.application.ports import Accounts, Account, Book, Copies, Effects, Messages, Screen, Transport
 from mailmind.compose.domain import outbox_item
+from mailmind.compose.domain.builder import Built
 from mailmind.compose.domain.errors import Unanswered
 from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
+from mailmind.compose.domain.outbox_item import SendMeta
+from mailmind.kernel.row import Connection, Row
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
 
-def _now():
+def _now() -> int:
     return int(time.time())
 
 
@@ -39,7 +45,8 @@ class Outbox:
     SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
     LOOK_IN_SENT_WAIT = 5  # how long a Retry waits for the account's gate, to look in Sent first
 
-    def __init__(self, book, transport, copies, accounts, mail, effects, screen):
+    def __init__(self, book: Book, transport: Transport, copies: Copies, accounts: Accounts, mail: Messages,
+                 effects: Effects, screen: Screen):
         self._book, self._transport, self._copies = book, transport, copies
         self._accounts, self._mail, self._effects, self._screen = accounts, mail, effects, screen
         # each account's sends in a lane of their own: one waiting on its IMAP server for a Sent copy
@@ -49,7 +56,7 @@ class Outbox:
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL,
                                   lane="account", unsure=("wire_begun", outbox_item.UNSURE))
 
-    def enqueue(self, built, meta):
+    def enqueue(self, built: Built, meta: SendMeta) -> tuple[int | None, bool]:
         """Persist a queued send. `built` = compose.build_message(...) output; `meta` =
         {account, idempotency_key, in_reply_to_pk, orig_message_id, subject, to, cc, bcc}. Returns
         (outbox_id, created). Kicks the worker."""
@@ -64,19 +71,19 @@ class Outbox:
         self.kick()
         return oid, created
 
-    def cancel(self, oid):
+    def cancel(self, oid: int) -> bool:
         """Undo Send — drop the row if it's still in its grace window. False if too late."""
         return self._commit(lambda c: self.QUEUE.cancel_queued(c, oid))
 
-    def kick(self):
+    def kick(self) -> None:
         self.QUEUE.kick()
 
-    def retry(self, oid):
+    def retry(self, oid: int) -> dict[str, bool]:
         """A person's Retry. On an unsure row it may send what went out already: they were told. Where the server
         files sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left to do."""
         went_out = self._in_sent_already(oid)
 
-        def again(c):
+        def again(c: Connection) -> bool:
             ok = self.QUEUE.requeue(c, oid)
             if ok:
                 self._book.outbox_set(c, oid, wire_begun=0, wait_kind="grace")
@@ -88,7 +95,7 @@ class Outbox:
             self.kick()
         return {"ok": True, "gone": True} if ok and went_out else {"ok": ok}
 
-    def _in_sent_already(self, oid):
+    def _in_sent_already(self, oid: int) -> bool:
         """Is an unsure send in Sent? False whenever that can't be told, and they were told it might go twice."""
         row = self._commit(lambda c: self._book.outbox_get(c, oid))
         if row is None or row["state"] != "error" or not row["wire_begun"] or row["delivered"]:
@@ -103,7 +110,7 @@ class Outbox:
             print(f"[outbox] couldn't look in Sent for #{oid}: {type(e).__name__}", flush=True)
             return False
 
-    def list_recent(self, limit=50):
+    def list_recent(self, limit: int = 50) -> dict[str, Any]:
         c = self._book.connect()
         try:
             rows = self._book.outbox_list(c, limit)
@@ -112,7 +119,7 @@ class Outbox:
         out = [outbox_item.listed(r) for r in rows]
         return {"ok": True, "items": out}
 
-    def send_now(self, oid):
+    def send_now(self, oid: int) -> bool:
         """Bring a scheduled send forward to now (Send-now from the outbox flyout)."""
         c = self._book.connect()
         try:
@@ -124,7 +131,7 @@ class Outbox:
             self.kick()
         return ok
 
-    def _commit(self, fn):
+    def _commit[T](self, fn: Callable[[Connection], T]) -> T:
         """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
         c = self._book.connect()
         try:
@@ -134,7 +141,7 @@ class Outbox:
         finally:
             c.close()
 
-    def _side_effects(self, oid, row, acct):
+    def _side_effects(self, oid: int, row: Row, acct: Account) -> str | None:
         """Done-once: Sent copy (non-Gmail) + \\Answered on the original, and the rest below.
         Each IMAP op is a job of its own on its account's IMAP gate (NOT one across the whole
         thing). A failure here never fails an already-delivered send. Each step is owed until its
@@ -182,7 +189,7 @@ class Outbox:
             try:
                 c = self._book.connect(); dr = self._book.draft_get(c, row["draft_id"]); c.close()
                 if dr:
-                    def cleanup():           # the row goes with its copy: Edit re-checks it under the gate
+                    def cleanup() -> None:   # the row goes with its copy: Edit re-checks it under the gate
                         removed = self.draft_copy_is_ours(dr) and self._copies.delete_draft_uid(
                             self._accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
                         c = self._book.connect()
@@ -191,7 +198,7 @@ class Outbox:
                         if waiting is not None and waiting["tried"] and waiting["account"] == dr["account"]:
                             self._copies.delete_left_copy(self._accounts.get(dr["account"]), waiting["tried"])
 
-                        def forget(c):
+                        def forget(c: Connection) -> None:
                             self._book.draft_delete(c, row["draft_id"])
                             if removed:
                                 self._mail.remove_copies(c, dr["account"], dr["folder"], [dr["uid"]])
@@ -205,7 +212,7 @@ class Outbox:
                 print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
         return owed
 
-    def draft_copy_is_ours(self, d):
+    def draft_copy_is_ours(self, d: Row) -> bool:
         """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
         MailMind saved (the row holds its hash, and a save that never synced has no `messages` row to
         be flagged), one the server flags \\Draft, or one in a folder named Drafts. Received mail
@@ -221,7 +228,7 @@ class Outbox:
         finally:
             c.close()
 
-    def send_one(self, oid):
+    def send_one(self, oid: int) -> None:
         row = self._commit(lambda c: self.QUEUE.claim(c, oid))
         if row is None:                          # lost the claim (cancelled / another worker)
             return
@@ -245,7 +252,7 @@ class Outbox:
             except Exception as e:
                 err, permanent = self._transport.sanitize_error(e), self._transport.permanent(e)
 
-                def failed(c):                     # the server answered, or it never had the whole message
+                def failed(c: Connection) -> tuple[bool, int]:   # the server answered, or it never had the whole message
                     self._book.outbox_set(c, oid, wire_begun=0, wait_kind="backoff")
                     if permanent:                  # a 5xx: the same answer again, so no retry
                         self.QUEUE.give_up(c, row, err)
@@ -275,10 +282,10 @@ class Outbox:
         except Exception as e:
             print(f"[outbox] post-send bookkeeping for #{oid} deferred: {type(e).__name__}", flush=True)
 
-    def drain(self):
+    def drain(self) -> None:
         if not profile.writes_allowed():     # read-only: sends wait here for a full run (D4)
             return
         self.QUEUE.drain(self.send_one, _now())        # one bad row is logged and never aborts the rest
 
-    def worker_loop(self):
+    def worker_loop(self) -> None:
         self.QUEUE.run_forever(self.drain)             # recovers rows a crash left mid-send, then drains

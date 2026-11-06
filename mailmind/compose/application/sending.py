@@ -1,17 +1,22 @@
 """A send: a compose, reply or forward request, built and queued."""
 import time
 import uuid
+from collections.abc import Mapping
+from typing import Any
 
-from mailmind.compose.application.composing import composer_key
+from mailmind.compose.application.composing import Composing, composer_key
+from mailmind.compose.application.outbox import Outbox
+from mailmind.compose.application.ports import Book
 from mailmind.compose.domain.builder import build_message
 from mailmind.compose.domain.errors import Refused
+from mailmind.compose.domain.outbox_item import SendMeta
 
 
 class Sending:
-    def __init__(self, composing, outbox, book):
+    def __init__(self, composing: Composing, outbox: Outbox, book: Book):
         self._composing, self._outbox, self._book = composing, outbox, book
 
-    def send(self, body):
+    def send(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Validate a compose/reply/forward request, build the message, enqueue it."""
         send_after = 0
         try:                                  # send-later: epoch secs; 0/absent = now (after the grace window)
@@ -33,14 +38,15 @@ class Sending:
         except ValueError as e:
             return {"ok": False, "error": str(e)}, 400
         draft_id = body.get("draft_id")
-        if not draft_id and composer_key(body):    # a first save whose answer the composer never heard
+        key = composer_key(body)
+        if not draft_id and key:              # a first save whose answer the composer never heard
             c = self._book.connect()
             try:
-                found = self._book.draft_by_key(c, composer_key(body))
+                found = self._book.draft_by_key(c, key)
             finally:
                 c.close()
             draft_id = found["id"] if found else None
-        meta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
+        meta: SendMeta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
                 "in_reply_to_pk": in_reply_to_pk, "orig_message_id": spec["in_reply_to"],
                 "subject": spec["subject"], "draft_id": draft_id, "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
         oid, created = self._outbox.enqueue(built, meta)

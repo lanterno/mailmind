@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from email.headerregistry import Address
 from email.message import EmailMessage
 import re
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
 
 from mailmind.compose.domain.attachments import Attachment
 from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
@@ -23,22 +23,25 @@ class Tail(TypedDict):
 
 
 class MessageSpec(TypedDict):
-    """What to build. Recipients are as a person typed them. `own`, `tail` and `forwarded` are for a save to record,
-    and building ignores them."""
+    """What to build. Recipients are as a person typed them."""
     account: str
-    account_name: NotRequired[str]
-    to: NotRequired[str | list[str]]
-    cc: NotRequired[str | list[str]]
-    bcc: NotRequired[str | list[str]]
-    subject: NotRequired[str]
-    text: NotRequired[str]
-    html: NotRequired[str | None]
-    attachments: NotRequired[list[Attachment]]
-    in_reply_to: NotRequired[str | None]
-    references: NotRequired[str | list[str] | None]
-    own: NotRequired[str]
-    tail: NotRequired[Tail]
-    forwarded: NotRequired[list[Attachment]]
+    account_name: str
+    to: str | list[str]
+    cc: str | list[str]
+    bcc: str | list[str]
+    subject: str
+    text: str
+    html: str | None
+    attachments: list[Attachment]
+    in_reply_to: str | None
+    references: str | list[str] | None
+
+
+class Composed(MessageSpec):
+    """A request made into a message, with what a save records and building ignores."""
+    own: str
+    tail: Tail
+    forwarded: list[Attachment]
 
 
 class Built(TypedDict):
