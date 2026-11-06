@@ -92,7 +92,7 @@ def ask(account, question):
 
     match = _fts_match(question)
     acct_clause, acct_params = _scope(account)
-    cols = ("m.pk, m.account, m.from_name, m.from_addr, m.subject, m.snippet, "
+    cols = ("m.pk, m.message_key, m.account, m.from_name, m.from_addr, m.subject, m.snippet, "
             "m.body_text, m.date_iso, s.summary AS ai_summary")
     if match:
         sql = (f"SELECT {cols}, {search.BM25} AS score "
@@ -107,7 +107,9 @@ def ask(account, question):
         args = [*acct_params, CAND_LIMIT]
     c = store.conn()
     try:                                                  # finally-close: release the conn on ANY error, not just OperationalError
-        rows = c.execute(sql, args).fetchall()
+        once = set()                                      # a message counts once, however many folders hold it
+        rows = [r for r in c.execute(sql, args).fetchall()
+                if not ((r["message_key"] or -r["pk"]) in once or once.add(r["message_key"] or -r["pk"]))]
     except sqlite3.OperationalError:
         return {"ok": False, "error": "bad query"}, 400
     finally:

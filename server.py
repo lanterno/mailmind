@@ -1366,23 +1366,34 @@ def search_json(qs):
     amap = config.alias_map()
     c = store.conn()
     try:
-        if match is not None:
-            sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
-                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action,
-                          {search.BM25} AS score
-                   FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid
+        # A message is one result however many folders hold it: its copy in the Inbox, else any but the
+        # one in All Mail, among the copies the query found.
+        in_all, in_all_args = _in_folders_playing(c, {"all"})
+        columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
+                     m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action"""
+        if match is not None:                   # every hit is scored anyway. bm25 can only be read where MATCH runs
+            sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
+                        ROW_NUMBER() OVER (PARTITION BY COALESCE(m.message_key, -m.pk)
+                                           ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth
+                   FROM (SELECT rowid AS pk, {search.BM25} AS score FROM msg_fts WHERE msg_fts MATCH ?) h
+                   JOIN messages m ON m.pk=h.pk
                    LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE msg_fts MATCH ?{where_sql}
-                   ORDER BY {'m.ts DESC' if sort=='date' else 'score ASC, m.ts DESC'}
+                   WHERE 1=1{where_sql})
+                   WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
                    LIMIT ? OFFSET ?""")
-            args = [match, *params, limit + 1, offset]
-        else:
-            sql = (f"""SELECT m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,
-                          m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action
-                   FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE 1=1{where_sql} ORDER BY m.ts DESC LIMIT ? OFFSET ?""")
-            args = [*params, limit + 1, offset]
-        rows = c.execute(sql, args).fetchall()
+            rows = c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
+        else:                                   # newest first stops early, which sorting every copy wouldn't
+            sql = (f"""SELECT {columns} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+                   WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
+            rows, seen = [], set()
+            for r in c.execute(sql, [*params, *in_all_args]):
+                key = r["message_key"] or -r["pk"]
+                if key not in seen:
+                    seen.add(key)
+                    if len(seen) > offset:
+                        rows.append(r)
+                    if len(rows) > limit:
+                        break
     except sqlite3.OperationalError:
         c.close()
         return {"ok": False, "error": "bad query"}
