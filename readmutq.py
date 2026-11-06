@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import store
-import mailops
+from mailmind.bootstrap.mailbox import commands
 from mailmind.platform import bus, profile
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
@@ -221,7 +221,7 @@ def apply_one(mid):
                 accounts.get(fresh["account"])
             except KeyError:
                 return "removed", "account removed"
-            why = mailops.apply_queued_mutation(fresh)
+            why = commands.apply_queued_mutation(fresh)
             if why:
                 return "refused", why
             _commit(lambda c: QUEUE.mark_gate(c, mid))       # applied=1, before the gate lets a cancel in
@@ -234,7 +234,7 @@ def apply_one(mid):
                 print(f"[readmutq] #{mid} won't apply ({why}); its message is listed again", flush=True)
             if outcome != "applied":
                 return
-        except mailops._UNREACHABLE as e:
+        except commands.UNREACHABLE as e:
             err = type(e).__name__
 
             def later(c):

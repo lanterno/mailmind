@@ -118,19 +118,19 @@ class _Messages:
 
     def unreachable(self):
         """What says a draft couldn't be read now, rather than that it can't be read at all."""
-        import mailops
-        return mailops._UNREACHABLE + (imaplib.IMAP4.error,)
+        from mailmind.bootstrap.mailbox import commands
+        return commands.UNREACHABLE + (imaplib.IMAP4.error,)
 
 
 class _Effects:
     """What a delivered send sets off elsewhere."""
     def account_of(self, pk):
-        import mailops
-        return mailops.account_of(pk)
+        from mailmind.bootstrap.mailbox import commands
+        return commands.account_of(pk)
 
     def mark_answered(self, pk, account, message_id):
-        import mailops
-        return mailops.mark_answered(pk, account, message_id)
+        from mailmind.bootstrap.mailbox import commands
+        return commands.mark_answered(pk, account, message_id)
 
     def followup_sent(self, c, account, thread_id, pk, now, at):
         from mailmind.bootstrap import attention

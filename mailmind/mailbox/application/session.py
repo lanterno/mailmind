@@ -7,7 +7,7 @@ runs every case through each.
   stores and accounts.mailbox_arg sends back. A UID is an int.
 - A server that refuses a command raises imaplib.IMAP4.error, and a connection that's lost raises
   imaplib.IMAP4.abort or an OSError, through either adapter (IMAPClient's own errors are those
-  classes), so every caller's catch, mailops._UNREACHABLE among them, holds.
+  classes), so every caller's catch, commands.UNREACHABLE among them, holds.
 - A read-only process's session (ReadOnlySession) opens every folder read-only and raises
   profile.ReadOnlyError on any write before it is sent.
 

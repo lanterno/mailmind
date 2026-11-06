@@ -62,8 +62,8 @@ class _Filing:
         return _server.do_trash({"pk": pk, "undo_group": undo_group})
 
     def trash_now(self, pk):
-        import mailops
-        trashed, _, _ = gates.run(mailops.account_of(pk) or gates.EVERY_ACCOUNT, lambda: mailops.trash_message(pk),
+        from mailmind.bootstrap.mailbox import commands
+        trashed, _, _ = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, lambda: commands.trash_message(pk),
                                   priority=gates.Priority.INTERACTIVE)
         return trashed
 

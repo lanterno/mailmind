@@ -19,6 +19,8 @@ from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.imap_names import imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+from mailmind.accounts.domain import provider
+from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.session import ReadOnlySession
 from mailmind.platform import profile
@@ -99,4 +101,26 @@ def open_session(acct, timeout=60):
     return session if profile.writes_allowed() else ReadOnlySession(session)
 
 
-copies = Copies(lambda acct, **kw: open_session(acct, **kw), imap_quote)
+def _open(acct, **kw):
+    return open_session(acct, **kw)
+
+
+class _Accounts:
+    """What the Mailbox asks of Accounts."""
+
+    def get(self, email):
+        return accounts.get(email)
+
+    def accounts(self):
+        return accounts.accounts()
+
+    def trash_folder(self, acct):
+        return accounts.trash_folder(acct)
+
+    def profile(self, acct):
+        return provider.resolve(acct)
+
+
+_directory = _Accounts()
+copies = Copies(_open, imap_quote)
+commands = MailCommands(store, _directory, _open, imap_quote)

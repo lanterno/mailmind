@@ -28,7 +28,7 @@ import ingest
 import warm
 import readmutq
 import summarize
-import mailops
+from mailmind.bootstrap.mailbox import commands
 from mailmind.bootstrap import attention, calendar, compose, curation, discovery
 from mailmind.bootstrap.curation import rules
 from mailmind.content import sanitize
@@ -392,7 +392,7 @@ def backfill_round():
                       priority=gates.Priority.MAINTENANCE, wait=False)
         except gates.Busy:
             break                        # a user op is live — yield and retry next cycle
-        except mailops._UNREACHABLE:
+        except commands.UNREACHABLE:
             wait = BACKFILL_UNREACHABLE  # the server's down: ask nothing more of it this round
             break
         except Exception:
@@ -722,7 +722,7 @@ def _folders_list_cached(account, acct):
         if hit:
             print(f"[folders] {account}: live refresh failed ({type(e).__name__}), serving cached", flush=True)
             return hit["folders"]
-        if isinstance(e, mailops._UNREACHABLE):
+        if isinstance(e, commands.UNREACHABLE):
             print(f"[folders] {account}: unreachable ({type(e).__name__}), serving the stored folders", flush=True)
             return _stored_folder_list(account)
         raise
@@ -1169,23 +1169,23 @@ def do_write(path, body):
             flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
                      else {body.get("flag", "flagged"): bool(body.get("on", True))})
             try:
-                return (*mailops.set_flags(pk, flags), None, None)
-            except mailops._UNREACHABLE:           # IMAP down → queue it, as a move is (no IMAP here)
+                return (*commands.set_flags(pk, flags), None, None)
+            except commands.UNREACHABLE:           # IMAP down → queue it, as a move is (no IMAP here)
                 return None, None, None, _readmut_enqueue_flags(pk, flags, body.get("mutation_id"))
         if path in _Q:
             op, dest = _Q[path]
             try:
                 if op == "archive":
-                    return (*mailops.archive_message(pk), None)
+                    return (*commands.archive_message(pk), None)
                 if op == "move":
-                    return (*mailops.move_message(pk, dest), None)
-                return (*mailops.junk_message(pk), None)
-            except mailops._UNREACHABLE:           # IMAP down → queue it (still under the gate; no IMAP here)
+                    return (*commands.move_message(pk, dest), None)
+                return (*commands.junk_message(pk), None)
+            except commands.UNREACHABLE:           # IMAP down → queue it (still under the gate; no IMAP here)
                 return None, None, None, _readmut_enqueue(op, pk, dest, body.get("undo_group"),
                                                           body.get("mutation_id"))
         return False, "unknown", None, None
     # no such message: the op finds that out under the gate, as it always has
-    ok, msg, undo, queued = gates.run(mailops.account_of(pk) or gates.EVERY_ACCOUNT, write,
+    ok, msg, undo, queued = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, write,
                                       priority=gates.Priority.INTERACTIVE)
     if queued is not None:
         return queued
@@ -1205,11 +1205,11 @@ def do_trash(body):
     def trash():
         """(ok, msg, undo, queued): queued is the answer when IMAP was down, as in do_write."""
         try:
-            return (*mailops.trash_message(pk), None)
-        except mailops._UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
+            return (*commands.trash_message(pk), None)
+        except commands.UNREACHABLE:       # IMAP down → durable offline queue (still under the gate; no IMAP here)
             return None, None, None, _readmut_enqueue("trash", pk, None, body.get("undo_group"),
                                                       body.get("mutation_id"))
-    ok, msg, undo, queued = gates.run(mailops.account_of(pk) or gates.EVERY_ACCOUNT, trash,
+    ok, msg, undo, queued = gates.run(commands.account_of(pk) or gates.EVERY_ACCOUNT, trash,
                                       priority=gates.Priority.INTERACTIVE)
     if queued is not None:
         return queued
@@ -1329,7 +1329,7 @@ def _reverse_held(d):
                 d = {**d, "dest_folder": q["dest"]}    # shipped: use the resolved dest
             c.close()
     if kind == "move":
-        ok, _ = mailops.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
+        ok, _ = commands.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
                                       unseen=bool(d.get("unseen")))
         if not ok:
             return False, d["account"], d["src_folder"]
@@ -1339,8 +1339,8 @@ def _reverse_held(d):
             pass
         return True, d["account"], d["src_folder"]
     if kind == "gmail_archive":
-        allmail = mailops.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
-        ok, _ = mailops.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
+        allmail = commands.find_special(d["account"], ("all mail", "\\all")) or "[Gmail]/All Mail"
+        ok, _ = commands.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
         if not ok:
             return False, d["account"], "INBOX"
         try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
