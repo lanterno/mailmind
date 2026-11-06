@@ -8,6 +8,7 @@ import pytest
 from mailmind.platform.workers.scheduler import Scheduler
 from mailmind.compose.api import Sent
 from mailmind.mailbox.domain.events import Applied
+from mailmind.mailbox.domain.events import InboxChanged
 
 
 @pytest.fixture
@@ -21,9 +22,8 @@ def unwired(monkeypatch):
 
 
 def wiring():
-    import realtime
     from mailmind.platform.bus import BUS
-    return [BUS.subscribers(topic) for topic in (Sent, Applied, realtime.InboxChanged)]
+    return [BUS.subscribers(topic) for topic in (Sent, Applied, InboxChanged)]
 
 
 def test_the_server_hears_what_the_workers_publish(unwired):
@@ -40,7 +40,7 @@ def test_the_server_hears_what_the_workers_publish(unwired):
 
 
 def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     import server
     from mailmind.accounts.domain import events
     from mailmind.bootstrap import legacy
@@ -54,22 +54,21 @@ def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
 
 
 def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):
-    import realtime
     import server
     from mailmind.bootstrap import legacy
     from mailmind.platform import bus
     synced = []
     monkeypatch.setattr(server, "sync_guarded", synced.append)
     legacy.wire(server)
-    bus.publish(realtime.InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
+    bus.publish(InboxChanged(frozenset({"ada@example.test", "cy@example.test"})))
     assert synced == [{"ada@example.test", "cy@example.test"}]
 
 
 def test_idles_dispatcher_publishes_one_change_for_a_burst(unwired, monkeypatch):
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     from mailmind.platform import bus
     heard = []
-    stop = bus.subscribe(realtime.InboxChanged, heard.append)
+    stop = bus.subscribe(InboxChanged, heard.append)
     monkeypatch.setattr(realtime, "_DEBOUNCE", 0.05)
     monkeypatch.setattr(realtime, "_stop", threading.Event())
     monkeypatch.setattr(realtime, "_kick", threading.Event())
@@ -86,7 +85,7 @@ def test_idles_dispatcher_publishes_one_change_for_a_burst(unwired, monkeypatch)
         t.join(5)
     finally:
         stop()
-    assert heard == [realtime.InboxChanged(frozenset({"ada@example.test", "cy@example.test"}))]
+    assert heard == [InboxChanged(frozenset({"ada@example.test", "cy@example.test"}))]
 
 
 
@@ -97,7 +96,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
                                                                      capsys):
     """What both front doors run before they serve. Read-only, only snooze wake starts, since it
     needs no mail server: the outbox and the offline queue wait, and nothing syncs."""
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     import server
     from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap import legacy

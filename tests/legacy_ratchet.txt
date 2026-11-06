@@ -7,6 +7,5 @@
 # new code may reach legacy code. When the legacy modules are gone, so is every line.
 mailmind.bootstrap.cli export
 mailmind.bootstrap.cli summarize
-mailmind.bootstrap.legacy realtime
 mailmind.bootstrap.legacy server
 mailmind.bootstrap.legacy summarize

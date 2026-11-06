@@ -9,6 +9,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.platform.workers import gates
+from mailmind.mailbox.domain.events import InboxChanged
 
 
 def wait_until(cond, timeout=5.0):
@@ -179,7 +180,6 @@ def stored(message_id):
 def test_an_idle_event_during_a_sync_isnt_lost(app, world, monkeypatch):
     """IDLE hears Ada's new mail while a sync of Bea runs. The running sync goes round again for
     Ada as it ends, instead of leaving her mail for the next scheduled sync, minutes away."""
-    import realtime
     import server
     from mailmind.platform import bus
     running, release = threading.Event(), threading.Event()
@@ -196,9 +196,9 @@ def test_an_idle_event_during_a_sync_isnt_lost(app, world, monkeypatch):
     try:
         assert running.wait(5)
         world.server.deliver(w.ADA, "INBOX", late(1))
-        bus.publish(realtime.InboxChanged(frozenset({w.ADA})))   # the app wired IDLE's news to a sync
+        bus.publish(InboxChanged(frozenset({w.ADA})))   # the app wired IDLE's news to a sync
         world.server.deliver(w.ADA, "INBOX", late(2))
-        bus.publish(realtime.InboxChanged(frozenset({w.ADA})))   # and again: one more round covers both
+        bus.publish(InboxChanged(frozenset({w.ADA})))   # and again: one more round covers both
     finally:
         release.set()
         first.join(10)

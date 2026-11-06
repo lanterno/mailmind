@@ -134,7 +134,7 @@ class _Sleeps:
 def idle(monkeypatch):
     """realtime with its own stop flag, kick and dirty set, so stopping a worker here leaves the
     module as the next test expects it."""
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     monkeypatch.setattr(realtime, "_stop", threading.Event())
     monkeypatch.setattr(realtime, "_kick", threading.Event())
     monkeypatch.setattr(realtime, "_dirty", set())
@@ -1146,7 +1146,7 @@ def test_hwf_a_pooled_connection_is_checked_with_noop_and_dropped_after_an_error
 
 
 def test_hwf_the_idle_worker_leaves_idle_before_it_asks_for_a_sync(world, idle):
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     idle()
     assert wait_until(lambda: count(world, "IDLE") == 1)
     n = len(world.server.commands)
@@ -1160,7 +1160,7 @@ def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle,
     # stop() wakes a worker blocked in IDLE by shutting its socket down. Closing it from the stopping
     # thread instead freed the descriptor while the worker could still be about to wait on it, so
     # the number could pass to the next socket opened and the worker would wait on (and read) that.
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     from mailmind.bootstrap import mailbox
     closed_by = []
     real = mailbox.open_session
@@ -1438,7 +1438,7 @@ def test_hwf_a_slow_catch_up_answers_with_what_is_stored_then_says_what_came(app
 
 def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkeypatch):
     from mailmind.bootstrap.accounts import config
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     monkeypatch.setattr(realtime, "IDLE_SECONDS", 0.1)
     idle()
     assert wait_until(lambda: count(world, "IDLE") >= 1)

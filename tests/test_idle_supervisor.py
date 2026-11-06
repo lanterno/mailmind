@@ -44,7 +44,7 @@ def edit_by_hand(email, **fields):
 def supervisor(world, monkeypatch):
     """realtime with state of its own, hearing the account events, and every worker it starts
     stopped after the test."""
-    import realtime
+    from mailmind.bootstrap.mailbox import realtime
     from mailmind.accounts.domain import events
     from mailmind.platform import bus
     for name, value in (("_stop", threading.Event()), ("_kick", threading.Event()), ("_dirty", set()),
