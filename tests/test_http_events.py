@@ -35,7 +35,13 @@ class Stream:
         self.body = _Chunked(self.f) if self.headers.get("transfer-encoding") == "chunked" else self.f
 
     def frame(self):
-        """The next frame, without the blank line that ends it."""
+        """The next frame, without the blank line that ends it. The `hello` that names the build is
+        kept apart, since every edit of the page changes it, and has a test of its own."""
+        while (frame := self._read()).startswith("event: hello"):
+            self.hello = frame
+        return frame
+
+    def _read(self):
         lines = []
         while (line := self.body.readline().decode()) not in ("\n", ""):
             lines.append(line.rstrip("\n"))
@@ -266,3 +272,13 @@ def test_the_end_of_a_folders_first_scan_tells_the_open_tabs(app, world, quick):
     assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "Spam", "ok": False, "new": 0}
     s.close()
     subscribers(quick, 0)
+
+
+def test_every_stream_names_the_build_being_served(app, quick):
+    from mailmind.platform import webroot
+    tab = Stream(app)
+    assert tab.frame().startswith("retry:")
+    subscribers(quick, 1)
+    quick.publish("outbox", {})
+    tab.event()
+    assert tab.hello == f'event: hello\ndata: {{"build": "{webroot.build()}"}}'

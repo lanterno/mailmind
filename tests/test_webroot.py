@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from mailmind.platform import webroot
+from mailmind.platform import sse, webroot
 
 SCRIPT = "/assets/legacy/app.js"
 
@@ -126,3 +126,8 @@ def test_an_edit_of_a_file_is_served_at_once(two_roots):
     assert webroot.asset("/assets/a.js").body == b"source()"
     (source / "assets" / "a.js").write_text("source(two)")
     assert webroot.asset("/assets/a.js").body == b"source(two)"
+
+
+def test_the_builds_frame_has_no_id():
+    frame = sse.hello("abc123").decode()
+    assert frame == 'event: hello\ndata: {"build": "abc123"}\n\n' and "id:" not in frame

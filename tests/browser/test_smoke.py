@@ -1150,3 +1150,18 @@ def test_the_sync_menu_says_when_mail_is_out_in_a_batch(page, world, ai):
     expect(page.locator("body")).to_be_visible()
     assert "3 out in a batch" in page.evaluate("""async()=>{ while(!state.ai)await new Promise(r=>setTimeout(r,20)); return aiLineHtml(); }""")
     clean(page)
+
+
+def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, app):
+    opened(page)
+    float_ = page.locator("#buildFloat")
+    assert float_.is_hidden()
+    page.pw.route("**/", lambda route: route.fulfill(
+        response=(r := route.fetch()), body=re.sub(r'(name="mailmind-build" content=")[^"]+', r"\1older", r.text())))
+    page.pw.reload()
+    float_.wait_for(state="visible")
+    assert "MailMind was updated" in float_.inner_text()
+    page.pw.unroute("**/")
+    page.locator("#buildReload").click()
+    float_.wait_for(state="hidden")
+    clean(page)
