@@ -51,7 +51,7 @@ def _kick(job):
         JOBS.kick(job)
 
 
-JOBS = scheduler.Scheduler()             # the background jobs; legacy.start puts the running ones here
+JOBS = scheduler.Scheduler()             # the background jobs; wiring.start puts the running ones here
 
 
 def schedule(jobs):

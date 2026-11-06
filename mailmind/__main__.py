@@ -97,8 +97,8 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     if args.command == "assess" and args.batch:
-        from mailmind.bootstrap import legacy
-        sys.exit(legacy.assess_batch())
+        from mailmind.bootstrap import wiring
+        sys.exit(wiring.assess_batch())
     if args.command == "ai":
         sys.exit(ai_usage(args.days))
     if args.command == "db":

@@ -7,7 +7,7 @@ import dataclasses
 import sys
 from http.server import ThreadingHTTPServer
 
-from mailmind.bootstrap import legacy, web
+from mailmind.bootstrap import wiring, web
 from mailmind.platform import settings
 
 
@@ -23,7 +23,7 @@ class _Server(ThreadingHTTPServer):
 def main(argv):
     if len(argv) > 1:
         settings.configure(dataclasses.replace(settings.current(), port=int(argv[1])))
-    legacy.start()  # the schema, the workers' wiring, and the workers
+    wiring.start()  # the schema, the workers' wiring, and the workers
     port = settings.current().port
     print(f"MailMind → http://127.0.0.1:{port}  (serving now)", flush=True)
     _Server(("127.0.0.1", port), web.H).serve_forever()
