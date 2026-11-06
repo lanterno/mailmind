@@ -9,6 +9,8 @@ import sqlite3
 
 from mailmind.platform.db import backup, database, migrations
 
+SQLITE_NEEDED = (3, 43)     # the search index's contentless_delete (migration 38)
+
 
 def init(path, steps=None):
     """Create the database at `path` if it is new, and run every migration in `steps` (all of
@@ -16,6 +18,9 @@ def init(path, steps=None):
     and a database already at the last of them is left alone. The base schema only creates what is
     missing, but that includes a table a later migration retired, so it runs only on a database
     older than the frozen migrations' last, which it was written for, and never brings one back."""
+    if sqlite3.sqlite_version_info < SQLITE_NEEDED:
+        raise RuntimeError(f"MailMind needs SQLite {'.'.join(map(str, SQLITE_NEEDED))} or newer, and this "
+                           f"Python has {sqlite3.sqlite_version}. Nothing was changed.")
     steps = migrations.MIGRATIONS if steps is None else steps
     c = database.connect(path)
     c.isolation_level = None                    # the transactions below are the only ones

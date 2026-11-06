@@ -11,7 +11,9 @@ A row that points at a row that's gone (a body or summary whose message was dele
 older MailMind left foreign keys off) is the database's, not the upgrade's: the foreign-key check
 counts what was there before the migrations too, and fails only on what they add.
 
-A table a migration retires on purpose (`migrations.RETIRED`) is no loss, and the report says so.
+A table a migration retires on purpose (`migrations.RETIRED`) is no loss, and the report says so. Nor
+is a change in the count of one it builds afresh (`migrations.REBUILT`); the full-text check says whether
+that one holds every message. The index's own tables (`msg_fts_data` and the like) aren't listed.
 """
 import collections
 import os
@@ -47,8 +49,10 @@ def check_upgrade(path, say=print):
     for table in sorted(set(before) | set(after)):
         b, a = before.get(table), after.get(table)
         retired = a is None and migrations.RETIRED.get(table, 0) > v_before
-        note = "" if a == b else ("  new" if b is None else "  retired" if retired else "  CHANGED")
-        if b is not None and a != b and not retired:
+        rebuilt = migrations.REBUILT.get(table, 0) > v_before
+        note = ("" if a == b else "  new" if b is None else "  retired" if retired
+                else "  rebuilt" if rebuilt else "  CHANGED")
+        if b is not None and a != b and not retired and not rebuilt:
             changed.append(table)
         say(f"  {table:<{width}}  {_n(b):>10}  {_n(a):>10}{note}")
     say("")
@@ -84,7 +88,8 @@ def _version(path):
 
 def _counts(path):
     tables = [name for (name,) in _query(path, "SELECT name FROM sqlite_master WHERE type='table' "
-                                               "AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+                                               "AND name NOT LIKE 'sqlite_%' AND name NOT GLOB 'msg_fts_*' "
+                                               "ORDER BY name")]
     return {t: _query(path, f'SELECT count(*) FROM "{t}"')[0][0] for t in tables}
 
 
@@ -124,7 +129,9 @@ def _checks(path, keys_before):
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='msg_fts'").fetchone():
             try:
                 c.execute("INSERT INTO msg_fts(msg_fts) VALUES('integrity-check')")
-                out.append(("full-text index", "ok", True))
+                missing = c.execute("SELECT count(*) FROM messages WHERE pk NOT IN "
+                                    "(SELECT rowid FROM msg_fts)").fetchone()[0]
+                out.append(("full-text index", f"{missing} message(s) not in it" if missing else "ok", not missing))
             except sqlite3.DatabaseError:
                 out.append(("full-text index", "1 problem(s)", False))
     finally:
