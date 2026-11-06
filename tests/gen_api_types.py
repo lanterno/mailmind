@@ -1,6 +1,6 @@
 """`just gen-api`: TypeScript types for the API, from what its routes really answer.
 
-The routes run in `server.H`, an if/elif chain with no schema to generate from, so the types come from the answers
+The routes have no schema to generate from, so the types come from the answers
 the whole test suite saw (`MAILMIND_RECORD_API`, tests/app_client.py). Every answer is fictional, and only shapes are
 written, never a value. A key seen in only some of a route's answers is optional. An object whose keys are data rather
 than field names (addresses, folders, ids) becomes a Record. It knows only the routes the tests call and only with 2xx

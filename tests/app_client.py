@@ -1,7 +1,7 @@
 """The app's HTTP server, run in-process against the test's world, and a client that talks to it
 the way the page does: same-origin, with the CSRF token on every request.
 
-Each test gets a clean server module: `reset_state` puts every module's private globals back to
+Each test gets a clean app: `reset_state` puts every module's private globals back to
 how they were at import (caches, the undo stack, the sync status, presence timestamps), so no
 test sees another's leftovers.
 """

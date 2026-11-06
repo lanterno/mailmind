@@ -1,5 +1,5 @@
 """mailmind.http.bridge.HandlerBridge: an http.server handler class served over ASGI, the way the
-new front door serves the legacy app. A toy handler stands in for server.H."""
+new front door serves the app. A toy handler stands in for the app's."""
 import http.client
 import json
 import threading
