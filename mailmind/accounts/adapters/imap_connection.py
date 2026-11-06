@@ -11,7 +11,7 @@ from mailmind.platform.db import txguard
 
 class LoginUnreachable(OSError):
     """A connect-time login failure (expired/revoked credentials, Bridge restart). Subclasses
-    OSError so it's a member of the offline-queue's _UNREACHABLE set — a mutation during an auth
+    OSError so it's a member of commands.UNREACHABLE — a mutation during an auth
     outage is QUEUED + retried rather than silently applied locally only."""
 
 

@@ -162,7 +162,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   give each account's worker the connection it owns (the pool dissolved into it), and split the
   jobs that still pass `gates.EVERY_ACCOUNT`, which wait for every gate: a draft save whose old
   copy is in another account (it needs just the two accounts' gates, which `gates.run` can't take
-  yet), an undo with no account, and a message whose account `commands.account_of` can't find.
+  yet), an undo with no account, and a message whose account `server_ops.account_of` can't find.
 - **Persist and document `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both
   features are hard default-off and nothing in the repo sets either — no launcher, no plist. A plain
   `python3 server.py` therefore silently reverts to fresh-connect-per-op and INBOX-only sync. Pick a

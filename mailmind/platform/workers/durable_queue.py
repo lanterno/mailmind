@@ -1,4 +1,4 @@
-"""A durable work queue over a table of its own: what the outbox and the offline move queue share.
+"""A durable work queue over a table of its own: what the outbox and the mail commands share.
 
 A row is queued, then claimed by the one worker that flips it to its running state, then
 finished. An attempt that fails puts it back in the queue after a backoff that doubles each time
@@ -6,7 +6,7 @@ finished. An attempt that fails puts it back in the queue after a backoff that d
 where it waits for a person to retry it.
 
 Each row has a done-once column, its gate: set the instant the row's one irreversible step
-returns (the outbox's wire send, the queue's IMAP move), before any bookkeeping. At boot a row a
+returns (the outbox's wire send, a command's IMAP move), before any bookkeeping. At boot a row a
 crash left running goes back to the queue, and its gate tells the handler whether that step
 already happened, so a crash never repeats it.
 

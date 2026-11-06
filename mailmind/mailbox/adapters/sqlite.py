@@ -164,7 +164,7 @@ def get_message(c, pk):
 
 def get_message_by_msgid(c, account, message_id):
     """Latest local row for a message by (account, RFC822 Message-ID) — the durable key the
-    read-mutation worker uses to re-resolve a message whose pk/uid may have changed via reconcile."""
+    command path uses to re-resolve a message whose pk/uid may have changed via reconcile."""
     if not message_id:
         return None
     return c.execute("SELECT * FROM messages WHERE account=? AND message_id=? ORDER BY pk DESC LIMIT 1",

@@ -163,7 +163,7 @@ class Filing:
         """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
         anchor's folder, which is what a conversation row stands for. Members are resolved here, never
         sent by the client (pk isn't stable, and a list row only knows its newest message). Each one
-        goes through the per-message op, so locking, the offline queue and undo descriptors are
+        goes through the per-message op, so the gate, the command path and undo descriptors are
         unchanged; one undo group spans them all, so a single Undo restores the conversation. A
         message without a thread_id is a conversation of one, never the folder's unthreaded pool."""
         try:
