@@ -33,6 +33,14 @@ def safe_to_file(importance, category, action):
     return (importance or 1) <= 2 and not _has_step(action) and category in ("info", "other")
 
 
+def answers(importance, category, action):
+    """All four, as a list row in the API carries them."""
+    return {"needs_you": needs_you(importance, category, action),
+            "reply_worthy": reply_worthy(importance, category),
+            "commitment_worthy": commitment_worthy(importance, category, action),
+            "safe_to_file": safe_to_file(importance, category, action)}
+
+
 def reply_worthy_sql(s="s"):
     """`reply_worthy` over a summaries row named `s`, or its bare columns if `s` is empty."""
     p = f"{s}." if s else ""

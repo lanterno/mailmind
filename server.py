@@ -19,7 +19,6 @@ import email.utils
 import secrets
 import hashlib
 import imaplib
-import sqlite3
 import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -41,7 +40,6 @@ from mailmind.content import sanitize
 import compose
 import smtpsend
 import outbox
-import search
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip, header_chips, header_text
 from mailmind.content.quote import own_html, quote_tail
@@ -52,7 +50,7 @@ import summarize_review
 from mailmind.assistant.application import plans
 from mailmind.assistant.domain import fingerprint
 from mailmind.bootstrap import assistant, legacy, mailbox
-from mailmind.discovery.domain.query import QuerySpec
+from mailmind.discovery.api import QuerySpec
 from mailmind.kernel import attention
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.accounts.domain import provider, tls_pin
@@ -62,6 +60,7 @@ from mailmind.platform.workers import gates, scheduler
 from mailmind.platform.workers.singleflight import SingleFlight
 
 curation.attach(sys.modules[__name__])
+discovery.attach(sys.modules[__name__])
 
 HERE = os.path.dirname(__file__)
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -515,11 +514,7 @@ def rel_time_future(ts):
 
 def _attention(r):
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
-    imp, cat, act = r["importance"], r["category"], r["action"]
-    return {"needs_you": attention.needs_you(imp, cat, act),
-            "reply_worthy": attention.reply_worthy(imp, cat),
-            "commitment_worthy": attention.commitment_worthy(imp, cat, act),
-            "safe_to_file": attention.safe_to_file(imp, cat, act)}
+    return attention.answers(r["importance"], r["category"], r["action"])
 
 
 def digest_json(qs):
@@ -772,15 +767,6 @@ def _folder_role(account, folder):
         if f["name"] == folder:
             return f["role"]
     return folder_roles.role_by_name(folder)
-
-
-def _in_folders_playing(c, roles):
-    """SQL and params for: a row's folder plays one of these roles."""
-    pairs = [(r["account"], r["folder"]) for r in c.execute("SELECT DISTINCT account, folder FROM messages")
-             if _folder_role(r["account"], r["folder"]) in roles]
-    if not pairs:
-        return "0=1", []                # a bare 0 in an ORDER BY would name a column
-    return "(m.account, m.folder) IN (VALUES " + ",".join("(?,?)" for _ in pairs) + ")", [x for p in pairs for x in p]
 
 
 _folder_list_lock = threading.Lock()
@@ -1240,73 +1226,6 @@ def thread_json(account, thread_id):
     reply_pk = items[-1]["pk"] if items else None
     return {"ok": True, "account": account, "thread_id": thread_id,
             "items": items, "count": len(items), "reply_pk": reply_pk}
-
-
-def search_json(qs):
-    """Local FTS5 + operator search across synced mail. Never touches IMAP."""
-    q = (qs.get("q", [""])[0] or "").strip()
-    if not q:
-        return {"ok": True, "query": "", "items": [], "total": 0, "has_more": False}
-    scope = qs.get("scope", ["account"])[0]
-    account = qs.get("account", [None])[0]
-    sort = qs.get("sort", ["rank"])[0]
-    limit = max(1, min(200, int(qs.get("limit", ["80"])[0])))
-    offset = max(0, int(qs.get("offset", ["0"])[0]))
-    match, where, params = search.build(q)
-    where = search.visible(where) + ["m.pending_removal IS NULL"]      # on its way out by a queued move
-    if scope != "all" and account:
-        where = where + ["m.account = ?"]
-        params = params + [account]
-    where_sql = (" AND " + " AND ".join(where)) if where else ""
-    amap = config.alias_map()
-    c = store.conn()
-    try:
-        # A message is one result however many folders hold it: its copy in the Inbox, else any but the
-        # one in All Mail, among the copies the query found.
-        in_all, in_all_args = _in_folders_playing(c, {"all"})
-        columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
-                     m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action"""
-        if match is not None:                   # every hit is scored anyway. bm25 can only be read where MATCH runs
-            sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
-                        ROW_NUMBER() OVER (PARTITION BY COALESCE(m.message_key, -m.pk)
-                                           ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth
-                   FROM (SELECT rowid AS pk, {search.BM25} AS score FROM msg_fts WHERE msg_fts MATCH ?) h
-                   JOIN messages m ON m.pk=h.pk
-                   LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE 1=1{where_sql})
-                   WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
-                   LIMIT ? OFFSET ?""")
-            rows = c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
-        else:                                   # newest first stops early, which sorting every copy wouldn't
-            sql = (f"""SELECT {columns} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
-            rows, seen = [], set()
-            for r in c.execute(sql, [*params, *in_all_args]):
-                key = r["message_key"] or -r["pk"]
-                if key not in seen:
-                    seen.add(key)
-                    if len(seen) > offset:
-                        rows.append(r)
-                    if len(rows) > limit:
-                        break
-    except sqlite3.OperationalError:
-        c.close()
-        return {"ok": False, "error": "bad query"}
-    c.close()
-    has_more = len(rows) > limit
-    rows = rows[:limit]
-    items = [{
-        "pk": r["pk"], "key": r["message_key"], "account": r["account"], "folder": r["folder"],
-        "alias": amap.get(r["account"]),
-        "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
-        "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-        "date": (r["date_iso"] or "")[:10],
-        "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"], **_attention(r),
-    } for r in rows]
-    return {"ok": True, "query": q, "scope": scope, "items": items,
-            "offset": offset, "has_more": has_more, "generated": now_iso()}
 
 
 _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
@@ -3346,62 +3265,6 @@ _DO_PROMPT = (
 )
 
 
-_DO_BROAD_FRACTION = 0.6   # a filter resolving to >= this share of ALL mail is a whole-inbox sweep
-
-
-def _do_total_messages():
-    c = store.conn()
-    try:
-        return c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-    except sqlite3.OperationalError:
-        return 0
-    finally:
-        c.close()
-
-
-def _do_resolve(match, where, params, cap, verb, names_folder):
-    """Exact COUNT + a capped set of (message key, folder) + an 8-row sample for a validated filter.
-    Mirrors search_json's FROM/JOINs exactly. Read-only; the messages come from OUR db, never the model.
-
-    A person who says "archive what Lin sent" means the mail that is around, not the copy already
-    archived, one in Trash or their own in Sent, so a filter reaches those only by naming a folder, and
-    a verb never reaches its own home. Each message counts once: its copy in the Inbox, else any but
-    the one in All Mail. `matched` is how many rows the filter says, whatever it may reach, for the
-    blast-radius check. Returns (count, messages, sample, matched) or (None, [], [], 0) on a bad query."""
-    where_sql = (" AND " + " AND ".join(where)) if where else ""
-    c = store.conn()
-    try:
-        if match is not None:
-            base = ("FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
-                    "LEFT JOIN summaries s ON s.message_pk=m.pk "
-                    f"WHERE msg_fts MATCH ? AND m.pending_removal IS NULL{where_sql}")
-            bargs = [match, *params]
-        else:
-            base = ("FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
-                    f"WHERE m.pending_removal IS NULL{where_sql}")
-            bargs = [*params]
-        apart, apart_args = _in_folders_playing(c, _DO_ALREADY.get(verb, set()) | (set() if names_folder else _DO_APART))
-        in_all, in_all_args = _in_folders_playing(c, {"all"})
-        try:
-            matched = c.execute(f"SELECT COUNT(*) {base}", bargs).fetchone()[0]
-            count = c.execute(f"SELECT COUNT(DISTINCT m.message_key) {base} AND NOT {apart}",
-                              [*bargs, *apart_args]).fetchone()[0]
-            rows = c.execute(
-                "SELECT * FROM (SELECT m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, "
-                f"ROW_NUMBER() OVER (PARTITION BY m.message_key ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth "
-                f"{base} AND NOT {apart}) WHERE nth=1 ORDER BY ts DESC LIMIT ?",
-                [*in_all_args, *bargs, *apart_args, cap]).fetchall()
-        except sqlite3.OperationalError:
-            return None, [], [], 0
-    finally:
-        c.close()
-    messages = [(r["message_key"], r["folder"]) for r in rows]
-    sample = [{"from": (r["from_name"] or r["from_addr"] or ""),
-               "subject": r["subject"] or "(no subject)",
-               "when": rel_time(r["date_iso"])} for r in rows[:_DO_SAMPLE]]
-    return count, messages, sample, matched
-
-
 def ai_do_plan(body):
     """Plan an NL bulk command → a validated, capped PREVIEW with the id of the plan it froze. READ-ONLY:
     generates no mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted,
@@ -3423,19 +3286,19 @@ def ai_do_plan(body):
     if plan.get("intent") != "act" or verb not in _DO_VERB_ALLOW:
         return {"ok": True, "intent": "search", "filter": filt}, 200
     # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
-    match, where, params = search.build(filt)
-    where = search.visible(where)
     spec = QuerySpec.parse(filt)
     if not spec.narrows():                             # empty / scope-only / negation-only → not a scoped action
         return {"ok": True, "intent": "search", "filter": filt}, 200
     cap = _DO_TRASH_CAP if verb in ("trash", "junk") else _DO_CAP
-    count, messages, sample, matched = _do_resolve(match, where, params, cap, verb, spec.names_folder())
+    # A person who says "archive what Lin sent" means the mail that is around, not the copy already archived, one in
+    # Trash or their own in Sent, so a filter reaches those only by naming a folder, and a verb never reaches its own home.
+    apart = _DO_ALREADY.get(verb, set()) | (set() if spec.names_folder() else _DO_APART)
+    count, messages, sample, matched = discovery.search.reach(spec, cap, apart, _DO_SAMPLE)
     if count is None:                                  # unparseable resolved query → degrade
         return {"ok": True, "intent": "search", "filter": filt}, 200
     if not messages:                                   # nothing matches → nothing to confirm
         return {"ok": True, "intent": "search", "filter": filt, "empty": True}, 200
-    total = _do_total_messages()                       # blast-radius backstop: refuse a filter that
-    if total and matched >= _DO_BROAD_FRACTION * total:   # still resolves to most of the whole mailbox
+    if discovery.search.sweeps_whole_mailbox(matched):  # blast-radius backstop: refuse what's still most of the mailbox
         return {"ok": True, "intent": "search", "filter": filt}, 200
     preset = (plan.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
     frozen = _DO_PLANS.open(verb, preset, messages)
@@ -3787,7 +3650,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/thread":
                 self._json(thread_json(q.get("account", [None])[0], q.get("thread_id", [None])[0]))
             elif u.path == "/api/search":
-                self._json(search_json(q))
+                self._json(discovery.search.answer(q))
             elif u.path == "/api/outbox":
                 self._json(outbox.list_recent(int(q.get("limit", ["50"])[0])))
             elif u.path == "/api/pending":

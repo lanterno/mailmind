@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import store
 import accounts
-import search
+from mailmind.bootstrap import discovery
 import summarize as _sz
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
@@ -95,7 +95,7 @@ def ask(account, question):
     cols = ("m.pk, m.message_key, m.account, m.from_name, m.from_addr, m.subject, m.snippet, "
             "m.body_text, m.date_iso, s.summary AS ai_summary")
     if match:
-        sql = (f"SELECT {cols}, {search.BM25} AS score "
+        sql = (f"SELECT {cols}, {discovery.BM25} AS score "
                "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
                "LEFT JOIN summaries s ON s.message_pk=m.pk "
                f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
