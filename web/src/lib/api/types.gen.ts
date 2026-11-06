@@ -483,6 +483,14 @@ export interface GetAnswers {
     waiting?: boolean;
   };
   "/api/outbox": {
+    drafts: {
+      account: string;
+      attempts: number;
+      discarding: boolean;
+      id: number;
+      saved_at: number;
+      subject: string;
+    }[];
     items: ({
       account: string;
       attempts: number;
@@ -927,16 +935,18 @@ export interface PostAnswers {
     }[];
     message_id?: string;
     ok: boolean;
+    pushed?: boolean;
     resume?: {
       in_reply_to: string;
       references: string;
       tail_text: string;
     };
     uid?: number | null;
+    version?: number;
   };
   "/api/draft/resume": {
     account: string;
-    bcc: unknown[];
+    bcc: string[];
     cc: unknown[];
     draft_id: number;
     files: {
@@ -961,6 +971,7 @@ export interface PostAnswers {
     tail_text: string;
     text: string;
     to: string[];
+    version: number;
   };
   "/api/flag": {
     msg: string;
