@@ -108,3 +108,18 @@ class StoredMail:
             return 0
         finally:
             c.close()
+
+    def attachments(self, accounts):
+        accounts = list(accounts)
+        ph = ",".join("?" for _ in accounts)
+        c = _conn()
+        try:
+            return c.execute(
+                "SELECT a.message_pk pk, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
+                "       m.account, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, m.folder "
+                "FROM attachments a JOIN messages m ON m.pk=a.message_pk "
+                "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
+                f"  AND m.account IN ({ph}) "
+                "ORDER BY m.ts DESC, a.id", accounts).fetchall()   # one order, or a page could repeat or skip a file
+        finally:
+            c.close()

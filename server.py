@@ -22,7 +22,7 @@ import imaplib
 import threading
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -1798,92 +1798,6 @@ def _compose_spec(body):
         "forwarded": forwarded,
     }
     return spec, in_reply_to_pk, acct
-
-
-# ═══════════════════ Document Hub ═══════════════════
-# One findable place for every real attachment (PDF/image/doc/…) across all accounts. Pure local SQL
-# over the attachments table (metadata only — filename/type/size, no body/IMAP fetch); calendar .ics,
-# cryptographic signatures and key blobs are excluded as non-documents. Downloads reuse the existing
-# /api/message/<pk>/attachment/<part_id> route.
-_DOC_EXCLUDE = ("text/calendar", "application/ics", "pkcs7", "pgp-signature", "pgp-keys",
-                "x-pkcs7", "application/x-pkcs7-signature")
-
-
-def _doc_kind(ct, fn):
-    ct = (ct or "").lower(); fn = (fn or "").lower()
-    ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
-    if "pdf" in ct or ext == "pdf":
-        return "pdf"
-    if ct.startswith("image/") or ext in ("png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "bmp", "tiff"):
-        return "image"
-    if ext in ("doc", "docx", "odt", "rtf", "pages") or "msword" in ct or "wordprocessingml" in ct or "opendocument.text" in ct:
-        return "doc"
-    if ext in ("xls", "xlsx", "ods", "csv", "numbers", "tsv") or "spreadsheet" in ct or "ms-excel" in ct or ct == "text/csv":
-        return "sheet"
-    if ext in ("ppt", "pptx", "odp", "key") or "presentation" in ct or "powerpoint" in ct:
-        return "slide"
-    if ext in ("zip", "rar", "7z", "tar", "gz", "tgz") or "zip" in ct or "compress" in ct or "x-tar" in ct:
-        return "archive"
-    if ct.startswith("text/") or ext in ("txt", "md", "log", "json", "xml"):
-        return "text"
-    return "other"
-
-
-def documents_json(qs):
-    """Real attachments across accounts, newest first: the `limit` from `offset` of those that match
-    `kind` and `q` (`matched` counts them), with per-kind facet counts of them all. Read-only SQL."""
-    try:
-        limit = max(1, min(1000, int((qs.get("limit") or ["400"])[0])))
-    except Exception:
-        limit = 400
-    try:
-        offset = max(0, int((qs.get("offset") or ["0"])[0]))
-    except Exception:
-        offset = 0
-    want_kind = (qs.get("kind") or [""])[0]
-    needle = (qs.get("q") or [""])[0].strip().lower()
-    enabled = {a["email"] for a in accounts.accounts()}      # match every other corpus-wide endpoint
-    if not enabled:
-        return {"ok": True, "total": 0, "matched": 0, "shown": 0, "facets": {}, "docs": []}
-    ph = ",".join("?" for _ in enabled)
-    c = store.conn()
-    rows = c.execute(
-        "SELECT a.message_pk pk, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
-        "       m.account, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, m.folder "
-        "FROM attachments a JOIN messages m ON m.pk=a.message_pk "
-        "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
-        f"  AND m.account IN ({ph}) "
-        "ORDER BY m.ts DESC, a.id", list(enabled)).fetchall()   # one order, or a page could repeat or skip a file
-    c.close()
-    docs, facets, seen, matched = [], {}, set(), 0
-    for r in rows:
-        ct = (r["content_type"] or "").lower()
-        if any(x in ct for x in _DOC_EXCLUDE):
-            continue
-        kind = _doc_kind(r["content_type"], r["filename"])
-        # dedup the SAME physical file — the identical email synced to two accounts/folders gets a
-        # different pk, so key on message_id + size + name (fall back to pk when message_id is absent,
-        # so unrelated same-name files aren't wrongly merged).
-        fn = (r["filename"] or "").lower()
-        key = (r["message_id"], r["size"], fn) if r["message_id"] else (r["pk"], fn)
-        if key in seen:
-            continue
-        seen.add(key)
-        facets[kind] = facets.get(kind, 0) + 1
-        if want_kind and kind != want_kind:
-            continue
-        if needle and needle not in " ".join(r[k] or "" for k in ("filename", "from_name", "from_addr", "subject")).lower():
-            continue
-        matched += 1
-        if matched <= offset or len(docs) >= limit:
-            continue
-        docs.append({"pk": r["pk"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
-                     "size": r["size"] or 0, "account": r["account"],
-                     "from": r["from_name"] or r["from_addr"] or "", "subject": r["subject"] or "(no subject)",
-                     "when": rel_time(r["date_iso"]),
-                     "url": f"/api/message/{r['pk']}/attachment/{quote(str(r['part_id']))}"})
-    return {"ok": True, "total": sum(facets.values()), "matched": matched, "shown": len(docs), "facets": facets,
-            "docs": docs}
 
 
 def do_contacts(q):
@@ -3662,7 +3576,7 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/screener":
                 self._json(curation.screener.queue(q.get("account", [None])[0]))
             elif u.path == "/api/documents":
-                self._json(documents_json(q))
+                self._json(discovery.documents.page(q))
             elif u.path == "/api/cleanup/senders":
                 self._json(curation.cleanup.senders(q))
             elif u.path == "/api/cleanup/sender":

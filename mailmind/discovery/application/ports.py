@@ -15,6 +15,11 @@ class SearchIndex(Protocol):
     def total(self) -> int: ...
 
 
+class StoredDocuments(Protocol):
+    """The attachments of stored mail, newest first. See adapters.sqlite."""
+    def attachments(self, accounts) -> list: ...
+
+
 class AccountNames(Protocol):
     """The accounts as the rest of the app names them."""
     def emails(self) -> list: ...
