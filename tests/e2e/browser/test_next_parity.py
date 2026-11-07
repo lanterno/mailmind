@@ -1,0 +1,51 @@
+"""What the page does and the React app has to as well, each found by holding the two side by side."""
+import re
+
+import pytest
+from playwright.sync_api import expect
+
+from fixtures import world as w
+from mailmind.platform import sse
+
+pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
+
+RECEIPT = "ada-inbox-05-receipt.eml"
+
+# Stands in for the browser's Notification, and lets a test say the tab is in the background.
+AWAY = """
+window.notes = [];
+window.Notification = class { constructor(title, o) { this.title = title; Object.assign(this, o); window.notes.push(this); } close() {} };
+window.Notification.permission = "granted";
+window.away = false;
+Object.defineProperty(document, "hidden", { get: () => window.away });
+"""
+
+
+def clean(page):
+    assert page.problems == [], page.problems
+    assert page.blocked == [], page.blocked
+
+
+def opened(page):
+    page.goto("/next")
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    expect(page.get_by_role("option").first).to_be_visible()
+    return page
+
+
+def row(page, world, name):
+    pk = world.pk(name)
+    assert pk is not None, f"{name} has no row in the database"
+    return page.locator(f'#rows .row[data-pk="{pk}"]')
+
+
+def test_read_only_says_what_it_files_waits_for(page, world, monkeypatch):
+    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
+    monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+    opened(page)
+    expect(page.locator("#statusTxt")).to_have_text("Read-only")
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    page.keyboard.press("e")
+    expect(page.locator("#toast")).to_have_text("Archived · waits for a full run")
+    clean(page)
