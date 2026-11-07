@@ -620,3 +620,25 @@ def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on
     page.clock.run_for(1_600)
     until(page, lambda: "/api/briefing/since" in asked, "the pill's line was never asked for")
     clean(page)
+def test_a_digest_that_wont_come_says_the_server_cant_be_reached_and_offers_retry(page, app, world):
+    page.route("**/api/digest*", lambda route: route.abort())
+    page.goto("/next")
+    expect(page.locator("#rows")).to_contain_text("Couldn\u2019t reach the server.")
+    page.unroute("**/api/digest*")
+    page.locator("#dgRetry").click()
+    expect(page.locator("#rows")).to_contain_text("Today\u2019s brief")
+    assert all("ERR_FAILED" in p for p in page.problems), page.problems
+    page.problems.clear()
+    assert page.blocked == [], page.blocked
+
+
+def test_a_digest_that_wont_come_is_tried_again_by_itself(page, app, world):
+    page.route("**/api/digest*", lambda route: route.abort())
+    page.goto("/next")
+    expect(page.locator("#rows")).to_contain_text("Couldn\u2019t reach the server.")
+    page.unroute("**/api/digest*")
+    page.clock.run_for(5_100)
+    expect(page.locator("#rows")).to_contain_text("Today\u2019s brief")
+    page.problems.clear()
+    assert page.blocked == [], page.blocked
+
