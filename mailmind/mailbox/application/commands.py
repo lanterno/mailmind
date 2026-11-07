@@ -24,6 +24,7 @@ from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.domain import command
 from mailmind.mailbox.domain.events import Applied, Restored
 from mailmind.platform import bus, profile, undo
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
@@ -62,12 +63,13 @@ class MailCommands:
     _POLL = 30
     gates = gates
 
-    def __init__(self, store: StoredMail, accounts: Accounts, server: ServerOps):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, server: ServerOps):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._server = server
         self.QUEUE = DurableQueue("commands", "mail_commands", running="running", finished="done", finished_at="done_at",
-                                  gate="applied", connect=lambda: store.conn(), max_attempts=self.MAX_ATTEMPTS,
+                                  gate="applied", connect=uow.connect, max_attempts=self.MAX_ATTEMPTS,
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL)
 
     def kick(self) -> None:
@@ -75,22 +77,14 @@ class MailCommands:
 
 
     def _commit[T](self, fn: Callable[[Connection], T]) -> T:
-        """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
-        c = self._store.conn()
-        try:
-            out = fn(c)
-            c.commit()
-            return out
-        finally:
-            c.close()
+        """Run fn(c) in a write block of its own, and return what fn returned."""
+        with self._uow.write() as c:
+            return fn(c)
 
 
     def _commit_get(self, mid: int) -> Row | None:
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             return self._store.command_get(c, mid)
-        finally:
-            c.close()
 
 
     # ── accept ──────────────────────────────────────────────────────────────────────────────────
@@ -108,8 +102,7 @@ class MailCommands:
                     push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
         """Accept a move of message `pk`: an Accepted, or None when there is no such message, or it is on its way out
         already. `push_undo(c, entry)`, in the same transaction, keeps what reverses it; without one, nothing will."""
-        c = self._store.conn()
-        try:
+        with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             row = self._store.get_message(c, pk)
             if not row or row["pending_removal"] is not None:
                 return None
@@ -137,17 +130,13 @@ class MailCommands:
                               "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
                               "subject": row["subject"], "thread_id": row["thread_id"]})
             claimed = self._claim(c, id_)
-            c.commit()
             return command.Accepted(id_, email, True, undoable, claimed)
-        finally:
-            c.close()
 
 
     def accept_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> command.Accepted | None:
         """Accept a flag change on message `pk`, which shows on its row at once: an Accepted, or None when there is
         no such message."""
-        c = self._store.conn()
-        try:
+        with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             row = self._store.get_message(c, pk)
             if not row:
                 return None
@@ -155,10 +144,7 @@ class MailCommands:
             if not created or id_ is None:
                 return command.Accepted(id_, row["account"], False, False)
             claimed = self._claim(c, id_)
-            c.commit()
             return command.Accepted(id_, row["account"], True, False, claimed)
-        finally:
-            c.close()
 
 
     # ── a try, and what settles it ──────────────────────────────────────────────────────────────
@@ -308,8 +294,7 @@ class MailCommands:
     def list_open(self, limit: int = 100) -> dict[str, Any]:
         """What the pending-changes tray shows: the changes that haven't reached a server, and how many
         wait and how many were given up on. A subject the row doesn't hold comes from its message."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             items: list[dict[str, Any]] = []
             for r in self._store.command_open(c, limit):
                 params = json.loads(r["params"] or "{}")
@@ -323,8 +308,6 @@ class MailCommands:
                               "attempts": r["attempts"], "error": r["last_error"], "subject": subject,
                               "next_attempt_at": r["next_attempt_at"], "created_at": r["created_at"]})
             counts = self._store.command_open_counts(c)
-        finally:
-            c.close()
         return {"items": items, "waiting": counts.get("queued", 0) + counts.get("running", 0),
                 "stuck": counts.get("error", 0)}
 

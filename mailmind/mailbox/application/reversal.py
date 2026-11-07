@@ -7,13 +7,16 @@ from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.platform.db.uow import UnitOfWork
 
 
 type Reversed = tuple[bool, str, str]       # (ok, the account it touched, the folder)
 
 
 class Reversals:
-    def __init__(self, store: StoredMail, accounts: Accounts, server: ServerOps, commands: MailCommands, ingest: Ingest):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, server: ServerOps, commands: MailCommands,
+                 ingest: Ingest):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._server = server
@@ -27,16 +30,16 @@ class Reversals:
         when a counter-move is still needed; the entry, with where the move went and what the server did on the way)."""
         if not d.get("message_id"):
             return None, d
-        c = self._store.conn()
-        q = (self._store.command_get(c, d["command"]) if d.get("command")
-             else self._store.command_latest_move(c, d["account"], d["message_id"]))
+        with self._uow.read() as c:
+            q = (self._store.command_get(c, d["command"]) if d.get("command")
+                 else self._store.command_latest_move(c, d["account"], d["message_id"]))
         if q is not None and not q["applied"]:
             src = d.get("src_folder") or "INBOX"
-            cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
-            if cancelled:
-                self._store.restore_pending(c, q["id"])
-            listed = cancelled and self._store.is_listed_in(c, d["account"], src, d["message_id"])
-            c.commit(); c.close()
+            with self._uow.write() as c:
+                cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
+                if cancelled:
+                    self._store.restore_pending(c, q["id"])
+                listed = cancelled and self._store.is_listed_in(c, d["account"], src, d["message_id"])
             if listed:
                 return (True, d["account"], src), d
             if cancelled:
@@ -53,7 +56,6 @@ class Reversals:
                 d = {**d, "dest_folder": q["dest"]}
             if json.loads(q["outcome"] or "{}").get("unseen"):
                 d = {**d, "unseen": True}
-        c.close()
         return None, d
 
 

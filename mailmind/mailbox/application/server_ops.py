@@ -15,6 +15,7 @@ from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import command, destination, move_strategy
 from mailmind.mailbox.domain.move_strategy import Way
 from mailmind.platform import profile
+from mailmind.platform.db.uow import UnitOfWork
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
 # imaplib.IMAP4.abort subclasses IMAP4.error; socket.timeout subclasses OSError. A NON-abort
@@ -66,7 +67,8 @@ def _seen_on_server(s: MailSession, uid: int, otherwise: bool) -> bool:
 class ServerOps:
     UNREACHABLE = UNREACHABLE
 
-    def __init__(self, store: StoredMail, accounts: Accounts, open_session: OpenSession, quote: Callable[[str], str]):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, open_session: OpenSession, quote: Callable[[str], str]):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._open_session = open_session
@@ -74,11 +76,8 @@ class ServerOps:
 
     def account_of(self, pk: int | None) -> str | None:
         """The account the message `pk` is in, or None when there's no such message."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             return self._store.account_of(c, pk)
-        finally:
-            c.close()
 
 
     def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T]) -> T:
@@ -192,11 +191,8 @@ class ServerOps:
         """\\Answered on the message a send replied to, wherever it is by now: where its row says, or
         with no row left (archiving right after replying deletes it), in the inbox and the folders filing
         moves mail to. A custom folder it was moved to isn't looked through. Answers as set_flags does."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             row = self._store.get_message_by_msgid(c, account, message_id) or (self._store.get_message(c, pk) if pk else None)
-        finally:
-            c.close()
         if row:
             return self.set_flags(row["pk"], {"answered": True})
         if not (account and message_id):
@@ -230,9 +226,8 @@ class ServerOps:
         """flags: {'answered':True} -> UID STORE +/-FLAGS, mirrored locally once the server took it. What a send sets
         off retries for itself, so this goes straight to the server; what a person asks goes through MailCommands. A
         refusal (the UID gone, a read-only folder) leaves the local row as the server has it, and answers (False, why)."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.get_message(c, pk)
         if not row:
             return False, "not found"
         profile.refuse_writes("a flag change")
@@ -252,10 +247,8 @@ class ServerOps:
                 s.logout()
             except Exception:
                 pass
-        c = self._store.conn()
-        self._store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items() if k in _FLAG})
-        c.commit()
-        c.close()
+        with self._uow.write() as c:
+            self._store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items() if k in _FLAG})
         return True, "ok"
 
 
