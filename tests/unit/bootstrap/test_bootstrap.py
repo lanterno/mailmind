@@ -165,6 +165,11 @@ def test_each_door_runs_the_account_that_asks_on_its_own_adapter(app):
     assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == (expected, "imaplib")
 
 
+def test_each_door_reads_an_invite_through_its_own_reader(app):
+    from mailmind.bootstrap import calendar
+    assert calendar.kind() == ("icalendar" if app.door == "new" else "stdlib")
+
+
 def scheduled(monkeypatch, **env):
     """The jobs background.schedule puts on a fresh scheduler under `env`: name, interval and first delay."""
     for name in ("MAILMIND_PROFILE", "MAILMIND_NOSYNC", "MAILMIND_NO_DRAFT_TICK"):
