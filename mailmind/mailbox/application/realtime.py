@@ -3,15 +3,16 @@ dispatcher coalesces a burst of changes into one InboxChanged on mailmind.platfo
 server answers with a sync of those accounts. The open tabs hear of the result through the live
 event stream, mailmind.platform.sse.
 
-A supervisor keeps the workers in line with the configuration: an account added gets a worker, one
-removed or disabled loses its own, and one now reached another way (host, port, TLS, credential)
-gets a fresh worker in place of the old. The account events (mailmind.accounts.domain.events) call
-reconcile(), and a worker that finds its account changed under it leaves on its own.
+The workers follow the configuration (mailmind.platform.workers.idle_supervisor holds how): an
+account added gets a worker, one removed or disabled loses its own, and one now reached another way
+(host, port, TLS, credential) gets a fresh worker in place of the old. The account events
+(mailmind.accounts.domain.events) call reconcile(), and a worker that finds its account changed
+under it leaves on its own.
 
 Bounded (1 IDLE conn/account, capped accounts), reconnect-safe, daemon-thread clean exit.
 """
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession
@@ -19,50 +20,29 @@ from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.platform import bus
 from mailmind.platform.logging import get_logger
+from mailmind.platform.workers.idle_supervisor import IdleSupervisor, Watch
 
 log = get_logger("idle")
 _ENDPOINT = ("kind", "host", "port", "starttls", "credential", "strip_spaces",   # how it's reached
              "imap_adapter")
 
 
-class _Watch:
-    """One account's worker: the account as configured when it started, and what stops it."""
-
-    def __init__(self, acct: Account, stopping: Callable[[], bool]):
-        self.acct = acct
-        self._stopping = stopping
-        self.quit = False               # retired: its account is gone or now reached another way
-        self.conn: MailSession | None = None    # its connection, while it has one
-        self.thread: threading.Thread | None = None
-
-    def leaving(self) -> bool:
-        return self.quit or self._stopping()
-
-
 def _same_endpoint(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     return all(a.get(k) == b.get(k) for k in _ENDPOINT)
 
 
-class Realtime:
+class Realtime(IdleSupervisor[Account, MailSession]):
     IDLE_SECONDS = 24 * 60          # re-IDLE before servers drop (~29 min)
     MAX_IDLE_ACCOUNTS = 12
     _DEBOUNCE = 3                   # coalesce a burst of IDLE signals into one sync
 
     def __init__(self, accounts: Accounts, open_session: OpenSession):
+        super().__init__()
         self._accounts = accounts
         self._open_session = open_session
-        self._stop = threading.Event()
-        self._conns: list[MailSession] = []  # worker IMAP sessions, for force-close on stop()
-        self._wake = threading.Condition()   # a worker backing off waits here; stop() and a retirement wake it
-        self._watchers: dict[str, _Watch] = {}    # email -> _Watch: the workers start() and reconcile() run
-        self._watch_lock = threading.Lock()
-        self._running = False                # start() has run, and stop() hasn't
         self._dirty: set[str] = set()
         self._dirty_lock = threading.Lock()
         self._kick = threading.Event()
-
-    def _stopping(self) -> bool:
-        return self._stop.is_set()
 
     def _trigger_sync(self, email: str) -> None:
         with self._dirty_lock:
@@ -83,7 +63,21 @@ class Realtime:
                 bus.publish(InboxChanged(frozenset(todo)))
 
 
-    def _wanted(self, acct: Account) -> bool:
+    # ── which accounts, and how each is reached ────────────────────────────────────────────────
+
+    def _desired(self) -> dict[str, Account] | None:
+        try:
+            return {a["email"]: a for a in self._accounts.accounts()}
+        except Exception as e:
+            log.warning("can't read the accounts; watching as before", exc_info=e)
+            return None
+
+
+    def _same(self, running: Account, wanted: Account, /) -> bool:
+        return _same_endpoint(running, wanted)
+
+
+    def _wanted(self, acct: Account, /) -> bool:
         """Is this account still configured, enabled and reached the same way? A configuration that
         can't be read keeps the worker watching."""
         try:
@@ -94,116 +88,65 @@ class Realtime:
             return True
 
 
-    def _rest(self, watch: _Watch, seconds: float) -> None:
-        with self._wake:
-            self._wake.wait_for(watch.leaving, timeout=seconds)
+    def _limit(self) -> int:
+        return self.MAX_IDLE_ACCOUNTS
 
 
-    def _worker(self, acct: Account, watch: _Watch | None = None) -> None:
-        watch = watch or _Watch(acct, self._stopping)
-        email = acct["email"]
-        backoff = 5
+    def _name(self, acct: Account, /) -> str:
+        return f"idle:{acct['email']}"
+
+
+    def _say_unwanted(self, acct: Account, /) -> None:
+        log.info("%(account)s: removed, disabled or changed; this worker stops", {"account": acct["email"]})
+
+
+    def _say_failed(self, acct: Account, error: Exception, /) -> None:
+        log.warning("%(account)s: IDLE failed", {"account": acct["email"]}, exc_info=error)
+
+
+    # ── the IDLE loop ──────────────────────────────────────────────────────────────────────────
+
+    def _connect(self, acct: Account, /) -> MailSession:
+        return self._open_session(acct)
+
+
+    def _ready(self, acct: Account, session: MailSession, /) -> bool:
+        if "IDLE" not in session.capabilities:
+            log.warning("%(account)s: server has no IDLE — falling back to periodic sync", {"account": acct["email"]})
+            try:
+                session.logout()
+            except Exception:
+                pass
+            return False
+        session.select("INBOX", readonly=False)
+        return True
+
+
+    def _serve(self, watch: Watch[Account, MailSession], session: MailSession, /) -> None:
+        acct = watch.spec
         while not watch.leaving():
+            changed = session.idle(self.IDLE_SECONDS)   # it leaves IDLE (sends DONE) before syncing
+            if watch.leaving():
+                break
+            if changed:
+                self._trigger_sync(acct["email"])      # sync runs on a SEPARATE short-lived conn
             if not self._wanted(acct):
-                log.info("%(account)s: removed, disabled or changed; this worker stops", {"account": email})
-                self.reconcile()                  # changed by hand: a worker for the new settings, if running
-                return
-            session = None
+                break                         # the worker asks again, says so and stops
+
+
+    def _close(self, session: MailSession, /) -> None:
+        try:
+            session.logout()               # closes the connection once the server answers
+        except Exception:
             try:
-                session = self._open_session(acct)
-                if "IDLE" not in session.capabilities:
-                    log.warning("%(account)s: server has no IDLE — falling back to periodic sync", {"account": email})
-                    try:
-                        session.logout()
-                    except Exception:
-                        pass
-                    return
-                session.select("INBOX", readonly=False)
-                self._conns.append(session)
-                watch.conn = session               # set before leaving() is asked: _retire sets quit first
-                backoff = 5
-                while not watch.leaving():
-                    changed = session.idle(self.IDLE_SECONDS)   # it leaves IDLE (sends DONE) before syncing
-                    if watch.leaving():
-                        break
-                    if changed:
-                        self._trigger_sync(email)          # sync runs on a SEPARATE short-lived conn
-                    if not self._wanted(acct):
-                        break                         # the loop's top says so and stops
-            except Exception as e:
-                if not watch.leaving():
-                    log.warning("%(account)s: IDLE failed", {"account": email}, exc_info=e)
-                self._rest(watch, min(backoff, 300))
-                backoff = min(backoff * 2, 300)
-            finally:
-                watch.conn = None
-                if session:
-                    try:
-                        self._conns.remove(session)
-                    except ValueError:
-                        pass
-                    try:
-                        session.logout()               # closes the connection once the server answers
-                    except Exception:
-                        try:
-                            session.shutdown()         # it didn't answer (stop() shut the socket down): close here
-                        except Exception:
-                            pass
-
-
-    def _spawn(self, acct: Account) -> _Watch:
-        watch = _Watch(acct, self._stopping)
-        watch.thread = threading.Thread(target=self._worker, args=(acct, watch), name=f"idle:{acct['email']}",
-                                        daemon=True)
-        watch.thread.start()
-        return watch
-
-
-    def _retire(self, watch: _Watch) -> None:
-        """Stop a worker: wake it from a backoff, and from IDLE by shutting its socket down (see stop)."""
-        with self._wake:
-            watch.quit = True
-            self._wake.notify_all()
-        M = watch.conn
-        if M is not None:
-            M.interrupt()
-
-
-    def reconcile(self, _event: object = None) -> int:
-        """Bring the workers in line with the configuration: retire each whose account is gone, disabled
-        or now reached another way, and start one for each account without one, up to
-        self.MAX_IDLE_ACCOUNTS. Each account event calls it; before start() and after stop() it does nothing.
-        Returns how many accounts are configured."""
-        with self._watch_lock:
-            if not self._running or self._stop.is_set():
-                return 0
-            try:
-                wanted = {a["email"]: a for a in self._accounts.accounts()}
-            except Exception as e:
-                log.warning("can't read the accounts; watching as before", exc_info=e)
-                return 0
-            for email, watch in list(self._watchers.items()):
-                if email not in wanted or not _same_endpoint(watch.acct, wanted[email]):
-                    self._retire(watch)
-                    del self._watchers[email]
-            for email, acct in wanted.items():
-                if email not in self._watchers and len(self._watchers) < self.MAX_IDLE_ACCOUNTS:
-                    self._watchers[email] = self._spawn(acct)
-            return len(wanted)
-
-
-    def watching(self) -> dict[str, bool]:
-        """The accounts with a worker, each with whether it is still running (it ends on a server
-        without IDLE, and the periodic sync covers that account)."""
-        with self._watch_lock:
-            return {email: watch.thread is not None and watch.thread.is_alive()
-                    for email, watch in self._watchers.items()}
+                session.shutdown()         # it didn't answer (stop() shut the socket down): close here
+            except Exception:
+                pass
 
 
     def start(self) -> None:
         """Launch the sync dispatcher, then one IDLE worker per enabled account (capped)."""
-        with self._watch_lock:
-            self._running = True
+        self.begin()
         threading.Thread(target=self._dispatch_loop, daemon=True).start()
         configured = self.reconcile()
         if configured > self.MAX_IDLE_ACCOUNTS:
@@ -212,16 +155,6 @@ class Realtime:
 
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop.set()                   # before the kick: the dispatcher asks as it wakes
         self._kick.set()
-        with self._watch_lock:
-            self._running = False
-            self._watchers.clear()
-        with self._wake:
-            self._wake.notify_all()
-        for M in list(self._conns):
-            # Wake a worker blocked reading its connection by shutting the socket down. Never close it
-            # from here: the worker may be about to wait on that descriptor, and once closed its number
-            # can go to the next socket opened, which the worker would then wait on (and read from).
-            # The worker closes its own connection on the way out.
-            M.interrupt()
+        super().stop()
