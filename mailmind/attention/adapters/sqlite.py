@@ -79,6 +79,12 @@ def unread_in_thread(c, account, thread_id):
                      (account, thread_id)).fetchall()
 
 
+def a_member(c, account, thread_id):
+    """One message of the thread, whichever: what can say later which thread this has become."""
+    return c.execute("SELECT message_key, folder FROM messages WHERE account=? AND thread_id=? AND message_key IS NOT NULL LIMIT 1",
+                     (account, thread_id)).fetchone()
+
+
 def unread_in_muted_threads(c, account):
     """Unseen members of any muted thread. One whose mark is still open, or was refused and waits in the tray, isn't
     asked for again each sync."""

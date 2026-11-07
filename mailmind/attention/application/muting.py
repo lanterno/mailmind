@@ -32,9 +32,10 @@ class Muting:
             rows = self._book.unread_in_thread(c, acct, tid)
             self._mark_read(c, rows, now_iso())
             unread = [[r["message_key"], r["folder"]] for r in rows]   # the ones Undo marks unread again: pk isn't stable
+            member = self._book.a_member(c, acct, tid)
             self._book.mute_thread(c, acct, tid, now_iso())
-        self._undo.push({"kind": "mute", "account": acct, "thread_id": tid,
-                         "unread": unread, "label": "Muted"}, body.get("undo_group"))
+        self._undo.push({"kind": "mute", "account": acct, "thread_id": tid, "unread": unread, "label": "Muted",
+                         "member": [member["message_key"], member["folder"]] if member else None}, body.get("undo_group"))
         self._screen.stats_changed()
         sse.publish("mute", {"account": acct})
         if unread:
@@ -52,12 +53,21 @@ class Muting:
         sse.publish("mute", {"account": acct})
         return {"ok": True, "thread_id": tid}, 200
 
+    def _thread_now(self, c: object, d: dict[str, Any]) -> list[str]:
+        """A merge moves a mute to the thread that took this one in, and an undo entry doesn't hear of it, so ask a
+        message the thread held. One that has since been filed elsewhere can't say."""
+        member = d.get("member")
+        pk = self._messages.copy_in_folder(c, member[0], member[1]) if member else None
+        r = self._messages.get(c, pk) if pk else None
+        return [r["thread_id"]] if r and r["thread_id"] else []
+
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
         """Undo of a mute: unmuted, and unread again what it marked read. `prev_seen` is an entry's from when muting
         told the server nothing."""
         marked, when = False, now_iso()
         with self._book.transaction() as c:
-            self._book.unmute_thread(c, d["account"], d["thread_id"])
+            for tid in {d["thread_id"], *self._thread_now(c, d)}:
+                self._book.unmute_thread(c, d["account"], tid)
             for pk, prev in d.get("prev_seen", []):
                 self._messages.set_local_flags(c, pk, seen=int(prev or 0))
             for key, folder in d.get("unread", []):
