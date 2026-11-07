@@ -1,5 +1,6 @@
 """The dependency rules the import graph can't hold: what's asked of the standard library, the Assistant's ports, who
-writes which table, and who still reads a stored pk. import-linter's contracts in pyproject.toml hold the rest."""
+writes which table, who still reads a stored pk, and what the last phase drops. import-linter's contracts in
+pyproject.toml hold the rest."""
 import ast
 import pathlib
 import re
@@ -49,6 +50,11 @@ PK_READS = {
 
 # What holds `in_reply_to_pk` as a request said it, a moment old and no stored column: the page's composer sends it.
 PK_REQUESTS = {"body", "meta"}
+
+# What still reads what the refactor's last phase drops, `summaries` and `messages.snoozed_until`. It may only shrink.
+READS_OF_WHAT_GOES = {
+    ("mailbox/adapters/sqlite.py", "repair_keys"),   # at a start, what a run of an older commit wrote only there comes across
+}
 
 # What a domain may never ask the standard library for: it holds no I/O.
 IO = {"sqlite3", "smtplib", "imaplib", "socket", "ssl", "http", "subprocess", "urllib.request"}
@@ -223,3 +229,36 @@ def test_writing_a_stored_pk_in_sql_is_no_read(sql):
 ])
 def test_reading_a_stored_pk_by_name_is_seen(code, read):
     assert any(pk_column_is_read_by_name(n) for n in ast.walk(ast.parse(code))) is read
+
+
+def literals(path):
+    """(the function it's in, the string) for each string in the module but a docstring."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    prose = {id(n.body[0].value) for n in ast.walk(tree)
+             if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and ast.get_docstring(n) is not None}
+
+    def walk(node, where):
+        for child in ast.iter_child_nodes(node):
+            inside = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else where
+            if isinstance(child, ast.Constant) and isinstance(child.value, str) and id(child) not in prose:
+                yield inside, child.value
+            yield from walk(child, inside)
+    return walk(tree, "<module>")
+
+
+def test_nothing_reads_what_the_last_phase_drops():
+    """Both are only written, so a rollback to an older commit still works and dropping them stays one migration. What the AI
+    said is read from `assessments`, by key, and a snooze from `snoozes`, by key and folder (`kernel.snoozed`). Naming the
+    column is a read unless it's what an UPDATE sets, or an alias, which holds what `snoozes` said under the old name."""
+    selects = re.compile(r"(?<!DELETE )\b(?:FROM|JOIN)\s+summaries\b")
+    no_read = re.compile(r"\bSET\s+snoozed_until\s*=|\bAS\s+snoozed_until\b")
+    found = {(rel(path), where) for path in modules() for where, text in literals(path)
+             if text != "snoozed_until" and (selects.search(text) or "snoozed_until" in no_read.sub("", text))}
+    assert found == READS_OF_WHAT_GOES
+
+
+def test_only_the_snoozed_view_reads_a_row_by_the_columns_name():
+    """A row read with `*` holds the column for as long as there is one, so `row["snoozed_until"]` reads it, and an SQL check
+    can't see that. The Snoozed view's row has the alias instead; a row read alone says `snooze_until` (`store.get_message`)."""
+    found = {(rel(path), where) for path in modules() for where, text in literals(path) if text == "snoozed_until"}
+    assert found == {("mailbox/application/queries.py", "snoozed_in")}
