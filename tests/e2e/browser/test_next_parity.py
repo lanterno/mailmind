@@ -160,3 +160,16 @@ def test_a_star_says_so_either_way(page, world):
     page.keyboard.press("s")
     expect(page.locator("#toast")).to_have_text("Couldn’t star")
     clean(page)
+
+
+def test_with_single_keys_off_help_still_opens(page, world):
+    opened(page)
+    page.pw.evaluate("localStorage.setItem('mm_nokeys', '1')")
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    page.keyboard.press("e")
+    page.wait_for_timeout(100)
+    expect(receipt).to_have_count(1)                            # off, as you asked
+    page.keyboard.press("?")
+    expect(page.locator(".legsearch")).to_contain_text("from:")
+    clean(page)
