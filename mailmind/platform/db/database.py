@@ -20,4 +20,5 @@ def connect(path):
     c.execute("PRAGMA fullfsync=ON")
     c.execute("PRAGMA busy_timeout=60000")
     c.execute("PRAGMA foreign_keys=ON")
+    c.execute("PRAGMA temp_store=MEMORY")   # what a big sort or join holds of the mail never lands in a temp file
     return c
