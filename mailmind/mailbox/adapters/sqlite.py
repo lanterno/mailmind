@@ -601,7 +601,7 @@ def conversation_rows(c, account, by, value):
 
 def message_to_reply_to(c, pk):
     """A message with no thread as a reply is drafted from it, in a list as a conversation's are."""
-    return c.execute("SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,"
+    return c.execute("SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,"
                      "body_fetched FROM messages WHERE pk=?", (pk,)).fetchall()
 
 
