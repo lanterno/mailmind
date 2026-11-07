@@ -149,16 +149,9 @@ def test_the_page_reaches_only_this_server_and_no_one_may_frame_it():
         "form-action": "'none'", "object-src": "'none'"}
 
 
-def test_the_current_page_keeps_its_policy_word_for_word():
+def test_the_page_keeps_its_policy_word_for_word_which_allows_nothing_for_mail():
     assert perimeter.page_policy() == (
-        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
-        "font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; "
-        "frame-ancestors 'none'; object-src 'none'")
-
-
-def test_the_react_apps_policy_allows_nothing_for_mail():
-    assert perimeter.next_page_policy() == (
-        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; "
         "font-src 'self'; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; "
         "frame-ancestors 'none'; object-src 'none'")
 

@@ -115,12 +115,19 @@ def _imap_adapters():
     mailbox.reset()
 
 
+@pytest.fixture(scope="session")
+def tiny_build(tmp_path_factory):
+    """The folder of a build small enough to write, which needs no node (fixtures/tiny_build.py)."""
+    from fixtures import tiny_build as tiny
+    return tiny.write(tmp_path_factory.mktemp("tiny-build"))
+
+
 @pytest.fixture(autouse=True)
-def _no_build(monkeypatch):
-    """Nothing built, whatever this machine has built, so `/` answers the same everywhere. A test that wants a build
-    sets `webroot.DIST` itself (`serve_the_build`, `with_next`)."""
+def _a_build(tiny_build, monkeypatch):
+    """That build, whatever this machine has built, so `/` answers the same everywhere. A test that wants another, or none,
+    sets `webroot.DIST` itself (`serve_the_build`, test_webroot.py)."""
     from mailmind.platform import webroot
-    monkeypatch.setattr(webroot, "DIST", os.path.join(webroot.REPO, "mailmind", "http", "no-build-in-a-test"))
+    monkeypatch.setattr(webroot, "DIST", tiny_build)
 
 
 @pytest.fixture(autouse=True)

@@ -20,8 +20,9 @@ import guard
 ROOT = guard.ROOT
 TESTS = os.path.join(ROOT, "tests")
 
-# The child: the tripwire first, then the program.
+# The child: the tripwire first, then which build it serves, then the program.
 GUARDED = ("import sys; sys.path[:0] = [{tests!r}, {root!r}]; import guard; guard.install(); "
+           "from mailmind.platform import webroot; webroot.DIST = {dist!r}; "
            "import runpy; sys.argv = {argv!r}; runpy.run_module('mailmind', run_name='__main__')")
 
 
@@ -46,10 +47,14 @@ def get(port, path, timeout=2):
         conn.close()
 
 
-def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path):
+def serve_code(port, dist):
+    return GUARDED.format(tests=TESTS, root=ROOT, dist=dist, argv=["mailmind", "serve", str(port)])
+
+
+def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path, tiny_build):
     """It ends as interrupted (by SIGINT, so a caller such as `just` stops too) and quietly."""
     port = free_port()
-    code = GUARDED.format(tests=TESTS, root=ROOT, argv=["mailmind", "serve", str(port)])
+    code = serve_code(port, tiny_build)
     proc = subprocess.Popen([sys.executable, "-c", code], cwd=ROOT, env=child_env(tmp_path),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     stream = None
@@ -83,15 +88,15 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path):
     out = proc.stdout.read() if proc.stdout else ""
     assert f"MailMind → http://127.0.0.1:{port}" in out
     assert "[imap] mail through imaplib" in out          # no account here asks for IMAPClient
+    assert "isn't built" not in out
     assert "Traceback" not in out and "Tripwire" not in out, out
 
 
 @contextlib.contextmanager
-def serving(home):
-    """The app running over the data directory `home`, until the block ends: its port."""
+def serving(home, dist):
+    """The app running over the data directory `home`, serving the build in `dist`, until the block ends: its port."""
     port = free_port()
-    code = GUARDED.format(tests=TESTS, root=ROOT, argv=["mailmind", "serve", str(port)])
-    proc = subprocess.Popen([sys.executable, "-c", code], cwd=ROOT, env=child_env(home),
+    proc = subprocess.Popen([sys.executable, "-c", serve_code(port, dist)], cwd=ROOT, env=child_env(home),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         deadline = time.monotonic() + 30
@@ -125,8 +130,8 @@ def post(port, path, body):
         conn.close()
 
 
-def test_it_keeps_its_log_in_the_data_directory_its_owners_alone(tmp_path):
-    with serving(tmp_path) as port:
+def test_it_keeps_its_log_in_the_data_directory_its_owners_alone(tmp_path, tiny_build):
+    with serving(tmp_path, tiny_build) as port:
         pass
     path = tmp_path / "mailmind.log"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -135,14 +140,23 @@ def test_it_keeps_its_log_in_the_data_directory_its_owners_alone(tmp_path):
     assert "mail through imaplib" in [line["msg"] for line in lines if line["logger"] == "imap"]
 
 
-def test_undo_outlives_a_restart(world):
+def test_with_nothing_built_it_runs_says_so_once_and_the_page_says_how(tmp_path):
+    with serving(tmp_path, str(tmp_path / "nothing-built")) as port:
+        status, body = get(port, "/")
+        assert (status, b"just build-web" in body) == (404, True)
+        assert get(port, "/api/outbox")[0] == 200
+    said = [json.loads(line)["msg"] for line in (tmp_path / "mailmind.log").read_text().splitlines()]
+    assert [m for m in said if "isn't built" in m] == ["The app isn't built, so it answers 404. Run: just build-web"]
+
+
+def test_undo_outlives_a_restart(world, tiny_build):
     """Archived in one run, undone in the next. Both run read-only, so the archive waits in the queue and its Undo asks
     no server."""
     from fixtures import world as w
     receipt = world.pk("ada-inbox-05-receipt.eml")
-    with serving(world.dir) as port:
+    with serving(world.dir, tiny_build) as port:
         assert post(port, "/api/archive", {"pk": receipt})["status"] == "queued"
-    with serving(world.dir) as port:
+    with serving(world.dir, tiny_build) as port:
         r = post(port, "/api/undo", {})
         assert (r["ok"], r["label"], r["remaining"]) == (True, "Archived", 0)
         listed = json.loads(get(port, f"/api/messages?account={w.ADA}&limit=200")[1])["items"]

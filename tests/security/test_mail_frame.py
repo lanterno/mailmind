@@ -4,7 +4,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
-from mailmind.platform import perimeter, webroot
+from mailmind.platform import perimeter
 
 TRACKER = "https://tracker.example.test/open.png"
 HOSTILE = f"""From: Mallory <mallory@evil.example.test>
@@ -83,11 +83,9 @@ def test_only_this_origin_may_ask_for_it(app, world, site, error):
     assert r.headers["x-frame-options"] == "DENY" and "content-security-policy" not in r.headers
 
 
-def test_each_page_answers_under_a_policy_of_its_own(app, monkeypatch):
-    monkeypatch.setattr(webroot, "next_page", lambda token: "<!doctype html>")
-    assert app.get("/legacy").headers["content-security-policy"] == perimeter.page_policy()
-    assert app.get("/").headers["content-security-policy"] == perimeter.next_page_policy()
-    assert app.get("/m/ada%40example.test/INBOX").headers["content-security-policy"] == perimeter.next_page_policy()
+def test_the_page_answers_under_a_policy_of_its_own(app):
+    assert app.get("/").headers["content-security-policy"] == perimeter.page_policy()
+    assert app.get("/m/ada%40example.test/INBOX").headers["content-security-policy"] == perimeter.page_policy()
 
 
 def test_no_other_answer_may_be_framed(app, world):
