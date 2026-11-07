@@ -2,6 +2,7 @@
 import pytest
 
 from fixtures import world as w
+from mailmind.bootstrap import web
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import as_int, required_int
 
@@ -176,3 +177,25 @@ def test_a_port_that_cant_be_a_number(app, field, said, junk):
 def test_a_connection_test_of_what_cant_be_a_draft(app, junk):
     r = app.post("/api/accounts/test", {"draft": junk})
     assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
+WALK_LEAVES_OUT = {"/api/refresh", "/api/undo", "/api/accounts/delete"}     # each would undo the walk's own world
+WALK_FIELDS = ("pk", "pks", "id", "draft_id", "account", "email", "thread_id", "from_addr", "token", "decision", "mode", "subject",
+               "text", "undo_group", "idempotency_key", "in_reply_to_pk", "port", "draft", "rows", "to", "attachments", "resume")
+WALK_JUNK = ([1], 10 ** 30, float("inf"))
+
+
+def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai):
+    """Every POST route, each field a route has choked on, each kind of junk that got past the handler's own catch, within
+    a body otherwise good enough to get as far as reading it."""
+    pk = world.pk("ada-inbox-05-receipt.eml")
+    good = {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "dest": "Archive", "seen": True, "id": 1,
+            "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
+            "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
+            "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}
+    routes = sorted(path for method, path in web.H.routes._exact if method == "POST" and path not in WALK_LEAVES_OUT)
+    routes += ["/api/accounts/test", "/api/accounts/trust-cert", "/api/accounts/add", "/api/accounts/edit"]
+    bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
+           if app.post(path, {**good, field: junk}).status >= 500]
+    app.settle(120)
+    assert not bad
