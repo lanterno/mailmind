@@ -7,6 +7,7 @@ from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.application.ports import ConnectionProbe
 from mailmind.accounts.domain.account import Entry
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
+from mailmind.kernel.errors import NotFound
 
 
 PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick word of a bad host
@@ -15,7 +16,7 @@ PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
                  probe: ConnectionProbe, quiet_error: Callable[[BaseException], str],
-                 retry_sync: Callable[[Entry], tuple[dict[str, Any], int]], forget_status: Callable[[str | None], None]):
+                 retry_sync: Callable[[Entry], dict[str, Any]], forget_status: Callable[[str | None], None]):
         self._config = config
         self._get = get
         self._accounts = accounts
@@ -50,15 +51,15 @@ class Connections:
                     "error": self._quiet_error(e)}
 
 
-    def trust_cert(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
+    def trust_cert(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Trust the account's servers again after its loopback certificate changed (Bridge reinstalled
         or reset): forget its pins, and sync it, which pins the certificate it meets now."""
         email = (body.get("email") or "").strip()
         if not self._config.forget_tls_pins(email):
-            return {"ok": False, "error": "not found"}, 404
+            raise NotFound("not found")
         if email in {a["email"] for a in self._accounts()}:    # a disabled one waits until enabled
             return self._retry_sync({"account": email})
-        return {"ok": True, "account": email}, 200
+        return {"ok": True, "account": email}
 
 
     def change(self, action: str, body: Mapping[str, Any]) -> dict[str, Any]:

@@ -1,5 +1,6 @@
 """What the settings page asks of Accounts: the list, masked, and a change to it."""
 from mailmind.http.routing import ANSWERED, Routes
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.when import now_iso
 
 
@@ -12,7 +13,9 @@ def routes(accounts, mailbox):
         em = req.arg("email")
         if em:
             row = next((a for a in config.masked_rows() if a["email"] == em), None)
-            return {"ok": bool(row), "account": row}, 200 if row else 404
+            if row is None:
+                raise NotFound(account=None)
+            return {"ok": True, "account": row}
         return {"ok": True, "accounts": config.masked_rows(),
                 "signature_default": config.signature_default(), "generated": now_iso()}
 
@@ -34,7 +37,7 @@ def routes(accounts, mailbox):
             try:
                 return accounts.connections.change(action, req.body)
             except ValueError as ve:
-                return {"ok": False, "error": str(ve)}, 400
+                raise Refused(str(ve)) from ve
             finally:
                 mailbox.stats.invalidate()
         req.handler._send(404, b"not found", "text/plain")
