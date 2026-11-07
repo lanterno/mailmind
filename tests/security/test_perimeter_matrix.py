@@ -20,9 +20,7 @@ from mailmind.platform import webroot
 
 # A route on the handler that matches by shape names no path, so each has one here. A new one fails test_every_shape_has_a_path_here.
 # One that moves to a router names its path, and the entry here goes unused.
-SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
-          ("GET", "attachment"): "/api/message/1/attachment/1", ("GET", "body"): "/api/message/1/body", ("GET", "body_document"): "/api/message/1/body.html",
-          ("POST", "change"): "/api/accounts/test"}
+SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css"}
 BAD_HOST = "bad host/origin"
 CROSS_SITE = "cross-site request"
 NOT_THE_PAGE = "same-origin request required"

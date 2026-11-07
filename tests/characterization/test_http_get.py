@@ -49,7 +49,7 @@ def test_guards_refuse_foreign_hosts_and_cross_site_reads(app, golden):
     fetch(app, golden, "/api/accounts", "GET /api/accounts via localhost",
           headers={"Host": f"localhost:{app.port}"})
     fetch(app, golden, "/api/no-such-route")
-    fetch(app, golden, "/api/messages?account=ada@example.test&limit=lots")     # a bad int: 500
+    fetch(app, golden, "/api/messages?account=ada@example.test&limit=lots")     # a bad int: 400
 
 
 # ── accounts, settings and the stores beside the database ───────────────────
