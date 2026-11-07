@@ -288,7 +288,7 @@ def test_hwf_since_is_held_between_a_day_ago_and_now(app, world, monkeypatch):
     from mailmind.bootstrap import assistant
     seen = []
     monkeypatch.setattr(assistant.briefs, "build_delta",
-                        lambda accts, since, generate=True: (seen.append(since), ({"ok": True}, 200))[1])
+                        lambda accts, since, generate=True: (seen.append(since), {"ok": True, "empty": True, "count": 0})[1])
     app.clock.shift(timedelta(minutes=7))                    # 12:07
     now = int(time.time())
     for since in (0, now - 3600, now + 3600, "soon"):

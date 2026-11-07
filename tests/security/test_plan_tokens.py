@@ -91,8 +91,10 @@ def test_an_id_nearly_right_is_none_and_leaves_the_plan_standing(app, world, ai)
     plan = preview(app, ai)
     since = world.mark()
     id_ = plan["plan"]
-    for wrong in (id_ + "x", id_[:-1], id_.swapcase(), " " + id_, [id_], {"plan": id_}):
+    for wrong in (id_ + "x", id_[:-1], id_.swapcase(), " " + id_):
         assert app.post("/api/ai/do-confirm", {"plan": wrong}).status == 410, wrong
+    for not_text in ([id_], {"plan": id_}):
+        assert app.post("/api/ai/do-confirm", {"plan": not_text}).status == 400, not_text
     assert world.writes(since) == []
     assert app.post("/api/ai/do-confirm", {"plan": plan["plan"]}).status == 200
 

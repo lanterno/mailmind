@@ -245,11 +245,11 @@ def test_a_plan_is_good_up_to_then(app, world, ai):
     assert confirm(app, plan).status == 200
 
 
-@pytest.mark.parametrize("body", [{}, {"plan": ""}, {"plan": "made-up"}, {"plan": None}, {"plan": ["x"]}])
-def test_a_plan_no_one_made_is_refused(app, world, body):
+@pytest.mark.parametrize("body, status", [({}, 410), ({"plan": ""}, 410), ({"plan": "made-up"}, 410), ({"plan": None}, 410), ({"plan": ["x"]}, 400)])
+def test_a_plan_no_one_made_is_refused(app, world, body, status):
     since = world.mark()
     r = app.post("/api/ai/do-confirm", body)
-    assert r.status == 410 and world.writes(since) == []
+    assert r.status == status and world.writes(since) == []
 
 
 def test_a_message_the_server_refuses_is_counted_and_the_rest_go_on(app, world, ai):
