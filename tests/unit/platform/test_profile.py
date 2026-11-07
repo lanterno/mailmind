@@ -46,7 +46,7 @@ def test_it_reads_the_process_environment_at_every_call(monkeypatch):
     assert profile.current() is FULL
 
 
-def test_a_front_door_refuses_to_start_on_a_name_that_is_no_profile(tmp_path, monkeypatch):
+def test_the_app_refuses_to_start_on_a_name_that_is_no_profile(tmp_path, monkeypatch):
     """Before it creates or migrates anything, or starts a worker."""
     from mailmind.bootstrap import wiring
     from mailmind.platform import settings

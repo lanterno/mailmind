@@ -1,4 +1,4 @@
-"""The status pill, the help overlay and Settings in the React app."""
+"""The status pill, the help overlay and Settings."""
 import re
 import time
 

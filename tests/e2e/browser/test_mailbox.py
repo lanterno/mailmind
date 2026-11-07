@@ -1,4 +1,4 @@
-"""The app, on the fictional world. Every test here serves the build the `built` fixture made."""
+"""The mailbox, on the fictional world: the rail, the list, the reader and filing."""
 import re
 
 import pytest

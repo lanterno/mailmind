@@ -154,7 +154,7 @@ def test_another_sites_link_opens_the_page_and_nothing_else(app, table):
 
 
 def test_no_other_method_reaches_a_route(app, table):
-    """Not even with every header right, through a door that would take the method further."""
+    """Not even with every header right, on a server that would take the method further."""
     let_through = {(method, path): status
                    for method in ("HEAD", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE")
                    for status, path in [(knock(app, method, path, {"Origin": app.origin}).status, path)
@@ -177,11 +177,11 @@ def test_a_path_written_oddly_gets_no_further_from_a_typed_url(app, table, metho
 
 
 def test_the_handler_answers_no_method_the_perimeter_doesnt_check():
-    """A new `do_PUT` on the one handler would be a door of its own on the old server, which runs each check by hand."""
+    """A new `do_PUT` on the handler would be a way in of its own, past the checks `do_GET` and `do_POST` run by hand."""
     assert sorted(name for name in dir(web.H) if name.startswith("do_")) == ["do_GET", "do_POST"]
 
 
-def test_the_new_door_has_no_route_of_its_own_and_runs_the_perimeter(monkeypatch):
+def test_the_app_has_no_route_of_its_own_and_runs_the_perimeter(monkeypatch):
     """A route on the FastAPI app itself wouldn't be in the table this walks."""
     monkeypatch.setattr(front.assistant, "use", lambda kind: None)
     monkeypatch.setattr(front.mailbox, "offer", lambda kind: None)

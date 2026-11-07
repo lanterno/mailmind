@@ -1,4 +1,5 @@
-"""What the page does and the React app has to as well, each found by holding the two side by side."""
+"""The small things across the app that no feature's own suite says, each found by an audit: what it says when something fails
+or is slow, where a key or a click leaves you, and what the rail, the palette and help name."""
 import re
 
 import pytest
@@ -185,7 +186,7 @@ def test_with_single_keys_off_help_still_opens(page, world):
     clean(page)
 
 
-def test_help_names_every_search_operator_the_page_does(page, world):
+def test_help_names_the_search_operators(page, world):
     opened(page)
     page.keyboard.press("?")
     expect(page.locator(".legsearch")).to_contain_text("-exclude")
@@ -213,7 +214,7 @@ def test_the_account_menu_names_itself_marks_yours_says_who_cant_connect_and_lea
     clean(page)
 
 
-def test_the_rail_keeps_the_pages_order_and_all_inboxes_is_one_inbox(page, world):
+def test_the_rail_keeps_its_order_and_all_inboxes_is_one_inbox(page, world):
     opened(page)
     names = page.locator("#folderrail .frow .fn")
     expect(names.last).to_have_text("Snoozed")
@@ -334,7 +335,7 @@ def test_a_message_that_wont_load_offers_retry(page, world):
     clean(page)
 
 
-def test_the_palette_says_what_the_pages_does(page, world):
+def test_the_palette_says_what_each_command_does(page, world):
     opened(page)
     page.keyboard.press("ControlOrMeta+k")
     labels = page.locator("#plist .pi-l").all_inner_texts()
@@ -529,7 +530,7 @@ def test_settings_says_what_each_inbox_holds_and_what_stops_one_answering(page, 
     expect(ada.locator(".chip-dot")).not_to_have_class(re.compile(r"\berror\b"))
     clean(page)
 
-def test_a_view_that_wont_go_says_so_in_the_pages_words(page, app, world):
+def test_a_view_that_wont_go_says_so(page, app, world):
     opened(page)
     page.pw.on("dialog", lambda d: d.accept("Lunch"))
     page.keyboard.press("/")
@@ -540,7 +541,7 @@ def test_a_view_that_wont_go_says_so_in_the_pages_words(page, app, world):
     view = page.locator("#folderrail [data-view]", has_text="Lunch")
     expect(view).to_be_visible()
     page.route("**/api/views", lambda route: route.abort() if route.request.method == "POST" else route.fallback())
-    page.locator("#folderrail .vrow", has_text="Lunch").locator(".vdel").dispatch_event("click")   # at this width the rail folds it away, as the page's does
+    page.locator("#folderrail .vrow", has_text="Lunch").locator(".vdel").dispatch_event("click")   # at this width the rail folds it away
     expect(page.locator("#toast")).to_have_text("Couldn\u2019t remove view")
     assert all("ERR_FAILED" in p for p in page.problems), page.problems
     page.problems.clear()
@@ -734,7 +735,7 @@ def test_a_digest_that_wont_come_is_tried_again_by_itself(page, app, world):
     page.problems.clear()
     assert page.blocked == [], page.blocked
 
-def test_a_list_or_a_search_that_fails_says_so_in_the_pages_words(page, app, world):
+def test_a_list_or_a_search_that_fails_says_so(page, app, world):
     page.goto(f"/m/{w.ADA}/INBOX")
     archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
     expect(archive).to_be_visible()
@@ -819,7 +820,7 @@ def test_a_saved_view_can_be_removed_from_the_keyboard(page):
     clean(page)
 
 
-# -- Esc backs out one step, which the owner chose over the page's on 2026-11-07 --------------------
+# -- Esc backs out one step, which the owner chose on 2026-11-07 ------------------------------------
 
 def test_escape_closes_a_message_before_it_leaves_the_search_it_was_opened_from(page, world):
     opened(page)

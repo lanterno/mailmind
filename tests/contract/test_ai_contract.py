@@ -324,9 +324,9 @@ def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, a
     assert assistant.assessments.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
 
 
-# ── which door talks through which ────────────────────────────────────────────
+# ── what the app talks through ────────────────────────────────────────────────
 
-def test_the_new_front_door_talks_through_the_sdk():
+def test_the_app_talks_through_the_sdk():
     from mailmind.bootstrap import assistant, front
     assistant.use("urllib")
     try:

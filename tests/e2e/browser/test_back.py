@@ -1,4 +1,4 @@
-"""What a phone's gestures do in the React app: Back closes what's on top, a swipe files a row. And the rows after the
+"""What a phone's gestures do: Back closes what's on top, a swipe files a row. And the rows after the
 one you're reading are made ready."""
 import re
 

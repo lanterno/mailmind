@@ -1,4 +1,4 @@
-"""The Screener and the contact card in the React app: deciding on a sender, and who a sender is."""
+"""The Screener and the contact card: deciding on a sender, and who a sender is."""
 import re
 
 import pytest

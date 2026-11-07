@@ -1,4 +1,4 @@
-"""The app's composer, on the fictional world.
+"""The composer, on the fictional world.
 
 The rules these lean on are also pinned without a browser in web/src/features/compose/machine.test.ts.
 """

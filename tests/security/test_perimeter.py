@@ -15,7 +15,7 @@ POSTED = {**PAGE, "Origin": f"http://{OWN}"}             # and, on a POST, its O
 
 
 def headers(**kw):
-    """Request headers as the old server parses them: a lookup that ignores case."""
+    """Request headers as the handler reads them: a lookup that ignores case."""
     m = email.message.Message()
     for k, v in kw.items():
         m[k.replace("_", "-")] = v

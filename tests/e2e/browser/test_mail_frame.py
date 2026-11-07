@@ -1,4 +1,4 @@
-"""A mail body in the React app's frame, loaded from its own URL under its own policy: what a browser lets it do, and what
+"""A mail body in the app's frame, loaded from its own URL under its own policy: what a browser lets it do, and what
 the page around it still does to it. tests/security/test_mail_frame.py holds what the route answers.
 
 Some of these serve the mail unsanitized, since the sandbox and the policy are the walls and the sanitizer only stands behind

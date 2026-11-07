@@ -1,4 +1,4 @@
-"""The curate drawer in the React app: flooding senders, each inbox, the learned rules and the audit trail."""
+"""The curate drawer: flooding senders, each inbox, the learned rules and the audit trail."""
 import re
 
 import pytest

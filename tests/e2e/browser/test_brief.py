@@ -1,4 +1,4 @@
-"""Today's brief in the React app: what the Inbox opens on, and the lists and panels it opens."""
+"""Today's brief: what the Inbox opens on, and the lists and panels it opens."""
 import re
 import time
 

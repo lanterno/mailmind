@@ -1,4 +1,4 @@
-"""Ask and Do in the React app: a question changes nothing, and a bulk action passes its preview."""
+"""Ask and Do: a question changes nothing, and a bulk action passes its preview."""
 import re
 import time
 from datetime import timedelta

@@ -1,4 +1,4 @@
-"""Feed and Paper Trail in the React app: two built-in views that read as a river and as a ledger."""
+"""Feed and Paper Trail: two built-in views that read as a river and as a ledger."""
 import re
 
 import pytest

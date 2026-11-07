@@ -1,4 +1,4 @@
-"""The Document Hub in the React app: every attachment across accounts, filtered and paged by the server."""
+"""The Document Hub: every attachment across accounts, filtered and paged by the server."""
 import re
 
 import pytest
