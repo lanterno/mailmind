@@ -50,8 +50,10 @@ export async function reconcile(qc: QueryClient) {
     else {
       toast(`Reconciling — striking ${dry.total_ghosts} ghosts…`);
       const real = await post("/api/reconcile", { account: "all", dry_run: false });
+      const d = await get("/api/digest?min=1&account=");
+      qc.setQueryData(["digest"], d);
       readAgain(qc);
-      toast(`Struck ${(real.total_pruned ?? 0).toLocaleString()} deleted items`);
+      toast(`Struck ${(real.total_pruned ?? 0).toLocaleString()} deleted items · ${(d.stats?.kept ?? 0).toLocaleString()} stand`);
     }
   } catch {
     toast("Reconcile failed");
