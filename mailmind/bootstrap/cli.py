@@ -5,6 +5,7 @@ module it names is on tests/legacy_ratchet.txt until that code moves into its co
 import imaplib
 
 from mailmind.accounts.domain import provider
+from mailmind.accounts.domain.credential import CredentialRef
 from mailmind.bootstrap import curation, discovery, mailbox
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -24,11 +25,7 @@ def check():
 def list_accounts():
     from mailmind.bootstrap.accounts import config
     for a in config.accounts():
-        c = a.get("credential")
-        style = "plain" if isinstance(c, (str,)) or (isinstance(c, dict) and "plain" in c) else \
-                ("op" if isinstance(c, dict) and "op" in c else
-                 "env" if isinstance(c, dict) and "env" in c else
-                 "proton_bridge" if isinstance(c, dict) and c.get("proton_bridge") else "?")
+        style = CredentialRef.parse(a.get("credential")).style or "?"
         print(f"  {a['email']:42} {a['kind']:6} {a['host']}:{a['port']}  cred={style}")
 
 

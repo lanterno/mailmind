@@ -11,7 +11,8 @@ An optional top-level "anthropic_api_key" holds the Claude API key, in any of th
 (proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment.
 
 Credential styles (so this works for anyone, with or without 1Password): plain, op, env and
-proton_bridge, which mailmind.accounts.adapters.secrets lists and resolves.
+proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
+resolves.
 
 Type defaults (override per account as needed):
   gmail  -> imap.gmail.com:993 TLS, trash "[Gmail]/Trash", app-password spaces stripped
@@ -26,6 +27,7 @@ from typing import Any
 from mailmind.accounts.application.ports import AccountRepository, SecretResolver
 from mailmind.accounts.domain import account, events
 from mailmind.accounts.domain.account import Entry, MaskedRow
+from mailmind.accounts.domain.credential import CredentialRef, credential_from
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus, settings
 from mailmind.platform.logging import get_logger
@@ -87,8 +89,7 @@ class Directory:
         server never has to prompt again."""
         ok = 0
         for a in self.accounts():
-            cred = a.get("credential")
-            if isinstance(cred, dict) and "op" in cred:
+            if CredentialRef.parse(a.get("credential")).style == "op":
                 try:
                     self.resolve_credential(a)
                     ok += 1
@@ -150,7 +151,7 @@ class Directory:
                 raise ValueError(f"{email} already exists")
             entry = {"email": email, "type": p.get("type", "imap")}
             account.apply_fields(entry, p)
-            cred = account.credential_from(p.get("credential"))
+            cred = credential_from(p.get("credential"))
             if cred is None:
                 raise ValueError("a credential is required")
             entry["credential"] = cred
@@ -169,7 +170,7 @@ class Directory:
             old_cred = entry.get("credential")
             account.apply_fields(entry, p)
             if "credential" in p:
-                new = account.credential_from(p["credential"])
+                new = credential_from(p["credential"])
                 if new is not None:          # only replace when a real value/ref/var was given
                     entry["credential"] = new
                     self._secrets.evict(old_cred)
@@ -200,7 +201,7 @@ class Directory:
             if only and entry.get("email") != only:
                 continue
             cred = entry.get("credential")
-            if isinstance(cred, dict) and "plain" in cred or isinstance(cred, str):
+            if CredentialRef.parse(cred).style == "plain":
                 continue  # already inline
             try:
                 pw = self.resolve_credential({"email": entry.get("email"), "credential": cred,

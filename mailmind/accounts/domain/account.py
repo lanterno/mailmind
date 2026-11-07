@@ -1,12 +1,13 @@
 """An account as `mailmind.config.json` holds it: an entry's defaults, what the API may show of it, and
-what an edit may change. Credential styles are mailmind.accounts.adapters.secrets's."""
+what an edit may change. Credential styles are mailmind.accounts.domain.credential's."""
 from collections.abc import Mapping
-from typing import Any, Required, TypedDict
+from typing import Any, TypedDict
+
+from mailmind.accounts.domain.credential import CredentialMask, CredentialRef
 
 # An entry of the file, or what a request asked of one: JSON as it parsed, so what a key holds is the file's
 # word for it, Any on purpose. `normalized` says which keys the rest of the app may count on.
 type Entry = dict[str, Any]
-type Credential = str | dict[str, Any] | None
 
 
 class TypeDefaults(TypedDict):
@@ -18,14 +19,6 @@ class TypeDefaults(TypedDict):
     smtp_host: str | None
     smtp_port: int
     smtp_starttls: bool
-
-
-class CredentialMask(TypedDict, total=False):
-    """A credential as the API may show it: its style and whether it's set, and only ever a pointer."""
-    style: Required[str | None]
-    set: Required[bool]
-    ref: str
-    var: str
 
 
 class MaskedRow(TypedDict):
@@ -87,24 +80,6 @@ def normalized(a: Entry) -> Entry | None:
     }
 
 
-def mask_credential(cred: Credential) -> CredentialMask:
-    """Public, secret-FREE descriptor of a credential. NEVER returns a value,
-    length, prefix, or hash — only the style and whether something is set."""
-    if isinstance(cred, str):
-        return {"style": "plain", "set": bool(cred)}
-    if not isinstance(cred, dict) or not cred:
-        return {"style": None, "set": False}
-    if "plain" in cred:
-        return {"style": "plain", "set": bool(cred.get("plain"))}
-    if "op" in cred:
-        return {"style": "op", "set": bool(cred["op"]), "ref": cred["op"]}  # ref is a pointer, safe
-    if "env" in cred:
-        return {"style": "env", "set": bool(cred["env"]), "var": cred["env"]}
-    if cred.get("proton_bridge"):
-        return {"style": "proton_bridge", "set": True}
-    return {"style": "unknown", "set": False}
-
-
 def masked_row(entry: Entry) -> MaskedRow:
     """Re-shape ONE raw account entry into the secret-free row the API returns.
     Echoes effective host/port/etc (with a defaults_applied flag) and masks the
@@ -123,7 +98,7 @@ def masked_row(entry: Entry) -> MaskedRow:
         "smtp_starttls": entry.get("smtp_starttls", d["smtp_starttls"]),
         "disabled": bool(entry.get("disabled")),
         "defaults_applied": applied,
-        "credential": mask_credential(entry.get("credential")),
+        "credential": CredentialRef.parse(entry.get("credential")).masked(),
         "signature": (entry.get("signature") or ""),   # plain text, intentionally non-secret
     }
 
@@ -134,32 +109,6 @@ def find(raw: Entry, email: str | None) -> Entry | None:
         if (e.get("email") or "").strip().lower() == el:
             return e
     return None
-
-
-def credential_from(p: Entry | None) -> dict[str, Any] | None:
-    """Build a stored credential dict from a request payload {style,value|ref|var}.
-    Returns None to mean 'keep existing'. Raises ValueError on invalid input."""
-    if not p:
-        return None
-    style = p.get("style")
-    if style == "plain":
-        v = p.get("value")
-        if not v:  # never blank out / store an empty password
-            raise ValueError("password required")
-        return {"plain": v}
-    if style == "op":
-        ref = p.get("ref")
-        if not ref or (isinstance(ref, str) and not ref.strip()):
-            raise ValueError("1Password reference required")
-        return {"op": ref}
-    if style == "env":
-        var = (p.get("var") or "").strip()
-        if not var:
-            raise ValueError("environment variable name required")
-        return {"env": var}
-    if style == "proton_bridge":
-        return {"proton_bridge": True}
-    return None  # style unchanged / not provided -> keep existing
 
 
 def clean_alias(a: object) -> str | None:

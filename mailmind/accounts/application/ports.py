@@ -2,7 +2,8 @@
 from collections.abc import Iterable, Mapping
 from typing import Any, Protocol
 
-from mailmind.accounts.domain.account import Credential, Entry
+from mailmind.accounts.domain.account import Entry
+from mailmind.accounts.domain.credential import Credential
 
 
 class AccountRepository(Protocol):
