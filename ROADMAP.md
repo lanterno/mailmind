@@ -59,10 +59,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - *The durable-task half needs a new table*, and per the original design constraint it must key on
     `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
   The AI `action` string in the Commitments panel is read-only and parses no dates.
-- **Today & next's remaining blind spots** · low value · effort S — `ics_reader.next_occurrence` reads
-  DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL, COUNT, UNTIL, BYDAY and BYMONTHDAY; any other part
-  (BYSETPOS, BYMONTH, BYWEEKNO, BYHOUR, HOURLY) makes `_occurrences` return None and
-  `Agenda.upcoming` shows only the series' first date. Ingest keeps an invite's body only for the
+- **Today & next's remaining blind spots** · low value · effort S — A zone only the invite's own VTIMEZONE
+  explains (Outlook's `W. Europe Standard Time`, a vendor's prefix) floats on both doors, so such an invite shows
+  the hour it says, whatever zone you're in; `invite.zone` is the one place to teach them, and the goldens hold both
+  doors to one answer. A later SEQUENCE is not weighed, only which message is newest, and RANGE=THISANDFUTURE moves one
+  occurrence. Only on the old door, `ics_reader.next_occurrence` reads DAILY/WEEKLY/MONTHLY/YEARLY with INTERVAL,
+  COUNT, UNTIL, BYDAY and BYMONTHDAY, any other part (BYSETPOS, BYMONTH, BYWEEKNO, BYHOUR) showing only the series'
+  first date, and its other bugs are listed in `tests/contract/test_ics_differential.py`. On either, a rule finer than a
+  day shows only its first date. Ingest keeps an invite's body only for the
   Inbox (`ingest._process` with `with_body`), so an invite filed elsewhere by a server rule is
   listed once opened. Bodies stored before `mime.parse` recorded inline-only calendar parts
   keep attachment rows without one; a one-off re-parse of stored bodies containing

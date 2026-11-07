@@ -128,6 +128,9 @@ and the Claude API.
   and attendees, with `＋ Add to calendar` for your OS — and **Accept / Maybe /
   Decline** mails a standards-compliant iMIP reply to the organizer through the
   outbox, so it lands inside the Undo-Send window like any other message.
+  `python -m mailmind serve` reads an invite through `icalendar` and `recurring-ical-events`:
+  every recurrence rule down to a day, RDATE, and each event of an invite. `python3 server.py`,
+  with nothing installed, reads the common rules and an invite's first event.
 - **Click any sender for a relationship card** — how many emails they've sent, how
   often you replied, first and last contact, which of your accounts they write to,
   and their recent threads, with quick Compose and search actions. Pure local SQL,
@@ -652,6 +655,8 @@ uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules: storage, matching, age selection
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next: stored invites, repeats, updates, cancellations
+uv run pytest tests/contract/test_ics_reader_contract.py    # reading an invite, by either reader: nothing raises, nothing costs much
+uv run pytest tests/contract/test_ics_differential.py       # the two readers compared, each difference listed with why
 uv run pytest tests/unit/discovery/test_contacts_known.py   # "new" recipients lookup: matching, drafts, thin history, CSRF
 uv run pytest tests/unit/compose/test_send_after.py         # send-later times: passed or far-off ones are refused
 uv run pytest tests/unit/compose/test_send_guard.py         # send-time checks: attachment words, subject, reply-all (needs node)

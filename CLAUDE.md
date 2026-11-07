@@ -47,7 +47,9 @@ uv run pytest tests/unit/curation/test_classifier.py        # classifier behavio
 uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks (68)
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules (19)
-uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (40)
+uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient, through each reader (122)
+uv run pytest tests/contract/test_ics_reader_contract.py    # a reader of invites, through each: never raises, plain data, bounded (314)
+uv run pytest tests/contract/test_ics_differential.py       # the two readers compared over a corpus, each difference listed with why (526)
 uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (19)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
 uv run pytest tests/unit/compose/test_send_guard.py         # the composer's send-time checks, run in node (157)
@@ -90,7 +92,7 @@ The fixtures, from the bottom up:
   `ThreadingHTTPServer`, `door=new` the app `mailmind.bootstrap.front.build` makes, on uvicorn.
   So every app test runs twice, both runs share one golden file, and `app.door` says which run
   this is. In the world's config Cy's Gmail asks for IMAPClient, so the new door's run reaches it
-  through IMAPClient and the old door's through imaplib. Its CSRF token is fixed, and the clock
+  through IMAPClient and the old door's through imaplib, and the new door reads invites through the library. Its CSRF token is fixed, and the clock
   is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves
   it. `tests/e2e/test_front_door.py` runs each door as a program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
@@ -161,7 +163,7 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
 - **`python3 server.py` runs with nothing installed.** The app was standard library only until
   the refactor's Phase 2, and that shaped every design decision below (hand-rolled sanitizer,
   hand-rolled IMAP handling, no web framework, no frontend build). Since then it may use
-  runtime packages (FastAPI, uvicorn, the Anthropic SDK and IMAPClient so far), each declared in
+  runtime packages (FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events so far), each declared in
   `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its own
   commit, and the `uv.lock` change goes in the next. But `python3 server.py`, the old front door,
   is the kill switch while the new one carries daily use, so nothing it imports may import a
@@ -246,8 +248,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   scheduler's jobs and IDLE; read-only, the snooze job alone.
 - `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
-  bound to 127.0.0.1. Its `build` picks the Anthropic SDK and offers IMAPClient to an account
-  that asks for it (see the Mailbox paragraph); both doors print at startup which IMAP adapter
+  bound to 127.0.0.1. Its `build` picks the Anthropic SDK, offers IMAPClient to an account
+  that asks for it (see the Mailbox paragraph) and reads invites through the library (see the Calendar paragraph); both doors print at startup which IMAP adapter
   serves how many accounts (`[imap] ...`). Every route runs in `mailmind.http.handler.H` (see Routing):
   `mailmind.http.bridge.HandlerBridge`,
   the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
@@ -422,14 +424,27 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   what a change makes stale through the Mailbox (`mailbox.undo`, `mailbox.stats`).
   `mailmind.kernel.attention` is a different module, what a verdict asks of you, which the modules that need both import as `verdict`.
   It is standard library only.
-- `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `invite` (the shape the reader gives), `agenda`
+- `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `invite` (what a reader
+  finds in an event, `Fields`, and what that comes to, `Invite`, the card's words included, so either reader gives the same), `agenda`
   (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
-  REPLY and its idempotency key); `adapters` holds `ics_reader` (the hand-rolled reader of an invite's text, `parse` and
-  `next_occurrence`, what the proposal's `IcsReader` port names) and `sqlite` (reads stored bodies and the outbox's keys, and
+  REPLY and its idempotency key); `adapters` holds two readers of an invite's text behind the `IcsReader` port (`parse`, the event a
+  card shows, `events`, every event the reader reads, and `next_occurrence`) and `sqlite` (reads stored bodies and the outbox's keys, and
   writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
   binds them, and it's how the routers reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
   RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
-  It is standard library only.
+  A process starts on `ics_reader`, hand-rolled, which reads a subset of RRULE and only the first VEVENT, and the old door stays on it.
+  `front.build` asks for `icalendar_acl` (`calendar.use("icalendar")`), the only module that imports `icalendar` and
+  `recurring_ical_events`, and nothing of either leaves it. So Calendar is standard library only but for that module. An invite is a
+  stranger's text and a reader runs on a request thread, so a reader never raises. `icalendar_acl` takes a text of at most `_MAX_TEXT`
+  with at most `_MAX_EVENTS`, expands nothing finer than a day and gives each call a budget of its thread's time (`_within`: a tracer
+  raises at the next Python call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
+  of dateutil's). `Agenda.upcoming` has an allowance for one list on top (`_EXPAND_SECONDS`), past which a series shows its first date.
+  One rule says what a TZID means, `invite.zone`, on either door: a name the zone database doesn't know floats, so a VTIMEZONE counts for
+  nothing, and `icalendar_acl` lets the library keep none and look up no TZID. It keeps what isn't text as its line said it (`_AS_SAID`),
+  since an RSVP echoes a UID and writes to an organizer. `Invite.rdates` is there only where a reader found some, so an answer's
+  shape is the same through both doors. `tests/unit/calendar/` runs through each reader (its `conftest.py`),
+  `tests/contract/test_ics_reader_contract.py` holds what any reader must do, and `tests/contract/test_ics_differential.py` compares the two:
+  a difference its `DIFFERS` doesn't list, with why, fails.
 - `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
   else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `resume` (a saved draft split back into your text, its quote and its
   files), `attachments`, `limits`, `outbox_item`, `events` and `errors`. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
@@ -441,7 +456,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - Three checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, and each table to its owner. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
-  `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
+  `anthropic`, `imapclient`, `icalendar` and `recurring_ical_events` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
   every import of a root module from inside the package, and it is now empty; `tests/unit/test_ratchet.py` fails when the
   code and the list differ.
 
