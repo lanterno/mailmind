@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
+import { go } from "../../app/route";
 import { useLayer } from "../../lib/backTrap";
 import { createStore } from "../../lib/store";
 import { shortAddress } from "../../lib/text";
@@ -246,11 +247,17 @@ function Audit() {
   const { data } = useQuery({ queryKey: ["audit"], queryFn: () => get("/api/audit?limit=60") });
   const nameOf = (a: string) => digest?.aliases?.[a] || shortAddress(a);
   const events = (data?.events ?? []) as { ts?: string; kind: string; account?: string; pruned?: number; from?: string }[];
+  const openAccount = (a: string | undefined) => {
+    if (!a || !digest?.accounts?.includes(a)) return;   // a removed account has no folders to open
+    curateOpen.set(false);
+    go({ source: { kind: "folder", account: a, folder: "INBOX" }, opened: null });
+  };
   if (!events.length) return <div className="console" id="console"><div style={{ color: "var(--faint)" }}>No activity yet.</div></div>;
   return (
     <div className="console" id="console">
       {events.map((e, i) => (
-        <div className="ln" key={i} data-acct={e.account ?? ""}>
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a shortcut for the pointer: the rail and the palette reach every account from the keyboard
+        <div className="ln" key={i} data-acct={e.account ?? ""} onClick={() => openAccount(e.account)}>
           <span className={`k ${e.kind}`}>{e.kind}</span>
           <span className="t">{e.ts ? new Date(e.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</span>
           <span>{e.kind === "reconcile" ? `struck ${e.pruned} · ${nameOf(e.account ?? "")}` : `${nameOf(e.account ?? "")} · ${(e.from ?? "").slice(0, 22)}`}</span>
