@@ -7,14 +7,15 @@ means the same day on both sides. `page.problems` collects uncaught errors, cons
 content security policy violations.
 """
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
 
 import pytest
 
-SANDBOX_REFUSAL = ("Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed "
-                   "and the 'allow-scripts' permission is not set.")
+SANDBOX_REFUSAL = re.compile(r"Blocked script execution in '(about:srcdoc|about:blank|[^']*/api/message/\d+/body\.html\?[^']*)' because the "
+                             r"document's frame is sandboxed and the 'allow-scripts' permission is not set\.")
 # What Chromium says of anything a content security policy refuses.
 CSP_VIOLATION = "violates the following Content Security Policy directive"
 
@@ -85,7 +86,7 @@ def page(chromium, app, monkeypatch):
         # is the sandbox working, not a fault in the page.
         if m.type != "error" and CSP_VIOLATION not in m.text:
             return
-        if m.location.get("url") == "about:srcdoc" and m.text.startswith(SANDBOX_REFUSAL):
+        if SANDBOX_REFUSAL.match(m.text):
             return
         p.problems.append(f"console.{m.type}: {m.text}")
 

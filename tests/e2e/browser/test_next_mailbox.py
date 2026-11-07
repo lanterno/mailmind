@@ -82,7 +82,7 @@ def test_a_mail_frame_is_sandboxed_with_no_scripts_and_is_sized_to_what_it_holds
     frame = page.locator("iframe.rd-iframe")
     expect(frame).to_have_attribute("sandbox", "allow-same-origin")
     until(page, lambda: frame.evaluate("f => parseInt(f.style.height) > 0"), "the frame was never sized")
-    assert "default-src 'none'" in frame.get_attribute("srcdoc")
+    assert "/body.html?" in frame.get_attribute("src")
     clean(page)
 
 
@@ -470,12 +470,13 @@ def test_reading_settings_change_a_plain_mail_and_stay_after_a_reload(page, worl
     menu = page.get_by_role("dialog", name="Reading settings")
     menu.get_by_role("button", name="Mono").click()
     expect(menu.get_by_role("button", name="Mono")).to_have_attribute("aria-pressed", "true")
-    until(page, lambda: "SF Mono" in (frame.get_attribute("srcdoc") or ""), "the frame kept its old face")
+    face = "f => getComputedStyle(f.contentDocument.querySelector('pre')).fontFamily"
+    until(page, lambda: "SF Mono" in frame.evaluate(face), "the frame kept its old face")
     menu.get_by_role("button", name="Wide").click()
     assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--measure')").strip() == "920px"
     page.pw.reload()
     expect(frame).to_be_visible()
-    assert "SF Mono" in frame.get_attribute("srcdoc")
+    until(page, lambda: "SF Mono" in frame.evaluate(f"f => f.contentDocument?.querySelector('pre') ? ({face})(f) : ''"), "the face didn't stay")
     clean(page)
 
 
