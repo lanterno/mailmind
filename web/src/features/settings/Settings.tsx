@@ -208,7 +208,9 @@ function HealthLine({ h, email, again }: { h: Health | undefined; email: string;
   return null;
 }
 
-function ConnectionRow({ r, h, status, edit, again }: { r: Connection; h: Health | undefined; status: string; edit: () => void; again: () => void }) {
+type Live = { in_inbox?: number | null; error?: string | null };   // the generated type only knows the answer of a world where nothing failed
+
+function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: Health | undefined; live: Live | undefined; status: string; edit: () => void; again: () => void }) {
   const qc = useQueryClient();
   const [tested, setTested] = useState<Tested>(null);
   const [arming, setArming] = useState(false);
@@ -257,6 +259,9 @@ function ConnectionRow({ r, h, status, edit, again }: { r: Connection; h: Health
         <HealthLine h={h} email={r.email} again={again} />
       </div>
       <div className="acts">
+        {live?.error
+          ? <span className="set-count" style={{ color: "var(--err)" }}>{live.error.slice(0, 18)}</span>
+          : live?.in_inbox != null && <span className="set-count" style={{ color: "var(--mute)" }}>{live.in_inbox}</span>}
         <TestResult t={tested} />
         <button className="set-mini" onClick={edit}>Edit</button>
         <button className="set-mini" onClick={() => void testConnection({ email: r.email }, setTested)}>Test</button>
@@ -284,6 +289,7 @@ function Connections() {
   const qc = useQueryClient();
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => get("/api/accounts"), staleTime: 0, gcTime: 0 });
   const health = useQuery({ queryKey: ["accountHealth"], queryFn: () => get("/api/account-health"), staleTime: 0, gcTime: 0 });
+  const stats = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
   const { data: digest } = useDigest();
   const [editing, setEditing] = useState<string | "new" | null>(null);
   // Esc steps back one thing at a time: out of a field, out of the form, and only then out of Settings.
@@ -305,6 +311,7 @@ function Connections() {
   const again = () => {
     void qc.invalidateQueries({ queryKey: ["accounts"] });
     void qc.invalidateQueries({ queryKey: ["accountHealth"] });
+    void qc.invalidateQueries({ queryKey: ["stats"] });
   };
   const saved = (added: boolean) => {
     setEditing(null);
@@ -314,7 +321,8 @@ function Connections() {
     if (added) void syncNow(qc);     // a new connection has no mail yet: pull it now, not at the next sync
   };
   const healthOf = (email: string) => health.data?.accounts?.find((a) => a.account === email);
-  const statusOf = (email: string) => ((digest?.status ?? {}) as unknown as Record<string, { health?: string } | undefined>)[email]?.health ?? "";
+  const liveOf = (email: string) => stats.data?.accounts?.find((a) => a.account === email) as unknown as Live | undefined;
+  const statusOf = (email: string) => (liveOf(email)?.error ? "error" : ((digest?.status ?? {}) as unknown as Record<string, { health?: string } | undefined>)[email]?.health ?? "");
   let body: React.ReactNode;
   if (editing !== null) {
     body = <ConnectionForm key={editing} row={editing === "new" ? null : rows.find((r) => r.email === editing) ?? null} signatureDefault={accounts.data?.signature_default ?? ""} done={saved} cancel={() => setEditing(null)} />;
@@ -325,7 +333,7 @@ function Connections() {
       <>
         <Backup />
         {!rows.length && <div className="nores" style={{ padding: 36 }}>No email connections yet.<br />Add one to get started.</div>}
-        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email)} status={statusOf(r.email)} edit={() => setEditing(r.email)} again={again} />)}
+        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email)} live={liveOf(r.email)} status={statusOf(r.email)} edit={() => setEditing(r.email)} again={again} />)}
       </>
     );
   }
