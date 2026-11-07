@@ -80,7 +80,7 @@ def read_time(val: str | None, params: dict[str, str]) -> tuple[datetime | None,
     z = v.endswith("Z")
     vv = v[:-1] if z else v
     d = None
-    for fmt in ("%Y%m%dT%H%M%S", "%Y%m%dT%H%M"):
+    for fmt in ("%Y%m%dT%H%M", "%Y%m%dT%H%M%S"):     # this order: strptime would read 1030 as 10:03:00 with seconds to fill
         try:
             d = datetime.strptime(vv, fmt)
             break
