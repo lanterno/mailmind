@@ -208,6 +208,40 @@ def test_a_conversation_opens_whole_with_its_latest_open_and_files_whole(page, w
     clean(page)
 
 
+def test_e_on_a_conversations_row_files_every_message_its_sent_copy_stays_and_z_brings_them_back(page, world):
+    opened(page)
+    convo = page.locator("#rows .row[data-pk]").filter(has_text="Lunch on Thursday?")
+    expect(convo).to_have_count(1)                        # one row for the two inbox messages
+    expect(convo.locator(".thr-count")).to_have_text("2")
+    convo.click()
+    page.keyboard.press("e")
+    expect(convo).to_have_count(0)
+    until(page, lambda: all(mailbox(world, n) == "Archive" for n in LUNCH), "the conversation wasn't filed whole")
+    assert mailbox(world, "ada-sent-01-lunch-reply.eml") == "Sent"   # only the row's folder files
+    expect(page.locator("#toast")).to_have_text("Archived 2 messages")
+    page.keyboard.press("z")
+    expect(convo).to_have_count(1)
+    until(page, lambda: all(mailbox(world, n) == "INBOX" for n in LUNCH), "one Undo didn't bring both back")
+    clean(page)
+
+
+def test_an_undo_that_restores_only_part_says_so_and_z_tries_the_rest(page, world):
+    opened(page)
+    convo = page.locator("#rows .row[data-pk]").filter(has_text="Lunch on Thursday?")
+    convo.click()
+    page.keyboard.press("e")
+    until(page, lambda: all(mailbox(world, n) == "Archive" for n in LUNCH), "the conversation wasn't filed whole")
+    expect(page.locator("#toast")).to_have_text("Archived 2 messages")
+    world.server.fail("UID SEARCH", user=w.ADA)           # the first one undo looks for isn't found
+    page.keyboard.press("z")
+    expect(page.locator("#toast")).to_have_text("1 couldn’t be restored — press z to try again")
+    until(page, lambda: sorted(mailbox(world, n) for n in LUNCH) == ["Archive", "INBOX"], "one back on the server")
+    page.keyboard.press("z")
+    until(page, lambda: all(mailbox(world, n) == "INBOX" for n in LUNCH), "both back on the server")
+    expect(convo).to_have_count(1)
+    clean(page)
+
+
 def test_a_search_shows_what_it_finds_and_escape_leaves_it(page, world):
     opened(page)
     page.keyboard.press("/")
@@ -229,6 +263,48 @@ def test_new_mail_comes_into_the_list_by_itself(page, world):
     sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
     until(page, lambda: page.locator("#rows .row[data-pk]").count() > before, "the new mail never showed")
     expect(page.locator("#rows .row[data-pk]").filter(has_text="Fresh off the press")).to_have_count(1)
+    clean(page)
+
+
+def test_what_changes_elsewhere_shows_on_an_open_list(page, app, world):
+    """Nothing here touches the page: each change reaches it only as its event, flags-changed, reconcile and undo-done."""
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest, reconciler
+    old = "ada-archive-01-old-thread.eml"
+    opened(page)
+    page.locator('#folderrail .frow[data-folder="Archive"]').click()
+    listed = row(page, world, old)
+    expect(listed).to_have_count(1)
+    expect(page.locator("iframe.rd-iframe")).to_be_visible()
+    page.keyboard.press("Escape")                         # a folder opens on its first message, and an open message is marked read
+    expect(page.locator("iframe.rd-iframe")).to_have_count(0)
+    expect(listed).not_to_have_class(re.compile(r"\bunread\b"))
+
+    with world.server.lock:                               # marked unread in another client
+        world.server.mailbox(w.ADA, "Archive").messages[world.uid(old)].flags.discard(w.SEEN)
+    ingest.sync_folder(accounts.get(w.ADA), "Archive")
+    expect(listed).to_have_class(re.compile(r"\bunread\b"))
+
+    # Reconcile believes no empty answer, so the folder keeps something on the server.
+    world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@example.test>"))
+    with world.server.lock:                               # deleted in another client
+        world.server.mailbox(w.ADA, "Archive").messages.pop(world.uid(old))
+
+    def pruned():                                         # the ghost pruner's round, which yields while the page reads
+        reconciler._auto_reconcile_one(accounts.get(w.ADA))
+        return world.pk(old) is None
+    until(page, pruned, "the ghost was never pruned")
+    expect(listed).to_have_count(0)
+
+    page.locator('#folderrail .frow[data-folder="INBOX"]').click()
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "the server never filed it")
+    expect(page.locator("#toast")).to_have_text("Archived")
+    assert app.post("/api/undo", {}).json["ok"]           # another tab's Undo
+    expect(page.locator("#rows .row[data-pk]").filter(has_text="Your receipt for order 1042")).to_have_count(1)
     clean(page)
 
 
