@@ -17,7 +17,6 @@ from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint
-from mailmind.kernel import attention as verdict
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.logging import get_logger
@@ -26,24 +25,6 @@ from mailmind.platform.workers.singleflight import SingleFlight
 log = get_logger("ai")
 tick_log = get_logger("draft")
 _WARM = object()                                      # what warm() finds: a fresh draft is stored
-_DRAFT_CAND_SQL = """
-SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
-       m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
-FROM messages m
-JOIN summaries s ON s.message_pk = m.pk
-WHERE m.folder = 'INBOX'
-  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
-  AND """ + verdict.reply_worthy_sql() + """
-  AND m.ts >= ?
-  AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
-  AND (COALESCE(m.thread_id,'') = '' OR m.pk = (
-        SELECT m2.pk FROM messages m2 WHERE m2.account = m.account
-          AND m2.thread_id = m.thread_id ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1))
-  AND NOT EXISTS (SELECT 1 FROM muted mu
-        WHERE mu.account = m.account AND mu.thread_id = m.thread_id)
-ORDER BY s.importance DESC, m.ts DESC
-LIMIT 40
-"""
 
 
 class DraftAhead:
@@ -110,12 +91,11 @@ class DraftAhead:
         (a backfilled body → a better draft) but is excluded from the thread form (body
         backfill would churn-invalidate the whole table)."""
         if thread_id:
-            rows = c.execute("SELECT message_id, ts FROM messages WHERE account=? AND thread_id=?",
-                             (account, thread_id)).fetchall()
+            rows = self._mail.thread_stamps(c, account, thread_id)
             if not rows:
                 return "t2:gone"
             return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
-        r = c.execute("SELECT message_id, body_fetched FROM messages WHERE pk=?", (pk,)).fetchone()
+        r = self._mail.message_stamp(c, pk)
         return fingerprint.message(r["message_id"] if r else None, r["body_fetched"] if r else 0)
 
     def _gen_draft_ahead(self, account: str | None, pk: int, source: str = "dwell") -> bool | None:
@@ -188,13 +168,6 @@ class DraftAhead:
         led = self.DRAFT_FLIGHTS.run(key, make, warm, wait=45)
         return led if isinstance(led, bool) else None     # neutral: already warm, or joined another's run
 
-    def _thread_anchor_pk(self, c: Connection, account: str, thread_id: str) -> int | None:
-        """The thread's latest message — the only pk a thread draft may be served/kicked for
-        (never pair the thread-latest draft with a composer quoting an older message)."""
-        r = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? "
-                      "ORDER BY ts DESC, pk DESC LIMIT 1", (account, thread_id)).fetchone()
-        return r["pk"] if r else None
-
     def get(self, qs: Mapping[str, Sequence[str]], kick_ok: bool = False) -> Result:
         """GET /api/ai/draft-ahead?pk=[&peek=1] → cached draft (ready) / kicks generation
         (generating) / none. peek=1 is strictly read-only (reports inflight, never kicks).
@@ -217,7 +190,7 @@ class DraftAhead:
                 return {"ok": True, "status": "none"}, 200
             acct = row["account"]
             tid = row["thread_id"] or None
-            if tid and pk != self._thread_anchor_pk(c, acct, tid):
+            if tid and pk != self._mail.thread_anchor_pk(c, acct, tid):
                 return {"ok": True, "status": "none"}, 200
             if not self._draft_eligible(row):
                 return {"ok": True, "status": "none"}, 200
@@ -251,7 +224,7 @@ class DraftAhead:
         now = int(time.time())
         c = self._connect()
         try:
-            rows = c.execute(_DRAFT_CAND_SQL, (now - self.DRAFT_RECENCY_WINDOW,)).fetchall()
+            rows = self._mail.draft_candidates(c, now - self.DRAFT_RECENCY_WINDOW)
             picked: Row | None = None
             seen: set[tuple[str, str]] = set()
             warm_total = 0

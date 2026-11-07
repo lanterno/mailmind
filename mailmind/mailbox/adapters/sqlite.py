@@ -545,6 +545,51 @@ def needs_you_rows(c, accounts, n):
         + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, n]).fetchall()
 
 
+_DRAFT_CAND_SQL = """
+SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
+       m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
+FROM messages m
+JOIN summaries s ON s.message_pk = m.pk
+WHERE m.folder = 'INBOX'
+  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
+  AND """ + verdict.reply_worthy_sql() + """
+  AND m.ts >= ?
+  AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
+  AND (COALESCE(m.thread_id,'') = '' OR m.pk = (
+        SELECT m2.pk FROM messages m2 WHERE m2.account = m.account
+          AND m2.thread_id = m.thread_id ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1))
+  AND NOT EXISTS (SELECT 1 FROM muted mu
+        WHERE mu.account = m.account AND mu.thread_id = m.thread_id)
+ORDER BY s.importance DESC, m.ts DESC
+LIMIT 40
+"""
+
+
+def draft_candidates(c, since_ts):
+    """What drafting ahead may pick from: reply-worthy Inbox mail since then, each thread by its latest message, most
+    important first."""
+    return c.execute(_DRAFT_CAND_SQL, (since_ts,)).fetchall()
+
+
+def thread_stamps(c, account, thread_id):
+    """Each copy's Message-ID and time: the thread's state, for a reply drafted ahead."""
+    return c.execute("SELECT message_id, ts FROM messages WHERE account=? AND thread_id=?",
+                     (account, thread_id)).fetchall()
+
+
+def message_stamp(c, pk):
+    """A message's Message-ID and whether its body is here: a lone message's state, for a reply drafted ahead."""
+    return c.execute("SELECT message_id, body_fetched FROM messages WHERE pk=?", (pk,)).fetchone()
+
+
+def thread_anchor_pk(c, account, thread_id):
+    """The thread's latest message — the only pk a thread draft may be served/kicked for
+    (never pair the thread-latest draft with a composer quoting an older message)."""
+    r = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? "
+                  "ORDER BY ts DESC, pk DESC LIMIT 1", (account, thread_id)).fetchone()
+    return r["pk"] if r else None
+
+
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],

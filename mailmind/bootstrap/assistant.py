@@ -197,6 +197,22 @@ class _Mail:
         from mailmind.bootstrap import curation
         return curation.sqlite.senders_cleaned(c, since_iso, accounts)
 
+    def draft_candidates(self, c, since_ts):
+        from mailmind.bootstrap.mailbox import store
+        return store.draft_candidates(c, since_ts)
+
+    def thread_stamps(self, c, account, thread_id):
+        from mailmind.bootstrap.mailbox import store
+        return store.thread_stamps(c, account, thread_id)
+
+    def message_stamp(self, c, pk):
+        from mailmind.bootstrap.mailbox import store
+        return store.message_stamp(c, pk)
+
+    def thread_anchor_pk(self, c, account, thread_id):
+        from mailmind.bootstrap.mailbox import store
+        return store.thread_anchor_pk(c, account, thread_id)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""
