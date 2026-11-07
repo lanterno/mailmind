@@ -10,19 +10,27 @@ def thread_pks(c, account, thread_id):
         (account, thread_id))]
 
 
+def _write_column(c, pk, until):
+    """`messages.snoozed_until`, written for a rollback to an older commit: on the row, and on any other copy in its
+    folder, since `snoozes` hides them all. Nothing here reads it."""
+    c.execute("UPDATE messages SET snoozed_until=? WHERE pk=?", (until, pk))
+    c.execute("""UPDATE messages SET snoozed_until=? WHERE (message_key, folder) IN
+                 (SELECT message_key, folder FROM messages WHERE pk=?)""", (until, pk))
+
+
 def set_snooze(c, pk, until):
-    """Hide message `pk` until `until`. It's kept under the message's key and folder too, so it outlives
-    the row: a copy that arrives in that folder takes it up (upsert_message)."""
-    c.execute("UPDATE messages SET snoozed_until=? WHERE pk=?", (int(until), pk))
+    """Hide message `pk` until `until`. It's kept under the message's key and folder, so it outlives
+    the row: a copy that arrives in that folder is hidden too."""
+    _write_column(c, pk, int(until))
     c.execute("""INSERT OR REPLACE INTO snoozes(message_key, folder, until)
-                 SELECT message_key, folder, snoozed_until FROM messages WHERE pk=? AND message_key IS NOT NULL""",
-              (pk,))
+                 SELECT message_key, folder, ? FROM messages WHERE pk=? AND message_key IS NOT NULL""",
+              (int(until), pk))
 
 
 def clear_snooze(c, pk):
     c.execute("""DELETE FROM snoozes WHERE (message_key, folder) IN
                  (SELECT message_key, folder FROM messages WHERE pk=?)""", (pk,))
-    c.execute("UPDATE messages SET snoozed_until=NULL WHERE pk=?", (pk,))
+    _write_column(c, pk, None)
 
 
 def due_snoozes(c, now_ts):
