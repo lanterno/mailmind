@@ -31,10 +31,6 @@ class SavedViews:
         self._file.write(kept)
         return True
 
-    def reorder(self, ids: list[str]) -> bool:
-        self._file.write(views.reordered(self.load(), ids))
-        return True
-
     def post(self, b: Mapping[str, Any]) -> dict[str, Any]:
         """A change /api/views asked for, and the views after it."""
         if any(not isinstance(b.get(name), str | None) for name in ("id", "name", "q")):
@@ -45,8 +41,6 @@ class SavedViews:
                 return {"ok": False, "msg": "need a name and a query", "views": self.merged()}
         elif verb == "delete":
             self.remove(b.get("id"))            # no-op (returns False) for a builtin/lane
-        elif verb == "reorder" and isinstance(b.get("ids"), list):
-            self.reorder([str(x) for x in b["ids"]])
         else:
-            return {"ok": False, "msg": "verb must be create|delete|reorder", "views": self.merged()}
+            return {"ok": False, "msg": "verb must be create|delete", "views": self.merged()}
         return {"ok": True, "views": self.merged()}

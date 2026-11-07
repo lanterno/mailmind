@@ -5,7 +5,7 @@ search and an auto-label "lane" are the same thing. Built-in DEFAULTS and LANES 
 they always appear, can't be deleted, and are never written to disk.
 """
 import secrets
-from collections.abc import Collection, Iterable
+from collections.abc import Iterable
 from typing import NotRequired, TypedDict
 
 from mailmind.kernel.parsed import is_list, is_object
@@ -78,6 +78,3 @@ def without(user_views: Iterable[View], view_id: str | None) -> list[View] | Non
     return kept if len(kept) != len(cur) else None
 
 
-def reordered(user_views: Iterable[View], ids: Collection[str]) -> list[View]:
-    cur = {v["id"]: v for v in user_views}
-    return [cur[i] for i in ids if i in cur] + [v for k, v in cur.items() if k not in ids]
