@@ -598,3 +598,25 @@ def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
     expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
     clean(page)
 
+def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on_return(page, app, world, ai):
+    from urllib.parse import urlsplit
+    from mailmind.http.handler import _UI_QUIET
+    page.pw.add_init_script(AWAY)
+    with page.pw.expect_response("**/api/digest*"):
+        page.goto(f"/next/m/{w.ADA}/Archive")
+    expect(page.frame_locator("iframe.rd-iframe").locator("body")).to_contain_text("log cabin")   # the folder opened its first message
+    page.evaluate("window.away = true")
+    asked = []
+    page.on("request", lambda r: asked.append(urlsplit(r.url).path))
+    sse.publish("sync-done", {"account": w.ADA})
+    sse.publish("folder-synced", {"account": w.ADA, "folder": "Archive", "ok": True, "new": 1})
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    expect(page.pw).to_have_title("(1) MailMind")                # all three have arrived
+    page.clock.run_for(61_000)                                  # the digest's delay, the headline's, and a minute of timers
+    page.wait_for_timeout(300)
+    assert [p for p in asked if p.startswith("/api/") and p not in _UI_QUIET] == []
+    page.evaluate("window.away = false; document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))")
+    until(page, lambda: "/api/digest" in asked and "/api/messages" in asked, "what it missed was never read")
+    page.clock.run_for(1_600)
+    until(page, lambda: "/api/briefing/since" in asked, "the pill's line was never asked for")
+    clean(page)
