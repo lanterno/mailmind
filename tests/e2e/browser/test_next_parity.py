@@ -404,3 +404,19 @@ def test_reconcile_says_how_many_stand(page, world):
     page.keyboard.press("Enter")
     expect(page.locator("#toast")).to_have_text(re.compile(r"^Struck 1 deleted items · [\d,]+ stand$"), timeout=7000)
     clean(page)
+
+
+def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invite(page, world):
+    pk = world.pk(RECEIPT)
+    page.pw.add_init_script(AWAY + "window.away = true;")
+    page.pw.route("**/api/upcoming", lambda route: route.fulfill(json={"ok": True, "items": [
+        {"pk": pk, "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
+    opened(page)
+    expect(page.locator("#soonPill")).to_be_visible()
+    until(page, lambda: page.pw.evaluate("notes.filter((n) => n.tag.startsWith('mailmind-soon-')).length") == 1, "the reminder went out")
+    note = page.pw.evaluate("(() => { const n = notes.find((x) => x.tag.startsWith('mailmind-soon-')); return { title: n.title, body: n.body }; })()")
+    assert note["title"] == "Standup starts in 5 min"
+    assert note["body"].endswith(" · Room 1")
+    page.pw.evaluate("notes.find((x) => x.tag.startsWith('mailmind-soon-')).onclick()")
+    expect(row(page, world, RECEIPT)).to_have_class(re.compile(r"\bsel\b"))
+    clean(page)
