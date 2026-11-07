@@ -16,6 +16,7 @@ from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
 from mailmind.mailbox.application.session import MailSession
+from mailmind.mailbox.domain import sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
@@ -30,7 +31,7 @@ _FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
 
 class Ingest:
     CUTOFF_DAYS = CUTOFF_DAYS
-    FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sync reads again
+    FLAG_REFRESH = sync_plan.FLAG_REFRESH
     FLAG_BATCH = 500        # how many UIDs one flag read names
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, open_session: OpenSession, pool: Pool,
@@ -75,14 +76,13 @@ class Ingest:
         email = acct["email"]
         with self._uow.read() as c:
             since = self._store.get_modseq(c, email, folder) if modseq else None
-        if modseq and since == modseq:
+        plan = sync_plan.plan_flags(modseq, since)
+        if plan.unchanged:
             return 0                                     # the server says nothing changed
-        behind = since if modseq and since and since < modseq else None
         uids: list[int] | None = None
-        ask = behind is not None
-        if behind is not None:
+        if plan.changed_since is not None:
             try:
-                uids = session.uids_changed_since(behind)
+                uids = session.uids_changed_since(plan.changed_since)
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:
@@ -103,7 +103,7 @@ class Ingest:
         moved = [(r, new) for r in rows if r["uid"] in now and r["pk"] not in skip
                  for new in [self._flags_of(now[r["uid"]])] if any(new[k] != r[k] for k in _FLAG_COLS)]
         changed = 0
-        mark = modseq if modseq and not held and (uids is not None or not ask) else None
+        mark = plan.mark(held_back=bool(held), searched=uids is not None)
         if moved or mark:                                # a server with no modseq and nothing new takes no lock
             with self._uow.write() as c:
                 for r, new in moved:                     # each only if it still holds what was read
@@ -244,33 +244,24 @@ class Ingest:
             modseq = selected.highest_modseq if condstore else None
             with self._uow.read() as c:
                 known = self._store.get_uidvalidity(c, acct["email"], folder)
-            if uidv and known and uidv != known:
+                wm = self._store.get_watermark(c, acct["email"], folder)
+            plan = sync_plan.plan_folder(uidvalidity=uidv, known_uidvalidity=known, watermark=wm, full=full, recent=recent)
+            if plan.reset:
                 with self._uow.write() as c:
                     self._store.reset_folder(c, acct["email"], folder)  # server reset UIDs -> re-sync clean
-                full = True
             if uidv:
                 with self._uow.write() as c:
                     self._store.set_uidvalidity(c, acct["email"], folder, uidv)
-            with self._uow.read() as c:
-                wm = self._store.get_watermark(c, acct["email"], folder)
-            scan = None                                    # the scan_state this sync leaves
-            if full or wm == 0:
-                uids = s.uids("ALL")
-                scan = "synced"
-                if recent and len(uids) > recent:
-                    uids = uids[-recent:]      # the most recent N only
-                    scan = "recent"
-            else:
-                uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
+            uids, scan = plan.to_fetch(s.uids(*plan.search))    # scan: the scan_state this sync leaves
             stored: list[int] = []
             result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored)
             if scan:
                 with self._uow.write() as c:
                     self._store.set_scan_state(c, acct["email"], folder, scan)
-            if not full and wm:
+            if plan.read_flags:
                 self._refresh_flags(s, acct, folder, modseq)
             with self._uow.write() as c:                   # what fails here rolls back, and holds no lock past this
-                if scan == "synced" and modseq:            # a whole scan has just read every flag
+                if scan == sync_plan.WHOLE and modseq:     # a whole scan has just read every flag
                     self._store.set_modseq(c, acct["email"], folder, modseq)
                 self._store.thread_stored(c, acct["email"], stored)   # new mail joins its conversations
                 self._attention.on_ingest(c, acct["email"])  # keep new members of muted threads silent
@@ -321,7 +312,7 @@ class Ingest:
     def folder_synced(self, acct_email: str, folder: str) -> bool:
         """Whether a scan has read the whole folder, so its first open needn't."""
         with self._uow.read() as c:
-            return self._store.get_scan_state(c, acct_email, folder) == "synced"
+            return self._store.get_scan_state(c, acct_email, folder) == sync_plan.WHOLE
 
 
     def ingest_account(self, acct: Account, days: int = CUTOFF_DAYS) -> Stored:
@@ -334,7 +325,7 @@ class Ingest:
                 uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
             result = self._process(s, acct, uids, "INBOX", with_body=True)
             with self._uow.write() as c:                 # the owner chose how far back: INBOX counts as read
-                self._store.set_scan_state(c, acct["email"], "INBOX", "synced")
+                self._store.set_scan_state(c, acct["email"], "INBOX", sync_plan.WHOLE)
             return result
         finally:
             s.logout()
