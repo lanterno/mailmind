@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from email.headerregistry import Address
 from email.message import EmailMessage
 import re
+from collections.abc import Iterable
 from typing import Any, TypedDict
 
 from mailmind.compose.domain.attachments import Attachment
@@ -92,6 +93,14 @@ def thread_ids(in_reply_to: object, references: object) -> tuple[str | None, lis
 _BCC_HEADER = re.compile(rb"(?im)^bcc[ \t]*:")
 
 
+def _each_once(addrs: Iterable[str]) -> list[str]:
+    """A person named in To and again in Cc or Bcc gets one RCPT TO."""
+    first: dict[str, str] = {}
+    for a in addrs:
+        first.setdefault(a.lower(), a)
+    return list(first.values())
+
+
 def build_message(spec: MessageSpec, draft: bool = False) -> Built:
     """spec: {account, account_name, to, cc, bcc (lists of raw tokens or strings),
     subject, text, html|None, attachments [{filename,content_type,data:bytes}],
@@ -159,7 +168,7 @@ def build_message(spec: MessageSpec, draft: bool = False) -> Built:
         raise ValueError("Bcc must never appear in the transmitted/stored bytes")
     return {
         "raw": raw, "message_id": mid,
-        "envelope": [a for _, a in to] + [a for _, a in cc] + [a for _, a in bcc],
+        "envelope": _each_once(a for _, a in [*to, *cc, *bcc]),
         "to_disp": [a for _, a in to], "cc_disp": [a for _, a in cc],
         "bcc_disp": [a for _, a in bcc],
     }
