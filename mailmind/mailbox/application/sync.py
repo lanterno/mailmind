@@ -11,6 +11,7 @@ from typing import Any
 from mailmind.content import mime
 from mailmind.content.mime import Parsed, dec
 from mailmind.content.text import body_text_of, text_body
+from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
@@ -53,7 +54,7 @@ class Ingest:
                 "deleted": int("\\deleted" in f)}
 
 
-    def _flag_rows(self, c: Connection, email: str, folder: str, uids: Sequence[int] | None) -> list[Row]:
+    def _flag_rows(self, c: Connection, email: AccountId, folder: FolderName, uids: Sequence[int] | None) -> list[Row]:
         """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
         if uids is None:
             return self._store.flag_rows_newest(c, email, folder, self.FLAG_REFRESH)
@@ -64,7 +65,7 @@ class Ingest:
         return rows
 
 
-    def _refresh_flags(self, session: MailSession, acct: Account, folder: str, modseq: int | None = None) -> int:
+    def _refresh_flags(self, session: MailSession, acct: Account, folder: FolderName, modseq: int | None = None) -> int:
         """Read the flags of the folder's mail again and store what changed, so mail read, starred or
         answered in another client shows so here. `modseq` is the HIGHESTMODSEQ the select just said, if
         the server keeps one: with the mark the last read left, it says whether there is anything to read
@@ -115,7 +116,7 @@ class Ingest:
         return changed
 
 
-    def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: str = "INBOX",
+    def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: FolderName = INBOX,
                  with_body: bool = False, advance: bool = True, stored: list[int] | None = None) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
         has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
@@ -227,7 +228,7 @@ class Ingest:
         return len(changes)
 
 
-    def sync_folder(self, acct: Account, folder: str, full: bool = False, recent: int | None = None) -> Stored:
+    def sync_folder(self, acct: Account, folder: FolderName, full: bool = False, recent: int | None = None) -> Stored:
         """Sync one folder (UIDVALIDITY-checked). full=True re-scans the whole folder;
         otherwise pulls only UIDs above the per-folder watermark. Stores everything.
         recent=N bounds a first/full scan to the most recent N UIDs (used by background folder
@@ -274,7 +275,7 @@ class Ingest:
                 pass
 
 
-    def ingest_message(self, acct: Account, folder: str, message_id: str | None) -> int:
+    def ingest_message(self, acct: Account, folder: FolderName, message_id: str | None) -> int:
         """Force-ingest ONE message identified by RFC822 Message-ID into `folder`,
         bypassing the incremental watermark. Needed by undo: a re-labeled Gmail message
         keeps its original (<= watermark) UID, so a normal incremental sync skips it.
@@ -309,7 +310,7 @@ class Ingest:
                 pass
 
 
-    def folder_synced(self, acct_email: str, folder: str) -> bool:
+    def folder_synced(self, acct_email: AccountId, folder: FolderName) -> bool:
         """Whether a scan has read the whole folder, so its first open needn't."""
         with self._uow.read() as c:
             return self._store.get_scan_state(c, acct_email, folder) == sync_plan.WHOLE
@@ -323,9 +324,9 @@ class Ingest:
                 uids = s.uids("ALL")
             else:
                 uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
-            result = self._process(s, acct, uids, "INBOX", with_body=True)
+            result = self._process(s, acct, uids, INBOX, with_body=True)
             with self._uow.write() as c:                 # the owner chose how far back: INBOX counts as read
-                self._store.set_scan_state(c, acct["email"], "INBOX", sync_plan.WHOLE)
+                self._store.set_scan_state(c, acct["email"], INBOX, sync_plan.WHOLE)
             return result
         finally:
             s.logout()
@@ -388,6 +389,6 @@ class Ingest:
         self._store.fts_set_body(c, pk, body_text_of(parsed))   # full body + recipients now searchable
 
 
-    def sync_new(self, acct: Account, folder: str = "INBOX") -> Stored:
+    def sync_new(self, acct: Account, folder: FolderName = INBOX) -> Stored:
         """Incremental sync of one folder: only UIDs above the stored watermark."""
         return self.sync_folder(acct, folder, full=False)

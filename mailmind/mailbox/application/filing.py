@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.ids import FolderName, MessageKey
 from mailmind.kernel.parsed import as_int, is_list, is_object
 from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
@@ -296,7 +297,7 @@ class Filing:
             return self.do_write("/api/flag", {**one, "flag": "flagged", "on": True})
         return self.do_write("/api/junk" if verb == "junk" else "/api/archive", one)
 
-    def carry_out(self, verb: str, preset: str | None, messages: Sequence[tuple[int, str]],
+    def carry_out(self, verb: str, preset: str | None, messages: Sequence[tuple[MessageKey, FolderName]],
                   undo_group: str | None = None) -> dict[str, Any]:
         """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
         in the folder the preview saw it in is left where it is: someone moved it, and a verb that was

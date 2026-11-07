@@ -3,6 +3,7 @@ gets a counter-move, from where its command says it went."""
 import json
 from typing import Any
 
+from mailmind.kernel.ids import INBOX, FolderName
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import ServerOps
@@ -34,7 +35,7 @@ class Reversals:
             q = (self._store.command_get(c, d["command"]) if d.get("command")
                  else self._store.command_latest_move(c, d["account"], d["message_id"]))
         if q is not None and not q["applied"]:
-            src = d.get("src_folder") or "INBOX"
+            src: FolderName = d.get("src_folder") or INBOX
             with self._uow.write() as c:
                 cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
                 if cancelled:
@@ -85,7 +86,7 @@ class Reversals:
         if not ok:
             return False, d["account"], "INBOX"
         try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
-            self._ingest.ingest_message(self._accounts.get(d["account"]), "INBOX", d["message_id"])
+            self._ingest.ingest_message(self._accounts.get(d["account"]), INBOX, d["message_id"])
         except Exception:
             pass
         return True, d["account"], "INBOX"

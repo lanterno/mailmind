@@ -3,14 +3,12 @@ Each read is of the database alone, but that a folder opening may start its sync
 from typing import Any
 
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.ids import INBOX, AccountId, FolderName, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.platform.db.uow import UnitOfWork
-
-
-_INBOX = "INBOX"
 
 
 def _attention(r: Row) -> dict[str, bool]:
@@ -142,7 +140,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def messages_in(self, account: str, folder: str, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
+    def messages_in(self, account: AccountId, folder: FolderName, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
         if folder == "__snoozed__":
             return self.snoozed_in(account, offset, limit)
         if folder == "__muted__":
@@ -168,7 +166,7 @@ class Queries:
         """Every account's Inbox as one list, newest first, each row naming its account. It answers from what is stored, so
         an account that's away or still on its first scan holds up no one."""
         emails = self._emails()
-        scanning = [e for e in emails if self._folders.scanning_first(e, _INBOX)] if offset == 0 else []
+        scanning = [e for e in emails if self._folders.scanning_first(AccountId(e), INBOX)] if offset == 0 else []
         with self._uow.read() as c:
             if group:
                 rows = self._store.inboxes_conversation_rows(c, emails, limit, offset)
@@ -177,11 +175,11 @@ class Queries:
                 rows = self._store.inboxes_rows(c, emails, limit, offset)
                 total = self._store.inboxes_count(c, emails)
         items = [_listed_item(r, group) for r in rows]
-        return {"ok": True, "folder": _INBOX, "items": items, "grouped": group, "total": total, "offset": offset,
+        return {"ok": True, "folder": INBOX, "items": items, "grouped": group, "total": total, "offset": offset,
                 "has_more": offset + len(items) < total, **({"syncing": True} if scanning else {})}
 
 
-    def thread_json(self, account: str, thread_id: str) -> dict[str, Any]:
+    def thread_json(self, account: AccountId, thread_id: ThreadRef) -> dict[str, Any]:
         """All messages in a conversation within an account, oldest->newest, de-duped by
         Message-ID (so a Gmail INBOX+All-Mail copy shows once)."""
         if not account or not thread_id:

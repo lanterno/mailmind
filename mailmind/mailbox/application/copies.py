@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime
 import imaplib
 
+from mailmind.kernel.ids import FolderName
 from mailmind.mailbox.application.ports import Account, OpenSession
 from mailmind.mailbox.application.session import MailSession, find_role
 
@@ -48,7 +49,7 @@ class Copies:
 
     def append_to_drafts(self, acct: Account, raw: bytes, prev_uid: int | None = None, prev_uidvalidity: int | None = None,
                          prev_msgid: str | None = None, prev_folder: str | None = None, message_id: str | None = None,
-                         tried: str | None = None) -> tuple[str, int | None, int | None, int | None]:
+                         tried: str | None = None) -> tuple[FolderName, int | None, int | None, int | None]:
         """APPEND a draft (flagged \\Draft) to the account's Drafts folder, then delete the previous
         copy (single-UID expunge — NEVER a bulk expunge). Returns
         (folder, new_uid|None, uidvalidity|None, removed_uid|None). Append first, so a save that fails or
@@ -59,7 +60,7 @@ class Copies:
         nothing is appended; if not, it goes once the new copy is there."""
         s = self._open_session(acct)
         try:
-            drafts = find_role(s, "drafts") or "Drafts"
+            drafts = FolderName(find_role(s, "drafts") or "Drafts")
             if prev_folder is not None and prev_folder != drafts:
                 prev_uid = prev_msgid = None
             try:

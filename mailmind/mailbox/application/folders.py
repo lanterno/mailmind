@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from typing import Any, TypedDict
 
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import AccountId, FolderName
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
@@ -175,7 +176,7 @@ class Folders:
                 "muted": muted, "waiting": waiting, "replylater": replylater}
 
 
-    def _folder_sync(self, account: str, folder: str, full: bool) -> threading.Event:
+    def _folder_sync(self, account: AccountId, folder: FolderName, full: bool) -> threading.Event:
         """Sync a folder as it is opened, as a job on the account's gate, unless a sync of it is
         running already: its first scan (full) or a catch-up (what came above the watermark, and the
         newest flags again), since only INBOX is synced in the background. Return the Event set when
@@ -239,14 +240,14 @@ class Folders:
         sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
-    def scanning_first(self, account: str, folder: str) -> bool:
+    def scanning_first(self, account: AccountId, folder: FolderName) -> bool:
         """Whether a first scan of the folder is still to finish, starting one if none runs. A list across accounts waits
         for none of them: what's stored now, then folder-synced."""
         if self._ingest.folder_synced(account, folder):
             return False
         return not self._folder_sync(account, folder, full=True).wait(0)
 
-    def on_open(self, account: str, folder: str) -> dict[str, bool]:
+    def on_open(self, account: AccountId, folder: FolderName) -> dict[str, bool]:
         """A folder opens: its first scan, or a catch-up if one is due, waited for a moment. Returns how the
         sync went, for the list's answer."""
         if not self._ingest.folder_synced(account, folder):

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, OpenSession, Pruned, StoredMail
@@ -44,15 +45,15 @@ class Reconciler:
         self._folders = folders
         self._stats = stats
 
-    def reconciled_folders(self, email: str) -> list[str]:
+    def reconciled_folders(self, email: AccountId) -> list[FolderName]:
         """The folders reconcile looks at for an account: each one a sync has stored (it has a
         sync_state row), INBOX first."""
         with self._uow.read() as c:
             folders = self._store.synced_folders(c, email)
-        return folders or ["INBOX"]
+        return folders or [INBOX]
 
 
-    def reconcile_account(self, acct: Account, force: bool = False, dry_run: bool = False, folder: str = "INBOX") -> Pruned:
+    def reconcile_account(self, acct: Account, force: bool = False, dry_run: bool = False, folder: FolderName = INBOX) -> Pruned:
         """Prune `folder`'s rows whose UID is no longer live, and stamp survivors verified.
         Pure prune — preserves summaries of survivors and never lowers the watermark.
         SAFETY: never deletes on an IMAP error, and treats an OK-but-empty SEARCH
