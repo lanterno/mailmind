@@ -250,3 +250,16 @@ def test_a_click_anywhere_on_a_flooding_sender_opens_its_cleanup(page, world):
     d.locator(".flood-row .flood-nm").first.click()
     expect(page.get_by_role("dialog", name="Clean up a sender")).to_be_visible()
     clean(page)
+
+
+def test_an_audit_line_opens_its_account(page, world):
+    page.pw.route(re.compile(r"/api/audit"), lambda route: route.fulfill(json={"ok": True, "events": [
+        {"ts": "2026-11-02T11:00:00+00:00", "kind": "reconcile", "account": "gone@example.test", "pruned": 1},
+        {"ts": "2026-11-02T10:00:00+00:00", "kind": "reconcile", "account": w.BEA, "pruned": 2}]}))
+    d = curate_drawer(page)
+    page.locator('#console .ln[data-acct="gone@example.test"]').click()    # a removed account has no folders to open
+    expect(d).to_be_visible()
+    page.locator(f'#console .ln[data-acct="{w.BEA}"]').click()
+    expect(d).to_have_count(0)
+    expect(page.locator("#acctSw")).to_contain_text(w.BEA)
+    clean(page)
