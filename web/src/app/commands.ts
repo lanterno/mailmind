@@ -22,7 +22,7 @@ import { go } from "./route";
 
 export interface Command {
   id: string;
-  group: "Navigation" | "Actions" | "Commands";
+  group: "Navigation" | "Views" | "Actions" | "Commands";
   label: string;
   keys?: string[];     // what presses it, by KeyboardEvent.key with letters lowered
   hint?: string;       // what the palette shows for it
@@ -54,6 +54,8 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   const nameOf = (a: string) => m.aliases[a] || shortAddress(a);
 
   add({ id: "all-inboxes", group: "Navigation", label: "All inboxes", run: () => go({ source: { kind: "allInboxes" }, opened: null }) });
+  add({ id: "commitments", group: "Navigation", label: "Commitments — your to-dos", run: () => panel.set("commits") });
+  add({ id: "review", group: "Navigation", label: "Weekly review — how your week went", run: () => panel.set("week") });
   for (const a of m.accounts) {
     add({ id: `acct:${a}`, group: "Navigation", label: `Account · ${nameOf(a)}`, run: () => go({ source: { kind: "folder", account: a, folder: "INBOX" }, opened: null }) });
     if (a === m.account) {
@@ -107,13 +109,14 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     if (m.folder === "__waiting__") add({ id: "dismiss", group: "Actions", label: "Dismiss follow-up", run: m.dismissFollowup });
     add({ id: "summarize", group: "Actions", label: "AI summarize", keys: ["i"], hint: "i", run: () => { const t = m.target(); if (t) void summarize(t); } });
     add({ id: "mark", group: "Actions", label: "Select", keys: ["x"], hint: "x", run: () => actions.toggleMark(m.openPk!) });
+    add({ id: "read-settings", group: "Commands", label: "Reading settings — width, text, mail colors", run: () => void setTimeout(() => document.querySelector<HTMLElement>("#reader [data-readset]")?.click()) });
     add({
       id: "focus", group: "Commands", label: readFocus.get() ? "Leave focus reading" : "Focus reading — hide folders and list", keys: ["Enter"], hint: "↵",
       run: () => setReadFocus(!readFocus.get()),
     });
   }
 
-  add({ id: "compose", group: "Commands", label: "New message", keys: ["c"], hint: "c", run: () => void composing.open({ mode: "new" }) });
+  add({ id: "compose", group: "Commands", label: "Compose new message", keys: ["c"], hint: "c", run: () => void composing.open({ mode: "new" }) });
   add({ id: "undo", group: "Commands", label: "Undo last action", keys: ["z"], hint: "z", run: m.undo });
   add({
     id: "brief", group: "Commands", label: "Today’s brief",
@@ -126,15 +129,13 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   add({ id: "settings", group: "Commands", label: "Settings", keys: [","], hint: ",", run: m.openSettings });
   add({ id: "sync", group: "Commands", label: "Sync now", run: () => void syncNow(m.qc) });
   add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
-  add({ id: "commitments", group: "Commands", label: "Commitments", run: () => panel.set("commits") });
-  add({ id: "review", group: "Commands", label: "Your week", run: () => panel.set("week") });
   add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => docsOpen.set(true) });
   add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
   add({ id: "curate", group: "Commands", label: "Curate — rules and audit", run: () => curateOpen.set(true) });
   add({ id: "cleanup", group: "Commands", label: "Clean up senders (unsubscribe)", run: () => curateOpen.set(true) });
   for (const v of m.views) {
     const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
-    add({ id: `view:${v.id}`, group: "Navigation", label: `View · ${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
+    add({ id: `view:${v.id}`, group: "Views", label: `${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
   }
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });
