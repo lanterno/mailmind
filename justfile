@@ -20,12 +20,8 @@ _web-deps:
 
 # ── run ───────────────────────────────────────────────────────────────────────
 
-# Run the app (default http://127.0.0.1:8721)
-run port="":
-    {{py}} -m mailmind serve {{port}}
-
-# Build the React app, then run; it's at http://127.0.0.1:8721/next, and doesn't exist unbuilt
-run-next port="": build-web
+# Build the app, then run it (default http://127.0.0.1:8721). The old page is at /legacy
+run port="": build-web
     {{py}} -m mailmind serve {{port}}
 
 # The whole app on fictional mail, with fake servers and a temp data directory: nothing of yours is read or changed
@@ -33,11 +29,11 @@ demo port="": build-web
     {{py}} tests/demo.py {{port}}
 
 # Run read-only: nothing written to a mail server (sends and moves wait), no background sync or AI
-dev port="":
+dev port="": build-web
     MAILMIND_PROFILE=read-only {{py}} -m mailmind serve {{port}}
 
 # Run with persistent IMAP connections + multi-folder sync (both default-off)
-run-fast port="":
+run-fast port="": build-web
     MAILMIND_POOL=1 MAILMIND_WARM_FOLDERS=1 {{py}} -m mailmind serve {{port}}
 
 # Run through the old front door, `python3 server.py`, which needs nothing installed
@@ -120,8 +116,8 @@ audit:
     uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
     osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json
 
-# Build the page's files and the React app, named by their content, into mailmind/http/dist (needs node).
-# The page runs without this; the React app doesn't.
+# Build the React app and the old page's files, named by their content, into mailmind/http/dist (needs node).
+# The app doesn't exist without this. With nothing built, the old page stands in at `/`.
 build-web: _web-deps
     cd web && npx vite build
 
