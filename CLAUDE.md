@@ -691,6 +691,13 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   caller holding a write uses), under one undo group, so a crash can't leave half of them marked. Each
   is then tried on its own once that commits: a refusal gives back only its own message, and a try
   that raises counts as queued, with the rest still tried.
+- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; the page sends more as more requests
+  under one undo group): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
+  own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
+  (`commands.leave_to_worker`), and every row has left the lists by then.
+- Every account's Inbox is one list and one query (`/api/inboxes`, `queries.all_inboxes`), read from what is stored: an account
+  on its first scan starts one and holds up no one (`syncing: true`). So is who you wait on (`/api/waiting-on-others`). The page
+  still asks each account for both, a page of each; the React app doesn't.
 - Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.
