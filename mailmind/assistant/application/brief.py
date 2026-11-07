@@ -12,7 +12,7 @@ from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
-from mailmind.assistant.domain import fingerprint
+from mailmind.assistant.domain import citations, fingerprint
 from mailmind.kernel import attention
 from mailmind.kernel.parsed import is_object
 from mailmind.kernel.row import Row
@@ -170,7 +170,7 @@ class Briefs:
             if not is_object(g):
                 continue
             named: list[Any] = g.get("pks") or []
-            pks = [p for p in named if isinstance(p, int) and p in valid_pks][:80]
+            pks = citations.in_group(named, valid_pks)
             if not pks:
                 continue
             groups.append({"label": str(g.get("label") or "")[:40], "count": len(pks), "pks": pks})

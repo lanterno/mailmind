@@ -13,11 +13,10 @@ Read-only: only SELECTs, no IMAP fetch (never blocks), no mutation, no SMTP. Sha
 """
 from datetime import datetime, timezone
 import re
-from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Mail, NotSent, Result
-from mailmind.kernel.parsed import is_list
+from mailmind.assistant.domain import citations
 from mailmind.kernel.row import Row
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
@@ -136,18 +135,7 @@ class Asker:
         if not answer:
             return {"ok": False, "error": "ask unavailable", "retry": True}, 502
 
-        # clamp citations to what was both account-scoped AND actually shown to the model
-        citable = set(by_pk)
-        held = obj.get("cited_pks")
-        raw: list[Any] = held if is_list(held) else []
-        cited: list[int] = []
-        for p in raw:
-            try:
-                pk = int(p)
-            except (TypeError, ValueError):
-                continue
-            if pk in citable and pk not in cited:
-                cited.append(pk)
+        cited = citations.in_answer(obj.get("cited_pks"), set(by_pk))     # what was account-scoped AND shown to the model
         sources = [{
             "pk": pk, "from": by_pk[pk]["from_name"] or by_pk[pk]["from_addr"],
             "subject": by_pk[pk]["subject"] or "(no subject)",
