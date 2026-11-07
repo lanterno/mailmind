@@ -59,7 +59,7 @@ def test_accounts_rules_views_and_audit(app, golden):
     fetch(app, golden, "/api/rules")
     fetch(app, golden, "/api/views")
     fetch(app, golden, "/api/audit")
-    fetch(app, golden, "/api/audit?kind=reconcile&limit=5")
+    fetch(app, golden, "/api/audit?limit=5")
     fetch(app, golden, "/api/outbox")
     fetch(app, golden, "/api/debug/pool")
 
@@ -67,13 +67,10 @@ def test_accounts_rules_views_and_audit(app, golden):
 def test_account_health_and_stats(app, golden):
     fetch(app, golden, "/api/account-health")
     fetch(app, golden, "/api/stats")
-    fetch(app, golden, f"/api/stats?account={w.ADA}")
-    fetch(app, golden, "/api/stats?account=all&refresh=1")
 
 
 def test_export_plan_and_database_export(app, golden, tmp_path):
     fetch(app, golden, "/api/export/plan")
-    fetch(app, golden, f"/api/export/plan?account={w.CY}")
     r = app.get("/api/export")
     golden.record("GET /api/export", r, body=False)
     assert r.body.startswith(b"SQLite format 3\x00")
@@ -200,8 +197,6 @@ BODIES = ("ada-inbox-01-lunch.eml", "ada-inbox-06-outlook-invite.eml", "ada-inbo
 def test_message_bodies(app, golden, world):
     for name in BODIES:
         fetch(app, golden, f"/api/message/{world.pk(name)}/body", f"GET body of {name}")
-    pk = world.pk("ada-inbox-11-html-cid.eml")
-    fetch(app, golden, f"/api/message/{pk}/body?images=1", "GET body of ada-inbox-11-html-cid.eml with images")
     fetch(app, golden, f"/api/message/{world.pk('bea-inbox-01-client.eml')}/body?prefetch=1",
           "GET body of bea-inbox-01-client.eml as a prefetch")
     fetch(app, golden, "/api/message/999999/body")

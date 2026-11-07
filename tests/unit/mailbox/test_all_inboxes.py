@@ -158,6 +158,6 @@ def test_who_you_wait_on_leaves_out_a_disabled_account_and_keeps_to_its_limit(ap
     threads = waiting_threads(app)
     for i in threads:
         follow_up(i["account"], i["thread_id"], "sent", 1)
-    assert len(app.get("/api/waiting-on-others?limit=2").json["items"]) == 2
+    assert len(mailbox.queries.waiting_on_others(2)["items"]) == 2
     disable(w.BEA)
     assert w.BEA not in {i["account"] for i in app.get("/api/waiting-on-others").json["items"]}

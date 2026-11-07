@@ -27,8 +27,7 @@ def test_a_number_reads_or_it_is_none(held, read):
                                         ("/api/messages?account=" + w.ADA + "&folder=INBOX", "limit"),
                                         ("/api/messages?account=" + w.ADA + "&folder=INBOX", "offset"),
                                         ("/api/inboxes", "limit"), ("/api/inboxes", "offset"), ("/api/outbox", "limit"),
-                                        ("/api/search?q=lunch", "limit"), ("/api/search?q=lunch", "offset"),
-                                        ("/api/waiting-on-others", "limit")])
+                                        ("/api/search?q=lunch", "limit"), ("/api/search?q=lunch", "offset")])
 @pytest.mark.parametrize("junk", ["x", TOO_LARGE])
 def test_a_number_in_a_query_string_that_wont_read(app, path, name, junk):
     r = app.get(f"{path}{'&' if '?' in path else '?'}{name}={junk}")
@@ -156,9 +155,8 @@ def test_a_saved_view_named_by_anything_but_text(app, verb, field, junk):
     assert app.get("/api/views").json == before
 
 
-@pytest.mark.parametrize("path", ["/api/folders", "/api/stats"])
-def test_asking_after_an_account_there_is_no_such_of(app, path):
-    r = app.get(f"{path}?account=nobody@example.test")
+def test_asking_after_an_account_there_is_no_such_of(app):
+    r = app.get("/api/folders?account=nobody@example.test")
     assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
 
 

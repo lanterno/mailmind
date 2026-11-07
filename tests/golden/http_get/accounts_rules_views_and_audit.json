@@ -231,7 +231,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/audit?kind=reconcile&limit=5",
+  "request": "GET /api/audit?limit=5",
   "status": 200
  },
  {

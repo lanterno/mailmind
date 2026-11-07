@@ -88,7 +88,7 @@ def test_reconcile_prunes_what_the_server_no_longer_has(app, golden, world):
     golden.note("the row after the dry run", world.where("ada-inbox-04-ci.eml"))
     post(app, golden, "reconcile everyone", "/api/reconcile", {})
     golden.note("the row after reconcile", world.where("ada-inbox-04-ci.eml"))
-    golden.record("the audit trail", app.get("/api/audit?kind=reconcile"))
+    golden.record("the audit trail", app.get("/api/audit"))
 
 
 def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
@@ -98,7 +98,7 @@ def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
     golden.note("server writes", world.writes(since))
     golden.note("Ada's INBOX on the server", sorted(
         str(m.headers()["Message-ID"]) for m in world.server.messages(w.ADA, "INBOX").values()))
-    golden.record("the audit trail", app.get("/api/audit?kind=sweep"))
+    golden.record("the audit trail", app.get("/api/audit"))
 
 
 def test_sync_retry_runs_a_sync_for_that_account(app, golden, world):

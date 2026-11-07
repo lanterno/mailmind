@@ -1113,7 +1113,7 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
     n = len(world.server.commands)
 
     def background():
-        got = {"prefetch": mailbox.bodies.message_body(pk, False, prefetch=True)}
+        got = {"prefetch": mailbox.bodies.message_body(pk, prefetch=True)}
         mailbox.reconciler._auto_reconcile_one(acct())
         curation.expiry.auto_one(acct())
         got["backfill"] = mailbox.syncing.backfill_round()               # yielded, its backlog left for the next round

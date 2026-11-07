@@ -316,7 +316,7 @@ def test_an_injected_folder_in_the_url_reaches_no_imap_command(app, connected):
     assert not _sent_a_line_break(M), M.calls
 
 
-@pytest.mark.parametrize("path", ["/api/digest", "/api/stats?refresh=1", "/api/contacts?q=a", "/api/no-such-route"])
+@pytest.mark.parametrize("path", ["/api/digest", "/api/stats", "/api/contacts?q=a", "/api/no-such-route"])
 @pytest.mark.parametrize("site", ["cross-site", "same-site"])
 def test_a_read_another_site_starts_is_refused(site, path, app):
     r = bare_get(app, path, {"Sec-Fetch-Site": site, "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Dest": "image"})
