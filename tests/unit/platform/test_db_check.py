@@ -132,3 +132,69 @@ def test_a_table_no_migration_retired_is_a_loss(tmp_path, monkeypatch):
     code, report = run(path)
     assert code == check.PROBLEM
     assert "every table kept its rows: no (muted)" in report and MARK not in report
+
+
+# -- m28 takes some part rows on purpose, and opening the message records them again ---------------
+
+def holding_an_attached_email(folder, version):
+    """A database at `version`: message 1 has an email attached and two part rows, and message 2 a part row and none."""
+    path = database_at(folder, version)
+    c = sqlite3.connect(path)
+    for pk, ctype in ((1, "application/pdf"), (1, "Message/RFC822"), (2, "application/pdf")):
+        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (?, '2', 'f', ?)", (pk, ctype))
+    c.commit()
+    c.close()
+    return path
+
+
+def attachments_line(report):
+    return next(line.split() for line in report.splitlines() if line.startswith("  attachments"))
+
+
+def losing_a_part_row(monkeypatch, which="id=(SELECT max(id) FROM attachments)"):
+    """A start that also loses rows no migration means to."""
+    real = migrate.init
+
+    def init(db, steps=None):
+        real(db, steps)
+        c = sqlite3.connect(db)
+        c.execute(f"DELETE FROM attachments WHERE {which}")
+        c.commit()
+        c.close()
+    monkeypatch.setattr(migrate, "init", init)
+
+
+def test_the_part_rows_m28_takes_on_purpose_are_no_loss(tmp_path):
+    code, report = run(holding_an_attached_email(tmp_path, 27))
+    assert attachments_line(report) == ["attachments", "3", "1", "trimmed"]
+    assert code == check.OK and "every table kept its rows: yes" in report, report
+
+
+def test_a_row_more_than_m28_takes_is_a_loss(tmp_path, monkeypatch):
+    path = holding_an_attached_email(tmp_path, 27)
+    losing_a_part_row(monkeypatch)
+    code, report = run(path)
+    assert attachments_line(report) == ["attachments", "3", "0", "CHANGED"]
+    assert code == check.PROBLEM and "every table kept its rows: no (attachments)" in report, report
+
+
+def test_a_database_past_m28_has_no_part_rows_to_lose(tmp_path, monkeypatch):
+    """Even the very rows m28 would have taken, since it has run."""
+    path = holding_an_attached_email(tmp_path, 28)
+    assert run(path)[0] == check.OK
+    losing_a_part_row(monkeypatch, "message_pk=1")
+    code, report = run(path)
+    assert attachments_line(report) == ["attachments", "3", "1", "CHANGED"]
+    assert code == check.PROBLEM, report
+
+
+def test_a_database_with_no_attached_email_loses_no_part_rows_in_a_trim(tmp_path, monkeypatch):
+    path = database_at(tmp_path, 27)
+    c = sqlite3.connect(path)
+    c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (1, '2', 'f', 'application/pdf')")
+    c.commit()
+    c.close()
+    losing_a_part_row(monkeypatch)
+    code, report = run(path)
+    assert attachments_line(report) == ["attachments", "1", "0", "CHANGED"]
+    assert code == check.PROBLEM, report
