@@ -15,8 +15,9 @@ Two ways in, and for mail that only arrives they end with the same threads:
   is all a sync has to read: everything a thread holds is one thread already.
   `regroup` takes every copy the account holds. It is the repair.
 They give the same ids too, but for a thread holding two Gmail threads: `regroup` decides between
-them whenever it runs, and `place` only when a new Gmail id comes to it. And mail that goes can
-leave a thread unconnected: `regroup` lets the parts part at their next merge, `place` keeps them one.
+them whenever it runs, and `place` only when a new Gmail id comes to it. And mail that goes, or a copy
+stored again naming something else, can leave a thread unconnected: `place` keeps it one, where `regroup`
+parts what no longer reaches a Gmail copy at once, and lets the rest part at their next merge.
 
 An id is sticky once given, and goes only when a merge absorbs it (two threads joined, or a thread
 that gained a Gmail thread id). The survivor is a Gmail id over an rf: id, the smallest of several
@@ -133,7 +134,8 @@ class Threader:
     def conversations(self, arrivals: Iterable[Copy], touching: Mapping[str, Collection[str]]) -> list[Conversation]:
         """Copies that belong together, with the threads they touch: `touching` says, for each name the arrivals
         name, the ids of the threads that hold a copy naming it. Two threads touched by one conversation are one
-        thread from now on. An arrival's own rf: id counts as touched, for one whose references changed."""
+        thread from now on. An arrival's own id counts as touched, so one whose references changed stays in its
+        thread, with or without a Message-ID for its links to find it by."""
         arrivals = list(arrivals)
         uf = _UF()
         for m in arrivals:
@@ -148,7 +150,7 @@ class Threader:
             root = uf.find(m.key)
             conversation = found.setdefault(root, Conversation(root))
             conversation.arrivals.append(m)
-            if m.thread_id and m.thread_id.startswith("rf:"):
+            if m.thread_id:
                 conversation.held.add(m.thread_id)
         for name, ids in touching.items():
             conversation = found.get(uf.find(name))
@@ -196,6 +198,7 @@ class Threader:
         rows = _in_store_order(copies)
         given: dict[int, str] = {}
         for conversation in self.conversations(rows, {}):
+            conversation.held = {tid for tid in conversation.held if tid.startswith("rf:")}
             survivor = self._survivor(conversation)
             given.update((m.pk, survivor) for m in conversation.arrivals)
         held = set(given.values())
