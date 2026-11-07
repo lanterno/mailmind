@@ -4,6 +4,7 @@ goes through `rows`, which bootstrap binds to whoever holds them."""
 import json
 
 from mailmind.curation.domain import unsubscribe
+from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.kernel.when import now_iso
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -155,8 +156,8 @@ class SenderMail:
         """The Message-IDs of INBOX mail MailMind's AI called junk, and no snoozed mail."""
         with _uow.read() as c:
             return set(m for (m,) in c.execute(
-                """SELECT message_id FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1
-                   AND deleted=0 AND (snoozed_until IS NULL OR snoozed_until=0)
+                f"""SELECT message_id FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1
+                   AND deleted=0 AND {not_snoozed_sql('messages')}
                    AND message_id IS NOT NULL AND message_id!=''""", (account,)).fetchall())
 
     def forget_moved(self, account, moved, stragglers):
