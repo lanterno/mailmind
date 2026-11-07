@@ -124,13 +124,13 @@ def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, worl
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).check()
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
-    page.keyboard.press("?")                           # the setting took
-    expect(dialog).to_be_hidden()
+    page.keyboard.press("c")                           # the setting took
+    expect(page.locator("#cmpBody")).to_have_count(0)
     page.reload()
     expect(page.get_by_role("option").first).to_be_visible()
-    page.keyboard.press("?")
-    expect(dialog).to_be_hidden()
-    page.locator("#helpBtn").click()
+    page.keyboard.press("c")
+    expect(page.locator("#cmpBody")).to_have_count(0)
+    page.keyboard.press("?")                           # how you find the setting again, as on the page
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).uncheck()
     clean(page)
 
