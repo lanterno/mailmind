@@ -64,7 +64,7 @@ def test_a_queued_item_named_by_what_cant_be_a_number(app, path, junk):
                                                ("/api/ai/draft-reply", "pk", "bad request"), ("/api/mute", "pk", "bad request"),
                                                ("/api/unmute", "pk", "bad request"), ("/api/followups/dismiss", "pk", "bad request"),
                                                ("/api/replylater", "pk", "bad request"), ("/api/snooze", "pk", "bad request"),
-                                               ("/api/unsnooze", "pk", "bad request"), ("/api/invite/rsvp", "pk", "missing message"),
+                                               ("/api/unsnooze", "pk", "bad request"), ("/api/invite/rsvp", "pk", "bad request"),
                                                ("/api/draft/resume", "draft_id", "Missing draft."),
                                                ("/api/draft/resume", "pk", "Missing draft.")])
 @pytest.mark.parametrize("junk", [[1], 10 ** 30])

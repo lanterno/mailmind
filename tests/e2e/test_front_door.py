@@ -16,6 +16,7 @@ import sys
 import time
 
 import guard
+from mailmind.http import serving as serving_module
 
 ROOT = guard.ROOT
 TESTS = os.path.join(ROOT, "tests")
@@ -49,6 +50,11 @@ def get(port, path, timeout=2):
 
 def serve_code(port, dist):
     return GUARDED.format(tests=TESTS, root=ROOT, dist=dist, argv=["mailmind", "serve", str(port)])
+
+
+# In the child, before the program: Today & next says it has been asked, then waits as a call to a dead server would.
+BLOCKS = ("import threading; from mailmind.calendar.application.agenda import Agenda; "
+          "Agenda.upcoming = lambda self: (open({marker!r}, 'w').close(), threading.Event().wait()); ")
 
 
 def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path, tiny_build):
@@ -90,6 +96,43 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path, tiny_build)
     assert "[imap] mail through imaplib" in out          # no account here asks for IMAPClient
     assert "isn't built" not in out
     assert "Traceback" not in out and "Tripwire" not in out, out
+
+
+def test_ctrl_c_stops_it_with_a_route_on_a_router_still_blocked(tmp_path, tiny_build):
+    """A pool thread that won't come back holds up the exit no longer than the grace a request gets to finish."""
+    port = free_port()
+    marker = tmp_path / "asked"
+    code = BLOCKS.format(marker=str(marker)) + serve_code(port, tiny_build)
+    proc = subprocess.Popen([sys.executable, "-c", code], cwd=ROOT, env=child_env(tmp_path),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    blocked = None
+    try:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                get(port, "/api/outbox")
+                break
+            except OSError:
+                assert proc.poll() is None and time.monotonic() < deadline, "serve didn't come up"
+                time.sleep(0.05)
+        blocked = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+        blocked.request("GET", "/api/upcoming", headers={"Host": f"127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"})
+        while not marker.exists():
+            assert time.monotonic() < deadline, "the route was never reached"
+            time.sleep(0.05)
+        began = time.monotonic()
+        proc.send_signal(signal.SIGINT)
+        assert proc.wait(timeout=15) == -signal.SIGINT
+        assert time.monotonic() - began < serving_module.GRACE_SECONDS + 2
+    finally:
+        if blocked is not None:
+            blocked.close()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    # uvicorn logs the cancelled request's stack, as it does one blocked on the bridge: code, and nothing of the request.
+    out = proc.stdout.read() if proc.stdout else ""
+    assert "Tripwire" not in out, out
 
 
 @contextlib.contextmanager
