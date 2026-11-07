@@ -10,6 +10,7 @@ import pytest
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.application import plans
+from mailmind.assistant.domain import action_plan
 from mailmind.bootstrap import assistant, curation
 from mailmind.bootstrap.curation import safe_http
 from mailmind.bootstrap.mailbox import store
@@ -54,7 +55,7 @@ def test_confirms_sent_together_carry_it_out_once(app, world, ai):
 
 def test_the_book_gives_a_plan_to_one_taker():
     book, taken, start = plans.PlanBook(), [], threading.Barrier(8)
-    made = [book.open("archive", None, []) for _ in range(plans.KEPT)]
+    made = [book.open("archive", None, []) for _ in range(action_plan.KEPT)]
 
     def take():
         start.wait(10)
@@ -70,9 +71,9 @@ def test_the_book_gives_a_plan_to_one_taker():
 def test_a_plan_past_its_time_doesnt_come_back_with_the_clock(app, world, ai):
     """A confirm that came too late has ended it, not only been turned away."""
     plan = preview(app, ai)
-    app.clock.shift(timedelta(seconds=plans.TTL))
+    app.clock.shift(timedelta(seconds=action_plan.TTL))
     assert app.post("/api/ai/do-confirm", {"plan": plan["plan"]}).status == 410
-    app.clock.shift(timedelta(seconds=-plans.TTL))
+    app.clock.shift(timedelta(seconds=-action_plan.TTL))
     assert app.post("/api/ai/do-confirm", {"plan": plan["plan"]}).status == 410
 
 

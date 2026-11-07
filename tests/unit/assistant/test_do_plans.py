@@ -9,7 +9,6 @@ from fixtures import world as w
 from mailmind.assistant.application import plans
 from mailmind.assistant.domain import action_plan
 from mailmind.bootstrap import mailbox
-from mailmind.bootstrap import assistant
 
 LUNCH_END = "ada-inbox-02-lunch-confirm.eml"    # Lin's last word: <lunch-3@...>, in Ada's Inbox
 LUNCH_START = "ada-inbox-01-lunch.eml"          # Lin's first: <lunch-1@...>, in Ada's Inbox too
