@@ -628,6 +628,7 @@ function renderBulk(){
     <button class="bb" data-bulk="mute">${ico("bell-off")} Mute</button>
     <button class="bclear" data-bulk="clear">Clear</button>`;
 }
+const BULK_MAX=500;    // what one request may file (Filing.BULK_MAX)
 async function cbulk(action, anchor){
   const pks=[...state.cmarked]; if(!pks.length)return;
   if(action==="clear")return cmarkClear();
@@ -647,17 +648,17 @@ async function cbulk(action, anchor){
     return;
   }
   if(action==="archive"||action==="trash"||action==="junk"){
-    const path={archive:"/api/archive",trash:"/api/trash",junk:"/api/junk"}[action];
     const verb={archive:"Archived",trash:"Trashed",junk:"Marked junk"}[action];
-    const paths=new Map(pks.map(p=>[p, action!=="junk"&&convoRow(cfindAny(p))?"/api/thread/"+action:path]));   // a conversation row files whole; decide while the rows are still listed
+    const rows=pks.map(pk=>({pk, whole:action!=="junk"&&!!convoRow(cfindAny(pk))}));   // a conversation row files whole; junk is per message
     state.cmsgs=state.cmsgs.filter(x=>!state.cmarked.has(x.pk));
     state.searchItems=(state.searchItems||[]).filter(x=>!state.cmarked.has(x.pk));
     if(state.cmarked.has(state.csel))state.csel=null;
     state.cmarked.clear(); renderClientList();
     if(state.csel==null){ const first=(state.searching?state.searchItems:state.cmsgs)[0]; if(first)openClientMsg(first.pk,false); else clearReader(); }
     const grp=undoGroup(); let fail=0, undoable=false, partial=false;
-    for(const pk of pks){ try{ const r=await cpost(paths.get(pk),{pk,undo_group:grp}); if(!r.ok)fail++;
-      else{ if(r.undoable)undoable=true; if(r.failed)partial=true; if(r.pks)cForget(r.pks); } }catch(e){ fail++; } }
+    for(let i=0;i<rows.length;i+=BULK_MAX){ const part=rows.slice(i,i+BULK_MAX);     // one request, or as many as it takes under one undo group
+      try{ const r=await cpost("/api/bulk/file",{verb:action,rows:part,undo_group:grp}); fail+=r.rows_failed||0;
+        if(r.undoable)undoable=true; if(r.partial)partial=true; if(r.pks)cForget(r.pks); }catch(e){ fail+=part.length; } }
     toast(fail?`${verb} ${pks.length-fail}, ${fail} failed`:partial?`${verb} ${pks.length} — some messages stayed`:`${verb} ${pks.length}`);
     if(undoable)showUndoFloat(`${verb} ${pks.length-fail}`);
     if(fail||partial)loadCMessages(); return;
