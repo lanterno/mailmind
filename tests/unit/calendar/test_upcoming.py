@@ -268,6 +268,37 @@ def test_a_one_off_event_is_its_own_only_occurrence():
     assert _next("", start="20261102T100000", end="20261102T103000")[0] == "2026-11-02T10:00+01:00"
 
 
+def _when_said(*times):
+    return "\r\n".join(["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:w", "SUMMARY:Odd", *times, "END:VEVENT", "END:VCALENDAR", ""])
+
+
+@pytest.mark.parametrize("start, end", [
+    ("DTSTART;TZID=Europe/Berlin:20261102T100000", "DTEND;TZID=Nowhere/Land:20261102T103000"),
+    ("DTSTART;TZID=Nowhere/Land:20261102T100000", "DTEND;TZID=Europe/Berlin:20261102T103000"),
+    ("DTSTART:20261102T100000Z", "DTEND:20261102T103000"),
+    ("DTSTART:20261102T100000", "DTEND:20261102T103000Z"),
+])
+def test_an_end_that_floats_where_its_start_doesnt_counts_by_its_wall_clock(start, end):
+    inv = ics.parse(_when_said(start, end))
+    got = ics.next_occurrence(inv, datetime(2026, 11, 2, 8, 0, tzinfo=timezone.utc))
+    assert got is not None, inv
+    assert got[1] - got[0] == timedelta(minutes=30)
+
+
+@pytest.mark.parametrize("times", [
+    ("DTSTART:00010101T000000Z",),
+    ("DTSTART:99991231T235959Z",),
+    ("DTSTART:00010101T000000Z", "DTEND:99990101T000000Z"),
+    ("DTSTART:20261001T100000", "RRULE:FREQ=DAILY;UNTIL=99991231T235959Z"),
+    ("DTSTART;TZID=Asia/Tokyo:00010101T000000", "RRULE:FREQ=YEARLY"),
+])
+def test_a_time_at_the_edge_of_a_datetime_costs_only_that_event_its_place(machine_zone, data_dir, times):
+    """In a zone that pushes it past year 1 or 9999, a stranger's invite took the whole list down with it."""
+    _msg(_when_said(*times), ts=NOW - timedelta(days=2))
+    ok = _msg(_ics("k", NOW + timedelta(days=1)))
+    assert ok in [x["pk"] for x in _up()]
+
+
 class _FakeSession:
     """Answers ingest._process's two reads (headers, then the whole message) from `raws`."""
     def __init__(self, raws):
