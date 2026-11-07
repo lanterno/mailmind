@@ -68,8 +68,8 @@ def hit(r: Row, aliases: Mapping[str, str | None], when: Callable[[str | None], 
         "subject": r["subject"] or NO_SUBJECT, "when": when(r["date_iso"]),
         "date": (r["date_iso"] or "")[:10],
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"], **attention.answers(r["importance"], r["category"], r["action"]),
+        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
+        "importance": r["importance"], "action": r["action"], **attention.answers(r["importance"], r["category"], r["action"]),
     }
 
 

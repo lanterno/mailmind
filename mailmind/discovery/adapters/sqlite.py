@@ -35,7 +35,7 @@ class StoredMail:
             try:
                 in_all, in_all_args = self._in_folders_playing(c, {"all"})
                 columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
-                             m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action"""
+                             m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,m.thread_id,s.importance,s.category,s.action"""
                 if match is not None:               # every hit is scored anyway. bm25 can only be read where MATCH runs
                     sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
                                 ROW_NUMBER() OVER (PARTITION BY COALESCE(m.message_key, -m.pk)
