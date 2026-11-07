@@ -744,3 +744,12 @@ def test_a_thread_that_ends_in_your_own_reply_is_not_pre_drafted(app, world, ai)
         app.settle()
     assert draft_rows(w.ADA, thread_key(world, LUNCH)) == []        # nothing kept, as the GC intends
     assert len(drafts(ai)) == 0
+
+
+def test_hwf_what_a_hidden_tab_polls_for_its_meeting_reminder_doesnt_count_as_someone_here(app, monkeypatch):
+    seen = []
+    monkeypatch.setattr(assistant.governor(), "saw_someone", lambda: seen.append(1))
+    app.get("/api/upcoming")
+    assert seen == []
+    app.get("/api/digest")
+    assert seen
