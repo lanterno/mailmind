@@ -12,9 +12,10 @@ import json
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -91,10 +92,10 @@ class Retrospective(TypedDict):
 
 
 class Reviews:
-    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, mail: Mail):
         self._calls = calls
         self._answers = answers
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
@@ -189,19 +190,15 @@ class Reviews:
         import time
         since_ts = time.time() - WEEK_SECONDS
         accounts, day = ",".join(sorted(accounts_set)), datetime.now().astimezone().date().isoformat()
-        c = self._connect()
-        stats, needs, waiting = self._aggregate(c, accounts_set, since_ts)
-        cached_row = self._answers.get_review(c, accounts, day)
-        c.close()
+        with self._uow.read() as c:
+            stats, needs, waiting = self._aggregate(c, accounts_set, since_ts)
+            cached_row = self._answers.get_review(c, accounts, day)
         fp = self._fingerprint(stats, needs, waiting)
 
         def stored(row: Row) -> Result:
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 stored_needs = self._items_now(c, json.loads(row["needs_json"]))
                 stored_waiting = self._items_now(c, json.loads(row["waiting_json"]))
-            finally:
-                c.close()
             return self._result(json.loads(row["stats_json"]), stored_needs, stored_waiting,
                            {"narrative": row["narrative"], "next": json.loads(row["next_json"])},
                            row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
@@ -212,11 +209,8 @@ class Reviews:
             return {"ok": True, "missing": True}, 200
 
         def read() -> Result | None:
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 row = self._answers.get_review(c, accounts, day)
-            finally:
-                c.close()
             return stored(row) if row else None
 
         def make() -> Result:
@@ -248,13 +242,9 @@ class Reviews:
                 return {"ok": False, "error": "review unavailable", "retry": True}, 502
 
             created = self._now()
-            c = self._connect()
-            try:
+            with self._uow.write() as c:
                 self._answers.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
                                   json.dumps(needs), json.dumps(waiting), model, created)
-                c.commit()
-            finally:
-                c.close()                          # release the handle even if save/commit raises
             return self._result(stats, needs, waiting, ai, model, created, False, False, since_ts), 200
 
         return (self._FLIGHTS.run((accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it

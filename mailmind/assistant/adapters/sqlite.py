@@ -173,18 +173,16 @@ def batch_open(c):
 
 
 def batch_begin(c, feature, model, keys, estimate_micros, cutoff_ts, now):
-    """Record a batch about to be sent and hold its messages, so nothing triages them meanwhile, and
-    commit, since sending it is a network call. None if another is out already."""
+    """Record a batch about to be sent and hold its messages, so nothing triages them meanwhile: the caller commits
+    this before it sends, which is a network call. None if another is out already."""
     cur = c.execute(
         "INSERT INTO ai_batches(feature, model, state, requests, estimate_micros, cutoff_ts, created_at) "
         f"SELECT ?, ?, 'submitting', ?, ?, ?, ? WHERE NOT EXISTS(SELECT 1 FROM ai_batches WHERE state IN {_BATCH_OUT})",
         (feature, model, len(keys), estimate_micros, cutoff_ts, now))
     if cur.rowcount != 1:
-        c.rollback()
         return None
     batch_id = cur.lastrowid
     c.executemany("INSERT INTO ai_batch_items(message_key, batch_id) VALUES (?,?)", [(k, batch_id) for k in keys])
-    c.commit()
     return batch_id
 
 

@@ -6,22 +6,23 @@ from typing import Any
 
 from mailmind.assistant.application.ask import Asker
 from mailmind.assistant.application.brief import Briefs
-from mailmind.assistant.application.ports import Connect, Mail, Result
+from mailmind.assistant.application.ports import Mail, Result
 from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.kernel.parsed import is_list, is_object
+from mailmind.platform.db.uow import UnitOfWork
 
 
 class Asking:
-    def __init__(self, threads: ThreadDigest, briefs: Briefs, reviews: Reviews, rewriter: Rewriter, asker: Asker, connect: Connect,
+    def __init__(self, threads: ThreadDigest, briefs: Briefs, reviews: Reviews, rewriter: Rewriter, asker: Asker, uow: UnitOfWork,
                  mail: Mail):
         self._threads = threads
         self._briefs = briefs
         self._reviews = reviews
         self._rewriter = rewriter
         self._asker = asker
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
 
     def summarize(self, body: Mapping[str, Any]) -> Result:
@@ -30,9 +31,8 @@ class Asking:
         account = body.get("account")
         thread_id = body.get("thread_id")
         if body.get("pk") is not None:
-            c = self._connect()
-            row = self._mail.get_message(c, int(body["pk"]))
-            c.close()
+            with self._uow.read() as c:
+                row = self._mail.get_message(c, int(body["pk"]))
             if not row:
                 return {"ok": False, "error": "not found"}, 404
             account = row["account"]

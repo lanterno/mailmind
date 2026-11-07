@@ -11,11 +11,12 @@ import json
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.kernel.parsed import is_object
 from mailmind.kernel.row import Row
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -109,10 +110,10 @@ class DeltaItem(TypedDict):
 
 
 class Briefs:
-    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, mail: Mail):
         self._calls = calls
         self._answers = answers
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
@@ -183,14 +184,11 @@ class Briefs:
 
     def _groups_now(self, groups_json: str) -> list[Group]:
         """A stored brief's groups, as the page reads them: by the pks their messages have now."""
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             groups: list[Group] = []
             for g in json.loads(groups_json):
                 pks = [p for p in (self._mail.pk_now(c, *m) for m in g["messages"]) if p is not None]
                 groups.append({"label": g["label"], "count": len(pks), "pks": pks})
-        finally:
-            c.close()
         return groups
 
     def _result(self, narrative: str, groups: list[Group], model: str, created_at: str, cached: bool,
@@ -224,9 +222,8 @@ class Briefs:
         """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count).
         With generate=False it only reads: nothing stored yet -> {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
-        c = self._connect()
-        rows = self._mail.delta_rows(c, accounts_set, since_ts, DELTA_TOP_N)
-        c.close()
+        with self._uow.read() as c:
+            rows = self._mail.delta_rows(c, accounts_set, since_ts, DELTA_TOP_N)
         if not rows:
             return {"ok": True, "empty": True, "count": 0}, 200
         # Stored by what it was made from: if the window changes (more mail since the same watermark, even
@@ -235,11 +232,8 @@ class Briefs:
         accounts, since, fp = self._accounts_key(accounts_set), int(since_ts), self._fingerprint(rows)
 
         def read() -> Result | None:
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 row = self._answers.get_delta(c, accounts, since, fp)
-            finally:
-                c.close()
             if row is None:
                 return None
             return {"ok": True, "empty": False, "headline": row["headline"],
@@ -269,10 +263,8 @@ class Briefs:
             if not headline:                        # replied but unusable -> deterministic, cached once
                 headline, items = self._delta_fallback(rows)
                 model = "fallback"
-            c = self._connect()
-            self._answers.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, self._now())
-            c.commit()
-            c.close()
+            with self._uow.write() as c:
+                self._answers.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, self._now())
             return {"ok": True, "empty": False, "headline": headline,
                     "items": items, "count": len(rows), "cached": False}, 200
 
@@ -286,10 +278,9 @@ class Briefs:
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
         accounts, day = self._accounts_key(accounts_set), self._today()
-        c = self._connect()
-        rows = self._mail.brief_rows(c, accounts_set, TOP_N)
-        cached = self._answers.get_brief(c, accounts, day)
-        c.close()
+        with self._uow.read() as c:
+            rows = self._mail.brief_rows(c, accounts_set, TOP_N)
+            cached = self._answers.get_brief(c, accounts, day)
         fp = self._fingerprint(rows)
 
         def stored(row: Row) -> Result:
@@ -305,11 +296,8 @@ class Briefs:
             return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}, 200
 
         def read() -> Result | None:
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 row = self._answers.get_brief(c, accounts, day)
-            finally:
-                c.close()
             return stored(row) if row else None
 
         def make() -> Result:
@@ -338,10 +326,8 @@ class Briefs:
                 fb = self._fallback(rows)
                 narrative, groups, model = fb["narrative"], fb["groups"], "fallback"
             created = self._now()
-            c = self._connect()
-            self._answers.save_brief(c, accounts, day, fp, narrative, json.dumps(self._stored_groups(groups, rows)), model, created)
-            c.commit()
-            c.close()
+            with self._uow.write() as c:
+                self._answers.save_brief(c, accounts, day, fp, narrative, json.dumps(self._stored_groups(groups, rows)), model, created)
             return self._result(narrative, groups, model, created, False, False), 200
 
         return (self._FLIGHTS.run(("brief", accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it

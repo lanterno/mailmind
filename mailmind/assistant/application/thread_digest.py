@@ -10,9 +10,10 @@ import re
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Answers, Connect, ConversationBy, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Answers, ConversationBy, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
@@ -45,10 +46,10 @@ class Digest(TypedDict):
 
 
 class ThreadDigest:
-    def __init__(self, calls: Calls, answers: Answers, connect: Connect, mail: Mail):
+    def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, mail: Mail):
         self._calls = calls
         self._answers = answers
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
         self._FLIGHTS = SingleFlight()
 
@@ -142,25 +143,20 @@ class ThreadDigest:
 
     def summarize(self, account: str, thread_id: str, scope: str = "thread", force: bool = False) -> Result:
         """-> (result_dict, http_code)."""
-        c = self._connect()
-        rows = self.rows(c, account, thread_id)
-        c.close()
+        with self._uow.read() as c:
+            rows = self.rows(c, account, thread_id)
         if not rows:
             return {"ok": False, "error": "nothing to summarize"}, 404
         fp = self._fingerprint(rows)
-        c = self._connect()
-        cached = self._answers.get_thread_summary(c, account, thread_id, scope)
-        c.close()
+        with self._uow.read() as c:
+            cached = self._answers.get_thread_summary(c, account, thread_id, scope)
         if cached and not force:
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                     "cached": True, "stale": cached["fingerprint"] != fp, **self._expand(cached)}, 200
 
         def read() -> Result | None:                    # a summary of the thread as it is now
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 row = self._answers.get_thread_summary(c, account, thread_id, scope)
-            finally:
-                c.close()
             if row is None or row["fingerprint"] != fp:
                 return None
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
@@ -193,10 +189,8 @@ class ThreadDigest:
                    "tldr": parsed["tldr"], "points": json.dumps(parsed["points"]),
                    "action": parsed["action"], "participants": json.dumps(parsed["participants"]),
                    "message_count": len(rows), "model": model, "created_at": self._now()}
-            c = self._connect()
-            self._answers.save_thread_summary(c, row)
-            c.commit()
-            c.close()
+            with self._uow.write() as c:
+                self._answers.save_thread_summary(c, row)
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                     "cached": False, "stale": False, "tldr": parsed["tldr"], "points": parsed["points"],
                     "action": parsed["action"], "participants": parsed["participants"],

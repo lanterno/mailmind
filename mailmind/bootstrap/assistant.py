@@ -37,6 +37,7 @@ from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
+from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
 __all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
@@ -130,11 +131,7 @@ def transport() -> str:
     return NAMES[_bound.transport]
 
 
-def _connect():
-    from mailmind.bootstrap.mailbox import store
-    return store.conn()
-
-
+_uow = UnitOfWork()
 calls = Calls(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status())
 
 
@@ -246,13 +243,13 @@ def _looks_human(local):
 
 
 _mail = _Mail()
-triage = Triage(calls, lambda: gateway(), answers, _connect, _mail)
-threads = ThreadDigest(calls, answers, _connect, _mail)
-briefs = Briefs(calls, answers, _connect, _mail)
-reviews = Reviews(calls, answers, _connect, _mail)
-replies = ReplyDrafts(calls, threads, _connect, _mail)
+triage = Triage(calls, lambda: gateway(), answers, _uow, _mail)
+threads = ThreadDigest(calls, answers, _uow, _mail)
+briefs = Briefs(calls, answers, _uow, _mail)
+reviews = Reviews(calls, answers, _uow, _mail)
+replies = ReplyDrafts(calls, threads, _uow, _mail)
 rewriter = Rewriter(calls)
 asker = Asker(calls, _mail)
-asking = Asking(threads, briefs, reviews, rewriter, asker, _connect, _mail)
-drafting = DraftAhead(calls, lambda: gateway(), answers, _connect, _mail, replies, _looks_human)
+asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
+drafting = DraftAhead(calls, lambda: gateway(), answers, _uow, _mail, replies, _looks_human)
 bulk = BulkCommands(calls, _Search())

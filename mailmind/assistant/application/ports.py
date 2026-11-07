@@ -7,7 +7,7 @@ holds: the API rejected the call (`status` says how), or nothing answered (`stat
 Some say nothing was sent (NotSent): AIOff, which a model raises when there is no key, and what
 the cost governor raises when it holds a call back (OverLimit, Deferred).
 """
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypedDict
 
@@ -18,7 +18,6 @@ from mailmind.kernel.row import Connection, Row
 # error. Both adapters retry these, twice; any other 4xx says the request itself won't do.
 RETRIED = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
 
-type Connect = Callable[[], Connection]
 type Result = tuple[dict[str, Any], int]      # what a request is answered with: its JSON, and the HTTP status
 type ConversationBy = Literal["thread_id", "message_id", "pk"]     # what a conversation's messages share
 

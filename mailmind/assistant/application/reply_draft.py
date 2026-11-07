@@ -4,8 +4,9 @@ model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft —
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Connect, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Mail, NotSent, Result
 from mailmind.assistant.application.thread_digest import ThreadDigest
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
@@ -33,26 +34,23 @@ Conversation (oldest first):
 
 
 class ReplyDrafts:
-    def __init__(self, calls: Calls, threads: ThreadDigest, connect: Connect, mail: Mail):
+    def __init__(self, calls: Calls, threads: ThreadDigest, uow: UnitOfWork, mail: Mail):
         self._calls = calls
         self._threads = threads
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
 
     def draft(self, account: str, thread_id: str | None = None, pk: int | None = None, instruction: str = "",
               tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
         """-> (result_dict, http_code). Gathers a thread (thread_id) or a single message (pk).
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             if thread_id:
                 rows = self._threads.rows(c, account, thread_id)
             elif pk is not None:
                 rows = self._mail.message_to_reply_to(c, int(pk))
             else:
                 rows = []
-        finally:
-            c.close()
         if not rows:
             return {"ok": False, "error": "nothing to reply to"}, 404
 

@@ -9,9 +9,10 @@ from typing import Any
 
 from mailmind.assistant.application.calls import Calls, object_in
 from mailmind.assistant.application.gateway import Gateway
-from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Connect, Mail, ModelError, NotSent
+from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent
 from mailmind.assistant.domain import models, pricing
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
 assess_log = get_logger("assess")
@@ -67,11 +68,11 @@ class Triage:
     ASSESS_BATCH = 300                        # messages triaged in one round
     ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
 
-    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, connect: Connect, mail: Mail):
+    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
-        self._connect = connect
+        self._uow = uow
         self._mail = mail
 
     def _triage_prompt(self, row: Row) -> str:
@@ -104,11 +105,10 @@ class Triage:
         at once: not one message is tried."""
         if self._calls.engine() == "none" or self._gateway().held_back("triage", self._calls.MODEL):
             return 0
-        c = self._connect()
-        out = self._answers.batch_open(c)
-        rows = self._answers.needs_summary(c, limit, newer_than=out["cutoff_ts"] if out else None)
+        with self._uow.read() as c:
+            out = self._answers.batch_open(c)
+            rows = self._answers.needs_summary(c, limit, newer_than=out["cutoff_ts"] if out else None)
         if not rows:
-            c.close()
             return 0
         log(f"summarizing {len(rows)} messages with {workers} workers...")
         done = 0
@@ -119,13 +119,12 @@ class Triage:
                 if payload is None:
                     continue  # transient failure -> stays in needs_summary for next run
                 s, imp, cat, act, model = payload
-                self._answers.save_summary(c, pk, s, imp, cat, act, model,
-                                   datetime.now(timezone.utc).isoformat())
-                c.commit()
+                with self._uow.write() as c:
+                    self._answers.save_summary(c, pk, s, imp, cat, act, model,
+                                       datetime.now(timezone.utc).isoformat())
                 done += 1
                 if done % 25 == 0 or done == len(rows):
                     log(f"  {done}/{len(rows)}")
-        c.close()
         return done
 
     def _send_batch(self, requests: list[tuple[str, str]], name: str) -> str:
@@ -140,13 +139,10 @@ class Triage:
         gw = self._gateway()
         if self._calls.engine() == "none" or gw.held_back(self.BATCH_FEATURE, self._calls.MODEL):
             return 0
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             if self._answers.batch_open(c):
                 return 0
             rows = [r for r in self._answers.needs_summary(c, keep + self.BATCH_MAX) if r["message_key"] is not None]
-        finally:
-            c.close()
         if len(rows) < at_least:
             return 0
         name = self._calls.MODEL or models.DEFAULT
@@ -165,22 +161,19 @@ class Triage:
             cutoff = max(cutoff, r["ts"] or 0)
         if not requests:
             return 0
-        c = self._connect()
-        try:
+        with self._uow.write() as c:                # committed before the network: sending it is a call
             batch_id = self._answers.batch_begin(c, self.BATCH_FEATURE, name, keys, estimate, cutoff, int(time.time()))
-            if batch_id is None:
-                return 0
-            try:
-                remote_id = self._send_batch(requests, name)
-            except Exception as e:                  # it didn't go, so they wait; the next round tries again
+        if batch_id is None:
+            return 0
+        try:
+            remote_id = self._send_batch(requests, name)
+        except Exception as e:                      # it didn't go, so they wait; the next round tries again
+            with self._uow.write() as c:
                 self._answers.batch_drop(c, batch_id)
-                c.commit()
-                log(f"a batch of {len(requests)} wasn't sent: {type(e).__name__}")
-                return 0
+            log(f"a batch of {len(requests)} wasn't sent: {type(e).__name__}")
+            return 0
+        with self._uow.write() as c:
             self._answers.batch_sent(c, batch_id, remote_id, int(time.time()))
-            c.commit()
-        finally:
-            c.close()
         log(f"sent a batch of {len(requests)}, at most about {pricing.usd(estimate)}")
         return len(requests)
 
@@ -206,14 +199,17 @@ class Triage:
         if self._calls.engine() == "none":
             return 0
         gw, now, stored = self._gateway(), int(time.time()), 0
-        c = self._connect()
         try:
-            for b in self._answers.batches_in_state(c, "submitting"):
-                if b["created_at"] < now - self.BATCH_SEND_GIVE_UP:
-                    self._answers.batch_drop(c, b["id"])
-                    log("a batch was cut off while it was being sent; its messages are waiting again")
-            c.commit()
-            out = self._answers.batch_open(c)
+            with self._uow.read() as c:             # most rounds find nothing to do, and take no lock for it
+                cut_off = [b for b in self._answers.batches_in_state(c, "submitting")
+                           if b["created_at"] < now - self.BATCH_SEND_GIVE_UP]
+            if cut_off:
+                with self._uow.write() as c:
+                    for b in cut_off:
+                        self._answers.batch_drop(c, b["id"])
+                        log("a batch was cut off while it was being sent; its messages are waiting again")
+            with self._uow.read() as c:
+                out = self._answers.batch_open(c)
             if out is not None and out["state"] == "running" and out["polled_at"] + self.BATCH_POLL <= now:
                 try:
                     ended = gw.batch_ended(out["remote_id"])
@@ -222,21 +218,24 @@ class Triage:
                     raise
                 except ModelError as e:
                     ended, results = False, None
-                    if e.status == 404:             # another key's, or removed: nothing more will come of it
-                        self._answers.batch_drop(c, out["id"])
-                        log("the API no longer has a batch; its messages are waiting again")
-                    else:
-                        self._answers.batch_polled(c, out["id"], now)
-                        log(f"couldn't read a batch: {type(e).__name__} {e.status}")
-                    c.commit()
+                    with self._uow.write() as c:
+                        if e.status == 404:         # another key's, or removed: nothing more will come of it
+                            self._answers.batch_drop(c, out["id"])
+                            log("the API no longer has a batch; its messages are waiting again")
+                        else:
+                            self._answers.batch_polled(c, out["id"], now)
+                            log(f"couldn't read a batch: {type(e).__name__} {e.status}")
                 if results is not None:
-                    stored = self._store_answers(c, out, results)
-                    self._answers.batch_collected(c, out["id"], now)
-                    log(f"a batch brought {stored} answers")
+                    with self._uow.write() as c:
+                        stored = self._store_answers(c, out, results)
+                        self._answers.batch_collected(c, out["id"], now)
+                        log(f"a batch brought {stored} answers")
                 elif not ended:
-                    self._answers.batch_polled(c, out["id"], now)
-                c.commit()
-            for b in self._answers.batches_in_state(c, "collected"):
+                    with self._uow.write() as c:
+                        self._answers.batch_polled(c, out["id"], now)
+            with self._uow.read() as c:
+                collected = self._answers.batches_in_state(c, "collected")
+            for b in collected:
                 try:                                # what it holds is mail: it stays at the API no longer than needed
                     gw.discard_batch(b["remote_id"])
                 except NotSent:
@@ -245,23 +244,18 @@ class Triage:
                     if e.status != 404:
                         log(f"couldn't remove a batch: {type(e).__name__} {e.status}")
                         continue
-                self._answers.batch_discarded(c, b["id"])
-                c.commit()
+                with self._uow.write() as c:
+                    self._answers.batch_discarded(c, b["id"])
         except NotSent:
             pass
-        finally:
-            c.close()
         return stored
 
     def batch_status(self) -> BatchStatus:
         """What's out in a batch, with no call made: how many messages, and what it may cost."""
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             out = self._answers.batch_open(c)
             return {"waiting": self._answers.batch_waiting(c), "state": out["state"] if out else None,
                     "estimate_micros": out["estimate_micros"] if out else 0}
-        finally:
-            c.close()
 
     def round(self) -> int | None:
         """The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. It runs
