@@ -7,9 +7,10 @@ from mailmind.bootstrap.mailbox import copies
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
 from mailmind.compose.application.composing import Composing
-from mailmind.compose.application.drafts import PUSH_TICK, Drafts
+from mailmind.compose.application.drafts import Drafts
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
+from mailmind.compose.domain.draft_journal import PUSH_TICK
 from mailmind.mailbox.domain import roles
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork

@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mailmind.compose.application.ports import Accounts, Account, Book, Copies, Effects, Messages, Screen, Transport
-from mailmind.compose.domain import draft, outbox_item
+from mailmind.compose.domain import draft, draft_journal, outbox_item
 from mailmind.compose.domain.builder import Built
 from mailmind.compose.domain.errors import Unanswered
 from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
@@ -180,8 +180,9 @@ class Outbox:
                             self._accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
                         with self._uow.read() as c:
                             waiting = self._book.journal_get(c, row["draft_id"])
-                        if waiting is not None and waiting["tried"] and waiting["account"] == dr["account"]:
-                            self._copies.delete_left_copy(self._accounts.get(dr["account"]), waiting["tried"])
+                        left = draft_journal.left_by_a_try(waiting, dr["account"])
+                        if left:
+                            self._copies.delete_left_copy(self._accounts.get(dr["account"]), left)
 
                         def forget(c: Connection) -> None:
                             self._book.draft_delete(c, row["draft_id"])

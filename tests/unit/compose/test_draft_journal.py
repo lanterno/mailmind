@@ -327,7 +327,7 @@ def test_a_send_takes_the_copy_a_try_may_have_left(app, world):
 
 
 def test_the_job_looks_again_when_the_next_save_comes_due(app, world):
-    from mailmind.compose.application.drafts import PUSH_TICK
+    from mailmind.compose.domain.draft_journal import PUSH_TICK
     assert drafts.push_round() == PUSH_TICK
     did = save(app, autosave=True)["draft_id"]
     assert drafts.push_round() == PUSH_TICK                # a minute off

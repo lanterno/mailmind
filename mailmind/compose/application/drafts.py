@@ -11,13 +11,12 @@ from typing import Any, Literal
 from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
-from mailmind.compose.domain import draft, limits
+from mailmind.compose.domain import draft, draft_journal, limits
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
-from mailmind.compose.domain.draft_journal import PUSH_EVERY, due_after_failing, due_after_typing
 from mailmind.compose.domain.errors import Refused
-from mailmind.compose.domain.resume import MODES, PARTICIPANT, lf, resume_files, resume_split
+from mailmind.compose.domain.resume import MODES, PARTICIPANT, resume_files, resume_split
 from mailmind.content import mime
-from mailmind.content.headers import addr_chip, header_chips, header_text
+from mailmind.content.headers import header_chips, header_text
 from mailmind.kernel import addresses
 from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Row
@@ -31,8 +30,6 @@ log = get_logger("draft")
 resume_log = get_logger("resume")
 _LIVE_TIMEOUT = 10
 PUSH_WAIT = 2.5              # how long a save someone asked for waits for the account's gate, before the job has it
-PUSH_TICK = 10               # the push job looks at least this often
-WAITING_AFTER = 30           # the tray names a save this overdue
 
 
 class _Gate(enum.Enum):
@@ -116,11 +113,11 @@ class Drafts:
         key = draft.composer_key(body)
         base = body.get("base_version")
         now, stamp = _now(), now_iso()
-        bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
+        record = draft_journal.record_of(spec, built)
         with self._uow.write() as c:
             prev = self._book.draft_get(c, did) if did else (self._book.draft_by_key(c, key) if key else None)
             waiting = self._book.journal_get(c, prev["id"]) if prev else None
-            if waiting is not None and waiting["discard"]:   # as good as gone: this save is a draft of its own
+            if draft_journal.asks_removal(waiting):
                 prev = waiting = None
             if prev and self._book.outbox_holds_draft(c, prev["id"]):
                 return None, None, ({"ok": False, "error": draft.HELD}, 423)
@@ -136,15 +133,9 @@ class Drafts:
                 if key:
                     self._book.draft_set_key(c, new_id, key)
             self._book.draft_note_save(c, new_id, body.get("mode", "new"), in_reply_to_pk, spec["subject"], version, key, stamp)
-            if body.get("autosave"):
-                due = waiting["due_at"] if waiting else due_after_typing(now, prev["pushed_at"] if prev else None)
-                attempts = waiting["attempts"] if waiting else 0
-            else:
-                due, attempts = now, 0
-            self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"],
-                                   hashlib.sha256(built["raw"]).hexdigest(), lf(spec["own"]),
-                                   lf(spec["tail"]["text"]) if spec["tail"]["text"] else None, spec["tail"]["html"],
-                                   json.dumps(bcc) if bcc else None, now, due, attempts)
+            due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None)
+            self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"], record["raw_sha"],
+                                   record["own_text"], record["tail_text"], record["tail_html"], record["bcc"], now, due, attempts)
             return new_id, version, None
 
     def _discard(self, did: int) -> Answer:
@@ -155,7 +146,7 @@ class Drafts:
             if row is None:
                 return {"ok": True, "deleted": True}, 200
             waiting = self._book.journal_get(c, did)
-            if row["uid"] or (waiting is not None and waiting["tried"]):
+            if draft_journal.copy_may_be_there(row, waiting):
                 self._book.journal_discard(c, did, draft.next_version(row), row["account"], _now())
                 self._book.draft_note_discard(c, did, draft.next_version(row), now_iso())
                 there = True
@@ -189,7 +180,7 @@ class Drafts:
                 now_waiting = self._book.journal_get(c, did)
                 if now_waiting is not None:
                     attempts = now_waiting["attempts"] + 1
-                    self._book.journal_failed(c, did, attempts, due_after_failing(_now(), attempts))
+                    self._book.journal_failed(c, did, attempts, draft_journal.due_after_failing(_now(), attempts))
             self._screen.outbox_changed()
             return False
 
@@ -200,7 +191,7 @@ class Drafts:
             return False
         if scope != gates.EVERY_ACCOUNT and _scope_of(row, waiting) != scope:
             return _Gate.WIDER
-        if waiting["discard"]:
+        if draft_journal.asks_removal(waiting):
             self._remove(row, waiting)
             return False
         return self._push(row, waiting)
@@ -267,20 +258,18 @@ class Drafts:
         """One round of the push job: whatever has come due. Returns the seconds until the next is."""
         now = _now()
         with self._uow.read() as c:
-            due = self._book.journal_due(c, now, now + PUSH_EVERY)
+            due = self._book.journal_due(c, now, now + draft_journal.PUSH_EVERY)
         for r in due:
             self._try_push(r["draft_id"], priority=gates.Priority.AFTER_USER, wait=False)
         with self._uow.read() as c:
-            at = self._book.journal_next_due(c, now, now + PUSH_EVERY)
-        return PUSH_TICK if at is None or at <= now else min(PUSH_TICK, at - now)   # still due: its gate was busy
+            at = self._book.journal_next_due(c, now, now + draft_journal.PUSH_EVERY)
+        return draft_journal.next_round_in(now, at)
 
     def waiting(self) -> list[dict[str, Any]]:
         """What the tray names: what should have reached its server by now and hasn't."""
-        grace = WAITING_AFTER if profile.writes_allowed() else 0
         with self._uow.read() as c:
-            rows = self._book.journal_overdue(c, _now() - grace)
-        return [{"id": r["draft_id"], "account": r["account"], "subject": r["subject"] or "", "saved_at": r["saved_at"],
-                 "attempts": r["attempts"], "discarding": bool(r["discard"])} for r in rows]
+            rows = self._book.journal_overdue(c, draft_journal.overdue_since(_now(), profile.writes_allowed()))
+        return [draft_journal.listed(r) for r in rows]
 
     def _live(self, acct: Account, folder: str, uid: int | None) -> bool | None:
         """Is this exact draft copy still on the server? True, False, or None when that can't be told
@@ -328,7 +317,7 @@ class Drafts:
             asked = self._book.journal_get(c, before["id"]) if before is not None else None
         if queued:                                           # reopened and sent again, it would go out twice
             return {"ok": False, "error": draft.HELD}, 423
-        if asked is not None and asked["discard"]:
+        if draft_journal.asks_removal(asked):
             return {"ok": False, "error": draft.DISCARDED}, 409
         live = self._live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
 
@@ -373,7 +362,7 @@ class Drafts:
                      and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
         exact = bool(same_copy or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
         record = d
-        if j is not None and j["raw"]:
+        if draft_journal.holds_a_save(j):
             if exact:                                      # the copy is as pushed: the journal may be newer
                 raw, record = j["raw"], j
             else:                                          # another app changed it: neither one takes the other's place
@@ -397,7 +386,7 @@ class Drafts:
             return {"ok": False, "error": draft.HELD}, 423
         if d is None or j is None:
             return {"ok": False, "error": "That draft has reached the server. Open it from Drafts."}, 409
-        if j["discard"]:
+        if draft_journal.asks_removal(j):
             return {"ok": False, "error": draft.DISCARDED}, 409
         return self._opened(j["raw"], d, j, True, j["account"], d["subject"], None)
 
