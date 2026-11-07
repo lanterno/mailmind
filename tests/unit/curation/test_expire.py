@@ -7,7 +7,7 @@ import pytest
 
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
-from mailmind.curation.domain import rulebook
+from mailmind.curation.domain import expiry, rulebook
 from mailmind.platform import settings
 
 HOUR = 3600
@@ -70,6 +70,29 @@ def test_arrival_falls_back_to_date_header():
 def test_arrival_unknown_is_none():
     msg = email.message_from_string("Subject: no date\r\n\r\n")
     assert curation.arrival_ts(None, msg) is None
+
+
+# ── what expiry reads and what the audit says ─────────────────────────────────
+def test_a_message_is_read_from_its_headers_and_when_it_arrived():
+    arrived = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    raw = b"From: =?utf-8?b?QWRh?= <Ada@Notify-Example.TEST>\r\nSubject: =?utf-8?b?SGVsbG8=?=\r\nMessage-ID:  <m@notify-example.test> \r\n\r\n"
+    assert expiry.aged_from_headers(7, raw, arrived) == {"uid": "7", "from": "ada@notify-example.test", "subject": "Hello",
+                                                         "mid": "<m@notify-example.test>", "ts": 1767268800}
+
+
+def test_with_no_arrival_it_goes_by_the_date_and_with_neither_its_age_is_unknown():
+    assert expiry.aged_from_headers(1, b"From: a@notify-example.test\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\n\r\n", None)["ts"] == 1767268800
+    assert expiry.aged_from_headers(1, b"From: a@notify-example.test\r\n\r\n", None)["ts"] is None
+
+
+def test_expiry_asks_the_server_for_what_it_reads():
+    assert set(expiry.AGE_FIELDS) == {"FROM", "SUBJECT", "MESSAGE-ID", "DATE"}
+
+
+def test_the_audit_says_which_rule_took_it():
+    target = {"uid": "9", "from": "a@notify-example.test", "subject": "Old", "mid": "<m@notify-example.test>", "ts": NOW, "hours": 72}
+    assert expiry.audited([target]) == [{"uid": "9", "from": "a@notify-example.test", "subject": "Old", "bucket": "expired",
+                                         "reason": "expire rule: older than 72h"}]
 
 
 # ── storage ───────────────────────────────────────────────────────────────────
