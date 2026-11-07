@@ -30,7 +30,7 @@ class _Stored:
     def __init__(self, text):
         self.text = text
 
-    def invite_parts(self, _since, _account, _skipped):
+    def invite_parts(self, _since, _skipped):
         yield {"pk": 1, "message_key": "k", "account": "a@example.test", "thread_id": "t"}, self.text
 
 
