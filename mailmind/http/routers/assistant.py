@@ -1,67 +1,146 @@
 """What the page asks of the Assistant. A route that spends is a POST, and the GETs read what is stored; the one GET that
 can start a call is drafting ahead's kick, which needs the page's token."""
-from mailmind.assistant.api import AIOff, OverLimit
-from mailmind.http.routing import Routes
+from functools import wraps
+from typing import Annotated
+
+from fastapi import Query, Request
+
+from mailmind.assistant.api import NotSent
+from mailmind.http import route
+from mailmind.http.handler import H
+from mailmind.http.schemas.assistant import (
+    Answered,
+    AskBody,
+    Brief,
+    BriefMissing,
+    ConfirmBody,
+    Delta,
+    DeltaArgs,
+    DeltaBody,
+    DeltaEmpty,
+    DeltaMissing,
+    DraftAheadArgs,
+    DraftAheadReady,
+    DraftAheadStatus,
+    DraftedReply,
+    DraftReplyBody,
+    Expired,
+    PlanBody,
+    PlanCarriedOut,
+    PlanIsASearch,
+    PlanPreview,
+    Review,
+    ReviewMissing,
+    Rewritten,
+    RewriteBody,
+    SummarizeBody,
+    Summary,
+    Unavailable,
+)
+from mailmind.http.schemas.common import Failure, NoBody, answers
 from mailmind.kernel.errors import Problem
 from mailmind.platform import perimeter
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
 
-
-def _scrubbed(what, failed, answer):
-    """A route's answer, with a failure logged and answered in general terms. What the handler answers goes through: a
-    Problem, the 402 (the page asks) and the 409."""
-    def route(req):
-        try:
-            return answer(req)
-        except (OverLimit, AIOff, Problem):
-            raise
-        except Exception as ex:
-            log.error("%(what)s", {"what": what}, exc_info=ex)
-            return {"ok": False, "error": failed}, 500
-    return route
+_MAY_FAIL = {502: Unavailable}
 
 
-def routes(assistant, mailbox):
-    r = Routes()
+def _scrubbed(what, failed):
+    """A handler whose failure is logged and answered in general terms. What `Route` answers goes through: a Problem, the
+    402 (the page asks) and the 409."""
+    def scrubbing(handler):
+        @wraps(handler)
+        def answering(*args, **kwargs):
+            try:
+                return handler(*args, **kwargs)
+            except (NotSent, Problem):
+                raise
+            except Exception as ex:
+                log.error("%(what)s", {"what": what}, exc_info=ex)
+                return {"ok": False, "error": failed}, 500
+        return answering
+    return scrubbing
 
-    @r.get("/api/briefing")          # what is stored of the "Today" card; POST writes it
-    def briefing(req):
+
+def router(assistant, mailbox):
+    r = route.router()
+
+    @r.get("/api/briefing", responses=answers(Brief | BriefMissing))     # what is stored of the "Today" card; POST writes it
+    def briefing():
         return assistant.asking.briefing(generate=False)
 
-    @r.get("/api/review")            # what is stored of the Weekly Review; POST writes it
-    def review(req):
+    @r.get("/api/review", responses=answers(Review | ReviewMissing))     # what is stored of the Weekly Review; POST writes it
+    def review():
         return assistant.asking.review(generate=False)
 
-    @r.get("/api/briefing/since")    # what is stored of the "since you last looked" delta
-    def delta(req):
-        return assistant.asking.delta(req.query, generate=False)
+    @r.get("/api/briefing/since", responses=answers(Delta | DeltaEmpty | DeltaMissing))     # what is stored of "since you last looked"
+    def delta(args: Annotated[DeltaArgs, Query()]):
+        return assistant.asking.delta(args.as_query(), generate=False)
 
-    @r.get("/api/ai/draft-ahead")    # serve/peek; the generation KICK needs the CSRF token
-    def draft_ahead(req):
-        return assistant.drafting.get(req.query, kick_ok=perimeter.token_matches(req.handler.headers, req.handler.CSRF))
+    @r.get("/api/ai/draft-ahead", responses=answers(DraftAheadStatus | DraftAheadReady))    # serve/peek; the KICK needs the CSRF token
+    def draft_ahead(request: Request, args: Annotated[DraftAheadArgs, Query()]):
+        return assistant.drafting.get(args.as_query(), kick_ok=perimeter.token_matches(request.headers, H.CSRF))
 
-    r.post("/api/ai/summarize")(_scrubbed("error", "summary failed", lambda req: assistant.asking.summarize(req.body)))
-    r.post("/api/ai/draft-reply")(_scrubbed("draft error", "draft failed", lambda req: assistant.drafting.reply(req.body)))
-    r.post("/api/ai/rewrite")(_scrubbed("rewrite error", "rewrite failed", lambda req: assistant.asking.rewrite(req.body)))
-    r.post("/api/ai/ask")(_scrubbed("ask error", "ask failed", lambda req: assistant.asking.ask(req.body)))
+    @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
+    @_scrubbed("error", "summary failed")
+    def summarize(body: SummarizeBody):
+        return assistant.asking.summarize(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/ai/do-confirm")    # carry out the plan a preview froze
-    def do_confirm(req):
-        plan = assistant.bulk.take(str(req.body.get("plan") or ""))
+    @r.post("/api/ai/draft-reply", responses=answers(DraftedReply, _MAY_FAIL))
+    @_scrubbed("draft error", "draft failed")
+    def draft_reply(body: DraftReplyBody):
+        return assistant.drafting.reply(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/ai/rewrite", responses=answers(Rewritten, _MAY_FAIL))
+    @_scrubbed("rewrite error", "rewrite failed")
+    def rewrite(body: RewriteBody):
+        return assistant.asking.rewrite(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/ai/ask", responses=answers(Answered, _MAY_FAIL))
+    @_scrubbed("ask error", "ask failed")
+    def ask(body: AskBody):
+        return assistant.asking.ask(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/ai/do-confirm", responses=answers(PlanCarriedOut, {410: Expired}))    # carry out the plan a preview froze
+    def do_confirm(body: ConfirmBody):
+        plan = assistant.bulk.take(str(body.plan or ""))
         if plan is None:
             return {"ok": False, "error": "this plan has expired", "expired": True}, 410
-        return mailbox.filing.carry_out(plan.verb, plan.preset, plan.messages, req.body.get("undo_group"))
+        return mailbox.filing.carry_out(plan.verb, plan.preset, plan.messages, body.undo_group)
 
     # read-only: NL command → validated, capped action PREVIEW
-    r.post("/api/ai/do-plan")(_scrubbed("do-plan error", "plan failed", lambda req: assistant.bulk.plan(req.body)))
+    @r.post("/api/ai/do-plan", responses=answers(PlanPreview | PlanIsASearch, _MAY_FAIL))
+    @_scrubbed("do-plan error", "plan failed")
+    def do_plan(body: PlanBody):
+        return assistant.bulk.plan(body.model_dump(exclude_unset=True))
+
     # write each once, if none is stored
-    r.post("/api/briefing")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing()))
-    r.post("/api/review")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review()))
-    r.post("/api/briefing/since")(_scrubbed("delta error", "delta failed", lambda req: assistant.asking.delta(req.body)))
+    @r.post("/api/briefing", responses=answers(Brief, _MAY_FAIL))
+    @_scrubbed("briefing error", "briefing failed")
+    def write_briefing(body: NoBody):
+        return assistant.asking.briefing()
+
+    @r.post("/api/review", responses=answers(Review, _MAY_FAIL))
+    @_scrubbed("review error", "review failed")
+    def write_review(body: NoBody):
+        return assistant.asking.review()
+
+    @r.post("/api/briefing/since", responses=answers(Delta | DeltaEmpty, _MAY_FAIL))
+    @_scrubbed("delta error", "delta failed")
+    def write_delta(body: DeltaBody):
+        return assistant.asking.delta(body.model_dump(exclude_unset=True))
+
     # write each again
-    r.post("/api/review/refresh")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review(force=True)))
-    r.post("/api/briefing/refresh")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing(force=True)))
+    @r.post("/api/review/refresh", responses=answers(Review, _MAY_FAIL))
+    @_scrubbed("review error", "review failed")
+    def refresh_review(body: NoBody):
+        return assistant.asking.review(force=True)
+
+    @r.post("/api/briefing/refresh", responses=answers(Brief, _MAY_FAIL))
+    @_scrubbed("briefing error", "briefing failed")
+    def refresh_briefing(body: NoBody):
+        return assistant.asking.briefing(force=True)
 
     return r

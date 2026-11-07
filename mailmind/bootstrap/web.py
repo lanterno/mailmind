@@ -22,12 +22,12 @@ ROUTERS = [attention_routes.router(attention),
            mailbox_routes.router(mailbox),
            accounts_routes.router(accounts, mailbox),
            debug.router(mailbox, compose, background, assistant),
-           curation_routes.router(curation)]
+           curation_routes.router(curation),
+           assistant_routes.router(assistant, mailbox)]
 
 handler.bind(Routes(static.routes(),
                     events.routes(),
                     export.routes(),
                     discovery_routes.routes(discovery),
-                    compose_routes.routes(compose),
-                    assistant_routes.routes(assistant, mailbox)),
+                    compose_routes.routes(compose)),
              lambda: assistant.governor().saw_someone())
