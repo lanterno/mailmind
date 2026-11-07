@@ -13,7 +13,10 @@ from mailmind.curation.domain.live import Classified, Read
 from mailmind.curation.domain.rulebook import domain_listed
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("sweep")
 
 HDR_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "LIST-UNSUBSCRIBE", "LIST-ID")
 
@@ -54,7 +57,8 @@ class Sweeps:
             with self._boxes.borrow(acct) as s:      # pooled read: reuse the login (no fresh connect per call)
                 rows = self.classify_rows(fetch_headers(s))   # ctx-mgr ALWAYS closes → no socket leak on fetch error
         except Exception as e:
-            res["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            res["error"] = type(e).__name__      # what a server said stays out of the answer
             return res
         by: defaultdict[str, list[Classified]] = defaultdict(list)
         for r in rows:
@@ -116,7 +120,8 @@ class Sweeps:
                 except Exception:
                     pass
         except Exception as e:
-            out["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         out["moved"], out["stragglers"] = moved, stragglers
         self._mail.forget_moved(acct["email"], junk_rows, stragglers)        # don't re-ghost swept mail
@@ -143,7 +148,8 @@ class Sweeps:
         try:
             s = self._boxes.open_session(acct)
         except Exception as e:
-            out["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
             live = fetch_headers(s)
@@ -163,7 +169,8 @@ class Sweeps:
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
                                                           self._boxes.trash_folder(acct))
         except Exception as e:
-            out["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         finally:
             try:

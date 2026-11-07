@@ -486,7 +486,8 @@ class Ingest:
                 except Exception:
                     pass
         except Exception as e:
-            res["error"] = f"{type(e).__name__}: {e}"
+            log.warning("reconcile: an account failed", exc_info=e)
+            res["error"] = type(e).__name__      # what a server said stays out of the answer
             return res  # never prune on error
         # UIDVALIDITY guard: if the server renumbered UIDs (mailbox recreation / Bridge
         # re-index), `live` is in a DIFFERENT uid space than the stored uids — comparing

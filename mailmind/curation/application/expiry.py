@@ -33,7 +33,8 @@ class Expiry:
         try:
             s = self._boxes.open_session(acct)
         except Exception as e:
-            out["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
             s.select("INBOX")
@@ -62,7 +63,8 @@ class Expiry:
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
                                                           self._boxes.trash_folder(acct))
         except Exception as e:
-            out["error"] = f"{type(e).__name__}: {e}"
+            log.warning("an account failed", exc_info=e)
+            out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         finally:
             try:
