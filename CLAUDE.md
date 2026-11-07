@@ -357,7 +357,12 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   expunge of the UIDs named, append (the new UID when the server says it), NOOP, and IDLE with
   `interrupt()` from another thread. Names are as LIST gave them, and the errors are imaplib's
   classes through either adapter: a refusal raises `IMAP4.error`, a lost connection
-  `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets. The adapters
+  `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets.
+  `domain.destination` says where a filing goes, and `domain.move_strategy.choose` which way, as a value (`MoveStrategy`):
+  `Way.LABELS`, `Way.MOVE` or `Way.COPY`, and whether to read `\Seen` first because the server will set it. It goes by the
+  verb, not a folder's role, and takes what the profile says and the session's capabilities as plain values. No way sends a
+  bulk EXPUNGE, on any server. `ServerOps.apply` carries it out, and each adapter's `move` (what a sweep and a reversal call) asks
+  the same `offers_move`. The adapters
   are `adapters.imap.imaplib_session` (what the old door runs on) and `adapters.imap.imapclient_session`
   (only it imports `imapclient`). `adapters.imap.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
