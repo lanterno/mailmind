@@ -14,6 +14,7 @@ import pytest
 from mailmind.bootstrap import calendar, mailbox
 from mailmind.bootstrap.calendar import ics
 from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.calendar.application import agenda as agenda_use_case
 from mailmind.content import mime
 from mailmind.mailbox.application.session import Headers
 
@@ -165,6 +166,32 @@ def test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead(data_dir):
     _msg(_ics("a", NOW + timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     assert [x["start"] for x in _up()] == ["2026-11-02T12:00"]
+
+
+def _series_lines(uid, start, rule):
+    return ["BEGIN:VEVENT", f"UID:{uid}", "SUMMARY:Series", f"DTSTART:{start:%Y%m%dT%H%M%S}", f"RRULE:{rule}", "END:VEVENT"]
+
+
+def test_a_list_past_its_allowance_shows_a_series_at_its_first_date_alone(data_dir, monkeypatch):
+    monkeypatch.setattr(agenda_use_case, "_EXPAND_SECONDS", -1)
+    one_off = _msg(_ics("o", NOW + timedelta(days=1)))
+    ahead = _msg(_ics("a", NOW + timedelta(days=2)).replace("END:VEVENT", "RRULE:FREQ=WEEKLY\r\nEND:VEVENT"))
+    _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", "RRULE:FREQ=WEEKLY\r\nEND:VEVENT"))        # would next be in four days
+    assert [x["pk"] for x in _up()] == [one_off, ahead]
+
+
+def test_one_message_of_series_that_each_use_up_their_budget_cant_hold_a_list_for_long(data_dir, monkeypatch):
+    """Two hundred rules that never come to a date, in one message. Each stops at the reader's bound, which is no bound on
+    the list: it took twenty seconds of a request thread."""
+    monkeypatch.setattr(agenda_use_case, "_EXPAND_SECONDS", 0.2)
+    lines = ["BEGIN:VCALENDAR", "METHOD:REQUEST"]
+    for i in range(200):
+        lines += _series_lines(f"s{i}", NOW - timedelta(days=3), "FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30")
+    _msg("\r\n".join([*lines, "END:VCALENDAR", ""]))
+    ok = _msg(_ics("k", NOW + timedelta(days=1)))
+    began = time.thread_time()
+    assert ok in [x["pk"] for x in _up()]
+    assert time.thread_time() - began < 2
 
 
 def test_trash_junk_unfetched_and_old_mail_are_not_read(data_dir):
