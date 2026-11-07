@@ -3,7 +3,6 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, Classifier
 
@@ -22,16 +21,11 @@ class LiveStats:
         self._curation = curation
         self._cache: dict[str, Any] = {"data": None, "exp": 0}
 
-    def live(self, account: str | None = None, refresh: bool = False) -> dict[str, Any]:
-        is_all = account is None or account == "all"
-        if not refresh and is_all and self._cache["data"] and self._cache["exp"] > time.time():
+    def live(self) -> dict[str, Any]:
+        if self._cache["data"] and self._cache["exp"] > time.time():
             return self._cache["data"]
-        try:
-            accts = self._accounts.accounts() if account is None or account == "all" else [self._accounts.get(account)]
-        except KeyError:
-            raise Refused("unknown account")
         out: list[dict[str, Any]] = []
-        for a in accts:
+        for a in self._accounts.accounts():
             p = _strip(self._curation.plan_stored(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;
             p["alias"] = a.get("alias")              # the Sweep buttons still re-verify live before moving
             out.append(p)
@@ -45,8 +39,7 @@ class LiveStats:
             },
             "generated": now_iso(),
         }
-        if account is None or account == "all":
-            self._cache["data"], self._cache["exp"] = data, time.time() + self.TTL
+        self._cache["data"], self._cache["exp"] = data, time.time() + self.TTL
         return data
 
 

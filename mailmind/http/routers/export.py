@@ -40,7 +40,7 @@ def routes():
 
     @r.get("/api/export/plan")
     def plan(req):
-        return export.plan(req.arg("account"))
+        return export.plan()
 
     @r.get("/api/export")
     def snapshot(req):

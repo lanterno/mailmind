@@ -112,7 +112,7 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def waiting_on_others(self, limit: int) -> dict[str, Any]:
+    def waiting_on_others(self, limit: int = 100) -> dict[str, Any]:
         """Every account's sent threads still with no reply, the longest wait first. Pure-local."""
         emails = self._emails()
         with self._uow.read() as c:

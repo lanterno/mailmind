@@ -45,7 +45,7 @@ def routes(mailbox):
 
     @r.get("/api/stats")
     def stats(req):
-        return mailbox.stats.live(req.arg("account"), req.arg("refresh", "0") == "1")
+        return mailbox.stats.live()
 
     @r.get("/api/folders")
     def folders(req):
@@ -67,7 +67,7 @@ def routes(mailbox):
 
     @r.get("/api/waiting-on-others")
     def waiting_on_others(req):
-        return mailbox.queries.waiting_on_others(req.int_arg("limit", 100))
+        return mailbox.queries.waiting_on_others()
 
     @r.get("/api/thread")
     def thread(req):
@@ -85,8 +85,7 @@ def routes(mailbox):
 
     @r.matching("GET", lambda path: path.startswith("/api/message/") and path.endswith("/body"))
     def body(req):
-        return mailbox.bodies.message_body(required_int(req.path.split("/")[3]), req.arg("images", "0") == "1",
-                                           prefetch=(req.arg("prefetch", "0") == "1"))
+        return mailbox.bodies.message_body(required_int(req.path.split("/")[3]), prefetch=(req.arg("prefetch", "0") == "1"))
 
     @r.matching("GET", _BODY_DOCUMENT.fullmatch)
     def body_document(req):

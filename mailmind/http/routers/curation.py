@@ -19,7 +19,7 @@ def routes(curation):
 
     @r.get("/api/audit")
     def audit(req):
-        return curation.AUDIT.read(req.arg("kind", "all"), req.int_arg("limit", 120))
+        return curation.AUDIT.read(req.int_arg("limit", 120))
 
     @r.get("/api/screener")
     def screener(req):

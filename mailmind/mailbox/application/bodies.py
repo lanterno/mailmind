@@ -62,7 +62,7 @@ class Bodies:
             safe_html = self._resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
         return safe_html, info
 
-    def message_body(self, pk: int, load_images: bool, prefetch: bool = False) -> dict[str, Any]:
+    def message_body(self, pk: int, prefetch: bool = False) -> dict[str, Any]:
         with self._uow.read() as c:
             row = self._store.get_message(c, pk)
         if not row:
@@ -81,7 +81,7 @@ class Bodies:
         parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
         if parsed is None:
             return {"ok": False, "error": "not found"}
-        safe_html, info = self._safe_html(pk, parsed, load_images)
+        safe_html, info = self._safe_html(pk, parsed, False)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
             "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": parsed.get("text"),

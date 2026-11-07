@@ -27,14 +27,9 @@ class AuditFile:
         except Exception:
             pass
 
-    def read(self, kind="all", limit=120):
+    def read(self, limit=120):
         events = []
-        files = []
-        if kind in ("all", "sweep"):
-            files.append(settings.current().sweep_audit)
-        if kind in ("all", "reconcile"):
-            files.append(settings.current().reconcile_audit)
-        for path in files:
+        for path in (settings.current().sweep_audit, settings.current().reconcile_audit):
             if not os.path.exists(path):
                 continue
             with open(path) as f:
