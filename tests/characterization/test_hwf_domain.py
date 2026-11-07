@@ -682,6 +682,17 @@ def test_hwf_the_stored_inbox_plan_counts_the_junk_ingest_stored(world):
     assert curation.sweeps.plan_stored(accounts.get(w.ADA))["junk"] == stored["n"]
 
 
+def test_hwf_the_stored_inbox_plan_leaves_out_mail_on_its_way_out(world):
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import store
+    before = curation.sweeps.plan_stored(accounts.get(w.ADA))
+    c = store.conn()
+    c.execute("UPDATE messages SET pending_removal=1 WHERE pk=?", (world.pk("ada-inbox-03-newsletter.eml"),))
+    c.commit()
+    c.close()
+    assert curation.sweeps.plan_stored(accounts.get(w.ADA))["in_inbox"] == before["in_inbox"] - 1
+
+
 def test_hwf_the_screener_skips_senders_a_parent_domain_rule_decided(world):
     from mailmind.bootstrap.curation import rules
     rules.add("example.test", "keep")
