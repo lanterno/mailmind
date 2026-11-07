@@ -27,7 +27,7 @@ def triage(req):
 def triaged(ai):
     from mailmind.bootstrap import assistant
     ai.responder = triage
-    n = assistant.triage.summarize_pending(limit=100, workers=1)
+    n = assistant.assessments.summarize_pending(limit=100, workers=1)
     ai.requests.clear()
     return n
 

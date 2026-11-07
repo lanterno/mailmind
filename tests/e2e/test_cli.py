@@ -54,7 +54,7 @@ def test_sync_pulls_mail_and_says_how_much(world, capsys):
 
 def test_assess_says_ai_is_off_and_tries_nothing(data_dir, anthropic_api, monkeypatch, capsys):
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.triage, "summarize_one", lambda row: 1 / 0)
+    monkeypatch.setattr(assistant.assessments, "summarize_one", lambda row: 1 / 0)
     main(["assess", "10", "1"])
     assert capsys.readouterr().out == "AI is off: there is no API key, so nothing was summarized.\n"
     assert anthropic_api.requests == []

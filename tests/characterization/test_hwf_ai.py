@@ -147,11 +147,11 @@ def test_hwf_triage_retries_a_failed_call_but_stores_an_unusable_reply_once(worl
             return fa.answer({})                     # a reply with nothing usable in it
         return None
     ai.responder = reply
-    assistant.triage.summarize_pending(limit=100, workers=1)
+    assistant.assessments.summarize_pending(limit=100, workers=1)
     assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(QUILT)) == [{"model": "parse-error"}]
     assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(CLIENT)) == []
     ai.requests.clear()
-    assistant.triage.summarize_pending(limit=100, workers=1)
+    assistant.assessments.summarize_pending(limit=100, workers=1)
     assert [r.prompt.count("Subject: Contract draft v2") for r in ai.requests] == [1]
 
 
@@ -162,7 +162,7 @@ def test_hwf_only_the_text_after_the_last_fallback_block_counts(data_dir, ai):
         {"type": "text", "text": '{"summary": "first try'}, hop,
         {"type": "text", "text": '{"summary": "second try'}, hop,
         {"type": "text", "text": '{"summary": "final", "importance": 3, "category": "info"}'}]}))
-    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "final"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)["summary"] == "final"
 
 
 def test_hwf_api_schema_reads_defs_as_names_not_keywords():
@@ -629,7 +629,7 @@ def test_hwf_a_degenerate_review_falls_back_but_keeps_the_ai_picks(app, world, a
 
 def test_without_a_key_triage_sends_no_mail(world, anthropic_api):
     from mailmind.bootstrap import assistant
-    assistant.triage.summarize_pending(limit=3, workers=1)
+    assistant.assessments.summarize_pending(limit=3, workers=1)
     assert anthropic_api.requests == []
 
 

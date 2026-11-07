@@ -314,10 +314,10 @@ def test_at_the_limit_reading_the_ai_cards_never_asks(app, world, ai):
 def test_at_the_limit_triage_waits_for_tomorrow(app, world, ai):
     spend(15_000_000)                                      # the default limit, $15
     assert app.get("/api/debug/ai").json["governor"]["spent_today_micros"] == 15_000_000
-    assistant.triage.round()
+    assistant.assessments.round()
     assert ai.requests == []
     app.clock.shift(timedelta(days=1))
-    assistant.triage.round()
+    assistant.assessments.round()
     assert ai.requests                                     # a new day: triage goes again
 
 
@@ -334,7 +334,7 @@ def test_a_refused_key_stops_triage_but_not_a_click(app, world, ai):
     assert len(ai.requests) == 1
     app.clock.shift(timedelta(seconds=YIELD_SECONDS))
     sent = len(ai.requests)
-    assistant.triage.round()
+    assistant.assessments.round()
     assert len(ai.requests) == sent                        # the breaker is open for background work
     assert app.get("/api/debug/ai").json["governor"]["breaker"] == ["every feature"]
     app.post("/api/ai/rewrite", REWRITE)

@@ -25,6 +25,7 @@ from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.adapters.urllib_http import UrllibModel
 from mailmind.assistant.application.ask import Asker
 from mailmind.assistant.application.asking import Asking
+from mailmind.assistant.application.assessment import Assessments
 from mailmind.assistant.application.brief import Briefs
 from mailmind.assistant.application.bulk import BulkCommands
 from mailmind.assistant.application.calls import Calls
@@ -37,12 +38,11 @@ from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
-from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "triage", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -134,7 +134,7 @@ def transport() -> str:
 
 
 _uow = UnitOfWork()
-status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status(),
+status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: assessments.batch_status(),
                 lambda: calls.model_label())
 calls = Calls(lambda: gateway(), status)
 
@@ -247,7 +247,7 @@ def _looks_human(local):
 
 
 _mail = _Mail()
-triage = Triage(calls, lambda: gateway(), answers, _uow, _mail)
+assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)
 context = ContextAssembler(_mail)
 threads = ThreadDigest(calls, answers, _uow, context)
 briefs = Briefs(calls, answers, _uow, _mail)

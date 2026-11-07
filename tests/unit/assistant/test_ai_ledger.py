@@ -194,7 +194,7 @@ def summarize_as(pk, importance, category):
 
 def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
     from mailmind.bootstrap import assistant
-    assistant.triage.summarize_pending(limit=1, workers=1)
+    assistant.assessments.summarize_pending(limit=1, workers=1)
     lunch = world.pk(LUNCH)
     summarize_as(lunch, 5, "action-needed")
     assert app.post("/api/ai/summarize", {"pk": lunch}).status == 200

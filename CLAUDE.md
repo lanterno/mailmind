@@ -268,8 +268,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`background._kick`). With AI off, or triage held back
-  by the cost governor (see AI calls), it tries nothing: `assistant.triage.summarize_pending` returns 0
-  at once, and a round (`assistant.triage.round`) that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
+  by the cost governor (see AI calls), it tries nothing: `assistant.assessments.summarize_pending` returns 0
+  at once, and a round (`assistant.assessments.round`) that is only yielding to a click comes back in `ASSESS_YIELD` seconds.
   `/api/debug/jobs` shows each job's timing and last outcome, an error as its class name only.
   A test calls the round itself (`mailbox.syncing.backfill_round()`) or `jobs.run(name)`. It is
   standard library only.
@@ -320,12 +320,12 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes),
-  `triage` (`Triage`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
+  `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
   `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `draft_ahead` (`DraftAhead`) and
   `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
-  contexts and the tests reach the Assistant (`assistant.calls`, `.triage`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
+  contexts and the tests reach the Assistant (`assistant.calls`, `.assessments`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
 - `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`).
   `application.ports` holds `AccountRepository`, `SecretResolver` and `ConnectionProbe`. `adapters.config_file` is the first, which `application.directory.Directory` reads and writes `mailmind.config.json`
@@ -965,7 +965,7 @@ tests start each one afresh with `forget()`.
 
 A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7): `BATCH_MIN`
 messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
-`assistant.triage.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
+`assistant.assessments.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
 collects first since that sends no mail and the answers are paid for. `python3 -m mailmind assess --batch` does
 the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
 did; a batch already out is still brought in.

@@ -18,7 +18,7 @@ def routes(mailbox, compose, background, assistant):
                            "drafts_waiting": len(compose.drafts.waiting())},
                 "breakers": governor["breaker"],
                 "ai": {"today": assistant.calls.usage(1)[0], "limit_micros": governor["limit_micros"],
-                       "batch": assistant.triage.batch_status()}}
+                       "batch": assistant.assessments.batch_status()}}
 
     @r.get("/api/debug/pool")
     def pool(req):
@@ -32,6 +32,6 @@ def routes(mailbox, compose, background, assistant):
     def ai(req):
         days = max(1, min(366, int(req.arg("days", "30"))))
         return {"ok": True, "days": assistant.calls.usage(days), "governor": assistant.governor().snapshot(),
-                "batch": assistant.triage.batch_status(), "generated": now_iso()}
+                "batch": assistant.assessments.batch_status(), "generated": now_iso()}
 
     return r

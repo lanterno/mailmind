@@ -56,7 +56,7 @@ def answer(obj, **extra):
 
 def test_a_request_carries_the_key_the_version_and_the_refusal_fallback(api):
     from mailmind.bootstrap import assistant
-    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     [req] = api.requests
     assert req.key == fa.KEY
     assert req.headers["anthropic-version"] == "2026-10-21"
@@ -68,14 +68,14 @@ def test_a_request_carries_the_key_the_version_and_the_refusal_fallback(api):
 
 def test_the_schema_goes_out_closed_and_without_bounds(api):
     from mailmind.bootstrap import assistant
-    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     fmt = api.requests[0].body["output_config"]["format"]
     assert fmt["type"] == "json_schema"
     sent = fmt["schema"]
     assert sent["additionalProperties"] is False and sent["required"] == ["summary", "importance", "category"]
     assert sent["properties"]["importance"] == {"type": "integer"}
     assert sent["properties"]["category"]["enum"][0] == "action-needed"
-    assert assistant.triage.TRIAGE_SCHEMA["properties"]["importance"]["maximum"] == 5   # the original is untouched
+    assert assistant.assessments.TRIAGE_SCHEMA["properties"]["importance"]["maximum"] == 5   # the original is untouched
 
 
 def test_nested_objects_are_closed_and_property_names_kept():
@@ -92,7 +92,7 @@ def test_nested_objects_are_closed_and_property_names_kept():
 def test_triage_runs_at_low_effort_and_the_rest_at_medium(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 4, "category": "personal"}))
-    assistant.triage.summarize_one(ROW)
+    assistant.assessments.summarize_one(ROW)
     assistant.calls.call_claude_json("Draft a reply.", {"type": "object", "properties": {"body": {"type": "string"}}})
     assert [r.body["output_config"]["effort"] for r in api.requests] == ["low", "medium"]
 
@@ -100,9 +100,9 @@ def test_triage_runs_at_low_effort_and_the_rest_at_medium(api):
 def test_a_model_override_and_the_models_without_effort_or_fallback(api, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-4-5")
-    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")
-    assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     old, new = api.requests
     assert old.body["model"] == "claude-haiku-4-5" and "effort" not in old.body["output_config"]
     assert new.body["model"] == "claude-haiku-5-5" and new.body["output_config"]["effort"] == "medium"
@@ -115,7 +115,7 @@ def test_without_schemas_no_format_goes_out_and_loose_json_is_read(api, monkeypa
     from mailmind.bootstrap import assistant
     api.queue(fa.answer('Here you go: {"summary": "loose", "importance": 2, "category": "info"}'))
     monkeypatch.setenv("MAILMIND_NO_SCHEMA", "1")
-    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "loose"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)["summary"] == "loose"
     assert "format" not in api.requests[0].body["output_config"]
 
 
@@ -125,7 +125,7 @@ def test_triage_stores_the_structured_reply(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 9,
                          "category": "action-needed", "action": "Reply by Friday"}))
-    assert assistant.triage.summarize_one(ROW) == (7, ("Mira asks for the table.", 5, "action-needed",
+    assert assistant.assessments.summarize_one(ROW) == (7, ("Mira asks for the table.", 5, "action-needed",
                                                 "Reply by Friday", "claude-opus-5-5"))
 
 
@@ -142,9 +142,9 @@ def test_a_refusal_reads_as_an_empty_reply(api):
     api.queue((200, {"stop_reason": "refusal", "content": [],
                      "stop_details": {"type": "refusal", "category": "cyber"}}),
               (200, {"stop_reason": "refusal", "content": []}))
-    _, payload = assistant.triage.summarize_one(ROW)       # triage first: it yields for 45s after any other call
+    _, payload = assistant.assessments.summarize_one(ROW)       # triage first: it yields for 45s after any other call
     assert payload is not None and payload[-1] == "parse-error"   # stored once, not retried forever
-    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA) == {}
+    assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA) == {}
 
 
 def test_only_the_answer_after_a_fallback_block_counts(api):
@@ -154,7 +154,7 @@ def test_only_the_answer_after_a_fallback_block_counts(api):
         {"type": "fallback", "from": {"model": "claude-opus-5-5"}, "to": {"model": "claude-opus-4-8"},
          "trigger": {"type": "refusal"}},
         {"type": "text", "text": '{"summary": "whole", "importance": 3, "category": "info"}'}]}))
-    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "whole"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)["summary"] == "whole"
 
 
 def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
@@ -181,7 +181,7 @@ def test_a_reply_names_the_model_that_served_it_and_what_it_used(api):
 def test_a_rate_limit_is_retried(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(429, "rate_limit_error", "slow down", NOW_RETRY))
-    assert assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)["summary"] == "stub summary"
+    assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)["summary"] == "stub summary"
     assert len(api.requests) == 2
 
 
@@ -189,7 +189,7 @@ def test_a_bad_key_raises_without_a_retry_and_without_the_key(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(401, "authentication_error", "invalid x-api-key"))
     with pytest.raises(RuntimeError) as e:
-        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert "401" in str(e.value) and "invalid x-api-key" in str(e.value) and "sk-ant" not in str(e.value)
     assert e.value.status == 401 and e.value.permanent
     assert len(api.requests) == 1
@@ -198,7 +198,7 @@ def test_a_bad_key_raises_without_a_retry_and_without_the_key(api):
 def test_a_failed_triage_is_left_for_the_next_run(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(400, "invalid_request_error", "bad"))
-    assert assistant.triage.summarize_one(ROW) == (7, None)
+    assert assistant.assessments.summarize_one(ROW) == (7, None)
 
 
 def test_a_persistent_overload_gives_up_after_two_retries(api):
@@ -206,7 +206,7 @@ def test_a_persistent_overload_gives_up_after_two_retries(api):
     busy = fa.error(529, "overloaded_error", "Overloaded", NOW_RETRY)
     api.queue(busy, busy, busy)
     with pytest.raises(RuntimeError, match="529") as e:
-        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert not e.value.permanent
     assert len(api.requests) == 3
 
@@ -235,7 +235,7 @@ def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monke
     from mailmind.bootstrap import assistant
     config(data_dir, anthropic_api_key="sk-ant-config-key")
     with pytest.raises(RuntimeError, match="401"):              # the fake knows only its own key
-        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
     via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
     assert assistant.status.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
@@ -275,7 +275,7 @@ def test_status_records_a_rejected_key_then_a_good_call(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(401, "authentication_error", "invalid x-api-key"))
     with pytest.raises(RuntimeError):
-        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     st = assistant.status.report()
     assert st["last_ok"] is False and st["last_error"] == "the API key was rejected" and st["last_ts"]
     assert assistant.calls.call_claude("Say hi.") == fa.STUB_TEXT
@@ -288,14 +288,14 @@ def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, a
     before = assistant.status.report()
     assert (before["engine"], before["model"], before["key_from"]) == ("none", "", "")
     with pytest.raises(AIOff):
-        assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     with pytest.raises(AIOff):
         assistant.calls.call_claude("Summarize this thread.")
     assert anthropic_api.requests == []
     after = assistant.status.report()
     assert (after["last_ok"], after["last_ts"], after["last_error"]) == \
         (before["last_ok"], before["last_ts"], before["last_error"])
-    assert assistant.triage.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
+    assert assistant.assessments.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
 
 
 # ── which door talks through which ────────────────────────────────────────────

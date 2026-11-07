@@ -72,7 +72,7 @@ def assess(limit, workers):
     if why:
         print(f"Triage is held back ({why}), so nothing was summarized.")
         return
-    assistant.triage.summarize_pending(limit, workers if workers is not None else assistant.triage.WORKERS,
+    assistant.assessments.summarize_pending(limit, workers if workers is not None else assistant.assessments.WORKERS,
                                 log=lambda m: print(m, flush=True))
     _print_stats()
 

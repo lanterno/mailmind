@@ -117,9 +117,9 @@ def assess_batch() -> int:
     if assistant.calls.engine() == "none":
         print("AI is off: there is no API key, so nothing was sent.")
         return 1
-    assistant.triage.batch_collect(print)
-    sent = assistant.triage.batch_submit(at_least=1, keep=0, log=print)
-    status = assistant.triage.batch_status()
+    assistant.assessments.batch_collect(print)
+    sent = assistant.assessments.batch_submit(at_least=1, keep=0, log=print)
+    status = assistant.assessments.batch_status()
     if status["waiting"]:
         print(f"{status['waiting']} messages are out in a batch. Most end within the hour, and all within a day; "
               "the app brings the answers in when it next runs, or run this again.")

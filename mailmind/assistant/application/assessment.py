@@ -50,7 +50,7 @@ TRIAGE_SCHEMA = {
 }
 
 
-class Triage:
+class Assessments:
     WORKERS = WORKERS
     TRIAGE_EFFORT = "low"      # triage runs on every new message and is a short classify-and-summarize
     TRIAGE_SCHEMA = TRIAGE_SCHEMA
