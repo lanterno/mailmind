@@ -209,11 +209,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `SavedViews.post`, `search.bad_query`, `Cleanup.sender`, `Bodies.message_body`, `Queries.thread_json`, `Connections.test`
   and `change`. The literals that mean none of the seven stay (410 for a plan expired, 413, 503, 504, each route's own worded
   500). `ApiError` in `web/src/lib/api/client.ts` and everything that reads `ok` move with them.
-- **Retire `mailmind/calendar/adapters/ics_reader.py`** · low value · effort S — A process starts on it (`_reader` in
-  `bootstrap/calendar.py`) and `front.build` asks for `icalendar_acl`, so with the old door gone no one reads an invite through it
-  but the tests. `calendar.use`, `tests/contract/test_ics_differential.py` and the per-reader runs of
-  `tests/unit/calendar/` and `tests/contract/test_ics_reader_contract.py` go with it. The `IcsReader` port can stay, with
-  one adapter.
 - **Move the command line off `urllib_http.py`** · low value · effort S — `python3 -m mailmind` runs on Python alone, so
   `assess` and the rest reach Claude through `UrllibModel` (`TRANSPORTS` in `bootstrap/assistant.py`; only `front.build` calls
   `assistant.use("sdk")`), and `tests/contract/test_ai_contract.py` holds the two to one behaviour over `adapters.wire`.

@@ -675,8 +675,8 @@ uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules: storage, matching, age selection
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next: stored invites, repeats, updates, cancellations
-uv run pytest tests/contract/test_ics_reader_contract.py    # reading an invite, by either reader: nothing raises, nothing costs much
-uv run pytest tests/contract/test_ics_differential.py       # the two readers compared, each difference listed with why
+uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's text comes to: who a reply goes to, its dates
+uv run pytest tests/contract/test_ics_reader_contract.py    # reading an invite: nothing raises, nothing costs much
 uv run pytest tests/unit/discovery/test_contacts_known.py   # "new" recipients lookup: matching, drafts, thin history, CSRF
 uv run pytest tests/unit/compose/test_send_after.py         # send-later times: passed or far-off ones are refused
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopened drafts: text and quote, files, Bcc, threading, refusals
