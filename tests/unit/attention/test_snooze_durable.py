@@ -212,3 +212,38 @@ def test_two_copies_waking_together_each_get_the_mark(app, world):
     app.clock.shift(timedelta(hours=7))
     attention.snoozing.wake_due()
     assert copy(world, CI)["seen"] == 0 and copy(world, CI, "Archive")["seen"] == 0
+
+
+# -- two copies in one folder ------------------------------------------------------------------------------
+
+def second_copy(world, name=RECEIPT):
+    """The same message under another UID in the same folder, stored as ingest stores one."""
+    from mailmind.bootstrap.mailbox import store
+    r = world.row(name)
+    fields = ("account", "kind", "folder", "message_id", "gmail_thread", "from_addr", "from_name", "subject", "date_iso", "ts",
+              "snippet", "bucket", "is_junk")
+    c = store.conn()
+    try:
+        pk = store.upsert_message(c, {**{k: r[k] for k in fields}, "uid": r["uid"] + 900})
+        c.commit()
+        return pk
+    finally:
+        c.close()
+
+
+def test_a_snooze_and_its_end_reach_the_column_of_every_copy_in_the_folder(world):
+    from mailmind.bootstrap.mailbox import store
+    one, other = world.pk(RECEIPT), second_copy(world)
+    c = store.conn()
+    try:
+        def columns():
+            return [c.execute("SELECT snoozed_until FROM messages WHERE pk=?", (pk,)).fetchone()[0] for pk in (one, other)]
+        attention.book.set_snooze(c, one, 4102444800)
+        assert columns() == [4102444800, 4102444800]
+        assert c.execute("SELECT until FROM snoozes").fetchall()[0][0] == 4102444800
+        attention.book.clear_snooze(c, other)
+        assert columns() == [None, None]
+        assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
+    finally:
+        c.rollback()
+        c.close()
