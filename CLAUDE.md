@@ -50,9 +50,9 @@ uv run pytest tests/contract/test_ics_reader_contract.py    # the reader of invi
 uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (18)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (146)
-uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (102)
+uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
-uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (167)
+uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (159)
 uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers (28)
 ```
 
@@ -406,7 +406,7 @@ The app lives in `mailmind/`.
   matcher, `domain_covers`, for the classifier, the Screener and expiry; what a token is, who is left to decide on and what a keep
   rule covers), `cleanup_plan` (`CleanupPlan`: who it blocks, how far its sweep goes, reading one past the cap to know it was hit,
   and what its moves came to), `sweep_plan` (how an inbox falls, how a stored row is judged and what an AI sweep may take),
-  `expiry`, `live` (a message as a sweep reads it), `noise` (the score, its bar, the order and what a request may ask) and
+  `expiry`, `live` (a message as a sweep reads it), `noise` (the score, its bar and the order) and
   `unsubscribe` (`Attempt`, what each way out comes to and what is latched; what a mailto may send and what a preview shows). What goes
   to the server, in what order, stays in the use cases: audit before a move, block before sweep before unsubscribe. A rule change's
   `reclassify` stays a direct call, since its count is in the answer, it runs after the sweep, and when it fails an Undo of a block
@@ -692,7 +692,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   both queues' drains wait for a full run. What nothing queues (a sweep) answers 409 through
   `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
-  `_imap_mutate` returns `(False, None)`, and trash, archive, junk and move answer `ok: false`
+  `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer `ok: false`
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
   `EXPUNGE`: `MailSession.expunge(uids)` removes the UIDs named and no others, and
   `move_by_copy` flags each original only after its COPY succeeded.

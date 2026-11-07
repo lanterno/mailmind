@@ -327,7 +327,7 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_cancelling_the_series_drops_its_moved_occurrences_too` | `tests/unit/calendar/test_upcoming.py` |
 | `test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead` | `tests/unit/calendar/test_upcoming.py` |
 | `test_trash_junk_unfetched_and_old_mail_are_not_read` | `tests/unit/calendar/test_upcoming.py` |
-| `test_account_filter_and_limit` | `tests/unit/calendar/test_upcoming.py` |
+| `test_every_account_and_a_limit` | `tests/unit/calendar/test_upcoming.py` |
 | `test_a_broken_calendar_part_is_skipped` | `tests/unit/calendar/test_upcoming.py` |
 | `test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving` | `tests/unit/calendar/test_upcoming.py` `test_a_weekly_event_keeps_its_wall_clock_time_across_daylight_saving, test_a_weekly_event_keeps_its_wall_clock_time_and_length_across_daylight_saving` |
 | `test_count_until_and_exdate_end_or_skip_occurrences` | `tests/unit/calendar/test_upcoming.py` `test_count_until_and_exdate_end_or_skip_occurrences, test_count_and_until_end_a_series` |
