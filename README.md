@@ -1,6 +1,6 @@
 # MailMind
 
-**A local-first, dependency-free email client with an AI layer.** MailMind logs
+**A local-first email client with an AI layer.** MailMind logs
 into your mailboxes over IMAP, throws away the junk, AI-summarizes everything
 that matters, and gives you a fast dashboard to read, triage, search and *send* —
 so you read *summaries of what's important*, not your inbox.
@@ -12,9 +12,9 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **Next to nothing to install.** Python, three packages (FastAPI, uvicorn and the
-  Anthropic SDK) that [uv](https://docs.astral.sh/uv/) fetches on first run, and one HTML
-  file. `python3 server.py` still runs the app on Python alone.
+- **Next to nothing to install.** Python, and four packages (FastAPI, uvicorn, the
+  Anthropic SDK and IMAPClient) that [uv](https://docs.astral.sh/uv/) fetches on first run.
+  `python3 server.py` still runs the app on Python alone, with nothing installed and no build.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
   Anthropic through the Claude API.
@@ -44,17 +44,18 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    mailmind/http/  +  web/ (the page)   the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
+                                       or `python3 server.py` (the standard library)
 ```
 
 Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP IDLE),
-`mailmind/compose/` (send), `mailmind.discovery` (FTS + operator
-grammar), `mailmind/content/` (reading a message, and the reader's
-whitelist sanitizer), `mailmind/calendar/` (invites), and
-`mailmind/assistant/` (everything asked of Claude).
+`mailmind/compose/` (send), `mailmind/discovery/` (FTS + operator
+grammar), `mailmind/attention/` (snooze, mute, reply later, follow-ups),
+`mailmind/content/` (reading a message, and the reader's whitelist sanitizer),
+`mailmind/calendar/` (invites), and `mailmind/assistant/` (everything asked of Claude).
 
 The app is one view: a real folder-and-account client whose Inbox opens on
-today's AI brief. Curation tools (sweep junk, keep/block rules, reconcile, audit)
-live in a slide-in drawer.
+today's AI brief. Curation tools (sweep junk, keep/block rules, audit) live in a
+slide-in drawer, and the sync menu opens it and runs a reconcile.
 
 ## Features
 
@@ -131,6 +132,9 @@ and the Claude API.
   `python -m mailmind serve` reads an invite through `icalendar` and `recurring-ical-events`:
   every recurrence rule down to a day, RDATE, and each event of an invite. `python3 server.py`,
   with nothing installed, reads the common rules and an invite's first event.
+- **An email attached to an email stays one file.** Its chip shows its real size, the download
+  is the whole message as an `.eml`, and a forward carries it intact. Its text and its files
+  aren't taken for the outer message's.
 - **Click any sender for a relationship card** — how many emails they've sent, how
   often you replied, first and last contact, which of your accounts they write to,
   and their recent threads, with quick Compose and search actions. Pure local SQL,
@@ -151,7 +155,7 @@ and the Claude API.
 - **Bulk triage on demand.** Mark rows with `x` or the checkbox on each avatar, then archive,
   delete, read, unread, star, junk, snooze or mute the whole set as **one** undo group.
 - **Snooze, mute, reply-later and Waiting.** A numbered snooze preset popover (plus a
-  native date-time picker for custom times) with its own Snoozed folder; a 📌 reply-later
+  native date-time picker for custom times) with its own Snoozed folder; a reply-later
   stack; thread mute that silences future replies at ingest and drops the thread out of
   the inbox while keeping it searchable; and a **Waiting** folder that tracks what you
   owe and are owed ("Sent 3d ago · no reply", "Awaiting your reply") and auto-resolves
@@ -167,9 +171,10 @@ and the Claude API.
   auto-label lanes — Feed, Paper trail, Notifications, Action needed, Finance —
   which are just saved queries over the existing classifier buckets.
 - **One "All inboxes" view** merges every connected account's INBOX by date with
-  per-row account chips, replacing the eight-click morning ritual. The switcher at the
-  top of the rail shows each account as a colored dot (stacked for All inboxes) and
-  says in words when one can't connect.
+  per-row account chips. The page shows each account's newest 40. The React app at `/next` reads
+  them as one list that pages back through all of it, and an account still on its first scan holds
+  up no one there. The switcher at the top of the rail shows each account as a colored dot
+  (stacked for All inboxes) and says in words when one can't connect.
 - **Document Hub.** Every real attachment across every account in one searchable
   overlay — type facets, live filename/sender/subject search that reaches every file, a
   "show more" past the first page, direct download and click-through to the source email,
@@ -299,8 +304,8 @@ automatically.
   message back before it hits the wire and restores everything you'd written. If you're
   writing another message by then, it is saved to Drafts before the undone one takes its
   place, and if that save fails it stays open while the undone one waits behind Edit.
-- **Scheduled send** — pick a preset or an exact time; the row shows
-  `Scheduled · <time>` with **Send now** and **Cancel**.
+- **Scheduled send** — pick a preset or an exact time; its row in the outbox says when,
+  with **Send now** and **Cancel**.
 - **Send-time checks.** Send, ⌘/Ctrl+Enter and the Later presets first look the message
   over. A gold strip holds the send when there's no subject, when you wrote "attached" (or
   *ci-joint*, *te adjunto*, *em anexo*, *anbei*, *in allegato*, *bijgevoegd*, *مرفق*: eight
@@ -372,8 +377,8 @@ automatically.
 - **Push that follows your accounts.** IMAP IDLE watches each account's inbox. Add an
   account, change its password or server, or remove it, and IDLE follows at once, with no
   restart; a move still queued for a removed account is given up rather than left waiting.
-- **Background notifications.** An opt-in 🔔 fires a desktop notification and keeps an
-  unread count in the tab title when MailMind isn't focused.
+- **Background notifications.** Opt in from the sync menu and new mail fires a desktop notification
+  while MailMind's tab is in the background, and the tab title counts what arrived either way.
 - **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill
   beside the sync status reads "Studio sync in 8 min"; it opens the invite or dismisses,
   and turns into one desktop notification when the tab is in the background.
@@ -392,16 +397,17 @@ automatically.
   copy landed, then removes only that message, never expunging the rest of the folder. A star
   or a read mark the server refuses is taken back on the page too, instead of showing until the
   next sync.
-- **Flags follow other clients.** Each sync reads the read, star and answered marks of a
-  folder's newest 500 messages again, so mail you read on your phone shows read here too. A
-  change you make meanwhile, or one still queued offline, keeps its own.
+- **Flags follow other clients.** Each sync reads the read, star and answered marks again, so mail
+  you read on your phone shows read here too: whatever changed, however old, where the server can say,
+  and a folder's newest 500 messages where it can't. A change you make meanwhile, or one still queued
+  offline, keeps its own.
 - **Phantom messages clean themselves up.** A background loop reconciles one account
   per tick against the server, every folder MailMind has synced, yields instantly to anything
   you're doing, and pushes an event so open lists drop messages deleted in another client. It prunes only what it read
   before asking the server, so mail a sync stores while it runs is never taken for a ghost.
-- **Persistent per-account IMAP connections** make repeated reads dramatically faster,
-  with connection validation, age/use recycling and extra-conservative handling for
-  Proton Bridge's low connection cap.
+- **Optional persistent per-account IMAP connections.** Set `MAILMIND_POOL=1` and repeated reads
+  get dramatically faster, with connection validation, age/use recycling and extra-conservative
+  handling for Proton Bridge's low connection cap. Off by default while it's being tried out.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
@@ -425,8 +431,8 @@ automatically.
   backs it up beside it (the newest three kept, readable only by you), and each step of the change
   lands whole or not at all. `python3 -m mailmind db check-upgrade` tries the next upgrade on a copy
   first and reports only row counts and integrity checks, never a message.
-- **The page asks no other host for anything.** Its fonts are served from the app, so opening your mail tells
-  no font service you did.
+- **The page asks no other host for anything** until you load a message's images. Its fonts are served from the
+  app, so opening your mail tells no font service you did.
 - **Only your own MailMind page can talk to the local server.** It answers just its
   own host name, refuses requests other websites start and any change that lacks the page's
   token and origin, can't be framed by another page, and checks every folder name and search
@@ -448,14 +454,14 @@ automatically.
 - **Nothing is ever sent or deleted behind your back.** AI drafts wait for you, bulk
   actions require a preview and a confirm, and every destructive action is reversible.
 - **You always know what's happening** — a first-run welcome with a Connect-account
-  button, an explicit "Claude isn't reachable" message rather than an endless spinner,
+  button, an explicit "Claude not reachable" message rather than an endless spinner,
   and an inline Retry on every error panel.
 
 ### Keyboard, theming & accessibility
 
 - **Full keyboard control** — `j`/`k`/`n`/`p` to move, `o` to open, `↵` for focus reading,
-  `[` to show or hide folder names, `e`/`d`/`b`/`s`/`u`/`x` to triage, `l` reply-later,
-  `w` waiting, `v` save a view, `z` undo,
+  `[` to show or hide folder names, `e`/`d`/`b`/`s`/`u`/`x` to triage, `h` snooze, `w` mute,
+  `l` reply-later, `v` save a view, `z` undo,
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
   account, saved views, the actions available on the selected message, and app commands.
@@ -481,12 +487,15 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
-- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's three
-  packages, FastAPI, uvicorn and the Anthropic SDK, from `pyproject.toml` on first run. Without
-  it, `python3 server.py` runs the same app on the standard library alone.
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's four
+  packages, FastAPI, uvicorn, the Anthropic SDK and IMAPClient, from `pyproject.toml` on first run.
+  Without it, `python3 server.py` runs the same app on the standard library alone.
 - **A Claude API key**, for summaries and the other AI features, as
   `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
   AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
+- **Optional:** [`just`](https://just.systems), which wraps the commands below, and
+  [Node](https://nodejs.org), which `just demo`, `just run-next` and the frontend checks need. The
+  page itself needs no build.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
@@ -496,6 +505,10 @@ automatically.
 
 ```bash
 git clone https://github.com/<you>/mailmind.git && cd mailmind
+
+# To look around first: the whole app on fictional mail, fake servers and a temp data directory.
+# Nothing of yours is read or changed, and Ctrl-C ends it. (Needs uv, just and Node.)
+just demo                         # http://127.0.0.1:8721   (custom port: just demo 9000)
 
 # 1. Configure ONE account to start (delete the others in the example)
 cp mailmind.config.example.json mailmind.config.json
@@ -582,6 +595,10 @@ slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one s
 read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
 queues until a full run, and it syncs nothing in the background. `just dev` does that.
 
+Both serve the page at `/`. A React rewrite of it sits at `/next`, and its top bar links back. It
+exists only once built (`just run-next` builds it, and needs Node; unbuilt, `/next` answers 404), and
+it isn't the default yet.
+
 **CLI curation** (`python3 -m mailmind`, or `just`) — works across every account:
 
 ```bash
@@ -595,9 +612,10 @@ python3 -m mailmind rules block spammer.com # always trash (writes a rule)
 python3 -m mailmind rules                  # show the learned lists
 python3 -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
 python3 -m mailmind expire all --dry       # preview what the expiry rules would trash now
+python3 -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
-> ⚠️ **`sweep`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
+> ⚠️ **`sweep`, `sweep-ai`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
 > Always `--dry` first. Every sweep/reconcile is logged to `sweep_audit.jsonl` /
 > `reconcile_audit.jsonl`. Moves go to Trash and are recoverable; Gmail purges
 > its Trash after 30 days.
@@ -606,8 +624,8 @@ python3 -m mailmind expire all --dry       # preview what the expiry rules would
 
 | Variable | Effect |
 |---|---|
-| `MAILMIND_HOME` | The data directory: the database, config, rules, saved views and audit trails. Unset, the repo folder, where they have always lived. It must already exist; MailMind never creates it. Every command reads it: the server, `ingest.py`, `summarize.py`, `manage.py`, `config.py check`, `export.py`. |
-| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves and flag changes wait in their queues, drafts, sweeps and unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
+| `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. Both front doors and every `python3 -m mailmind` command read it. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |
@@ -619,16 +637,17 @@ python3 -m mailmind expire all --dry       # preview what the expiry rules would
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
 | `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs read-only. |
 | `MAILMIND_NO_DRAFT_TICK=1` | Disable the background reply pre-drafter (also implied by read-only). |
+| `MAILMIND_NO_BATCHES=1` | Triage a backlog message by message at full price instead of sending it as a batch at half price. A batch already out is still brought in. |
 | `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
 
 The server's port is the first argument to `serve` or to `server.py` (default `8721`).
 
-`MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default** and
-nothing in the repo sets them, so a plain run connects fresh for
-every operation and syncs INBOX only. Export them from your shell profile or a
-launcher script if you want them on.
+`MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default**, so a plain
+run connects fresh for every operation and syncs INBOX only. `just run-fast` sets
+both for that run; export them from your shell profile or a launcher script to keep
+them on.
 
 ## Where your data lives (all local, all git-ignored)
 
@@ -642,6 +661,8 @@ In the repo folder, or in the directory `MAILMIND_HOME` names:
 - `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
 - `mailmind.log` (and `.1` to `.3`, older) — what the app said of its own running, one JSON object a
   line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject.
+- `backups/` — the database as it stood before each upgrade (the newest three, readable by you
+  only), and any rules file that wouldn't parse.
 - `mailmind.config.json` — your accounts + credentials.
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
@@ -663,26 +684,28 @@ uv run pytest tests/unit/compose/test_send_guard.py         # send-time checks: 
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopened drafts: text and quote, files, Bcc, threading, refusals
 uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's side of reopening a draft (needs node)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
+uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds
 ```
 
 These need [uv](https://docs.astral.sh/uv/). With [`just`](https://just.systems) installed too, `just test` runs all of them
-together with the rest of the pytest suite in `tests/`. That suite drives the app against fake IMAP,
+together with the rest of the pytest suite in `tests/`. That suite drives the app, through each front door, against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
-`tests/golden/`. `just verify` adds lint (ruff), byte-compile and a frontend syntax check.
+`tests/golden/`. `just verify` adds lint (ruff, the import rules between the package's layers, and pyright), byte-compile, the
+frontend checks (the page's syntax, and the TypeScript's types, lint and tests, which need Node) and a look for known
+vulnerabilities in what the lockfiles pin.
 `just test-full` also runs the browser tests (`just test-browser` runs only those), which click
-through the dashboard in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
+through the page and the React app in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
 real Dovecot server in Docker. `just setup` installs all of it, and `just` on its own lists every recipe. uv installs those dev
 tools from `pyproject.toml` on first use, as it does the app's own packages.
-
-Separately, `python3 -m mailmind assess --batch` (`just backfill`) sends every message with no
-summary yet as a batch, within today's limit. Run it again, or let the app, to bring in the answers.
 
 ## Privacy & contributing
 
 This is a personal-data app. **Never commit** `mailmind.config.json`,
 `mailmind_rules.json` (it holds your personal keep/block entries), `mailmind.db`,
 the audit `*.jsonl` files, or screenshots of real mail — the `.gitignore` covers
-them; don't `git add -f` around it. PRs welcome; keep the app itself dependency-free.
+them; don't `git add -f` around it. PRs welcome. `python3 server.py` has to keep running with nothing
+installed, so nothing it imports may import a third-party package, and a package the new front door
+needs is declared in `pyproject.toml`.
 
 ## License
 
