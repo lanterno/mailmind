@@ -345,7 +345,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `all`, `junk`, `trash`, else `custom`): INBOX by name, then the SPECIAL-USE attribute, then the
   whole last segment of the name, never part of one ("Bulk orders" is nobody's junk). Where
   several could play a role, an attribute beats a name, a shallower path a deeper one, then the
-  lower name, never LIST's order (Proton Bridge shuffles it). `adapters.imap_list` reads an
+  lower name, never LIST's order (Proton Bridge shuffles it). `adapters.imap.imap_list` reads an
   imaplib LIST answer into `Folder`s, literals included.
   `session.find_role(s, *roles)` finds a folder on a live session; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
@@ -358,8 +358,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `interrupt()` from another thread. Names are as LIST gave them, and the errors are imaplib's
   classes through either adapter: a refusal raises `IMAP4.error`, a lost connection
   `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets. The adapters
-  are `adapters.imaplib_session` (what the old door runs on) and `adapters.imapclient_session`
-  (only it imports `imapclient`). `adapters.imap_names` holds `mailbox_arg` and `imap_quote`,
+  are `adapters.imap.imaplib_session` (what the old door runs on) and `adapters.imap.imapclient_session`
+  (only it imports `imapclient`). `adapters.imap.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
   `adapters.sqlite` holds what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.threading` for thread ids.
   `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
