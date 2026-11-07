@@ -3,6 +3,7 @@ import pytest
 
 from mailmind.discovery.domain import search
 from mailmind.discovery.domain.query import QuerySpec
+from mailmind.kernel.errors import Refused
 
 
 def asked(**qs):
@@ -32,9 +33,9 @@ def test_nothing_typed_answers_whatever_else_the_request_holds():
 
 
 def test_it_says_nothing_of_a_bad_number_past_that():
-    with pytest.raises(ValueError):
+    with pytest.raises(Refused):
         asked(q="heron", limit="many")
-    with pytest.raises(ValueError):
+    with pytest.raises(Refused):
         asked(q="heron", offset="far")
 
 
