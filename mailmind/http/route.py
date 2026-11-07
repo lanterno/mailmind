@@ -39,6 +39,8 @@ from mailmind.platform.logging import for_request, get_logger
 
 log = get_logger("http")
 
+_AS_SENT = "query_string_as_sent"     # the scope's, as `handle` found it
+
 
 def router():
     """A router whose routes are all `Route`s. `mailmind.bootstrap.web` hands each to the app."""
@@ -61,6 +63,11 @@ def _first_of_each(query_string):
     FastAPI would take the last, and hand a number the blank."""
     given = parse_qs(query_string.decode("latin-1"))
     return urlencode({name: values[0] for name, values in given.items()}).encode()
+
+
+def query_as_sent(request):
+    """The query string as the client wrote it, for what repeats it rather than reads it."""
+    return request.scope[_AS_SENT].decode("latin-1")
 
 
 def _replaying(body, receive):
@@ -109,7 +116,8 @@ class Route(APIRoute):
         """What FastAPI is to read: the query string, and a POST's body, as the handler read them. A body counts only if its
         length was declared (no length, as a chunked one has, is {}), whatever its Content-Type says, which FastAPI would
         hold to JSON. The perimeter has judged a declared length, so a body that runs over its cap never said how long it was."""
-        scope["query_string"] = _first_of_each(scope.get("query_string", b""))
+        scope[_AS_SENT] = scope.get("query_string", b"")
+        scope["query_string"] = _first_of_each(scope[_AS_SENT])
         if scope["method"] == "POST":
             try:
                 body = await shared.read_body(scope, receive, shared.post_body_cap(scope["path"]))

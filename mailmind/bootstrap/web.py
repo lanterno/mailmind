@@ -1,6 +1,6 @@
 """The routes, over the contexts, on the routers and the one handler the app serves."""
 from mailmind.bootstrap import accounts, assistant, attention, background, calendar, compose, curation, discovery, mailbox
-from mailmind.http import handler, static
+from mailmind.http import handler
 from mailmind.http.handler import H
 from mailmind.http.routers import accounts as accounts_routes
 from mailmind.http.routers import assistant as assistant_routes
@@ -8,7 +8,7 @@ from mailmind.http.routers import attention as attention_routes
 from mailmind.http.routers import calendar as calendar_routes
 from mailmind.http.routers import compose as compose_routes
 from mailmind.http.routers import curation as curation_routes
-from mailmind.http.routers import debug, events, export
+from mailmind.http.routers import debug, events, export, static
 from mailmind.http.routers import discovery as discovery_routes
 from mailmind.http.routers import mailbox as mailbox_routes
 from mailmind.http.routing import Routes
@@ -27,7 +27,8 @@ ROUTERS = [attention_routes.router(attention),
            compose_routes.router(compose),
            discovery_routes.router(discovery),
            events.router(),
-           export.router()]
+           export.router(),
+           static.router()]
 
-handler.bind(Routes(static.routes()),
+handler.bind(Routes(),
              lambda: assistant.governor().saw_someone())
