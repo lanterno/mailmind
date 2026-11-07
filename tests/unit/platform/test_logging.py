@@ -14,7 +14,8 @@ import threading
 import pytest
 
 import guard
-from mailmind.bootstrap import assistant, background, calendar, curation, discovery, mailbox, wiring
+from fixtures import world as w
+from mailmind.bootstrap import assistant, background, calendar, compose, curation, discovery, mailbox, wiring
 from mailmind.bootstrap.mailbox import realtime
 from mailmind.http import serving
 from mailmind.platform import logging as logs
@@ -80,6 +81,11 @@ def test_an_extra_is_held_to_the_same_list(home, capsys):
 def test_a_positional_argument_shows_only_if_it_is_a_number(home):
     log.warning("%s sent %d, %s", "Lunch on Friday", 3, "ada@example.test")
     assert written(home)[0]["msg"] == f"{WITHHELD} sent 3, {WITHHELD}"
+
+
+def test_a_count_shows(home, capsys):
+    log.info("moved %(count)s", {"count": 3})
+    assert capsys.readouterr().out == "[test] moved 3\n"
 
 
 def test_a_value_that_isnt_plain_is_withheld(home):
@@ -376,6 +382,8 @@ def test_a_write_refused_read_only_says_what_was_refused(app, monkeypatch, capsy
     ("/api/cleanup/execute", lambda: curation.cleanup, "execute", "[cleanup] error: RuntimeError"),
     ("/api/contacts/known", lambda: discovery.known, "ask", "[contacts] known error: RuntimeError"),
     ("/api/ai/ask", lambda: assistant.asking, "ask", "[ai] ask error: RuntimeError"),
+    ("/api/send", lambda: compose.sending, "send", "[send] error: RuntimeError"),
+    ("/api/draft/resume", lambda: compose.drafts, "resume", "[resume] error: RuntimeError"),
 ])
 def test_a_route_that_answers_its_own_failure_says_only_its_class(app, monkeypatch, capsys, path, holder, name, said):
     monkeypatch.setattr(holder(), name, raises())
@@ -400,6 +408,20 @@ def test_a_round_that_fails_says_which_job_and_the_class_of_its_error(home, caps
     [line] = written(home)
     assert (line["job"], line["error"]) == ("sync", "RuntimeError")
     assert line["job_id"].startswith("sync-") and "example.test" not in json.dumps(line)
+
+
+def test_a_sync_that_fails_withholds_its_account(world, monkeypatch, capsys):
+    monkeypatch.setattr(mailbox.ingest, "sync_new", raises())
+    capsys.readouterr()
+    assert mailbox.syncing.sync_accounts({w.ADA}) == 0
+    assert capsys.readouterr().out == f"[sync] {WITHHELD}: sync failed: RuntimeError\n"
+
+
+def test_expiry_withholds_its_account_and_the_text_of_an_error(monkeypatch, capsys):
+    outcome = {"error": "RuntimeError: no such user ada@example.test, Lunch on Friday", "moved": 0}
+    monkeypatch.setattr(curation.expiry, "account", lambda acct: outcome)
+    curation.expiry.auto_one({"email": "ada@example.test"})
+    assert capsys.readouterr().out == f"[expire] {WITHHELD}: RuntimeError\n"
 
 
 def test_a_bus_handler_that_fails_goes_in_the_file_too(home):
@@ -444,6 +466,27 @@ def test_no_module_binds_the_name_logging_to_this_one():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom) and node.module == "mailmind.platform":
                 assert not any(a.name == "logging" and a.asname in (None, "logging") for a in node.names), path
+
+
+def _where_it_prints(tree):
+    """The name of each function a print is called in, and None for one outside any."""
+    def walk(node, where):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Call) and getattr(child.func, "id", "") == "print":
+                yield where
+            yield from walk(child, child.name if isinstance(child, ast.FunctionDef) else where)
+    return set(walk(tree, None))
+
+
+def test_only_a_commands_own_output_is_a_print():
+    """A print goes past `Redact`, so a line about the app's own running goes through the log."""
+    package = pathlib.Path(guard.ROOT) / "mailmind"
+    printing = {path.relative_to(package).as_posix(): where for path in _source_files()
+                if (where := _where_it_prints(ast.parse(path.read_text())))}
+    for the_command_line in ("__main__.py", "bootstrap/cli.py"):
+        del printing[the_command_line]
+    assert printing == {"accounts/application/directory.py": {"check", "materialize"},
+                        "bootstrap/wiring.py": {"assess_batch"}}
 
 
 def _is_a_logger(node):
