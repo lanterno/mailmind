@@ -48,7 +48,7 @@ uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules (19)
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient, through each reader (122)
-uv run pytest tests/contract/test_ics_reader_contract.py    # a reader of invites, through each: never raises, plain data, bounded (314)
+uv run pytest tests/contract/test_ics_reader_contract.py    # a reader of invites, through each: never raises, plain data, bounded (315)
 uv run pytest tests/contract/test_ics_differential.py       # the two readers compared over a corpus, each difference listed with why (526)
 uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (19)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
@@ -437,7 +437,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `recurring_ical_events`, and nothing of either leaves it. So Calendar is standard library only but for that module. An invite is a
   stranger's text and a reader runs on a request thread, so a reader never raises. `icalendar_acl` takes a text of at most `_MAX_TEXT`
   with at most `_MAX_EVENTS`, expands nothing finer than a day and gives each call a budget of its thread's time (`_within`: a tracer
-  raises at the next Python call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
+  raises at the next plain call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
   of dateutil's). `Agenda.upcoming` has an allowance for one list on top (`_EXPAND_SECONDS`), past which a series shows its first date.
   One rule says what a TZID means, `invite.zone`, on either door: a name the zone database doesn't know floats, so a VTIMEZONE counts for
   nothing, and `icalendar_acl` lets the library keep none and look up no TZID. It keeps what isn't text as its line said it (`_AS_SAID`),
