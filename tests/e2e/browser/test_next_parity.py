@@ -528,3 +528,20 @@ def test_settings_says_what_each_inbox_holds_and_what_stops_one_answering(page, 
     expect(ada.locator(".chip-dot")).not_to_have_class(re.compile(r"\berror\b"))
     clean(page)
 
+def test_a_view_that_wont_go_says_so_in_the_pages_words(page, app, world):
+    opened(page)
+    page.pw.on("dialog", lambda d: d.accept("Lunch"))
+    page.keyboard.press("/")
+    box = page.get_by_role("textbox", name="Search")
+    box.fill("from:lin")
+    box.press("Enter")
+    page.locator("#clientCtx .ctx-save").click()
+    view = page.locator("#folderrail [data-view]", has_text="Lunch")
+    expect(view).to_be_visible()
+    page.route("**/api/views", lambda route: route.abort() if route.request.method == "POST" else route.fallback())
+    view.locator(".vdel").dispatch_event("click")               # at this width the rail folds it away, as the page's does
+    expect(page.locator("#toast")).to_have_text("Couldn\u2019t remove view")
+    assert all("ERR_FAILED" in p for p in page.problems), page.problems
+    page.problems.clear()
+    assert page.blocked == [], page.blocked
+
