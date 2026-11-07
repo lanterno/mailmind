@@ -12,6 +12,7 @@ from typing import Any
 from mailmind.assistant.application import plans
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import NotSent, Result, Search
+from mailmind.assistant.domain import action_plan
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -61,13 +62,6 @@ _DO_PROMPT = (
 
 
 class BulkCommands:
-    _DO_VERB_ALLOW = {"archive", "trash", "junk", "read", "unread", "star", "snooze"}
-    _DO_CAP = 500            # hard ceiling on how many messages ONE command may touch
-    _DO_TRASH_CAP = 200      # trash/junk are extra-dangerous → a lower ceiling
-    _DO_SAMPLE = 8
-    _DO_APART = {"sent", "drafts", "trash", "junk"}      # a command reaches these only if its filter names a folder
-    _DO_ALREADY = {"archive": {"archive", "all"}, "trash": {"trash"}, "junk": {"junk"}}     # a verb's own home: nothing to do
-
     def __init__(self, calls: Calls, search: Search):
         self._calls = calls
         self._search = search
@@ -91,17 +85,15 @@ class BulkCommands:
         filt = str(plan.get("filter") or "").strip()[:400]
         verb = plan.get("verb")
         # degrade: anything that isn't a clean, allowlisted ACT → just show a search (act on nothing)
-        if plan.get("intent") != "act" or verb not in self._DO_VERB_ALLOW:
+        if plan.get("intent") != "act" or verb not in action_plan.VERBS:
             return {"ok": True, "intent": "search", "filter": filt}, 200
         # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
         spec = self._search.parse(filt)
         if not spec.narrows():                             # empty / scope-only / negation-only → not a scoped action
             return {"ok": True, "intent": "search", "filter": filt}, 200
-        cap = self._DO_TRASH_CAP if verb in ("trash", "junk") else self._DO_CAP
-        # A person who says "archive what Lin sent" means the mail that is around, not the copy already archived, one in
-        # Trash or their own in Sent, so a filter reaches those only by naming a folder, and a verb never reaches its own home.
-        apart: set[str] = self._DO_ALREADY.get(verb, set()) | (set() if spec.names_folder() else self._DO_APART)
-        count, messages, sample, matched = self._search.reach(spec, cap, apart, self._DO_SAMPLE)
+        cap = action_plan.cap_of(verb)
+        apart = action_plan.out_of_reach(verb, spec.names_folder())
+        count, messages, sample, matched = self._search.reach(spec, cap, apart, action_plan.SAMPLE)
         if count is None:                                  # unparseable resolved query → degrade
             return {"ok": True, "intent": "search", "filter": filt}, 200
         if not messages:                                   # nothing matches → nothing to confirm
@@ -115,7 +107,7 @@ class BulkCommands:
                 "count": count, "cap": cap, "capped": count > cap,
                 "plan": frozen.id, "sample": sample}, 200
 
-    def take(self, plan_id: str) -> plans.ActionPlan | None:
+    def take(self, plan_id: str) -> action_plan.ActionPlan | None:
         """What a preview froze, once, or None when its plan has expired. The Assistant only says what it was: the mail's
         own contexts carry it out."""
         return self._DO_PLANS.take(plan_id)

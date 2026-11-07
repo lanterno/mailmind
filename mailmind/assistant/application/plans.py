@@ -5,7 +5,7 @@ is that set: not a list from the browser, whose pks a renumber may have moved on
 filter run again, which would reach mail that came after the preview. A plan names each message by its key
 and the folder it was seen in.
 
-A plan can be confirmed once, within `TTL` seconds. Nothing here is durable: a restart ends every plan, and
+A plan can be confirmed once, within `action_plan.TTL` seconds. Nothing here is durable: a restart ends every plan, and
 the person plans again.
 
 Standard library only: python3 server.py uses it.
@@ -14,23 +14,12 @@ import secrets
 import threading
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
 
-TTL = 600            # seconds a preview stays good for
-KEPT = 16            # plans held at a time, the newest
-
-
-@dataclass(frozen=True)
-class ActionPlan:
-    id: str
-    verb: str
-    preset: str | None
-    messages: tuple[tuple[int, str], ...]         # (message key, folder)
-    expires: float
+from mailmind.assistant.domain.action_plan import KEPT, TTL, ActionPlan
 
 
 class PlanBook:
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self._plans: dict[str, ActionPlan] = {}
 
