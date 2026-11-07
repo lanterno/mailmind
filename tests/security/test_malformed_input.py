@@ -139,3 +139,12 @@ def test_a_file_named_by_anything_but_text(app, path, junk):
     r = app.post(path, {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello",
                         "attachments": [{"filename": junk, "b64": "aGk="}]})
     assert (r.status, r.json) == (400, {"ok": False, "error": "bad attachment"})
+
+
+@pytest.mark.parametrize("verb, field", [("delete", "id"), ("create", "name"), ("create", "q")])
+@pytest.mark.parametrize("junk", [[], [1], {"a": 1}, 5])
+def test_a_saved_view_named_by_anything_but_text(app, verb, field, junk):
+    before = app.get("/api/views").json
+    r = app.post("/api/views", {"verb": verb, "name": "Lunch", "q": "lunch", field: junk})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+    assert app.get("/api/views").json == before
