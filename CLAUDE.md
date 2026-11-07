@@ -560,11 +560,17 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   `executescript` run one statement at a time inside the transaction. It never commits.
 - Each must still be idempotent; `init()` runs on every process start. A database with no
   migration to run is left alone, and the base schema runs only on one older than the frozen migrations'
-  last (`migrations.BASE_UNTIL`), or it would bring back a table a migration retired.
+  last (`migrations.BASE_UNTIL`), or it would bring back a table a migration retired. Idempotent means at its place in the
+  history (`tests/unit/platform/test_schema.py` runs each twice there): an older one may read what a later one ended, as m30
+  does `summaries` and m44 `outbox.in_reply_to_pk`, so none runs over the newest schema, and a test wanting one again builds
+  the database at its version.
 - A migration that builds a table afresh says so in `migrations.REBUILT`, as m38 does `msg_fts`: the upgrade check
   reports `rebuilt` rather than a change of count, and leaves out the index's own tables.
 - A migration that ends a table says so in `migrations.RETIRED`. The upgrade check then reports it
-  as retired rather than as rows lost, and `tests/unit/platform/test_db_upgrade.py` holds it to that.
+  as retired rather than as rows lost, and `tests/unit/platform/test_db_upgrade.py` holds it to that. A column it ends goes
+  in that file's `ENDED`. One that carries what it ends over to another table says so in `migrations.FILLED`, as m45 does
+  `assessments`, `snoozes` and `message_identity`: the check reports that table's growth as `carried over`, and its shrinking is
+  still a loss.
 - Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
   to `backups/mailmind-v{N}-{UTC time}.db` beside it, readable by its owner only, keeping the
   newest 3 (`backup.py` says how to roll back).
@@ -833,26 +839,22 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
   moved stored thread summaries onto it. A stored brief and a stored review name their messages by
   key and folder (below), and a read gives the pks they have now (`store.pk_now`).
-  `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk` and `followups.anchor_pk` are still written, for a
-  rollback, and go unread: a send goes by `orig_*`, and with no Message-ID to go by by `original_key` (migration 44), a draft by its own
-  In-Reply-To, the other two by thread or Message-ID. `tests/unit/test_architecture.py` holds that.
+  No column names a message by pk (migration 45 ended the last four): a send goes by `orig_*`, and with no Message-ID to go by by
+  `original_key` (migration 44), a draft by its own In-Reply-To, a reply drafted ahead and a follow-up by thread or Message-ID.
+  `in_reply_to_pk` in a request is a pk a moment old, which `Composing` and `Outbox.enqueue` find the original by.
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
   said under the key (`assessments`), and every query joins that on `message_key`, so a move, an Undo, a
   renumber or Gmail's All Mail copy pays for no second call. `needs_summary` offers one copy of each, and no
-  row without a key. `summaries`, a row for each copy, stays written (`save_summary`, `upsert_message`) only
-  for a rollback to an older commit, until it is dropped: read it nowhere. A key with no copy left waits 30
-  days (`gone_at`) for one to come back, then the `forget` job ends it. `store.init` (`store.repair_keys`)
-  gives a key to a row an older commit wrote, and brings what such a run wrote only to `summaries` or
-  `messages.snoozed_until` across, the one read of those two outside the migrations
-  (`tests/unit/test_architecture.py` holds that). Message rows in the API carry the key as `key`, beside
-  `pk`. New durable state about a message keys on it.
+  row without a key. A key with no copy left waits 30 days (`gone_at`) for one to come back, then the `forget` job ends it.
+  `store.init` (`store.repair_keys`) gives a key to a row an older commit wrote. Message rows in the API carry the key as `key`,
+  beside `pk`. New durable state about a message keys on it. Migration 45 ended `summaries`, a row for each copy, and
+  `messages.snoozed_until`, first bringing across what a run of an older commit wrote only there.
 - **A snooze outlives its row.** `attention.book.set_snooze` writes a `snoozes` row (migration 33, by key and
   folder), and every query asks that (`kernel.snoozed`: `not_snoozed_sql`, `snoozed_sql`), so a resync keeps it,
-  each copy in that folder is hidden and a copy filed elsewhere isn't. `messages.snoozed_until` stays written only
-  for a rollback, until it is dropped: read it nowhere, `row["snoozed_until"]` on a `SELECT *` included. A row read
-  alone says `snooze_until` (`store.get_message`), and the Snoozed view's row has the old name as an alias.
+  each copy in that folder is hidden and a copy filed elsewhere isn't. A row read alone says `snooze_until`
+  (`store.get_message`), and the Snoozed view's row says `snoozed_until`, an alias, which its answer carries.
   An Undo of filing brings it back; one come due with
   no copy in its folder ends at `attention.book.due_snoozes`. The undo entry names rows by key and folder too (`where`).
   A message that wakes is unread on the server as well: `Snoozing.wake_due` queues the mark for read mail

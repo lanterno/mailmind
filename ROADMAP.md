@@ -318,11 +318,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   An audit against the page closed 41 gaps on the fictional world, and a week on real accounts covers what it couldn't drive.
   Left: the week, which the owner chose to do first on 2026-11-07, and then the flip itself (`BASE` in `app/route.ts`, the
   "Current app" link, and `webroot` still serving the page to a door with no fresh build).
-- **Drop what is written only for a rollback** · low value · effort S — `summaries`,
-  `messages.snoozed_until`, `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk`
-  and `followups.anchor_pk` are still written, for going back to an older commit, and nothing reads them. The owner agreed to
-  drop them on 2026-11-07. It is a destructive migration, so it lands only after their dry run of
-  `python3 -m mailmind db check-upgrade` passes.
 
 ## Open decisions
 
