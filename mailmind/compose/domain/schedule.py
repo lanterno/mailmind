@@ -11,7 +11,7 @@ def send_after(asked: Any, now: float) -> int:
     now: whoever scheduled it isn't there to say so."""
     try:
         at = int(asked or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):     # JSON may say Infinity, which no int holds
         raise Refused(400, "bad send time")
     if at and at <= now:
         raise Refused(400, "that send time has passed")
