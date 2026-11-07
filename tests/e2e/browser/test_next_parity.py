@@ -512,3 +512,19 @@ def test_with_the_event_stream_up_nothing_is_read_on_a_timer(page, app, world):
     assert not any("/api/digest" in u or "/api/outbox" in u for u in asked), asked
     clean(page)
 
+def test_settings_says_what_each_inbox_holds_and_what_stops_one_answering(page, app, world):
+    stats = app.get("/api/stats").json
+    held = {a["account"]: a["in_inbox"] for a in stats["accounts"]}
+    down = dict(stats, accounts=[dict(a, error="LoginFailedForGood and more", in_inbox=None) if a["account"] == w.BEA else a
+                                 for a in stats["accounts"]])
+    page.route("**/api/stats", lambda route: route.fulfill(json=down))
+    opened(page)
+    page.locator("#settingsBtn").click()
+    ada = page.locator(f'.set-row[data-email="{w.ADA}"]')
+    expect(ada.locator(".acts .set-count")).to_have_text(str(held[w.ADA]))
+    bea = page.locator(f'.set-row[data-email="{w.BEA}"]')
+    expect(bea.locator(".acts .set-count")).to_have_text("LoginFailedForGood")
+    expect(bea.locator(".chip-dot")).to_have_class(re.compile(r"\berror\b"))
+    expect(ada.locator(".chip-dot")).not_to_have_class(re.compile(r"\berror\b"))
+    clean(page)
+
