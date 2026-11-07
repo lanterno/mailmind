@@ -146,6 +146,29 @@ def rule_in_words(r: str | None) -> str:
     return base
 
 
+def rule_parts(r: str | None) -> dict[str, str]:
+    kv: dict[str, str] = {}
+    for p in (r or "").split(";"):
+        if "=" in p:
+            k, v = p.split("=", 1)
+            kv[k.strip().upper()] = v.strip().upper()
+    return kv
+
+
+def until_bound(kv: dict[str, str], start: datetime) -> datetime | None:
+    """UNTIL as a bound comparable with the event's own starts (inclusive), or None."""
+    u, date_only = read_time(kv.get("UNTIL", ""), {})
+    if u is None:
+        return None
+    if date_only:
+        u = u.replace(hour=23, minute=59, second=59)
+    if u.tzinfo and not start.tzinfo:
+        return u.astimezone().replace(tzinfo=None)
+    if start.tzinfo and not u.tzinfo:
+        return u.replace(tzinfo=start.tzinfo)
+    return u
+
+
 def invite_of(e: Fields, method: str) -> Invite:
     start, end, all_day = e.get("start"), e.get("end"), bool(e.get("all_day"))
     recurrence_id = e.get("recurrence_id")
