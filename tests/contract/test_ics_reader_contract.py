@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
+from dateutil.rrule import DAILY, rrule
 from hypothesis import given, strategies as st
 from icalendar.timezone import tzp
 
@@ -342,6 +343,50 @@ def test_a_budget_that_runs_out_in_a_garbage_collectors_callback_still_holds(lib
         gc.callbacks.remove(callback)
         gc.set_threshold(*threshold)
     assert spun and seconds < CPU_SECONDS, (spun, seconds)
+
+
+def test_a_budget_that_runs_out_as_an_old_generator_is_closed_still_holds(library, monkeypatch):
+    """A walk an earlier call abandoned waits in a cycle for the collector, who closes it during some later call. What's raised
+    there goes nowhere and ends the tracer, which is how a long test session came to run one rule on towards year 9999."""
+    spun, dropped = [], []
+    walk_on = icalendar_acl._next
+
+    def _step():
+        pass
+
+    def callback(phase, _info):
+        if phase == "start" and not spun:           # past the budget, just as the old walk is closed
+            spun.append(True)
+            until = time.thread_time() + 2 * icalendar_acl._EXPAND_SECONDS
+            while time.thread_time() < until:
+                _step()
+
+    def collecting_as_it_starts(*args):             # with the tracer on, and only now: the old walk has to last until then
+        gc.callbacks.append(callback)
+        try:
+            gc.collect(0)
+        finally:
+            gc.callbacks.remove(callback)
+            gc.enable()
+        return walk_on(*args)
+
+    inv = library.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"))
+    monkeypatch.setattr(icalendar_acl, "_next", collecting_as_it_starts)
+    monkeypatch.setattr(sys, "unraisablehook", dropped.append)
+    gc.collect()
+    gc.disable()
+    old_walk = iter(rrule(DAILY, dtstart=datetime(2026, 1, 1)))
+    next(old_walk)
+    cycle = [old_walk]
+    cycle.append(cycle)
+    del old_walk, cycle
+    try:
+        began = time.thread_time()
+        assert library.next_occurrence(inv, NOW) is None
+        seconds = time.thread_time() - began
+    finally:
+        gc.enable()
+    assert spun and not dropped and seconds < CPU_SECONDS, (spun, dropped, seconds)
 
 
 def test_a_reader_leaves_the_thread_as_it_found_it(ics):
