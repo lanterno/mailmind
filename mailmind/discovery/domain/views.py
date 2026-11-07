@@ -69,6 +69,15 @@ def new(name: str | None, q: str | None) -> View | None:
     return {"id": "v" + secrets.token_hex(4), "name": name, "q": q}
 
 
+def without(user_views: Iterable[View], view_id: str | None) -> list[View] | None:
+    """The views with this one gone, or None if that changes nothing. A built-in or a lane can't go, whatever a file holds."""
+    if view_id in BUILTIN_IDS:
+        return None
+    cur = list(user_views)
+    kept = [v for v in cur if v["id"] != view_id]
+    return kept if len(kept) != len(cur) else None
+
+
 def reordered(user_views: Iterable[View], ids: Collection[str]) -> list[View]:
     cur = {v["id"]: v for v in user_views}
     return [cur[i] for i in ids if i in cur] + [v for k, v in cur.items() if k not in ids]

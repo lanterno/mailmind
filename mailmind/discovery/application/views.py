@@ -24,11 +24,8 @@ class SavedViews:
         return v
 
     def remove(self, view_id: str | None) -> bool:
-        if view_id in views.BUILTIN_IDS:        # refuse to delete a built-in / lane
-            return False
-        cur = self.load()
-        kept = [v for v in cur if v["id"] != view_id]
-        if len(kept) == len(cur):
+        kept = views.without(self.load(), view_id)
+        if kept is None:
             return False
         self._file.write(kept)
         return True
