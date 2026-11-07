@@ -39,6 +39,8 @@ from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import limits
+from mailmind.bootstrap import accounts, attention, curation, discovery, mailbox
+from mailmind.discovery.api import QuerySpec
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
@@ -142,108 +144,79 @@ calls = Calls(lambda: gateway(), status)
 class _Mail:
     """What the Assistant reads of the mail, from the contexts that hold it."""
     def fetch_body(self, pk):
-        from mailmind.bootstrap.mailbox import ingest
-        return ingest.fetch_body(pk)
+        return mailbox.ingest.fetch_body(pk)
 
     def pk_now(self, c, key, folder):
-        from mailmind.bootstrap.mailbox import store
-        return store.pk_now(c, key, folder)
+        return mailbox.store.pk_now(c, key, folder)
 
     def accounts(self):
-        from mailmind.bootstrap import accounts
         return accounts.accounts()
 
     def get_message(self, c, pk):
-        from mailmind.bootstrap.mailbox import store
-        return store.get_message(c, pk)
+        return mailbox.store.get_message(c, pk)
 
     def for_asking(self, match, accounts, limit):
-        from mailmind.bootstrap import discovery
         return discovery.search.for_asking(match, accounts, limit)
 
     def brief_rows(self, c, accounts, n):
-        from mailmind.bootstrap.mailbox import store
-        return store.brief_rows(c, accounts, n)
+        return mailbox.store.brief_rows(c, accounts, n)
 
     def delta_rows(self, c, accounts, since_ts, n):
-        from mailmind.bootstrap.mailbox import store
-        return store.delta_rows(c, accounts, since_ts, n)
+        return mailbox.store.delta_rows(c, accounts, since_ts, n)
 
     def sent_since(self, c, accounts, since_ts):
-        from mailmind.bootstrap.mailbox import store
-        return store.sent_since(c, accounts, since_ts)
+        return mailbox.store.sent_since(c, accounts, since_ts)
 
     def received_since(self, c, accounts, since_ts):
-        from mailmind.bootstrap.mailbox import store
-        return store.received_since(c, accounts, since_ts)
+        return mailbox.store.received_since(c, accounts, since_ts)
 
     def received_by_bucket(self, c, accounts, since_ts):
-        from mailmind.bootstrap.mailbox import store
-        return store.received_by_bucket(c, accounts, since_ts)
+        return mailbox.store.received_by_bucket(c, accounts, since_ts)
 
     def needs_you_rows(self, c, accounts, n):
-        from mailmind.bootstrap.mailbox import store
-        return store.needs_you_rows(c, accounts, n)
+        return mailbox.store.needs_you_rows(c, accounts, n)
 
     def awaited_threads(self, c, accounts, n):
-        from mailmind.bootstrap import attention
         return attention.book.awaited_threads(c, accounts, n)
 
     def replylater_due(self, c, accounts):
-        from mailmind.bootstrap import attention
         return attention.book.replylater_due(c, accounts)
 
     def senders_cleaned(self, c, since_iso, accounts):
-        from mailmind.bootstrap import curation
         return curation.sqlite.senders_cleaned(c, since_iso, accounts)
 
     def draft_candidates(self, c, since_ts):
-        from mailmind.bootstrap.mailbox import store
-        return store.draft_candidates(c, since_ts)
+        return mailbox.store.draft_candidates(c, since_ts)
 
     def thread_stamps(self, c, account, thread_id):
-        from mailmind.bootstrap.mailbox import store
-        return store.thread_stamps(c, account, thread_id)
+        return mailbox.store.thread_stamps(c, account, thread_id)
 
     def message_stamp(self, c, pk):
-        from mailmind.bootstrap.mailbox import store
-        return store.message_stamp(c, pk)
+        return mailbox.store.message_stamp(c, pk)
 
     def thread_anchor_pk(self, c, account, thread_id):
-        from mailmind.bootstrap.mailbox import store
-        return store.thread_anchor_pk(c, account, thread_id)
+        return mailbox.store.thread_anchor_pk(c, account, thread_id)
 
     def conversation_rows(self, c, account, by, value):
-        from mailmind.bootstrap.mailbox import store
-        return store.conversation_rows(c, account, by, value)
+        return mailbox.store.conversation_rows(c, account, by, value)
 
     def message_to_reply_to(self, c, pk):
-        from mailmind.bootstrap.mailbox import store
-        return store.message_to_reply_to(c, pk)
+        return mailbox.store.message_to_reply_to(c, pk)
 
     def any_copy(self, c, message_key):
-        from mailmind.bootstrap.mailbox import store
-        return store.any_copy(c, message_key)
+        return mailbox.store.any_copy(c, message_key)
 
 
 class _Search:
     """What a bulk command asks of Discovery."""
     def parse(self, text):
-        from mailmind.discovery.api import QuerySpec
         return QuerySpec.parse(text)
 
     def reach(self, spec, cap, apart, sample):
-        from mailmind.bootstrap import discovery
         return discovery.search.reach(spec, cap, apart, sample)
 
     def sweeps_whole_mailbox(self, matched):
-        from mailmind.bootstrap import discovery
         return discovery.search.sweeps_whole_mailbox(matched)
-
-
-def _looks_human(local):
-    from mailmind.bootstrap import curation
-    return curation.looks_human(local)
 
 
 _mail = _Mail()
@@ -256,5 +229,5 @@ replies = ReplyDrafts(calls, context, _uow, _mail)
 rewriter = Rewriter(calls)
 asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
-drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, _looks_human)
+drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
 bulk = BulkCommands(calls, _Search())
