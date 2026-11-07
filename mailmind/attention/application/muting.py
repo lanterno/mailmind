@@ -4,6 +4,7 @@ from typing import Any
 
 from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
 from mailmind.attention.application.threads import Threads
+from mailmind.attention.domain import mute
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
@@ -29,18 +30,16 @@ class Muting:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
                 return {"ok": False, "error": "bad mute target"}, 400
-            if self._book.is_muted(c, acct, tid):     # already muted: don't recapture prev_seen (it would be
-                return {"ok": True, "thread_id": tid}, 200   # the post-mute all-seen state, breaking undo) — no-op
-            rows = self._book.unread_in_thread(c, acct, tid)
-            self._mark_read(c, rows, now_iso())
-            unread = [[r["message_key"], r["folder"]] for r in rows]   # the ones Undo marks unread again: pk isn't stable
-            member = self._book.a_member(c, acct, tid)
+            todo = mute.plan(self._book.is_muted(c, acct, tid), acct, tid, self._book.unread_in_thread(c, acct, tid),
+                             self._book.a_member(c, acct, tid))
+            if todo is None:
+                return {"ok": True, "thread_id": tid}, 200
+            self._mark_read(c, todo.mark_read, now_iso())
             self._book.mute_thread(c, acct, tid, now_iso())
-        self._undo.push({"kind": "mute", "account": acct, "thread_id": tid, "unread": unread, "label": "Muted",
-                         "member": [member["message_key"], member["folder"]] if member else None}, body.get("undo_group"))
+        self._undo.push(todo.undo, body.get("undo_group"))
         self._screen.stats_changed()
         sse.publish("mute", {"account": acct})
-        if unread:
+        if todo.mark_read:
             self._screen.flags_queued()
         return {"ok": True, "thread_id": tid}, 200
 
@@ -64,15 +63,14 @@ class Muting:
         return [r["thread_id"]] if r and r["thread_id"] else []
 
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
-        """Undo of a mute: unmuted, and unread again what it marked read. `prev_seen` is an entry's from when muting
-        told the server nothing."""
+        """Undo of a mute: unmuted, and unread again what it marked read."""
         marked, when = False, now_iso()
         with self._uow.write() as c:
-            for tid in {d["thread_id"], *self._thread_now(c, d)}:
+            for tid in mute.threads_to_unmute(d, self._thread_now(c, d)):
                 self._book.unmute_thread(c, d["account"], tid)
-            for pk, prev in d.get("prev_seen", []):
-                self._messages.set_local_flags(c, pk, seen=int(prev or 0))
-            for key, folder in d.get("unread", []):
+            for pk, seen in mute.seen_to_restore(d):
+                self._messages.set_local_flags(c, pk, seen=seen)
+            for key, folder in mute.marked_read(d):
                 pk = self._messages.copy_in_folder(c, key, folder)
                 r = self._messages.get(c, pk) if pk else None
                 if r:
