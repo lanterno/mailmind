@@ -107,3 +107,35 @@ def test_a_discard_naming_what_cant_be_a_draft(app, junk):
 def test_a_reply_naming_what_cant_be_its_original(app, junk):
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": junk, "to": ["lin@example.test"], "text": "Hello"})
     assert (r.status, r.json) == (400, {"ok": False, "error": "missing original message"})
+
+
+@pytest.mark.parametrize("path, field", [("/api/ai/ask", "account"), ("/api/ai/draft-reply", "account"), ("/api/ai/summarize", "account"),
+                                         ("/api/briefing", "account"), ("/api/review", "account"), ("/api/draft", "account"),
+                                         ("/api/send", "account"), ("/api/reconcile", "account"), ("/api/sweep", "account"),
+                                         ("/api/snooze", "account"), ("/api/unsnooze", "account"), ("/api/sync-retry", "account"),
+                                         ("/api/accounts/add", "email"), ("/api/accounts/edit", "email"),
+                                         ("/api/accounts/trust-cert", "email"), ("/api/ai/draft-reply", "thread_id"),
+                                         ("/api/followups/dismiss", "thread_id"), ("/api/mute", "thread_id"),
+                                         ("/api/unmute", "thread_id"), ("/api/replylater", "thread_id"),
+                                         ("/api/snooze", "thread_id"), ("/api/unsnooze", "thread_id"),
+                                         ("/api/cleanup/execute", "from_addr"), ("/api/cleanup/execute", "undo_group"),
+                                         ("/api/draft", "mode"), ("/api/send", "mode"), ("/api/draft", "subject"),
+                                         ("/api/send", "subject"), ("/api/draft", "text"), ("/api/send", "text"),
+                                         ("/api/invite/rsvp", "decision"), ("/api/rules", "token"), ("/api/send", "idempotency_key")])
+@pytest.mark.parametrize("junk", [[], {}, 5, True])
+def test_a_text_field_that_holds_anything_else(app, path, field, junk):
+    r = app.post(path, {"account": w.ADA, "thread_id": "t", field: junk})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
+def test_a_text_field_may_say_nothing(app, world):
+    r = app.post("/api/mute", {"account": None, "thread_id": None, "pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    assert (r.status, r.json["ok"]) == (200, True)
+
+
+@pytest.mark.parametrize("path", ["/api/draft", "/api/send"])
+@pytest.mark.parametrize("junk", [[1], {"a": 1}, 5])
+def test_a_file_named_by_anything_but_text(app, path, junk):
+    r = app.post(path, {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello",
+                        "attachments": [{"filename": junk, "b64": "aGk="}]})
+    assert (r.status, r.json) == (400, {"ok": False, "error": "bad attachment"})
