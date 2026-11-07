@@ -586,18 +586,12 @@ def reconcile(c, account, folder, live_uids, when, among=None):
     return len(pruned_pks), len(rows) - len(pruned_pks)
 
 
-def digest(c, min_importance=1, account=None, limit=300):
-    q = f"""SELECT m.*, s.summary, s.importance, s.category, s.action
+def digest(c, limit=300):
+    return c.execute(f"""SELECT m.*, s.summary, s.importance, s.category, s.action
            FROM messages m JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.is_junk = 0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance >= ?
-             AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)"""
-    args = [min_importance]
-    if account:
-        q += " AND m.account = ?"
-        args.append(account)
-    q += " ORDER BY s.importance DESC, m.ts DESC LIMIT ?"
-    args.append(limit)
-    return c.execute(q, args).fetchall()
+           WHERE m.is_junk = 0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance >= 1
+             AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)
+           ORDER BY s.importance DESC, m.ts DESC LIMIT ?""", (limit,)).fetchall()
 
 
 # ------------------------------------------------------------------- what the Assistant reads (its Mail port)

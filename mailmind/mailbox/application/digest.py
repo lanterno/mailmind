@@ -1,10 +1,9 @@
 """What `/api/digest` answers: the items the brief is built from, and with them what the page needs of the rest of the app
 as it opens, the identities to send from, the sync's state and the AI's."""
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from typing import Any
 
 from mailmind.kernel import attention as verdict
-from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.mailbox.application.ports import Directory, StoredMail
@@ -26,11 +25,9 @@ class Digest:
         self._syncing = syncing
         self._ai_status = ai_status
 
-    def answer(self, qs: Mapping[str, Sequence[str]]) -> dict[str, Any]:
-        min_imp = required_int(qs.get("min", ["1"])[0])
-        account = qs.get("account", [None])[0] or None
+    def answer(self) -> dict[str, Any]:
         with self._uow.read() as c:
-            rows = self._store.digest(c, min_importance=min_imp, account=account, limit=400)
+            rows = self._store.digest(c, limit=400)
             keys: set[str] = set(rows[0].keys()) if rows else set()
             amap = self._accounts.alias_map()
             wmap = self._accounts.webmail_map()

@@ -41,7 +41,7 @@ def routes(mailbox):
 
     @r.get("/api/digest")
     def digest(req):
-        return mailbox.digest.answer(req.query)
+        return mailbox.digest.answer()
 
     @r.get("/api/stats")
     def stats(req):
