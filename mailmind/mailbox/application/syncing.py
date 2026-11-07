@@ -74,22 +74,15 @@ class Syncing:
         return new
 
 
-    def account_health_json(self) -> dict[str, Any]:
-        """Per-account durable sync health (last ok/error + coarse kind), merged with the in-flight
-        _status. Pure read; no IMAP, no IMAP gate."""
+    def sync_record(self) -> list[dict[str, Any]]:
+        """What each account's syncs have come to (last ok/error + coarse kind), and how its sync
+        stands now, for Accounts to read as its health. Pure read; no IMAP, no IMAP gate."""
         with self._uow.read() as c:
             rows = self._store.account_health(c)
-        out: list[dict[str, Any]] = []
-        for r in rows:
-            if (r["folder"] or "INBOX") != "INBOX":
-                continue
-            live = self._status.get(r["account"], {})
-            healthy = bool(r["last_ok_ts"]) and not r["last_error"]
-            out.append({"account": r["account"], "last_ok_ts": r["last_ok_ts"],
-                        "last_error_ts": r["last_error_ts"], "last_error_kind": r["last_error_kind"],
-                        "last_error": r["last_error"], "sync_count": r["sync_count"],
-                        "healthy": healthy, "live": live.get("health", "")})
-        return {"ok": True, "accounts": out, "generated": now_iso()}
+        return [{"account": r["account"], "last_ok_ts": r["last_ok_ts"], "last_error_ts": r["last_error_ts"],
+                 "last_error_kind": r["last_error_kind"], "last_error": r["last_error"], "sync_count": r["sync_count"],
+                 "live": self._status.get(r["account"], {}).get("health", "")}
+                for r in rows if (r["folder"] or "INBOX") == "INBOX"]
 
 
     def do_sync_retry(self, body: Mapping[str, Any]) -> Result:

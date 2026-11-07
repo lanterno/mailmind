@@ -16,6 +16,10 @@ def routes(accounts, mailbox):
         return {"ok": True, "accounts": config.masked_rows(),
                 "signature_default": config.signature_default(), "generated": now_iso()}
 
+    @r.get("/api/account-health")
+    def account_health(req):
+        return accounts.health.answer()
+
     @r.matching("POST", lambda path: path.startswith("/api/accounts/"))
     def change(req):
         action = req.path.rsplit("/", 1)[-1]

@@ -1,5 +1,6 @@
 """What Accounts needs from outside it. Each is bound in mailmind.bootstrap.accounts."""
-from typing import Protocol
+from collections.abc import Iterable, Mapping
+from typing import Any, Protocol
 
 from mailmind.accounts.domain.account import Credential, Entry
 
@@ -23,3 +24,8 @@ class Session(Protocol):
 class OpenSession(Protocol):
     """A logged-in connection to the account's server, which is the test."""
     def __call__(self, acct: Entry, timeout: int) -> Session: ...
+
+
+class SyncRecord(Protocol):
+    """What the Mailbox recorded of each account's syncs, and how its sync stands now: the fields AccountHealth holds."""
+    def __call__(self) -> Iterable[Mapping[str, Any]]: ...

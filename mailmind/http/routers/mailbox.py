@@ -75,10 +75,6 @@ def routes(mailbox):
     def pending(req):
         return mailbox.commands.list_open()
 
-    @r.get("/api/account-health")
-    def account_health(req):
-        return mailbox.syncing.account_health_json()
-
     @r.matching("GET", lambda path: path.startswith("/api/message/") and "/attachment/" in path)
     def attachment(req):
         parts = req.path.split("/")     # ['', 'api', 'message', '<pk>', 'attachment', '<part_id>']
