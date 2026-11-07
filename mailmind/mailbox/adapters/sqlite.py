@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.mailbox.domain import identity
 from mailmind.mailbox.domain.events import ConversationsMerged
 from mailmind.mailbox.domain.threading import Copy, Threader
@@ -599,9 +600,9 @@ def reconcile(c, account, folder, live_uids, when, among=None):
 
 
 def digest(c, min_importance=1, account=None, limit=300):
-    q = """SELECT m.*, s.summary, s.importance, s.category, s.action
+    q = f"""SELECT m.*, s.summary, s.importance, s.category, s.action
            FROM messages m JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.is_junk = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance >= ?
+           WHERE m.is_junk = 0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance >= ?
              AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)"""
     args = [min_importance]
     if account:
@@ -625,7 +626,7 @@ def brief_rows(c, accounts, n):
     sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
-           "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
+           f"WHERE m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance>=2 "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = []
     if accounts:
@@ -645,7 +646,7 @@ def delta_rows(c, accounts, since_ts, n):
            # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
            # so it matches the pill count; only drop spam/blocked and snoozed/muted.
            "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
-           "AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND m.ts > ? "
+           f"AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND m.ts > ? "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = [since_ts]
     if accounts:
@@ -686,7 +687,7 @@ def needs_you_rows(c, accounts, n):
         "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
         "       s.importance, s.action, s.category "
         "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
-        "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
+        f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.answered=0 "
         "  AND m.pending_removal IS NULL "
         f"  AND {verdict.needs_you_sql()} "
         "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
@@ -699,7 +700,8 @@ SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
 FROM messages m
 JOIN assessments s ON s.message_key=m.message_key
 WHERE m.folder = 'INBOX'
-  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL
+  AND m.is_junk = 0 AND m.answered = 0 AND m.pending_removal IS NULL
+  AND """ + not_snoozed_sql() + """
   AND """ + verdict.reply_worthy_sql() + """
   AND m.ts >= ?
   AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
@@ -777,7 +779,7 @@ def stats(c):
 
 # ---- what the page lists: none holds a row on its way out (pending_removal) ----
 _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.account "
-               "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
+               "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed exclusion
 
 
 def snoozed_rows(c, account, limit, offset):
@@ -785,15 +787,16 @@ def snoozed_rows(c, account, limit, offset):
     return c.execute(
         """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
-                  m.snoozed_until, s.importance, s.category, s.action
-           FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
-           ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
+                  z.until AS snoozed_until, s.importance, s.category, s.action
+           FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder
+           LEFT JOIN assessments s ON s.message_key=m.message_key
+           WHERE m.account=? AND m.pending_removal IS NULL
+           ORDER BY z.until ASC, m.folder, m.ts, m.pk LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
 
 
 def snoozed_count(c, account):
-    return c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
-                     "AND pending_removal IS NULL",
+    return c.execute("SELECT COUNT(*) FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder "
+                     "WHERE m.account=? AND m.pending_removal IS NULL",
                      (account,)).fetchone()[0]
 
 
@@ -808,7 +811,7 @@ def folder_conversation_rows(c, account, folder, limit, offset):
                MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
                MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
              FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-             WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
+             WHERE m.account=? AND m.folder=? AND m.pending_removal IS NULL AND """ + not_snoozed_sql() + " "
         + _MUTED_EXCL.format(t="m") + """)
            SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
         (account, folder, limit, offset)).fetchall()
@@ -816,7 +819,7 @@ def folder_conversation_rows(c, account, folder, limit, offset):
 
 def folder_conversation_count(c, account, folder):
     return c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
-                     "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
+                     f"WHERE account=? AND folder=? AND pending_removal IS NULL AND {not_snoozed_sql('messages')} "
                      + _MUTED_EXCL.format(t="messages"),
                      (account, folder)).fetchone()[0]
 
@@ -828,7 +831,7 @@ def folder_rows(c, account, folder, limit, offset):
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                   s.summary, s.action, s.category
            FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
+           WHERE m.account=? AND m.folder=? AND m.pending_removal IS NULL AND """ + not_snoozed_sql() + " "
         + _MUTED_EXCL.format(t="m") + """
            ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
         (account, folder, limit, offset)).fetchall()
@@ -836,7 +839,7 @@ def folder_rows(c, account, folder, limit, offset):
 
 def folder_count(c, account, folder):
     return c.execute("SELECT COUNT(*) FROM messages "
-                     "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
+                     f"WHERE account=? AND folder=? AND pending_removal IS NULL AND {not_snoozed_sql('messages')} "
                      + _MUTED_EXCL.format(t="messages"),
                      (account, folder)).fetchone()[0]
 
