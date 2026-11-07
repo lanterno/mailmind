@@ -54,6 +54,8 @@ uv run pytest tests/security/test_hardening.py              # security and data-
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (159)
 uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers (28)
+uv run pytest tests/unit/http/test_route.py                 # what a route on a router does around its handler, on a toy router (140)
+uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads (32)
 ```
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
@@ -235,13 +237,15 @@ The app lives in `mailmind/`.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Its `build` picks the Anthropic SDK, offers IMAPClient to an account
   that asks for it (see the Mailbox paragraph). A line at startup says which IMAP adapter
-  serves how many accounts (`[imap] ...`). Every route runs in `mailmind.http.handler.H` (see Routing):
+  serves how many accounts (`[imap] ...`). A route that has moved runs on a FastAPI router, on a thread of
+  AnyIO's pool, whose limit `http.app` raises to 64 at startup, and the rest in `mailmind.http.handler.H` (see Routing):
   `mailmind.http.bridge.HandlerBridge`,
   the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
   its own, and streams back what it writes, the event stream and the export included.
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
   and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
-  (`HandlerBridge.close`), so Ctrl-C stops at once.
+  (`HandlerBridge.close`), so Ctrl-C stops at once. A request still blocked after the 3 s of grace (`serving.GRACE_SECONDS`) is
+  cancelled, and its thread, a daemon on either path, doesn't hold the exit.
 - `mailmind.platform.profile` says how the process runs, `full` or `read-only` (see Writes,
   undo, and offline).
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
@@ -269,7 +273,7 @@ The app lives in `mailmind/`.
   field joins `ALLOWED` only if its value can never be a person's. A line goes to stdout for someone at a
   terminal (`[jobs] sync failed: ConnectionResetError`), from the moment the module loads, the command line
   included. Once `wiring.start` has called `setup()`, it also goes as a JSON object to `mailmind.log` in the data
-  directory, rotated and readable by its owner only, with `request_id` (`H.handle_one_request`) and `job_id`
+  directory, rotated and readable by its owner only, with `request_id` (`H.handle_one_request`, `Route`) and `job_id`
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
   the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
@@ -473,22 +477,55 @@ The app lives in `mailmind/`.
 
 ### Routing
 
-`mailmind.http.handler.H` is one `BaseHTTPRequestHandler` subclass, served through `HandlerBridge`. `do_GET` and `do_POST` run the perimeter and the catches every route
-shares, then ask `mailmind.http.routing.Routes` for the route. A route names its path as a **literal string**
-(`@r.post("/api/snooze")`), in `mailmind/http/routers/<context>.py` or `http/static.py`, and takes a `Request`. It returns
-an object, `(object, code)`, or `ANSWERED` when it wrote the answer itself. A router gets its context's wiring as an
-argument (`routes(attention)`), and `mailmind.bootstrap.web` binds them all, since http may not import bootstrap. The
-routers are plain tables, standard library only, and hold no schemas yet.
+Two tables run side by side until the last file moves, and a request goes to the first that names it. **A route on a router** is
+FastAPI's: `mailmind/http/routers/<context>.py` gives `router(context)`, which `mailmind.bootstrap.web.ROUTERS` hands the app, and
+`mailmind/http/schemas/<context>.py` its models. `attention` and `calendar` have moved. **A route on the handler** is every other:
+what no router matches falls through to `app.router.default`, the bridge, and `mailmind.http.handler.H`, one
+`BaseHTTPRequestHandler` subclass whose `do_GET` and `do_POST` run the perimeter and the catches every route shares, then ask
+`mailmind.http.routing.Routes`. Its routes take a `Request` and return an object, `(object, code)`, or `ANSWERED` when they wrote
+the answer. The event stream and the export move last, then `H` and `HandlerBridge` go. Both paths share one copy of what a
+failure answers, who counts as someone here and how far a body may run: `mailmind.http.shared`.
+
+To move a route file, as `routers/attention.py` did:
+
+```python
+r = route.router()      # mailmind.http.route
+
+@r.post("/api/snooze", responses=answers(Snoozed))
+def snooze(body: SnoozeBody):
+    return attention.snoozing.snooze(body.model_dump(exclude_unset=True))
+```
+
+- A handler is a plain `def` naming its **literal path**, a parameter only where the path has one (`/api/message/{pk}/body`, after
+  the literal paths it could shadow). `Route` refuses an `async def`, a `response_model` and a POST with no body model, `NoBody` if
+  it reads nothing, as that model is what refuses a body that isn't a JSON object. It returns an object, `(object, code)` or a
+  `Response` for what isn't JSON, naming `Content-Type` in `headers=`, since `media_type` adds a charset.
+- `Route` does what `do_GET` and `do_POST` do, so a handler holds none of it: `for_request`, `allowing_over`, `shared.touched`, the
+  error mapping below, and `txguard.release_thread`, since a pooled thread outlives its request. It hands FastAPI what the handler
+  read: a query string's first value for each name with a blank as none, a body as JSON whatever its Content-Type, and {} for one
+  with no declared length. It writes an answer in the handler's bytes, on the thread. A method the route doesn't take falls through.
+- A request's model (`schemas.common.RequestBody`, or `QueryArgs` as `Annotated[Model, Query()]`, whose `as_query()` is for a use
+  case that takes the query whole) names every field its use case reads, typed in `common`'s words: `str | None`, `Number`
+  (`kernel.parsed`'s reading, nothing past 2^53) and `Flag`. It stays optional unless going without already answers `bad request`,
+  so a use case keeps its own words for what is left out. What the model refuses answers `{"ok": false, "error": "bad request"}`
+  with 400, GET included. That is the one change a move makes to the wire: say which statuses and words change.
+- An answer's model (`schemas.common.Answer`) is documentation: `responses=answers(Ok, {409: MoreSaid})`, never `response_model`,
+  which would filter and refuse. `Ok` may be a union, for `ok: false` with a 200. `answers` gives each failure status `Failure`; a
+  route whose `Problem` says more names a subclass of `Failure`.
+- Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route on a router must fit its model,
+  with no field it doesn't name, and a use case reading a name its model doesn't declare fails the test. So the suite is what says
+  a model is true, and a golden that changes is a question, not an update. `web/src/lib/api/types.gen.ts` holds the shapes the
+  suite saw, a place to start. What walks the routes (`tests/route_tables.py`: the perimeter matrix, the error scrubbing, the
+  malformed-input walk) reads both tables, so a moved route needs no edit there, and a stand-in for a handler is `route.work`.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and
-`do_GET` and `do_POST` answer it as `{"ok": false, "error": ..., ...}` by `handler._STATUS`: `NotFound` 404, `Conflict` and `Busy`
+`shared.failure_answer` answers it as `{"ok": false, "error": ..., ...}` by `shared.STATUS`: `NotFound` 404, `Conflict` and `Busy`
 409, `Locked` 423, `Refused` 400, `Unreachable` 502 (a retry can help), `Unreadable` 422. `gates.Busy` is the kernel's. A use case
 returns only the answer it has, a dict, and a route with a catch of its own lets `Problem` through ahead of it (`except Problem:
 raise`). Unexpected exceptions still answer the fixed 500, with the class logged. `AIOff`, `OverLimit`, `ReadOnlyError` and
-`TxAcrossNetworkError` keep the paths the sections below give them. What a request can't mean is refused before it does harm:
-`Request.int_arg` and `required_int` for a number, `H._body` for a body with anything but text in a `_TEXT_FIELDS` name. `do_POST`
-still turns any `TypeError` or `ValueError` into the 400. `do_GET` doesn't, and `/api/messages` still answers a bad `limit` or
-`offset` with the 500 its golden pins.
+`TxAcrossNetworkError` keep the paths the sections below give them. On the handler, what a request can't mean is refused before it does
+harm by `Request.int_arg` and `required_int` for a number, and by `H._body` for a body with anything but text in a `_TEXT_FIELDS` name.
+On a POST, any `TypeError` or `ValueError` is still the 400. On a GET it isn't.
 
 RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
 `{"ok": false, "msg": ...}`, `Undo.undo_last`, `Screener.rule`, `SavedViews.post`, `search.bad_query`, `Cleanup.sender`,
@@ -496,7 +533,7 @@ RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
 that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
 each route's own worded 500.
 
-Consequence: to find a route, grep the literal path. A path that matches by shape (`@r.matching`, a message's body or
+Consequence: to find a route, grep the literal path. On the handler, a path that matches by shape (`@r.matching`, a message's body or
 attachment, `/api/accounts/<action>`) is asked only when no literal path answers.
 
 ### Schema migrations
@@ -509,7 +546,8 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   `busy_timeout` 60 s, `foreign_keys=ON`, which the cascades depend on, and `temp_store=MEMORY`, so what a
   big sort holds of the mail never lands in a temp file.
 - No transaction stays open across a network call. `database.connect` tracks each connection for
-  the thread that opened it, and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
+  the thread that opened it (`Route` ends what a request left, with `txguard.release_thread`, as a pooled thread
+  goes on to the next), and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
   while one has a transaction open, since a write held while a server answers keeps every other
   writer waiting. An IMAP session and each command (`mailbox.open_session`), an SMTP session and
   all it sends (`SmtpTransport.connect`), a Claude API request and a one-click unsubscribe check
@@ -690,7 +728,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
   member of `commands.UNREACHABLE`, so a move or a flag change queues as it does offline, and
   both queues' drains wait for a full run. What nothing queues (a sweep) answers 409 through
-  `H.do_POST`'s catch. A new write path either queues or calls `profile.refuse_writes` first.
+  `shared.failure_answer`. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
   `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer `ok: false`
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
@@ -859,7 +897,8 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
 ### Security model
 
 Every request passes `mailmind.platform.perimeter` before any route: the `Perimeter` middleware
-calls it, and `H.do_GET` and `H.do_POST` do again.
+calls it, and `H.do_GET` and `H.do_POST` do again for what reaches them. What runs next goes by the path it judged, as sent, and not as the
+ASGI server decoded it.
 It is standard library only. Callers ask the package by these names (`perimeter.refuse_host`); inside it
 `host`, `origin`, `fetch_metadata`, `csrf` and `limits` hold the checks, `headers` and `csp` what an answer
 carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case imports for itself.
@@ -869,7 +908,7 @@ carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case 
 - `refuse_cross_site` — under `/api/` only `Sec-Fetch-Site: same-origin` passes, so another
   site's no-cors `<img>`, a typed URL and a client that says nothing are all refused. `/` also
   opens from a typed URL or another site's top-level link.
-- `refuse_body` — a Content-Length over the route's cap (`handler.post_body_cap`:
+- `refuse_body` — a Content-Length over the route's cap (`shared.post_body_cap`:
   `MAX_SEND_POST` for send and draft, `MAX_POST` otherwise), judged before the body is read.
 - `refuse_mutation` — every POST: the two checks above, then the `X-CSRF-Token` header
   compared with `secrets.compare_digest`, then an Origin, which must be this server's.
@@ -972,7 +1011,7 @@ stores its fallback). No key degrades to no summaries, with nothing sent, rather
 failing; keep that property. A call that was never sent raises a `NotSent`: `AIOff`, or a
 `HeldBack` from the cost governor (`OverLimit`, `Deferred`). A caller lets `NotSent` through
 (`except NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
-catch for `OverLimit` and `AIOff`, so `H.do_GET` and `H.do_POST` can answer
+catch for `OverLimit` and `AIOff`, so `shared.failure_answer` can answer
 them: `OverLimit` as a 402 (below), `AIOff` as a 409 with `ai_off: true`, which the page shows as
 "AI is off" rather than an error to retry. `call_claude`, `call_claude_json` and `reply_to` go through `Status.noting`,
 which records each call's outcome for `assistant.status.report()` (not an `AIOff`: no call was made) — served on `/api/digest` as
@@ -1002,14 +1041,14 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 - Yielding. Background and speculative calls don't start while an interactive one runs, or for
   45 seconds after one ends (`YIELD_SECONDS`).
 - Presence. A speculative call also needs someone to have used the app in the last 45 minutes.
-  `H._ui_touch` calls `saw_someone()` for every `/api/` request a person makes, except the
-  polling routes in `_UI_QUIET`. A start counts as someone here.
+  `shared.touched` calls `saw_someone()` for every `/api/` request a person makes, except the
+  polling routes in `UI_QUIET`. A start counts as someone here.
 - The daily limit is `assistant.limit_micros()`: the top-level `"ai_daily_limit_usd"`, a
   positive number, or $15 (decision D7). It counts everything the ledger holds for today, and a
   ledger that can't be read counts as over. At the limit, background and speculative calls raise
-  `Deferred("limit")`. An interactive call raises `OverLimit`, which `H.do_GET` and `H.do_POST`
-  answer as a 402 with `over_limit: true`. `request` in `lib/api/client.ts` asks (the `askOverLimit` a call passes it), then sends
-  the request again with `X-MailMind-AI-Over-Limit: allow` (`handler.AI_OVER_HEADER`), which
+  `Deferred("limit")`. An interactive call raises `OverLimit`, which `shared.failure_answer`
+  answers as a 402 with `over_limit: true`. `request` in `lib/api/client.ts` asks (the `askOverLimit` a call passes it), then sends
+  the request again with `X-MailMind-AI-Over-Limit: allow` (`shared.AI_OVER_HEADER`), which
   runs it inside `assistant.allowing_over()`.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
   4xx in a row for one feature and model stop that pair. It stays open until the model in use
