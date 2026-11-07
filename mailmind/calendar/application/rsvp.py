@@ -7,6 +7,9 @@ from mailmind.calendar.application.invites import Invites
 from mailmind.calendar.application.ports import Messages, StoredInvites, SystemSend
 from mailmind.calendar.domain import rsvp
 from mailmind.calendar.domain.invite import Party
+from mailmind.platform.logging import get_logger
+
+log = get_logger("rsvp")
 
 
 class Rsvp:
@@ -35,7 +38,7 @@ class Rsvp:
         try:
             parsed = self._messages.fetched(row["account"], pk)
         except Exception as e:
-            print(f"[rsvp] fetch failed for pk {pk}: {self._messages.quiet_error(e)}", flush=True)
+            log.warning("fetch failed for pk %(id)s: %(why)s", {"id": pk, "why": self._messages.quiet_error(e)})
             return {"ok": False, "error": "could not load the invite"}, 502
         invite, _part = self._invites.of(pk, parsed)
         if not invite:
