@@ -1,4 +1,4 @@
-"""Discovery's view of the database. It writes nothing here: `messages`, `summaries` and the rest are read models, and
+"""Discovery's view of the database. It writes nothing here: `messages`, `assessments` and the rest are read models, and
 which folder plays which role comes through `folders`."""
 import sqlite3
 
@@ -42,13 +42,13 @@ class StoredMail:
                                                    ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth
                            FROM (SELECT rowid AS pk, {fts.BM25} AS score FROM msg_fts WHERE msg_fts MATCH ?) h
                            JOIN messages m ON m.pk=h.pk
-                           LEFT JOIN summaries s ON s.message_pk=m.pk
+                           LEFT JOIN assessments s ON s.message_key=m.message_key
                            WHERE 1=1{where_sql})
                            WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
                            LIMIT ? OFFSET ?""")
                     return c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
                 # newest first stops early, which sorting every copy wouldn't
-                sql = (f"""SELECT {columns} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+                sql = (f"""SELECT {columns} FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
                        WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
                 rows, seen = [], set()
                 for r in c.execute(sql, [*params, *in_all_args]):
@@ -78,12 +78,12 @@ class StoredMail:
         if match:
             sql = (f"SELECT {cols}, {fts.BM25} AS score "
                    "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
-                   "LEFT JOIN summaries s ON s.message_pk=m.pk "
+                   "LEFT JOIN assessments s ON s.message_key=m.message_key "
                    f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
                    "ORDER BY score ASC, m.ts DESC LIMIT ?")
             args = [match, *acct_params, limit]
         else:                                                 # no content terms → recent mail
-            sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
+            sql = (f"SELECT {cols} FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key "
                    f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
             args = [*acct_params, limit]
         with _uow.read() as c:
@@ -100,11 +100,11 @@ class StoredMail:
         with _uow.read() as c:
             if match is not None:
                 base = ("FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
-                        "LEFT JOIN summaries s ON s.message_pk=m.pk "
+                        "LEFT JOIN assessments s ON s.message_key=m.message_key "
                         f"WHERE msg_fts MATCH ? AND m.pending_removal IS NULL{where_sql}")
                 bargs = [match, *params]
             else:
-                base = ("FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
+                base = ("FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key "
                         f"WHERE m.pending_removal IS NULL{where_sql}")
                 bargs = [*params]
             not_apart, apart_args = self._in_folders_playing(c, apart)
