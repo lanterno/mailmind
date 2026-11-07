@@ -33,7 +33,7 @@ function Keys() {
           <div className="legh">Anywhere</div>
           <div className="g">
             <kbd>/</kbd><span>search · <kbd>?</kbd>question asks your inbox · <kbd>!</kbd>command plans a bulk action · <kbd>⌘K</kbd> commands</span>
-            <kbd>z</kbd><span>undo last action (archive · delete · junk · move · snooze · mute)</span>
+            <kbd>z</kbd><span>undo last action (archive · delete · junk · snooze · mute)</span>
             <kbd>v</kbd><span>save the current search as a pinned View</span>
             <kbd>,</kbd><span>settings · <kbd>?</kbd> help · <kbd>Esc</kbd> back/close</span>
             <kbd>⌘</kbd><span>+<kbd>↵</kbd> send · +<kbd>S</kbd> draft (composing)</span>
