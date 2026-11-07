@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
+from mailmind.kernel import attention as verdict
 from mailmind.mailbox.domain import identity
 from mailmind.mailbox.domain.events import ConversationsMerged
 from mailmind.mailbox.domain.threading import Copy, Threader
@@ -464,6 +465,13 @@ def digest(c, min_importance=1, account=None, limit=300):
 
 
 # ------------------------------------------------------------------- what the Assistant reads (its Mail port)
+def _among(accounts, col):
+    """A clause confining a query to `accounts`, and its parameters: nothing when none are named."""
+    if not accounts:
+        return "", []
+    return " AND %s IN (%s) " % (col, ",".join("?" for _ in accounts)), list(accounts)
+
+
 def brief_rows(c, accounts, n):
     """What a brief is made from: the mail the AI said is worth a glance, most important first."""
     sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
@@ -498,6 +506,43 @@ def delta_rows(c, accounts, since_ts, n):
     sql += "ORDER BY m.ts DESC LIMIT ?"       # newest first
     params.append(n)
     return c.execute(sql, params).fetchall()
+
+
+def sent_since(c, accounts, since_ts):
+    ac, ap = _among(accounts, "account")
+    return c.execute(
+        "SELECT COUNT(*) FROM messages WHERE lower(folder) LIKE '%sent%' AND ts>=?" + ac,
+        [since_ts, *ap]).fetchone()[0]
+
+
+def received_since(c, accounts, since_ts):
+    ac, ap = _among(accounts, "account")
+    return c.execute(
+        "SELECT COUNT(*) FROM messages WHERE folder='INBOX' AND ts>=?" + ac,
+        [since_ts, *ap]).fetchone()[0]
+
+
+def received_by_bucket(c, accounts, since_ts):
+    """What kind of mail arrived: each bucket, and how many."""
+    ac, ap = _among(accounts, "account")
+    return c.execute(
+        "SELECT bucket, COUNT(*) n FROM messages WHERE folder='INBOX' AND ts>=?" + ac
+        + " GROUP BY bucket", [since_ts, *ap]).fetchall()
+
+
+def needs_you_rows(c, accounts, n):
+    """Who's waiting on the person to reply: open, important, unanswered INBOX mail (mirrors the brief's "needs you"
+    set; joins summaries so we get importance/action, excludes junk/snoozed/muted/answered)."""
+    ac, ap = _among(accounts, "m.account")
+    return c.execute(
+        "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
+        "       s.importance, s.action, s.category "
+        "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
+        "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
+        "  AND m.pending_removal IS NULL "
+        f"  AND {verdict.needs_you_sql()} "
+        "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
+        + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, n]).fetchall()
 
 
 def stats(c):

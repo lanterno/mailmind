@@ -243,6 +243,35 @@ def waiting_count(c, account):
         "WHERE f.account=? AND f.state='due' AND f.kind!='replylater'", (account,)).fetchone()[0]
 
 
+def _among(accounts):
+    """A clause confining a query of `followups f` to `accounts`, and its parameters: nothing when none are named."""
+    if not accounts:
+        return "", []
+    return " AND f.account IN (%s) " % ",".join("?" for _ in accounts), list(accounts)
+
+
+def awaited_threads(c, accounts, n):
+    """Who the person is waiting on, for a review: SENT-no-reply follow-ups only (kind='sent'; you replied, no answer
+    yet). kind='received' is the inverse (they're waiting on you). Subject and recipients come from the thread's LATEST
+    message on the STABLE (account,thread_id) key: anchor_pk is advisory and doesn't survive a reconcile/reset_folder
+    re-pk (would blank the row)."""
+    fac, fap = _among(accounts)
+    return c.execute(
+        "SELECT f.account, f.thread_id, m.pk, m.message_key, m.folder, f.first_sent_ts, m.subject, m.recipients "
+        "FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
+        "  AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id "
+        "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "
+        "WHERE f.state='due' AND f.kind='sent'" + fac
+        + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, n]).fetchall()
+
+
+def replylater_due(c, accounts):
+    fac, fap = _among(accounts)
+    return c.execute(
+        "SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='replylater'" + fac,
+        fap).fetchone()[0]
+
+
 def expire_followups(c, now_ts, days):
     """Bounded lifetime for 'received' nudges: a reply made from ANOTHER client can't be seen
     locally until Sent syncs, so cap how long an unresolved received nudge can nag."""

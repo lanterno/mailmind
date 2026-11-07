@@ -169,6 +169,34 @@ class _Mail:
         from mailmind.bootstrap.mailbox import store
         return store.delta_rows(c, accounts, since_ts, n)
 
+    def sent_since(self, c, accounts, since_ts):
+        from mailmind.bootstrap.mailbox import store
+        return store.sent_since(c, accounts, since_ts)
+
+    def received_since(self, c, accounts, since_ts):
+        from mailmind.bootstrap.mailbox import store
+        return store.received_since(c, accounts, since_ts)
+
+    def received_by_bucket(self, c, accounts, since_ts):
+        from mailmind.bootstrap.mailbox import store
+        return store.received_by_bucket(c, accounts, since_ts)
+
+    def needs_you_rows(self, c, accounts, n):
+        from mailmind.bootstrap.mailbox import store
+        return store.needs_you_rows(c, accounts, n)
+
+    def awaited_threads(self, c, accounts, n):
+        from mailmind.bootstrap import attention
+        return attention.book.awaited_threads(c, accounts, n)
+
+    def replylater_due(self, c, accounts):
+        from mailmind.bootstrap import attention
+        return attention.book.replylater_due(c, accounts)
+
+    def senders_cleaned(self, c, since_iso, accounts):
+        from mailmind.bootstrap import curation
+        return curation.sqlite.senders_cleaned(c, since_iso, accounts)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""

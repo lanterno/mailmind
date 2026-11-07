@@ -39,6 +39,14 @@ def unsub_log_put(c, from_addr, method, status, http_status, ts, key, accounts):
     return c.execute("SELECT * FROM unsub_log WHERE idempotency_key=?", (key,)).fetchone()
 
 
+def senders_cleaned(c, since_iso, accounts):
+    """How many senders were unsubscribed from since then, in any of `accounts`, or anywhere when none are named."""
+    jac, jap = (" AND value IN (%s) " % ",".join("?" for _ in accounts), list(accounts)) if accounts else ("", [])
+    return c.execute("SELECT COUNT(*) FROM unsub_log WHERE ts>=? AND (accounts IS NULL OR EXISTS "
+                     "(SELECT 1 FROM json_each(unsub_log.accounts) WHERE 1=1" + jac + "))",
+                     [since_iso, *jap]).fetchone()[0]
+
+
 class SenderMail:
     def __init__(self, rows):
         self._rows = rows

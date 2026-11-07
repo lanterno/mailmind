@@ -14,7 +14,6 @@ from typing import Any, TypedDict
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
-from mailmind.kernel import attention
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
@@ -102,75 +101,35 @@ class Reviews:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _acct_clause(self, accounts_set: Collection[str], col: str = "account") -> tuple[str, list[str]]:
-        if not accounts_set:
-            return "", []
-        return " AND %s IN (%s) " % (col, ",".join("?" for _ in accounts_set)), list(accounts_set)
-
     def _aggregate(self, c: Connection, accounts_set: Collection[str],
                    since_ts: float) -> tuple[Stats, list[Needed], list[Awaited]]:
         """All deterministic — pure local SQL. Returns (stats dict, needs list, waiting list)."""
-        ac, ap = self._acct_clause(accounts_set, "m.account")
-        ac2, ap2 = self._acct_clause(accounts_set, "account")
-
-        sent = c.execute(
-            "SELECT COUNT(*) FROM messages WHERE lower(folder) LIKE '%sent%' AND ts>=?" + ac2,
-            [since_ts, *ap2]).fetchone()[0]
-        received = c.execute(
-            "SELECT COUNT(*) FROM messages WHERE folder='INBOX' AND ts>=?" + ac2,
-            [since_ts, *ap2]).fetchone()[0]
+        sent = self._mail.sent_since(c, accounts_set, since_ts)
+        received = self._mail.received_since(c, accounts_set, since_ts)
         # received breakdown by bucket (what kind of mail arrived)
         by_bucket: dict[str, int] = {}
-        for r in c.execute(
-                "SELECT bucket, COUNT(*) n FROM messages WHERE folder='INBOX' AND ts>=?" + ac2
-                + " GROUP BY bucket", [since_ts, *ap2]):
+        for r in self._mail.received_by_bucket(c, accounts_set, since_ts):
             by_bucket[r["bucket"] or "other"] = r["n"]
 
-        # who's waiting on the person to reply — open, important, unanswered INBOX mail (mirrors the brief's
-        # "needs you" set; joins summaries so we get importance/action, excludes junk/snoozed/muted/answered)
-        needs_rows = c.execute(
-            "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
-            "       s.importance, s.action, s.category "
-            "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
-            "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
-            "  AND m.pending_removal IS NULL "
-            f"  AND {attention.needs_you_sql()} "
-            "  AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) "
-            + ac + " ORDER BY s.importance DESC, m.ts DESC LIMIT ?", [*ap, TOP_OPEN]).fetchall()
+        needs_rows = self._mail.needs_you_rows(c, accounts_set, TOP_OPEN)
         needs: list[Needed] = [{"pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
                                 "account": r["account"], "thread_id": r["thread_id"],
                                 "who": r["from_name"] or r["from_addr"] or "someone",
                                 "subject": r["subject"] or "(no subject)",
                                 "importance": r["importance"], "action": r["action"] or ""} for r in needs_rows]
 
-        # who the person is waiting on — SENT-no-reply follow-ups only (kind='sent'; you replied, no answer
-        # yet). kind='received' is the inverse (they're waiting on you) and is already in the `needs` list.
-        fac, fap = self._acct_clause(accounts_set, "f.account")
-        # resolve subject/recipients via the thread's LATEST message on the STABLE (account,thread_id) key —
-        # anchor_pk is advisory and doesn't survive a reconcile/reset_folder re-pk (would blank the row).
-        waiting_rows = c.execute(
-            "SELECT f.account, f.thread_id, m.pk, m.message_key, m.folder, f.first_sent_ts, m.subject, m.recipients "
-            "FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
-            "  AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id "
-            "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "
-            "WHERE f.state='due' AND f.kind='sent'" + fac
-            + " ORDER BY f.first_sent_ts ASC LIMIT ?", [*fap, TOP_OPEN]).fetchall()
+        waiting_rows = self._mail.awaited_threads(c, accounts_set, TOP_OPEN)
         waiting: list[Awaited] = [{"account": r["account"], "thread_id": r["thread_id"], "pk": r["pk"],
                                    "key": r["message_key"], "folder": r["folder"],
                                    "subject": r["subject"] or "(no subject)",
                                    "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
                                    "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
 
-        replylater = c.execute(
-            "SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='replylater'" + fac,
-            fap).fetchone()[0]
+        replylater = self._mail.replylater_due(c, accounts_set)
 
         since_iso = datetime.fromtimestamp(since_ts, timezone.utc).isoformat()
-        jac, jap = self._acct_clause(accounts_set, "value")
         try:
-            cleaned = c.execute("SELECT COUNT(*) FROM unsub_log WHERE ts>=? AND (accounts IS NULL OR EXISTS "
-                                "(SELECT 1 FROM json_each(unsub_log.accounts) WHERE 1=1" + jac + "))",
-                                [since_iso, *jap]).fetchone()[0]
+            cleaned = self._mail.senders_cleaned(c, since_iso, accounts_set)
         except Exception:
             cleaned = 0
 
