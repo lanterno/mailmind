@@ -442,3 +442,12 @@ def test_a_week_with_nothing_unanswered_says_so(page, world, ai):
     expect(panel.locator(".rv-empty")).to_have_text("Nothing important is unanswered.")
     expect(panel.locator(".rv-sec", has_text="Still needs you")).to_have_text("Still needs you")
     clean(page)
+
+
+def test_a_review_that_cant_be_written_says_why(page, world, ai):
+    page.pw.route("**/api/review", lambda route: route.fulfill(json={"ok": False, "error": "The mail couldn't be read"}))
+    page.goto("/next")
+    page.get_by_role("button", name="Your week").click()
+    panel = page.get_by_role("dialog", name="Weekly review")
+    expect(panel.locator(".rv-err")).to_contain_text("The mail couldn't be read")
+    clean(page)
