@@ -58,16 +58,6 @@ class Directory:
         """The global default signature (used when an account has no per-account one)."""
         return account.clean_signature(self._raw().get("signature_default") or "")
 
-    def set_signature_default(self, text: str) -> None:
-        with self._write_lock:
-            raw = self._raw()
-            sg = account.clean_signature(text)
-            if sg:
-                raw["signature_default"] = sg
-            else:
-                raw.pop("signature_default", None)
-            self.save(raw)
-
     def signature_map(self) -> dict[str, str]:
         """email -> effective signature (per-account if set, else the global default), for ALL
         raw accounts so the composer can insert/swap without an extra round trip."""
