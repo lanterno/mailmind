@@ -1,4 +1,5 @@
 """A message with no thread is read on its own: a reply drafted from it, and a draft ahead fingerprinted by it."""
+from answered import answered
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.adapters import sqlite as answers
@@ -24,14 +25,13 @@ def test_a_lone_message_is_fingerprinted_by_its_id_and_its_body(world):
 
 def test_a_reply_to_a_lone_message_is_drafted_from_that_message(world, ai):
     ai.queue(fa.answer({"body": "What a lovely quilt."}))
-    res, code = assistant.replies.draft(w.ADA, pk=world.pk(QUILT))
-    assert (code, res["body"]) == (200, "What a lovely quilt.")
+    assert assistant.replies.draft(w.ADA, pk=world.pk(QUILT))["body"] == "What a lovely quilt."
     [asked] = ai.requests
     assert "The finished quilt" in asked.prompt
 
 
 def test_a_reply_to_a_message_that_has_gone_has_nothing_to_reply_to(world, ai):
-    assert assistant.replies.draft(w.ADA, pk=999999) == ({"ok": False, "error": "nothing to reply to"}, 404)
+    assert answered(assistant.replies.draft, w.ADA, pk=999999) == ({"ok": False, "error": "nothing to reply to"}, 404)
     assert ai.requests == []
 
 
@@ -43,7 +43,7 @@ def test_a_lone_message_with_no_body_here_is_read_from_its_server(world, ai):
     c.commit()
     c.close()
     ai.queue(fa.answer({"body": "See you there."}))
-    assert assistant.replies.draft(w.ADA, pk=pk)[1] == 200
+    assert assistant.replies.draft(w.ADA, pk=pk)["ok"]
     [asked] = ai.requests
     assert PHRASE in asked.prompt
 
