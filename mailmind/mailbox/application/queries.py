@@ -8,9 +8,6 @@ from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Attention, StoredMail
 
-_MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.account "
-               "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
-
 
 def _attention(r: Row) -> dict[str, bool]:
     """What the verdict on row `r` asks of you. The page reads these and never works them out."""
@@ -26,16 +23,8 @@ class Queries:
     def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
         c = self._store.conn()
-        rows = c.execute(
-            """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
-                      m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
-                      m.snoozed_until, s.importance, s.category, s.action
-               FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-               WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
-               ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
-        total = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
-                            "AND pending_removal IS NULL",
-                          (account,)).fetchone()[0]
+        rows = self._store.snoozed_rows(c, account, limit, offset)
+        total = self._store.snoozed_count(c, account)
         c.close()
         items = [{
             "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
@@ -132,38 +121,11 @@ class Queries:
         scan: dict[str, bool] = self._folders.on_open(account, folder) if offset == 0 else {}
         c = self._store.conn()
         if group:
-            # collapse to conversations: one row per thread (the latest message) + rollups
-            rows = c.execute(
-                """WITH fm AS (
-                     SELECT m.*, s.importance, s.summary, s.action, s.category,
-                       ROW_NUMBER() OVER (PARTITION BY m.thread_id ORDER BY m.ts DESC, m.pk DESC) rn,
-                       COUNT(*)        OVER (PARTITION BY m.thread_id) cnt,
-                       SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
-                       MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
-                       MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
-                     FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                     WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
-                + _MUTED_EXCL.format(t="m") + """)
-                   SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
-                (account, folder, limit, offset)).fetchall()
-            total = c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
-                              "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
-                              + _MUTED_EXCL.format(t="messages"),
-                              (account, folder)).fetchone()[0]
+            rows = self._store.folder_conversation_rows(c, account, folder, limit, offset)
+            total = self._store.folder_conversation_count(c, account, folder)
         else:
-            rows = c.execute(
-                """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
-                          m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
-                          s.summary, s.action, s.category
-                   FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
-                + _MUTED_EXCL.format(t="m") + """
-                   ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
-                (account, folder, limit, offset)).fetchall()
-            total = c.execute("SELECT COUNT(*) FROM messages "
-                              "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
-                              + _MUTED_EXCL.format(t="messages"),
-                              (account, folder)).fetchone()[0]
+            rows = self._store.folder_rows(c, account, folder, limit, offset)
+            total = self._store.folder_count(c, account, folder)
         c.close()
         items: list[dict[str, Any]] = []
         for r in rows:
@@ -191,12 +153,7 @@ class Queries:
         if not account or not thread_id:
             return {"ok": False, "error": "missing account/thread"}
         c = self._store.conn()
-        rows = c.execute(
-            """SELECT pk, message_key, folder, from_addr, from_name, subject, date_iso, ts, snippet,
-                      seen, flagged, answered, has_attach, is_junk, message_id
-               FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
-               ORDER BY ts ASC, pk ASC""",
-            (account, thread_id)).fetchall()
+        rows = self._store.thread_rows(c, account, thread_id)
         c.close()
         items: list[dict[str, Any]] = []
         seen_ids: set[str] = set()

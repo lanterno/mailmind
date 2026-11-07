@@ -622,6 +622,82 @@ def stats(c):
     }
 
 
+# ---- what the page lists: none holds a row on its way out (pending_removal) ----
+_MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.account "
+               "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed_until IS NULL exclusion
+
+
+def snoozed_rows(c, account, limit, offset):
+    """Every snoozed message in the account, soonest wake first."""
+    return c.execute(
+        """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
+                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
+                  m.snoozed_until, s.importance, s.category, s.action
+           FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+           WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
+           ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
+
+
+def snoozed_count(c, account):
+    return c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
+                     "AND pending_removal IS NULL",
+                     (account,)).fetchone()[0]
+
+
+def folder_conversation_rows(c, account, folder, limit, offset):
+    """A folder collapsed to conversations: one row per thread (the latest message) + rollups."""
+    return c.execute(
+        """WITH fm AS (
+             SELECT m.*, s.importance, s.summary, s.action, s.category,
+               ROW_NUMBER() OVER (PARTITION BY m.thread_id ORDER BY m.ts DESC, m.pk DESC) rn,
+               COUNT(*)        OVER (PARTITION BY m.thread_id) cnt,
+               SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
+               MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
+               MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
+             FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+             WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
+        + _MUTED_EXCL.format(t="m") + """)
+           SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
+        (account, folder, limit, offset)).fetchall()
+
+
+def folder_conversation_count(c, account, folder):
+    return c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
+                     "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
+                     + _MUTED_EXCL.format(t="messages"),
+                     (account, folder)).fetchone()[0]
+
+
+def folder_rows(c, account, folder, limit, offset):
+    """A folder's messages, newest first."""
+    return c.execute(
+        """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
+                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
+                  s.summary, s.action, s.category
+           FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+           WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
+        + _MUTED_EXCL.format(t="m") + """
+           ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
+        (account, folder, limit, offset)).fetchall()
+
+
+def folder_count(c, account, folder):
+    return c.execute("SELECT COUNT(*) FROM messages "
+                     "WHERE account=? AND folder=? AND snoozed_until IS NULL AND pending_removal IS NULL "
+                     + _MUTED_EXCL.format(t="messages"),
+                     (account, folder)).fetchone()[0]
+
+
+def thread_rows(c, account, thread_id):
+    """A conversation's messages in the account, oldest first, every copy of each."""
+    return c.execute(
+        """SELECT pk, message_key, folder, from_addr, from_name, subject, date_iso, ts, snippet,
+                  seen, flagged, answered, has_attach, is_junk, message_id
+           FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
+           ORDER BY ts ASC, pk ASC""",
+        (account, thread_id)).fetchall()
+
+
 _THREADING = "pk, message_id, gmail_thread, in_reply_to, refs, thread_id, folder, ts"
 _SLICE = 500                                     # how many values one IN names
 
