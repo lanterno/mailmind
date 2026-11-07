@@ -134,3 +134,16 @@ def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it
     expect(page.locator("#srLive")).to_have_text("1 new message arrived in Ada")
     assert page.pw.evaluate("notes.length") == 2               # with someone here, no desktop notification
     clean(page)
+
+
+def test_filing_the_server_refuses_puts_you_back_on_the_message(page, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    expect(receipt).to_have_class(re.compile(r"\bsel\b"))
+    world.server.fail("UID MOVE", user=w.ADA, times=None)
+    world.server.fail("UID COPY", user=w.ADA, times=None)
+    page.keyboard.press("e")
+    expect(page.locator("#toast")).to_have_text("Couldn’t archive")
+    expect(receipt).to_have_class(re.compile(r"\bsel\b"))
+    clean(page)
