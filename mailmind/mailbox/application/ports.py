@@ -7,7 +7,7 @@ from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.session import MailSession
 
 type Account = dict[str, Any]                 # an entry of the configuration, as Accounts reads it
-type Result = tuple[dict[str, Any], int]      # what a request is answered with: its JSON, and the HTTP status
+type Result = dict[str, Any]                  # what a request is answered with: its JSON
 type Stored = tuple[int, int, int]            # what a sync stored: kept, junk, the highest UID it saw
 
 

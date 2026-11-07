@@ -10,7 +10,7 @@ KeptConnections holds the connection, and ConnectionPolicy says how long one may
 nothing of what a connection is: the caller says how to open, check and close one, and its provider
 gives the numbers.
 
-Standard library only: python3 server.py uses it.
+Standard library and the kernel only: python3 server.py uses it.
 """
 import contextlib
 import itertools
@@ -20,11 +20,9 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import Any
 
+from mailmind.kernel.errors import Busy
+
 EVERY_ACCOUNT = "*"
-
-
-class Busy(Exception):
-    """The gate was held, and the job was asked not to wait for it, or not past its deadline."""
 
 
 # ── who holds a gate, of either kind ───────────────────────────────────────────────────────────
@@ -78,7 +76,7 @@ def run[T](account: str, fn: Callable[[], T], priority: int, wait: bool, deadlin
         key = (int(priority), next(_arrival))
         if not _admissible(key, account):
             if not wait:
-                raise Busy(account)
+                raise Busy()
             entry = (key, account)
             _waiting.append(entry)
             ends = None if deadline is None else time.monotonic() + deadline
@@ -86,7 +84,7 @@ def run[T](account: str, fn: Callable[[], T], priority: int, wait: bool, deadlin
                 while not _admissible(key, account):
                     left = None if ends is None else ends - time.monotonic()
                     if left is not None and left <= 0:
-                        raise Busy(account)
+                        raise Busy()
                     _cv.wait(left)
             finally:
                 _waiting.remove(entry)

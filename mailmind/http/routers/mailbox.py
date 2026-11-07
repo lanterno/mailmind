@@ -5,6 +5,7 @@ import urllib.parse
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http.routing import ANSWERED, Routes
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.platform import perimeter
 
 _BODY_DOCUMENT = re.compile(r"/api/message/([0-9]{1,18})/body\.html")
@@ -20,10 +21,10 @@ def _safe_filename(name):
 
 def _attachment(h, mailbox, pk, part_id):
     if not re.match(r"^[0-9]+$", part_id or ""):     # only the part ids mime gives
-        return h._json({"ok": False, "error": "bad part id"}, 400)
+        raise Refused("bad part id")
     found = mailbox.bodies.attachment(pk, part_id)
     if "error" in found:
-        return h._json({"ok": False, "error": found["error"]}, 404)
+        raise NotFound(found["error"])
     data = found["data"]
     if len(data) > MAX_ATTACH_BYTES:
         return h._json({"ok": False, "error": "too large"}, 413)
@@ -49,7 +50,7 @@ def routes(mailbox):
     def folders(req):
         account = req.arg("account")
         if not account:
-            return {"ok": False, "error": "account required", "folders": []}, 400
+            raise Refused("account required", folders=[])
         return mailbox.folders.of_account(account)
 
     @r.get("/api/messages")

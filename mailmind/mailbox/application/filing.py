@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from mailmind.kernel.errors import Refused
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.parsed import as_int, is_list, is_object
 from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
@@ -110,20 +110,20 @@ class Filing:
 
 
     def do_pending_retry(self, mid: int) -> Result:
-        """The tray's Retry: a change the queue gave up on goes back in. Returns (result, code)."""
+        """The tray's Retry: a change the queue gave up on goes back in."""
         if not self._commands.retry(mid):
-            return {"ok": False}, 404
+            raise NotFound()
         self.settled()
-        return {"ok": True}, 200
+        return {"ok": True}
 
 
     def do_pending_discard(self, mid: int) -> Result:
         """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
-        migration 23 kept them, is read back. Returns (result, code)."""
+        migration 23 kept them, is read back. Raises gates.Busy if the gate stays held."""
         with self._uow.read() as c:
             row = self._store.command_get(c, mid)
         if row is None:
-            return {"ok": False}, 404
+            raise NotFound()
 
         def job() -> bool:
             gone = self._commands.discard(mid)
@@ -137,14 +137,10 @@ class Filing:
                 except Exception as e:                # the next open of the folder has another chance
                     pending_log.warning("reading a discarded move's message back: %(why)s", {"why": self._accounts.quiet_error(e)})
             return True
-        try:
-            ok = gates.run(row["account"], job, priority=gates.Priority.INTERACTIVE, deadline=self.PENDING_WAIT)
-        except gates.Busy:
-            return {"ok": False, "busy": True}, 409
-        if not ok:
-            return {"ok": False}, 404
+        if not gates.run(row["account"], job, priority=gates.Priority.INTERACTIVE, deadline=self.PENDING_WAIT):
+            raise NotFound()
         self.settled()
-        return {"ok": True}, 200
+        return {"ok": True}
 
 
     def do_write(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -173,7 +169,7 @@ class Filing:
         """Move one message to the account's Trash."""
         pk = as_int(body.get("pk"))
         if pk is None:
-            raise ValueError("bad pk")      # the handler answers malformed input with a 400
+            raise Refused()
         return self._file("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
 
 
@@ -212,14 +208,14 @@ class Filing:
         `partial` if some were."""
         verb, rows = body.get("verb"), body.get("rows")
         if verb not in ("archive", "trash", "junk") or not is_list(rows) or len(rows) > self.BULK_MAX:
-            raise ValueError("bad filing")          # the handler answers malformed input with a 400
+            raise Refused()
         wanted: list[tuple[int, bool]] = []
         for one in rows:
             if not is_object(one):
-                raise ValueError("bad row")
+                raise Refused()
             pk = as_int(one.get("pk"))
             if pk is None:
-                raise ValueError("bad row")
+                raise Refused()
             wanted.append((pk, one.get("whole") is True and verb != "junk"))
         push = self._pushing(body.get("undo_group") or "bulk:" + secrets.token_hex(6))
         accepted: list[tuple[int, command.Accepted | None]] = []

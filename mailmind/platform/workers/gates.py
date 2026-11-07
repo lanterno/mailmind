@@ -44,7 +44,7 @@ _lock = threading.Lock()
 
 def _run_global(account, fn, wait, deadline):
     if not _lock.acquire(blocking=wait, timeout=deadline if wait and deadline is not None else -1):
-        raise Busy(account)
+        raise Busy()
     me = threading.get_ident()
     account_worker.took(me)
     try:

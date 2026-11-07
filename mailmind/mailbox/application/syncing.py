@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Collection, Mapping
 from typing import Any
 
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.folders import Folders
@@ -89,12 +90,12 @@ class Syncing:
         """Clear an account's recorded sync error and re-run its sync via the existing single-flight."""
         acct = (body.get("account") or "").strip()
         if acct not in {a["email"] for a in self._accounts.accounts()}:
-            return {"ok": False, "error": "unknown account"}, 400
+            raise Refused("unknown account")
         with self._uow.write() as c:
             self._store.clear_sync_error(c, acct)
         self._accounts.try_login_again(acct)
         threading.Thread(target=lambda: self.sync_guarded({acct}), daemon=True).start()
-        return {"ok": True, "account": acct}, 200
+        return {"ok": True, "account": acct}
 
 
     def sync_once(self) -> None:
