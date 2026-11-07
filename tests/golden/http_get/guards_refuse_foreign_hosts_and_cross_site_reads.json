@@ -223,7 +223,7 @@
  },
  {
   "body": {
-   "error": "request failed",
+   "error": "bad request",
    "ok": false
   },
   "headers": {
@@ -237,6 +237,6 @@
    "x-frame-options": "DENY"
   },
   "request": "GET /api/messages?account=ada@example.test&limit=lots",
-  "status": 500
+  "status": 400
  }
 ]
