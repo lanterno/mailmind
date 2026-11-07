@@ -20,12 +20,12 @@ __all__ = ["AI_OVER_HEADER", "H", "ROUTERS", "post_body_cap"]
 ROUTERS = [attention_routes.router(attention),
            calendar_routes.router(calendar),
            mailbox_routes.router(mailbox),
-           accounts_routes.router(accounts, mailbox)]
+           accounts_routes.router(accounts, mailbox),
+           debug.router(mailbox, compose, background, assistant)]
 
 handler.bind(Routes(static.routes(),
                     events.routes(),
                     export.routes(),
-                    debug.routes(mailbox, compose, background, assistant),
                     curation_routes.routes(curation),
                     discovery_routes.routes(discovery),
                     compose_routes.routes(compose),
