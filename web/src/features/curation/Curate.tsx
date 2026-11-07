@@ -120,7 +120,8 @@ function Flood() {
   return (
     <>
       {senders.map((x) => (
-        <div className="flood-row" key={x.from_addr} data-flood={x.from_addr}>
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's larger target for the row's own button, which the keyboard has
+        <div className="flood-row" key={x.from_addr} data-flood={x.from_addr} onClick={() => void previewCleanup(x.from_addr)}>
           <div className="flood-main">
             <div className="flood-nm">{x.from_name || x.from_addr}</div>
             <div className="flood-ad">{x.from_addr}</div>
@@ -134,7 +135,7 @@ function Flood() {
           </div>
           <div className="flood-side">
             <span className="flood-score" title="noise score">{x.noise_score}</span>
-            <button className="flood-go" aria-label={`Clean up ${x.from_addr}`} onClick={() => void previewCleanup(x.from_addr)}>Clean up</button>
+            <button className="flood-go" aria-label={`Clean up ${x.from_addr}`}>Clean up</button>
           </div>
         </div>
       ))}
