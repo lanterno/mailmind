@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from mailmind.calendar.adapters import icalendar_acl as ics
+from mailmind.bootstrap.calendar import ics
 from mailmind.calendar.application.agenda import Agenda
 from mailmind.calendar.domain import rsvp
 

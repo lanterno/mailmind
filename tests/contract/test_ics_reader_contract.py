@@ -1,7 +1,6 @@
-"""A reader of invites' contract, through each reader there is: `ics_reader` (hand-rolled, what a process starts on)
-and `icalendar_acl` (what serving asks for, on `icalendar` and `recurring-ical-events`). An invite is a stranger's text, read on request
-threads: nothing raises however broken it is, what comes back is plain data, and no text or rule costs more than a bound, in
-time or in memory. test_ics_differential.py compares what the two answer. All addresses are fictional.
+"""The reader of invites' contract: `icalendar_acl`, on `icalendar` and `recurring-ical-events`. An invite is a stranger's text,
+read on request threads: nothing raises however broken it is, what comes back is plain data, and no text or rule costs more than a
+bound, in time or in memory. tests/unit/calendar/test_invite_text.py says what a text comes to. All addresses are fictional.
 """
 import gc
 import json
@@ -16,7 +15,7 @@ from dateutil.rrule import DAILY, rrule
 from hypothesis import given, strategies as st
 from icalendar.timezone import tzp
 
-from mailmind.bootstrap import calendar
+from mailmind.bootstrap.calendar import ics
 from mailmind.calendar.adapters import icalendar_acl
 from mailmind.calendar.domain import rsvp
 from property_runs import runs
@@ -24,20 +23,6 @@ from property_runs import runs
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 CPU_SECONDS = 1.0           # far above either budget, far below what any bomb here costs without one
 MEMORY_BYTES = 32_000_000
-
-
-@pytest.fixture(params=calendar.KINDS)
-def ics(request):
-    calendar.use(request.param)
-    yield calendar.ics
-    calendar.reset()
-
-
-@pytest.fixture
-def library():
-    calendar.use("icalendar")
-    yield calendar.ics
-    calendar.reset()
 
 
 def cal(*lines):
@@ -85,7 +70,7 @@ GARBAGE = {
 
 
 @pytest.mark.parametrize("text", GARBAGE.values(), ids=GARBAGE.keys())
-def test_no_broken_text_makes_a_reader_raise(ics, text, monkeypatch):
+def test_no_broken_text_makes_the_reader_raise(text, monkeypatch):
     monkeypatch.setattr(icalendar_acl, "_READ_SECONDS", 30.0)      # the budget has tests of its own: a busy machine mustn't decide this
     found, card = ics.events(text), ics.parse(text)
     assert isinstance(found, list)
@@ -98,7 +83,7 @@ def test_no_broken_text_makes_a_reader_raise(ics, text, monkeypatch):
 
 @pytest.mark.parametrize("inv", [{}, {"start_iso": ""}, {"start_iso": "x"}, {"start_iso": "2026-11-02T10:00:00", "end_iso": "x"},
                                  {"start_iso": "2026-11-02T10:00:00", "rrule": "x"}, {"start_iso": "2026-11-02T10:00:00+01:00", "tzid": "x"}])
-def test_a_broken_invite_raises_nothing_when_asked_when_it_next_happens(ics, inv):
+def test_a_broken_invite_raises_nothing_when_asked_when_it_next_happens(inv):
     ics.next_occurrence(inv, NOW)
 
 
@@ -123,7 +108,7 @@ def _plain(value):
 
 @given(text=st.text(max_size=300) | _mangled())
 @runs(120)
-def test_whatever_the_text_says_a_reader_answers_in_plain_data(ics, text):
+def test_whatever_the_text_says_the_reader_answers_in_plain_data(text):
     found, card = ics.events(text), ics.parse(text)
     assert (card is None) == (not found)
     assert card is None or card in found
@@ -136,7 +121,7 @@ def test_whatever_the_text_says_a_reader_answers_in_plain_data(ics, text):
         assert not set("\r\n") & set(reply.replace("\r\n", "")), reply
 
 
-def test_an_escape_in_a_uid_or_an_address_stays_as_it_was_said(ics):
+def test_an_escape_in_a_uid_or_an_address_stays_as_it_was_said():
     inv = ics.parse(cal("BEGIN:VEVENT", r"UID:a\nb\,c@example.test", "DTSTART:20261102T100000", r"ORGANIZER:mailto:ren\nX-Evil:1@example.test",
                         r"ATTENDEE:mailto:bo\nX-Evil:1@example.test", "END:VEVENT"))
     assert inv["uid"] == r"a\nb\,c@example.test"
@@ -144,13 +129,13 @@ def test_an_escape_in_a_uid_or_an_address_stays_as_it_was_said(ics):
     assert inv["attendees"][0]["email"] == r"bo\nX-Evil:1@example.test"
 
 
-def test_a_name_stays_on_one_line_whatever_it_says(ics):
+def test_a_name_stays_on_one_line_whatever_it_says():
     inv = ics.parse(cal("BEGIN:VEVENT", "UID:u", "DTSTART:20261102T100000", 'ORGANIZER;CN="Ren^nX-Evil":mailto:ren@example.test',
                         'ATTENDEE;CN="Ada^nX-Evil":mailto:ada@example.test', "END:VEVENT"))
     assert not set("\r\n") & set(inv["organizer"]["name"] + inv["attendees"][0]["name"])
 
 
-def test_nothing_in_an_invite_puts_a_line_of_its_own_in_an_rsvp(ics):
+def test_nothing_in_an_invite_puts_a_line_of_its_own_in_an_rsvp():
     inv = ics.parse(cal("BEGIN:VEVENT", r"UID:a\nX-Evil:1", "DTSTART:20261102T100000", r"SUMMARY:s\nX-Evil:1",
                         r'ORGANIZER;CN="Ren^nX-Evil:1":mailto:ren\nX-Evil:1@example.test', 'ATTENDEE;CN="Ada^nX-Evil:1":mailto:ada@example.test', "END:VEVENT"))
     reply = rsvp.build_reply(inv, "ada@example.test", rsvp.name_for(inv, "ada@example.test", "Ada"), "ACCEPTED")
@@ -158,13 +143,13 @@ def test_nothing_in_an_invite_puts_a_line_of_its_own_in_an_rsvp(ics):
     assert not set("\r\n") & set(reply.replace("\r\n", ""))
 
 
-def test_an_invite_has_the_same_fields_from_either_reader(ics):
+def test_an_invite_has_these_fields():
     assert set(ics.parse("\r\n".join(FULL))) == {"summary", "location", "description", "when", "all_day", "start_iso", "end_iso",
                                                   "organizer", "attendees", "recurrence", "method", "status", "uid", "rrule",
                                                   "exdates", "recurrence_id", "tzid"}
 
 
-def test_what_a_reader_gives_is_plain_data_nothing_of_a_library(ics):
+def test_what_the_reader_gives_is_plain_data_nothing_of_a_library():
     inv = ics.parse("\r\n".join(FULL))
     assert _plain(inv)
     assert (inv["summary"], inv["description"]) == ("Studio sync, weekly", "Bring\nnotes")
@@ -178,7 +163,7 @@ def test_what_a_reader_gives_is_plain_data_nothing_of_a_library(ics):
     (("DTSTART:20261105T080000Z",), "datetime"),
     (("DTSTART:20261005T080000Z", "RRULE:FREQ=WEEKLY"), "datetime"),
 ])
-def test_a_next_occurrence_is_plain_datetimes_in_a_standard_zone(ics, lines, zone_module):
+def test_a_next_occurrence_is_plain_datetimes_in_a_standard_zone(lines, zone_module):
     occ = ics.next_occurrence(ics.parse(event(*lines)), NOW)
     assert occ is not None
     for each in occ:
@@ -186,18 +171,18 @@ def test_a_next_occurrence_is_plain_datetimes_in_a_standard_zone(ics, lines, zon
         assert type(each.tzinfo).__module__ == zone_module
 
 
-def test_a_floating_next_occurrence_is_a_plain_naive_datetime(ics):
+def test_a_floating_next_occurrence_is_a_plain_naive_datetime():
     occ = ics.next_occurrence(ics.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=WEEKLY")), NOW)
     assert occ[0] == datetime(2026, 11, 2, 10, 0) and occ[0].tzinfo is None
 
 
-def test_an_all_day_next_occurrence_is_a_datetime_not_a_date(ics):
+def test_an_all_day_next_occurrence_is_a_datetime_not_a_date():
     occ = ics.next_occurrence(ics.parse(event("DTSTART;VALUE=DATE:20261005", "RRULE:FREQ=WEEKLY")), NOW)
     assert type(occ[0]) is datetime and occ[0] == datetime(2026, 11, 2)
     assert occ[1] - occ[0] == timedelta(days=1)
 
 
-def test_events_holds_the_card_and_empty_for_no_calendar(ics):
+def test_events_holds_the_card_and_empty_for_no_calendar():
     assert ics.events("no calendar here") == []
     text = "\r\n".join(FULL)
     assert ics.parse(text) in ics.events(text)
@@ -205,22 +190,22 @@ def test_events_holds_the_card_and_empty_for_no_calendar(ics):
 
 # ── what a TZID means ─────────────────────────────────────────────────────────
 
-def test_a_zone_the_database_knows_is_that_zone(ics):
+def test_a_zone_the_database_knows_is_that_zone():
     inv = ics.parse(event("DTSTART;TZID=Europe/Berlin:20261102T100000"))
     assert (inv["start_iso"], inv["tzid"]) == ("2026-11-02T10:00:00+01:00", "Europe/Berlin")
 
 
 @pytest.mark.parametrize("tzid", ["Nowhere/Land", "../../etc/passwd", "/etc/passwd", "", "Europe", "x" * 500])
-def test_an_unknown_tzid_makes_the_time_floating(ics, tzid):
+def test_an_unknown_tzid_makes_the_time_floating(tzid):
     inv = ics.parse(event(f"DTSTART;TZID={tzid}:20261102T100000", f"DTEND;TZID={tzid}:20261102T103000"))
     assert (inv["start_iso"], inv["end_iso"], inv["tzid"]) == ("2026-11-02T10:00:00", "2026-11-02T10:30:00", "")
     assert ics.next_occurrence(inv, NOW)[0] == datetime(2026, 11, 2, 10, 0)
 
 
 @pytest.mark.parametrize("tzid", ["W. Europe Standard Time", "Pacific Standard Time", "/freeassociation.sourceforge.net/Europe/Berlin", "Customized Time Zone"])
-def test_a_name_only_a_vtimezone_or_a_guess_could_explain_floats_too(ics, tzid):
-    """The library alone would map a Windows name or guess past a vendor's prefix. A VTIMEZONE doesn't count through either reader,
-    or an invite would mean another hour through the other; the differential test holds the two to it."""
+def test_a_name_only_a_vtimezone_or_a_guess_could_explain_floats_too(tzid):
+    """The library alone would map a Windows name or guess past a vendor's prefix. A VTIMEZONE doesn't count, and one rule says what a
+    TZID means (`invite.zone`)."""
     zone = ["BEGIN:VTIMEZONE", f"TZID:{tzid}", "BEGIN:STANDARD", "DTSTART:19701025T030000", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "END:STANDARD", "END:VTIMEZONE"]
     inv = ics.parse(cal(*zone, "BEGIN:VEVENT", "UID:u", f"DTSTART;TZID={tzid}:20261102T100000", "END:VEVENT"))
     assert (inv["start_iso"], inv["tzid"]) == ("2026-11-02T10:00:00", "")
@@ -230,19 +215,19 @@ def _zone_block(tzid, *rule, offset="+0000"):
     return ["BEGIN:VTIMEZONE", f"TZID:{tzid}", "BEGIN:STANDARD", "DTSTART:19700101T000000", f"TZOFFSETFROM:{offset}", f"TZOFFSETTO:{offset}", *rule, "END:STANDARD", "END:VTIMEZONE"]
 
 
-def test_what_a_stranger_calls_a_zone_is_not_remembered(ics):
+def test_what_a_stranger_calls_a_zone_is_not_remembered():
     ics.parse(cal(*_zone_block("Stranger/Time", offset="+0500"), "BEGIN:VEVENT", "UID:a", "DTSTART;TZID=Stranger/Time:20261102T100000", "END:VEVENT"))
     inv = ics.parse(event("DTSTART;TZID=Stranger/Time:20261102T100000"))
     assert (inv["start_iso"], inv["tzid"]) == ("2026-11-02T10:00:00", "")
 
 
-def test_the_library_keeps_nothing_of_a_vtimezone(library):
+def test_nothing_of_a_vtimezone_is_kept():
     """A name the sender chose, in a dict the process keeps."""
-    library.parse(cal(*_zone_block("Stranger/Kept", offset="+0500"), "BEGIN:VEVENT", "UID:a", "DTSTART:20261102T100000", "END:VEVENT"))
+    ics.parse(cal(*_zone_block("Stranger/Kept", offset="+0500"), "BEGIN:VEVENT", "UID:a", "DTSTART:20261102T100000", "END:VEVENT"))
     assert tzp.timezone("Stranger/Kept") is None
 
 
-def test_a_vtimezone_cant_change_what_a_real_zone_means(ics):
+def test_a_vtimezone_cant_change_what_a_real_zone_means():
     ics.parse(cal(*_zone_block("Europe/Berlin", offset="+0500"), "BEGIN:VEVENT", "UID:a", "DTSTART;TZID=Europe/Berlin:20261102T100000", "END:VEVENT"))
     inv = ics.parse(event("DTSTART;TZID=Europe/Berlin:20261102T100000"))
     assert inv["start_iso"] == "2026-11-02T10:00:00+01:00"
@@ -277,7 +262,7 @@ def _costed(work, *args):
 
 @pytest.mark.parametrize("start", STARTS.values(), ids=STARTS.keys())
 @pytest.mark.parametrize("rule", HOSTILE_RULES.values(), ids=HOSTILE_RULES.keys())
-def test_no_rule_costs_more_than_a_bound(ics, rule, start):
+def test_no_rule_costs_more_than_a_bound(rule, start):
     text = event(start, f"RRULE:{rule}")
     inv, seconds, memory = _costed(ics.parse, text)
     assert seconds < CPU_SECONDS and memory < MEMORY_BYTES, (seconds, memory)
@@ -287,38 +272,38 @@ def test_no_rule_costs_more_than_a_bound(ics, rule, start):
 
 
 @pytest.mark.parametrize("rule", ["FREQ=SECONDLY", "FREQ=MINUTELY", "FREQ=HOURLY"])
-def test_a_rule_finer_than_a_day_has_no_next_occurrence(ics, rule):
+def test_a_rule_finer_than_a_day_has_no_next_occurrence(rule):
     assert ics.next_occurrence(ics.parse(event("DTSTART:20261005T100000", f"RRULE:{rule}")), NOW) is None
 
 
-def test_a_vtimezone_that_fires_every_second_costs_nothing(ics):
+def test_a_vtimezone_that_fires_every_second_costs_nothing():
     text = cal(*_zone_block("Bomb/Zone", "RRULE:FREQ=SECONDLY"), "BEGIN:VEVENT", "UID:a", "DTSTART;TZID=Bomb/Zone:20261102T100000", "END:VEVENT")
     inv, seconds, memory = _costed(ics.parse, text)
     assert seconds < CPU_SECONDS and memory < MEMORY_BYTES, (seconds, memory)
     assert (inv["uid"], inv["start_iso"]) == ("a", "2026-11-02T10:00:00")
 
 
-def test_a_text_that_is_a_path_to_a_calendar_is_not_opened(ics, tmp_path):
+def test_a_text_that_is_a_path_to_a_calendar_is_not_opened(tmp_path):
     secret = tmp_path / "secret.ics"
     secret.write_text(event("DTSTART:20261102T100000", uid="from-a-file"))
     assert ics.parse(str(secret)) is None
     assert ics.events(str(secret)) == []
 
 
-def test_a_series_is_still_answered_after_decades_of_it(ics):
+def test_a_series_is_still_answered_after_decades_of_it():
     """What the budget has to leave room for."""
     occ = ics.next_occurrence(ics.parse(event("DTSTART;TZID=Europe/Berlin:19900101T100000", "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")), NOW)
     assert occ[0] == datetime(2026, 11, 2, 10, 0, tzinfo=ZoneInfo("Europe/Berlin"))
 
 
-def test_a_date_only_until_takes_in_that_day_and_no_later(ics):
+def test_a_date_only_until_takes_in_that_day_and_no_later():
     """Which dateutil, on its own, reads as that midnight."""
     inv = ics.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=WEEKLY;UNTIL=20261102"))
     assert ics.next_occurrence(inv, NOW)[0] == datetime(2026, 11, 2, 10, 0)
     assert ics.next_occurrence(inv, datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)) is None
 
 
-def test_a_budget_that_runs_out_in_a_garbage_collectors_callback_still_holds(library, monkeypatch):
+def test_a_budget_that_runs_out_in_a_garbage_collectors_callback_still_holds(monkeypatch):
     """What's raised in a callback goes nowhere and ends the tracer. Hypothesis has one, which is how this came up."""
     spun = []
 
@@ -332,13 +317,13 @@ def test_a_budget_that_runs_out_in_a_garbage_collectors_callback_still_holds(lib
             while time.thread_time() < until:
                 _step()
 
-    inv = library.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"))
+    inv = ics.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"))
     threshold = gc.get_threshold()
     gc.set_threshold(1)
     gc.callbacks.append(callback)
     try:
         began = time.thread_time()
-        assert library.next_occurrence(inv, NOW) is None
+        assert ics.next_occurrence(inv, NOW) is None
         seconds = time.thread_time() - began
     finally:
         gc.callbacks.remove(callback)
@@ -346,7 +331,7 @@ def test_a_budget_that_runs_out_in_a_garbage_collectors_callback_still_holds(lib
     assert spun and seconds < CPU_SECONDS, (spun, seconds)
 
 
-def test_a_budget_that_runs_out_as_an_old_generator_is_closed_still_holds(library, monkeypatch):
+def test_a_budget_that_runs_out_as_an_old_generator_is_closed_still_holds(monkeypatch):
     """A walk an earlier call abandoned waits in a cycle for the collector, who closes it during some later call. What's raised
     there goes nowhere and ends the tracer, which is how a long test session came to run one rule on towards year 9999."""
     spun, dropped = [], []
@@ -371,7 +356,7 @@ def test_a_budget_that_runs_out_as_an_old_generator_is_closed_still_holds(librar
             gc.enable()
         return walk_on(*args)
 
-    inv = library.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"))
+    inv = ics.parse(event("DTSTART:20261005T100000", "RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"))
     monkeypatch.setattr(icalendar_acl, "_next", collecting_as_it_starts)
     monkeypatch.setattr(sys, "unraisablehook", dropped.append)
     gc.collect()
@@ -383,14 +368,14 @@ def test_a_budget_that_runs_out_as_an_old_generator_is_closed_still_holds(librar
     del old_walk, cycle
     try:
         began = time.thread_time()
-        assert library.next_occurrence(inv, NOW) is None
+        assert ics.next_occurrence(inv, NOW) is None
         seconds = time.thread_time() - began
     finally:
         gc.enable()
     assert spun and not dropped and seconds < CPU_SECONDS, (spun, dropped, seconds)
 
 
-def test_a_reader_leaves_the_thread_as_it_found_it(ics):
+def test_the_reader_leaves_the_thread_as_it_found_it():
     def other_tracer(_frame, _event, _arg):
         return None
 
@@ -405,56 +390,56 @@ def test_a_reader_leaves_the_thread_as_it_found_it(ics):
         sys.settrace(before)
 
 
-# ── what only the library reads ───────────────────────────────────────────────
+# ── more than one event, and what an event may say besides ─────────────────────
 
 TWO = cal("BEGIN:VEVENT", "UID:a", "SUMMARY:First", "DTSTART:20261110T100000", "END:VEVENT",
           "BEGIN:VEVENT", "UID:b", "SUMMARY:Second", "DTSTART:20261111T100000", "END:VEVENT")
 
 
-def test_the_library_reads_every_event_of_a_text(library):
-    assert [e["summary"] for e in library.events(TWO)] == ["First", "Second"]
-    assert library.parse(TWO)["summary"] == "First"
+def test_every_event_of_a_text_is_read():
+    assert [e["summary"] for e in ics.events(TWO)] == ["First", "Second"]
+    assert ics.parse(TWO)["summary"] == "First"
 
 
-def test_the_card_of_a_series_and_its_moved_occurrence_is_the_series(library):
+def test_the_card_of_a_series_and_its_moved_occurrence_is_the_series():
     text = cal("BEGIN:VEVENT", "UID:a", "SUMMARY:Moved", "RECURRENCE-ID:20261109T100000", "DTSTART:20261110T100000", "END:VEVENT",
                "BEGIN:VEVENT", "UID:a", "SUMMARY:Series", "DTSTART:20261005T100000", "RRULE:FREQ=WEEKLY", "END:VEVENT")
-    assert library.parse(text)["summary"] == "Series"
+    assert ics.parse(text)["summary"] == "Series"
 
 
-def test_the_library_reads_a_duration_where_there_is_no_end(library):
-    inv = library.parse(event("DTSTART:20261102T100000", "DURATION:PT45M"))
+def test_a_duration_stands_where_there_is_no_end():
+    inv = ics.parse(event("DTSTART:20261102T100000", "DURATION:PT45M"))
     assert inv["end_iso"] == "2026-11-02T10:45:00"
 
 
-def test_an_rdate_is_an_occurrence_and_only_shows_where_there_is_one(library):
-    inv = library.parse(event("DTSTART:20261005T100000", "DTEND:20261005T103000", "RDATE:20261203T150000"))
+def test_an_rdate_is_an_occurrence_and_only_shows_where_there_is_one():
+    inv = ics.parse(event("DTSTART:20261005T100000", "DTEND:20261005T103000", "RDATE:20261203T150000"))
     assert inv["rdates"] == ["2026-12-03T15:00:00"]
-    assert library.next_occurrence(inv, NOW) == (datetime(2026, 12, 3, 15, 0), datetime(2026, 12, 3, 15, 30))
-    assert "rdates" not in library.parse(event("DTSTART:20261005T100000"))
+    assert ics.next_occurrence(inv, NOW) == (datetime(2026, 12, 3, 15, 0), datetime(2026, 12, 3, 15, 30))
+    assert "rdates" not in ics.parse(event("DTSTART:20261005T100000"))
 
 
-def test_an_alarm_doesnt_speak_for_its_event(library):
-    inv = library.parse(event("DTSTART:20261102T100000", "BEGIN:VALARM", "ACTION:EMAIL", "SUMMARY:Alarm", "DESCRIPTION:Soon",
+def test_an_alarm_doesnt_speak_for_its_event():
+    inv = ics.parse(event("DTSTART:20261102T100000", "BEGIN:VALARM", "ACTION:EMAIL", "SUMMARY:Alarm", "DESCRIPTION:Soon",
                               "ATTENDEE:mailto:alarm@example.test", "END:VALARM"))
     assert (inv["summary"], inv["description"], inv["attendees"]) == ("Standup", "", [])
 
 
-def test_no_more_than_so_many_events_of_one_text_are_read(library):
+def test_no_more_than_so_many_events_of_one_text_are_read():
     many = [f"BEGIN:VEVENT\r\nUID:e{i}\r\nDTSTART:20261110T100000\r\nEND:VEVENT" for i in range(icalendar_acl._MAX_EVENTS + 5)]
-    assert len(library.events(cal(*many))) == icalendar_acl._MAX_EVENTS
+    assert len(ics.events(cal(*many))) == icalendar_acl._MAX_EVENTS
 
 
-def test_a_text_past_the_cap_is_no_calendar(library):
+def test_a_text_past_the_cap_is_no_calendar():
     long = event("DTSTART:20261102T100000", "DESCRIPTION:" + "x" * icalendar_acl._MAX_TEXT)
     began = time.thread_time()
-    assert library.parse(long) is None
+    assert ics.parse(long) is None
     assert time.thread_time() - began < CPU_SECONDS
 
 
 @pytest.mark.parametrize("shape", ["\r\n".join(["DESCRIPTION:x"] * 60_000), "DESCRIPTION:" + "\\," * 450_000, " x\r\n" * 200_000, "EXDATE:" + "x," * 450_000, "ATTENDEE;" + "X=y;" * 200_000 + ":z"],
                          ids=["many-lines", "many-escapes", "many-folds", "many-commas", "many-parameters"])
-def test_a_text_within_the_cap_stops_at_the_budget_for_reading(library, shape):
+def test_a_text_within_the_cap_stops_at_the_budget_for_reading(shape):
     began = time.thread_time()
-    library.events(event("DTSTART:20261102T100000", shape))
+    ics.events(event("DTSTART:20261102T100000", shape))
     assert time.thread_time() - began < 2 * CPU_SECONDS

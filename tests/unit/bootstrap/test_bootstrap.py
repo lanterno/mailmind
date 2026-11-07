@@ -166,11 +166,6 @@ def test_the_app_runs_the_account_that_asks_on_imapclient_and_every_other_on_ima
     assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == ("imapclient", "imaplib")
 
 
-def test_the_app_reads_an_invite_through_the_library(app):
-    from mailmind.bootstrap import calendar
-    assert calendar.kind() == "icalendar"
-
-
 def scheduled(monkeypatch, **env):
     """The jobs background.schedule puts on a fresh scheduler under `env`: name, interval and first delay."""
     for name in ("MAILMIND_PROFILE", "MAILMIND_NOSYNC", "MAILMIND_NO_DRAFT_TICK"):

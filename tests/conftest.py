@@ -21,7 +21,7 @@ import pytest
 
 import guard
 from mailmind.bootstrap import web
-from mailmind.bootstrap import calendar, mailbox
+from mailmind.bootstrap import mailbox
 from mailmind.platform.logging import stop as stop_logging
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -128,12 +128,6 @@ def _a_build(tiny_build, monkeypatch):
     sets `webroot.DIST` itself (`serve_the_build`, test_webroot.py)."""
     from mailmind.platform import webroot
     monkeypatch.setattr(webroot, "DIST", tiny_build)
-
-
-@pytest.fixture(autouse=True)
-def _ics_reader():
-    """The hand-rolled reader of invites, as a process starts: an app an earlier test built asked for the library's."""
-    calendar.reset()
 
 
 @pytest.fixture(autouse=True)

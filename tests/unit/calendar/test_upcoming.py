@@ -278,9 +278,8 @@ def test_a_rule_it_cannot_read_gives_none_not_a_wrong_date(rule):
     assert _next(rule) is None
 
 
-def test_bysetpos_is_a_rule_only_the_library_expands(reader):
-    expected = ("2026-11-02T10:00+01:00", "2026-11-02T10:30+01:00") if reader == "icalendar" else None
-    assert _next("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1") == expected
+def test_bysetpos_picks_the_day_of_the_month():
+    assert _next("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1") == ("2026-11-02T10:00+01:00", "2026-11-02T10:30+01:00")
 
 
 def test_a_one_off_event_is_its_own_only_occurrence():

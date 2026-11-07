@@ -12,7 +12,7 @@ import hashlib
 import itertools
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.message import EmailMessage
 
 import pytest
@@ -23,7 +23,7 @@ from mailmind.curation.domain import rulebook
 from mailmind.bootstrap import curation
 from mailmind.discovery.domain import views as builtin
 from mailmind.bootstrap import discovery
-from mailmind.bootstrap import attention, calendar
+from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import composing
 from mailmind.compose.domain import attachments
@@ -997,9 +997,6 @@ def _cal(*events):
     return "\r\n".join(lines + ["END:VCALENDAR", ""])
 
 
-START = datetime(2026, 10, 5, 10, 0)                       # a Monday; floating times throughout
-
-
 def _next(rule, *extra, start="20261005T100000", end="20261005T103000", after=datetime(2026, 11, 1, 12, 0)):
     from mailmind.bootstrap.calendar import ics
     head = "DTSTART;VALUE=DATE:" if len(start) == 8 else "DTSTART:"
@@ -1009,38 +1006,20 @@ def _next(rule, *extra, start="20261005T100000", end="20261005T103000", after=da
     return got and got[0]
 
 
-@pytest.fixture(params=calendar.KINDS)
-def each_reader(request):
-    calendar.use(request.param)
-    yield request.param
-    calendar.reset()
-
-
-def test_hwf_only_the_first_event_of_a_calendar_is_read(each_reader):     # what a card shows: `events` has the others where they're read
+def test_hwf_only_the_first_event_of_a_calendar_is_read():     # what a card shows: `events` has the others
     from mailmind.bootstrap.calendar import ics
     inv = ics.parse(_cal(["UID:a", "SUMMARY:First", "DTSTART:20261110T100000"],
                          ["UID:b", "SUMMARY:Second", "DTSTART:20261111T100000"]))
     assert (inv["uid"], inv["summary"], inv["start_iso"]) == ("a", "First", "2026-11-10T10:00:00")
 
 
-def test_hwf_count_includes_occurrences_an_exdate_removes(each_reader):
+def test_hwf_count_includes_occurrences_an_exdate_removes():
     # Mondays from Oct 5: COUNT=5 ends on Nov 2, which EXDATE removes; it still counts
     assert _next("FREQ=WEEKLY;COUNT=5", "EXDATE:20261102T100000") is None
     assert _next("FREQ=WEEKLY;COUNT=6", "EXDATE:20261102T100000") == datetime(2026, 11, 9, 10, 0)
 
 
-def test_hwf_an_all_day_series_skips_an_exdate_by_its_date(each_reader):
+def test_hwf_an_all_day_series_skips_an_exdate_by_its_date():
     assert _next("FREQ=WEEKLY", "EXDATE:20261102T090000", start="20261005", end="20261006") == datetime(2026, 11, 9)
 
 
-def test_hwf_bymonthday_only_with_monthly_and_byday_never_with_yearly():
-    assert _next("FREQ=MONTHLY;BYMONTHDAY=5") == datetime(2026, 11, 5, 10, 0)
-    assert _next("FREQ=WEEKLY;BYMONTHDAY=5") is None
-    assert _next("FREQ=YEARLY;BYMONTHDAY=5") is None
-    assert _next("FREQ=YEARLY;BYDAY=MO") is None
-
-
-def test_hwf_a_rule_is_walked_20000_periods_at_most():
-    last = START + timedelta(days=19_999)
-    assert _next("FREQ=DAILY", after=last.replace(hour=0)) == last
-    assert _next("FREQ=DAILY", after=last + timedelta(days=1)) is None
