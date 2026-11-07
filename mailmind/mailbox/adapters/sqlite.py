@@ -551,7 +551,7 @@ SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
 FROM messages m
 JOIN summaries s ON s.message_pk = m.pk
 WHERE m.folder = 'INBOX'
-  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL
+  AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL
   AND """ + verdict.reply_worthy_sql() + """
   AND m.ts >= ?
   AND (COALESCE(m.thread_id,'') <> '' OR COALESCE(m.message_id,'') <> '')
