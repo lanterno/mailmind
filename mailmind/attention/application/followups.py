@@ -8,6 +8,10 @@ from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
+
+snooze_log = get_logger("snooze")
+followup_log = get_logger("followup")
 
 
 class FollowUps:
@@ -72,8 +76,8 @@ class Clocked:
         try:
             self._snoozing.wake_due()
         except Exception as e:
-            print(f"[snooze] tick error: {type(e).__name__}", flush=True)
+            snooze_log.warning("tick error", exc_info=e)
         try:
             self._follow_ups.tick()
         except Exception as e:
-            print(f"[followup] tick error: {type(e).__name__}", flush=True)
+            followup_log.warning("tick error", exc_info=e)

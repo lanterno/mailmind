@@ -7,6 +7,9 @@ from mailmind.attention.application.ports import AttentionBook, Messages, Screen
 from mailmind.attention.domain import snooze
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
+
+log = get_logger("snooze")
 
 
 class Snoozing:
@@ -88,4 +91,4 @@ class Snoozing:
         if due:
             self._screen.stats_changed()
             sse.publish("snooze-wake", {"count": len(due), "accounts": sorted(set(r["account"] for r in due))})
-            print(f"[snooze] woke {len(due)} message(s)", flush=True)
+            log.info("woke %d message(s)", len(due))
