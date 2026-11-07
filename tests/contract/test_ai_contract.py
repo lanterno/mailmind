@@ -25,10 +25,10 @@ NOW_RETRY = {"retry-after": "0", "retry-after-ms": "1"}    # retry at once, for 
 @pytest.fixture(params=TRANSPORTS)
 def transport(request, data_dir, monkeypatch):
     """AI through this transport, with no model override, structured output on and the key in
-    the environment only (no config file yet). The last call's outcome, which status() reports,
+    the environment only (no config file yet). The last call's outcome, which report() says,
     is this test's own: the app's tests take the module's as it was at import."""
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})
+    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
     monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
     monkeypatch.delenv("MAILMIND_MODEL", raising=False)
@@ -238,7 +238,7 @@ def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monke
         assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
     via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
-    assert assistant.calls.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
+    assert assistant.status.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
     monkeypatch.setenv("MAILMIND_TEST_KEY", "sk-ant-env-ref-key")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_KEY"})
     assert assistant.key() == ("sk-ant-env-ref-key", "mailmind.config.json")
@@ -250,10 +250,10 @@ def test_the_startup_line_says_when_there_is_no_key(transport, data_dir, monkeyp
     from mailmind.bootstrap import assistant
     via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert assistant.calls.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.status.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
                                            "set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert assistant.calls.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.status.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
                                            "the anthropic_api_key in mailmind.config.json can't be read")
 
 
@@ -263,11 +263,11 @@ def test_a_config_key_that_cannot_be_read_is_no_key(api, data_dir):
     assert assistant.key() == ("", "mailmind.config.json") and assistant.calls.engine() == "none"   # not the environment's
 
 
-# ── what the UI is told (assistant.calls.status) ───────────────────────────────────
+# ── what the UI is told (assistant.status.report) ───────────────────────────────────
 
 def test_status_names_the_engine_the_model_and_the_key_source(api):
     from mailmind.bootstrap import assistant
-    st = assistant.calls.status()
+    st = assistant.status.report()
     assert (st["engine"], st["model"], st["key_from"]) == ("api", "claude-opus-5-5", "ANTHROPIC_API_KEY")
 
 
@@ -276,23 +276,23 @@ def test_status_records_a_rejected_key_then_a_good_call(api):
     api.queue(fa.error(401, "authentication_error", "invalid x-api-key"))
     with pytest.raises(RuntimeError):
         assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
-    st = assistant.calls.status()
+    st = assistant.status.report()
     assert st["last_ok"] is False and st["last_error"] == "the API key was rejected" and st["last_ts"]
     assert assistant.calls.call_claude("Say hi.") == fa.STUB_TEXT
-    st = assistant.calls.status()
+    st = assistant.status.report()
     assert st["last_ok"] is True and st["last_error"] == ""
 
 
 def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, anthropic_api):
     from mailmind.bootstrap import assistant
-    before = assistant.calls.status()
+    before = assistant.status.report()
     assert (before["engine"], before["model"], before["key_from"]) == ("none", "", "")
     with pytest.raises(AIOff):
         assistant.calls.call_claude_json("Triage this.", assistant.triage.TRIAGE_SCHEMA)
     with pytest.raises(AIOff):
         assistant.calls.call_claude("Summarize this thread.")
     assert anthropic_api.requests == []
-    after = assistant.calls.status()
+    after = assistant.status.report()
     assert (after["last_ok"], after["last_ts"], after["last_error"]) == \
         (before["last_ok"], before["last_ts"], before["last_error"])
     assert assistant.triage.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored

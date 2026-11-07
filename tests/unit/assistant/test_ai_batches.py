@@ -19,7 +19,7 @@ SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "requ
 @pytest.fixture(params=TRANSPORTS)
 def transport(request, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})
+    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
     monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
     monkeypatch.delenv("MAILMIND_MODEL", raising=False)
@@ -485,12 +485,12 @@ def test_with_ai_off_nothing_goes_and_nothing_is_touched(world, anthropic_api):
 
 def test_status_says_so_only_when_a_batch_is_out(backlog, ai):
     from mailmind.bootstrap import assistant
-    assert "batch_waiting" not in assistant.calls.status()
+    assert "batch_waiting" not in assistant.status.report()
     n = assistant.triage.batch_submit()
-    assert assistant.calls.status()["batch_waiting"] == n
+    assert assistant.status.report()["batch_waiting"] == n
     ai.end_batch()
     assistant.triage.batch_collect()
-    assert "batch_waiting" not in assistant.calls.status()
+    assert "batch_waiting" not in assistant.status.report()
 
 
 def test_finished_batches_are_forgotten_after_a_month(backlog, ai):

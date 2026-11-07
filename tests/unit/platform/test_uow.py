@@ -181,7 +181,7 @@ def test_an_smtp_session_inside_a_write_block_raises_before_anything_is_sent(wor
 
 def test_a_claude_request_inside_a_write_block_raises_before_anything_is_sent(world, ai, monkeypatch):
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})   # status() stays as it was
+    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})   # report() stays as it was
     with UnitOfWork().write():
         with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
             assistant.calls.call_claude("Say hello to Ada.")

@@ -96,7 +96,7 @@ def test_an_open_smtp_session_sends_nothing(world, write):
 @pytest.mark.parametrize("transport", ["sdk", "urllib"])
 def test_no_claude_api_request_is_made(world, ai, write, transport, monkeypatch):
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})   # status() stays as it was
+    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})   # report() stays as it was
     assistant.use(transport)
     try:
         write.open()

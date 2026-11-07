@@ -90,7 +90,7 @@ def clock():
 def gateway(request, data_dir, ai, clock, monkeypatch):
     """The app's gateway, through each transport, with the ledger in this test's database."""
     from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.calls, "_last", {"ok": None, "ts": 0, "error": ""})
+    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
     assistant.use(request.param)
     yield assistant.gateway()
     assistant.use("urllib")
@@ -244,7 +244,7 @@ def test_a_ledger_that_cant_be_read_leaves_the_status_without_a_spend(data_dir, 
     def broken(day):
         raise sqlite3.OperationalError("database is locked")
     monkeypatch.setattr(assistant.LEDGER, "spent", broken)
-    assert assistant.calls.status()["spent_today_micros"] is None
+    assert assistant.status.report()["spent_today_micros"] is None
     assert "[ai] the usage ledger can't be read: OperationalError" in capsys.readouterr().out
 
 
