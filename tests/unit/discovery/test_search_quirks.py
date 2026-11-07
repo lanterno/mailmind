@@ -12,6 +12,7 @@ from mailmind.bootstrap import discovery
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import attention
+from mailmind.kernel.snoozed import not_snoozed_sql
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..")
@@ -112,9 +113,10 @@ def test_a_command_doesnt_reach_snoozed_mail(app, world, ai):
 
 
 def test_the_grammar_says_where_snoozed_mail_went():
-    assert discovery.visible(["m.seen = ?"]) == ["m.seen = ?", "m.snoozed_until IS NULL"]
-    where = discovery.build("is:snoozed")[1]
-    assert discovery.visible(where) == where
+    assert discovery.visible(["m.seen = ?"]) == ["m.seen = ?", not_snoozed_sql()]
+    for asks in ("is:snoozed", "-is:snoozed"):
+        where = discovery.build(asks)[1]
+        assert discovery.visible(where) == where
 
 
 # -- ranking --------------------------------------------------------------

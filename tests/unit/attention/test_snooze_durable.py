@@ -206,7 +206,8 @@ def test_two_copies_waking_together_each_get_the_mark(app, world):
     row = dict(c.execute("SELECT * FROM messages WHERE pk=?", (world.pk(CI),)).fetchone())
     other = {k: v for k, v in row.items() if k != "pk"}
     other.update(folder="Archive", uid=row["uid"] + 900)
-    c.execute(f"INSERT INTO messages({','.join(other)}) VALUES({','.join('?' * len(other))})", tuple(other.values()))
+    pk = c.execute(f"INSERT INTO messages({','.join(other)}) VALUES({','.join('?' * len(other))})", tuple(other.values())).lastrowid
+    attention.book.set_snooze(c, pk, until(app))
     c.commit()
     c.close()
     app.clock.shift(timedelta(hours=7))

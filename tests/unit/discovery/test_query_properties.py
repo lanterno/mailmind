@@ -11,12 +11,13 @@ from mailmind.bootstrap import discovery
 from mailmind.bootstrap.mailbox import store
 from mailmind.discovery.adapters import fts
 from mailmind.discovery.domain.query import MAX_CHARS, Clause, QuerySpec
+from mailmind.kernel.snoozed import not_snoozed_sql, snoozed_sql
 from property_runs import runs
 
 # Every WHERE fragment to_sql may write. Anything else in one came from the query.
 FRAGMENTS = {
-    "m.seen = ?", "m.flagged = ?", "m.answered = ?", "m.is_junk = ?", "m.snoozed_until IS NULL",
-    "m.snoozed_until IS NOT NULL", "m.bucket = ?", "m.bucket IS NOT ?", "s.category = ?", "s.category IS NOT ?",
+    "m.seen = ?", "m.flagged = ?", "m.answered = ?", "m.is_junk = ?", not_snoozed_sql(),
+    snoozed_sql(), "m.bucket = ?", "m.bucket IS NOT ?", "s.category = ?", "s.category IS NOT ?",
     "m.folder = ?", "m.folder <> ?", "m.account = ?", "m.account <> ?", "m.has_attach = ?", "m.ts < ?", "m.ts >= ?",
     "m.pk NOT IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?)"}
 _OPERATORS = ["from:", "subject:", "body:", "to:", "cc:", "is:", "bucket:", "category:", "has:", "in:", "account:", "before:",
