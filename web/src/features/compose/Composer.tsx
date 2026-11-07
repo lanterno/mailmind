@@ -1,6 +1,7 @@
 // The composer, on the page's own classes: what you see of the machine in compose.ts. Each control asks the machine, and
 // what it shows is the copy the machine published.
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { toast } from "../../lib/toast";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import { fileSize, shortAddress } from "../../lib/text";
@@ -194,6 +195,7 @@ function LaterChoices({ c, pick }: { c: Composer; pick: (when: number) => void }
           if (!e.target.value) return;
           const when = Math.floor(new Date(e.target.value).getTime() / 1000);
           if (when > Date.now() / 1000) pick(when);
+          else toast("Pick a future time");
         }}
       /></label>
     </div>
