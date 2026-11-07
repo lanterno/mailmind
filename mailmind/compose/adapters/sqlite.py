@@ -142,6 +142,11 @@ def draft_note_save(c, did, mode, in_reply_to_pk, subject, version, saved_by, up
               (mode, in_reply_to_pk, subject, version, saved_by, updated_at, did))
 
 
+def draft_note_discard(c, did, version, updated_at):
+    """A discard's mark on the row, which says nothing new about the composition."""
+    c.execute("UPDATE drafts SET version=?, updated_at=? WHERE id=?", (version, updated_at, did))
+
+
 def draft_settle_push(c, did, account, folder, uid, message_id, uidvalidity, pushed_at):
     c.execute("""UPDATE drafts SET account=?, folder=?, uid=?, message_id=?, uidvalidity=?, pushed_at=? WHERE id=?""",
               (account, folder, uid, message_id, uidvalidity, pushed_at, did))

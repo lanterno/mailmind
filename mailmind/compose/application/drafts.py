@@ -174,8 +174,7 @@ class Drafts:
             waiting = self._book.journal_get(c, did)
             if row["uid"] or (waiting is not None and waiting["tried"]):
                 self._book.journal_discard(c, did, row["version"] + 1, row["account"], _now())
-                self._book.draft_note_save(c, did, row["mode"], row["in_reply_to_pk"], row["subject"],
-                                           row["version"] + 1, row["saved_by"], now_iso())
+                self._book.draft_note_discard(c, did, row["version"] + 1, now_iso())
                 there = True
             else:
                 self._book.draft_delete(c, did)
@@ -436,9 +435,9 @@ class Drafts:
             now = now_iso()
             new_id = self._book.draft_upsert(c, {
                 "id": None, "account": j["account"], "folder": None, "uid": None, "message_id": j["message_id"],
-                "uidvalidity": None, "in_reply_to_pk": d["in_reply_to_pk"], "mode": d["mode"], "subject": d["subject"],
+                "uidvalidity": None, "in_reply_to_pk": None, "mode": d["mode"], "subject": d["subject"],
                 "created_at": now, "updated_at": now})
-            self._book.draft_note_save(c, new_id, d["mode"], d["in_reply_to_pk"], d["subject"], d["version"], None, now)
+            self._book.draft_note_save(c, new_id, d["mode"], None, d["subject"], d["version"], None, now)
             self._book.journal_move(c, d["id"], new_id)
 
     def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,
