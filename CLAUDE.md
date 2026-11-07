@@ -257,7 +257,9 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - `mailmind.platform.profile` says how the process runs, `full` or `read-only` (see Writes,
   undo, and offline).
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
-  Concurrency).
+  Concurrency). `account_worker` beside it holds the gate for each account, and the connection kept
+  for one between jobs (`KeptConnections`, `ConnectionPolicy`). `idle_supervisor.IdleSupervisor` keeps
+  one worker thread per key in line with what's wanted. Both are standard library only, and know nothing of IMAP.
 - `mailmind.platform.workers.scheduler.Scheduler` runs the background jobs. A job is a round (a
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
@@ -529,9 +531,12 @@ again for it as it ends.
 
 `mailbox.pool` (persistent per-account IMAP sessions) and `mailbox.warm` (multi-folder sync)
 are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
-work with them unset.
+work with them unset. `Pool` is a `KeptConnections`, which does the keeping. `Pool` says which accounts, that a
+NOOP checks and a LOGOUT closes, and that the provider gives the numbers (`recycle_seconds`, `recycle_uses`).
 
-IDLE's workers follow the configuration. `realtime.reconcile`, which the account events call,
+IDLE's workers follow the configuration. `Realtime` is an `IdleSupervisor`, which runs them, and says what a
+worker does: which accounts, how each is reached, the IDLE loop and what a change does.
+`realtime.reconcile`, which the account events call,
 retires the worker of an account removed, disabled or now reached another way (kind, host, port,
 TLS, credential), and starts one for each account without one, up to `MAX_IDLE_ACCOUNTS`. An alias
 or signature change leaves the worker be. A worker also checks its account after each IDLE cycle,
