@@ -32,7 +32,7 @@ import { stored } from "../lib/store";
 import { shortAddress } from "../lib/text";
 import { toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
-import { buildCommands, commandForKey, goChord, type Command } from "./commands";
+import { buildCommands, commandForKey, goChord, onSavedView, type Command } from "./commands";
 import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
 import { go, type ListSource } from "./route";
@@ -261,8 +261,8 @@ export function App() {
             {screening && <div className="client-ctx" id="clientCtx"><b>Screener</b> · {toScreen} new sender{toScreen === 1 ? "" : "s"} awaiting a decision</div>}
             {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
-                <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts ·{" "}
-                <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button>
+                <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts
+                {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
               </div>
             )}
             {m.source?.kind === "digest" && (
