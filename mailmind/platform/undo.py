@@ -12,6 +12,7 @@ from typing import Any
 
 from mailmind.kernel.row import Connection
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -102,11 +103,11 @@ def entries(c: Connection) -> list[Entry]:
 class Undo:
     UNDO_MAX = 50                             # a group counts as one (decision D3)
 
-    def __init__(self, connect: Callable[[], Connection], reversers: Mapping[str, Reverser], after: Callable[[], object],
+    def __init__(self, uow: UnitOfWork, reversers: Mapping[str, Reverser], after: Callable[[], object],
                  quiet_error: Callable[[Exception], str]):
         """`reversers` maps an entry's kind to what reverses it, `after()` runs once something was, and `quiet_error(e)`
         is what may be said of an exception."""
-        self._connect = connect
+        self._uow = uow
         self._reversers = reversers
         self._after = after
         self._quiet_error = quiet_error
@@ -114,14 +115,8 @@ class Undo:
 
     def _undo_db[T](self, fn: Callable[[Connection], T]) -> T:
         """Run fn(c) on the undo stack under its lock, commit, and return what fn returned."""
-        with self._lock:
-            c = self._connect()
-            try:
-                out = fn(c)
-                c.commit()
-                return out
-            finally:
-                c.close()
+        with self._lock, self._uow.write() as c:
+            return fn(c)
 
 
     def push(self, desc: Entry | None, group: str | None = None) -> None:
@@ -140,7 +135,8 @@ class Undo:
 
     def entries(self) -> list[Entry]:
         """The undo stack, oldest first."""
-        return self._undo_db(entries)
+        with self._uow.read() as c:
+            return entries(c)
 
 
     def _reverse_one(self, d: Entry) -> tuple[bool, str | None, str | None]:

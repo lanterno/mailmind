@@ -7,6 +7,7 @@ from mailmind.calendar.application.agenda import Agenda
 from mailmind.calendar.application.invites import Invites
 from mailmind.calendar.application.rsvp import Rsvp
 from mailmind.mailbox.domain import roles
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.workers import gates
 from mailmind.compose.api import Built, MessageSpec, build_message, reference_chain
 from mailmind.bootstrap import accounts
@@ -22,11 +23,8 @@ class _Messages:
     """A message and its account, until the Mailbox and Accounts hold them."""
     def message(self, pk):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with UnitOfWork().read() as c:
             return store.get_message(c, pk)
-        finally:
-            c.close()
 
     def account(self, email):
         from mailmind.bootstrap import accounts

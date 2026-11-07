@@ -51,52 +51,33 @@ class _Messages:
         """The row of the message a send replies to: by Message-ID, since a pk may have been renumbered,
         else by the pk it was queued with. None once mail has moved out of every folder stored."""
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.read() as c:
             return store.get_message_by_msgid(c, account, message_id) or (store.get_message(c, pk) if pk else None)
-        finally:
-            c.close()
 
     def message(self, pk):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.read() as c:
             return store.get_message(c, pk)
-        finally:
-            c.close()
 
     def by_msgid(self, account, message_id):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.read() as c:
             return store.get_message_by_msgid(c, account, message_id)
-        finally:
-            c.close()
 
     def body(self, pk):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.read() as c:
             return store.get_body(c, pk)
-        finally:
-            c.close()
 
     def uidvalidity(self, account, folder):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.read() as c:
             return store.get_uidvalidity(c, account, folder)
-        finally:
-            c.close()
 
     def remove(self, pk):
         from mailmind.bootstrap.mailbox import store
-        c = store.conn()
-        try:
+        with _uow.write() as c:
             store.delete_message(c, pk)
-            c.commit()
-        finally:
-            c.close()
 
     def remove_copies(self, c, account, folder, uids):
         from mailmind.bootstrap.mailbox import store

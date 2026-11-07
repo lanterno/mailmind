@@ -11,6 +11,7 @@ from mailmind.mailbox.domain.events import ConversationsMerged
 from mailmind.mailbox.domain.threading import Copy, Threader
 from mailmind.platform import settings
 from mailmind.platform.db import database, migrate
+from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
 
@@ -37,12 +38,8 @@ def conn():
 def init():
     """Bring the data directory's database to the newest schema (see mailmind.platform.db)."""
     migrate.init(settings.current().db)
-    c = conn()
-    try:
+    with UnitOfWork(conn).write() as c:
         repair_keys(c)
-        c.commit()
-    finally:
-        c.close()
 
 
 # ---- unsubscribe / sender-cleanup helpers ----

@@ -19,11 +19,13 @@ finished-at column, and the lane column when there is one. Every method but drai
 runs on the connection it's given and leaves the commit to its caller. Standard library only:
 python3 server.py uses it.
 """
+import sqlite3
 import threading
 import time
 from collections.abc import Callable
 
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
 QUEUED, ERROR = "queued", "error"
@@ -31,7 +33,7 @@ QUEUED, ERROR = "queued", "error"
 
 class DurableQueue:
     def __init__(self, name: str, table: str, *, running: str, finished: str, finished_at: str, gate: str,
-                 connect: Callable[[], Connection], max_attempts: int = 5, backoff_base: int = 20,
+                 connect: Callable[[], sqlite3.Connection], max_attempts: int = 5, backoff_base: int = 20,
                  backoff_cap: int = 900, poll: int = 30, lane: str | None = None, unsure: tuple[str, str] | None = None):
         """`name` labels its log lines and threads; `running` and `finished` are the table's own
         names for those states; `connect` opens a connection to the database for drain and
@@ -41,7 +43,7 @@ class DurableQueue:
         self.running, self.finished, self.finished_at, self.gate = running, finished, finished_at, gate
         self.max_attempts, self.backoff_base, self.backoff_cap = max_attempts, backoff_base, backoff_cap
         self.poll, self.lane, self.unsure = poll, lane, unsure
-        self._connect = connect
+        self._uow = UnitOfWork(connect)
         self._log = get_logger(name)
         self._kick = threading.Event()
         self._lanes, self._missed = {}, set()   # lane -> the thread running its rows; lanes a drain passed
@@ -50,11 +52,8 @@ class DurableQueue:
 
     def counts(self) -> dict[str, int]:
         """How many rows stand in each state, on a connection of its own."""
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             return {r[0]: r[1] for r in c.execute(f"SELECT state, COUNT(*) FROM {self.table} GROUP BY state")}
-        finally:
-            c.close()
 
     def due(self, c: Connection, now: float) -> list[int]:
         """The ids of queued rows whose time has come, oldest first."""
@@ -140,8 +139,7 @@ class DurableQueue:
         earlier drain's rows be: that lane kicks the queue as it ends, and the next drain runs
         them. Anywhere else (a test, a script) drain waits for a busy lane before it runs that
         lane's rows, and for every lane it ran before it returns."""
-        c = self._connect()
-        try:
+        with self._uow.read() as c:
             if not self.lane:
                 lanes = {None: self.due(c, now)}
             else:
@@ -149,8 +147,6 @@ class DurableQueue:
                 for id_, lane in c.execute(f"SELECT id, {self.lane} FROM {self.table} WHERE state=? "
                                            f"AND next_attempt_at<=? ORDER BY id", (QUEUED, now)):
                     lanes.setdefault(lane, []).append(id_)
-        finally:
-            c.close()
         if not self.lane:
             self._run(handle, lanes[None])
             return
@@ -207,11 +203,8 @@ class DurableQueue:
 
     def _wait(self, looked):
         try:
-            c = self._connect()
-            try:
+            with self._uow.read() as c:
                 return self.until_due(c, time.time(), looked)
-            finally:
-                c.close()
         except Exception as e:                   # the poll still comes
             self._log.warning("next due", exc_info=e)
             return self.poll
@@ -222,12 +215,8 @@ class DurableQueue:
         at least every `poll` seconds. drain is the worker's own, which calls self.drain with its
         handler and the time. It ends only once `stop`, an Event, is set (and the queue kicked)."""
         self._worker.on = True
-        c = self._connect()
-        try:
+        with self._uow.write() as c:
             self.reset_stuck(c)
-            c.commit()
-        finally:
-            c.close()
         looked = time.time()
         while True:
             self._kick.wait(timeout=self._wait(looked))

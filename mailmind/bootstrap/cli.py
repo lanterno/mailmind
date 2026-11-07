@@ -6,6 +6,13 @@ import imaplib
 
 from mailmind.accounts.domain import provider
 from mailmind.bootstrap import curation, discovery, mailbox
+from mailmind.platform.db.uow import UnitOfWork
+
+
+def _print_stats():
+    from mailmind.bootstrap.mailbox import store
+    with UnitOfWork().read() as c:
+        print("stats:", store.stats(c))
 
 
 def check():
@@ -43,7 +50,7 @@ def sync(who, days):
             print(f"{a['email']:<32} kept {kept:>4}  (skipped {junk} junk)", flush=True)
         except Exception as e:
             print(f"{a['email']:<32} ERROR: {type(e).__name__}: {e}", flush=True)
-    print("stats:", store.stats(store.conn()))
+    _print_stats()
 
 
 def rethread(who):
@@ -51,14 +58,10 @@ def rethread(who):
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.mailbox import store
     store.init()
-    c = store.conn()
-    try:
-        for a in accounts.accounts() if who == "all" else [accounts.get(who)]:
+    for a in accounts.accounts() if who == "all" else [accounts.get(who)]:
+        with UnitOfWork().write() as c:
             store.recompute_threads(c, a["email"])
-            c.commit()
-            print(f"{a['email']:<32} regrouped", flush=True)
-    finally:
-        c.close()
+        print(f"{a['email']:<32} regrouped", flush=True)
 
 
 def assess(limit, workers):
@@ -75,7 +78,7 @@ def assess(limit, workers):
         return
     assistant.triage.summarize_pending(limit, workers if workers is not None else assistant.triage.WORKERS,
                                 log=lambda m: print(m, flush=True))
-    print("stats:", store.stats(store.conn()))
+    _print_stats()
 
 
 def _count(s, folder):

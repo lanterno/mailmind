@@ -291,7 +291,7 @@ def _after_undo():
     folders.invalidate()            # undo re-added or removed a message: refresh the rail's badges
 
 
-undo = Undo(store.conn, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
+undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
                          "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
 filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
 

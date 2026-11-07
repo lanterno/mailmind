@@ -6,6 +6,7 @@ from mailmind.bootstrap import assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import profile
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import scheduler
 
@@ -25,19 +26,16 @@ def _expire_secs():
 
 
 _EXPIRE_INTERVAL = _expire_secs()
+_uow = UnitOfWork()
 
 
 def forget_round():
     """What's kept of a message no copy of has come back to in a month goes, and so do queue rows
     finished a month ago."""
-    c = store.conn()
-    try:
+    with _uow.write() as c:
         store.forget_gone_messages(c, int(time.time()))
         store.command_forget_finished(c, int(time.time()))
         answers.batch_forget_finished(c, int(time.time()))
-        c.commit()
-    finally:
-        c.close()
 
 
 def nosync():
