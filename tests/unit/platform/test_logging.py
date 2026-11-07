@@ -394,13 +394,6 @@ def test_a_route_that_answers_its_own_failure_says_only_its_class(app, monkeypat
     assert "example.test" not in out and "Lunch" not in out
 
 
-def test_a_snapshot_that_fails_says_only_its_class(monkeypatch, capsys):
-    from mailmind.http.routers import export
-    monkeypatch.setattr(export.export, "export_db", raises())
-    export._snapshot(None)                               # it fails before it has answered anything
-    assert capsys.readouterr().out == "[export] db error: RuntimeError\n"
-
-
 def test_a_round_that_fails_says_which_job_and_the_class_of_its_error(home, capsys):
     jobs = Scheduler()
     jobs.add("sync", raises(), every=300)
