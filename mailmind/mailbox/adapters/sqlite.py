@@ -238,19 +238,25 @@ def mint_key(c, account, message_id, from_addr, date_iso, subject):
 
 
 def repair_keys(c):
-    """Give a key to each row that has none: only a run of an older commit writes one."""
+    """What only a run of an older commit leaves behind. A row with no key gets one, and a key it comes back to is no
+    longer gone. And what that run wrote only to `summaries` or `messages.snoozed_until`, of a row with or without a key
+    before, reaches `assessments` and `snoozes`, which is all anything reads: the one read of those two outside the
+    migrations, until they are dropped."""
     rows = c.execute("SELECT pk, account, message_id, from_addr, date_iso, subject FROM messages "
                      "WHERE message_key IS NULL").fetchall()
     for r in rows:
         key = mint_key(c, r["account"], r["message_id"], r["from_addr"], r["date_iso"], r["subject"])
+        c.execute("UPDATE message_identity SET gone_at=NULL WHERE key=? AND gone_at IS NOT NULL", (key,))
         c.execute("UPDATE messages SET message_key=? WHERE pk=?", (key, r["pk"]))
-        c.execute("""INSERT OR IGNORE INTO assessments(message_key, summary, importance, category, action, model,
-                                                       created_at)
-                     SELECT ?, summary, importance, category, action, model, created_at
-                     FROM summaries WHERE message_pk=?""", (key, r["pk"]))
-        c.execute("""INSERT OR IGNORE INTO snoozes(message_key, folder, until)
-                     SELECT message_key, folder, snoozed_until FROM messages
-                     WHERE pk=? AND snoozed_until IS NOT NULL""", (r["pk"],))
+    c.execute("""INSERT OR IGNORE INTO assessments(message_key, summary, importance, category, action, model, created_at)
+                 SELECT m.message_key, s.summary, s.importance, s.category, s.action, s.model, s.created_at
+                 FROM summaries s JOIN messages m ON m.pk=s.message_pk
+                 WHERE m.message_key IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM assessments a WHERE a.message_key=m.message_key)
+                 ORDER BY s.created_at DESC""")
+    c.execute("""INSERT OR IGNORE INTO snoozes(message_key, folder, until)
+                 SELECT message_key, folder, snoozed_until FROM messages
+                 WHERE snoozed_until IS NOT NULL AND message_key IS NOT NULL""")
 
 
 def forget_gone_messages(c, now_ts, days=30):
