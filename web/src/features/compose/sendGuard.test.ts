@@ -108,6 +108,7 @@ describe("reply all", () => {
   it("is waved through up to that many people", () => {
     const ack = { subject: false, attach: false, fanout: 8 };
     expect(keys(guardCheck(S({ ...all, to: ppl(1), cc: ppl(7).slice(1), ack })))).toEqual([]);
+    expect(keys(guardCheck(S({ ...all, to: ppl(1), cc: ppl(8).slice(1), ack })))).toEqual([]);
     expect(keys(guardCheck(S({ ...all, to: ppl(1), cc: ppl(9).slice(1), ack })))).toEqual(["fanout"]);
   });
   it("offers to remove only people still copied in", () => {
