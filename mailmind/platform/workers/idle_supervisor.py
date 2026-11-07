@@ -9,8 +9,6 @@ what a worker does with one, is the subclass's to say; this knows nothing of wha
 Only a worker closes its connection. Anyone else may only interrupt it, which wakes the worker and
 closes nothing: closing a socket another thread may be about to wait on frees its descriptor's number
 for the next socket opened, which the worker would then wait on and read from.
-
-Standard library only: python3 server.py uses it.
 """
 import abc
 import threading

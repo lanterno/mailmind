@@ -1,4 +1,4 @@
-"""What the other contexts and the front doors may ask of Curation."""
+"""What the other contexts and the app's wiring may ask of Curation."""
 from mailmind.curation.domain.classifier import (BLOCKED, JUNK_BUCKETS, MKT, NOTIF, PERSONAL, PROTECTED, RECEIPT, SPAM,
                                                  by_rule, is_junk, looks_human)
 from mailmind.curation.domain.expiry import arrival_ts, select_expired

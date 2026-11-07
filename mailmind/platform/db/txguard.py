@@ -9,8 +9,6 @@ before the call.
 
 database.connect tracks each connection it opens for the thread that opened it. A SQLite
 connection belongs to that thread, so only the thread's own connections can be in its way.
-
-Standard library only: python3 server.py uses it.
 """
 import sqlite3
 import threading

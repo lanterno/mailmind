@@ -1,6 +1,5 @@
-"""The ASGI app the new front door serves: FastAPI, with no routes of its own. Every request
-passes the perimeter, then goes to the fallback, the handler behind a HandlerBridge, which holds the
-route table both doors serve."""
+"""The ASGI app: FastAPI, with no routes of its own. Every request passes the perimeter, then
+goes to the fallback, the handler behind a HandlerBridge, which holds the route table."""
 from fastapi import FastAPI
 
 from mailmind.http.middleware import Perimeter

@@ -1,12 +1,11 @@
-"""The Messages API through the official Anthropic SDK: the new front door's language model.
+"""The Messages API through the official Anthropic SDK: the language model `python -m mailmind serve` talks to.
 
 The client is given its key and base URL, so the SDK reads no credential or profile of its own
 from the environment or the disk. It retries the statuses in ports.RETRIED, twice, honouring
 retry-after, and raises typed errors, which become ModelError here. The server-side refusal
 fallback is a beta, so a prompt that asks for it goes through client.beta.messages.
 
-Only this module imports anthropic, and only the new front door loads it: `python3 server.py`
-runs with nothing installed.
+Only this module imports anthropic, and only front.build's choice loads it.
 """
 import anthropic
 

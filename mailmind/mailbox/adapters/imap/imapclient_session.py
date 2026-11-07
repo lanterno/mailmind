@@ -1,4 +1,4 @@
-"""The MailSession port over IMAPClient, which the new front door can run on.
+"""The MailSession port over IMAPClient, which an account may ask for.
 
 IMAPClient runs on imaplib underneath, and its errors are imaplib's classes. Folder names pass
 through unencoded (folder_encode off): the port's names are as LIST gave them, modified UTF-7
@@ -6,7 +6,7 @@ included, and the database stores them so. IMAPClient quotes a name itself, so a
 unescaped, and comes back from LIST unescaped, to be escaped again. The connection's own imaplib
 object (`_imap`) carries the TLS socket for the certificate pin, and the commands txguard checks.
 
-Only this module imports imapclient; only the new door loads it.
+Only this module imports imapclient; only an offer of it (front.build's) loads it.
 """
 import imaplib
 import re
@@ -138,7 +138,7 @@ class ImapClientSession:
         self._store_labels("-X-GM-LABELS", uids, labels)
 
     def _store_labels(self, item, uids, labels):
-        # Through the imaplib connection underneath, in the form the old door has always sent
+        # Through the imaplib connection underneath, in the form imaplib_session sends
         # Gmail. IMAPClient's own would quote a system label ("\\Inbox") and add .SILENT, a
         # form MailMind has never sent Gmail. imaplib's uid() takes the FETCH answers with it.
         typ, data = self._c._imap.uid("STORE", ",".join(str(int(u)) for u in uids), item, gmail_labels(labels))

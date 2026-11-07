@@ -21,8 +21,8 @@ _API_HEADERS = (*_ANSWER_HEADERS, ("Cache-Control", "no-store"))
 
 
 def answer_headers(path):
-    """The headers every answer to `path` carries, as (name, value) pairs. A front door adds each
-    one the route didn't set itself."""
+    """The headers every answer to `path` carries, as (name, value) pairs. The handler and the
+    middleware each add one the route didn't set itself."""
     return _API_HEADERS if is_api(path) else _ANSWER_HEADERS
 
 

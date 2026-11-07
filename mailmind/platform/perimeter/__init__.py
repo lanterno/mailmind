@@ -1,9 +1,9 @@
 """The perimeter: what a request must pass before any route runs.
 
-Both front doors apply these checks, so the two refuse the same requests with the same answers.
-Each check reads only the request's headers (any mapping whose .get ignores case: the old
-server's message headers and Starlette's alike) and the values passed in, and returns a Refusal,
-or None when the request may go on. Standard library only: python3 server.py runs it.
+The middleware (mailmind.http.middleware) applies these checks ahead of the handler, and the handler
+applies them again. Each check reads only the request's headers (any mapping whose .get ignores case:
+the handler's message headers and Starlette's alike) and the values passed in, and returns a Refusal,
+or None when the request may go on.
 
 Every request reaches 127.0.0.1, so the danger is another page in the browser:
 - a page on a rebound name, which reaches this server with its own Host (`refuse_host`);

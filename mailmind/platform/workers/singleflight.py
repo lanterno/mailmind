@@ -5,8 +5,6 @@ drafted ahead) are each made by the first caller that asks, then stored. A calle
 that run is going waits for it and reads what it stored. The caller that takes the lead reads once
 more before it makes: a run that ended between its own cache check and its taking the lead may
 have stored the answer already, and making it again would pay twice.
-
-Standard library only: python3 server.py uses it.
 """
 import threading
 from collections.abc import Callable, Hashable

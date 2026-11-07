@@ -1,7 +1,7 @@
 """What every way of running the app does first.
 
-Each front door calls `start()` before it serves, and the tests' app fixture calls
-`wire()`, so all of them put the app together the same way.
+`python -m mailmind serve` calls `start()` before it serves, and the tests' app fixture calls
+`wire()`, so both put the app together the same way.
 """
 import threading
 
@@ -126,7 +126,7 @@ def _daemon(target):
 
 
 def start(spawn=_daemon):
-    """Everything a front door does before it serves: check the profile, open the log, create or migrate
+    """Everything that's done before the app serves: check the profile, open the log, create or migrate
     the schema, wire the workers, and start them: the two queues' workers, the background jobs on a
     scheduler (background.schedule says which), and IDLE. Read-only, only snooze wake starts, since it
     needs no mail server: sends and moves wait in their queues, and nothing syncs.

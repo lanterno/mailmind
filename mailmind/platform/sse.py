@@ -14,8 +14,6 @@ per hub, so an id from before a restart never passes for one of this run's.
 Data carries ids and counts only, never a subject or an address in a message; the tab fetches
 the rest through the authenticated routes. TOPICS is every topic the app publishes, and publish
 refuses any other, so the list stays the whole contract the page listens to.
-
-Standard library only: python3 server.py uses it.
 """
 import json
 import secrets

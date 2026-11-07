@@ -9,8 +9,6 @@ is never starved. A job runs on its caller's own thread.
 KeptConnections holds the connection, and ConnectionPolicy says how long one may serve. They know
 nothing of what a connection is: the caller says how to open, check and close one, and its provider
 gives the numbers.
-
-Standard library and the kernel only: python3 server.py uses it.
 """
 import contextlib
 import itertools

@@ -12,8 +12,6 @@ an id of that round's.
 test does), and `snapshot()` is what /api/debug/jobs shows: each job's timing and how its last
 round went. A job's last error is its exception's class name only, since the text can carry a
 mail server's reply.
-
-Standard library only: python3 server.py uses it.
 """
 import threading
 import time

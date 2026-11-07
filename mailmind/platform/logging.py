@@ -24,8 +24,6 @@ this module didn't make hears a record.
 
 `MAILMIND_LOG_LEVEL=DEBUG` turns the terminal's withholding off: debug lines, and each exception's text
 and traceback, for someone chasing a fault. The file is the same either way.
-
-Standard library only: python3 server.py runs it.
 """
 import contextlib
 import contextvars
@@ -203,7 +201,7 @@ _file: _OwnFile | None = None
 
 
 def setup():
-    """Open the log file in the data directory, on its first line (wiring.start, for both doors), and
+    """Open the log file in the data directory, on its first line (wiring.start), and
     read MAILMIND_LOG_LEVEL. Asked again it adds nothing, and under other Settings the file moves."""
     global _file
     debug = os.environ.get("MAILMIND_LOG_LEVEL", "").strip().upper() == "DEBUG"

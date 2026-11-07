@@ -16,8 +16,7 @@ only that account's rows.
 
 The table needs id, state, attempts, next_attempt_at, last_error, the gate column and the
 finished-at column, and the lane column when there is one. Every method but drain and run_forever
-runs on the connection it's given and leaves the commit to its caller. Standard library only:
-python3 server.py uses it.
+runs on the connection it's given and leaves the commit to its caller.
 """
 import sqlite3
 import threading

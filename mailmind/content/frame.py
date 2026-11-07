@@ -4,7 +4,7 @@ The frame's look is its parent's to give, so this holds no style: changing a rea
 server. `<base target="_blank">` is here for a click the parent hasn't caught yet: a sandbox with no popups stops a new
 tab, so the frame stays on the message instead of navigating away.
 
-`html` must have been through the sanitizer. Standard library only: python3 server.py runs it.
+`html` must have been through the sanitizer.
 """
 from html import escape
 

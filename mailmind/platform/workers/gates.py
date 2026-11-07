@@ -12,8 +12,7 @@ There are two kinds of gate, chosen by MAILMIND_WORKERS:
 - `account`: each account has a gate of its own, in `account_worker`, so one account's slow server
   holds up only its own jobs.
 
-A job that spans accounts, or touches no one account's server, passes EVERY_ACCOUNT. Standard
-library only: python3 server.py uses it.
+A job that spans accounts, or touches no one account's server, passes EVERY_ACCOUNT.
 """
 import enum
 import os

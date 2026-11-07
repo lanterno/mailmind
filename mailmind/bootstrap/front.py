@@ -1,12 +1,10 @@
-"""The new front door: the app on FastAPI and uvicorn, `python -m mailmind serve [port]`.
+"""The app on FastAPI and uvicorn, `python -m mailmind serve [port]`.
 
-It starts the same workers as `python3 server.py`, the old front door, through wiring.start, and
-serves the same handler through a HandlerBridge, so either door can serve the same data
-directory. The old one stays as the kill switch. Three differences: this door talks to the Claude
-API through the Anthropic SDK, where the old one, with nothing installed, uses urllib, an
-account whose config asks for IMAPClient ("imap_adapter": "imapclient") reaches its server
-through it, where the old door keeps imaplib for every account, and it reads an invite through
-icalendar and recurring-ical-events, where the old door keeps the hand-rolled reader.
+It starts the workers through wiring.start and serves the handler through a HandlerBridge. It talks
+to the Claude API through the Anthropic SDK, an account whose config asks for IMAPClient
+("imap_adapter": "imapclient") reaches its server through it, and it reads an invite through
+icalendar and recurring-ical-events. The command line, which doesn't come through here, does none
+of the three.
 """
 import dataclasses
 

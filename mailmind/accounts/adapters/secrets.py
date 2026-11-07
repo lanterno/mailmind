@@ -6,8 +6,6 @@ credential's cached reads when it is replaced or removed.
 The Bridge password comes from the first of: the environment variable MAILMIND_PROTON_BRIDGE_PASS;
 1Password's op://Private/<MAILMIND_PROTON_OP_ITEM>/password, when that variable names an item;
 the file ~/.config/mailmind/proton_bridge_pass. It is cached once found.
-
-Standard library only: python3 server.py uses it.
 """
 import os
 import pathlib

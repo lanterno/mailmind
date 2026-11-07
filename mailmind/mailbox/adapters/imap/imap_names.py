@@ -42,7 +42,7 @@ def imap_quote(s):
 
 def gmail_labels(labels):
     """Gmail's labels as an X-GM-LABELS list: a system label (\\Inbox) as it is, any other quoted.
-    Both adapters send this one form, the one the old door has always sent Gmail."""
+    Both adapters send this one form."""
     return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
 
 

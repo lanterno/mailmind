@@ -1,8 +1,4 @@
-"""The one HTTP handler both front doors serve: the perimeter, then the route table.
-
-`server.py` puts it on the standard library's server. The new door hands it each request through a HandlerBridge. Standard
-library only: python3 server.py runs it with nothing installed.
-"""
+"""The one HTTP handler: the perimeter, then the route table. The app hands it each request through a HandlerBridge."""
 import json
 import secrets
 import urllib.parse
@@ -47,8 +43,7 @@ _PROBLEMS = tuple(_STATUS)
 
 
 def problem_answer(e):
-    """A Problem as both clients read one, {ok: false, error}, and its status. RFC 9457's form waits for the day / is the
-    React app."""
+    """A Problem as the app reads one, {ok: false, error}, and its status."""
     said = {"error": e.said} if e.said else {}
     return {"ok": False, **said, **e.more}, next(code for kind, code in _STATUS.items() if isinstance(e, kind))
 
@@ -74,7 +69,7 @@ class H(BaseHTTPRequestHandler):
         pass
 
     def handle_one_request(self):
-        """One request, through either door: what's logged while it runs carries its id."""
+        """One request: what's logged while it runs carries its id."""
         with for_request():
             super().handle_one_request()
 

@@ -20,8 +20,8 @@ _reader = ics_reader
 
 
 def use(kind):
-    """Read invites through `kind` from now on: `ics_reader`, or the library one, which only the new door asks for. The
-    old door runs with nothing installed, so it's imported here and only now (missing: fail now, not on the first invite)."""
+    """Read invites through `kind` from now on: `ics_reader`, or the library one, which only front.build asks for, so it's
+    imported here and only now (missing: fail now, not on the first invite)."""
     global _kind, _reader
     if kind not in KINDS:
         raise ValueError(f"no reader of invites {kind!r}")

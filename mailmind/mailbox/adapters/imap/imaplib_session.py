@@ -1,4 +1,4 @@
-"""The MailSession port over an imaplib connection: what the old front door runs on.
+"""The MailSession port over an imaplib connection: what every account runs on unless it asks for another.
 
 imaplib hands a server's NO back as a typed answer rather than raising it; every command here
 checks it and raises imaplib.IMAP4.error, as the port says. Standard library only.

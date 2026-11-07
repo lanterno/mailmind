@@ -11,8 +11,6 @@ Nothing here is durable. Work that would be wrong to lose in a crash (a send, a 
 assessing new mail) is a row written in the same transaction as the change, which a queue then
 works through; an event only tells the rest of the app it happened. Handlers that run inside the
 transaction come with the unit of work.
-
-Standard library only: python3 server.py uses it.
 """
 import dataclasses
 import threading

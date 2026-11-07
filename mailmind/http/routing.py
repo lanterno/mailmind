@@ -1,10 +1,7 @@
 """The route table: which function answers which path.
 
-There is no framework here: `python3 server.py`, the old front door, serves this same table with nothing installed.
-A route names its path as a literal string, so to find one, grep the path. A route takes a `Request` and returns what to
+There is no framework here. A route names its path as a literal string, so to find one, grep the path. A route takes a `Request` and returns what to
 answer: an object (a 200), `(object, code)`, or `ANSWERED` when it wrote the answer itself.
-
-Standard library only: python3 server.py uses it.
 """
 from dataclasses import dataclass
 

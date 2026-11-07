@@ -11,8 +11,6 @@ MAILMIND_PROFILE names the profile; unset or empty, it is `full`. MAILMIND_NOSYN
 switch, still selects read-only: any value but empty, 0, false, no or off turns it on, so a typo
 fails toward read-only. When the two disagree, read-only wins. This module is the only reader of
 both, and it reads them at every call, so a test can change them.
-
-Standard library only: python3 server.py uses it.
 """
 import enum
 import os

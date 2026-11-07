@@ -3,7 +3,7 @@ a session opens.
 
 Every account's mail goes through imaplib (mailbox.adapters.imap.imaplib_session) over accounts.connect,
 unless it asks for IMAPClient ("imap_adapter": "imapclient" in its config) and the process offers
-it. Only the new door's build offers it, loading it then, so the old door never imports it and
+it. Only front.build offers it, loading it then, so the command line never imports it and
 an account's ask changes nothing there. That ask is how IMAPClient soaks on real accounts before
 it becomes the default. use(kind) makes `kind` every account's, as the contract tests do.
 

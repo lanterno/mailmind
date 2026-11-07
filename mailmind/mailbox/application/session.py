@@ -1,5 +1,5 @@
 """What MailMind asks of one logged-in connection to an account's mail server: the MailSession
-port, with an adapter over imaplib (mailbox.adapters.imap.imaplib_session, what the old door runs on)
+port, with an adapter over imaplib (mailbox.adapters.imap.imaplib_session, the default)
 and one over IMAPClient (mailbox.adapters.imap.imapclient_session). tests/contract/test_mail_session_contract.py
 runs every case through each.
 

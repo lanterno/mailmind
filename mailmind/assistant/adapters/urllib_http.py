@@ -1,9 +1,7 @@
-"""The Messages API over urllib, for the old front door.
+"""The Messages API over urllib, for the command line.
 
-`python3 server.py` is the kill switch while the new door carries daily use, and it runs with
-nothing installed, so it can't load the Anthropic SDK. This is the client it runs instead: the same
-request (wire.body), the same reply (wire.reply), and the SDK's retries, on the statuses in
-ports.RETRIED and on network errors, honouring retry-after. It goes when the old door does.
+The same request as the SDK's adapter (wire.body), the same reply (wire.reply), and the SDK's retries,
+on the statuses in ports.RETRIED and on network errors, honouring retry-after.
 
 Standard library only.
 """

@@ -1,4 +1,4 @@
-"""uvicorn as the new front door runs it: on 127.0.0.1 only, quiet, and quick to stop."""
+"""uvicorn as `python -m mailmind serve` runs it: on 127.0.0.1 only, quiet, and quick to stop."""
 import uvicorn
 
 # On shutdown, how long requests still being answered get to finish before they are cancelled.
@@ -6,7 +6,7 @@ GRACE_SECONDS = 3
 
 
 def config(app, *, port, grace=GRACE_SECONDS):
-    """No access log (the old front door kept none), and no Server or Date header of uvicorn's:
+    """No access log, and no Server or Date header of uvicorn's:
     the bridged handler sends its own."""
     return uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", access_log=False,
                           server_header=False, date_header=False, timeout_graceful_shutdown=grace)

@@ -17,8 +17,7 @@ its first line to its commit, so:
 
 A loop that commits as it goes is one write block per commit, with whatever the network says in between read outside them.
 
-Each block's connection comes from database.connect, so WAL, synchronous=FULL and txguard apply. Standard library only:
-python3 server.py uses it.
+Each block's connection comes from database.connect, so WAL, synchronous=FULL and txguard apply.
 """
 import sqlite3
 from collections.abc import Callable, Iterator

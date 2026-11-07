@@ -4,8 +4,8 @@
 def page_policy():
     """The page's policy. Only script files from this server may run, it may reach only this server, and no one may frame it.
     A mail body loads into a frame from a URL under a policy of its own, so nothing here allows a remote image. The composer's
-    quote is a srcdoc, which inherits this: that, and the page's two style attributes, are what inline styles are for, and
-    the quote's own images, the icon and the stylesheets' are all that `data:` lets in. No image comes from this server."""
+    quote is a srcdoc, which inherits this: that, and the page's two style attributes, are what inline styles are for. The icon
+    and the stylesheets' images are what `data:` is for, and no image comes from this server."""
     return "; ".join([
         "default-src 'none'",
         "script-src 'self'",

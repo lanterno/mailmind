@@ -4,8 +4,7 @@ version = "0.1.0"
 description = "A local-first mail client with AI triage, served on 127.0.0.1."
 readme = "README.md"
 requires-python = ">=3.14"
-# What the new front door (`python -m mailmind serve`) runs on. The old one, `python3 server.py`,
-# imports none of these, so it still runs with nothing installed: it is the kill switch.
+# What `python -m mailmind serve` runs on.
 dependencies = [
     "anthropic>=2.4.0",
     "fastapi>=0.162.0",
@@ -80,9 +79,8 @@ strict = [
 ]
 
 [tool.importlinter]
-# The package's own layers. Which legacy modules it imports is the ratchet's job
-# (tests/unit/test_ratchet.py), since those modules sit outside the package. External packages are
-# in the graph too, so a contract can say who may import one.
+# The package's own layers. External packages are in the graph too, so a contract can say who may
+# import one.
 root_packages = ["mailmind"]
 include_external_packages = true
 
@@ -186,7 +184,7 @@ source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel",
 forbidden_modules = ["anthropic"]
 
 [[tool.importlinter.contracts]]
-# bootstrap.assistant loads the SDK adapter when the new door asks for it, and only then.
+# bootstrap.assistant loads the SDK adapter when front.build asks for it, and only then.
 name = "bootstrap imports the Anthropic SDK only through its adapter"
 type = "forbidden"
 source_modules = ["mailmind.bootstrap"]

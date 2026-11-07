@@ -1,10 +1,8 @@
 """The Assistant's wiring: which language model the process talks to, and with which key.
 
-Each front door binds its own. The new one, `python -m mailmind serve`, talks to the API through
-the Anthropic SDK: front.build calls use("sdk"). Everything else, `python3 server.py`, the command
-line scripts and the root test suites, gets the standard-library client, since the old door must
-run with nothing installed. Either way, with no key the model is DisabledModel: AI is off and
-nothing is sent.
+`python -m mailmind serve` talks to the API through the Anthropic SDK: front.build calls use("sdk").
+Everything else, the command line included, gets the standard-library client. Either way, with no
+key the model is DisabledModel: AI is off and nothing is sent.
 
 The key is config_key() (mailmind.config.json's "anthropic_api_key", in any credential style,
 read through the Accounts context), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
@@ -72,7 +70,7 @@ def key() -> tuple[str, str]:
 
 
 def _sdk(api_key, base_url, **kw):
-    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel   # the new door's only
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel   # front.build's only
     return AnthropicModel(api_key, base_url, **kw)
 
 

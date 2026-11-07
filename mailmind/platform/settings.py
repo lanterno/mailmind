@@ -15,7 +15,7 @@ import threading
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
-# The repo root: the directory holding server.py and the other legacy modules.
+# The repo root.
 SOURCE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_PORT = 8721
 

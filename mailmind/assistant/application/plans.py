@@ -7,8 +7,6 @@ and the folder it was seen in.
 
 A plan can be confirmed once, within `action_plan.TTL` seconds. Nothing here is durable: a restart ends every plan, and
 the person plans again.
-
-Standard library only: python3 server.py uses it.
 """
 import secrets
 import threading

@@ -1,4 +1,4 @@
-"""The routes, over the contexts, on the one handler both front doors serve."""
+"""The routes, over the contexts, on the one handler the app serves."""
 from mailmind.bootstrap import accounts, assistant, attention, background, calendar, compose, curation, discovery, mailbox
 from mailmind.http import handler, static
 from mailmind.http.handler import AI_OVER_HEADER, H, post_body_cap

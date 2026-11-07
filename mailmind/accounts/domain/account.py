@@ -98,7 +98,7 @@ def normalized(a: Entry) -> Entry | None:
         "smtp_host": smtp.host, "smtp_port": smtp.port, "smtp_starttls": smtp.starttls,
         "alias": (a.get("alias") or "").strip() or None,
         "credential": a.get("credential", {}),
-        # "imapclient" asks the new door for IMAPClient (mailmind.bootstrap.mailbox)
+        # "imapclient" asks for IMAPClient (mailmind.bootstrap.mailbox)
         "imap_adapter": a.get("imap_adapter"),
     }
 

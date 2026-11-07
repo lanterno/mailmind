@@ -1,5 +1,5 @@
-"""An invite's text read through `icalendar` and `recurring-ical-events`, for the new front door. The old one runs with
-nothing installed and keeps `ics_reader`; `mailmind.bootstrap.calendar` picks. Nothing of either library leaves this
+"""An invite's text read through `icalendar` and `recurring-ical-events`, which `python -m mailmind serve` asks for;
+`mailmind.bootstrap.calendar` picks. Nothing of either library leaves this
 module: it answers the `IcsReader` port in the domain's own shapes.
 
 An invite is a stranger's text and this runs on request threads, so nothing here raises, however broken the text, and
