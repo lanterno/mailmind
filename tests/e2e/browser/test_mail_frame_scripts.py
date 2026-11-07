@@ -72,7 +72,7 @@ def on_the_page(page, pk):
 
 
 def on_the_react_app(page, pk):
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
 
 
 @pytest.fixture(params=["page", "react"])

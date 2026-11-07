@@ -16,12 +16,12 @@ describe("the URL", () => {
     expect(parseRoute(u.pathname, u.search)).toEqual(route);
   });
   it("ignores an open that isn't a message", () => {
-    expect(parseRoute("/next/all", "?m=abc").opened).toBeNull();
-    expect(parseRoute("/next/all", "?m=-2").opened).toBeNull();
+    expect(parseRoute("/all", "?m=abc").opened).toBeNull();
+    expect(parseRoute("/all", "?m=-2").opened).toBeNull();
   });
   it("takes a path it doesn't know as nowhere", () => {
-    expect(parseRoute("/next/m/only-account", "").source).toBeNull();
-    expect(parseRoute("/next/nope", "").source).toBeNull();
+    expect(parseRoute("/m/only-account", "").source).toBeNull();
+    expect(parseRoute("/nope", "").source).toBeNull();
   });
 });
 
@@ -34,15 +34,15 @@ describe("the lanes", () => {
   });
 
   it("takes a lane it doesn't know as a plain search", () => {
-    expect(parseRoute("/next/search", "?q=x&lane=nonsense").source).toEqual({ kind: "search", q: "x", account: "" });
+    expect(parseRoute("/search", "?q=x&lane=nonsense").source).toEqual({ kind: "search", q: "x", account: "" });
   });
 });
 
 describe("lists from the digest, and the brief", () => {
   it.each([
-    [{ kind: "digest", list: "needs" }, "/next/brief/needs"],
-    [{ kind: "digest", list: "tidy" }, "/next/brief/tidy"],
-    [{ kind: "digest", list: "topic", label: "Trips & travel" }, "/next/brief/topic/Trips%20%26%20travel"],
+    [{ kind: "digest", list: "needs" }, "/brief/needs"],
+    [{ kind: "digest", list: "tidy" }, "/brief/tidy"],
+    [{ kind: "digest", list: "topic", label: "Trips & travel" }, "/brief/topic/Trips%20%26%20travel"],
   ] as const)("%o has a path of its own", (source, path) => {
     expect(pathOf({ source, opened: null })).toBe(path);
     expect(parseRoute(path, "")).toEqual({ source, opened: null });

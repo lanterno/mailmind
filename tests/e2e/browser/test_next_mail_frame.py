@@ -60,7 +60,7 @@ def arrives(world, body, ctype="text/html", subject="A message"):
 
 def reading(page, pk):
     """The reader on message `pk`, its frame's document dressed."""
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
     frame = page.locator("iframe.rd-iframe")
     expect(frame).to_be_visible()
     until(page, lambda: frame.evaluate("f => !!f.contentDocument?.head?.querySelector('style')"), "the frame was never dressed")
@@ -372,7 +372,7 @@ def test_a_message_gone_by_the_time_its_frame_asks_says_so_in_the_frame(page, wo
 
 
 def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, world):
-    answer = page.goto("/next")
+    answer = page.goto("/")
     assert answer.header_value("content-security-policy") == perimeter.next_page_policy()
     page.evaluate("""url => {
         const i = document.createElement("img");
@@ -391,7 +391,7 @@ def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, w
 
 
 def test_a_conversation_gives_each_message_its_own_frame(page, world):
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     page.locator("#rows .row[data-pk]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first.click()
     expect(page.locator("#thread .tmsg")).to_have_count(3)

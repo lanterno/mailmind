@@ -1,4 +1,4 @@
-"""The React app at /next, on the same world the current page's smoke tests use.
+"""The React app, on the same world the current page's smoke tests use.
 
 Every test here serves the build the `built` fixture made. Both front doors serve it, so each test runs twice, as app
 tests do.
@@ -33,7 +33,7 @@ def until(page, check, what):
 
 
 def opened(page):
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.get_by_role("option").first).to_be_visible()
     return page
@@ -49,9 +49,28 @@ def mailbox(world, name):
     return world.where(name)["server"][0][1]
 
 
+def test_a_link_from_when_the_app_lived_at_next_opens_the_same_place(page, world):
+    pk = world.pk(RECEIPT)
+    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    expect(page.locator("iframe.rd-iframe")).to_have_count(1)
+    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}") and "/next" not in page.url
+    clean(page)
+
+
+def test_the_top_bar_opens_the_old_page_which_still_works_at_legacy(page, world):
+    opened(page)
+    page.get_by_role("link", name="Old page").click()
+    expect(page.pw).to_have_url(re.compile(r"/legacy$"))
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    expect(row(page, world, RECEIPT)).to_be_visible()
+    assert page.locator("#root").count() == 0
+    clean(page)
+
+
 def test_it_opens_the_first_accounts_inbox_with_its_rail_and_list(page, world):
     opened(page)
-    assert page.url.endswith(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX")
+    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     expect(page.locator('#folderrail .frow[data-folder="INBOX"]')).to_have_attribute("aria-current", "page")
     expect(row(page, world, RECEIPT)).to_be_visible()
@@ -70,7 +89,7 @@ def test_a_folder_is_a_link_and_back_comes_back(page, world):
 
 def test_a_deep_link_opens_the_message(page, world):
     pk = world.pk(RECEIPT)
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
     expect(page.locator(".rd-subj")).to_be_visible()
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
     clean(page)
@@ -230,7 +249,7 @@ def test_the_account_menu_changes_account_and_offers_all_inboxes(page, world):
     expect(page.get_by_role("menu")).to_be_visible()
     page.get_by_role("menuitemradio", name=re.compile("^All inboxes")).click()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    assert page.url.endswith("/next/all")
+    assert page.url.endswith("/all")
     expect(page.locator("#rows .acctchip").first).to_be_visible()
     clean(page)
 
@@ -239,12 +258,12 @@ def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, 
     opened(page)
     float_ = page.locator("#buildFloat")
     assert float_.is_hidden()
-    page.pw.route("**/next**", lambda route: route.fulfill(
+    page.pw.route("**/m/**", lambda route: route.fulfill(
         response=(r := route.fetch()), body=re.sub(r'(name="mailmind-build" content=")[^"]+', r"\1older", r.text())))
     page.pw.reload()
     float_.wait_for(state="visible")
     assert "MailMind was updated" in float_.inner_text()
-    page.pw.unroute("**/next**")
+    page.pw.unroute("**/m/**")
     page.locator("#buildReload").click()
     float_.wait_for(state="hidden")
     clean(page)
@@ -252,7 +271,7 @@ def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, 
 
 def test_a_narrow_window_shows_one_pane_with_a_way_back_and_a_folder_drawer(page, world):
     page.set_viewport_size({"width": 420, "height": 800})
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     r = row(page, world, RECEIPT)
     r.click()
@@ -272,7 +291,7 @@ def test_a_narrow_window_shows_one_pane_with_a_way_back_and_a_folder_drawer(page
 
 def test_a_narrow_window_folds_search_away_until_asked(page, world):
     page.set_viewport_size({"width": 420, "height": 800})
-    page.goto("/next")
+    page.goto("/")
     box = page.get_by_role("textbox", name="Search")
     expect(box).to_be_hidden()
     page.locator(".search-tog").click()
@@ -365,7 +384,7 @@ def test_marked_rows_file_together_and_one_undo_brings_them_all_back(page, world
     page.pw.on("request", lambda r: asked.append(r.url) if "/api/" in r.url and r.method == "POST" else None)
     page.locator(".bulkbar .bb").filter(has_text="Archive").click()
     expect(page.locator("#toast")).to_have_text("Archived 2")
-    assert [u for u in asked if "archive" in u or "bulk" in u] == [page.pw.url.split("/next")[0] + "/api/bulk/file"]
+    assert [u for u in asked if "archive" in u or "bulk" in u] == [page.origin + "/api/bulk/file"]
     until(page, lambda: all(mailbox(world, n) == "Archive" for n in names), "they weren't filed")
     expect(rows).to_have_count(before - 2)
     expect(page.locator(".bulkbar")).to_have_count(0)
@@ -485,7 +504,7 @@ def test_reading_settings_change_a_plain_mail_and_stay_after_a_reload(page, worl
 
 def test_a_narrow_pane_keeps_its_hidden_verbs_under_more(page, world):
     page.set_viewport_size({"width": 700, "height": 800})
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     row(page, world, RECEIPT).click()
     more = page.get_by_role("button", name="More actions")

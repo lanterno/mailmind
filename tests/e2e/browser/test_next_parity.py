@@ -36,14 +36,14 @@ def until(page, check, what):
 
 
 def opened(page):
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.get_by_role("option").first).to_be_visible()
     return page
 
 
 def curate_drawer(page):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     page.locator("#statusBtn").click()
     page.get_by_role("button", name=re.compile("^Curate")).click()
     d = page.get_by_role("dialog", name="Curate")
@@ -437,7 +437,7 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
 
 
 def test_a_week_with_nothing_unanswered_says_so(page, world, ai):
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("button", name="Your week").click()
     panel = page.get_by_role("dialog", name="Weekly review")
     expect(panel.locator(".rv-empty")).to_have_text("Nothing important is unanswered.")
@@ -447,7 +447,7 @@ def test_a_week_with_nothing_unanswered_says_so(page, world, ai):
 
 def test_a_review_that_cant_be_written_says_why(page, world, ai):
     page.pw.route("**/api/review", lambda route: route.fulfill(json={"ok": False, "error": "The mail couldn't be read"}))
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("button", name="Your week").click()
     panel = page.get_by_role("dialog", name="Weekly review")
     expect(panel.locator(".rv-err")).to_contain_text("The mail couldn't be read")
@@ -560,7 +560,7 @@ def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
         c.close()
     ai.responder = lambda req: (fa.answer({"narrative": "Lin is waiting.", "groups": []})
                                 if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
-    page.goto("/next")
+    page.goto("/")
     page.locator(f'.bf-need[data-pk="{world.pk(receipt)}"]').get_by_role("button", name=re.compile("^Archive")).click()
     expect(page.locator("#toast")).to_have_text("Archived \u00b7 in the mailbox's Archive")
     expect(page.locator("#undoFloat")).to_contain_text("Archived")
@@ -573,7 +573,7 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
     from gate import held_elsewhere
     from mailmind.bootstrap import mailbox
     monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     folder = lambda name: page.locator("#folderrail .frow", has_text=re.compile(f"^{name}"))
     rows = page.locator("#rows .row[data-pk]")
     folder("Archive").click()
@@ -590,7 +590,7 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
     clean(page)
 
 def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
     expect(archive).to_be_visible()
     page.evaluate("window.dispatchEvent(new Event('offline'))")  # the Wi-Fi went; the server is on this machine
@@ -603,7 +603,7 @@ def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on
     from mailmind.http.handler import _UI_QUIET
     page.pw.add_init_script(AWAY)
     with page.pw.expect_response("**/api/digest*"):
-        page.goto(f"/next/m/{w.ADA}/Archive")
+        page.goto(f"/m/{w.ADA}/Archive")
     expect(page.frame_locator("iframe.rd-iframe").locator("body")).to_contain_text("log cabin")   # the folder opened its first message
     page.evaluate("window.away = true")
     asked = []
@@ -623,7 +623,7 @@ def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on
 
 def test_a_digest_that_wont_come_says_the_server_cant_be_reached_and_offers_retry(page, app, world):
     page.route("**/api/digest*", lambda route: route.abort())
-    page.goto("/next")
+    page.goto("/")
     expect(page.locator("#rows")).to_contain_text("Couldn\u2019t reach the server.")
     page.unroute("**/api/digest*")
     page.locator("#dgRetry").click()
@@ -635,7 +635,7 @@ def test_a_digest_that_wont_come_says_the_server_cant_be_reached_and_offers_retr
 
 def test_a_digest_that_wont_come_is_tried_again_by_itself(page, app, world):
     page.route("**/api/digest*", lambda route: route.abort())
-    page.goto("/next")
+    page.goto("/")
     expect(page.locator("#rows")).to_contain_text("Couldn\u2019t reach the server.")
     page.unroute("**/api/digest*")
     page.clock.run_for(5_100)
@@ -644,7 +644,7 @@ def test_a_digest_that_wont_come_is_tried_again_by_itself(page, app, world):
     assert page.blocked == [], page.blocked
 
 def test_a_list_or_a_search_that_fails_says_so_in_the_pages_words(page, app, world):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
     expect(archive).to_be_visible()
     page.route("**/api/messages*", lambda route: route.abort())

@@ -37,14 +37,14 @@ def snoozed_until(row):
 
 
 def inbox(page):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
     return page
 
 
 def two_pages(page):
     """The Inbox with Sent behind it in the tab's history, so a wrong step shows in the URL."""
-    page.goto(f"/next/m/{w.ADA}/Sent")
+    page.goto(f"/m/{w.ADA}/Sent")
     expect(page.locator("#monos")).not_to_be_empty()
     page.locator('a.frow[data-folder="INBOX"]').click()
     expect(page.pw).to_have_url(re.compile("/INBOX"))
@@ -107,7 +107,7 @@ def test_going_somewhere_from_a_dialog_leaves_one_back_to_the_page_before(page, 
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox").fill("All inboxes")
     page.keyboard.press("Enter")
-    expect(page.pw).to_have_url(re.compile("/next/all"))
+    expect(page.pw).to_have_url(re.compile("/all"))
     page.pw.go_back()
     expect(page.pw).to_have_url(INBOX)
     page.pw.go_back()

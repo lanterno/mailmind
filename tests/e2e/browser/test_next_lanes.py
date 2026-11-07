@@ -34,7 +34,7 @@ def until(page, check, what):
 
 
 def lane(page, view):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     page.locator(f'a.frow[data-view="__lane_{view}__"]').click()
     expect(page.pw).to_have_url(re.compile(f"lane={view}"))
     return page
@@ -126,7 +126,7 @@ def test_j_moves_through_a_lane(page, world):
 
 
 def test_a_lane_in_the_palette_opens_as_a_lane(page, world):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox").fill("Feed (lane)")

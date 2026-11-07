@@ -25,7 +25,7 @@ def until(page, check, what):
 
 
 def opened(page):
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.get_by_role("option").first).to_be_visible()
     return page
@@ -157,7 +157,7 @@ def test_axe_finds_nothing_on_status_help_or_settings(page, world):
 
 def test_with_no_accounts_the_welcome_offers_settings(page, world):
     page.pw.route(re.compile(r"/api/digest"), lambda route: route.fulfill(json={**route.fetch().json(), "accounts": [], "send_accounts": []}))
-    page.goto("/next")
+    page.goto("/")
     expect(page.locator(".firstrun .fr-h")).to_have_text("Welcome to MailMind")
     page.locator("#frAdd").click()
     expect(page.locator("#setClose")).to_be_visible()

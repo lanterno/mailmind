@@ -48,7 +48,7 @@ def one_file(world, name, filename, part="one", kind="application/pdf"):
 
 
 def docs(page):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox").fill("Documents")

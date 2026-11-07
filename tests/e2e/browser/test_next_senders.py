@@ -34,7 +34,7 @@ def until(page, check, what):
 
 
 def screener(page):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     page.locator('a.frow[data-folder="__screener__"]').click()
     expect(page.locator(".scr-row").first).to_be_visible()
     return page
@@ -89,7 +89,7 @@ def test_a_refused_decision_brings_the_sender_back(page, world):
 
 def test_the_last_decision_leaves_the_all_clear(page, world):
     page.pw.route(re.compile(r"/api/screener\?"), lambda route: route.fulfill(json={"ok": True, "account": w.ADA, "items": [], "total": 0}))
-    page.goto(f"/next/m/{w.ADA}/__screener__")
+    page.goto(f"/m/{w.ADA}/__screener__")
     expect(page.locator(".ac-h")).to_have_text("Screener clear")
     expect(page.locator(".ac-b")).to_have_text("Every sender in this inbox has been allowed or screened out.")
     expect(page.locator('a.frow[data-folder="__screener__"]')).to_have_count(0)
@@ -97,7 +97,7 @@ def test_the_last_decision_leaves_the_all_clear(page, world):
 
 
 def opened_receipt(page, world):
-    page.goto(f"/next/m/{w.ADA}/INBOX?m={world.pk(RECEIPT)}")
+    page.goto(f"/m/{w.ADA}/INBOX?m={world.pk(RECEIPT)}")
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     return page
 
@@ -132,7 +132,7 @@ def test_from_this_sender_searches_for_them(page, world):
     opened_receipt(page, world)
     page.locator("button.rd-sender").click()
     page.get_by_role("button", name="From this sender").click()
-    expect(page.pw).to_have_url(re.compile(r"/next/search\?q=from%3A"))
+    expect(page.pw).to_have_url(re.compile(r"/search\?q=from%3A"))
     expect(page.get_by_role("option").first).to_contain_text("Thimble")
     clean(page)
 

@@ -27,7 +27,7 @@ def until(page, check, what):
 
 
 def opened(page):
-    page.goto("/next")
+    page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.get_by_role("option").first).to_be_visible()
     return page

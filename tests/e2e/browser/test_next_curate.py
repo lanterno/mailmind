@@ -40,7 +40,7 @@ def issues(world, n=2):
 
 
 def drawer(page, where=None):
-    page.goto(where or f"/next/m/{w.ADA}/INBOX")
+    page.goto(where or f"/m/{w.ADA}/INBOX")
     page.locator("#statusBtn").click()
     page.get_by_role("button", name=re.compile("^Curate")).click()
     expect(page.get_by_role("dialog", name="Curate")).to_be_visible()
@@ -56,7 +56,7 @@ def test_the_status_menu_opens_the_drawer_and_esc_closes_it(page, world):
 
 
 def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
-    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.goto(f"/m/{w.ADA}/INBOX")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     row = page.get_by_role("option").filter(has_text="This week: five new patterns")
     expect(row.locator(".jb")).to_be_visible()
