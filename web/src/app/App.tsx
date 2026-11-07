@@ -61,7 +61,7 @@ function Floats() {
       </div>
       <div id="swipeBadge" aria-hidden="true"><span className="sw-archive"><Icon name="archive" /> Archive</span><span className="sw-snooze"><Icon name="clock" /> Tomorrow</span></div>
       <div className="send-float build-float" id="buildFloat" role="status" data-react-aria-top-layer="true" hidden={!build}>
-        MailMind was updated. <button id="buildReload" onClick={() => location.reload()}>Reload</button>
+        MailMind was updated or restarted. <button id="buildReload" onClick={() => location.reload()}>Reload</button>
       </div>
     </>
   );
