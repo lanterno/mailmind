@@ -73,7 +73,7 @@ def test_a_waiting_thread_is_found_by_what_was_said_under_the_key(c, world):
     c.execute("UPDATE messages SET seen=1, answered=0, draft=0, thread_id='T', ts=? WHERE pk=?", (1_800_000_000, lunch["pk"]))
     c.execute("DELETE FROM summaries")
     attention.book.followup_detect_received(c, 1_800_000_000 + 5 * 86400, 3, 14)
-    assert [r["anchor_pk"] for r in c.execute("SELECT anchor_pk FROM followups WHERE kind='received'")] == [lunch["pk"]]
+    assert [r["thread_id"] for r in c.execute("SELECT thread_id FROM followups WHERE kind='received'")] == ["T"]
 
 
 def test_a_copy_with_no_row_of_its_own_needs_no_second_call(c, world):
