@@ -10,11 +10,12 @@ from mailmind.compose.application.ports import Book
 from mailmind.compose.domain.builder import build_message
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.outbox_item import SendMeta
+from mailmind.platform.db.uow import UnitOfWork
 
 
 class Sending:
-    def __init__(self, composing: Composing, outbox: Outbox, book: Book):
-        self._composing, self._outbox, self._book = composing, outbox, book
+    def __init__(self, uow: UnitOfWork, composing: Composing, outbox: Outbox, book: Book):
+        self._uow, self._composing, self._outbox, self._book = uow, composing, outbox, book
 
     def send(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Validate a compose/reply/forward request, build the message, enqueue it."""
@@ -40,11 +41,8 @@ class Sending:
         draft_id = body.get("draft_id")
         key = composer_key(body)
         if not draft_id and key:              # a first save whose answer the composer never heard
-            c = self._book.connect()
-            try:
+            with self._uow.read() as c:
                 found = self._book.draft_by_key(c, key)
-            finally:
-                c.close()
             draft_id = found["id"] if found else None
         meta: SendMeta = {"account": acct["email"], "idempotency_key": (body.get("idempotency_key") or uuid.uuid4().hex),
                 "in_reply_to_pk": in_reply_to_pk, "orig_message_id": spec["in_reply_to"],

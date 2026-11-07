@@ -14,6 +14,7 @@ from mailmind.content import sanitize
 from mailmind.content.mime import Parsed
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel.parsed import as_int, is_object
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -26,8 +27,8 @@ def composer_key(body: Mapping[str, Any]) -> str | None:
 
 
 class Composing:
-    def __init__(self, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
-        self._book, self._accounts, self._mail, self._screen = book, accounts, mail, screen
+    def __init__(self, uow: UnitOfWork, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
+        self._uow, self._book, self._accounts, self._mail, self._screen = uow, book, accounts, mail, screen
 
     def spec(self, body: Mapping[str, Any]) -> tuple[Composed, int | None, Account]:
         """Shared by send + save-draft: resolve account, decode attachments, assemble
@@ -60,9 +61,8 @@ class Composing:
             text = own + tail
             if tail:   # the quote's HTML only when this draft's record vouches for that exact quote
                 did = as_int(body.get("draft_id"))
-                c = self._book.connect()
-                dr = self._book.draft_quote(c, did) if did else None
-                c.close()
+                with self._uow.read() as c:
+                    dr = self._book.draft_quote(c, did) if did else None
                 if dr and dr["tail_html"] and lf(dr["tail_text"] or "") == tail:
                     # built and sanitized by us at that save; never re-sanitized
                     tail_html = sanitize.without_fold(dr["tail_html"])

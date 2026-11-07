@@ -12,6 +12,7 @@ from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
 from mailmind.mailbox.domain import roles
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import accounts
 
@@ -157,7 +158,8 @@ class _Screen:
 
 transport = SmtpTransport(_Credentials())
 _accounts, _mail, _screen = _Accounts(), _Messages(), _Screen()
-outbox = Outbox(book, transport, copies, _accounts, _mail, _Effects(), _screen)
-composing = Composing(book, _accounts, _mail, _screen)
-sending = Sending(composing, outbox, book)
-drafts = Drafts(composing, outbox, book, _accounts, _mail, copies, _screen)
+_uow = UnitOfWork()
+outbox = Outbox(_uow, book, transport, copies, _accounts, _mail, _Effects(), _screen)
+composing = Composing(_uow, book, _accounts, _mail, _screen)
+sending = Sending(_uow, composing, outbox, book)
+drafts = Drafts(_uow, composing, outbox, book, _accounts, _mail, copies, _screen)

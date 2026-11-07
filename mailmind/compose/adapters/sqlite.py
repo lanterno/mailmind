@@ -1,26 +1,5 @@
-"""Compose's tables: `outbox` and `drafts`. Each function takes its caller's connection, from connect() or
-transaction(), and leaves the commit to it."""
+"""Compose's tables: `outbox` and `drafts`. Each function takes its caller's connection and leaves the commit to it."""
 import sqlite3
-from contextlib import contextmanager
-
-from mailmind.platform import settings
-from mailmind.platform.db import database
-
-
-def connect():
-    return database.connect(settings.current().db)
-
-
-@contextmanager
-def transaction():
-    """One change to Compose's tables, with the write lock taken up front: committed if the block ends, gone if it raises."""
-    c = connect()
-    try:
-        c.execute("BEGIN IMMEDIATE")
-        yield c
-        c.commit()
-    finally:
-        c.close()
 
 
 def rekey_thread(c, account, survivor, absorbed):

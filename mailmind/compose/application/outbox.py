@@ -29,6 +29,7 @@ from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
 from mailmind.compose.domain.outbox_item import SendMeta
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import bus, profile
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
@@ -48,14 +49,14 @@ class Outbox:
     SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
     LOOK_IN_SENT_WAIT = 5  # how long a Retry waits for the account's gate, to look in Sent first
 
-    def __init__(self, book: Book, transport: Transport, copies: Copies, accounts: Accounts, mail: Messages,
+    def __init__(self, uow: UnitOfWork, book: Book, transport: Transport, copies: Copies, accounts: Accounts, mail: Messages,
                  effects: Effects, screen: Screen):
-        self._book, self._transport, self._copies = book, transport, copies
+        self._uow, self._book, self._transport, self._copies = uow, book, transport, copies
         self._accounts, self._mail, self._effects, self._screen = accounts, mail, effects, screen
         # each account's sends in a lane of their own: one waiting on its IMAP server for a Sent copy
         # holds up no other account's
         self.QUEUE = DurableQueue("outbox", "outbox", running="sending", finished="sent", finished_at="sent_at",
-                                  gate="delivered", connect=lambda: book.connect(), max_attempts=self.MAX_ATTEMPTS,
+                                  gate="delivered", connect=uow.connect, max_attempts=self.MAX_ATTEMPTS,
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL,
                                   lane="account", unsure=("wire_begun", outbox_item.UNSURE))
 
@@ -65,12 +66,8 @@ class Outbox:
         (outbox_id, created). Kicks the worker."""
         orig = self._mail.original(meta.get("in_reply_to_pk"))         # its row may be gone by the time this goes out
         row = outbox_item.new_row(built, meta, orig, _now() + self.SEND_DELAY, datetime.now(timezone.utc).isoformat())
-        c = self._book.connect()
-        try:
+        with self._uow.write() as c:
             oid, created = self._book.outbox_insert(c, row)
-            c.commit()
-        finally:
-            c.close()
         self.kick()
         return oid, created
 
@@ -100,7 +97,8 @@ class Outbox:
 
     def _in_sent_already(self, oid: int) -> bool:
         """Is an unsure send in Sent? False whenever that can't be told, and they were told it might go twice."""
-        row = self._commit(lambda c: self._book.outbox_get(c, oid))
+        with self._uow.read() as c:
+            row = self._book.outbox_get(c, oid)
         if row is None or row["state"] != "error" or not row["wire_begun"] or row["delivered"]:
             return False
         try:
@@ -114,35 +112,23 @@ class Outbox:
             return False
 
     def list_recent(self, limit: int = 50) -> dict[str, Any]:
-        c = self._book.connect()
-        try:
+        with self._uow.read() as c:
             rows = self._book.outbox_list(c, limit)
-        finally:
-            c.close()
         out = [outbox_item.listed(r) for r in rows]
         return {"ok": True, "items": out}
 
     def send_now(self, oid: int) -> bool:
         """Bring a scheduled send forward to now (Send-now from the outbox flyout)."""
-        c = self._book.connect()
-        try:
+        with self._uow.write() as c:
             ok = self._book.outbox_send_now(c, oid, _now())
-            c.commit()
-        finally:
-            c.close()
         if ok:
             self.kick()
         return ok
 
     def _commit[T](self, fn: Callable[[Connection], T]) -> T:
-        """Run fn(c) on a short-lived connection, commit, and return what fn returned."""
-        c = self._book.connect()
-        try:
-            out = fn(c)
-            c.commit()
-            return out
-        finally:
-            c.close()
+        """Run fn(c) in a write block of its own, and return what fn returned."""
+        with self._uow.write() as c:
+            return fn(c)
 
     def _side_effects(self, oid: int, row: Row, acct: Account) -> str | None:
         """Done-once: Sent copy (non-Gmail) + \\Answered on the original, and the rest below.
@@ -179,25 +165,24 @@ class Outbox:
             try:
                 orig = self._mail.original(row["in_reply_to_pk"], row["orig_account"], row["orig_message_id"])
                 tid = (orig["thread_id"] if orig else None) or row["orig_thread_id"]
-                c = self._book.connect()
                 if tid:
-                    self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
-                                               _now(), datetime.now(timezone.utc).isoformat())
-                c.commit(); c.close()
+                    with self._uow.write() as c:
+                        self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
+                                                    _now(), datetime.now(timezone.utc).isoformat())
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
                 log.warning("followup record failed for #%(id)s", {"id": oid}, exc_info=e)
         # the draft this message was composed from is superseded once it's truly sent
         if row["draft_id"] and not row["draft_deleted"]:
             try:
-                c = self._book.connect(); dr = self._book.draft_get(c, row["draft_id"]); c.close()
+                with self._uow.read() as c:
+                    dr = self._book.draft_get(c, row["draft_id"])
                 if dr:
                     def cleanup() -> None:   # the row goes with its copy: Edit re-checks it under the gate
                         removed = self.draft_copy_is_ours(dr) and self._copies.delete_draft_uid(
                             self._accounts.get(dr["account"]), dr["folder"], dr["uid"], dr["uidvalidity"])
-                        c = self._book.connect()
-                        waiting = self._book.journal_get(c, row["draft_id"])
-                        c.close()
+                        with self._uow.read() as c:
+                            waiting = self._book.journal_get(c, row["draft_id"])
                         if waiting is not None and waiting["tried"] and waiting["account"] == dr["account"]:
                             self._copies.delete_left_copy(self._accounts.get(dr["account"]), waiting["tried"])
 
@@ -225,11 +210,8 @@ class Outbox:
             return False
         if d["raw_sha"] or self._screen.names_drafts(d["folder"]):
             return True
-        c = self._book.connect()
-        try:
+        with self._uow.read() as c:
             return self._book.flagged_draft(c, d["account"], d["folder"], d["uid"])
-        finally:
-            c.close()
 
     def send_one(self, oid: int) -> None:
         row = self._commit(lambda c: self.QUEUE.claim(c, oid))
