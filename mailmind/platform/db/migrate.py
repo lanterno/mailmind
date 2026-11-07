@@ -22,6 +22,7 @@ def init(path, steps=None):
         raise RuntimeError(f"MailMind needs SQLite {'.'.join(map(str, SQLITE_NEEDED))} or newer, and this "
                            f"Python has {sqlite3.sqlite_version}. Nothing was changed.")
     steps = migrations.MIGRATIONS if steps is None else steps
+    database.keep_private(path)                 # one made before MailMind saw to it
     c = database.connect(path)
     c.isolation_level = None                    # the transactions below are the only ones
     try:
