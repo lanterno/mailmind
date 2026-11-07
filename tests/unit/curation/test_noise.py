@@ -35,23 +35,9 @@ def test_with_no_date_or_one_ahead_of_now_it_counts_as_today(last_ts, days):
     assert noise.age_in_days(last_ts, NOW) == days
 
 
-# ── what a request asks ───────────────────────────────────────────────────────
-def test_with_nothing_asked_it_is_newsletters_and_notifications_three_messages_and_forty_senders():
-    assert noise.asked({}) == noise.Asked([MKT, NOTIF], 3, 40)
-
-
-def test_a_request_can_name_its_buckets():
-    assert noise.asked({"buckets": ["a,,b"]}).buckets == ["a", "b"]
-
-
-@pytest.mark.parametrize("raw, got", [("7", 7), ("0", 1), ("-4", 1), ("nope", 3), ("", 3)])
-def test_a_minimum_is_at_least_one_and_one_that_wont_read_goes_back_to_the_default(raw, got):
-    assert noise.asked({"min_count": [raw]}).min_count == got
-
-
-@pytest.mark.parametrize("raw, got", [("7", 7), ("0", 1), ("-4", 1), ("200", 200), ("9000", 200), ("nope", 40), ("", 40)])
-def test_a_limit_lies_between_one_and_two_hundred_and_one_that_wont_read_goes_back_to_the_default(raw, got):
-    assert noise.asked({"limit": [raw]}).limit == got
+# ── who it asks about ─────────────────────────────────────────────────────────
+def test_it_is_newsletters_and_notifications_three_messages_and_forty_senders():
+    assert (noise.BUCKETS, noise.MIN_COUNT, noise.LIMIT) == ((MKT, NOTIF), 3, 40)
 
 
 # ── who makes the list ────────────────────────────────────────────────────────

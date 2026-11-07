@@ -139,8 +139,6 @@ def test_documents_and_cleanup(app, golden, world):
             "ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
             Date=f"Wed, {day} Oct 2026 07:00:00 +0000", Subject=f"Issue {n}: weaving notes"))
     fetch(app, golden, "/api/cleanup/senders")
-    fetch(app, golden, "/api/cleanup/senders?buckets=automated-notifications&min_count=1")
-    fetch(app, golden, "/api/cleanup/senders?min_count=x&limit=y")
     fetch(app, golden, "/api/cleanup/sender?addr=news@loom.example.test")
     fetch(app, golden, "/api/cleanup/sender?addr=deals@spindle.example.test")
     fetch(app, golden, "/api/cleanup/sender?addr=nobody@example.test")
