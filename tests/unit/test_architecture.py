@@ -101,6 +101,17 @@ def test_no_use_case_holds_sql():
     assert found == set()
 
 
+def test_no_use_case_runs_a_connection_by_hand():
+    """A use case says what it reads and what it writes (`self._uow.read()`, `.write()`), and the unit of work opens each
+    connection, takes the lock up front, commits and closes. Handing `uow.connect` to a DurableQueue isn't a call: the
+    queue runs its own short transactions, in platform."""
+    by_hand = {"conn", "connect", "_connect", "commit", "rollback", "close"}
+    found = {(rel(path), node.func.attr) for path in sorted(PACKAGE.glob("*/application/*.py"))
+             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in by_hand}
+    assert found == set()
+
+
 def writers():
     out = {}
     pattern = re.compile(r"\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)")
