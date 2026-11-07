@@ -123,6 +123,23 @@ def test_an_undo_written_before_this_only_changes_the_local_row(app, world):
     assert app.get("/api/pending").json["items"] == []
 
 
+def test_an_undo_after_a_merge_unmutes_the_thread_that_took_this_one_in(app, world):
+    from mailmind.bootstrap.mailbox import store
+    lunch, _ = thread_with_a_reply(world)
+    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    survivor = "rf:<survivor@example.test>"
+    c = store.conn()
+    c.execute("UPDATE messages SET thread_id=? WHERE account=? AND thread_id=?", (survivor, w.ADA, lunch["thread_id"]))
+    attention.book.rekey_thread(c, w.ADA, survivor, lunch["thread_id"])
+    c.commit()
+    assert attention.book.is_muted(c, w.ADA, survivor)
+    c.close()
+    assert app.post("/api/undo", {}).json["ok"]
+    c = store.conn()
+    assert not attention.book.is_muted(c, w.ADA, survivor)
+    c.close()
+
+
 def test_a_refused_mark_goes_to_the_tray_and_isnt_asked_again_each_sync(app, world):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import commands
