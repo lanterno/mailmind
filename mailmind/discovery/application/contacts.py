@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from mailmind.discovery.application.ports import AccountNames, ContactMail, FolderRoles, KeptSenders
-from mailmind.discovery.domain import known
+from mailmind.discovery.domain import contacts, known
 from mailmind.kernel.when import ago, rel_time
 
 
@@ -14,26 +14,16 @@ class Contacts:
 
     def autocomplete(self, q: str | None) -> dict[str, Any]:
         """Everyone who has emailed you, ranked by frequency then recency."""
-        q = (q or "").strip().lower()[:64]
-        rows = self._mail.senders_like(q)
-        return {"ok": True, "items": [{"addr": r["addr"], "name": r["name"] or "", "n": r["n"]} for r in rows]}
+        rows = self._mail.senders_like(contacts.needle(q))
+        return {"ok": True, "items": [contacts.suggestion(r) for r in rows]}
 
     def card(self, addr: str | None) -> tuple[dict[str, Any], int]:
-        """Relationship memory for one sender: interaction stats, which accounts they write to and recent threads.
-        (result, code)."""
-        a = (addr or "").strip().lower()
-        if not a or "@" not in a:
+        """One sender's card. (result, code)."""
+        a = contacts.address(addr)
+        if a is None:
             return {"ok": False, "error": "bad address"}, 400
-        agg, accts, recent = self._mail.card(a)
-        n = agg["n"] or 0
-        return {"ok": True, "addr": a, "name": (agg["name"] or ""), "count": n,
-                "replied": agg["replied"] or 0, "known": n > 0,
-                "last_ago": (ago(agg["last"]) if agg["last"] else None),
-                "first_ago": (ago(agg["first"]) if agg["first"] else None),
-                "accounts": accts,                         # raw emails; client renders via nameOf()
-                "recent": [{"pk": r["pk"], "account": r["account"], "subject": r["subject"] or "(no subject)",
-                            "thread_id": r["thread_id"], "when": rel_time(r["date_iso"]), "seen": bool(r["seen"])}
-                           for r in recent]}, 200
+        agg, accounts, recent = self._mail.card(a)
+        return contacts.card(a, agg, accounts, recent, ago, rel_time), 200
 
 
 class KnownContacts:
