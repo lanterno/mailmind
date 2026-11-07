@@ -13,7 +13,8 @@ import pytest
 
 from fakes import anthropic_api as fa
 from mailmind.assistant.application.ports import AIOff
-from mailmind.assistant.domain.prompts import SYSTEM
+from mailmind.assistant.domain.prompts import SYSTEM, TRIAGE
+from mailmind.kernel.assessment import Assessment
 
 TRANSPORTS = ["sdk", "urllib"]
 
@@ -140,8 +141,18 @@ def test_triage_stores_the_structured_reply(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 9,
                          "category": "action-needed", "action": "Reply by Friday"}))
-    assert assistant.assessments.summarize_one(ROW) == (7, ("Mira asks for the table.", 5, "action-needed",
-                                                "Reply by Friday", "claude-opus-5-5"))
+    assert assistant.assessments.summarize_one(ROW) == (7, Assessment(
+        "Mira asks for the table.", 5, "action-needed", "Reply by Friday", "claude-opus-5-5",
+        "claude-opus-5-5", TRIAGE.version, "assessed"))
+
+
+def test_triage_keeps_the_model_a_fallback_handed_over_to(api):
+    from mailmind.bootstrap import assistant
+    api.queue(answer({"summary": "Mira asks.", "importance": 3, "category": "info"}, usage={
+        "input_tokens": 10, "output_tokens": 5,
+        "iterations": [{"type": "fallback_message", "model": "claude-opus-4-8", "input_tokens": 10, "output_tokens": 5}]}))
+    _, said = assistant.assessments.summarize_one(ROW)
+    assert (said.model, said.served_by, said.outcome) == ("claude-opus-5-5", "claude-opus-4-8", "assessed")
 
 
 def test_a_plain_text_call_returns_the_text(api):
@@ -158,7 +169,7 @@ def test_a_refusal_reads_as_an_empty_reply(api):
                      "stop_details": {"type": "refusal", "category": "cyber"}}),
               (200, {"stop_reason": "refusal", "content": []}))
     _, payload = assistant.assessments.summarize_one(ROW)       # triage first: it yields for 45s after any other call
-    assert payload is not None and payload[-1] == "parse-error"   # stored once, not retried forever
+    assert (payload.model, payload.outcome) == ("parse-error", "refused")     # stored once, not retried forever
     assert assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA) == {}
 
 
