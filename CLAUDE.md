@@ -649,7 +649,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   good for one confirm within ten minutes, and a restart ends it (410). A copy no longer in the folder it was seen
   in is left where it went, and counted as `gone`. `Filing.carry_out` sends each message through its own route (`filing.do_write`, `do_trash`,
   `attention.snoozing.snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
-  never reaches its own home (`_DO_APART`, `_DO_ALREADY`), and each message counts once, by the copy search would show.
+  never reaches its own home (`action_plan.out_of_reach`), and each message counts once, by the copy search would show.
 - Whole-conversation archive/trash (`/api/thread/archive|trash` → `filing.do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder — and files
   each through the per-message op (`filing.do_write` / `do_trash`) under one undo group.
