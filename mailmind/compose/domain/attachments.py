@@ -42,6 +42,19 @@ def decode(items: object) -> list[Attachment]:
     return out
 
 
+def take_along(have: list[Attachment], found: list[Attachment]) -> list[Attachment]:
+    """Of the files a forward's original holds, those that go with the ones you added under the budget: the first that
+    doesn't fit ends it."""
+    total = sum(len(a["data"]) for a in have)
+    taken: list[Attachment] = []
+    for a in found:
+        if total + len(a["data"]) > limits.MAX_ATTACH_BYTES:
+            break
+        total += len(a["data"])
+        taken.append(a)
+    return taken
+
+
 def extract(raw: bytes | None) -> list[Attachment]:
     """Pull real attachment parts (filename+bytes) out of a stored RFC822 message,
     for re-attaching on forward. Inline cid images are skipped."""
