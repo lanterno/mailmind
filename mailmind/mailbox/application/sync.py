@@ -18,6 +18,7 @@ from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Cl
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ingest")
@@ -32,8 +33,9 @@ class Ingest:
     FLAG_REFRESH = 500      # the newest stored UIDs whose flags each incremental sync reads again
     FLAG_BATCH = 500        # how many UIDs one flag read names
 
-    def __init__(self, store: StoredMail, accounts: Accounts, open_session: OpenSession, pool: Pool, curation: Classifier,
-                 attention: Attention, index: Index):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, open_session: OpenSession, pool: Pool,
+                 curation: Classifier, attention: Attention, index: Index):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._open_session = open_session
@@ -71,11 +73,8 @@ class Ingest:
         move: the mark stays behind those two, since a refusal would put back flags this read skipped.
         Returns how many rows changed."""
         email = acct["email"]
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             since = self._store.get_modseq(c, email, folder) if modseq else None
-        finally:
-            c.close()
         if modseq and since == modseq:
             return 0                                     # the server says nothing changed
         behind = since if modseq and since and since < modseq else None
@@ -88,12 +87,9 @@ class Ingest:
                 raise
             except imaplib.IMAP4.error:
                 log.warning("SEARCH MODSEQ refused %(account)s: reading the newest instead", {"account": email})
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             waiting = self._store.flag_changes_waiting(c, email)
             rows = self._flag_rows(c, email, folder, uids)    # before the flags are read: see above
-        finally:
-            c.close()
         now: dict[int, frozenset[str]] = {}
         try:
             for start in range(0, len(rows), self.FLAG_BATCH):
@@ -107,15 +103,13 @@ class Ingest:
         moved = [(r, new) for r in rows if r["uid"] in now and r["pk"] not in skip
                  for new in [self._flags_of(now[r["uid"]])] if any(new[k] != r[k] for k in _FLAG_COLS)]
         changed = 0
-        c = self._store.conn()
-        try:
-            for r, new in moved:                         # each only if it still holds what was read
-                changed += self._store.set_flags_if_still(c, r["pk"], new, r)
-            if modseq and not held and (uids is not None or not ask):
-                self._store.set_modseq(c, email, folder, modseq)
-            c.commit()
-        finally:
-            c.close()
+        mark = modseq if modseq and not held and (uids is not None or not ask) else None
+        if moved or mark:                                # a server with no modseq and nothing new takes no lock
+            with self._uow.write() as c:
+                for r, new in moved:                     # each only if it still holds what was read
+                    changed += self._store.set_flags_if_still(c, r["pk"], new, r)
+                if mark:
+                    self._store.set_modseq(c, email, folder, mark)
         if changed:
             bus.publish(FlagsChanged(acct["email"], folder, changed))
         return changed
@@ -163,7 +157,6 @@ class Ingest:
                              "refs": (msg.get("References") or "").replace("\n", " ").strip(),
                              "recipient_addrs": mime.recipient_addrs(msg),
                              "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:self._store.RECIPIENTS_CHARS]})
-        c = self._store.conn()
         for r in rows:
             snippet, invite = "", None
             if with_body and not r["is_junk"]:
@@ -180,31 +173,30 @@ class Ingest:
                     invite = raw if mime.has_invite(msg) else None
                 except Exception:
                     snippet = ""
-            pk = self._store.upsert_message(c, {
-                "account": acct["email"], "kind": acct["kind"], "folder": folder,
-                "uid": r["uid"], "message_id": r["message_id"], "gmail_thread": r["gmail_thread"],
-                "from_addr": r["from_addr"], "from_name": r["from_name"], "subject": r["subject"],
-                "date_iso": r["date_iso"], "ts": r["ts"], "snippet": snippet,
-                "bucket": r["bucket"], "confidence": r["confidence"], "reason": r["reason"],
-                "is_junk": r["is_junk"],
-            })
-            self._store.set_local_flags(c, pk, **r["flags"])
-            self._store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
-            self._store.set_recipients(c, pk, r["recipient_addrs"])
-            if stored is not None and self._store.needs_threading(c, pk, r["in_reply_to"], r["refs"]):
-                stored.append(pk)
-            self._store.set_ingested_headers(c, pk, r["in_reply_to"], r["refs"], r["recipients"])
-            self._index.index_message(c, pk)               # refresh FTS so recipients is searchable immediately
-            if invite:                           # Today & next reads invites from stored bodies only
-                try:
-                    self._keep_body(c, pk, invite, mime.parse(invite))
-                except Exception as e:
-                    log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
-            c.commit()
+            with self._uow.write() as c:
+                pk = self._store.upsert_message(c, {
+                    "account": acct["email"], "kind": acct["kind"], "folder": folder,
+                    "uid": r["uid"], "message_id": r["message_id"], "gmail_thread": r["gmail_thread"],
+                    "from_addr": r["from_addr"], "from_name": r["from_name"], "subject": r["subject"],
+                    "date_iso": r["date_iso"], "ts": r["ts"], "snippet": snippet,
+                    "bucket": r["bucket"], "confidence": r["confidence"], "reason": r["reason"],
+                    "is_junk": r["is_junk"],
+                })
+                self._store.set_local_flags(c, pk, **r["flags"])
+                self._store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
+                self._store.set_recipients(c, pk, r["recipient_addrs"])
+                if stored is not None and self._store.needs_threading(c, pk, r["in_reply_to"], r["refs"]):
+                    stored.append(pk)
+                self._store.set_ingested_headers(c, pk, r["in_reply_to"], r["refs"], r["recipients"])
+                self._index.index_message(c, pk)           # refresh FTS so recipients is searchable immediately
+                if invite:                       # Today & next reads invites from stored bodies only
+                    try:
+                        self._keep_body(c, pk, invite, mime.parse(invite))
+                    except Exception as e:
+                        log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
         if advance:
-            self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
-            c.commit()
-        c.close()
+            with self._uow.write() as c:
+                self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
         return kept, junk, max_uid
 
 
@@ -214,26 +206,25 @@ class Ingest:
         classifier read at ingest wasn't all kept (List-Unsubscribe), so one that no rule had a say in is
         left as ingest judged it. Returns how many rows changed."""
         token = token.strip().lower()
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             if "@" in token:
                 rows = self._store.classified_from_address(c, token)
             else:                                        # the domain and its sub-domains; the classifier decides
                 rows = self._store.classified_from_domain(c, token)
-            changed = 0
-            for r in rows:
-                bucket, confidence, reason = self._curation.classify((r["from_addr"] or "").lower(), r["subject"] or "",
-                                                                r["from_name"] or "",
-                                                                (r["list_unsub_method"] or "none") != "none")
-                if not (self._curation.by_rule(reason) or self._curation.by_rule(r["reason"])):
-                    continue
-                if (bucket, reason) != (r["bucket"], r["reason"]):
-                    self._store.set_classification(c, r["pk"], bucket, confidence, reason, int(self._curation.is_junk(bucket)))
-                    changed += 1
-            c.commit()
-            return changed
-        finally:
-            c.close()
+        changes: list[tuple[int, str, str, str, int]] = []
+        for r in rows:
+            bucket, confidence, reason = self._curation.classify((r["from_addr"] or "").lower(), r["subject"] or "",
+                                                            r["from_name"] or "",
+                                                            (r["list_unsub_method"] or "none") != "none")
+            if not (self._curation.by_rule(reason) or self._curation.by_rule(r["reason"])):
+                continue
+            if (bucket, reason) != (r["bucket"], r["reason"]):
+                changes.append((r["pk"], bucket, confidence, reason, int(self._curation.is_junk(bucket))))
+        if changes:
+            with self._uow.write() as c:
+                for pk, bucket, confidence, reason, is_junk in changes:
+                    self._store.set_classification(c, pk, bucket, confidence, reason, is_junk)
+        return len(changes)
 
 
     def sync_folder(self, acct: Account, folder: str, full: bool = False, recent: int | None = None) -> Stored:
@@ -251,17 +242,17 @@ class Ingest:
             selected = s.select(folder)
             uidv = selected.uidvalidity
             modseq = selected.highest_modseq if condstore else None
-            c = self._store.conn()
-            known = self._store.get_uidvalidity(c, acct["email"], folder)
+            with self._uow.read() as c:
+                known = self._store.get_uidvalidity(c, acct["email"], folder)
             if uidv and known and uidv != known:
-                self._store.reset_folder(c, acct["email"], folder)  # server reset UIDs -> re-sync clean
-                c.commit()
+                with self._uow.write() as c:
+                    self._store.reset_folder(c, acct["email"], folder)  # server reset UIDs -> re-sync clean
                 full = True
             if uidv:
-                self._store.set_uidvalidity(c, acct["email"], folder, uidv)
-                c.commit()
-            wm = self._store.get_watermark(c, acct["email"], folder)
-            c.close()
+                with self._uow.write() as c:
+                    self._store.set_uidvalidity(c, acct["email"], folder, uidv)
+            with self._uow.read() as c:
+                wm = self._store.get_watermark(c, acct["email"], folder)
             scan = None                                    # the scan_state this sync leaves
             if full or wm == 0:
                 uids = s.uids("ALL")
@@ -274,22 +265,16 @@ class Ingest:
             stored: list[int] = []
             result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored)
             if scan:
-                c = self._store.conn()
-                self._store.set_scan_state(c, acct["email"], folder, scan)
-                c.commit()
-                c.close()
+                with self._uow.write() as c:
+                    self._store.set_scan_state(c, acct["email"], folder, scan)
             if not full and wm:
                 self._refresh_flags(s, acct, folder, modseq)
-            c = self._store.conn()
-            try:                                           # what fails here rolls back, and holds no lock past this
+            with self._uow.write() as c:                   # what fails here rolls back, and holds no lock past this
                 if scan == "synced" and modseq:            # a whole scan has just read every flag
                     self._store.set_modseq(c, acct["email"], folder, modseq)
                 self._store.thread_stored(c, acct["email"], stored)   # new mail joins its conversations
                 self._attention.on_ingest(c, acct["email"])  # keep new members of muted threads silent
                 self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
-                c.commit()
-            finally:
-                c.close()
             return result
         finally:
             try:
@@ -321,14 +306,10 @@ class Ingest:
                 return 0
             stored: list[int] = []
             self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False, stored=stored)
-            c = self._store.conn()
-            try:
+            with self._uow.write() as c:
                 self._store.thread_stored(c, acct["email"], stored)
                 self._attention.on_ingest(c, acct["email"])
                 self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
-                c.commit()
-            finally:
-                c.close()
             return 1
         finally:
             try:
@@ -339,11 +320,8 @@ class Ingest:
 
     def folder_synced(self, acct_email: str, folder: str) -> bool:
         """Whether a scan has read the whole folder, so its first open needn't."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             return self._store.get_scan_state(c, acct_email, folder) == "synced"
-        finally:
-            c.close()
 
 
     def ingest_account(self, acct: Account, days: int = CUTOFF_DAYS) -> Stored:
@@ -355,10 +333,8 @@ class Ingest:
             else:
                 uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
             result = self._process(s, acct, uids, "INBOX", with_body=True)
-            c = self._store.conn()                       # the owner chose how far back: INBOX counts as read
-            self._store.set_scan_state(c, acct["email"], "INBOX", "synced")
-            c.commit()
-            c.close()
+            with self._uow.write() as c:                 # the owner chose how far back: INBOX counts as read
+                self._store.set_scan_state(c, acct["email"], "INBOX", "synced")
             return result
         finally:
             s.logout()
@@ -368,11 +344,10 @@ class Ingest:
         """Lazily fetch + store the raw RFC822 for one message (read-only PEEK), record
         attachment metadata, and return the parsed body. Idempotent. Returns parsed dict
         or None if the message/row is gone."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        fetched = row and row["body_fetched"]
-        raw = self._store.get_body(c, pk) if fetched else None
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.get_message(c, pk)
+            fetched = row and row["body_fetched"]
+            raw = self._store.get_body(c, pk) if fetched else None
         if not row:
             return None
         if not fetched or not raw:
@@ -390,10 +365,8 @@ class Ingest:
             if not raw:
                 return mime.parse(b"")
             parsed = mime.parse(raw)
-            c = self._store.conn()
-            self._keep_body(c, pk, raw, parsed)
-            c.commit()
-            c.close()
+            with self._uow.write() as c:
+                self._keep_body(c, pk, raw, parsed)
             return parsed
         parsed = mime.parse(raw)
         self._record_parts(pk, parsed)
@@ -404,13 +377,11 @@ class Ingest:
         """Rows a parsing change took away (migration 28) come back as the message is opened."""
         if not parsed["attachments"]:
             return
-        c = self._store.conn()
-        try:
-            if not self._store.has_attachments(c, pk):
+        with self._uow.read() as c:
+            recorded = self._store.has_attachments(c, pk)
+        if not recorded:
+            with self._uow.write() as c:
                 self._store.insert_attachments(c, pk, parsed["attachments"])
-                c.commit()
-        finally:
-            c.close()
 
 
     def _keep_body(self, c: Connection, pk: int, raw: bytes, parsed: Parsed) -> None:
@@ -429,11 +400,8 @@ class Ingest:
     def reconciled_folders(self, email: str) -> list[str]:
         """The folders reconcile looks at for an account: each one a sync has stored (it has a
         sync_state row), INBOX first."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             folders = self._store.synced_folders(c, email)
-        finally:
-            c.close()
         return folders or ["INBOX"]
 
 
@@ -448,9 +416,8 @@ class Ingest:
         from datetime import datetime as _dt
         res: Pruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
                        "pruned": 0, "error": None}
-        c = self._store.conn()
-        stored_uids = self._store.stored_uids(c, acct["email"], folder)
-        c.close()
+        with self._uow.read() as c:
+            stored_uids = self._store.stored_uids(c, acct["email"], folder)
         res["stored"] = len(stored_uids)
         try:
             s = self._open_session(acct, timeout=15)   # background/maintenance path: a hung account must
@@ -470,9 +437,8 @@ class Ingest:
         # re-index), `live` is in a DIFFERENT uid space than the stored uids — comparing
         # them would prune the ENTIRE real INBOX as "ghosts". Never prune here; sync_folder
         # detects the change and does the reset + full re-sync on its own pass.
-        c = self._store.conn()
-        stored_uidv = self._store.get_uidvalidity(c, acct["email"], folder)
-        c.close()
+        with self._uow.read() as c:
+            stored_uidv = self._store.get_uidvalidity(c, acct["email"], folder)
         if uidv and stored_uidv and uidv != stored_uidv:
             res["error"] = f"UIDVALIDITY changed ({stored_uidv}->{uidv}) — prune skipped"
             return res
@@ -484,10 +450,8 @@ class Ingest:
         if dry_run:
             return res
         when = _dt.now(timezone.utc).isoformat()
-        c = self._store.conn()
-        pruned, _ = self._store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
-        c.commit()
-        c.close()
+        with self._uow.write() as c:
+            pruned, _ = self._store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
         res["pruned"] = pruned
         return res
 

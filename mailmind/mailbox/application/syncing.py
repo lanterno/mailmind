@@ -26,6 +26,7 @@ from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import settings, sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -47,8 +48,9 @@ class Syncing:
     BACKFILL_UNREACHABLE = 60     # the round after one whose server couldn't be reached
     _RECONCILE_INTERVAL = _reconcile_secs()
 
-    def __init__(self, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
                  stats: LiveStats, attention: Attention, kick: Callable[[str], object]):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._ingest = ingest
@@ -77,35 +79,32 @@ class Syncing:
         """Sync the given account emails (or all when None). Emits realtime events. Caller
         must hold the _sync single-flight guard (sync_once / sync_guarded)."""
         new = 0
-        hc = self._store.conn()
-        try:
-            for a in self._accounts.accounts():
-                if emails is not None and a["email"] not in emails:
-                    continue
-                self._status[a["email"]] = {"health": "syncing", "msg": ""}
-                try:
-                    kept, junk, _ = self._ingest.sync_new(a)
-                    new += kept
-                    self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
-                    self._store.record_sync_result(hc, a["email"], True); hc.commit()
-                    sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
-                    if kept > 0:
-                        sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
-                except Exception as e:
-                    self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
-                    self._store.record_sync_result(hc, a["email"], False, type(e).__name__, sync_errors.kind_of(e)); hc.commit()
-                    log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
-        finally:
-            hc.close()
+        for a in self._accounts.accounts():
+            if emails is not None and a["email"] not in emails:
+                continue
+            self._status[a["email"]] = {"health": "syncing", "msg": ""}
+            try:
+                kept, junk, _ = self._ingest.sync_new(a)
+                new += kept
+                self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
+                with self._uow.write() as c:
+                    self._store.record_sync_result(c, a["email"], True)
+                sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
+                if kept > 0:
+                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
+            except Exception as e:
+                self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
+                with self._uow.write() as c:
+                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, sync_errors.kind_of(e))
+                log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
 
 
     def account_health_json(self) -> dict[str, Any]:
         """Per-account durable sync health (last ok/error + coarse kind), merged with the in-flight
         _status. Pure read; no IMAP, no IMAP gate."""
-        c = self._store.conn()
-        rows = self._store.account_health(c)
-        c.close()
+        with self._uow.read() as c:
+            rows = self._store.account_health(c)
         out: list[dict[str, Any]] = []
         for r in rows:
             if (r["folder"] or "INBOX") != "INBOX":
@@ -124,8 +123,8 @@ class Syncing:
         acct = (body.get("account") or "").strip()
         if acct not in {a["email"] for a in self._accounts.accounts()}:
             return {"ok": False, "error": "unknown account"}, 400
-        c = self._store.conn()
-        self._store.clear_sync_error(c, acct); c.commit(); c.close()
+        with self._uow.write() as c:
+            self._store.clear_sync_error(c, acct)
         threading.Thread(target=lambda: self.sync_guarded({acct}), daemon=True).start()
         return {"ok": True, "account": acct}, 200
 
@@ -272,11 +271,8 @@ class Syncing:
         now = time.time()
         for pk in [pk for pk, at in self._backfill_missed.items() if at <= now]:
             del self._backfill_missed[pk]
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             rows = self._store.bodies_to_fetch(c, self._backfill_missed)
-        finally:
-            c.close()                        # always close, even if the SELECT raises
         if not rows:
             return 600
         tried: list[int] = []
@@ -295,11 +291,8 @@ class Syncing:
             tried.append(r["pk"])
             time.sleep(1.5)                  # gentle pacing between IMAP fetches
         if tried:
-            c = self._store.conn()
-            try:
+            with self._uow.read() as c:
                 missed = self._store.still_without_body(c, tried)
-            finally:
-                c.close()
             for pk in missed:
                 self._backfill_missed[pk] = now + self.BACKFILL_RETRY
         return wait

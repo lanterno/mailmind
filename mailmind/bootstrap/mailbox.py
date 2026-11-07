@@ -276,7 +276,7 @@ copies = Copies(_open, imap_quote)
 server_ops = ServerOps(store, _directory, _open, imap_quote)
 commands = MailCommands(store, _directory, server_ops)
 pool = Pool(_directory, _open)
-ingest = Ingest(store, _directory, _open, pool, _Curation(), _attention, fts)
+ingest = Ingest(_uow, store, _directory, _open, pool, _Curation(), _attention, fts)
 warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
 stats = LiveStats(_directory, _Curation())
@@ -302,7 +302,7 @@ def _kick(job):
     background._kick(job)
 
 
-syncing = Syncing(store, _directory, ingest, warm, folders, stats, _attention, _kick)
+syncing = Syncing(_uow, store, _directory, ingest, warm, folders, stats, _attention, _kick)
 
 
 def _ai_status():
