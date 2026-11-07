@@ -15,15 +15,13 @@ just test-full                    # every test, plus the browser tests in Chromi
 just test-dovecot                 # the MailSession contract against Dovecot in Docker
 just demo [port]                  # the whole app on fictional mail and fake servers: nothing of yours is read or changed
 just dev                          # read-only: writes nothing to a mail server, no background sync
-just run [port]                   # build the app, then the real thing (default http://127.0.0.1:8721); the old page is at /legacy
-just run-old [port]               # the same through the old front door, which needs nothing installed (and with nothing built, shows the old page)
+just run [port]                   # build the app, then the real thing (default http://127.0.0.1:8721)
 just setup                        # install the Python packages, node_modules and Chromium
 ```
 
 ```bash
-uv run python -m mailmind serve [port]   # run the app (default http://127.0.0.1:8721)
-python3 server.py [port]          # the old front door: the same app, with nothing installed
-MAILMIND_PROFILE=read-only python3 server.py   # the same read-only profile, either door
+uv run python -m mailmind serve [port]   # run the app as last built (default http://127.0.0.1:8721)
+MAILMIND_PROFILE=read-only uv run python -m mailmind serve   # the same, read-only
 
 python3 -m mailmind check         # verify credentials resolve, per account (prints ok/fail, no secrets)
 python3 -m mailmind sync all 90   # pull last 90 days; `sync <email> <days>` for one account
@@ -39,7 +37,7 @@ python3 -m mailmind assess --batch     # send what has no summary as a batch; br
 
 Tests — `just test` (`uv run pytest`) runs them all. `just test -k hardening` picks by file or test name, so `-k` also picks a
 single test: `just test -k test_a_rebound_name_reads_nothing`. These are the first to run for a change in what they cover, with
-the cases pytest collects for each (a test through `app` counts once per front door):
+the cases pytest collects for each:
 
 ```bash
 uv run pytest tests/unit/curation/test_classifier.py        # classifier behaviour (35)
@@ -49,22 +47,17 @@ uv run pytest tests/unit/curation/test_expire.py            # expiry rules (23)
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient, through each reader (122)
 uv run pytest tests/contract/test_ics_reader_contract.py    # a reader of invites, through each: never raises, plain data, bounded (315)
 uv run pytest tests/contract/test_ics_differential.py       # the two readers compared over a corpus, each difference listed with why (526)
-uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (19)
+uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (18)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
-uv run pytest tests/unit/compose/test_send_guard.py         # the composer's send-time checks, run in node (157)
-uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (147)
-uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's reopen helpers, run in node (25)
-uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (138)
-uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (58)
-uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (319)
-uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers, through both doors (54)
+uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (146)
+uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (102)
+uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
+uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (167)
+uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers (28)
 ```
 
-`test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
-`/* draft-resume:pure:start */` …) out of `web/assets/legacy/pure.js` and run it in node. That file is written from
-`web/src/features/compose/sendGuard.ts` and `draftResume.ts`, which stay free of DOM and `state` references and have Vitest
-twins beside them; edit those and run `just gen-web`. The send guard's two suites share
-`tests/fixtures/send_guard_words.json`.
+The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
+and `state` references, with Vitest suites beside them. The send guard's reads `tests/fixtures/send_guard_words.json`.
 
 ### The pytest suite in `tests/`
 
@@ -89,13 +82,12 @@ The fixtures, from the bottom up:
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
   renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
-- `app` runs the app in-process through each front door in turn: `door=old` is `mailmind.bootstrap.old_door`'s
-  `ThreadingHTTPServer`, `door=new` the app `mailmind.bootstrap.front.build` makes, on uvicorn.
-  So every app test runs twice, both runs share one golden file, and `app.door` says which run
-  this is. In the world's config Cy's Gmail asks for IMAPClient, so the new door's run reaches it
-  through IMAPClient and the old door's through imaplib, and the new door reads invites through the library. Its CSRF token is fixed, and the clock
-  is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))` moves
-  it. `tests/e2e/test_front_door.py` runs each door as a program instead.
+- `app` runs the app in-process: what `mailmind.bootstrap.front.build` makes, on uvicorn. Every account in the world
+  goes through imaplib, as a real one does unless it asks otherwise, and invites are read through the library.
+  `world.ask_for_imapclient` has an account ask for IMAPClient (`tests/unit/mailbox/test_gmail_through_imapclient.py`).
+  Its CSRF token is fixed, and the clock is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))`
+  moves it. The page it answers with is a tiny stand-in build (`_a_build`, `tests/fixtures/tiny_build.py`), so these tests need
+  no node. `tests/e2e/test_front_door.py` runs the app as a program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
   Without `ai` there is no key, and AI calls get a 401.
@@ -112,12 +104,12 @@ fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
-`tests/e2e/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own. Any other test sees nothing built, whatever this machine has (`_no_build`), so `/` is the old page there:
+`tests/e2e/browser/` drives the app in Chromium (Playwright) on the `app` fixture, serving the real build (`serve_the_build`), made once for the session into a folder of its own:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
 - Console errors fail the test, and so does any content security policy violation.
-- axe's findings are compared with `tests/golden/browser/axe_baseline.json`, which may only go down.
+- A view's `axe` test expects no findings.
 - `page.pw.evaluate` has no timeout, so a promise that never settles hangs the run for good. A test waiting on animations leaves out
   the looping ones (`FADES_DONE`).
 
@@ -131,16 +123,15 @@ through a connection of its own. Its tests are marked `dovecot` and skipped unle
 with `--dovecot`; `just test-dovecot` runs them, and needs Docker running. One container serves
 the run, and each test logs in as a user of its own, with an empty mailbox.
 
-There is no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
+The Python has no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
 the dev tools (pytest, ruff, import-linter, Playwright and the like), all locked with hashes in
 `uv.lock`, and `.python-version` pins 3.14 for uv and pyenv alike. `just lint` is `ruff check` with pyflakes' rules only (`select = ["F"]`),
 then `lint-imports` (import-linter) on the `mailmind` package's layers, then `pyright`: basic rules across the package
 and strict ones on what `[tool.pyright]` lists, which a package joins once it reaches zero. New tests are pytest-native, in the folder of `tests/` they belong to;
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
-`just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint, runs its Vitest suites and checks that
-`web/assets/legacy/pure.js` is what `web/src/features/compose` gives; it installs `web/node_modules` from the lockfile if they
-are missing. `just gen-web` writes `pure.js`. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
+`just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint and runs its Vitest suites; it installs `web/node_modules` from the lockfile if they
+are missing. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
 writes `web/src/lib/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
 have no schema to generate from: run it when an answer's shape changes, and review the diff.
 
@@ -156,36 +147,31 @@ Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compi
 `just audit` (part of `just verify`) looks up what `uv.lock` and `web/package-lock.json` pin: `pip-audit` for the first, `osv-scanner` for both.
 A finding fails it. With no network it says so and passes. `web/osv-scanner.toml` holds what it may pass over, each with its reason and a date it lapses on.
 
-`just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
-brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
+`just check-frontend` parses `web/assets/theme.js` with `node --check`, checks CSS brace balance, and rejects
+an inline `<script>` in `web/index.html` or raw control bytes in the app's source (see Conventions).
 
 ## Constraints
 
-- **`python3 server.py` runs with nothing installed.** The app was standard library only until
-  the refactor's Phase 2, and that shaped every design decision below (hand-rolled sanitizer,
-  hand-rolled IMAP handling, no web framework, no frontend build). Since then it may use
-  runtime packages (FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events so far), each declared in
-  `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its own
-  commit, and the `uv.lock` change goes in the next. But `python3 server.py`, the old front door,
-  is the kill switch while the new one carries daily use, so nothing it imports may import a
-  third-party package; `tests/e2e/test_front_door.py` checks that.
-- **The page runs as it stands.** `web/index.html` is the markup, `web/assets/styles/` the CSS (`fonts.css` the
-  self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from system fonts), and `web/assets/legacy/` the
-  scripts: `theme.js`, `pure.js` (written from `web/src/features/compose`) and `app.js`, ~310KB of classic script. No build is needed:
-  `mailmind.platform.webroot` serves this source to either door with gzip and an ETag, so the old door still needs
-  nothing installed. `just build-web` (Vite, Node) writes the same files, named by their content, to
-  `mailmind/http/dist` (gitignored), served for good while it is as new as every source file, so an edit never leaves
-  the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
-  `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
-  restart changes. A tab that loaded another offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`lib/api/client.ts`, typed by `lib/api/types.gen.ts`).
-  `web/next.html` and `web/src/main.tsx` are the React app, at `/` (React 19 with the React Compiler, TanStack Query, React Aria Components), on the page's
-  stylesheet. Unlike the page it exists only as built, and `just run` builds it first. With nothing built `/` is the old page, which is always at `/legacy`, and a place in the app (`static._is_place`, as `app/route.ts` writes one) answers 404 and says so. `/next`, where it lived, redirects, to its own places only. Where you are lives in the URL
+- **Runtime packages are declared and locked.** The app uses FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
+  recurring-ical-events so far, each declared in `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its
+  own commit, and the `uv.lock` change goes in the next. The sanitizer, the IMAP handling and the route tables are hand-rolled on the
+  standard library, and most of the package still is.
+- **The app exists only as built.** `web/index.html` and `web/src/main.tsx` are the React app (React 19 with the React Compiler, TanStack Query,
+  React Aria Components), `web/assets/styles/` its CSS (`fonts.css` the self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from
+  system fonts), and `web/assets/theme.js` the one classic script, a file since the page's policy forbids an inline one. A new top-level script
+  joins `CLASSIC` in `web/vite.config.js`. `just build-web` (Vite, Node) writes it all, named by content, to `mailmind/http/dist` (gitignored),
+  and `just run` builds it first. `mailmind.platform.webroot` serves only that folder, with gzip and an ETag, so an edit reaches the app through a
+  build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. With nothing built `/` and each place in the app (`static._is_place`, as
+  `app/route.ts` writes one) answer 404 and say how to build, and `python -m mailmind serve` logs a line saying so. `/next` redirects, to the app's own
+  places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
+  restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
+  is `lib/api/client.ts`, typed by `lib/api/types.gen.ts`. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
-  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_next_parity.py` holds what an audit against the page found, ROADMAP says what is left, and the top bar links to `/legacy` until the old page retires. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
-  its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
+  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_next_parity.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
+  search box acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
@@ -225,32 +211,30 @@ which was cut at 2000 characters then, or for a column that was cut from the raw
 with none, the whole list comes when a body is stored.
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
-(`renderBrief`, built from the `/api/digest` items and the cached `/api/briefing` narrative; its
-side column, `briefSideHtml`, from `/api/upcoming` and the `__waiting__` view).
-A separate Briefing view existed until it was folded into this one; `body.mode-client`
-survives as a CSS specificity hook, not a mode.
+(`features/assistant/Brief.tsx`, built from the `/api/digest` items and the stored `/api/briefing` narrative; its
+side column from `/api/upcoming` and `/api/waiting-on-others`). `body.mode-client` is a CSS specificity hook, not a mode.
 
 ### The `mailmind` package
 
-The app lives in `mailmind/`. `server.py`, at the repo root, is only the old front door's entry point.
+The app lives in `mailmind/`.
 
 - `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
   directory; unset, it is the repo root. It must exist, and nothing creates it.
-  `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
+  `python -m mailmind serve [port]` puts the port in the settings.
 - `mailmind.bootstrap.wiring.wire()` subscribes the app, on `mailmind.platform.bus`, to
   what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
   `InboxChanged`, and what Attention's use cases say happened, which refreshes the stats and tells the tabs.
   It also hands each account event (below) to `realtime.reconcile`. `Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
-  `wiring.start()` is the startup both doors share: the profile check, the schema, `wire`,
+  `wiring.start()` is the startup: the profile check, the schema, `wire`,
   then the workers. Full, those are the outbox's and the command path's drains, the
   scheduler's jobs and IDLE; read-only, the snooze job alone.
-- `python -m mailmind serve` (`mailmind/__main__.py`) is the new front door.
+- `python -m mailmind serve` (`mailmind/__main__.py`) is how the app runs.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Its `build` picks the Anthropic SDK, offers IMAPClient to an account
-  that asks for it (see the Mailbox paragraph) and reads invites through the library (see the Calendar paragraph); both doors print at startup which IMAP adapter
+  that asks for it (see the Mailbox paragraph) and reads invites through the library (see the Calendar paragraph). A line at startup says which IMAP adapter
   serves how many accounts (`[imap] ...`). Every route runs in `mailmind.http.handler.H` (see Routing):
   `mailmind.http.bridge.HandlerBridge`,
   the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
@@ -298,8 +282,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   numbers each event `<run>-<n>` and keeps the last 512. A tab resumes after the `Last-Event-ID`
   its EventSource sends; one the hub can't resume (an earlier run, or further back than it keeps)
   gets one `resync`. `sse.TOPICS` lists every topic and `publish` refuses any other;
-  `tests/unit/platform/test_sse.py` checks that `connectEvents` in `app.js` and `useRealtime` in `web/src/app/realtime.ts` each
-  listen for every one, and for `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
+  `tests/unit/platform/test_sse.py` checks that `useRealtime` in `web/src/app/realtime.ts`
+  listens for every one, and for `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
   run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
@@ -311,7 +295,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
   checks an upgrade on a copy (see Schema migrations), and holds `uow.UnitOfWork`, how a use case gets a connection. It is
-  standard library only, since `python3 server.py` uses it.
+  standard library only.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
@@ -390,13 +374,13 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   verb, not a folder's role, and takes what the profile says and the session's capabilities as plain values. No way sends a
   bulk EXPUNGE, on any server. `ServerOps.apply` carries it out, and each adapter's `move` (what a sweep and a reversal call) asks
   the same `offers_move`. The adapters
-  are `adapters.imap.imaplib_session` (what the old door runs on) and `adapters.imap.imapclient_session`
+  are `adapters.imap.imaplib_session` (what an account runs on unless it asks otherwise) and `adapters.imap.imapclient_session`
   (only it imports `imapclient`). `adapters.imap.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
   `adapters.sqlite` holds what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.threading` for thread ids.
   `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
-  IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only the new door's
-  `front.build` does (`offer`). The old door ignores the ask and never imports `imapclient`.
+  IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only
+  `front.build` does (`offer`). The command line ignores the ask and never imports `imapclient`.
   `use(kind)` makes one adapter every account's, as the contract tests do, and an autouse fixture
   resets both before each test. It opens a session (`open_session(acct)`) the same way for both:
   TLS, the pin, login, txguard, `ReadOnlySession` read-only, and a login its server refused not at all until its hold ends (`accounts.logins`, above). Every IMAP connection the app opens
@@ -458,17 +442,17 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
   binds them, and it's how the routers reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
   RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
-  A process starts on `ics_reader`, hand-rolled, which reads a subset of RRULE and only the first VEVENT, and the old door stays on it.
+  A process starts on `ics_reader`, hand-rolled, which reads a subset of RRULE and only the first VEVENT, and the command line stays on it.
   `front.build` asks for `icalendar_acl` (`calendar.use("icalendar")`), the only module that imports `icalendar` and
   `recurring_ical_events`, and nothing of either leaves it. So Calendar is standard library only but for that module. An invite is a
   stranger's text and a reader runs on a request thread, so a reader never raises. `icalendar_acl` takes a text of at most `_MAX_TEXT`
   with at most `_MAX_EVENTS`, expands nothing finer than a day and gives each call a budget of its thread's time (`_within`: a tracer
   raises at the next plain call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
   of dateutil's). `Agenda.upcoming` has an allowance for one list on top (`_EXPAND_SECONDS`), past which a series shows its first date.
-  One rule says what a TZID means, `invite.zone`, on either door: a name the zone database doesn't know floats, so a VTIMEZONE counts for
+  One rule says what a TZID means, `invite.zone`, for either reader: a name the zone database doesn't know floats, so a VTIMEZONE counts for
   nothing, and `icalendar_acl` lets the library keep none and look up no TZID. It keeps what isn't text as its line said it (`_AS_SAID`),
   since an RSVP echoes a UID and writes to an organizer. `Invite.rdates` is there only where a reader found some, so an answer's
-  shape is the same through both doors. `tests/unit/calendar/` runs through each reader (its `conftest.py`),
+  shape is the same through both. `tests/unit/calendar/` runs through each reader (its `conftest.py`),
   `tests/contract/test_ics_reader_contract.py` holds what any reader must do, and `tests/contract/test_ics_differential.py` compares the two:
   a difference its `DIFFERS` doesn't list, with why, fails.
 - `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
@@ -483,22 +467,19 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
   (`mailbox.copies`). A message's row through `store`, and what's kept about folders through `mailbox.folders`. It is standard library only.
-- Three checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, and each table to its owner. import-linter's contracts in `pyproject.toml` run in `just lint`:
+- Two checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, and each table to its owner. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
-  `anthropic`, `imapclient`, `icalendar` and `recurring_ical_events` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
-  every import of a root module from inside the package, and it is now empty; `tests/unit/test_ratchet.py` fails when the
-  code and the list differ.
+  `anthropic`, `imapclient`, `icalendar` and `recurring_ical_events` packages each reached only through its adapter.
 
 ### Routing
 
-`mailmind.http.handler.H` is one `BaseHTTPRequestHandler` subclass, which both doors serve: the old one on the standard
-library's server, the new one through `HandlerBridge`. `do_GET` and `do_POST` run the perimeter and the catches every route
+`mailmind.http.handler.H` is one `BaseHTTPRequestHandler` subclass, served through `HandlerBridge`. `do_GET` and `do_POST` run the perimeter and the catches every route
 shares, then ask `mailmind.http.routing.Routes` for the route. A route names its path as a **literal string**
 (`@r.post("/api/snooze")`), in `mailmind/http/routers/<context>.py` or `http/static.py`, and takes a `Request`. It returns
 an object, `(object, code)`, or `ANSWERED` when it wrote the answer itself. A router gets its context's wiring as an
 argument (`routes(attention)`), and `mailmind.bootstrap.web` binds them all, since http may not import bootstrap. The
-routers run on the old door too, so they are plain tables, standard library only, and hold no schemas yet.
+routers are plain tables, standard library only, and hold no schemas yet.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and
 `do_GET` and `do_POST` answer it as `{"ok": false, "error": ..., ...}` by `handler._STATUS`: `NotFound` 404, `Conflict` and `Busy`
@@ -510,7 +491,7 @@ raise`). Unexpected exceptions still answer the fixed 500, with the class logged
 still turns any `TypeError` or `ValueError` into the 400. `do_GET` doesn't, and `/api/messages` still answers a bad `limit` or
 `offset` with the 500 its golden pins.
 
-The wire stays as both clients read it until `/` flips: RFC 9457 and ending `ok: false` with a 200 wait for that day. Filing's
+RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
 `{"ok": false, "msg": ...}`, `Undo.undo_last`, `Screener.rule`, `SavedViews.post`, `search.bad_query`, `Cleanup.sender`,
 `Bodies.message_body`, `Queries.thread_json` and `Connections.test` and `change` still answer a refusal that way. The literals
 that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
@@ -642,7 +623,7 @@ about to wait on frees its descriptor number for the next socket opened.
 `mailmind.platform.profile` is the only reader of `MAILMIND_PROFILE` (`full`, the default, or
 `read-only`) and of the older `MAILMIND_NOSYNC`, which still selects read-only: any value but
 empty, `0`, `false`, `no` or `off` turns it on, so a typo fails toward read-only, and read-only
-wins when the two disagree. A front door refuses to start on a profile name it doesn't know.
+wins when the two disagree. The app refuses to start on a profile name it doesn't know.
 `background.nosync()` asks the profile.
 
 ### Writes, undo, and offline
@@ -746,7 +727,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   turn. A lost connection sets its message aside, a minute doubling up to six hours, and rests only its account for a
   minute. A body the server didn't give waits six hours. That is kept in memory, so a restart tries everything again.
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`),
-  so it outlives a restart and is the same through either door (decision D3). It holds 50 groups
+  so it outlives a restart (decision D3). It holds 50 groups
   (`Undo.UNDO_MAX`, an action alone counts as one) or 24 hours of them (`undo.KEEP_FOR`), whichever comes first, and an entry leaves it, committed, before
   any server is asked to reverse it. It knows nothing of what an entry means: `mailmind.bootstrap.mailbox` hands it a reverser for each kind, the Mailbox's in `application.reversal` (`Reversals`). Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
@@ -771,9 +752,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
   (`commands.leave_to_worker`), and every row has left the lists by then.
 - Every account's Inbox is one list and one query (`/api/inboxes`, `queries.all_inboxes`), read from what is stored: an account
-  on its first scan starts one and holds up no one (`syncing: true`). So is who you wait on (`/api/waiting-on-others`). The page
-  still asks each account for both, a page of each; the React app doesn't.
-- Send-time checks: `composeSend` runs `guardCheck` synchronously, before `composeClose(true)`,
+  on its first scan starts one and holds up no one (`syncing: true`). So is who you wait on (`/api/waiting-on-others`).
+- Send-time checks: the composer's `send` (`features/compose/machine.ts`) runs `runChecks` synchronously, before `close(true)`,
   so nothing is awaited before the composer closes and a double submit still can't happen.
   `/api/contacts/known` (the "new" marks) is a read-only POST: pure SQL, no IMAP gate.
   `Sending.send` refuses a `send_after` that has passed instead of sending now.
@@ -789,7 +769,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   has (a server that refuses has the last word: the row goes, and the copy stays listed).
 - A save names the `version` it saw (`base_version`). One that never saw the latest gets a 409 with `conflict: true`, unless
   the last save was this composer's (`saved_by`), whose answer was lost. Autosave then stops, a closing save fails into
-  `state.failedSend`, and only a save someone asks for leaves `base_version` out and overwrites.
+  `failedSend`, and only a save someone asks for leaves `base_version` out and overwrites.
 - A send about to go holds its draft: the job leaves it, a save answers 423, and delivery removes the copy and the row, the
   journal with it. One scheduled more than a minute off lets the copy catch up.
 - Reopening prefers the journal when the copy opened is the one pushed. Where another app changed it, `Drafts._keep_apart`
@@ -822,17 +802,16 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A copy that leaves the server takes its `messages` row with it, in the step that records the save,
   discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
   catch-up brings the new copy). A copy the server wouldn't remove stays listed.
-- A composer's saves go in turn. `composeSaveDraft` chains on `cmp._saving` and names the copy the
+- A composer's saves go in turn. `save` (`features/compose/machine.ts`) chains on `x.saving` and names the copy the
   last save left, autosave skips a tick while one is in flight, and Send and Discard wait for it.
-  It clears `dirty` only if `cmp.edits` hasn't moved since it began, so call `markEdited(cmp)` at
-  every edit, never `cmp.dirty=true`. A closing save that fails goes to `state.failedSend`, with the
+  It clears `dirty` only if `x.edits` hasn't moved since it began, so call `markEdited(x)` at
+  every edit, never `x.dirty = true`. A closing save that fails goes to `failedSend`, with the
   float's Edit. On the server a first
   save finds an earlier one's row by the composer's key (`drafts.idempotency_key`, migration 26),
   as `Sending.send` does when it has no `draft_id`.
 - A composer replaced after an `await` (Undo Send, a failed send's Edit → `makeRoom`) must
-  close and open in the same task. In the gap `_syncBack`'s MutationObserver calls
-  `history.back()`, the new composer's `pushState` lands before that traversal does, and the
-  Back trap ends one entry short, so the next close steps the tab off the app.
+  close and open in the same task. In the gap `lib/backTrap.ts` would give back the tab's extra history
+  entry with `history.back()`, a traversal is asynchronous, and a `pushState` lands before it does and is undone.
 - **`pk` is not stable.** Reconcile can renumber rows, so anything durable keys on
   `(account, message_id)` — see `store.get_message_by_msgid`. A stored AI answer is checked
   against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
@@ -880,8 +859,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 
 ### Security model
 
-Every request passes `mailmind.platform.perimeter` before any route, through either door:
-`H.do_GET` and `H.do_POST` call it, and so does the new door's `Perimeter` middleware.
+Every request passes `mailmind.platform.perimeter` before any route: the `Perimeter` middleware
+calls it, and `H.do_GET` and `H.do_POST` do again.
 It is standard library only. Callers ask the package by these names (`perimeter.refuse_host`); inside it
 `host`, `origin`, `fetch_metadata`, `csrf` and `limits` hold the checks, `headers` and `csp` what an answer
 carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case imports for itself.
@@ -896,16 +875,14 @@ carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case 
 - `refuse_mutation` — every POST: the two checks above, then the `X-CSRF-Token` header
   compared with `secrets.compare_digest`, then an Origin, which must be this server's.
 
-The new door puts every method but GET and HEAD through the POST checks, and refuses before it
-reads a body; the old one reads the body first.
+Every method but GET and HEAD goes through the POST checks, and a refusal comes before a body is read.
 
 Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
 Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
 an answer didn't set itself, and so does the middleware. The page also carries
 `Content-Security-Policy` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
-only, framed by no one. The React app carries `perimeter.next_page_policy`, the same with nothing in it for mail: no
-`https:` images and no `data:` fonts. The browser tests fail on any violation.
+only, framed by no one, and nothing in it for mail: no `https:` images and no `data:` fonts. The browser tests fail on any violation.
 
 A failed GET or POST answers a fixed message and logs its path and the error's class. Every TLS connection, IMAP
 and SMTP alike, STARTTLS or implicit, takes `accounts.tls_context(host)`: verified everywhere but
@@ -929,14 +906,14 @@ refuses CR, LF and NUL with `BadValue`, an `IMAP4.error` too: a sender can fold 
 header so the ID stored holds a line break.
 
 `CSRF` is a per-process token. `web/index.html` ships a `__CSRF_TOKEN__` placeholder in a
-`<meta>` tag that `webroot.page` substitutes at serve time; the frontend's `api()` helper
+`<meta>` tag that `webroot.page` substitutes at serve time; `request` in `lib/api/client.ts`
 attaches it to every request, GETs included.
 
 Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.sanitize` is
 defense in depth — **the iframe sandbox is the actual boundary**, so a sanitizer miss
 alone cannot execute script. Preserve that ordering when touching either.
 
-The page's frame is a srcdoc, which inherits the page's policy. The React app's loads `GET /api/message/<pk>/body.html?key=<key>&images=0|1`
+The reader's frame loads `GET /api/message/<pk>/body.html?key=<key>&images=0|1`
 (`Bodies.as_document`), the same sanitized HTML as `/body` or the plain text escaped, under `perimeter.mail_frame_headers`: a policy
 of its own, with a `sandbox` that holds even if the frame's attribute goes (a `<meta>` can't do that), and the one answer this origin
 may frame. The pk names the copy, since one key spans a message's copies, and a sender who reuses a Message-ID shares another's. The
@@ -944,6 +921,7 @@ key must be that row's, so a renumbered pk never shows another message under the
 document too, or the frame would show a browser's error page. The document holds no style: `MailFrame` gives it its look
 (`mailDoc.lookOf`) as soon as it is parsed, folds a plain mail's quote and takes its link clicks through `contentDocument`, so a
 reading setting fetches nothing. Load images is a new frame on `images=1`, since moving a loaded frame would add a history entry.
+The composer's quote (`QuoteFrame`) is a srcdoc with an empty `sandbox`, which inherits the page's policy.
 
 ### AI calls
 
@@ -956,10 +934,10 @@ output's form (`schema.structured`) and the system prompt. It sends it through a
 `Reply`: the text, the model that served it, its `Usage` and its stop reason. A call with no
 reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
 
-The new front door talks through the Anthropic SDK (`front.build` calls
-`assistant.use("sdk")`); `python3 server.py`, the scripts and the root suites through
-`UrllibModel`, since the old door runs with nothing installed. Only
-`mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only the new door loads
+Serving talks through the Anthropic SDK (`front.build` calls
+`assistant.use("sdk")`); the command line and the scripts through
+`UrllibModel`. Only
+`mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only `front.build` loads
 it. The two share the wire format (`adapters.wire`) and must behave the same:
 `tests/contract/test_ai_contract.py` runs every case through each. The key is
 `assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
@@ -1031,7 +1009,7 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
   positive number, or $15 (decision D7). It counts everything the ledger holds for today, and a
   ledger that can't be read counts as over. At the limit, background and speculative calls raise
   `Deferred("limit")`. An interactive call raises `OverLimit`, which `H.do_GET` and `H.do_POST`
-  answer as a 402 with `over_limit: true`. The page's `api()` asks (`askOverLimit`), then sends
+  answer as a 402 with `over_limit: true`. `request` in `lib/api/client.ts` asks (the `askOverLimit` a call passes it), then sends
   the request again with `X-MailMind-AI-Over-Limit: allow` (`handler.AI_OVER_HEADER`), which
   runs it inside `assistant.allowing_over()`.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
@@ -1072,8 +1050,8 @@ words, with no message behind them. Each table keeps a week. They are read and w
   there is none it answers `missing: true` and calls nothing (the builders' `generate=False`).
 - A POST to the same path writes one, reading first, and its `/refresh` POST writes it again.
 - The page GETs, and POSTs only on `missing`. What it writes on its own (the brief as the Inbox
-  opens, the delta for the new-mail pill) passes `askOver: false` to `api()`. At the limit it
-  then gets the 402 as an error (`overLimit`), and the brief offers "Write it" instead of asking
+  opens, the delta for the new-mail pill) passes no `askOverLimit`. At the limit it
+  then gets the 402 as an `ApiError` (`overLimit`), and the brief offers "Write it" instead of asking
   unprompted.
 
 A new AI route spends on a POST. The one GET that still starts a call is drafting ahead's kick,
@@ -1113,8 +1091,7 @@ or naming another way out sends nothing and answers `no_token`, and its block an
 - **Don't create `*.bak-*` snapshot files.** The repo used to carry 38 of them; they are
   now gitignored. Use a git branch.
 - **No inline scripts or event handlers in the page.** Its content security policy lets script files from this
-  server run and nothing else, so an `onclick=` or a `<script>` block is a violation: attach a listener instead
-  (delegated, like `#doPanel`'s).
+  server run and nothing else, so an `onclick=` or a `<script>` block in `web/index.html` is a violation.
 - **Keep the page's files free of raw control bytes.** A single literal NUL byte once
   made `grep` and `ripgrep` treat the file as binary and silently return nothing past it,
   hiding half the frontend from every search tool. Use escape sequences in string
