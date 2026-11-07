@@ -3153,7 +3153,7 @@ function exportBlockHtml(){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px">
       <span id="exportPlan" class="set-help" style="margin:0">Counting…</span>
       <a class="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail">${ico("download")} Backup (.db)</a></div>
-    <div class="set-help">Portable per-message files: <code>python3 export.py --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>
+    <div class="set-help">Portable per-message files: <code>python3 -m mailmind export --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>
   </div>`;
 }
 async function loadExportPlan(){

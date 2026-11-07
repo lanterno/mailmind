@@ -265,7 +265,7 @@ function Backup() {
         <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data?.ok ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
         <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail"><Icon name="download" /> Backup (.db)</a>
       </div>
-      <div className="set-help">Portable per-message files: <code>python3 export.py --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>
+      <div className="set-help">Portable per-message files: <code>python3 -m mailmind export --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>
     </div>
   );
 }
