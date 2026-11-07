@@ -331,3 +331,20 @@ def test_a_message_that_wont_load_offers_retry(page, world):
     expect(page.locator("#reader .rd-frame, #reader iframe").first).to_be_visible()
     page.problems[:] = [p for p in page.problems if "500" not in p]
     clean(page)
+
+
+def test_the_palette_says_what_the_pages_does(page, world):
+    opened(page)
+    page.keyboard.press("ControlOrMeta+k")
+    labels = page.locator("#plist .pi-l").all_inner_texts()
+    for label in ("Compose new message", "Commitments — your to-dos", "Weekly review — how your week went", "Feed (lane)"):
+        assert label in labels
+    assert "Views" in page.locator("#plist .pgrp").all_inner_texts()
+    page.keyboard.press("Escape")
+    row(page, world, RECEIPT).click()
+    page.keyboard.press("ControlOrMeta+k")
+    page.locator("#pq").fill("Reading settings")
+    expect(page.locator(".pi.sel")).to_have_text("Reading settings — width, text, mail colors")
+    page.keyboard.press("Enter")
+    expect(page.locator(".read-menu")).to_be_visible()
+    clean(page)
