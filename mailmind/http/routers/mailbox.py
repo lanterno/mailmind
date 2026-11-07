@@ -57,8 +57,7 @@ def routes(mailbox):
     @r.get("/api/messages")
     def messages(req):
         return mailbox.queries.messages_in(req.arg("account"), req.arg("folder", "INBOX"),
-                                           # a bad number here is still the 500 tests/golden/http_get pins
-                                           int(req.arg("offset", "0")), int(req.arg("limit", "80")),
+                                           req.int_arg("offset", 0), req.int_arg("limit", 80),
                                            group=(req.arg("group", "") == "thread"))
 
     @r.get("/api/inboxes")
