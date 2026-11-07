@@ -1,5 +1,4 @@
-// The composer's send-time checks: pure, with no DOM and no app state, so they run anywhere. `just gen-web`
-// writes these, types erased, into assets/legacy/pure.js for the page's classic scripts.
+// The composer's send-time checks: pure, with no DOM and no app state, so they run anywhere.
 export interface GuardSnapshot {
   mode: string; subject: string; subject0: string; body: string; sigBlock: string;
   nAttach: number; fwdAttach: number; reading: string[]; sendAfter: number; now: number;

@@ -1,5 +1,4 @@
-// Reopening a saved draft: what the composer opens with and sends back. Pure, like sendGuard.ts, and written
-// into assets/legacy/pure.js the same way.
+// Reopening a saved draft: what the composer opens with and sends back. Pure, like sendGuard.ts.
 export interface ResumeFields { in_reply_to?: string | null; references?: string | null; tail_text?: string | null }
 export interface ResumeNotes { inline?: number; bcc_dropped?: number; plain?: boolean }
 export interface ReopenedDraft extends ResumeFields {

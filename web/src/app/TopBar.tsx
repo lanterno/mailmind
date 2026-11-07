@@ -158,7 +158,6 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
           <StatusPill m={m} />
           <button className="tbtn" id="composeBtn" title="Compose (c)" aria-label="Compose" onClick={() => composing.open({ mode: "new" })}><Icon name="pen" /><span className="tb-lbl"> Compose</span><kbd className="tb-kbd">c</kbd></button>
           <OutboxButton readOnly={readOnly} />
-          <a className="tbtn" href="/legacy" title="The old page, until it retires">Old page</a>
           <button className="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help" onClick={() => helpOpen.set(true)}><Icon name="keyboard" /></button>
           <button className="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings" onClick={m.openSettings}><Icon name="sliders" /></button>
           <button className="tbtn icon" id="themeBtn" aria-label={`Theme: ${THEME_LABEL[current]} — switch to ${THEME_LABEL[nextTheme(current)]}`} title="Day, Dusk or Night" onClick={() => { const t = nextTheme(current); setTheme(t); toast(`${THEME_LABEL[t]} theme`); }}>

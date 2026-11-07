@@ -19,7 +19,7 @@ _web-deps:
 
 # ── run ───────────────────────────────────────────────────────────────────────
 
-# Build the app, then run it (default http://127.0.0.1:8721). The old page is at /legacy
+# Build the app, then run it (default http://127.0.0.1:8721)
 run port="": build-web
     {{py}} -m mailmind serve {{port}}
 
@@ -48,7 +48,7 @@ test *args:
 test-full *args: setup
     uv run pytest --browser {{args}}
 
-# Only the browser tests, which drive the page and the React app in Chromium through both front doors
+# Only the browser tests, which drive the app in Chromium
 test-browser *args: setup
     uv run pytest --browser tests/e2e/browser {{args}}
 
@@ -68,31 +68,31 @@ lint:
 compile:
     {{py}} -m compileall -q mailmind && echo "compile ok"
 
-# Syntax-check the page's scripts (needs node), balance its CSS, and reject an inline script or raw control bytes
+# Reject raw control bytes in the app's source and an inline script in its page, parse theme.js (needs node) and balance the CSS
 check-frontend:
     #!/usr/bin/env python3
     import glob, re, subprocess, sys
-    html, scripts, styles = "web/index.html", glob.glob("web/assets/legacy/*.js"), glob.glob("web/assets/styles/*.css")
-    for path in (html, *scripts, *styles):
+    html, theme, styles = "web/next.html", "web/assets/legacy/theme.js", glob.glob("web/assets/styles/*.css")
+    code = glob.glob("web/src/**/*.ts", recursive=True) + glob.glob("web/src/**/*.tsx", recursive=True)
+    for path in (html, theme, *styles, *code):
         raw = open(path, "rb").read()
         bad = [i for i, b in enumerate(raw) if b < 0x09 or b in (0x0b, 0x0c) or 0x0e <= b < 0x20]
         if bad:
             sys.exit(f"raw control byte(s) in {path} at offset(s) {bad[:5]}: they make grep treat the file as binary")
     if re.search(r"<script(?![^>]*\bsrc=)", open(html, encoding="utf-8").read()):
         sys.exit(f"an inline script in {html}: the page's content security policy runs script files only")
-    for path in scripts:
-        r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
-        if r.returncode:
-            sys.exit(f"JS syntax error in {path}:\n{r.stderr}")
+    r = subprocess.run(["node", "--check", theme], capture_output=True, text=True)
+    if r.returncode:
+        sys.exit(f"JS syntax error in {theme}:\n{r.stderr}")
     for path in styles:
         css = open(path, encoding="utf-8").read()
         if css.count("{") != css.count("}"):
             sys.exit(f"unbalanced CSS braces in {path}")
-    print(f"frontend ok: {len(scripts)} scripts parse, {len(styles)} stylesheets balanced, no inline script, no control bytes")
+    print(f"frontend ok: theme.js parses, {len(styles)} stylesheets balanced, no inline script, no control bytes")
 
-# Type-check the TypeScript, lint it, run its tests, and check that the page's generated script is up to date (needs node)
+# Type-check the TypeScript, lint it and run its tests (needs node)
 check-web: _web-deps
-    cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent && node scripts/gen-legacy.mjs --check
+    cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent
 
 # ── web ───────────────────────────────────────────────────────────────────────
 
@@ -111,14 +111,10 @@ audit:
     uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
     osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json
 
-# Build the React app and the old page's files, named by their content, into mailmind/http/dist (needs node).
-# The app doesn't exist without this. With nothing built, the old page stands in at `/`.
+# Build the app, its files named by their content, into mailmind/http/dist (needs node). It doesn't exist without this:
+# with nothing built, `/` answers 404 and says to run this.
 build-web: _web-deps
     cd web && npx vite build
-
-# Write the pure TypeScript modules as the classic script the page runs with no build
-gen-web:
-    node web/scripts/gen-legacy.mjs
 
 # Write web/src/lib/api/types.gen.ts from the JSON answers the whole test suite sees (about 7 minutes)
 gen-api:

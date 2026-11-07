@@ -1,13 +1,12 @@
-// `just build-web`: the page's files, named by their content, in mailmind/http/dist, and the React app, which is `/`.
-// The page's scripts stay classic scripts, with their top-level names shared and run in order, so they are copied as
-// they are, not bundled.
+// `just build-web`: the app and its files, named by their content, in mailmind/http/dist. theme.js stays a classic script,
+// so it runs before the first paint, and is copied as it is, not bundled.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import babel from "@rolldown/plugin-babel";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const CLASSIC = ["theme", "pure", "app"];
+const CLASSIC = ["theme"];
 
 function classicScripts() {
   return {
@@ -38,7 +37,7 @@ export default defineConfig({
     emptyOutDir: true,
     assetsInlineLimit: 0,
     cssMinify: false,
-    rollupOptions: { input: { index: resolve(import.meta.dirname, "index.html"), next: resolve(import.meta.dirname, "next.html") } },
+    rollupOptions: { input: { next: resolve(import.meta.dirname, "next.html") } },
   },
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), classicScripts()],
   test: { include: ["src/**/*.test.{ts,tsx}"] },

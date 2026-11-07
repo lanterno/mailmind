@@ -1,4 +1,4 @@
-// What `just check-web` holds web/src to. web/assets/legacy/ is classic script, and `just check-frontend` checks that.
+// What `just check-web` holds web/src to.
 //
 // package.json's override lets eslint-plugin-jsx-a11y sit on ESLint 10: its peer range stops at 9, which is out of
 // support, and it calls nothing 10 removed. @babel/core is pinned there because eslint-plugin-react-hooks asks for
