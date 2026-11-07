@@ -28,6 +28,10 @@ run port="":
 run-next port="": build-web
     {{py}} -m mailmind serve {{port}}
 
+# The whole app on fictional mail, with fake servers and a temp data directory: nothing of yours is read or changed
+demo port="": build-web
+    {{py}} tests/demo.py {{port}}
+
 # Run read-only: nothing written to a mail server (sends and moves wait), no background sync or AI
 dev port="":
     MAILMIND_PROFILE=read-only {{py}} -m mailmind serve {{port}}
