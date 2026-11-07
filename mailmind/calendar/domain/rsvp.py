@@ -58,13 +58,14 @@ def _fold(line: str) -> str:
 
 
 def _ics_dt(iso: str) -> str:
-    """ISO datetime -> iCal form. Aware -> UTC basic 'YYYYMMDDTHHMMSSZ'; floating -> no Z. '' if unparseable."""
+    """ISO datetime -> iCal form. Aware -> UTC basic 'YYYYMMDDTHHMMSSZ'; floating -> no Z. '' if unparseable, or at the very
+    edge of what a datetime holds, where UTC is past it."""
     try:
         d = datetime.fromisoformat(iso)
+        if d.tzinfo:
+            return d.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     except Exception:
         return ""
-    if d.tzinfo:
-        return d.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return d.strftime("%Y%m%dT%H%M%S")
 
 
