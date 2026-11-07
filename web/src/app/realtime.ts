@@ -6,6 +6,7 @@ import type { GetAnswers } from "../lib/api/types.gen";
 import { onNewMail } from "../features/assistant/NewMail";
 import { onDraftReady } from "../features/compose/draftAhead";
 import { createStore } from "../lib/store";
+import { shortAddress } from "../lib/text";
 import { parseRoute } from "./route";
 
 export const newBuild = createStore(false);
@@ -29,7 +30,7 @@ export function useRealtime() {
     for (const topic of MAIL_CHANGED) es.addEventListener(topic, mail);
     es.addEventListener("new-mail", (e) => {
       const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
-      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, parseRoute(location.pathname, location.search), Boolean(digest && digest.ai.engine !== "none"));
+      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, parseRoute(location.pathname, location.search), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
     });
     es.addEventListener("resync", () => again("digest"));
     es.addEventListener("sync-done", () => {

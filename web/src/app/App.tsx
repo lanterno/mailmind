@@ -6,7 +6,7 @@ import { asking, stopAsking } from "../features/assistant/ask";
 import { AskPane } from "../features/assistant/AskPane";
 import { DoPanel } from "../features/assistant/Do";
 import { backFromDigest, BriefRow } from "../features/assistant/Brief";
-import { lookedAt, NewMailPill } from "../features/assistant/NewMail";
+import { cameBack, lookedAt, NewMailPill } from "../features/assistant/NewMail";
 import { Panels } from "../features/assistant/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, readOnly, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
@@ -188,7 +188,10 @@ export function App() {
   const accountsNow = accounts.join();   // by value: the array itself is new each render
   const look = useEffectEvent(() => { if (!document.hidden) lookedAt(source, accounts); });
   useEffect(() => {
-    const onVisibility = () => look();
+    const onVisibility = () => {
+      if (!document.hidden) cameBack();
+      look();
+    };
     look();
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);

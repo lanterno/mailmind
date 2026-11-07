@@ -3,6 +3,7 @@
 import { get, post } from "../../lib/api/client";
 import { go, type ListSource, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
+import { announce } from "../../lib/toast";
 
 interface Pending { count: number; account: string; since: number; headline: string }
 const pending = createStore<Pending | null>(null);
@@ -48,8 +49,34 @@ async function headline(ai: boolean) {
   }
 }
 
-export function onNewMail(d: { account?: string; folder?: string; count?: number }, route: Route, ai: boolean) {
+// In the background mail counts in the tab's title and on the desktop. With someone here, a screen reader hears of it.
+let cameIn = 0;
+const showTitle = () => { document.title = cameIn > 0 ? `(${cameIn}) MailMind` : "MailMind"; };
+export function cameBack() {
+  cameIn = 0;
+  showTitle();
+}
+
+function tell(account: string, count: number, name: string) {
+  if (!document.hidden) {
+    announce(`${count} new message${count === 1 ? "" : "s"} arrived${account ? ` in ${name}` : ""}`);
+    return;
+  }
+  cameIn += count;
+  showTitle();
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    const n = new Notification(`New mail · ${name}`, { body: `${count} new message${count > 1 ? "s" : ""}`, tag: `mailmind-${account}`, silent: false });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch { /* the title still counts it */ }
+}
+
+export function onNewMail(d: { account?: string; folder?: string; count?: number }, route: Route, ai: boolean, nameOf: (account: string) => string) {
   const account = d.account ?? "", folder = d.folder ?? "INBOX", count = d.count || 1;
+  tell(account, count, nameOf(account));
   if (landedHere(route.source, account, folder)) return;
   const was = pending.get();
   pending.set({
