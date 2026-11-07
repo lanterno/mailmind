@@ -111,3 +111,41 @@ def test_an_account_as_the_app_reads_it_holds_the_reference_not_what_it_names(di
     bea = next(a for a in directory.accounts() if a["email"] == "bea@example.test")
     assert bea["credential"] == {"env": "BEA_PASSWORD"}
     assert directory.resolve_credential(bea) == "hunter2"
+
+
+# -- a write, not a read -----------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fields, why", [
+    ({"host": "two words"}, "host must be a host name"),
+    ({"host": "imap.example.test\r\nX"}, "host must be a host name"),
+    ({"host": 123}, "host must be a host name"),
+    ({"smtp_host": "two words"}, "SMTP host must be a host name"),
+    ({"smtp_host": 123}, "SMTP host must be a host name"),
+    ({"smtp_port": 70000}, "SMTP port must be 1–65535"),
+    ({"smtp_port": 0}, "SMTP port must be 1–65535"),
+], ids=repr)
+def test_a_write_may_not_leave_an_endpoint_no_connection_could_reach(directory, data_dir, fields, why):
+    with pytest.raises(ValueError, match=why):
+        directory.add_account({"email": "bea@example.test", "type": "imap", "host": "imap.example.test", "credential": TYPED, **fields})
+    with pytest.raises(ValueError, match=why):
+        directory.update_account("ada@example.test", fields)
+    assert stored(data_dir) == [ADA]
+
+
+def test_a_gmail_account_is_held_to_it_as_well(directory):
+    with pytest.raises(ValueError, match="host must be a host name"):
+        directory.add_account({"email": "bea@example.test", "type": "gmail", "host": "two words", "credential": TYPED})
+
+
+@pytest.mark.parametrize("held", [{"smtp_port": 70000}, {"smtp_host": "two words"}, {"host": "two words"}, {"host": 123}], ids=repr)
+def test_what_the_file_already_held_doesnt_stop_an_edit_of_something_else(directory, data_dir, held):
+    directory.save({"accounts": [{**ADA, **held}]})
+    assert directory.update_account("ada@example.test", {"alias": "Ada"})["alias"] == "Ada"
+    assert stored(data_dir)[0] == {**ADA, **held, "alias": "Ada"}
+
+
+@pytest.mark.parametrize("held", [{"smtp_port": 70000}, {"smtp_host": "two words"}, {"host": "two words"}, {"host": 123}], ids=repr)
+def test_what_the_file_already_held_reads_as_it_stands(directory, held):
+    directory.save({"accounts": [{**ADA, **held}]})
+    assert [a["email"] for a in directory.accounts()] == ["ada@example.test"]
+    assert directory.masked_rows()[0]["email"] == "ada@example.test"
