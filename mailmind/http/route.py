@@ -13,6 +13,11 @@ read as the handler read it, an answer is written as the handler wrote it, and a
 A handler is a plain `def`, since a request can wait a long time on IMAP or the Claude API and one blocking the event loop would
 stop every other. It runs on a thread of AnyIO's pool, in a copy of the request's context, so the context variables reach it. It
 returns an object (a 200), `(object, code)`, or a `Response` for what isn't JSON.
+
+A `Response` runs after the handler has returned, on the event loop, and past the reach of what a failure answers. So a handler does
+whatever can fail first, and an answer that streams is a `StreamingResponse` with a `__call__` of its own around the stream, for
+what must be given back however it ends: a tab hanging up leaves its generator waiting at a `yield`, whose `finally` runs only
+when it is collected.
 """
 import inspect
 import json
@@ -40,7 +45,7 @@ def router():
     return APIRouter(route_class=Route)
 
 
-def _json(obj, code=200):
+def json_answer(obj, code=200):
     """An answer in the bytes the handler's `_json` writes: Starlette's JSONResponse writes others, and refuses NaN."""
     return Response(json.dumps(obj).encode(), code, media_type="application/json")
 
@@ -48,7 +53,7 @@ def _json(obj, code=200):
 def _rendered(answer):
     if isinstance(answer, Response):
         return answer
-    return _json(*answer) if isinstance(answer, tuple) else _json(answer)
+    return json_answer(*answer) if isinstance(answer, tuple) else json_answer(answer)
 
 
 def _first_of_each(query_string):
@@ -126,7 +131,7 @@ class Route(APIRoute):
                 try:
                     return await run(request)
                 except (RequestValidationError, HTTPException):     # a value a schema refuses, or a body that won't parse
-                    return _json(shared.BAD_REQUEST, 400)
+                    return json_answer(shared.BAD_REQUEST, 400)
                 except Exception as e:
-                    return _json(*shared.failure_answer(e, request.method, request.scope["path"]))
+                    return json_answer(*shared.failure_answer(e, request.method, request.scope["path"]))
         return answering

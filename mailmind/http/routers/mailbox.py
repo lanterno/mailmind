@@ -10,7 +10,7 @@ from starlette.responses import Response
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http import route
-from mailmind.http.schemas.common import NoBody, Number, answers
+from mailmind.http.schemas.common import NoBody, NotJson, Number, answers
 from mailmind.http.schemas.mailbox import (
     BodyArgs,
     BodyDocumentArgs,
@@ -35,7 +35,6 @@ from mailmind.http.schemas.mailbox import (
     NoThread,
     NotFiled,
     NothingToUndo,
-    NotJson,
     NotUndone,
     Pending,
     Prefetched,

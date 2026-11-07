@@ -375,10 +375,6 @@ class Stats(Answer):
 # ── a message opened ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-class NotJson(Answer):
-    """A file or a frame's document, which is what its route says it is. Nothing holds an answer that isn't JSON to a model."""
-
-
 class AttachmentPart(Answer):
     part_id: str
     filename: str

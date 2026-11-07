@@ -56,6 +56,10 @@ class Answer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class NotJson(Answer):
+    """A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model."""
+
+
 class Failure(Answer):
     """What any route may answer when it can't (`shared.failure_answer`), or the perimeter when it won't. A route that says more
     (a Problem's `more`) names a subclass of its own for that status, through `answers`."""

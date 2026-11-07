@@ -46,7 +46,7 @@ TOPICS = frozenset({
 })
 RESYNC = "resync"         # this tab missed events it can't be told: fetch afresh
 RING = 512                # the events kept for tabs that reconnect
-MAX_LISTENERS = 8         # each holds a request thread
+MAX_LISTENERS = 8         # each keeps a thread waiting for its next event
 HEARTBEAT = 20            # seconds between keepalives on a quiet stream
 RETRY_MS = 3000           # how soon EventSource reconnects
 
@@ -68,7 +68,7 @@ class Hub:
         self.max_listeners = max_listeners
         self._kept: deque[tuple[int, str, dict]] = deque(maxlen=ring)
         self._n = 0
-        self._listeners = 0
+        self._open: set[Listener] = set()
         self._cond = threading.Condition()
 
     def _id(self, n: int) -> str:
@@ -88,15 +88,12 @@ class Hub:
         """A stream for one tab, from just after `last_event_id` (the Last-Event-ID it sent), or
         from now when it sent none. None once max_listeners streams are open."""
         with self._cond:
-            if self._listeners >= self.max_listeners:
+            if len(self._open) >= self.max_listeners:
                 return None
-            self._listeners += 1
-            if not last_event_id:
-                return Listener(self, self._n, resync=False)
-            n = self._position(last_event_id.strip())
-            if n is None:
-                return Listener(self, self._n, resync=True)
-            return Listener(self, n, resync=False)
+            n = self._position(last_event_id.strip()) if last_event_id else self._n
+            tab = Listener(self, self._n if n is None else n, resync=n is None)
+            self._open.add(tab)
+            return tab
 
     def _position(self, last_event_id: str) -> int | None:
         """The event number `last_event_id` names, if this hub can resume after it."""
@@ -109,11 +106,14 @@ class Hub:
     def listening(self) -> int:
         """How many streams are open."""
         with self._cond:
-            return self._listeners
+            return len(self._open)
 
-    def _leave(self) -> None:
+    def end_streams(self) -> None:
+        """End every stream open now, for a server about to stop: a stream never ends on its own, and each waiting wakes at
+        once. One opened after this goes on as any other, so the hub outlives the server."""
         with self._cond:
-            self._listeners -= 1
+            for tab in list(self._open):
+                tab.close()
 
 
 class Listener:
@@ -129,6 +129,11 @@ class Listener:
     def last_id(self) -> str:
         """The id of the last event this stream has passed on, or would resume after."""
         return self._hub._id(self._pos)
+
+    @property
+    def closed(self) -> bool:
+        """Nothing more will come: it was closed, or the hub ended it."""
+        return self._closed
 
     def opening(self) -> bytes:
         """What the stream sends first: how soon to reconnect, and its position, so a tab that
@@ -158,8 +163,8 @@ class Listener:
             if self._closed:
                 return
             self._closed = True
+            self._hub._open.discard(self)
             self._hub._cond.notify_all()
-        self._hub._leave()
 
 
 HUB = Hub()
