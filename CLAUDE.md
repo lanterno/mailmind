@@ -547,7 +547,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A change a person asks of the mail takes one path, online or offline: `mailbox.commands` (`MailCommands`), over
   `mail_commands` (migration 39). **Accept**, in one transaction: the command's row, and for a move the message's row marked
   `pending_removal` with its id and the undo entry, which names it. Every list, search, the conversation view, the
-  brief and the AI's inputs leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too. A
+  brief, the delta and what drafting ahead picks from leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too. What the AI
+  reads of a whole thread doesn't, since its fingerprint would change twice over one move and pay for a summary each time. A
   flag change shows on the local row instead, and `params` keeps the flags it replaced (`was`). **Submit**: a try as a job
   on the account's gate, which a click waits for only `FILE_WAIT` seconds. Past that the worker has it, and the answer's
   `status` is `waiting`. **Settle**, under the same gate and in one transaction: `applied`, where the message went and what
