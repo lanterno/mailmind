@@ -16,7 +16,7 @@ from mailmind.platform.logging import get_logger
 
 
 def build():
-    """The ASGI app over the handler, and the coroutine function to await when
+    """The ASGI app over the routers and the handler, and the coroutine function to await when
     shutdown begins. A POST's body may hold up to the route's own cap, and the bridge reads no
     other body: the handler reads none. The perimeter checks the page's token as the handler does, so
     both see the same one. AI calls go through the Anthropic SDK from here on, and an account that
@@ -27,7 +27,7 @@ def build():
     def body_cap(method, path):
         return web.post_body_cap(path) if method == "POST" else 0
     bridge = HandlerBridge(web.H, body_cap=body_cap)
-    return create_app(bridge, token=lambda: web.H.CSRF, body_cap=body_cap), bridge.close
+    return create_app(bridge, routers=web.ROUTERS, token=lambda: web.H.CSRF, body_cap=body_cap), bridge.close
 
 
 def serve(port=None):

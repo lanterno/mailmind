@@ -14,7 +14,9 @@ from mailmind.http.routers import mailbox as mailbox_routes
 from mailmind.http.routing import Routes
 from mailmind.http.shared import AI_OVER_HEADER, post_body_cap
 
-__all__ = ["AI_OVER_HEADER", "H", "post_body_cap"]
+__all__ = ["AI_OVER_HEADER", "H", "ROUTERS", "post_body_cap"]
+
+ROUTERS = []        # what has moved to FastAPI; the handler's table below holds the rest until each file has
 
 handler.bind(Routes(static.routes(), events.routes(), export.routes(), debug.routes(mailbox, compose, background, assistant),
                     mailbox_routes.routes(mailbox), attention_routes.routes(attention), curation_routes.routes(curation),
