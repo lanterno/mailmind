@@ -1,12 +1,9 @@
 """Calendar's view of the database. It writes nothing: invites live in stored bodies, the Mailbox's, and what was sent
 in the outbox, Compose's."""
 from mailmind.content import mime
-from mailmind.platform import settings
-from mailmind.platform.db import database
+from mailmind.platform.db.uow import UnitOfWork
 
-
-def _conn():
-    return database.connect(settings.current().db)
+_uow = UnitOfWork()
 
 
 def _body(c, pk):
@@ -21,8 +18,7 @@ class StoredInvites:
     def invite_parts(self, since, account, skipped_roles):
         """Every calendar part of mail fetched since then, newest first, as (row, text), leaving out folders that
         play those roles and any part that can't be read. One body at a time: they can be large."""
-        c = _conn()
-        try:
+        with _uow.read() as c:
             rows = c.execute(
                 """SELECT m.pk, m.message_key, m.account, m.folder, m.thread_id, a.part_id
                    FROM attachments a JOIN messages m ON m.pk=a.message_pk
@@ -41,21 +37,13 @@ class StoredInvites:
                 except Exception:
                     continue
                 yield r, text
-        finally:
-            c.close()
 
     def body(self, pk):
-        c = _conn()
-        try:
+        with _uow.read() as c:
             return _body(c, pk)
-        finally:
-            c.close()
 
     def keys_sent(self, prefix):
         """The outbox's idempotency keys under this prefix, newest first."""
-        c = _conn()
-        try:
+        with _uow.read() as c:
             return [r[0] for r in c.execute("SELECT idempotency_key FROM outbox WHERE substr(idempotency_key, 1, ?) = ? "
                                             "ORDER BY id DESC", (len(prefix), prefix))]
-        finally:
-            c.close()
