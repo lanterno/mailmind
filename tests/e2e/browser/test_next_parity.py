@@ -642,3 +642,21 @@ def test_a_digest_that_wont_come_is_tried_again_by_itself(page, app, world):
     page.problems.clear()
     assert page.blocked == [], page.blocked
 
+def test_a_list_or_a_search_that_fails_says_so_in_the_pages_words(page, app, world):
+    page.goto(f"/next/m/{w.ADA}/INBOX")
+    archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
+    expect(archive).to_be_visible()
+    page.route("**/api/messages*", lambda route: route.abort())
+    archive.click()
+    expect(page.locator("#rows")).to_contain_text("Couldn\u2019t load messages.")
+    page.unroute("**/api/messages*")
+    page.locator("#rows .ai-rerun").click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    page.route("**/api/search*", lambda route: route.abort())
+    page.locator("#search").fill("lunch")
+    page.keyboard.press("Enter")
+    expect(page.locator("#rows")).to_contain_text("Search failed.")
+    assert all("ERR_FAILED" in p for p in page.problems), page.problems
+    page.problems.clear()
+    assert page.blocked == [], page.blocked
+
