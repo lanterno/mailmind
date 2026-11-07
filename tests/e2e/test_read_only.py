@@ -241,6 +241,6 @@ def test_the_unsubscribe_request_itself_refuses(read_only):
 
 
 def test_the_digest_names_the_profile_the_page_shows(app, world, read_only):
-    assert app.get("/api/digest?min=1&account=").json["profile"] == "read-only"
+    assert app.get("/api/digest").json["profile"] == "read-only"
     read_only.end()
-    assert app.get("/api/digest?min=1&account=").json["profile"] == "full"
+    assert app.get("/api/digest").json["profile"] == "full"

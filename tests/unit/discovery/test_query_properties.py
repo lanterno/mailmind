@@ -82,7 +82,7 @@ def test_nothing_a_query_says_is_written_into_its_sql(text):
 def test_sqlite_takes_what_any_query_makes(one_message, text):
     """Through the search and the bulk command's reach as they run, each of which answers None for one it rejects."""
     spec = QuerySpec.parse(text)
-    assert discovery._mail.search(spec, None, "rank", 5, 0) is not None, text
+    assert discovery._mail.search(spec, None, 5, 0) is not None, text
     assert discovery._mail.reach(spec, 5, {"trash"}) is not None, text
 
 
@@ -91,7 +91,7 @@ def test_sqlite_takes_what_any_query_makes(one_message, text):
 def test_a_nul_at_worst_makes_a_bad_query(one_message, text, at):
     """FTS5 reads a bound string only up to a NUL, so it may see a quote left open. That's an answer, not a raise."""
     spec = QuerySpec.parse(text[:at] + "\x00" + text[at:])
-    discovery._mail.search(spec, None, "rank", 5, 0)
+    discovery._mail.search(spec, None, 5, 0)
     discovery._mail.reach(spec, 5, {"trash"})
 
 

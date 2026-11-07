@@ -52,7 +52,7 @@ def test_the_demo_runs_on_the_fictional_world_and_leaves_nothing(tmp_path):
         items = wait_for_mail(port, proc)
         assert all(i["account"].endswith("@example.test") for i in items)
         assert all(i["from_addr"].endswith((".test", ".example")) or "example" in i["from_addr"] for i in items)
-        assert json.loads(get(port, "/api/digest?min=1&account=")[1])["send_accounts"]
+        assert json.loads(get(port, "/api/digest")[1])["send_accounts"]
         assert [p.name for p in tmp_path.iterdir()][0].startswith("mailmind-demo-")
         proc.send_signal(signal.SIGINT)
         assert proc.wait(timeout=20) in (0, -signal.SIGINT, 130)

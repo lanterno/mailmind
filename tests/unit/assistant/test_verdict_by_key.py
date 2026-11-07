@@ -17,15 +17,15 @@ def rows(found):
 
 # Each answers with the rows of what was said, so a reader that read nothing can't pass.
 READERS = {
-    "digest": lambda c: rows(store.digest(c, 1, w.ADA)),
+    "digest": lambda c: rows(store.digest(c)),
     "brief": lambda c: rows(store.brief_rows(c, [w.ADA], 50)),
     "delta": lambda c: rows(store.delta_rows(c, [w.ADA], 0, 50)),
     "needs you": lambda c: rows(store.needs_you_rows(c, [w.ADA], 50)),
     "drafting ahead": lambda c: rows(store.draft_candidates(c, 0)),
     "a folder": lambda c: rows(store.folder_rows(c, w.ADA, "INBOX", 50, 0)),
     "a folder's conversations": lambda c: rows(store.folder_conversation_rows(c, w.ADA, "INBOX", 50, 0)),
-    "search": lambda c: rows(discovery._mail.search(QuerySpec.parse("category:action-needed"), w.ADA, "date", 50, 0)),
-    "search by word": lambda c: rows(discovery._mail.search(QuerySpec.parse('lunch category:action-needed'), w.ADA, "date", 50, 0)),
+    "search": lambda c: rows(discovery._mail.search(QuerySpec.parse("category:action-needed"), w.ADA, 50, 0)),
+    "search by word": lambda c: rows(discovery._mail.search(QuerySpec.parse('lunch category:action-needed'), w.ADA, 50, 0)),
     "ask": lambda c: rows(discovery._mail.for_asking(None, w.ADA, 50)),
     "ask by word": lambda c: rows(discovery._mail.for_asking('"lunch"', w.ADA, 50)),
 }

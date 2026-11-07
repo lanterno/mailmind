@@ -19,11 +19,11 @@ def pks(found):
 
 
 def search(text):
-    return discovery._mail.search(QuerySpec.parse(text), w.ADA, "date", 50, 0)
+    return discovery._mail.search(QuerySpec.parse(text), w.ADA, 50, 0)
 
 
 LISTS = {
-    "digest": lambda c: store.digest(c, 1, w.ADA),
+    "digest": lambda c: store.digest(c),
     "brief": lambda c: store.brief_rows(c, [w.ADA], 50),
     "delta": lambda c: store.delta_rows(c, [w.ADA], 0, 50),
     "needs you": lambda c: store.needs_you_rows(c, [w.ADA], 50),

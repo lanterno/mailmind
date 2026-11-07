@@ -279,7 +279,7 @@ def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
     assert holds(app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100&group=1").json["items"])
     assert holds(app.get(f"/api/thread?account={w.ADA}&thread_id={row['thread_id']}").json["items"])
     assert holds(app.get(f"/api/search?q=lunch&scope=all&account={w.ADA}").json["items"])
-    assert holds(app.get(f"/api/digest?account={w.ADA}").json["items"])
+    assert holds(app.get("/api/digest").json["items"])
     assert app.get(f"/api/message/{pk}/body").json["key"] == key
     c = store.conn()
     attention.book.mute_thread(c, w.ADA, row["thread_id"], "now")

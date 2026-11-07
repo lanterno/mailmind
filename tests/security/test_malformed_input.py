@@ -23,7 +23,7 @@ def test_a_number_reads_or_it_is_none(held, read):
         assert required_int(held) == read
 
 
-@pytest.mark.parametrize("path, name", [("/api/audit", "limit"), ("/api/debug/ai", "days"), ("/api/digest", "min"),
+@pytest.mark.parametrize("path, name", [("/api/audit", "limit"), ("/api/debug/ai", "days"),
                                         ("/api/messages?account=" + w.ADA + "&folder=INBOX", "limit"),
                                         ("/api/messages?account=" + w.ADA + "&folder=INBOX", "offset"),
                                         ("/api/inboxes", "limit"), ("/api/inboxes", "offset"), ("/api/outbox", "limit"),

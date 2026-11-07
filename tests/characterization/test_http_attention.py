@@ -36,7 +36,7 @@ def verdicts(item):
 
 def rows(app, world, route):
     if route == "digest":
-        return app.get(f"/api/digest?account={w.ADA}").json["items"]
+        return [i for i in app.get("/api/digest").json["items"] if i["account"] == w.ADA]
     if route == "folder":
         return app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]
     if route == "search":

@@ -86,7 +86,6 @@ def test_export_plan_and_database_export(app, golden, tmp_path):
 
 def test_digest(app, golden):
     fetch(app, golden, "/api/digest")
-    fetch(app, golden, f"/api/digest?account={w.ADA}&min=3")
 
 
 def test_folders(app, golden):

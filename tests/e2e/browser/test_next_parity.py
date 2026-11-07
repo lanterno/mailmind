@@ -193,7 +193,7 @@ def test_help_names_every_search_operator_the_page_does(page, world):
 
 
 def test_the_account_menu_names_itself_marks_yours_says_who_cant_connect_and_leads_to_settings(page, app, world):
-    digest = app.get("/api/digest?min=1&account=").json
+    digest = app.get("/api/digest").json
     digest["status"] = {**digest["status"], w.BEA: {"health": "error"}}
     page.pw.route(re.compile(r"/api/digest"), lambda route: route.fulfill(json=digest))
     opened(page)
