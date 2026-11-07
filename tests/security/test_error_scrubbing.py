@@ -11,6 +11,7 @@ from datetime import timedelta
 
 import pytest
 
+import route_tables
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import web
@@ -28,9 +29,9 @@ QUERY = ("?account={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_i
 
 
 def every_route(pk):
-    table = web.H.routes
-    walk = {r for r in table._exact} | {(method, path.format(pk=pk)) for (method, _), path in SHAPED.items()}
-    return sorted(walk - NOT_WALKED)
+    """In either table. A route by shape that moves to a router names its path, and leaves SHAPED behind."""
+    shaped = {(method, path.format(pk=pk)) for (method, name), path in SHAPED.items() if (method, name) in route_tables.shapes_on_the_handler()}
+    return sorted((route_tables.by_name(pk) | shaped) - NOT_WALKED)
 
 
 def body_for(pk, **more):
@@ -88,6 +89,7 @@ def test_whatever_a_route_raises_its_answer_says_only_that_it_failed(app, monkey
     routes = every_route(pk)
     assert ("POST", "/api/send") in routes and ("GET", "/api/digest") in routes
     monkeypatch.setattr(web.H, "routes", Raising(web.H.routes, RAISED[what]))
+    route_tables.raise_on_routers(monkeypatch, RAISED[what])
     answers = {}
     for method, path in routes:
         r = app.post(path, {}) if method == "POST" else app.get(path)

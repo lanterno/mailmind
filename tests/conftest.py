@@ -218,8 +218,10 @@ def app(world, monkeypatch):
     import dataclasses
     import time_machine
     import app_client
+    import schema_contract
     from mailmind.bootstrap import wiring
     app_client.reset_state()
+    schema_contract.watch_reads(monkeypatch)
     monkeypatch.setattr(web.H, "CSRF", app_client.CSRF)
     wiring.wire()                 # as wiring.start does, without starting the workers' threads
     from mailmind.platform import settings
@@ -233,6 +235,7 @@ def app(world, monkeypatch):
                 client.clock = clock
                 yield client
                 client.settle()
+                schema_contract.verify()
         finally:
             running.stop()
             app_client.reset_state()

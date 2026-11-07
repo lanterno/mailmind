@@ -1,17 +1,25 @@
 """The perimeter matrix: every route the app has, against each way a request can be wrong. The walk
-reads the route table, so a route added tomorrow is in it. test_perimeter.py pins each check on its own, and
-test_http_post_guards.py a few routes end to end.
+reads both route tables, the handler's and the routers', so a route added or moved tomorrow is in it. test_perimeter.py pins each
+check on its own, and test_http_post_guards.py a few routes end to end.
 
 Every route is swapped for one that only says it ran. So the walk can knock on all of them, the event stream and a send
 included, with nothing happening, and an honest request reaching each shows the refusals are the perimeter's own.
 """
+import json
+
 import app_client
 import pytest
+from fastapi.routing import iter_route_contexts
 
+import route_tables
+import schema_contract
 from mailmind.bootstrap import front, web
+from mailmind.http.route import Route
+from mailmind.http.shared import send_whole
 from mailmind.platform import webroot
 
-# A route that matches by shape names no path, so each has one here. A new one fails test_every_shape_has_a_path_here.
+# A route on the handler that matches by shape names no path, so each has one here. A new one fails test_every_shape_has_a_path_here.
+# One that moves to a router names its path, and the entry here goes unused.
 SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
           ("GET", "attachment"): "/api/message/1/attachment/1", ("GET", "body"): "/api/message/1/body", ("GET", "body_document"): "/api/message/1/body.html",
           ("POST", "change"): "/api/accounts/test"}
@@ -53,10 +61,12 @@ def wrong_for_an_api_read():
 
 
 class Table:
-    """The route table with each route answering only that it ran. A path the real table doesn't know stays unknown."""
+    """Both route tables with each route answering only that it ran. A path the real tables don't know stays unknown."""
 
     def __init__(self, real):
         self.real, self.reached = real, []
+        shaped = route_tables.shapes_on_the_handler()
+        self.walk = sorted({*route_tables.by_name(), *((method, path) for (method, name), path in SHAPED.items() if (method, name) in shaped)})
 
     def find(self, method, path):
         if self.real.find(method, path) is None:
@@ -67,20 +77,23 @@ class Table:
             return {"ok": True, "ran": path}
         return ran
 
+    async def ran_on_a_router(self, route, scope, send):
+        path = route_tables.concrete(route.path)
+        self.reached.append((scope["method"], path))
+        await send_whole(send, 200, [(b"content-type", b"application/json")], json.dumps({"ok": True, "ran": path}).encode())
+
     def routes(self, method=None):
         """Every route, as (method, a path it answers)."""
-        walk = sorted({*self.real._exact, *SHAPED_PATHS})
-        return [r for r in walk if method in (None, r[0])]
-
-
-SHAPED_PATHS = {(method, path) for (method, _), path in SHAPED.items()}
+        return [r for r in self.walk if method in (None, r[0])]
 
 
 @pytest.fixture
 def table(app, monkeypatch):
     spy = Table(web.H.routes)
     monkeypatch.setattr(web.H, "routes", spy)
+    route_tables.stand_in_on_routers(monkeypatch, spy.ran_on_a_router)
     monkeypatch.setattr(app_client, "RECORD_API", None)     # what these answer isn't what the routes answer
+    monkeypatch.setattr(schema_contract, "HOLDING", False)
     return spy
 
 
@@ -102,17 +115,19 @@ def refusals(app, table, routes, cases):
 
 
 def test_every_shape_has_a_path_here():
-    """A route by shape only joins the walk through SHAPED: give a new one a path it answers."""
+    """A route by shape on the handler only joins the walk through SHAPED: give a new one a path it answers."""
     table = web.H.routes
-    named = {(method, route.__name__) for method, _, route in table._matching}
-    assert named == set(SHAPED)
-    for (method, name), path in SHAPED.items():
-        assert table.find(method, path).__name__ == name, path
+    shapes = route_tables.shapes_on_the_handler()
+    assert shapes <= set(SHAPED)
+    for method, name in shapes:
+        assert table.find(method, SHAPED[method, name]).__name__ == name, name
 
 
-def test_the_walk_holds_what_the_table_holds():
+def test_the_walk_holds_what_both_tables_hold():
     walk = Table(web.H.routes).routes()
-    assert set(web.H.routes._exact) <= set(walk) and len(walk) == len(web.H.routes._exact) + len(SHAPED)
+    on_routers = {(method, route_tables.concrete(route.path)) for route in route_tables.on_routers() for method in route.methods}
+    assert set(web.H.routes._exact) | on_routers <= set(walk)
+    assert len(walk) == len(web.H.routes._exact) + len(on_routers) + len(route_tables.shapes_on_the_handler())
     assert {("GET", "/"), ("GET", "/api/events"), ("POST", "/api/send"), ("POST", "/api/cleanup/execute"),
             ("POST", "/api/ai/do-confirm")} <= set(walk)
 
@@ -162,17 +177,25 @@ def test_no_other_method_reaches_a_route(app, table):
     assert let_through == {} and table.reached == []
 
 
-ODD_PATHS = ("/%61pi/digest", "/api%2Fdigest", "//api/digest", "///api/digest", "/./api/digest", "/api/../api/digest", "/x/../api/digest",
-             "/api//digest", "/API/digest", "/api/digest/", "/api/digest%00", "/api/digest;x", "/\\api/digest",
-             "http://127.0.0.1/api/digest", "/api/message/1/body/../../../digest", "/%2e/api/digest", "/next/../api/digest",
-             "/m/../api/digest", "/brief/../api/digest", "/assets/../api/digest")
+ODD_PATHS = ("/%61pi/{0}", "/api%2F{0}", "//api/{0}", "///api/{0}", "/./api/{0}", "/api/../api/{0}", "/x/../api/{0}",
+             "/api//{0}", "/API/{0}", "/api/{0}/", "/api/{0}%00", "/api/{0};x", "/\\api/{0}",
+             "http://127.0.0.1/api/{0}", "/api/message/1/body/../../../{0}", "/%2e/api/{0}", "/next/../api/{0}",
+             "/m/../api/{0}", "/brief/../api/{0}", "/assets/../api/{0}")
+
+
+def one_of_each_table(table, method):
+    """The last word of a route of each table that takes `method`, since either reads a path its own way."""
+    def single(routes):
+        return sorted(p.removeprefix("/api/") for m, p in routes if m == method and p.count("/") == 2 and p.startswith("/api/"))[:1]
+    return [*single(table.real._exact), *single((m, route.path) for route in route_tables.on_routers() for m in route.methods)]
 
 
 @pytest.mark.parametrize("method", ["GET", "POST"])
 def test_a_path_written_oddly_gets_no_further_from_a_typed_url(app, table, method):
     """The perimeter judges a path as it reads it: what it doesn't take for the API must not then run as the API."""
-    for path in ODD_PATHS:
-        knock(app, method, path, {"Sec-Fetch-Site": None, "X-CSRF-Token": None, "Origin": None})
+    for name in one_of_each_table(table, method):
+        for path in ODD_PATHS:
+            knock(app, method, path.format(name), {"Sec-Fetch-Site": None, "X-CSRF-Token": None, "Origin": None})
     assert [hit for hit in table.reached if hit[1].startswith("/api")] == []
 
 
@@ -181,10 +204,11 @@ def test_the_handler_answers_no_method_the_perimeter_doesnt_check():
     assert sorted(name for name in dir(web.H) if name.startswith("do_")) == ["do_GET", "do_POST"]
 
 
-def test_the_app_has_no_route_of_its_own_and_runs_the_perimeter(monkeypatch):
-    """A route on the FastAPI app itself wouldn't be in the table this walks."""
+def test_the_app_holds_only_its_routers_routes_and_runs_the_perimeter(monkeypatch):
+    """A route on the FastAPI app itself wouldn't be in the tables this walks, or go through what a Route does."""
     monkeypatch.setattr(front.assistant, "use", lambda kind: None)
     monkeypatch.setattr(front.mailbox, "offer", lambda kind: None)
     asgi, _ = front.build()
-    assert asgi.routes == []
+    held = [context.original_route for context in iter_route_contexts(asgi.routes)]
+    assert held == route_tables.on_routers() and all(isinstance(route, Route) for route in held)
     assert [m.cls.__name__ for m in asgi.user_middleware] == ["Perimeter"]

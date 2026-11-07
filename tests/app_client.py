@@ -93,11 +93,12 @@ class AppClient:
         self._before = set(threading.enumerate())
 
     def started_threads(self):
-        """Threads alive now that weren't when the client was made, other than the fakes' and
-        the app's serving thread: work a request started in the background (a sync, a draft)."""
+        """Threads alive now that weren't when the client was made, other than the fakes', the
+        app's serving thread and the pool the routes on routers run on, whose threads wait for the
+        next request: work a request started in the background (a sync, a draft)."""
         return [t for t in threading.enumerate()
                 if t not in self._before and t is not threading.current_thread()
-                and not t.name.startswith(("fake-", "app-http"))]
+                and not t.name.startswith(("fake-", "app-http", "AnyIO worker"))]
 
     def settle(self, timeout=30):
         """Wait for the background work requests started. Raises if any is still running, so a
@@ -145,14 +146,15 @@ class AppClient:
 
 
 class RunningAsgiApp:
-    """The app: web.H behind FastAPI and uvicorn, as `python -m mailmind serve` builds it, on a
-    random loopback port, serving from a background thread."""
+    """The app, as `python -m mailmind serve` builds it, on a random loopback port, serving from a
+    background thread, with what its routes answer held to their schemas."""
 
     def __init__(self):
+        import schema_contract
         from asgi_server import Uvicorn
         from mailmind.bootstrap import front
-        app, before_shutdown = front.build()
-        self.uvicorn = Uvicorn(app, before_shutdown=before_shutdown)
+        self.asgi, before_shutdown = front.build()
+        self.uvicorn = Uvicorn(schema_contract.HoldingAnswers(self.asgi), before_shutdown=before_shutdown)
         self.port = self.uvicorn.port
 
     def start(self):

@@ -6,7 +6,7 @@ import logging
 import pytest
 
 from mailmind.bootstrap import web
-from mailmind.http import handler
+from mailmind.http import shared
 from mailmind.kernel import errors
 from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.platform.logging import get_logger
@@ -42,7 +42,7 @@ def test_each_answers_the_status_it_means_with_what_a_person_is_told(app, monkey
 
 def test_every_one_has_a_status():
     assert set(Problem.__subclasses__()) == set(STATUS)
-    assert handler._STATUS == STATUS
+    assert shared.STATUS == STATUS
 
 
 @pytest.mark.parametrize("how", ["GET", "POST"])

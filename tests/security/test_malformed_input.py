@@ -1,8 +1,8 @@
 """A request that doesn't read as one gets the 400 a malformed request gets, not the 500 that means a bug here."""
 import pytest
 
+import route_tables
 from fixtures import world as w
-from mailmind.bootstrap import web
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import as_int, required_int
@@ -196,7 +196,7 @@ def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai
             "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}
-    routes = sorted(path for method, path in web.H.routes._exact if method == "POST" and path not in WALK_LEAVES_OUT)
+    routes = sorted(path for method, path in route_tables.by_name() if method == "POST" and path not in WALK_LEAVES_OUT)
     routes += ["/api/accounts/test", "/api/accounts/trust-cert", "/api/accounts/add", "/api/accounts/edit"]
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
            if app.post(path, {**good, field: junk}).status >= 500]
