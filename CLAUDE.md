@@ -360,7 +360,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   are `adapters.imaplib_session` (what the old door runs on) and `adapters.imapclient_session`
   (only it imports `imapclient`). `adapters.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
-  `adapters.sqlite` holds what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.conversations` for thread ids.
+  `adapters.sqlite` holds what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.threading` for thread ids.
   `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
   IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only the new door's
   `front.build` does (`offer`). The old door ignores the ask and never imports `imapclient`.
