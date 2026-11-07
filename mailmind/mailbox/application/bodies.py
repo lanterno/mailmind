@@ -7,6 +7,7 @@ from mailmind.content import frame, mime, sanitize
 from mailmind.content.mime import Parsed
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -18,7 +19,8 @@ _CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
 
 
 class Bodies:
-    def __init__(self, store: StoredMail, ingest: Ingest, reader: Reader):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader):
+        self._uow = uow
         self._store = store
         self._ingest = ingest
         self._reader = reader
@@ -27,7 +29,8 @@ class Bodies:
         """Rewrite src="cid:<id>" -> a data: URI for embedded RASTER images only, so the
         sandboxed iframe (CSP img-src allows data:) renders logos without any network.
         Active types (svg/html) are never embedded; oversized sets are left as cid (broken)."""
-        c = self._store.conn(); raw = self._store.get_body(c, pk); c.close()
+        with self._uow.read() as c:
+            raw = self._store.get_body(c, pk)
         if not raw:
             return safe_html
         parts = mime.inline_parts(raw)        # {content_id: (content_type, bytes)}
@@ -60,9 +63,8 @@ class Bodies:
         return safe_html, info
 
     def message_body(self, pk: int, load_images: bool, prefetch: bool = False) -> dict[str, Any]:
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.get_message(c, pk)
         if not row:
             return {"ok": False, "error": "not found"}
         if prefetch:
@@ -104,9 +106,8 @@ class Bodies:
         `key` must be the key of the row `pk` names: a pk can come to name another message (reconcile renumbers), and the
         bar above the frame speaks for the message the page read, so a frame never shows another's body under it."""
         try:
-            c = self._store.conn()
-            row = self._store.get_message(c, pk)
-            c.close()
+            with self._uow.read() as c:
+                row = self._store.get_message(c, pk)
             parsed = None
             if row and str(row["message_key"]) == key:
                 parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
@@ -122,17 +123,15 @@ class Bodies:
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.get_message(c, pk)
         if not row:
             return {"error": "not found"}
         gates.run(row["account"], lambda: self._ingest.fetch_body(pk),   # ensure body + attachment metadata exist
                   priority=gates.Priority.INTERACTIVE)
-        c = self._store.conn()
-        att = self._store.attachment_of(c, pk, part_id)
-        raw = self._store.get_body(c, pk)
-        c.close()
+        with self._uow.read() as c:
+            att = self._store.attachment_of(c, pk, part_id)
+            raw = self._store.get_body(c, pk)
         if not att or not raw:
             return {"error": "no such part"}
         data, _ = mime.extract_part(raw, part_id)

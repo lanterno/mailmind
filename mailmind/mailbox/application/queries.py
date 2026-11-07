@@ -7,6 +7,7 @@ from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Attention, StoredMail
+from mailmind.platform.db.uow import UnitOfWork
 
 
 def _attention(r: Row) -> dict[str, bool]:
@@ -15,17 +16,17 @@ def _attention(r: Row) -> dict[str, bool]:
 
 
 class Queries:
-    def __init__(self, store: StoredMail, attention: Attention, folders: Folders):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, attention: Attention, folders: Folders):
+        self._uow = uow
         self._store = store
         self._attention = attention
         self._folders = folders
 
     def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
-        c = self._store.conn()
-        rows = self._store.snoozed_rows(c, account, limit, offset)
-        total = self._store.snoozed_count(c, account)
-        c.close()
+        with self._uow.read() as c:
+            rows = self._store.snoozed_rows(c, account, limit, offset)
+            total = self._store.snoozed_count(c, account)
         items = [{
             "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
             "from_name": r["from_name"] or r["from_addr"],
@@ -42,9 +43,8 @@ class Queries:
     def muted_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Muted' virtual view: one row per muted thread (its latest message), so the user
         can find + unmute. Pure-local read (no IMAP)."""
-        c = self._store.conn()
-        all_rows = self._attention.list_muted(c, account)
-        c.close()
+        with self._uow.read() as c:
+            all_rows = self._attention.list_muted(c, account)
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
@@ -62,9 +62,8 @@ class Queries:
 
     def waiting_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
-        c = self._store.conn()
-        all_rows = self._attention.list_waiting(c, account)
-        c.close()
+        with self._uow.read() as c:
+            all_rows = self._attention.list_waiting(c, account)
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items: list[dict[str, Any]] = []
@@ -90,9 +89,8 @@ class Queries:
 
     def replylater_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
-        c = self._store.conn()
-        all_rows = self._attention.list_replylater(c, account)
-        c.close()
+        with self._uow.read() as c:
+            all_rows = self._attention.list_replylater(c, account)
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
@@ -119,14 +117,13 @@ class Queries:
         if folder == "__replylater__":
             return self.replylater_in(account, offset, limit)
         scan: dict[str, bool] = self._folders.on_open(account, folder) if offset == 0 else {}
-        c = self._store.conn()
-        if group:
-            rows = self._store.folder_conversation_rows(c, account, folder, limit, offset)
-            total = self._store.folder_conversation_count(c, account, folder)
-        else:
-            rows = self._store.folder_rows(c, account, folder, limit, offset)
-            total = self._store.folder_count(c, account, folder)
-        c.close()
+        with self._uow.read() as c:
+            if group:
+                rows = self._store.folder_conversation_rows(c, account, folder, limit, offset)
+                total = self._store.folder_conversation_count(c, account, folder)
+            else:
+                rows = self._store.folder_rows(c, account, folder, limit, offset)
+                total = self._store.folder_count(c, account, folder)
         items: list[dict[str, Any]] = []
         for r in rows:
             it: dict[str, Any] = {
@@ -152,9 +149,8 @@ class Queries:
         Message-ID (so a Gmail INBOX+All-Mail copy shows once)."""
         if not account or not thread_id:
             return {"ok": False, "error": "missing account/thread"}
-        c = self._store.conn()
-        rows = self._store.thread_rows(c, account, thread_id)
-        c.close()
+        with self._uow.read() as c:
+            rows = self._store.thread_rows(c, account, thread_id)
         items: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
         for r in rows:

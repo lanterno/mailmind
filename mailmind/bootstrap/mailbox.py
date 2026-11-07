@@ -41,6 +41,7 @@ from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import MailSession, ReadOnlySession
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.undo import Undo
 
 from mailmind.bootstrap import accounts         # the connection's TLS, pin and login, until they move into Accounts
@@ -268,6 +269,7 @@ def _reverse_block(d):
     return curation.cleanup.reverse_block(d)
 
 
+_uow = UnitOfWork()
 _directory = _Accounts()
 _attention = _Attention()
 copies = Copies(_open, imap_quote)
@@ -278,9 +280,9 @@ ingest = Ingest(store, _directory, _open, pool, _Curation(), _attention, fts)
 warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
 stats = LiveStats(_directory, _Curation())
-folders = Folders(store, _directory, pool, ingest, _attention)
-queries = Queries(store, _attention, folders)
-bodies = Bodies(store, ingest, _Reader())
+folders = Folders(_uow, store, _directory, pool, ingest, _attention)
+queries = Queries(_uow, store, _attention, folders)
+bodies = Bodies(_uow, store, ingest, _Reader())
 reversals = Reversals(store, _directory, server_ops, commands, ingest)
 
 
@@ -291,7 +293,7 @@ def _after_undo():
 
 undo = Undo(store.conn, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
                          "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
-filing = Filing(store, _directory, commands, ingest, undo, stats, folders, _attention)
+filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
 
 
 def _kick(job):
@@ -308,4 +310,4 @@ def _ai_status():
     return assistant.calls.status()
 
 
-digest = Digest(store, _directory, syncing, _ai_status)
+digest = Digest(_uow, store, _directory, syncing, _ai_status)

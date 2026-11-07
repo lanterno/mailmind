@@ -17,6 +17,7 @@ from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -47,7 +48,8 @@ class Folders:
     CATCH_UP_EVERY = 60.0      # seconds between catch-ups of one folder as it is opened
     _FOLDER_LIST_TTL = 25.0    # folder unread/total badges may be this stale (ambient counts)
 
-    def __init__(self, store: StoredMail, accounts: Accounts, pool: Pool, ingest: Ingest, attention: Attention):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, ingest: Ingest, attention: Attention):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._pool = pool
@@ -104,11 +106,8 @@ class Folders:
         """The folders MailMind holds this account's mail in, from the database alone: what the rail
         shows when the server can't be reached and no live list is cached (Bridge down, its
         certificate changed). Roles by name, the shallower folder first; counts as stored."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             counts = self._store.stored_folder_counts(c, account)
-        finally:
-            c.close()
         counts.setdefault("INBOX", (0, 0))
         names = sorted(counts, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
         folders = [folder_roles.Folder(n, frozenset(), None) for n in names]
@@ -164,12 +163,11 @@ class Folders:
         is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh."""
         acct = self._accounts.get(account)
         out = self._folders_list_cached(account, acct)
-        c = self._store.conn()
-        snoozed = self._store.snoozed_count(c, account)
-        muted = self._attention.muted_count(c, account)
-        waiting = self._attention.waiting_count(c, account)
-        replylater = self._attention.replylater_count(c, account)
-        c.close()
+        with self._uow.read() as c:
+            snoozed = self._store.snoozed_count(c, account)
+            muted = self._attention.muted_count(c, account)
+            waiting = self._attention.waiting_count(c, account)
+            replylater = self._attention.replylater_count(c, account)
         return {"ok": True, "account": account, "folders": out, "snoozed": snoozed,
                 "muted": muted, "waiting": waiting, "replylater": replylater}
 

@@ -13,6 +13,7 @@ from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import command
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.undo import Undo
 from mailmind.platform.workers import gates
@@ -28,8 +29,9 @@ _NOT_FOUND: dict[str, Any] = {"ok": False, "msg": "not found", "undoable": False
 class Filing:
     PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
 
-    def __init__(self, store: StoredMail, accounts: Accounts, commands: MailCommands, ingest: Ingest,
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, commands: MailCommands, ingest: Ingest,
                  undo: Undo, stats: LiveStats, folders: Folders, attention: Attention):
+        self._uow = uow
         self._store = store
         self._accounts = accounts
         self._commands = commands
@@ -106,9 +108,8 @@ class Filing:
     def do_pending_discard(self, mid: int) -> Result:
         """The tray's Discard, on the account's gate. A message whose row went when it was queued, before
         migration 23 kept them, is read back. Returns (result, code)."""
-        c = self._store.conn()
-        row = self._store.command_get(c, mid)
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.command_get(c, mid)
         if row is None:
             return {"ok": False}, 404
 
@@ -116,9 +117,8 @@ class Filing:
             gone = self._commands.discard(mid)
             if gone is None or gone["kind"] == "flag" or not gone["message_id"]:
                 return gone is not None
-            cc = self._store.conn()
-            listed = self._store.has_copy_in(cc, gone["account"], gone["src_folder"], gone["message_id"])
-            cc.close()
+            with self._uow.read() as cc:
+                listed = self._store.has_copy_in(cc, gone["account"], gone["src_folder"], gone["message_id"])
             if not listed:
                 try:
                     self._ingest.ingest_message(self._accounts.get(gone["account"]), gone["src_folder"], gone["message_id"])
@@ -180,15 +180,14 @@ class Filing:
         pk = as_int(body.get("pk"))
         if pk is None:
             return {"ok": False, "msg": "bad pk"}
-        c = self._store.conn()
-        row = self._store.get_message(c, pk)
-        if not row:
-            pks = []
-        elif (row["thread_id"] or "").strip():
-            pks = self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
-        else:
-            pks = [pk]
-        c.close()
+        with self._uow.read() as c:
+            row = self._store.get_message(c, pk)
+            if not row:
+                pks = []
+            elif (row["thread_id"] or "").strip():
+                pks = self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
+            else:
+                pks = [pk]
         if not pks:
             return {"ok": False, "msg": "not found"}
         group = body.get("undo_group") or "thread:" + secrets.token_hex(6)
@@ -229,11 +228,8 @@ class Filing:
         """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
         in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
         right for the Inbox may not be for wherever it went."""
-        c = self._store.conn()
-        try:
+        with self._uow.read() as c:
             pks = [p for p in (self._store.pk_in(c, key, folder) for key, folder in messages) if p is not None]
-        finally:
-            c.close()
         group = undo_group or "plan:" + secrets.token_hex(6)
         done: dict[str, Any] = {"ok": True, "verb": verb, "count": 0, "failed": 0, "gone": len(messages) - len(pks),
                 "queued": 0, "undoable": False}
