@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from mailmind.assistant.api import AIOff, OverLimit, allowing_over
 from mailmind.compose.api import MAX_SEND_POST
 from mailmind.http.routing import ANSWERED, Request, Routes
+from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Refused, Unreachable, Unreadable
 from mailmind.platform import perimeter, profile, settings
 from mailmind.platform.logging import for_request, get_logger
 
@@ -33,6 +34,18 @@ _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api
 
 
 AI_OVER_HEADER = "X-MailMind-AI-Over-Limit"   # "allow": the user said this request may go over
+
+
+# The status each answers with. 502 says asking again can help, and 422 that it won't.
+_STATUS = {NotFound: 404, Conflict: 409, Locked: 423, Refused: 400, Unreachable: 502, Unreadable: 422, Busy: 409}
+_PROBLEMS = tuple(_STATUS)
+
+
+def problem_answer(e):
+    """A Problem as both clients read one, {ok: false, error}, and its status. RFC 9457's form waits for the day / is the
+    React app."""
+    said = {"error": e.said} if e.said else {}
+    return {"ok": False, **said, **e.more}, next(code for kind, code in _STATUS.items() if isinstance(e, kind))
 
 
 def _over_limit_answer(e):
@@ -143,6 +156,8 @@ class H(BaseHTTPRequestHandler):
         over.__enter__()
         try:
             self._route("GET", Request(self, u.path, q))
+        except _PROBLEMS as e:
+            self._json(*problem_answer(e))
         except OverLimit as e:      # the page asks before it goes over
             self._json(*_over_limit_answer(e))
         except AIOff:               # no key: nothing was sent, and nothing will be until one is set
@@ -173,6 +188,8 @@ class H(BaseHTTPRequestHandler):
         over.__enter__()
         try:
             self._route("POST", Request(self, u.path, {}, b))
+        except _PROBLEMS as e:
+            self._json(*problem_answer(e))
         except (TypeError, ValueError):       # malformed request input (bad/missing int id/pk) → clean 400
             self._json({"ok": False, "error": "bad request"}, 400)
         except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
