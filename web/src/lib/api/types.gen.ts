@@ -16,34 +16,7 @@ export interface GetAnswers {
     ok: boolean;
   };
   "/api/accounts": {
-    account?: {
-      alias: string;
-      credential: {
-        set: boolean;
-        style: string;
-      };
-      defaults_applied: {
-        host: boolean;
-        port: boolean;
-        smtp_host: boolean;
-        smtp_port: boolean;
-        smtp_starttls: boolean;
-        starttls: boolean;
-        trash: boolean;
-      };
-      disabled: boolean;
-      email: string;
-      host: string;
-      port: number;
-      signature: string;
-      smtp_host: string;
-      smtp_port: number;
-      smtp_starttls: boolean;
-      starttls: boolean;
-      trash: string;
-      type: string;
-    };
-    accounts?: {
+    accounts: {
       alias: string;
       credential: {
         set: boolean;
@@ -70,9 +43,9 @@ export interface GetAnswers {
       trash: string;
       type: string;
     }[];
-    generated?: string;
+    generated: string;
     ok: boolean;
-    signature_default?: string;
+    signature_default: string;
   };
   "/api/ai/draft-ahead": {
     body?: string;
@@ -163,14 +136,9 @@ export interface GetAnswers {
       last_seen: string;
       lu_likely: boolean;
       noise_score: number;
-      sample_subjects: string[];
       unseen: number;
       unseen_ratio: number;
     }[];
-    totals: {
-      candidate_messages: number;
-      candidate_senders: number;
-    };
   };
   "/api/contact": {
     accounts: string[];
@@ -347,7 +315,6 @@ export interface GetAnswers {
       bucket: string;
       category: string;
       commitment_worthy: boolean;
-      confidence: string;
       flagged: boolean;
       folder: string;
       from_addr: string;
@@ -356,11 +323,9 @@ export interface GetAnswers {
       importance: number;
       key: number;
       kind: string;
-      last_seen: null;
       link: string;
       needs_you: boolean;
       pk: number;
-      reason: string;
       reply_worthy: boolean;
       safe_to_file: boolean;
       seen: boolean;
@@ -368,7 +333,6 @@ export interface GetAnswers {
       summary: string;
       thread_id: string;
       ts: number;
-      verified: boolean;
       when: string;
     }[];
     profile: string;
@@ -899,10 +863,6 @@ export interface PostAnswers {
     error?: string;
     ok: boolean;
   };
-  "/api/accounts/signature-default": {
-    ok: boolean;
-    signature_default: string;
-  };
   "/api/accounts/test": {
     connect?: boolean;
     detail?: string;
@@ -1141,12 +1101,6 @@ export interface PostAnswers {
     status?: string;
     undoable?: boolean;
   };
-  "/api/move": {
-    msg: string;
-    ok: boolean;
-    status?: string;
-    undoable?: boolean;
-  };
   "/api/mute": {
     ok: boolean;
     thread_id: string;
@@ -1309,8 +1263,6 @@ export interface PostAnswers {
       senders?: number;
       stragglers?: unknown[];
     })[];
-    total_moved: number;
-    total_planned: number;
   };
   "/api/sync-retry-account": {
     account: string;
