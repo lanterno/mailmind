@@ -16,8 +16,10 @@ from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.kernel.parsed import is_object
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
+log = get_logger("ai")
 TOP_N = 40
 CAP_TOTAL = 12000
 BRIEFING_SCHEMA = {
@@ -293,7 +295,7 @@ class Briefs:
             except NotSent:                     # AI off, or over the daily limit: the route answers it
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache
-                print(f"[ai] delta failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                log.warning("delta failed", exc_info=e)
                 return {"ok": False, "error": "delta unavailable", "retry": True}, 502
             headline, items = self._clean_delta(obj)
             model = self._calls.model_label()
@@ -361,7 +363,7 @@ class Briefs:
             except NotSent:                     # AI off, or over the daily limit: the route answers it
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache
-                print(f"[ai] briefing failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                log.warning("briefing failed", exc_info=e)
                 return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
             narrative, groups = self._clean(obj, valid)
             model = self._calls.model_label()

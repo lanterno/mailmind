@@ -12,6 +12,9 @@ from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Connect, ModelError, NotSent
 from mailmind.assistant.domain import models, pricing
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.logging import get_logger
+
+assess_log = get_logger("assess")
 
 type Log = Callable[[str], None]
 type Assessment = tuple[str, int, str, str, str]    # what's stored of a message: summary, importance, category, action, model
@@ -266,16 +269,16 @@ class Triage:
         round waits until it has yielded long enough; held back otherwise (the limit, the breaker), it
         waits its interval. A batch's answers are brought in first, whatever holds the rest back, and a
         backlog goes out in the next batch rather than through this round's calls."""
-        def log(m: str) -> None:
-            print(f"[assess] {m}", flush=True)
+        def say(m: str) -> None:                       # the app's own words, and counts and an error's class
+            assess_log.info("%(what)s", {"what": m})
 
-        self.batch_collect(log)
+        self.batch_collect(say)
         why = self._gateway().held_back("triage", self._calls.MODEL)
         if why:
             return self.ASSESS_YIELD if why == "yielding" else None
         if not os.environ.get("MAILMIND_NO_BATCHES"):
-            self.batch_submit(log=log)
+            self.batch_submit(log=say)
         done = self.summarize_pending(limit=self.ASSESS_BATCH, workers=self.WORKERS)
         if done:
-            print(f"[assess] {done} summarized", flush=True)
+            assess_log.info("%d summarized", done)
         return 0 if done >= self.ASSESS_BATCH else None

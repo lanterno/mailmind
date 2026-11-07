@@ -16,6 +16,9 @@ from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import BatchStatus, NotSent
 from mailmind.assistant.domain import models
 from mailmind.kernel.parsed import is_object
+from mailmind.platform.logging import get_logger
+
+log = get_logger("ai")
 
 
 def _plain(e: Exception) -> str:
@@ -145,7 +148,7 @@ class Calls:
         try:
             return self._gateway().spent_today()
         except Exception as e:
-            print(f"[ai] the usage ledger can't be read: {type(e).__name__}", flush=True)
+            log.warning("the usage ledger can't be read", exc_info=e)
             return None
 
     def usage(self, days: int = 30) -> list[DayCost]:

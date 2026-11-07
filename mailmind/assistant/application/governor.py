@@ -30,7 +30,9 @@ from typing import Any
 
 from mailmind.assistant.application.ports import Deferred, LanguageModel, ModelError, OverLimit
 from mailmind.assistant.domain.features import INTERACTIVE, SPECULATIVE
+from mailmind.platform.logging import get_logger
 
+log = get_logger("ai")
 YIELD_SECONDS = 45
 PRESENCE_SECONDS = 45 * 60
 TRIP_AFTER = 3                      # permanent rejections in a row, for one feature and model
@@ -147,8 +149,8 @@ class CostGovernor:
                 self._open[key] = instance
                 scope = f"{feature} on {model}"
         if opened:
-            print(f"[ai] the API keeps rejecting requests: {scope} stops until the key or the model "
-                  f"changes ({error.status})", flush=True)
+            log.warning("the API keeps rejecting requests: %(what)s stops until the key or the model changes (%(why)s)",
+                        {"what": scope, "why": error.status})
 
     def forget(self) -> None:
         """Back to how a fresh start finds things: no interactive call lately, someone here now, the
@@ -186,7 +188,7 @@ class CostGovernor:
         try:
             return self._reserved()
         except Exception as e:
-            print(f"[ai] what batches may cost can't be read: {type(e).__name__}", flush=True)
+            log.warning("what batches may cost can't be read", exc_info=e)
             return None
 
     def _today(self) -> tuple[int | None, int]:
@@ -194,7 +196,7 @@ class CostGovernor:
         try:
             spent = self._spent()
         except Exception as e:
-            print(f"[ai] the usage ledger can't be read: {type(e).__name__}", flush=True)
+            log.warning("the usage ledger can't be read", exc_info=e)
             spent = None
         return spent, self._limit()
 

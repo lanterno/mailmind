@@ -20,8 +20,11 @@ from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
+log = get_logger("ai")
+tick_log = get_logger("draft")
 _WARM = object()                                      # what warm() finds: a fresh draft is stored
 _DRAFT_CAND_SQL = """
 SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
@@ -170,7 +173,7 @@ class DraftAhead:
             except NotSent:
                 return None                                   # neutral: AI is off, or the governor said not now
             except Exception as e:
-                print(f"[ai] draft-ahead failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                log.warning("draft-ahead failed", exc_info=e)
                 try:
                     c = self._connect()
                     self._answers.draft_ahead_fail(c, key[0], key[1], int(time.time()))
@@ -313,7 +316,7 @@ class DraftAhead:
                     if fails >= self.DRAFT_TICK_TRIP:
                         suspended_until = time.time() + self.DRAFT_TICK_SUSPEND
                         fails = 0
-                        print("[draft] tick suspended 30m after repeated failures", flush=True)
+                        tick_log.warning("tick suspended 30m after repeated failures")
                 c = self._connect()
                 try:                                                 # close() rolls back a half-done GC — a leaked
                     self._answers.draft_ahead_gc(c, int(time.time()))        # conn here would pin the WAL write lock

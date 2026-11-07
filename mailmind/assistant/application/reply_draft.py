@@ -6,7 +6,9 @@ The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructi
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Connect, NotSent, Result
 from mailmind.assistant.application.thread_digest import ThreadDigest
+from mailmind.platform.logging import get_logger
 
+log = get_logger("ai")
 REPLY_SCHEMA = {
     "type": "object",
     "properties": {"body": {"type": "string"}},
@@ -68,7 +70,7 @@ class ReplyDrafts:
         except NotSent:                         # AI off, over the limit, or a draft ahead that must wait
             raise
         except Exception as e:                      # timeout / rate-limit: retryable
-            print(f"[ai] draft failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            log.warning("draft failed", exc_info=e)
             return {"ok": False, "error": "draft unavailable", "retry": True}, 502
         body = (obj.get("body") or "").strip()
         if not body:

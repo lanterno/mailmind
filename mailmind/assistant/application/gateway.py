@@ -14,7 +14,9 @@ from mailmind.assistant.application.ports import (BatchResult, LanguageModel, Mo
                                                   Reply, Spend, Usage, UsageLedger)
 from mailmind.assistant.domain import features, models, pricing
 from mailmind.assistant.domain.schema import structured
+from mailmind.platform.logging import get_logger
 
+log = get_logger("ai")
 MAX_TOKENS = 16000                 # a ceiling, not a target; adaptive thinking counts against it
 
 
@@ -165,7 +167,7 @@ class Gateway:
             self._ledger.record(Spend(local_day(now), feature, asked, served, outcome, usage, cost,
                                       int(now), calls))
         except Exception as e:     # the call itself went fine; a ledger write never undoes it
-            print(f"[ai] the usage ledger failed: {type(e).__name__}", flush=True)
+            log.warning("the usage ledger failed", exc_info=e)
 
     def spent_today(self) -> int:
         """What today's calls cost so far, in micro-dollars."""

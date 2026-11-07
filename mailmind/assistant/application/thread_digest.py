@@ -13,9 +13,11 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.singleflight import SingleFlight
 
+log = get_logger("ai")
 CAP_MSGS = 20
 CAP_PER_MSG = 1500
 CAP_TOTAL = 14000
@@ -179,7 +181,7 @@ class ThreadDigest:
             except NotSent:                         # AI off, or over the daily limit: the route answers it
                 raise
             except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
-                print(f"[ai] claude failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                log.warning("claude failed", exc_info=e)
                 return {"ok": False, "error": "summary unavailable", "retry": True}, 502
             parsed: Digest | None = self._parse(out)
             model = self._calls.model_label()

@@ -16,8 +16,10 @@ from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
+log = get_logger("ai")
 WEEK_SECONDS = 7 * 86400
 TOP_OPEN = 8                            # cap the deterministic open/waiting lists
 CAP_TOTAL = 9000
@@ -283,7 +285,7 @@ class Reviews:
             except NotSent:                     # AI off, or over the daily limit: the route answers it
                 raise
             except Exception as e:
-                print(f"[ai] review failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+                log.warning("review failed", exc_info=e)
                 return {"ok": False, "error": "review unavailable", "retry": True}, 502
 
             created = self._now()

@@ -5,7 +5,9 @@ text only.
 """
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import NotSent, Result
+from mailmind.platform.logging import get_logger
 
+log = get_logger("ai")
 REWRITE_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
 _OPS = {
     "shorten": "Make it noticeably shorter and tighter while keeping every key point.",
@@ -46,7 +48,7 @@ class Rewriter:
         except NotSent:                         # AI off, or over the daily limit: the route answers it
             raise
         except Exception as e:
-            print(f"[ai] rewrite failed: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            log.warning("rewrite failed", exc_info=e)
             return {"ok": False, "error": "rewrite unavailable", "retry": True}, 502
         out = (obj.get("text") or "").strip()
         if not out:
