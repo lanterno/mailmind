@@ -299,6 +299,20 @@ def test_undo_takes_off_the_read_mark_a_server_set_on_the_way_to_trash(app, worl
     assert box == "INBOX" and "\\Seen" not in flags
 
 
+def test_undo_of_a_plain_move_to_trash_takes_off_the_read_mark_too(app, world, monkeypatch):
+    from mailmind.bootstrap import mailbox
+    from mailmind.bootstrap.mailbox import server_ops
+    real = server_ops._accounts.profile
+    monkeypatch.setattr(mailbox._directory, "profile", lambda acct: dataclasses.replace(real(acct), marks_trash_read=True))
+    pk = world.pk(RECEIPT)
+    assert not world.row(RECEIPT)["seen"]
+    assert app.post("/api/move", {"pk": pk, "dest": "Trash"}).json["ok"]
+    assert "unseen" in (rows()[0]["outcome"] or "")
+    assert app.post("/api/undo", {}).json["ok"]
+    [(_, box, _, flags)] = world.where(RECEIPT)["server"]
+    assert box == "INBOX" and "\\Seen" not in flags
+
+
 def test_undo_of_an_older_entry_goes_by_the_move_and_not_a_later_flag_change(app, world):
     """An entry written before entries named their command finds the newest move, never a flag change."""
     from mailmind.bootstrap import mailbox

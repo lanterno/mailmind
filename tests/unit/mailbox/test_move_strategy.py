@@ -31,7 +31,7 @@ def strategy(acct, verb, capabilities, named=None):
     p = provider.resolve(acct)
     where = destination.resolve(verb, named=named, archive_is_label_removal=p.archive_is_label_removal, trash="Trash",
                                 junk_fallback=p.junk_fallback, find=lambda *roles: roles[0].title())
-    return move_strategy.choose(verb, where, capabilities=capabilities, marks_trash_read=p.marks_trash_read)
+    return move_strategy.choose(verb, where, capabilities=capabilities, marks_trash_read=p.marks_trash_read, trash="Trash")
 
 
 @pytest.mark.parametrize("capabilities, way", OFFERS)
@@ -77,8 +77,10 @@ def test_no_other_server_marks_what_it_trashes_read(acct):
     assert not strategy(acct, "trash", frozenset({"MOVE"})).read_seen_first
 
 
-def test_it_goes_by_the_verb_so_a_plain_move_to_trash_is_a_move():
-    assert not strategy(PROTON, "move", frozenset({"MOVE"}), named="Trash").read_seen_first
+def test_a_plain_move_to_the_accounts_trash_reads_the_mark_first_too():
+    assert strategy(PROTON, "move", frozenset({"MOVE"}), named="Trash").read_seen_first
+    assert not strategy(PROTON, "move", frozenset({"MOVE"}), named="Folders/Clients").read_seen_first
+    assert not strategy(PLAIN, "move", frozenset({"MOVE"}), named="Trash").read_seen_first
 
 
 @pytest.mark.parametrize("capabilities, way", OFFERS)
