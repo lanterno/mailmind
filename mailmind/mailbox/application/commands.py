@@ -244,6 +244,17 @@ class MailCommands:
         return outcome
 
 
+    def leave_to_worker(self, accepted: command.Accepted) -> str:
+        """No one waits for a try at this one, as a click on many gives up in the end: the worker has it, as when the gate
+        stayed busy."""
+        row = accepted.claimed
+        if row is None:
+            return command.QUEUED
+        self._commit(lambda c: (self.QUEUE.put_back(c, row["id"]), self._store.command_never_begun(c, row["id"])))
+        self.kick()
+        return command.WAITING
+
+
     def _forget(self, c: Connection, row: Row) -> None:
         """The change someone is waiting on won't happen, and they hear so now: as if it was never asked."""
         self._give_back(c, row)

@@ -1,6 +1,7 @@
 """Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. The
 tray's Retry and Discard of what is waiting are here too."""
 import secrets
+import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -214,15 +215,26 @@ class Filing:
 
 
     def _try_each(self, kind: str, accepted: Sequence[tuple[int, command.Accepted | None]]) -> dict[int, dict[str, Any]]:
-        """Moves accepted and committed: a try at each, as filing one message is, on the gate with no transaction open."""
+        """Moves accepted and committed: a try at each, as filing one message is, on the gate with no transaction open. Whoever
+        clicked waits about as long as for one: past FILE_WAIT the rest are left to the worker, so a busy gate or a server
+        gone quiet costs one wait, not one for each message."""
         out: dict[int, dict[str, Any]] = {}
-        for p, one in accepted:
+        until = time.monotonic() + self._commands.FILE_WAIT
+        left = False
+        for i, (p, one) in enumerate(accepted):
             try:
-                out[p] = self._submit_move(kind, one)
+                if i and one is not None and one.created and time.monotonic() >= until:
+                    out[p] = {"ok": True, "msg": "queued", "status": self._commands.leave_to_worker(one),
+                              "undoable": one.undoable}
+                    left = True
+                else:
+                    out[p] = self._submit_move(kind, one)
             except Exception as e:                   # it's back in the queue; the rest are claimed, and wait on this loop
                 do_log.warning("%(what)s failed", {"what": kind}, exc_info=e)
                 self.flags_queued()
                 out[p] = {"ok": True, "status": command.QUEUED, "undoable": bool(one and one.undoable)}
+        if left:
+            self.flags_queued()
         return out
 
 
