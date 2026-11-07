@@ -11,7 +11,7 @@ import re
 from typing import TypedDict
 
 from mailmind.compose.domain import limits
-from mailmind.compose.domain.errors import Refused
+from mailmind.kernel.errors import Unreadable
 from mailmind.content.headers import header_chips, header_text
 from mailmind.content.mime import Parsed, decoded, parse
 from mailmind.kernel import addresses
@@ -101,18 +101,18 @@ def resume_split(text: str | None, rec: Record | None, exact: bool) -> tuple[str
 
 
 def split_to_fit(text: str | None, record: Row, exact: bool, files: list[ResumedFile]) -> tuple[str, str, str]:
-    """resume_split's answer, if the draft can come back at all. Refused(422) with formatted text only, whose links and
+    """resume_split's answer, if the draft can come back at all. Unreadable with formatted text only, whose links and
     formatting would be lost, and past what a save can carry: every save and send of it carries the files as base64 and the
     text and quote as JSON, so past limits.MAX_SEND_POST each would be refused, and edits made in the composer lost on
     close."""
     split = resume_split(text, {"own_text": record["own_text"], "tail_text": record["tail_text"]}, exact)
     if split is None:
-        raise Refused(422, "This draft only has formatted text. Edit it in the app that made it, "
-                           "so its links and formatting aren’t lost.")
+        raise Unreadable("This draft only has formatted text. Edit it in the app that made it, "
+                         "so its links and formatting aren’t lost.")
     size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode()) for t in split[:2])
     if size + limits.RESUME_HEADROOM > limits.MAX_SEND_POST:
-        raise Refused(422, "This draft is too large for MailMind to save or send, with its files "
-                           "and the text it quotes." + ELSEWHERE)
+        raise Unreadable("This draft is too large for MailMind to save or send, with its files "
+                         "and the text it quotes." + ELSEWHERE)
     return split
 
 
@@ -158,14 +158,14 @@ def subject_of(msg: EmailMessage, then: str | None) -> str:
 def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], int]:
     """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
     many were pictures in the text: every part must come back as the text or a file, or this
-    raises Refused(422). Headers parse as they're read, so a hostile one raises here as well."""
+    raises Unreadable. Headers parse as they're read, so a hostile one raises here as well."""
     lost = "Part of this draft is something MailMind can’t reopen without losing it." + ELSEWHERE
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
-        raise Refused(422, "This draft has an email attached as a file, which MailMind can’t "
+        raise Unreadable("This draft has an email attached as a file, which MailMind can’t "
                          "reattach yet." + ELSEWHERE)
     if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
            for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
-        raise Refused(422, lost)
+        raise Unreadable(lost)
     leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
     listed = {int(a["part_id"]) for a in parsed["attachments"]}
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
@@ -177,7 +177,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
     for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
         ct = p.get_content_type()
         if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
-            raise Refused(422, "This draft is a calendar invite, which MailMind can’t send on as "
+            raise Unreadable("This draft is a calendar invite, which MailMind can’t send on as "
                              "one." + ELSEWHERE)
         if i in listed or p is body or id(p) in covered:
             continue                                     # a file, the text, or formatting of that same text
@@ -186,7 +186,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
             continue
         if not (decoded(p) or b"").strip():
             continue                                     # nothing in it to lose
-        raise Refused(422, lost)
+        raise Unreadable(lost)
     files: list[ResumedFile] = []
     total = inline = 0
     for a in parsed["attachments"]:
@@ -195,7 +195,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
         ct = (part.get_content_type() or "application/octet-stream").lower()
         total += len(data)
         if total > limits.MAX_ATTACH_BYTES:
-            raise Refused(422, "This draft’s files add up to more than 25 MB, more than MailMind "
+            raise Unreadable("This draft’s files add up to more than 25 MB, more than MailMind "
                              "can send." + ELSEWHERE)
         name = a["filename"]
         if a["content_id"] and a["is_inline"]:

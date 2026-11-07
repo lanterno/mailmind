@@ -1,7 +1,7 @@
 """The time a person asks a send to go at. It is judged before the original is fetched, so a bad one costs nothing."""
 from typing import Any
 
-from mailmind.compose.domain.errors import Refused
+from mailmind.kernel.errors import Refused
 
 FURTHEST = 366 * 86400     # seconds ahead a send may be scheduled
 
@@ -12,9 +12,9 @@ def send_after(asked: Any, now: float) -> int:
     try:
         at = int(asked or 0)
     except (TypeError, ValueError, OverflowError):     # JSON may say Infinity, which no int holds
-        raise Refused(400, "bad send time")
+        raise Refused("bad send time")
     if at and at <= now:
-        raise Refused(400, "that send time has passed")
+        raise Refused("that send time has passed")
     if at and at >= now + FURTHEST:
-        raise Refused(400, "pick a send time within a year")
+        raise Refused("pick a send time within a year")
     return at

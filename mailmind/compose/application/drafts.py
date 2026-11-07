@@ -9,8 +9,8 @@ from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
 from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
-from mailmind.compose.domain.errors import Refused
 from mailmind.content.headers import header_chips, header_text
+from mailmind.kernel.errors import Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
@@ -23,13 +23,13 @@ log = get_logger("draft")
 resume_log = get_logger("resume")
 _LIVE_TIMEOUT = 10
 PUSH_WAIT = 2.5              # how long a save someone asked for waits for the account's gate, before the job has it
+_NOT_LOADED = "Couldn’t load this draft from the mail server. Try again in a moment."
 
 
 class _Gate(enum.Enum):
     WIDER = enum.auto()      # the row now needs a wider gate than the job held
 
 
-type Answer = tuple[dict[str, Any], int]     # what to say, and the HTTP status to say it with
 type Pushed = int | None | Literal[False]    # the new copy's UID (None if the server didn't say), or False: it has to wait
 
 
@@ -70,25 +70,20 @@ class Drafts:
                                                            folder=row["folder"], uid=row["uid"], uidvalidity=uidvalidity))
         return {"draft_id": did, "draft_mode": "new", "is_draft": True}
 
-    def save(self, body: Mapping[str, Any]) -> Answer:
+    def save(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Save a draft, or discard it. Either is local and durable the moment it answers: the journal holds it, and
         the server's copy follows (decision D5). An autosave leaves that to the push job, at most every minute; any other
-        save tries now, for a moment. Returns (result, code)."""
+        save tries now, for a moment."""
         if body.get("delete") and body.get("draft_id"):
             return self._discard(int(body["draft_id"]))
         try:
             spec, in_reply_to_pk, acct = self._composing.spec(body)
             if draft.is_empty(spec):
-                return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}, 200
+                return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}
             built = build_message(spec, draft=True)
-        except Refused as h:
-            return {"ok": False, "error": h.msg}, h.code
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}, 400
-        accepted = self._accept(body, spec, built, acct, in_reply_to_pk)
-        if accepted[2] is not None:
-            return accepted[2]
-        did, version, _ = accepted
+        except ValueError as e:                       # our own words: they hold nothing secret
+            raise Refused(str(e)) from e
+        did, version = self._accept(body, spec, built, acct, in_reply_to_pk)
         answer: dict[str, Any] = {"ok": True, "draft_id": did, "version": version, "message_id": built["message_id"], "pushed": False}
         if not body.get("autosave") and profile.writes_allowed():
             uid = self._try_push(did, priority=gates.Priority.INTERACTIVE, deadline=PUSH_WAIT)
@@ -96,12 +91,12 @@ class Drafts:
                 answer.update(pushed=True, uid=uid)
         if body.get("resume") is None and spec["tail"]["text"]:
             answer.update(draft.handed_over(spec))
-        return answer, 200
+        return answer
 
     def _accept(self, body: Mapping[str, Any], spec: Composed, built: Built, acct: Account,
-                in_reply_to_pk: int | None) -> tuple[int, int, None] | tuple[None, None, Answer]:
-        """Write the save to the journal, in one transaction with the draft's row. Returns (the row's id, its version,
-        None), or (None, None, the answer) for a save that may not go in."""
+                in_reply_to_pk: int | None) -> tuple[int, int]:
+        """Write the save to the journal, in one transaction with the draft's row. Returns the row's id and its version.
+        A save that may not go in raises, with nothing written."""
         did = int(body["draft_id"]) if body.get("draft_id") else None
         key = draft.composer_key(body)
         base = body.get("base_version")
@@ -113,10 +108,9 @@ class Drafts:
             if draft_journal.asks_removal(waiting):
                 prev = waiting = None
             if prev and self._book.outbox_holds_draft(c, prev["id"]):
-                return None, None, ({"ok": False, "error": draft.HELD}, 423)
+                raise Locked(draft.HELD)
             if prev and draft.is_stale(prev, base, key):
-                return None, None, ({"ok": False, "conflict": True, "version": prev["version"],
-                                     "error": draft.CHANGED_ELSEWHERE}, 409)
+                raise Conflict(draft.CHANGED_ELSEWHERE, conflict=True, version=prev["version"])
             version = draft.next_version(prev)
             if prev:
                 new_id = prev["id"]
@@ -129,15 +123,15 @@ class Drafts:
             due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None)
             self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"], record["raw_sha"],
                                    record["own_text"], record["tail_text"], record["tail_html"], record["bcc"], now, due, attempts)
-            return new_id, version, None
+            return new_id, version
 
-    def _discard(self, did: int) -> Answer:
+    def _discard(self, did: int) -> dict[str, Any]:
         """Discard a draft. A copy on the server goes first and the row after it, so a server that's away
         leaves the journal asking until it's back; with no copy there's nothing to wait for."""
         with self._uow.write() as c:
             row = self._book.draft_get(c, did)
             if row is None:
-                return {"ok": True, "deleted": True}, 200
+                return {"ok": True, "deleted": True}
             waiting = self._book.journal_get(c, did)
             if draft_journal.copy_may_be_there(row, waiting):
                 self._book.journal_discard(c, did, draft.next_version(row), row["account"], _now())
@@ -149,7 +143,7 @@ class Drafts:
         if there and profile.writes_allowed():
             self._try_push(did, priority=gates.Priority.INTERACTIVE, deadline=PUSH_WAIT)
         self._screen.outbox_changed()
-        return {"ok": True, "deleted": True}, 200
+        return {"ok": True, "deleted": True}
 
     def _try_push(self, did: int, *, priority: int, deadline: float | None = None, wait: bool = True) -> Pushed:
         """Do what the journal asks for this draft, as a job on the gate. Returns the new copy's UID (None if the server
@@ -278,39 +272,38 @@ class Drafts:
         cur, there = seen
         return reopening.copy_is_there(cur, self._mail.uidvalidity(acct["email"], folder), there)
 
-    def resume(self, body: Mapping[str, Any]) -> Answer:
+    def resume(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Open a saved draft back into the composer from its own stored bytes: your text, the quote
         or forwarded section it already carries (as text), every file as base64, To/Cc/Bcc as chips
         and its own threading headers. The original is looked up by (account, Message-ID) for the
         composer's sake only: sending a reopened draft never needs it. What MailMind recorded at its
-        last save (_m20_draft_resume) is trusted only for the very copy it saved. Returns (result, code)."""
+        last save (_m20_draft_resume) is trusted only for the very copy it saved."""
         if body.get("draft_id") and body.get("pk") is None:
             return self._resume_saved(body["draft_id"])
         pk = as_int(body.get("pk"))
         if pk is None:
-            return {"ok": False, "error": "Missing draft."}, 400
+            raise Refused("Missing draft.")
         row = self._mail.message(pk)
         if not row:
-            return {"ok": False, "error": "That draft is no longer in Drafts."}, 404
+            raise NotFound("That draft is no longer in Drafts.")
         if not self.is_draft(row):
-            return {"ok": False, "error": "That message isn’t a draft."}, 400
+            raise Refused("That message isn’t a draft.")
         try:
             acct = self._accounts.get(row["account"])
         except KeyError:
-            return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
-        unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
+            raise Refused("That draft’s account isn’t set up in MailMind any more.")
         with self._uow.read() as c:
             before = self._book.draft_by_msgid(c, row["account"], row["message_id"])
             queued = before is not None and self._book.outbox_holds_draft(c, before["id"])
             asked = self._book.journal_get(c, before["id"]) if before is not None else None
         if queued:                                           # reopened and sent again, it would go out twice
-            return {"ok": False, "error": draft.HELD}, 423
+            raise Locked(draft.HELD)
         if draft_journal.asks_removal(asked):
-            return {"ok": False, "error": draft.DISCARDED}, 409
+            raise Conflict(draft.DISCARDED)
         live = self._live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
 
-        def reread_then_fetch() -> Answer | None:
-            """The 409 when the copy changed, else None once the body is fetched."""
+        def reread_then_fetch() -> None:
+            """The body fetched, or Conflict when the copy changed."""
             # the probe ran before the gate: a save or a send that held it meanwhile may have replaced
             # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
             with self._uow.read() as c:
@@ -321,23 +314,21 @@ class Drafts:
                     self._mail.sync_whole(acct, row["folder"])
                 except Exception as e:
                     resume_log.warning("drafts resync failed: %(why)s", {"why": self._screen.quiet_error(e)})
-                return {"ok": False, "error": "This draft changed since the list loaded. "
-                                              "Open it again from the refreshed list."}, 409
+                raise Conflict("This draft changed since the list loaded. Open it again from the refreshed list.")
             self._mail.fetch_body(pk)
-            return None
         try:
-            changed = gates.run(acct["email"], reread_then_fetch, priority=gates.Priority.INTERACTIVE)
+            gates.run(acct["email"], reread_then_fetch, priority=gates.Priority.INTERACTIVE)
+        except Problem:
+            raise
         except self._mail.unreachable() as e:
             resume_log.warning("fetch failed: %(why)s", {"why": self._screen.quiet_error(e)})
-            return unreachable, 502
+            raise Unreachable(_NOT_LOADED)
         except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
             resume_log.warning("draft unreadable", exc_info=e)
-            return {"ok": False, "error": reopening.UNREADABLE}, 422
-        if changed:
-            return changed
+            raise Unreadable(reopening.UNREADABLE)
         raw = self._mail.body(pk)
         if not raw:
-            return unreachable, 502
+            raise Unreachable(_NOT_LOADED)
         did = self.info(row)["draft_id"]                   # registers another app's draft
         with self._uow.read() as c:
             d = self._book.draft_get(c, did)
@@ -355,21 +346,21 @@ class Drafts:
         repoint = None if trust.same_copy else (row["folder"], row["uid"], cur, not trust.exact)
         return self._opened(raw, d, record, trust.exact, row["account"], row["subject"], repoint)
 
-    def _resume_saved(self, draft_id: Any) -> Answer:
+    def _resume_saved(self, draft_id: Any) -> dict[str, Any]:
         """Open a draft by its journal, for one that may not be on the server yet."""
         try:
             did = int(draft_id)
         except (TypeError, ValueError):
-            return {"ok": False, "error": "Missing draft."}, 400
+            raise Refused("Missing draft.")
         with self._uow.read() as c:
             d, j = self._book.draft_get(c, did), self._book.journal_get(c, did)
             queued = d is not None and self._book.outbox_holds_draft(c, did)
         if queued:
-            return {"ok": False, "error": draft.HELD}, 423
+            raise Locked(draft.HELD)
         if d is None or j is None:
-            return {"ok": False, "error": "That draft has reached the server. Open it from Drafts."}, 409
+            raise Conflict("That draft has reached the server. Open it from Drafts.")
         if draft_journal.asks_removal(j):
-            return {"ok": False, "error": draft.DISCARDED}, 409
+            raise Conflict(draft.DISCARDED)
         return self._opened(j["raw"], d, j, True, j["account"], d["subject"], None)
 
     def _keep_apart(self, d: Row, j: Row) -> None:
@@ -382,20 +373,17 @@ class Drafts:
             self._book.journal_move(c, d["id"], new_id)
 
     def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,
-                repoint: tuple[str, int, int | None, bool] | None) -> Answer:
+                repoint: tuple[str, int, int | None, bool] | None) -> dict[str, Any]:
         """A draft's bytes, in the composer's terms. `record` is what MailMind knows of those very bytes."""
         try:
             msg, parsed = reopening.read(raw)
             files, inline = reopening.resume_files(msg, parsed)
-        except Refused as h:
-            return {"ok": False, "error": h.msg}, h.code
+        except Problem:
+            raise
         except Exception as e:
             resume_log.warning("draft unreadable", exc_info=e)
-            return {"ok": False, "error": reopening.UNREADABLE}, 422
-        try:
-            own, tail, how = reopening.split_to_fit(parsed["text"], record, exact, files)
-        except Refused as h:
-            return {"ok": False, "error": h.msg}, h.code
+            raise Unreadable(reopening.UNREADABLE)
+        own, tail, how = reopening.split_to_fit(parsed["text"], record, exact, files)
         irt, refs = thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
         mode = reopening.mode_of(d["mode"], irt)
         original = self._mail.by_msgid(account, irt) if mode in reopening.REPLIES and irt else None
@@ -410,4 +398,4 @@ class Drafts:
                 "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
                 "orig_pk": original["pk"] if original else None,
                 "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,
-                "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200
+                "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}

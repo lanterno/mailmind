@@ -6,9 +6,9 @@ from mailmind.compose.application.ports import Accounts, Account, Book, Messages
 from mailmind.compose.domain import composition
 from mailmind.compose.domain.attachments import Attachment, decode as attachments_of, extract, take_along
 from mailmind.compose.domain.builder import Composed
-from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.resume import REPLIES
 from mailmind.content.mime import Parsed
+from mailmind.kernel.errors import NotFound, Refused, Unreachable
 from mailmind.kernel.parsed import as_int, is_object
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
@@ -24,12 +24,12 @@ class Composing:
 
     def spec(self, body: Mapping[str, Any]) -> tuple[Composed, int | None, Account]:
         """Shared by send + save-draft: resolve account, decode attachments, assemble
-        reply/forward bodies + threading. Returns (spec, in_reply_to_pk, acct). Raises Refused."""
+        reply/forward bodies + threading. Returns (spec, in_reply_to_pk, acct)."""
         mode = body.get("mode", "new")
         try:
             acct = self._accounts.get((body.get("account") or "").strip())   # From: only a configured account
         except KeyError:
-            raise Refused(400, "unknown sending account")
+            raise Refused("unknown sending account")
         text = body.get("text") or ""
         in_reply_to_pk: int | None = None
         forwarded: list[Attachment] = []    # the original's files a forward added to the payload's
@@ -37,7 +37,7 @@ class Composing:
         resume = body.get("resume")
         if resume is not None:
             if not is_object(resume):
-                raise Refused(400, "bad draft data")
+                raise Refused("bad draft data")
             tail = composition.tail_of(resume)
             made = composition.as_drafted(text, tail, self._recorded_quote(body, tail), resume.get("in_reply_to"),
                                           resume.get("references"))
@@ -47,16 +47,16 @@ class Composing:
         elif mode in (*REPLIES, "forward"):
             opk = as_int(body.get("in_reply_to_pk"))
             if opk is None:
-                raise Refused(400, "missing original message")
+                raise Refused("missing original message")
             orow = self._mail.message(opk)
             if not orow:
-                raise Refused(404, "original message not found")
+                raise NotFound("original message not found")
             try:
                 parsed: Parsed | dict[str, Any] = gates.run(orow["account"], lambda: self._mail.fetch_body(opk),
                                                             priority=gates.Priority.INTERACTIVE) or {}
             except Exception as e:
                 log.warning("original fetch failed for pk %(id)s: %(why)s", {"id": opk, "why": self._screen.quiet_error(e)})
-                raise Refused(502, "could not load the original message")
+                raise Unreachable("could not load the original message")
             if mode == "forward":
                 made = composition.as_forward(text, orow, parsed)
                 if body.get("forward_attachments", True):
