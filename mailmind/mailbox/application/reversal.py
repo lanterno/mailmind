@@ -35,9 +35,7 @@ class Reversals:
             cancelled = self._commands.QUEUE.cancel_unapplied(c, q["id"])
             if cancelled:
                 self._store.restore_pending(c, q["id"])
-            listed = cancelled and c.execute(
-                "SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=? "
-                "AND pending_removal IS NULL", (d["account"], src, d["message_id"])).fetchone()
+            listed = cancelled and self._store.is_listed_in(c, d["account"], src, d["message_id"])
             c.commit(); c.close()
             if listed:
                 return (True, d["account"], src), d

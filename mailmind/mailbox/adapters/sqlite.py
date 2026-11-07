@@ -200,6 +200,12 @@ def has_copy_in(c, account, folder, message_id):
                      (account, folder, message_id)).fetchone() is not None
 
 
+def is_listed_in(c, account, folder, message_id):
+    """Whether a copy of a message is in `folder` and not on its way out."""
+    return c.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=? "
+                     "AND pending_removal IS NULL", (account, folder, message_id)).fetchone() is not None
+
+
 def thread_pks_in(c, account, folder, thread_id):
     """The pks of a conversation's messages in `folder`, none on its way out, newest first."""
     return [r["pk"] for r in c.execute(
