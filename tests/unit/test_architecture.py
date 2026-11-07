@@ -88,6 +88,13 @@ def test_only_composes_adapter_speaks_smtp():
     assert {rel(p) for p in modules() if "smtplib" in set(imports(p))} == {"compose/adapters/smtp.py"}
 
 
+def test_only_the_tls_context_may_turn_a_certificates_checks_off():
+    """Accounts' invariant: only for a loopback host, where a pin stands in. tests/security/test_hardening.py holds what
+    tls_context does with a host, and that SMTP and IMAP each take it. No setting in the file reaches this, either."""
+    skips = re.compile(r"CERT_NONE|CERT_OPTIONAL|check_hostname|_create_unverified_context|_create_stdlib_context")
+    assert {rel(p) for p in modules() if skips.search(p.read_text(encoding="utf-8"))} == {"accounts/adapters/imap_connection.py"}
+
+
 def test_outbound_http_lives_in_the_ai_adapter_and_safe_http():
     calls = re.compile(r"\b(urlopen|HTTPSConnection|HTTPConnection)\(")
     assert {rel(p) for p in modules() if calls.search(p.read_text(encoding="utf-8"))} == {
