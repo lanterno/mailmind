@@ -456,7 +456,7 @@
  },
  {
   "body": {
-   "msg": "bad pk",
+   "error": "bad request",
    "ok": false
   },
   "headers": {
@@ -470,7 +470,7 @@
    "x-frame-options": "DENY"
   },
   "request": "archive a conversation with a bad pk",
-  "status": 200
+  "status": 400
  },
  {
   "note": "archive a conversation with a bad pk: server writes",

@@ -355,7 +355,7 @@
  },
  {
   "body": {
-   "msg": "bad pk",
+   "error": "bad request",
    "ok": false
   },
   "headers": {
@@ -369,7 +369,7 @@
    "x-frame-options": "DENY"
   },
   "request": "flag a bad pk",
-  "status": 200
+  "status": 400
  },
  {
   "note": "flag a bad pk: server writes",

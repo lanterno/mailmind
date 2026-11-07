@@ -121,7 +121,7 @@ def test_an_unreachable_server_queues_each_message(app, world):
 
 def test_a_missing_or_bad_anchor(app):
     assert app.post("/api/thread/archive", {"pk": 999}).json["ok"] is False
-    assert app.post("/api/thread/archive", {"pk": "x"}).json["msg"] == "bad pk"
+    assert app.post("/api/thread/archive", {"pk": "x"}).json["error"] == "bad request"
     assert app.post("/api/thread/archive", {}).json["msg"] == "bad pk"
 
 
