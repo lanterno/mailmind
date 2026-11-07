@@ -24,7 +24,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-HELLO = "hello"           # opens every stream, naming the build the server has now: not published
+HELLO = "hello"           # opens every stream, naming what the server serves now (webroot.edition): not published
 
 
 def hello(build):

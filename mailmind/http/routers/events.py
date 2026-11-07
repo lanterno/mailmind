@@ -17,7 +17,7 @@ def _events(h):
         h.send_header("Cache-Control", "no-cache")
         h.send_header("Connection", "keep-alive")
         h.end_headers()
-        h.wfile.write(tab.opening() + sse.hello(webroot.build()))
+        h.wfile.write(tab.opening() + sse.hello(webroot.edition(h.CSRF)))
         h.wfile.flush()
         while True:
             events = tab.next(sse.HEARTBEAT)

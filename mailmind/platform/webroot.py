@@ -73,9 +73,15 @@ def build():
     return _builds[seen]
 
 
+def edition(csrf):
+    """What a tab compares with what it loaded under: the files, and the token it was given, which a restart changes, so a
+    tab that would be refused from now on offers a reload as one on old files does. Only a hash of the token goes out."""
+    return f"{build()}-{hashlib.sha256(csrf.encode()).hexdigest()[:8]}"
+
+
 def page(csrf):
     with open(os.path.join(_root(), "index.html"), encoding="utf-8") as f:
-        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", build())
+        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", edition(csrf))
 
 
 def next_page(csrf):
@@ -84,7 +90,7 @@ def next_page(csrf):
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as f:
-        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", build())
+        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", edition(csrf))
 
 
 def asset(url_path):
