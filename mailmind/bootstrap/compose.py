@@ -2,7 +2,7 @@
 `outbox`, `transport`, and `book`, its tables."""
 import imaplib
 
-from mailmind.accounts.domain import provider, tls_pin
+from mailmind.accounts.api import TLSPinMismatch, provider_of
 from mailmind.bootstrap.mailbox import copies
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
@@ -20,7 +20,7 @@ __all__ = ["PUSH_TICK", "book", "composing", "drafts", "outbox", "sending", "tra
 
 class _Credentials:
     """An account's TLS and its secret, until Accounts holds them."""
-    PinMismatch = tls_pin.TLSPinMismatch
+    PinMismatch = TLSPinMismatch
 
     def tls_context(self, host):
         from mailmind.bootstrap import accounts
@@ -42,7 +42,7 @@ class _Accounts:
         return accounts.get(email)              # host, port and credential only from the configuration
 
     def saves_sent(self, acct):
-        return provider.resolve(acct).saves_sent
+        return provider_of(acct).saves_sent
 
 
 class _Messages:

@@ -5,7 +5,7 @@ Each front door calls `start()` before it serves, and the tests' app fixture cal
 """
 import threading
 
-from mailmind.accounts.domain import events as account_events
+from mailmind.accounts.api import AccountAdded, AccountChanged, AccountRemoved, CredentialsRejected
 from mailmind.bootstrap import accounts, background, compose, mailbox
 from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
@@ -63,11 +63,11 @@ def wire():
                    bus.subscribe(Restored, mailbox.filing.settled),
                    bus.subscribe(InboxChanged, _after_idle),
                    bus.subscribe(FlagsChanged, _after_flags_changed),
-                   bus.subscribe(account_events.CredentialsRejected, accounts.logins.rejected)])
+                   bus.subscribe(CredentialsRejected, accounts.logins.rejected)])
     _wired.extend(bus.subscribe(topic, accounts.logins.changed) for topic in     # ahead of what starts a new worker
-                  (account_events.AccountChanged, account_events.AccountRemoved))
+                  (AccountChanged, AccountRemoved))
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
-                  (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))
+                  (AccountAdded, AccountChanged, AccountRemoved))
 
 
 def unwire():

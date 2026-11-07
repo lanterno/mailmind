@@ -15,8 +15,7 @@ ReadOnlySession.
 from collections import Counter
 import imaplib
 
-from mailmind.accounts.domain import login_hold, tls_pin
-from mailmind.accounts.domain.events import CredentialsRejected
+from mailmind.accounts.api import CredentialsRejected, TLSPinMismatch, login_id, provider_of
 from mailmind.assistant.adapters import sqlite as assistant_store
 from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
@@ -24,7 +23,6 @@ from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.imap.imap_names import BadValue, imap_quote
 from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
-from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.bodies import Bodies
 from mailmind.mailbox.application.digest import Digest
 from mailmind.mailbox.application.commands import MailCommands
@@ -127,7 +125,7 @@ def try_login(acct, timeout=60) -> MailSession:
         session = session_for(acct, timeout)
     except accounts.LoginUnreachable as e:
         if e.refused:
-            bus.publish(CredentialsRejected(acct["email"], login_hold.login_id(acct)))
+            bus.publish(CredentialsRejected(acct["email"], login_id(acct)))
         raise
     accounts.logins.accepted(acct["email"])
     return session
@@ -146,7 +144,7 @@ def session_for(acct, timeout=60) -> MailSession:
             check_tls=lambda imap: accounts.check_pin(acct, host, port, imap),
             username=acct["email"], password=lambda: config.resolve_credential(acct),
             guard=lambda imap: txguard.guard_calls(imap, "send", "IMAP command"))
-    except (tls_pin.TLSPinMismatch, imaplib.IMAP4.abort):
+    except (TLSPinMismatch, imaplib.IMAP4.abort):
         raise
     except BadValue:                     # no server was asked: it would say no every time
         raise
@@ -163,7 +161,7 @@ class _Accounts:
     def deep_link(self, row, wmap=None):
         """The message in its provider's web client (ProviderProfile.deep_link), else the account's
         webmail (e.g. Nextcloud Mail), else ""."""
-        return provider.resolve({"kind": row["kind"]}).deep_link(
+        return provider_of({"kind": row["kind"]}).deep_link(
             account=row["account"], message_id=row["message_id"], subject=row["subject"],
             webmail=(wmap or {}).get(row["account"]))
 
@@ -191,7 +189,7 @@ class _Accounts:
         return accounts.trash_folder(acct)
 
     def profile(self, acct):
-        return provider.resolve(acct)
+        return provider_of(acct)
 
     def quiet_error(self, e):
         return accounts.quiet_error(e)

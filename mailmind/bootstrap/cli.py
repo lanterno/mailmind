@@ -4,8 +4,7 @@ module it names is on tests/legacy_ratchet.txt until that code moves into its co
 """
 import imaplib
 
-from mailmind.accounts.domain import provider
-from mailmind.accounts.domain.credential import CredentialRef
+from mailmind.accounts.api import CredentialRef, provider_of
 from mailmind.bootstrap import curation, discovery, mailbox
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -184,7 +183,7 @@ def _plan(accts, do_sweep=False, dry=False):
 def _empty_trash(accts):
     from mailmind.bootstrap import accounts
     for a in accts:
-        if provider.resolve(a).bulk_expunge_unsafe:
+        if provider_of(a).bulk_expunge_unsafe:
             print(f"{a['email']:30} SKIPPED — empty Proton Trash with the native button "
                   "(Bridge crashes on bulk expunge).")
             continue
