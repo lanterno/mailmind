@@ -605,6 +605,11 @@ def message_to_reply_to(c, pk):
                      "body_fetched FROM messages WHERE pk=?", (pk,)).fetchall()
 
 
+def any_copy(c, message_key):
+    """One stored copy of a message, whichever comes first, or None if none is left."""
+    return c.execute("SELECT * FROM messages WHERE message_key=? LIMIT 1", (message_key,)).fetchone()
+
+
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],

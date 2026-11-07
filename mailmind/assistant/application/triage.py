@@ -9,7 +9,7 @@ from typing import Any
 
 from mailmind.assistant.application.calls import Calls, object_in
 from mailmind.assistant.application.gateway import Gateway
-from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Connect, ModelError, NotSent
+from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Connect, Mail, ModelError, NotSent
 from mailmind.assistant.domain import models, pricing
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.logging import get_logger
@@ -67,11 +67,12 @@ class Triage:
     ASSESS_BATCH = 300                        # messages triaged in one round
     ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
 
-    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, connect: Connect):
+    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, connect: Connect, mail: Mail):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
         self._connect = connect
+        self._mail = mail
 
     def _triage_prompt(self, row: Row) -> str:
         frm = f"{row['from_name']} <{row['from_addr']}>" if row["from_name"] else row["from_addr"]
@@ -190,7 +191,7 @@ class Triage:
             key = int(r.custom_id) if r.custom_id.isdigit() else None
             if key not in keys or r.reply is None:
                 continue                            # no answer: it is waiting again once the batch is closed
-            row = c.execute("SELECT * FROM messages WHERE message_key=? LIMIT 1", (key,)).fetchone()
+            row = self._mail.any_copy(c, key)
             obj = object_in(r.reply.text)
             if row is not None:
                 self._answers.save_summary(c, row["pk"], *self._assessment(row, obj), when)

@@ -136,7 +136,6 @@ def _connect():
 
 
 calls = Calls(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status())
-triage = Triage(calls, lambda: gateway(), answers, _connect)
 
 
 class _Mail:
@@ -221,6 +220,10 @@ class _Mail:
         from mailmind.bootstrap.mailbox import store
         return store.message_to_reply_to(c, pk)
 
+    def any_copy(self, c, message_key):
+        from mailmind.bootstrap.mailbox import store
+        return store.any_copy(c, message_key)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""
@@ -243,6 +246,7 @@ def _looks_human(local):
 
 
 _mail = _Mail()
+triage = Triage(calls, lambda: gateway(), answers, _connect, _mail)
 threads = ThreadDigest(calls, answers, _connect, _mail)
 briefs = Briefs(calls, answers, _connect, _mail)
 reviews = Reviews(calls, answers, _connect, _mail)
