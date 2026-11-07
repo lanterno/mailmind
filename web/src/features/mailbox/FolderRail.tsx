@@ -111,7 +111,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
         const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
         const to: ListSource = { kind: "search", q, account, ...(lane ? { lane } : {}) };
         const on = source?.kind === "search" && source.q === q && source.lane === lane;
-        return (
+        const row = (
           <a
             key={v.id}
             className={on ? "frow on" : "frow"}
@@ -125,8 +125,14 @@ function Views({ source, account }: { source: ListSource | null; account: string
             }}
           >
             <span className="ic2"><Icon name={lane === "feed" ? "book" : lane === "papertrail" ? "receipt" : "search"} /></span><span className="fn">{v.name}</span>
-            {!v.builtin && <span className="vdel" aria-hidden="true" title="Remove view" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void remove(v.id); }}>×</span>}
           </a>
+        );
+        // A link can't hold a button, or a keyboard and a screen reader couldn't reach it, so the two sit side by side.
+        return v.builtin ? row : (
+          <div className="vrow" key={v.id}>
+            {row}
+            <button className="vdel" title="Remove view" aria-label="Remove view" onClick={() => void remove(v.id)}>×</button>
+          </div>
         );
       })}
     </>
