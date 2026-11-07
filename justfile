@@ -8,10 +8,11 @@ py := "uv run python"
 _default:
     @just --list --unsorted
 
-# Install everything the checks and the React app use: the Python packages, node_modules, Chromium
+# Install everything the checks and the React app use: the Python packages, node_modules, Chromium, osv-scanner
 setup: _web-deps
     uv sync
     uv run playwright install chromium
+    command -v osv-scanner >/dev/null || brew install osv-scanner
 
 # node_modules from the lockfile, when they are missing or older than it
 _web-deps:
@@ -42,7 +43,7 @@ run-old port="":
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
-verify: lint compile test check-frontend check-web
+verify: lint compile test check-frontend check-web audit
 
 # Every test but the browser's and Dovecot's. Pick some with `just test -k hardening`
 test *args:
@@ -99,6 +100,21 @@ check-web: _web-deps
     cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent && node scripts/gen-legacy.mjs --check
 
 # ── web ───────────────────────────────────────────────────────────────────────
+
+# Known vulnerabilities in what the lockfiles pin. With no network it says so and passes.
+audit:
+    #!/usr/bin/env sh
+    set -eu
+    if ! curl -sS -m 5 -o /dev/null https://api.osv.dev/; then
+        echo "audit: skipped, no network"
+        exit 0
+    fi
+    command -v osv-scanner >/dev/null || { echo "audit: osv-scanner is missing: brew install osv-scanner" >&2; exit 1; }
+    req=$(mktemp)
+    trap 'rm -f "$req"' EXIT
+    uv export --frozen --format requirements-txt --all-groups --no-emit-project -q -o "$req"
+    uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
+    osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json
 
 # Build the page's files and the React app, named by their content, into mailmind/http/dist (needs node).
 # The page runs without this; the React app doesn't.

@@ -1,0 +1,6 @@
+# What osv-scanner may pass over in package-lock.json. Each entry says why it can't reach anyone, and lapses so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-07
+reason = "minimatch 10 is dev-only, under ESLint and typescript-eslint, and matches only our own config's globs. The fix is minimatch 11, which ESLint 10 doesn't accept yet."
