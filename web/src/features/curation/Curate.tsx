@@ -146,6 +146,10 @@ function Flood() {
 
 function Inboxes() {
   const qc = useQueryClient();
+  const abort = () => {
+    setArmed(null);
+    toast("Aborted");
+  };
   const { data: digest } = useDigest();
   const { data } = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
   const [armed, setArmed] = useState<{ account: string; planned: number } | null>(null);
@@ -188,10 +192,11 @@ function Inboxes() {
               {a.junk > 0 && <button className="sweep" onClick={() => void arm(a.account)}>Sweep {a.junk}</button>}
             </div>
             {armed?.account === a.account && (
-              <div className="armline">
+              // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Esc while the focus is on its buttons: the line itself takes no focus
+              <div className="armline" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); abort(); } }}>
                 ▸ sweep <b>{nameOf(a.account)}</b> · <b>{armed.planned}</b> msgs<br />
                 {/* eslint-disable-next-line jsx-a11y/no-autofocus -- it appears because of the click just made on Sweep, and answers that click */}
-                <button className="sweep" autoFocus onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={() => setArmed(null)}>Abort</button>
+                <button className="sweep" autoFocus onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={abort}>Abort</button>
               </div>
             )}
           </div>
