@@ -58,7 +58,7 @@ class HoldingAnswers:
             if message["type"] == "http.response.start":
                 status = message["status"]
                 json_answer = dict(message["headers"]).get(b"content-type", b"").startswith(b"application/json")
-            elif message["type"] == "http.response.body":
+            elif json_answer:
                 chunks.append(message.get("body", b""))
             await send(message)
         await self.app(scope, receive, noting)

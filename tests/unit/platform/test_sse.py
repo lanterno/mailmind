@@ -181,3 +181,31 @@ def test_the_app_listens_for_every_topic_for_resync_and_hello_and_nothing_else()
     assert listed
     heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', text)) | set(re.findall(r'"([a-z-]+)"', listed.group(1)))
     assert heard == sse.TOPICS | {RESYNC, sse.HELLO}
+
+
+def test_ending_the_streams_wakes_each_and_closes_it():
+    hub = Hub(run="r1")
+    tabs = [hub.listen(), hub.listen()]
+    got = []
+    waiting = [threading.Thread(target=lambda tab=tab: got.append(tab.next(5))) for tab in tabs]
+    for t in waiting:
+        t.start()
+    time.sleep(0.05)
+    began = time.monotonic()
+    hub.end_streams()
+    for t in waiting:
+        t.join(5)
+    assert got == [[], []] and time.monotonic() - began < 1
+    assert hub.listening() == 0 and all(tab.closed for tab in tabs)
+    tabs[0].close()                                              # what the stream does as it ends
+    assert hub.listening() == 0
+
+
+def test_a_stream_opened_after_that_goes_on_as_any_other():
+    hub = Hub(max_listeners=1, run="r1")
+    hub.listen()
+    hub.end_streams()
+    tab = hub.listen()
+    assert tab is not None and not tab.closed
+    hub.publish("outbox", {})
+    assert [e.topic for e in tab.next(0)] == ["outbox"]
