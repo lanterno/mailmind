@@ -274,9 +274,7 @@ class Syncing:
             del self._backfill_missed[pk]
         c = self._store.conn()
         try:
-            rows = c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
-                             "AND pending_removal IS NULL AND pk NOT IN (SELECT value FROM json_each(?)) "
-                             "ORDER BY ts DESC LIMIT 12", (json.dumps(list(self._backfill_missed)),)).fetchall()
+            rows = self._store.bodies_to_fetch(c, self._backfill_missed)
         finally:
             c.close()                        # always close, even if the SELECT raises
         if not rows:
@@ -299,9 +297,7 @@ class Syncing:
         if tried:
             c = self._store.conn()
             try:
-                missed = [x["pk"] for x in c.execute(
-                    "SELECT pk FROM messages WHERE body_text IS NULL AND pk IN (SELECT value FROM json_each(?))",
-                    (json.dumps(tried),))]
+                missed = self._store.still_without_body(c, tried)
             finally:
                 c.close()
             for pk in missed:

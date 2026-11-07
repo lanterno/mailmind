@@ -355,6 +355,20 @@ def get_body(c, pk):
     return r["raw"] if r else None
 
 
+def bodies_to_fetch(c, skip):
+    """The newest messages with no body text, none on its way out, but for the pks in `skip`."""
+    return c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
+                     "AND pending_removal IS NULL AND pk NOT IN (SELECT value FROM json_each(?)) "
+                     "ORDER BY ts DESC LIMIT 12", (json.dumps(list(skip)),)).fetchall()
+
+
+def still_without_body(c, pks):
+    """Which of these pks still have no body text."""
+    return [x["pk"] for x in c.execute(
+        "SELECT pk FROM messages WHERE body_text IS NULL AND pk IN (SELECT value FROM json_each(?))",
+        (json.dumps(pks),))]
+
+
 def attachment_of(c, pk, part_id):
     """What's kept of one part of a message: its filename and content type."""
     return c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
