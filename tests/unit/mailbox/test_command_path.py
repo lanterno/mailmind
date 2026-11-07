@@ -314,3 +314,11 @@ def test_a_queued_change_is_given_up_on_after_about_a_day_of_tries(app, world):
     from mailmind.bootstrap.mailbox import commands
     hours = sum(commands.QUEUE.backoff(n) for n in range(1, commands.MAX_ATTEMPTS)) / 3600
     assert 23 < hours < 25
+
+
+def test_a_message_says_which_account_it_is_in(world):
+    """What a send's bookkeeping falls back on for a row that doesn't name its original's account."""
+    from mailmind.bootstrap.mailbox import server_ops
+    assert server_ops.account_of(world.pk(LUNCH)) == w.ADA
+    assert server_ops.account_of(10 ** 9) is None
+    assert server_ops.account_of(None) is None
