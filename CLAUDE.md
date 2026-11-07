@@ -177,8 +177,8 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   nothing installed. `just build-web` (Vite, Node) writes the same files, named by their content, to
   `mailmind/http/dist` (gitignored), served for good while it is as new as every source file, so an edit never leaves
   the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
-  `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), and a tab that loaded another build
-  offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`lib/api/client.ts`, typed by `lib/api/types.gen.ts`).
+  `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
+  restart changes. A tab that loaded another offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`lib/api/client.ts`, typed by `lib/api/types.gen.ts`).
   `web/next.html` and `web/src/main.tsx` are the React app at `/next` (React 19 with the React Compiler, TanStack Query, React Aria Components), beside the page and on its
   stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
