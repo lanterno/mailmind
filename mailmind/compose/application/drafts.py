@@ -11,6 +11,7 @@ from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.content.headers import header_chips, header_text
 from mailmind.kernel.errors import Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
+from mailmind.kernel.ids import FolderName
 from mailmind.kernel.parsed import as_int, required_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
@@ -258,7 +259,7 @@ class Drafts:
             rows = self._book.journal_overdue(c, draft_journal.overdue_since(_now(), profile.writes_allowed()))
         return [draft_journal.listed(r) for r in rows]
 
-    def _live(self, acct: Account, folder: str, uid: int | None) -> bool | None:
+    def _live(self, acct: Account, folder: FolderName, uid: int | None) -> bool | None:
         """Is this exact draft copy still on the server? True, False, or None when that can't be told
         (unreachable, no UID). A Drafts list loaded before an autosave still shows the copy that save
         replaced, and reopening it would put an older text over the newer one. A stateless, read-only

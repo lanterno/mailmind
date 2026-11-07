@@ -7,6 +7,7 @@ from typing import Any, TypedDict
 
 from mailmind.compose.domain.builder import Composed
 from mailmind.compose.domain.resume import ResumedFile, lf
+from mailmind.kernel.ids import AccountId, FolderName
 from mailmind.kernel.row import Row
 
 HELD = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it."
@@ -49,7 +50,7 @@ def next_version(prev: Row | None) -> int:
     return prev["version"] + 1 if prev else 1
 
 
-def is_draft(row: Row, plays_drafts: Callable[[str, str], bool]) -> bool:
+def is_draft(row: Row, plays_drafts: Callable[[AccountId, FolderName], bool]) -> bool:
     """A message is a draft if the server flags it \\Draft, or it sits in the account's Drafts: never by what a folder is
     called."""
     return bool(row["draft"]) or plays_drafts(row["account"], row["folder"])
