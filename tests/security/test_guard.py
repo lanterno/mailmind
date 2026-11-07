@@ -71,7 +71,7 @@ def test_a_module_path_left_pointing_at_the_repo_is_caught(refused):
     from mailmind.bootstrap.mailbox import store
     with pytest.raises(guard.Tripwire):                               # no data_dir here; refused whether
         store.conn()                                                  # or not the file exists in this checkout
-    assert refused == [f"sqlite3.connect {os.path.join(ROOT, 'mailmind.db')!r}"]
+    assert refused == [f"open {os.path.join(ROOT, 'mailmind.db')!r}"]          # before SQLite is asked to, and nothing swallows it
 
 
 @pytest.mark.parametrize("host", ["192.0.2.1", "2001:db8::1"])
