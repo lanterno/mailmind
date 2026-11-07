@@ -46,13 +46,13 @@ def test_the_answer_to_nothing_is_a_list_of_nothing_of_its_own():
 
 def test_what_goes_unsaid_has_a_default():
     want = asked(q="  heron ")
-    assert (want.q, want.scope, want.account, want.sort, want.limit, want.offset) == ("heron", "account", None, "rank", 80, 0)
+    assert (want.q, want.scope, want.account, want.limit, want.offset) == ("heron", "account", None, 80, 0)
     assert want.spec == QuerySpec.parse("heron")
 
 
 def test_a_request_says_what_it_says():
-    want = asked(q="heron", scope="account", account="ada@example.test", sort="date", limit="20", offset="40")
-    assert (want.scope, want.account, want.sort, want.limit, want.offset) == ("account", "ada@example.test", "date", 20, 40)
+    want = asked(q="heron", scope="account", account="ada@example.test", limit="20", offset="40")
+    assert (want.scope, want.account, want.limit, want.offset) == ("account", "ada@example.test", 20, 40)
 
 
 def test_every_account_means_no_one_account_whichever_it_names():

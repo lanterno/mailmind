@@ -183,7 +183,7 @@ def test_search(app, golden, scope):
     fetch(app, golden, "/api/search?q=")
     for q in SEARCHES:
         fetch(app, golden, f"/api/search?scope={scope}&account={w.ADA}&q={quote(q)}", f"search {scope}: {q}")
-    fetch(app, golden, "/api/search?scope=all&q=lunch&sort=date&limit=1&offset=1")
+    fetch(app, golden, "/api/search?scope=all&q=lunch&limit=1&offset=1")
     fetch(app, golden, "/api/search?scope=all&q=is:unread&limit=0&offset=-5")
 
 
