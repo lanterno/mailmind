@@ -3,9 +3,7 @@ gateway, each call's outcome noted for `status.Status`. With no API key AI is of
 is sent. The cost governor may hold a call back instead (HeldBack: OverLimit for one someone asked for at the daily limit,
 Deferred for background work).
 """
-import json
 import os
-import re
 from collections.abc import Callable
 from typing import Any
 
@@ -13,16 +11,6 @@ from mailmind.assistant.application.gateway import DayCost, Gateway
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.schema import object_in
-
-
-def parse(out: str) -> tuple[str, int, str, str]:
-    m = re.search(r"\{.*\}", out, re.S)
-    if not m:
-        raise ValueError("no JSON")
-    obj = json.loads(m.group(0))
-    imp = int(obj.get("importance", 2))
-    return (str(obj.get("summary", ""))[:600], max(1, min(5, imp)),
-            str(obj.get("category", "other"))[:32], str(obj.get("action", ""))[:200])
 
 
 class Calls:
