@@ -63,3 +63,12 @@ def test_a_rows_snooze_button_asks_when_and_snoozes_that_row(page, world):
     expect(receipt).to_have_count(0)
     expect(page.locator("#toast")).to_have_text("Snoozed")
     clean(page)
+
+
+def test_a_double_click_on_a_row_reads_it_in_focus(page, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.locator(".sj").dblclick()
+    expect(receipt).to_have_class(re.compile(r"\bsel\b"))
+    expect(page.locator("body")).to_have_class(re.compile("read-focus"))
+    clean(page)
