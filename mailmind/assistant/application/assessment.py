@@ -10,7 +10,7 @@ from typing import Any
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent
-from mailmind.assistant.domain import models, pricing
+from mailmind.assistant.domain import models, pricing, prompts
 from mailmind.assistant.domain.schema import object_in
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
@@ -22,19 +22,6 @@ type Log = Callable[[str], None]
 type Assessment = tuple[str, int, str, str, str]    # what's stored of a message: summary, importance, category, action, model
 
 WORKERS = 4
-PROMPT = """You are triaging ONE email for a personal dashboard. Reply with ONLY a JSON object (no prose, no code fence) with these keys:
-- "summary": 1-2 sentence plain-English summary of what this email is and what (if anything) it wants.
-- "importance": integer 1-5. 5 = urgent / personal / time-sensitive / financial / needs a reply; 3 = useful but not urgent; 1 = trivial or purely informational.
-- "category": one of "action-needed","personal","work-job","finance","calendar","info","other".
-- "action": a short next step if one is needed (e.g. "Reply with availability"), else "".
-
-Email:
-From: {frm}
-Subject: {subject}
-Date: {date}
-Body:
-{body}
-"""
 
 # --- triage schema: structured output returns an object that matches it, so a triage reply needs
 #     no regex scrape (the old parse-error class).
@@ -55,7 +42,6 @@ class Assessments:
     WORKERS = WORKERS
     TRIAGE_EFFORT = "low"      # triage runs on every new message and is a short classify-and-summarize
     TRIAGE_SCHEMA = TRIAGE_SCHEMA
-    PROMPT = PROMPT
     # A backlog goes to the Message Batches API, at half price, one batch at a time. New mail stays synchronous.
     BATCH_FEATURE = "triage-batch"
     BATCH_MIN = 100            # this many waiting is a backlog (a first import, or after an outage)
@@ -77,8 +63,8 @@ class Assessments:
 
     def _triage_prompt(self, row: Row) -> str:
         frm = f"{row['from_name']} <{row['from_addr']}>" if row["from_name"] else row["from_addr"]
-        return self.PROMPT.format(frm=frm, subject=row["subject"] or "(no subject)",
-                             date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
+        return prompts.TRIAGE.fill(frm=frm, subject=row["subject"] or "(no subject)",
+                                   date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
 
     def _assessment(self, row: Row, obj: Mapping[str, Any]) -> Assessment:
         """What to store for a message from what triage answered. A reply with no usable summary stores a
