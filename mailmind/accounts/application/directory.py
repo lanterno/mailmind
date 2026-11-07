@@ -34,8 +34,6 @@ log = get_logger("accounts")
 
 
 class Directory:
-    TYPE_DEFAULTS = account.TYPE_DEFAULTS
-
     def __init__(self, file: AccountRepository, secrets: SecretResolver, ai_key: Callable[[], str | None]):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
         self._write_lock = threading.Lock()

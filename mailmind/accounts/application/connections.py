@@ -6,6 +6,7 @@ from typing import Any
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.application.ports import ConnectionProbe
 from mailmind.accounts.domain.account import Entry
+from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
 
 
 class Connections:
@@ -21,30 +22,13 @@ class Connections:
         self._forget_status = forget_status
 
     def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Test a SAVED account ({email}) or an UNSAVED draft (no disk write).
-        Errors are sanitized — never echoes the attempted password or server banner.
-
-        A saved account's credential goes only to its saved server. A draft may only try a password
-        typed with it, against the host typed with it: a draft naming a stored secret (an op
-        reference, an environment variable, the Bridge password) would send that secret to whatever
-        host the request names, so it is refused until the account is saved."""
+        """Test a SAVED account ({email}), at its saved server, or an UNSAVED draft (no disk write; what it may try
+        is mailmind.accounts.domain.draft's to say). Errors are sanitized — never echoes the attempted password or
+        server banner."""
         t0 = time.time()
         try:
             if body.get("draft"):
-                d = body["draft"]
-                ty = d.get("type", "imap")
-                td = self._config.TYPE_DEFAULTS.get(ty, self._config.TYPE_DEFAULTS["imap"])
-                cs: Entry = d.get("credential") or {}
-                acct: Entry = {"email": d.get("email"), "kind": ty,
-                               "host": d.get("host") or td["host"], "port": int(d.get("port") or td["port"]),
-                               "starttls": bool(d.get("starttls", td["starttls"])),
-                               "strip_spaces": bool(d.get("strip_spaces", td["strip_spaces"])),
-                               "trash": td["trash"], "credential": {"plain": cs.get("value")}}
-                if not acct["host"]:
-                    return {"ok": False, "error": "a host is required"}
-                if cs.get("style") != "plain" or not cs.get("value"):
-                    return {"ok": False, "error": "save the account to test a stored secret; "
-                                                  "before then only a typed password is tried"}
+                acct = throwaway_account(body["draft"])
             else:
                 acct = self._get(body["email"])
             # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host;
@@ -54,6 +38,8 @@ class Connections:
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:
             return {"ok": False, "error": "account not found"}
+        except DraftRefused as no:
+            return {"ok": False, "error": str(no)}
         except Exception as e:
             draft: Entry = body.get("draft") or {}
             return {"ok": True, "connect": False,
