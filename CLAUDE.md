@@ -13,6 +13,7 @@ the dev tools on first use.
 just verify                       # lint + compile + all tests + frontend check + audit — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
 just test-dovecot                 # the MailSession contract against Dovecot in Docker
+just demo [port]                  # the whole app on fictional mail and fake servers: nothing of yours is read or changed
 just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # the real thing (default http://127.0.0.1:8721)
 just run-old [port]               # the same through the old front door, which needs nothing installed
@@ -459,7 +460,8 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 
 - `database.connect` opens every connection: WAL, `synchronous=FULL` with `fullfsync` (a commit
   survives a power cut, because `delivered` and `applied` are exactly-once gates),
-  `busy_timeout` 60 s, and `foreign_keys=ON`, which the cascades depend on.
+  `busy_timeout` 60 s, `foreign_keys=ON`, which the cascades depend on, and `temp_store=MEMORY`, so what a
+  big sort holds of the mail never lands in a temp file.
 - No transaction stays open across a network call. `database.connect` tracks each connection for
   the thread that opened it, and `txguard.refuse_network(what)` raises `TxAcrossNetworkError`
   while one has a transaction open, since a write held while a server answers keeps every other
