@@ -189,6 +189,12 @@ def get_message_by_msgid(c, account, message_id):
                      (account, message_id)).fetchone()
 
 
+def get_message_by_key(c, account, key):
+    """Latest local row for a message by its key: a message with no Message-ID has that to be found by."""
+    return c.execute("SELECT * FROM messages WHERE account=? AND message_key=? ORDER BY pk DESC LIMIT 1",
+                     (account, key)).fetchone()
+
+
 def account_of(c, pk):
     """The account the message `pk` is in, or None when there's no such message."""
     r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()

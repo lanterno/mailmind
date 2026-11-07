@@ -65,6 +65,11 @@ class _Messages:
         with _uow.read() as c:
             return store.get_message_by_msgid(c, account, message_id)
 
+    def by_key(self, account, key):
+        from mailmind.bootstrap.mailbox import store
+        with _uow.read() as c:
+            return store.get_message_by_key(c, account, key)
+
     def body(self, pk):
         from mailmind.bootstrap.mailbox import store
         with _uow.read() as c:
@@ -101,10 +106,6 @@ class _Messages:
 
 class _Effects:
     """What a delivered send sets off elsewhere."""
-    def account_of(self, pk):
-        from mailmind.bootstrap.mailbox import server_ops
-        return server_ops.account_of(pk)
-
     def mark_answered(self, pk, account, message_id):
         from mailmind.bootstrap.mailbox import server_ops
         return server_ops.mark_answered(pk, account, message_id)

@@ -152,7 +152,7 @@ class Outbox:
         if owes.answered:
             try:
                 pk = self._original_pk(row)
-                gates.run(row["orig_account"] or self._effects.account_of(pk) or gates.EVERY_ACCOUNT,
+                gates.run(row["orig_account"],
                           lambda: self._effects.mark_answered(pk, row["orig_account"], row["orig_message_id"]),
                           priority=gates.Priority.AFTER_USER)
                 self._commit(lambda c: self._book.outbox_set(c, oid, answered_set=1))
@@ -199,12 +199,11 @@ class Outbox:
         return owed
 
     def _original_pk(self, row: Row) -> int | None:
-        """What pk_of_original gives, if it can still be the original. One queued before migration 27 names nothing to check
-        its pk against, and goes by it as it always has."""
-        pk = outbox_item.pk_of_original(row)
-        if pk is None or not row["orig_account"]:
-            return pk
-        return pk if outbox_item.still_the_original(row, self._mail.message(pk)) else None
+        """The pk a send's original has now, for one with no Message-ID to go by. Any other goes by `orig_*`."""
+        if row["orig_message_id"] or not row["original_key"]:
+            return None
+        named = self._mail.by_key(row["orig_account"], row["original_key"])
+        return named["pk"] if named else None
 
     def draft_copy_is_ours(self, d: Row) -> bool:
         def flagged() -> bool:

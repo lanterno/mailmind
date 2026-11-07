@@ -67,6 +67,7 @@ def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at
         "orig_account": orig["account"] if orig else meta["account"] if meta.get("orig_message_id") else None,
         "orig_message_id": orig["message_id"] if orig else meta.get("orig_message_id"),
         "orig_thread_id": orig["thread_id"] if orig else None,
+        "original_key": orig["message_key"] if orig else None,
         "envelope": json.dumps(built["envelope"]),
         "recipients": json.dumps({"to": built["to_disp"], "cc": built["cc_disp"],
                                   "bcc": built["bcc_disp"]}),
@@ -77,20 +78,6 @@ def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at
         "wait_kind": SCHEDULED if int(meta.get("send_after") or 0) > due else GRACE,
         "created_at": created_at,
     }
-
-
-def pk_of_original(r: Row) -> int | None:
-    """The pk to find a send's original by, for a row with no Message-ID to go by: one queued before migration 27, or a
-    reply to a message that has none. Any other row goes by `orig_account` and `orig_message_id`, since a pk may be
-    another message's by now. This is the one place the stored column is read."""
-    return None if r["orig_message_id"] else r["in_reply_to_pk"]
-
-
-def still_the_original(r: Row, named: Row | None) -> bool:
-    """Whether `named`, the row at a send's pk_of_original, can still be its original. A send that names its account was
-    queued as a reply to a message with no Message-ID, so a row in another account, or one with a Message-ID, isn't that
-    message."""
-    return bool(named and named["account"] == r["orig_account"] and not named["message_id"])
 
 
 def thread_of_reply(r: Row, orig: Row | None) -> str | None:
@@ -143,7 +130,7 @@ class Owed:
 def owed(r: Row, saves_sent: bool) -> Owed:
     """A brand-new message owes nothing of what a reply does: it has no original, nor a local thread until its Sent copy
     syncs."""
-    replied_to = r["orig_message_id"] or pk_of_original(r)
+    replied_to = r["orig_message_id"] or r["original_key"]
     return Owed(sent_copy=not saves_sent and not r["sent_appended"],
                 sent_filed_for_us=saves_sent and not r["sent_appended"],
                 answered=bool(replied_to and not r["answered_set"]),
