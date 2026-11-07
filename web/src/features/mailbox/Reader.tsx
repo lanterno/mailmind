@@ -224,8 +224,8 @@ function Fetching({ whole }: { whole: boolean }) {
 
 function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHeight: number; pad: number; whole?: boolean }) {
   const [images, setImages] = useState(false);
-  const { data: d, isError } = useBody(pk);
-  if (isError) return <div className="nores">Couldn’t load.</div>;
+  const { data: d, isError, refetch } = useBody(pk);
+  if (isError) return <div className="nores">Couldn’t load. <button className="ai-rerun" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
   if (!d) return <Fetching whole={whole} />;
   if (!d.ok) return <div className="nores">{d.error ?? "error"}</div>;
   const blocked = images ? 0 : (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
