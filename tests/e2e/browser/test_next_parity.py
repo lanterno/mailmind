@@ -279,3 +279,33 @@ def test_aborting_a_sweep_says_so_and_escape_aborts_it(page, world):
     expect(d.locator(".armline")).to_have_count(0)
     expect(d).to_be_visible()                                   # the sweep, not the drawer
     clean(page)
+
+
+def test_escape_in_settings_steps_back_one_thing_at_a_time(page, world):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    title = page.get_by_role("heading", name="Email connections")
+    expect(title).to_be_visible()
+    page.locator("#setAdd").click()
+    field = page.locator("#setList input").first
+    field.focus()
+    page.keyboard.press("Escape")                               # out of the field, with what's typed still there
+    expect(field).not_to_be_focused()
+    expect(field).to_be_visible()
+    page.keyboard.press("Escape")                               # out of the form
+    expect(page.locator("#setAdd")).to_be_visible()
+    expect(page.locator("#setList input")).to_have_count(0)
+    expect(title).to_be_visible()
+    remove = page.locator("#setList .set-mini.danger").first
+    remove.click()
+    expect(remove).to_have_text("Confirm?")
+    page.keyboard.press("Escape")                               # out of asking
+    expect(remove).to_have_text("Remove")
+    expect(title).to_be_visible()
+    page.keyboard.press(",")
+    expect(title).to_be_hidden()
+    page.locator("#settingsBtn").click()
+    expect(title).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(title).to_be_hidden()
+    clean(page)
