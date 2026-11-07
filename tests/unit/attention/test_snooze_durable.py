@@ -54,6 +54,19 @@ def test_a_snoozed_message_stays_hidden_through_a_resync_of_its_folder(app, worl
     assert subject in listed(app, "__snoozed__")
 
 
+def test_the_sql_wakes_what_the_domain_calls_due(app, world):
+    from mailmind.attention.domain.snooze import is_due
+    from mailmind.bootstrap.mailbox import store
+    snooze(app, world)
+    c = store.conn()
+    try:
+        at = c.execute("SELECT until FROM snoozes").fetchone()["until"]
+        for now in (at - 1, at, at + 1):
+            assert bool(attention.book.due_snoozes(c, now)) is is_due(at, now)
+    finally:
+        c.close()
+
+
 def test_it_wakes_on_time_on_the_row_it_has_now(app, world):
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
