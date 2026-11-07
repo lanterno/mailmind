@@ -11,6 +11,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, OpenSession, Pruned, StoredMail
@@ -173,7 +174,10 @@ class Reconciler:
         """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
         force prunes even where the server's SEARCH came back empty against stored mail."""
         self._accounts.preload_creds()
-        accts = [self._accounts.get(account)] if account and account != "all" else self._accounts.accounts()
+        try:
+            accts = [self._accounts.get(account)] if account and account != "all" else self._accounts.accounts()
+        except KeyError:
+            raise Refused("unknown account")
         results = [self._reconcile_folders(a, dry_run=dry_run, force=force) for a in accts]
         if not dry_run:
             stamp = now_iso()

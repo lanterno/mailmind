@@ -3,6 +3,7 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, Classifier
 
@@ -25,7 +26,10 @@ class LiveStats:
         is_all = account is None or account == "all"
         if not refresh and is_all and self._cache["data"] and self._cache["exp"] > time.time():
             return self._cache["data"]
-        accts = self._accounts.accounts() if account is None or account == "all" else [self._accounts.get(account)]
+        try:
+            accts = self._accounts.accounts() if account is None or account == "all" else [self._accounts.get(account)]
+        except KeyError:
+            raise Refused("unknown account")
         out: list[dict[str, Any]] = []
         for a in accts:
             p = _strip(self._curation.plan_stored(a))    # DB-sourced (no IMAP / no IMAP gate) → instant;

@@ -6,6 +6,7 @@ from typing import Any
 from mailmind.curation.application.ports import AuditLog, FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain import sweep_plan
 from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, read_from_headers
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
 from mailmind.platform.logging import get_logger
@@ -128,7 +129,11 @@ class Sweeps:
         its own account's gate alone: the accounts' work is independent, so a run over all of them
         never holds every gate at once, and one account's slow server holds up only its own turn."""
         if account and account != "all":
-            return [gates.run(account, lambda: job(self._boxes.get(account)), priority=gates.Priority.INTERACTIVE)]
+            try:
+                acct = self._boxes.get(account)
+            except KeyError:
+                raise Refused("unknown account")
+            return [gates.run(account, lambda: job(acct), priority=gates.Priority.INTERACTIVE)]
         return [gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE)
                 for a in self._boxes.all()]
 

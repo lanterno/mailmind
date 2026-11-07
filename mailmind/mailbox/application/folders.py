@@ -10,6 +10,7 @@ import time
 from collections.abc import Iterable
 from typing import Any, TypedDict
 
+from mailmind.kernel.errors import Refused
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
@@ -160,7 +161,10 @@ class Folders:
     def of_account(self, account: str) -> dict[str, Any]:
         """Folder list with roles + unread counts for one account. The live-IMAP part
         is TTL-cached + pooled; the DB-derived counts (snoozed/muted/…) are always fresh."""
-        acct = self._accounts.get(account)
+        try:
+            acct = self._accounts.get(account)
+        except KeyError:
+            raise Refused("unknown account")
         out = self._folders_list_cached(account, acct)
         with self._uow.read() as c:
             snoozed = self._store.snoozed_count(c, account)
