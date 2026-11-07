@@ -101,7 +101,7 @@ class Briefs:
         with self._uow.read() as c:
             groups: list[Group] = []
             for g in json.loads(groups_json):
-                pks = [p for p in (self._mail.pk_now(c, *m) for m in g["messages"]) if p is not None]
+                pks: list[int] = [p for p in (self._mail.pk_now(c, *m) for m in g["messages"]) if p is not None]
                 groups.append({"label": g["label"], "count": len(pks), "pks": pks})
         return groups
 

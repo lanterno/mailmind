@@ -14,6 +14,7 @@ from mailmind.assistant.application.ports import Answers, NotSent, Result
 from mailmind.assistant.domain import digest, fingerprint, prompts
 from mailmind.assistant.domain.digest import Digest
 from mailmind.kernel.errors import NotFound, Unreachable
+from mailmind.kernel.ids import AccountId, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -48,7 +49,7 @@ class ThreadDigest:
                 "participants": _j(row["participants"]), "message_count": row["message_count"],
                 "model": row["model"], "created_at": row["created_at"]}
 
-    def summarize(self, account: str, thread_id: str, scope: str = "thread", force: bool = False) -> Result | tuple[Result, int]:
+    def summarize(self, account: AccountId, thread_id: ThreadRef, scope: str = "thread", force: bool = False) -> Result | tuple[Result, int]:
         with self._uow.read() as c:
             rows = self._context.rows(c, account, thread_id)
         if not rows:

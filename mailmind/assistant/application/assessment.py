@@ -12,6 +12,7 @@ from mailmind.assistant.application.ports import Answers, BatchResult, BatchStat
 from mailmind.assistant.domain import models, pricing, prompts
 from mailmind.assistant.domain.schema import object_in
 from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
+from mailmind.kernel.ids import MessageKey, Pk
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -76,11 +77,11 @@ class Assessments:
         return Assessment(row["subject"] or "(no subject)", 2, "other", "", "parse-error",
                           reply.model, prompt_version, REFUSED if reply.refused else UNUSABLE)
 
-    def _save(self, c: Connection, pk: int, said: Assessment, when: str) -> None:
+    def _save(self, c: Connection, pk: Pk, said: Assessment, when: str) -> None:
         self._answers.save_summary(c, pk, said.summary, said.importance, said.category, said.action, said.model, when,
                                    said.served_by, said.prompt_version, said.outcome)
 
-    def summarize_one(self, row: Row) -> tuple[int, Assessment | None]:
+    def summarize_one(self, row: Row) -> tuple[Pk, Assessment | None]:
         try:
             reply = self._calls.reply_to(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT, feature="triage")
         except Exception:
@@ -134,7 +135,7 @@ class Assessments:
         name = self._calls.MODEL or models.DEFAULT
         room = gw.room()                    # None: no governor, so no limit to keep within
         requests: list[tuple[str, str]] = []
-        keys: list[int] = []
+        keys: list[MessageKey] = []
         estimate, cutoff = 0, 0
         for r in rows[keep:]:
             text = self._triage_prompt(r)
@@ -168,8 +169,8 @@ class Assessments:
         """Each answer a batch brought, for each copy of its message and under its key. How many."""
         keys, stored, when = self._answers.batch_keys(c, batch["id"]), 0, datetime.now(timezone.utc).isoformat()
         for r in results:
-            key = int(r.custom_id) if r.custom_id.isdigit() else None
-            if key not in keys or r.reply is None:
+            key = MessageKey(int(r.custom_id)) if r.custom_id.isdigit() else None
+            if key is None or key not in keys or r.reply is None:
                 continue                            # no answer: it is waiting again once the batch is closed
             row = self._mail.any_copy(c, key)
             said = self._assessment(row or {"subject": ""}, r.reply, batch["prompt_version"])

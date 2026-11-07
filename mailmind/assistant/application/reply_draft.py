@@ -8,6 +8,7 @@ from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.ports import Mail, NotSent, Result
 from mailmind.assistant.domain import prompts
 from mailmind.kernel.errors import NotFound, Unreachable
+from mailmind.kernel.ids import AccountId, Pk, ThreadRef
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -26,7 +27,7 @@ class ReplyDrafts:
         self._uow = uow
         self._mail = mail
 
-    def draft(self, account: str, thread_id: str | None = None, pk: int | None = None, instruction: str = "",
+    def draft(self, account: AccountId, thread_id: ThreadRef | None = None, pk: Pk | None = None, instruction: str = "",
               tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
         """Gathers a thread (thread_id) or a single message (pk).
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
@@ -34,7 +35,7 @@ class ReplyDrafts:
             if thread_id:
                 rows = self._context.rows(c, account, thread_id)
             elif pk is not None:
-                rows = self._mail.message_to_reply_to(c, int(pk))
+                rows = self._mail.message_to_reply_to(c, pk)
             else:
                 rows = []
         if not rows:

@@ -10,6 +10,7 @@ what is served: a draft someone already paid for stays good whatever the verdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from mailmind.kernel.ids import AccountId
 from mailmind.kernel.row import Row
 
 TTL = 24 * 3600         # servable age; the fingerprint is the correctness gate, this is hygiene against temporal drift
@@ -20,7 +21,7 @@ TRIP = 3                # consecutive generations that failed, for the round's b
 SUSPEND = 1800          # ...which stays open for 30 min (an AI outage)
 
 
-def key_of(row: Row) -> tuple[str, str] | None:
+def key_of(row: Row) -> tuple[AccountId, str] | None:
     """A prepared reply's identity, (account, 't:<thread>' or 'm:<Message-ID>'), which survives a folder being renumbered,
     so never a pk. By thread, so two messages of one can't each pay for one. None for malformed mail with neither: nothing
     is drafted ahead for it, and a draft asked for still works."""

@@ -4,6 +4,7 @@ port's, and nothing here speaks to a server. Thread summaries and replies both r
 import re
 
 from mailmind.assistant.application.ports import ConversationBy, Mail
+from mailmind.kernel.ids import AccountId, ThreadRef
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.workers import gates
 
@@ -14,9 +15,9 @@ _QUOTE = re.compile(r"^\s*>")
 _ATTR = re.compile(r"^(On .+ wrote:|From:.*|-{3,} ?Forwarded)", re.I)
 
 
-def lone_key(row: Row) -> str:
+def lone_key(row: Row) -> ThreadRef:
     """What a message with no thread goes by here: its Message-ID, or if it has none, its pk."""
-    return f"m:{row['message_id']}" if row["message_id"] else f"pk:{row['pk']}"
+    return ThreadRef(f"m:{row['message_id']}" if row["message_id"] else f"pk:{row['pk']}")
 
 
 def _trim(text: str | None) -> str:
@@ -34,7 +35,7 @@ class ContextAssembler:
     def __init__(self, mail: Mail):
         self._mail = mail
 
-    def rows(self, c: Connection, account: str, thread_id: str) -> list[Row]:
+    def rows(self, c: Connection, account: AccountId, thread_id: ThreadRef) -> list[Row]:
         kind, _, value = str(thread_id).partition(":")
         lone: dict[str, tuple[ConversationBy, str]] = {"m": ("message_id", value), "pk": ("pk", value)}
         by, value = lone.get(kind, ("thread_id", thread_id))

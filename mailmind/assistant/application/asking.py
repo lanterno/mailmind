@@ -12,6 +12,7 @@ from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import brief
 from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.ids import Pk
 from mailmind.kernel.parsed import is_list, is_object, required_int
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -34,7 +35,7 @@ class Asking:
         thread_id = body.get("thread_id")
         if body.get("pk") is not None:
             with self._uow.read() as c:
-                row = self._mail.get_message(c, required_int(body["pk"]))
+                row = self._mail.get_message(c, Pk(required_int(body["pk"])))
             if not row:
                 raise NotFound("not found")
             account = row["account"]

@@ -18,6 +18,7 @@ from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint, prepared_reply
 from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.ids import AccountId, Pk, ThreadRef
 from mailmind.kernel.parsed import as_int, required_int
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
@@ -51,7 +52,7 @@ class PreparedReplies:
     def _draft_eligible(self, row: Row | None) -> bool:
         return prepared_reply.eligible(row, self._looks_human)
 
-    def _draft_fp(self, c: Connection, account: str, thread_id: str | None, pk: int) -> str:
+    def _draft_fp(self, c: Connection, account: AccountId, thread_id: ThreadRef | None, pk: Pk) -> str:
         """Thread-state hash. Stable across reconcile/reset_folder (built only from
         message_id/ts/count — never pk); flips when a message arrives, leaves, or is swapped.
         Captured BEFORE generation (load-bearing: the 10-40s TOCTOU window can then only
@@ -66,20 +67,20 @@ class PreparedReplies:
         r = self._mail.message_stamp(c, pk)
         return fingerprint.message(r["message_id"] if r else None, r["body_fetched"] if r else 0)
 
-    def _gen_draft_ahead(self, account: str | None, pk: int, source: str = "dwell") -> bool | None:
+    def _gen_draft_ahead(self, account: AccountId | None, pk: Pk, source: str = "dwell") -> bool | None:
         """Background generation (single-flight per natural key). Writes the durable cache;
         never sends. Returns True on led-success, None on a NEUTRAL bail (follower joined an
         in-flight generation / message became ineligible / already warm), False ONLY when this
         call led a generation that actually failed — the tick's circuit breaker counts False,
         ignores None (a neutral must neither trip nor reset the consecutive-failure count)."""
         with self._uow.read() as c:
-            row = self._mail.get_message(c, int(pk))
+            row = self._mail.get_message(c, pk)
             key = prepared_reply.key_of(row) if row else None
             if not row or key is None or not self._draft_eligible(row):
                 return None                               # neutral: nothing to (pre-)generate
             acct = account or row["account"]
             tid = row["thread_id"] or None
-            fp = self._draft_fp(c, acct, tid, int(pk))         # captured BEFORE the 10-40s generation: a mid-gen
+            fp = self._draft_fp(c, acct, tid, pk)         # captured BEFORE the 10-40s generation: a mid-gen
             mid = row["message_id"]                       # thread change → fp mismatch on read → regen, never a stale serve
 
         def warm() -> object | None:                      # a draft for the thread as it is now
@@ -90,11 +91,11 @@ class PreparedReplies:
         def make() -> bool | None:
             ok = False
             try:
-                res = self._replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct, feature="draft-ahead")
+                res = self._replies.draft(acct, thread_id=tid, pk=(None if tid else pk), me=acct, feature="draft-ahead")
                 now = int(time.time())
                 with self._uow.write() as c:
                     self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                                  res.get("model"), int(pk), mid, source, now)
+                                                  res.get("model"), pk, mid, source, now)
                     self._answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
                                                                   # no orphan sweeps — a reset_folder reingest may be mid-flight
                 ok = True
@@ -126,9 +127,10 @@ class PreparedReplies:
         to burn generations). Never generates synchronously, never sends; fingerprint + TTL +
         eligibility + thread-anchor are revalidated on EVERY serve so a stale draft is never
         surfaced."""
-        pk = as_int((qs.get("pk") or ["0"])[0])
-        if pk is None:
+        asked = as_int((qs.get("pk") or ["0"])[0])
+        if asked is None:
             raise Refused("bad pk")
+        pk = Pk(asked)
         peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
         if not pk:
             return {"ok": True, "status": "none"}
@@ -227,13 +229,13 @@ class PreparedReplies:
         """Draft an editable reply to a thread/message via claude."""
         account = body.get("account")
         thread_id = body.get("thread_id")
-        pk = None if body.get("pk") is None else required_int(body["pk"])
+        pk = None if body.get("pk") is None else Pk(required_int(body["pk"]))
         tone = str(body.get("tone") or "balanced")[:16]
         instruction = str(body.get("instruction") or "")[:400]
         default_shape = prepared_reply.default_shaped(instruction, tone)
         row: Row | None = None
         fp: str | None = None
-        key: tuple[str, str] | None = None
+        key: tuple[AccountId, str] | None = None
         if pk is not None:
             with self._uow.read() as c:
                 row = self._mail.get_message(c, pk)
@@ -269,7 +271,7 @@ class PreparedReplies:
             try:
                 with self._uow.write() as c:
                     self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                          res.get("model"), int(row["pk"]), row["message_id"],
+                                          res.get("model"), row["pk"], row["message_id"],
                                           "demand", int(time.time()))
             except Exception:
                 pass                                        # banking is best-effort; the reply itself already succeeded
