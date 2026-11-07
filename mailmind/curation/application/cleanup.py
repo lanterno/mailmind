@@ -11,10 +11,6 @@ from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.platform.perimeter import tokens
 
-BUCKETS = ("newsletters/marketing", "automated-notifications")
-MIN_COUNT = 3
-LIMIT = 40
-
 type Query = Mapping[str, Sequence[str]]      # a query string as the routes parse it
 
 
@@ -37,35 +33,12 @@ class Cleanup:
         """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
         lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an
         already-decided sender never reappears."""
-        buckets = [b for b in ((qs.get("buckets") or [",".join(BUCKETS)])[0]).split(",") if b]
-        try:
-            min_count = max(1, int((qs.get("min_count") or [MIN_COUNT])[0]))
-        except Exception:
-            min_count = MIN_COUNT
-        try:
-            limit = max(1, min(200, int((qs.get("limit") or [LIMIT])[0])))
-        except Exception:
-            limit = LIMIT
-        r = self._rules.sets()
-        now = time.time()
-        cands: list[dict[str, Any]] = []
-        for row in rulebook.undecided(self._mail.noisy_senders(buckets, min_count), r):
-            addr = row["addr"]
-            dom = rulebook.domain_of(addr)
-            n = row["n"] or 0
-            unseen = row["unseen"] or 0
-            ratio = (unseen / n) if n else 0
-            age_days = max(0.0, (now - (row["last_ts"] or now)) / 86400.0)
-            score = noise.noise_score(n, unseen, age_days)
-            if score < noise.MIN_SCORE:
-                continue
-            cands.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
-                          "count": n, "unseen": unseen, "unseen_ratio": round(ratio, 2),
-                          "last_seen": rel_time(row["last_iso"]), "bucket": row["bucket"],
-                          "lu_likely": row["bucket"] == "newsletters/marketing",
-                          "noise_score": round(score, 2)})
-        cands.sort(key=lambda x: -x["noise_score"])
-        cands = cands[:limit]
+        ask = noise.asked(qs)
+        rows = rulebook.undecided(self._mail.noisy_senders(ask.buckets, ask.min_count), self._rules.sets())
+        cands: list[dict[str, Any]] = [
+            {"from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
+             "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso), "bucket": c.bucket, "lu_likely": c.list_likely,
+             "noise_score": c.score} for c in noise.ranked(rows, time.time(), ask.limit)]
         # per-account rollup + sample subjects for just the shown senders
         addrs = [x["from_addr"] for x in cands]
         if addrs:
