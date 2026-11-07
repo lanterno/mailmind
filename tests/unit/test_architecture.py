@@ -72,14 +72,29 @@ def test_outbound_http_lives_in_the_ai_adapter_and_safe_http():
 def test_the_assistants_ports_only_read():
     """A plan's confirm runs through the mail's own contexts, so nothing the Assistant is handed can change mail."""
     from mailmind.bootstrap import assistant
-    allowed = {"_Mail": {"fetch_body", "pk_now", "accounts", "get_message", "for_asking", "brief_rows", "delta_rows", "sent_since", "received_since",
-                         "received_by_bucket", "needs_you_rows", "awaited_threads", "replylater_due", "senders_cleaned",
-                         "draft_candidates", "thread_stamps", "message_stamp", "thread_anchor_pk",
-                         "conversation_rows", "message_to_reply_to", "any_copy"},   # fetch_body fills a local cache, and writes to no server
+    allowed = {"_Mail": {"fetch_body",                                 # fills a local cache, and writes to no server
+                         "pk_now", "accounts", "get_message", "any_copy", "for_asking", "brief_rows", "delta_rows",
+                         "sent_since", "received_since", "received_by_bucket", "needs_you_rows", "awaited_threads",
+                         "replylater_due", "senders_cleaned", "draft_candidates", "thread_stamps", "message_stamp",
+                         "thread_anchor_pk", "conversation_rows", "message_to_reply_to"},
                "_Search": {"parse", "reach", "sweeps_whole_mailbox"}}
     for name, methods in allowed.items():
         declared = {m for m in vars(getattr(assistant, name)) if not m.startswith("__")}
         assert declared == methods, name
+
+
+def test_the_assistants_and_composes_use_cases_hold_no_sql():
+    """What they ask of a table goes through a port, to an adapter: no statement, no connection run by hand, no sqlite3."""
+    runs = re.compile(r"\.execute(many|script)?\(")
+    statement = re.compile(r"\b(SELECT|INSERT INTO|DELETE FROM|BEGIN IMMEDIATE)\b|\bUPDATE \w+ SET\b")
+    found = set()
+    for context in ("assistant", "compose"):
+        for path in sorted((PACKAGE / context / "application").glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            literals = (n.value for n in ast.walk(ast.parse(text)) if isinstance(n, ast.Constant) and isinstance(n.value, str))
+            if runs.search(text) or "sqlite3" in set(imports(path)) or any(statement.search(s) for s in literals):
+                found.add(rel(path))
+    assert found == set()
 
 
 def writers():
