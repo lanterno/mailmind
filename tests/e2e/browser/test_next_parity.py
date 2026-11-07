@@ -568,3 +568,22 @@ def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
     expect(page.locator("#undoFloat")).to_contain_text("Deleted")
     clean(page)
 
+def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, monkeypatch):
+    from gate import held_elsewhere
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
+    page.goto(f"/next/m/{w.ADA}/INBOX")
+    folder = lambda name: page.locator("#folderrail .frow", has_text=re.compile(f"^{name}"))
+    rows = page.locator("#rows .row[data-pk]")
+    folder("Archive").click()
+    expect(rows).to_have_count(1)
+    folder("Inbox").click()
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@example.test>"))
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
+    with held_elsewhere(w.ADA):                                 # the catch-up waits behind a long op
+        folder("Archive").click()
+        expect(rows).to_have_count(1)
+        monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 60)   # that open was due one; the reads after it aren't
+    expect(rows).to_have_count(2)
+    clean(page)
