@@ -97,14 +97,11 @@ def populate(server):
 
 
 def config(server, smtp=None):
-    """The MailMind config for the world's accounts on `server`, sending through `smtp` if given.
-    Cy's Gmail asks for IMAPClient, as an account soaking it would: the new door runs it through
-    IMAPClient, the old door through imaplib, against the same golden files."""
+    """The MailMind config for the world's accounts on `server`, sending through `smtp` if given. Every account goes through
+    imaplib, the default, which is what real accounts run; `ask_for_imapclient` has one ask for the other."""
     accounts = []
     for email, _, alias, _ in ACCOUNTS:
         entry = {**server.config_entry(email), "alias": alias}
-        if email == CY:
-            entry["imap_adapter"] = "imapclient"
         if smtp is not None:
             entry.update(smtp_host="127.0.0.1", smtp_port=smtp.port, smtp_starttls=True)
         accounts.append(entry)
@@ -114,6 +111,16 @@ def config(server, smtp=None):
 def write_config(server, data_dir, smtp=None):
     with open(os.path.join(data_dir, "mailmind.config.json"), "w") as f:
         json.dump(config(server, smtp), f, indent=2)
+
+
+def ask_for_imapclient(data_dir, email):
+    """Have an account of the config in `data_dir` ask for IMAPClient, as one soaking it does."""
+    path = os.path.join(data_dir, "mailmind.config.json")
+    with open(path) as f:
+        written = json.load(f)
+    next(a for a in written["accounts"] if a["email"] == email)["imap_adapter"] = "imapclient"
+    with open(path, "w") as f:
+        json.dump(written, f, indent=2)
 
 
 def connect_smtp(server, smtp):

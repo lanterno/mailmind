@@ -138,10 +138,10 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
 
 
 def test_an_account_gets_imapclient_only_where_it_is_offered(world):
-    # Cy's Gmail asks for IMAPClient in the world's config, as an account soaking it would.
     from mailmind.bootstrap import accounts
     from fixtures import world as w
     from mailmind.bootstrap import mailbox
+    w.ask_for_imapclient(world.dir, w.CY)
 
     def adapters():
         sessions = {who: mailbox.open_session(accounts.get(who), timeout=10) for who in (w.ADA, w.CY)}
@@ -157,10 +157,12 @@ def test_an_account_gets_imapclient_only_where_it_is_offered(world):
     assert adapters() == {w.ADA: "ImapClientSession", w.CY: "ImapClientSession"}
 
 
-def test_the_app_runs_the_account_that_asks_on_imapclient(app):
+def test_the_app_runs_the_account_that_asks_on_imapclient_and_every_other_on_imaplib(app, world):
     from mailmind.bootstrap import accounts
     from fixtures import world as w
     from mailmind.bootstrap import mailbox
+    assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == ("imaplib", "imaplib")
+    w.ask_for_imapclient(world.dir, w.CY)
     assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == ("imapclient", "imaplib")
 
 

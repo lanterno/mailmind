@@ -331,7 +331,6 @@
      },
      "email": "cy@example.test",
      "host": "127.0.0.1",
-     "imap_adapter": "imapclient",
      "port": "<imap>",
      "smtp_host": "127.0.0.1",
      "smtp_port": "<smtp>",
