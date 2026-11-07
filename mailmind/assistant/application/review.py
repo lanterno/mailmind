@@ -9,11 +9,12 @@ deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUS
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 import json
-from typing import Any, TypedDict
+from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
-from mailmind.assistant.domain import fingerprint
+from mailmind.assistant.domain import review
+from mailmind.assistant.domain.review import Awaited, Needed, Retrospective, Stats
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -49,46 +50,6 @@ STILL NEEDS YOU (open, important, unanswered):
 YOU'RE WAITING ON A REPLY FROM:
 {waiting}
 """
-
-
-class Stats(TypedDict):
-    sent: int
-    received: int
-    by_bucket: dict[str, int]
-    needs_you: int
-    waiting_on: int
-    reply_later: int
-    cleaned: int
-
-
-class Needed(TypedDict):
-    """A message that still needs you."""
-    pk: int
-    key: int | None
-    folder: str
-    account: str
-    thread_id: str | None
-    who: str
-    subject: str
-    importance: int
-    action: str
-
-
-class Awaited(TypedDict):
-    """A thread you're waiting on. One whose thread has no row names no message."""
-    account: str
-    thread_id: str
-    pk: int | None
-    key: int | None
-    folder: str | None
-    subject: str
-    to: str
-    sent_ts: int
-
-
-class Retrospective(TypedDict):
-    narrative: str
-    next: list[str]
 
 
 class Reviews:
@@ -139,31 +100,6 @@ class Reviews:
                         "cleaned": cleaned}
         return stats, needs, waiting
 
-    def _fingerprint(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]]) -> str:
-        """The week as reviewed: its counts, and the threads that need you or wait on others, named by
-        account and thread so a renumbered folder changes nothing."""
-        def threads(items: Iterable[Mapping[str, Any]]) -> str:
-            return fingerprint.of(f'{i["account"]}|{i["thread_id"]}' for i in items)
-        counts = "%d:%d:%d:%d" % (stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"])
-        return f"{counts}|{threads(needs)}|{threads(waiting)}"
-
-    def _fallback(self, stats: Stats, needs: Sequence[Needed], waiting: Sequence[Awaited]) -> Retrospective:
-        n = (f"In the last 7 days you sent {stats['sent']} message"
-             + ("s" if stats["sent"] != 1 else "")
-             + f" and {stats['received']} came in. "
-             + (f"{stats['needs_you']} still need a reply from you"
-                + (f" and you're waiting to hear back on {stats['waiting_on']}." if stats["waiting_on"]
-                   else ".") if (stats["needs_you"] or stats["waiting_on"])
-                else "Your inbox is clear — nothing is waiting on you."))
-        nxt = [f"Reply to {x['who']} — {x['subject']}" for x in needs[:3]]
-        return {"narrative": n, "next": nxt}
-
-    def _clean(self, obj: Mapping[str, Any]) -> Retrospective:
-        narrative = str(obj.get("narrative") or "")[:1400]
-        told: list[Any] = obj.get("next") or []
-        nxt = [str(x)[:160] for x in told if isinstance(x, str)][:3]
-        return {"narrative": narrative, "next": nxt}
-
     def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         """A stored list, as the page reads it: each with the pk its message has now. The pk it had says
         nothing after a renumber. One whose message has gone is left out, and one that named no message
@@ -193,7 +129,7 @@ class Reviews:
         with self._uow.read() as c:
             stats, needs, waiting = self._aggregate(c, accounts_set, since_ts)
             cached_row = self._answers.get_review(c, accounts, day)
-        fp = self._fingerprint(stats, needs, waiting)
+        fp = review.fingerprint_of(stats, needs, waiting)
 
         def stored(row: Row) -> Result:
             with self._uow.read() as c:
@@ -227,12 +163,10 @@ class Reviews:
             prompt = _PROMPT.format(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
             try:
                 obj = self._calls.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
-                ai: Retrospective = self._clean(obj)
+                ai: Retrospective = review.clean(obj)
                 model = self._calls.model_label()
-                # guard a degenerate reply (empty, or a trivial stub like "test") — a real retrospective is
-                # a few sentences; anything shorter falls back to the deterministic narrative (still useful).
-                if len(ai["narrative"]) < 40 or len(ai["narrative"].split()) < 7:
-                    fb = self._fallback(stats, needs, waiting)
+                if review.degenerate(ai["narrative"]):     # the deterministic narrative is still useful
+                    fb = review.fallback(stats, needs, waiting)
                     ai = {"narrative": fb["narrative"], "next": ai["next"] or fb["next"]}
                     model = "fallback"
             except NotSent:                     # AI off, or over the daily limit: the route answers it

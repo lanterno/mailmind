@@ -5,16 +5,15 @@ caches it keyed on (sorted enabled-account set + local date) so the daily cost i
 and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap. The row
 text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks (never trusted).
 """
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Iterable
 from datetime import datetime, timezone
 import json
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
-from mailmind.assistant.domain import citations, fingerprint
-from mailmind.kernel import attention
-from mailmind.kernel.parsed import is_object
+from mailmind.assistant.domain import brief, fingerprint
+from mailmind.assistant.domain.brief import DELTA_TOP_N, Group
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -55,7 +54,6 @@ Items (most important first):
 # the mail newer than a client watermark. Reuses every primitive of build(); the only
 # new SQL is `AND m.ts > ?`. Stored in `deltas`, by the watermark and the messages it was made from.
 # ─────────────────────────────────────────────────────────────────────────────
-DELTA_TOP_N = 25
 DELTA_CAP = 4000
 DELTA_SCHEMA = {
     "type": "object",
@@ -86,27 +84,10 @@ New items (newest first, {count} total):
 """
 
 
-class Group(TypedDict):
-    label: str
-    count: int
-    pks: list[int]
-
-
 class StoredGroup(TypedDict):
     """A group as a brief keeps it: each message as [its key, the folder it was read from]."""
     label: str
     messages: list[list[Any]]
-
-
-class Card(TypedDict):
-    narrative: str
-    groups: list[Group]
-
-
-class DeltaItem(TypedDict):
-    who: str
-    gist: str
-    importance: int
 
 
 class Briefs:
@@ -130,52 +111,6 @@ class Briefs:
         """The messages a brief or a delta was made from, by Message-ID."""
         return fingerprint.of(r["message_id"] for r in rows)
 
-    def _fallback(self, rows: list[Row]) -> Card:
-        """Deterministic narrative + groups straight from the rows — used when Claude is flaky,
-        so a bad reply is cached once rather than retried forever."""
-        by_cat: dict[str, list[int]] = {}
-        for r in rows:
-            by_cat.setdefault(r["category"] or "other", []).append(r["pk"])
-        need = [r["pk"] for r in rows if attention.needs_you(r["importance"], r["category"], r["action"])]
-        groups: list[Group] = []
-        if need:
-            groups.append({"label": "Needs a reply", "count": len(need), "pks": need[:60]})
-        for cat, pks in sorted(by_cat.items(), key=lambda kv: -len(kv[1]))[:5]:
-            groups.append({"label": cat, "count": len(pks), "pks": pks[:60]})
-        narrative = (f"{len(rows)} items need a glance"
-                     + (f" — {len(need)} look like they need a reply" if need else "")
-                     + f". Grouped into {len(groups)} buckets below.")
-        return {"narrative": narrative, "groups": groups}
-
-    def _trim_narrative(self, s: str | None, cap: int = 1500) -> str:
-        """A 3-5 sentence prose brief is ~500-1200 chars; the old hard [:800] cut it mid-word
-        ("…mimicking syste"). Keep it whole under a generous cap; only if a runaway reply
-        exceeds it, end on the last complete sentence (never mid-word), then ellipsize."""
-        s = (s or "").strip()
-        if len(s) <= cap:
-            return s
-        cut = s[:cap]
-        end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
-        if end > cap * 0.5:                     # a clean sentence break in the back half → stop there
-            return cut[:end + 1].rstrip()
-        sp = cut.rfind(" ", int(cap * 0.5))      # a word boundary in the BACK half only (never collapse to a
-        return (cut[:sp] if sp > 0 else cut).rstrip() + "…"   # first-half space; else hard-cut at the cap)
-
-    def _clean(self, obj: Mapping[str, Any], valid_pks: Collection[int]) -> tuple[str, list[Group]]:
-        """Validate/clamp the model output; intersect pks with real ids (never trust invented ids)."""
-        narrative = self._trim_narrative(str(obj.get("narrative") or ""))
-        groups: list[Group] = []
-        told: list[Any] = obj.get("groups") or []
-        for g in told[:6]:
-            if not is_object(g):
-                continue
-            named: list[Any] = g.get("pks") or []
-            pks = citations.in_group(named, valid_pks)
-            if not pks:
-                continue
-            groups.append({"label": str(g.get("label") or "")[:40], "count": len(pks), "pks": pks})
-        return narrative, groups
-
     def _stored_groups(self, groups: Iterable[Group], rows: Iterable[Row]) -> list[StoredGroup]:
         """The groups as stored: each message by its key and the folder it was read from, since a pk
         doesn't last."""
@@ -195,28 +130,6 @@ class Briefs:
                 stale: bool) -> dict[str, Any]:
         return {"ok": True, "narrative": narrative, "groups": groups, "model": model,
                 "generated": created_at, "cached": cached, "stale": stale}
-
-    def _clean_delta(self, obj: Mapping[str, Any]) -> tuple[str, list[DeltaItem]]:
-        headline = str(obj.get("headline") or "")[:300]
-        items: list[DeltaItem] = []
-        told: list[Any] = obj.get("items") or []
-        for it in told[:DELTA_TOP_N]:
-            if not is_object(it):
-                continue
-            try:
-                imp = int(it.get("importance") or 2)
-            except Exception:
-                imp = 2
-            items.append({"who": str(it.get("who") or "")[:60],
-                          "gist": str(it.get("gist") or "")[:120], "importance": imp})
-        return headline, items
-
-    def _delta_fallback(self, rows: list[Row]) -> tuple[str, list[DeltaItem]]:
-        """Deterministic headline + items — caches a usable card once when Claude's reply is unusable."""
-        items: list[DeltaItem] = [{"who": (r["from_name"] or r["from_addr"] or "someone")[:60],
-                                   "gist": (r["subject"] or "(no subject)")[:120], "importance": r["importance"]}
-                                  for r in rows[:DELTA_TOP_N]]
-        return f"{len(rows)} new since you last looked.", items
 
     def build_delta(self, accounts_set: Iterable[str] | None, since_ts: int, generate: bool = True) -> Result:
         """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count).
@@ -258,10 +171,10 @@ class Briefs:
             except Exception as e:                  # transport: retryable, do NOT cache
                 log.warning("delta failed", exc_info=e)
                 return {"ok": False, "error": "delta unavailable", "retry": True}, 502
-            headline, items = self._clean_delta(obj)
+            headline, items = brief.clean_delta(obj)
             model = self._calls.model_label()
             if not headline:                        # replied but unusable -> deterministic, cached once
-                headline, items = self._delta_fallback(rows)
+                headline, items = brief.delta_fallback(rows)
                 model = "fallback"
             with self._uow.write() as c:
                 self._answers.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, self._now())
@@ -320,10 +233,10 @@ class Briefs:
             except Exception as e:                  # transport: retryable, do NOT cache
                 log.warning("briefing failed", exc_info=e)
                 return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
-            narrative, groups = self._clean(obj, valid)
+            narrative, groups = brief.clean(obj, valid)
             model = self._calls.model_label()
             if not narrative:                       # replied but unusable: cache a deterministic card
-                fb = self._fallback(rows)
+                fb = brief.fallback(rows)
                 narrative, groups, model = fb["narrative"], fb["groups"], "fallback"
             created = self._now()
             with self._uow.write() as c:

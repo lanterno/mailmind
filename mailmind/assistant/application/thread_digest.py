@@ -6,13 +6,13 @@ the prompt tells the model to treat it as data, not instructions.
 """
 from datetime import datetime, timezone
 import json
-import re
-from typing import Any, TypedDict
+from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.ports import Answers, NotSent, Result
-from mailmind.assistant.domain import fingerprint
+from mailmind.assistant.domain import digest, fingerprint
+from mailmind.assistant.domain.digest import Digest
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -33,13 +33,6 @@ Subject: {subject}
 """
 
 
-class Digest(TypedDict):
-    tldr: str
-    points: list[str]
-    action: str
-    participants: list[str]
-
-
 class ThreadDigest:
     def __init__(self, calls: Calls, answers: Answers, uow: UnitOfWork, context: ContextAssembler):
         self._calls = calls
@@ -55,21 +48,6 @@ class ThreadDigest:
         """The thread as summarized: its messages' Message-IDs and the newest one's time, so a
         renumbered folder leaves its summary fresh."""
         return fingerprint.of((r["message_id"] for r in rows), max(r["ts"] or 0 for r in rows))
-
-    def _parse(self, out: str | None) -> Digest | None:
-        m = re.search(r"\{.*\}", out or "", re.S)
-        if not m:
-            return None
-        try:
-            d = json.loads(m.group(0))
-        except Exception:
-            return None
-        pts: list[Any] = d.get("points") if isinstance(d.get("points"), list) else []
-        parts: list[Any] = d.get("participants") if isinstance(d.get("participants"), list) else []
-        return {"tldr": str(d.get("tldr") or "")[:600],
-                "points": [str(x)[:200] for x in pts][:6],
-                "action": str(d.get("action") or "")[:200],
-                "participants": [str(x)[:80] for x in parts][:12]}
 
     def _expand(self, row: Row) -> dict[str, Any]:
         def _j(s: str | None) -> list[Any]:
@@ -117,7 +95,7 @@ class ThreadDigest:
             except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
                 log.warning("claude failed", exc_info=e)
                 return {"ok": False, "error": "summary unavailable", "retry": True}, 502
-            parsed: Digest | None = self._parse(out)
+            parsed: Digest | None = digest.parse(out)
             model = self._calls.model_label()
             if parsed is None:                          # replied but not JSON: cache a safe fallback, don't loop
                 parsed = {"tldr": subject, "points": [(rows[-1]["snippet"] or "")[:200]],

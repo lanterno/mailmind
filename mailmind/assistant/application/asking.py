@@ -11,6 +11,7 @@ from mailmind.assistant.application.ports import Mail, Result
 from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
+from mailmind.assistant.domain import brief
 from mailmind.kernel.parsed import is_list, is_object
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -74,12 +75,7 @@ class Asking:
             since = int(float(self._one(qs_or_body, "since") or 0))
         except Exception:
             since = 0
-        now = int(time.time())
-        floor = now - 24 * 3600
-        floor -= floor % 600                  # quantize the 24h floor to a 10-min bucket so a stale watermark
-                                              # yields a STABLE cache key (not a fresh claude call every second)
-        since = min(max(since, floor), now)   # also cap at now (client/server clock-skew guard)
-        return self._briefs.build_delta(accts, since, generate=generate)
+        return self._briefs.build_delta(accts, brief.delta_since(since, int(time.time())), generate=generate)
 
     def rewrite(self, body: Mapping[str, Any]) -> Result:
         """Rewrite/tone/translate the composer text via claude. Returns (result, code)."""
