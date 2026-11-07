@@ -3,7 +3,6 @@ a repeating one next happens (ics.next_occurrence), and the recipient the Waitin
 (mailbox.queries.waiting_in). The messages are built here; nothing touches IMAP. All addresses are
 fictional."""
 import itertools
-import os
 import time
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -81,16 +80,6 @@ def test_an_event_that_has_ended_drops_out_but_one_in_progress_stays(data_dir):
     _msg(_ics("done", NOW - timedelta(hours=3), NOW - timedelta(hours=2)))
     on = _msg(_ics("now", NOW - timedelta(minutes=30), NOW + timedelta(minutes=30)))
     assert [x["pk"] for x in _up()] == [on]
-
-
-@pytest.fixture(params=["UTC", "Asia/Tokyo", "America/New_York"])
-def machine_zone(request):
-    """This machine's zone for the test: the suite's own UTC can't tell UTC from local time."""
-    os.environ["TZ"] = request.param
-    time.tzset()
-    yield request.param
-    os.environ["TZ"] = "UTC"
-    time.tzset()
 
 
 def test_utc_times_come_back_as_local_wall_clock(machine_zone, data_dir):
@@ -320,7 +309,10 @@ def test_an_end_that_floats_where_its_start_doesnt_counts_by_its_wall_clock(star
     ("DTSTART:00010101T000000Z",),
     ("DTSTART:99991231T235959Z",),
     ("DTSTART:00010101T000000Z", "DTEND:99990101T000000Z"),
+    ("DTSTART:20261001T100000", "DTEND:99991231T235959"),
+    ("DTSTART:99991231T100000", "DURATION:P7D"),
     ("DTSTART:20261001T100000", "RRULE:FREQ=DAILY;UNTIL=99991231T235959Z"),
+    ("DTSTART:20261001T100000", "RRULE:FREQ=YEARLY;INTERVAL=9000"),
     ("DTSTART;TZID=Asia/Tokyo:00010101T000000", "RRULE:FREQ=YEARLY"),
 ])
 def test_a_time_at_the_edge_of_a_datetime_costs_only_that_event_its_place(machine_zone, data_dir, times):
