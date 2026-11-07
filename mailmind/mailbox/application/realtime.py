@@ -113,11 +113,7 @@ class Realtime(IdleSupervisor[Account, MailSession]):
     def _ready(self, acct: Account, session: MailSession, /) -> bool:
         if "IDLE" not in session.capabilities:
             log.warning("%(account)s: server has no IDLE — falling back to periodic sync", {"account": acct["email"]})
-            try:
-                session.logout()
-            except Exception:
-                pass
-            return False
+            return False                   # the worker closes it as it ends, as it does any connection
         session.select("INBOX", readonly=False)
         return True
 
