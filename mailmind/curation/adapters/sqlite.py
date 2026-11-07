@@ -150,7 +150,7 @@ class SenderMail:
     def stored_inbox(self, account):
         with _uow.read() as c:
             return c.execute("""SELECT from_addr, from_name, subject, bucket, list_unsub_raw FROM messages
-                                WHERE account=? AND folder='INBOX' AND deleted=0""", (account,)).fetchall()
+                                WHERE account=? AND folder='INBOX' AND deleted=0 AND pending_removal IS NULL""", (account,)).fetchall()
 
     def ai_junk_ids(self, account):
         """The Message-IDs of INBOX mail stored as junk, and no snoozed mail. The classifier said so, at ingest."""
