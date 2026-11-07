@@ -26,6 +26,8 @@ def test_a_time_ahead_is_kept(asked, at):
     ("soon", "bad send time"),
     ([NOW], "bad send time"),
     ({"at": NOW}, "bad send time"),
+    (float("inf"), "bad send time"),
+    (float("nan"), "bad send time"),
 ])
 def test_a_time_it_cant_keep_is_refused_as_a_bad_request(asked, says):
     with pytest.raises(Refused) as refused:
