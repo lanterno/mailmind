@@ -219,3 +219,32 @@ def test_an_expiry_rule_holding_a_line_break(world, wire):
     curation.rules.save({**curation.rules.load(), curation.rules.EXPIRE: {"lin@example.test" + INJECTED: 1}})
     curation.expiry.account(accounts.get(w.ADA), dry=True)
     assert on_the_wire(wire) == []
+
+
+# imaplib writes LOGIN's user as it is and only escapes quotes in the password, and neither path checks them first as
+# mailbox_arg and imap_quote check everything else.
+TYPED_LOGINS = [("dee@example.test" + INJECTED, "app-password"), ("dee@example.test", "app-password" + INJECTED),
+                ("dee@example.test\x00", "app-password"), ("dee@example.test", "app\npassword")]
+_LOGIN_BUG = "a login's user and password reach the wire unchecked: nothing refuses a line break or a NUL in them"
+
+
+@pytest.mark.xfail(strict=True, reason=_LOGIN_BUG)
+@pytest.mark.parametrize("user, password", TYPED_LOGINS)
+def test_trying_an_account_typed_with_a_line_break_in_its_login(app, world, wire, user, password):
+    """The settings page sends what was typed, to a host that was typed too, and answers with what the login said."""
+    entry = world.server.config_entry(w.ADA)
+    app.post("/api/accounts/test", {"draft": {
+        "email": user, "type": "imap", "host": entry["host"], "port": entry["port"], "starttls": entry.get("starttls", True),
+        "credential": {"style": "plain", "value": password}}})
+    assert on_the_wire(wire) == []
+
+
+@pytest.mark.xfail(strict=True, reason=_LOGIN_BUG)
+@pytest.mark.parametrize("user, password", TYPED_LOGINS)
+def test_opening_a_session_with_a_line_break_in_its_login(world, adapter, wire, user, password):
+    """A saved account's address, or a password pasted with its line end into the config, on either adapter."""
+    from mailmind.bootstrap import accounts, mailbox
+    acct = {**accounts.get(w.ADA), "email": user, "credential": {"plain": password}}
+    with pytest.raises(imaplib.IMAP4.error):
+        mailbox.open_session(acct, timeout=10)
+    assert on_the_wire(wire) == []
