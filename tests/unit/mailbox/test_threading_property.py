@@ -166,6 +166,13 @@ def merges(monkeypatch):
     return heard
 
 
+def fresh(c):
+    """An example's mail, in a database with no other's: all share the ids above, and one id's rows are what a lookup reads."""
+    c.execute("DELETE FROM messages")
+    c.execute("DELETE FROM muted")
+    c.commit()
+
+
 def assert_sticky(before, now, heard):
     """An id once given stays unless a merge absorbs it: then no message holds it any more, and the state went with it."""
     for uid, was in before.items():
@@ -179,6 +186,7 @@ def assert_sticky(before, now, heard):
 @given(arrivals=syncs, shuffled=st.randoms(use_true_random=False))
 def test_any_order_of_arrival_gives_the_threads_a_whole_recompute_gives(db, merges, arrivals, shuffled):
     from mailmind.bootstrap.mailbox import store
+    fresh(db)
     placed, regrouped = Mailbox(db, "placed"), Mailbox(db, "regrouped")
     for batch in arrivals:
         before = placed.ids()
@@ -225,6 +233,7 @@ def test_any_order_of_arrival_gives_the_threads_a_whole_recompute_gives(db, merg
 @given(arrivals=syncs, keep=st.lists(st.integers(0, 99), max_size=20))
 def test_what_each_context_keeps_follows_its_thread(db, arrivals, keep):
     """Whatever merges, a mute is on a thread that holds messages, and on the one holding the message it was set on."""
+    fresh(db)
     box = Mailbox(db, "kept")
     muted = set()                                      # the UID of the message each mute was set on
     for batch, choose in zip(arrivals, itertools.chain(keep, itertools.repeat(0))):
@@ -250,6 +259,7 @@ def test_mail_that_goes_leaves_threads_that_still_hold(db, merges, steps, gmail)
     keeps its one id, as a whole recompute also leaves it. Without Gmail the repair then has nothing to do. With it, the
     repair drops a gm: id whose Gmail copies have gone."""
     from mailmind.bootstrap.mailbox import store
+    fresh(db)
     box = Mailbox(db, "going")
     for step in steps:
         before = box.ids()
