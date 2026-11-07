@@ -137,6 +137,16 @@ def test_no_use_case_runs_a_connection_by_hand():
     assert found == set()
 
 
+def test_the_package_opens_no_connection_outside_the_unit_of_work():
+    """platform/db is what opens them. `connect` and `close` name other things here (an IMAP login, a socket), so a use case's
+    list of names above says more than this one can."""
+    by_hand = {"conn", "commit", "rollback"}
+    found = {(rel(path), node.func.attr) for path in modules() if path.relative_to(PACKAGE).parts[:2] != ("platform", "db")
+             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in by_hand}
+    assert found == set()
+
+
 def writers():
     out = {}
     pattern = re.compile(r"\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)")
