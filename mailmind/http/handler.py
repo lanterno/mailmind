@@ -28,6 +28,7 @@ def post_body_cap(path):
 
 
 _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/stats",
+             "/api/upcoming",         # the meeting reminder reads it every minute, from a hidden tab too
              "/api/ai/draft-ahead",   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
                                       # or the tick's own events would hold the vacation gate open forever
              "/api/debug/health"}     # asking how the app is doing changes nothing, this included
