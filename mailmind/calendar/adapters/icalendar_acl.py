@@ -14,6 +14,7 @@ can't read. Four things the libraries would do with that text are not done:
   a stranger's `\\n` there would be a line of their own in the reply.
 - `Component.from_ical` opens a text with no line break in it as a path, if a file is there. The parser doesn't.
 """
+import inspect
 import sys
 import time
 from collections.abc import Callable, Iterator
@@ -35,6 +36,7 @@ _MAX_EVENTS = 200                           # of one text: the Agenda reads all 
 _EXPANDS = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}     # anything finer: no date a person would want, and a CPU bomb
 _DAY = timedelta(days=1)
 _READING = ("dateutil.", "icalendar", "recurring_ical_events", "x_wr_timezone", __name__)
+_RESUMED = inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR
 _AS_SAID = {"RRULE", "UID", "ORGANIZER", "ATTENDEE"}
 
 
@@ -46,12 +48,14 @@ def _within(seconds: float, otherwise: Any, work: Callable[..., Any], *args: Any
     """`work`'s answer, or `otherwise` if it raises or spends `seconds` of this thread's CPU time. A rule can walk to year
     9999 with no occurrence to show for it, inside one `next()` of dateutil's generator, so counting occurrences can't
     stop it. The check runs at each Python call, which dateutil makes at least once for each period of a rule. CPU time,
-    since a busy machine is no fault of this call's. It raises only in a frame of the reading itself: a garbage collector's
-    callback or a `__del__` may run at any call, and what's raised there is dropped, and takes the tracer with it."""
+    since a busy machine is no fault of this call's. It raises only at a plain call of the reading itself: a garbage
+    collector's callback, a `__del__` or the close of a generator an earlier walk left behind may run at any call, and
+    what's raised there is dropped and takes the tracer with it, which leaves the walk nothing to stop it."""
     limit = time.thread_time() + seconds
 
     def check(frame: Any, _event: str, _arg: Any) -> None:
-        if time.thread_time() > limit and frame.f_globals.get("__name__", "").startswith(_READING):
+        if (time.thread_time() > limit and not frame.f_code.co_flags & _RESUMED
+                and frame.f_globals.get("__name__", "").startswith(_READING)):
             raise _Spent
 
     before = sys.gettrace()
