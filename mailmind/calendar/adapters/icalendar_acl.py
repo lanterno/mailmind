@@ -32,6 +32,7 @@ _MAX_TEXT = 1_000_000                       # characters: the library unfolds an
 _MAX_EVENTS = 200                           # of one text: the Agenda reads all of them on every request
 _EXPANDS = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}     # anything finer: no date a person would want, and a CPU bomb
 _DAY = timedelta(days=1)
+_READING = ("dateutil.", "icalendar", "recurring_ical_events", "x_wr_timezone", __name__)
 
 
 class _Spent(BaseException):
@@ -42,11 +43,12 @@ def _within(seconds: float, otherwise: Any, work: Callable[..., Any], *args: Any
     """`work`'s answer, or `otherwise` if it raises or spends `seconds` of this thread's CPU time. A rule can walk to year
     9999 with no occurrence to show for it, inside one `next()` of dateutil's generator, so counting occurrences can't
     stop it. The check runs at each Python call, which dateutil makes at least once for each period of a rule. CPU time,
-    since a busy machine is no fault of this call's."""
+    since a busy machine is no fault of this call's. It raises only in a frame of the reading itself: a garbage collector's
+    callback or a `__del__` may run at any call, and what's raised there is dropped, and takes the tracer with it."""
     limit = time.thread_time() + seconds
 
-    def check(_frame: Any, _event: str, _arg: Any) -> None:
-        if time.thread_time() > limit:
+    def check(frame: Any, _event: str, _arg: Any) -> None:
+        if time.thread_time() > limit and frame.f_globals.get("__name__", "").startswith(_READING):
             raise _Spent
 
     before = sys.gettrace()
