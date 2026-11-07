@@ -13,7 +13,7 @@ def asked(**qs):
 def row(pk=1, **kw):
     return {"pk": pk, "message_key": pk * 10, "account": "ada@example.test", "folder": "INBOX", "from_name": "Lin Ma",
             "from_addr": "lin@example.test", "subject": "Fabric", "date_iso": "2026-11-02T12:00:00+00:00", "snippet": "swatches",
-            "seen": 1, "flagged": 0, "has_attach": 0, "is_junk": 0, "bucket": "PERSONAL", "importance": None, "category": None,
+            "seen": 1, "flagged": 0, "has_attach": 0, "is_junk": 0, "bucket": "PERSONAL", "thread_id": None, "importance": None, "category": None,
             "action": None, **kw}
 
 
@@ -113,8 +113,8 @@ def test_a_hit_reads_as_the_list_shows_it():
         "pk": 1, "key": 10, "account": "ada@example.test", "folder": "INBOX", "alias": "Work",
         "from_name": "Lin Ma", "from_addr": "lin@example.test", "subject": "Fabric",
         "when": "when:2026-11-02T12:00:00+00:00", "date": "2026-11-02", "snippet": "swatches",
-        "seen": False, "flagged": True, "has_attach": True, "is_junk": True, "bucket": "PERSONAL", "importance": None,
-        "needs_you": False, "reply_worthy": False, "commitment_worthy": False, "safe_to_file": False,
+        "seen": False, "flagged": True, "has_attach": True, "is_junk": True, "bucket": "PERSONAL", "thread_id": None,
+        "importance": None, "action": None, "needs_you": False, "reply_worthy": False, "commitment_worthy": False, "safe_to_file": False,
     }
 
 

@@ -27,6 +27,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -46,10 +47,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -69,10 +72,12 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -92,6 +97,7 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -120,6 +126,7 @@
    "items": [
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -139,10 +146,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "16h ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -162,6 +171,7 @@
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "3d ago"
     }
    ],
@@ -190,6 +200,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -209,10 +220,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Quilt pattern ideas",
+     "thread_id": "rf:ada@example.test:c5862e0831764395",
      "when": "1w ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -232,10 +245,12 @@
      "seen": false,
      "snippet": "It's done!",
      "subject": "The finished quilt",
+     "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "when": "17h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -255,10 +270,12 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -278,6 +295,7 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -329,6 +347,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -348,10 +367,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Quilt pattern ideas",
+     "thread_id": "rf:ada@example.test:c5862e0831764395",
      "when": "1w ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -371,10 +392,12 @@
      "seen": false,
      "snippet": "It's done!",
      "subject": "The finished quilt",
+     "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "when": "17h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -394,10 +417,12 @@
      "seen": false,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
+     "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -417,10 +442,12 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -440,10 +467,12 @@
      "seen": false,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
+     "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -463,10 +492,12 @@
      "seen": false,
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
+     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -486,10 +517,12 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "automated-notifications",
      "commitment_worthy": false,
@@ -509,10 +542,12 @@
      "seen": true,
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
+     "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "when": "4d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -532,10 +567,12 @@
      "seen": false,
      "snippet": "",
      "subject": "This week: five new patterns",
+     "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -555,10 +592,12 @@
      "seen": true,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
+     "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "when": "1w ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -578,10 +617,12 @@
      "seen": false,
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
+     "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
      "when": "4d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -601,10 +642,12 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -624,10 +667,12 @@
      "seen": false,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
+     "thread_id": "rf:ada@example.test:14318281301a68a3",
      "when": "yesterday"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -647,6 +692,7 @@
      "seen": false,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
+     "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "when": "2d ago"
     }
    ],
@@ -675,6 +721,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -694,6 +741,7 @@
      "seen": false,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
+     "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "when": "2d ago"
     }
    ],
@@ -745,6 +793,7 @@
    "items": [
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -764,10 +813,12 @@
      "seen": false,
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
+     "thread_id": "gm:cy@example.test:1800000000000000004",
      "when": "4h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -787,10 +838,12 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -810,10 +863,12 @@
      "seen": false,
      "snippet": "It's done!",
      "subject": "The finished quilt",
+     "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "when": "17h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -833,10 +888,12 @@
      "seen": false,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
+     "thread_id": "rf:ada@example.test:14318281301a68a3",
      "when": "yesterday"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -856,10 +913,12 @@
      "seen": false,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
+     "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -879,10 +938,12 @@
      "seen": false,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
+     "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -902,10 +963,12 @@
      "seen": false,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
+     "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -925,10 +988,12 @@
      "seen": false,
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
+     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "when": "3d ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -948,10 +1013,12 @@
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -971,10 +1038,12 @@
      "seen": false,
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
+     "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
      "when": "4d ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -994,10 +1063,12 @@
      "seen": false,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
+     "thread_id": "gm:cy@example.test:1800000000000000001",
      "when": "4d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1017,10 +1088,12 @@
      "seen": false,
      "snippet": "",
      "subject": "This week: five new patterns",
+     "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1040,6 +1113,7 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -1068,6 +1142,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1087,6 +1162,7 @@
      "seen": false,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
+     "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "when": "3d ago"
     }
    ],
@@ -1115,6 +1191,7 @@
    "items": [
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1134,10 +1211,12 @@
      "seen": true,
      "snippet": "Shall we book the library hall again?",
      "subject": "Guild meetup venue",
+     "thread_id": "gm:cy@example.test:1800000000000000001",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1157,6 +1236,7 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -1185,6 +1265,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -1204,10 +1285,12 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "automated-notifications",
      "commitment_worthy": false,
@@ -1227,10 +1310,12 @@
      "seen": true,
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
+     "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "when": "4d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1250,10 +1335,12 @@
      "seen": false,
      "snippet": "",
      "subject": "This week: five new patterns",
+     "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1273,6 +1360,7 @@
      "seen": true,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
+     "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "when": "1w ago"
     }
    ],
@@ -1301,6 +1389,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1320,10 +1409,12 @@
      "seen": false,
      "snippet": "",
      "subject": "This week: five new patterns",
+     "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1343,6 +1434,7 @@
      "seen": true,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
+     "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "when": "1w ago"
     }
    ],
@@ -1394,6 +1486,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -1413,6 +1506,7 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     }
    ],
@@ -1464,6 +1558,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1483,10 +1578,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Notes for the review",
+     "thread_id": "rf:ada@example.test:a9a397439969c343",
      "when": "3h ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1506,6 +1603,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "16h ago"
     }
    ],
@@ -1557,6 +1655,7 @@
    "items": [
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1576,10 +1675,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "16h ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "personal/protected",
      "commitment_worthy": false,
@@ -1599,10 +1700,12 @@
      "seen": true,
      "snippet": "We noticed a new sign-in from a Mac. If this was you, no action is needed.",
      "subject": "New sign-in to your account",
+     "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "when": "yesterday"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1622,10 +1725,12 @@
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "3d ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1645,6 +1750,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Kickoff notes",
+     "thread_id": "rf:bea@example.test:b8304c2862f5ab91",
      "when": "2w ago"
     }
    ],
@@ -1673,6 +1779,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1692,10 +1799,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Notes for the review",
+     "thread_id": "rf:ada@example.test:a9a397439969c343",
      "when": "3h ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -1715,10 +1824,12 @@
      "seen": false,
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
+     "thread_id": "gm:cy@example.test:1800000000000000004",
      "when": "4h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -1738,10 +1849,12 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1761,10 +1874,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "16h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1784,10 +1899,12 @@
      "seen": false,
      "snippet": "It's done!",
      "subject": "The finished quilt",
+     "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "when": "17h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1807,10 +1924,12 @@
      "seen": false,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
+     "thread_id": "rf:ada@example.test:14318281301a68a3",
      "when": "yesterday"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "personal/protected",
      "commitment_worthy": false,
@@ -1830,10 +1949,12 @@
      "seen": true,
      "snippet": "We noticed a new sign-in from a Mac. If this was you, no action is needed.",
      "subject": "New sign-in to your account",
+     "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "when": "yesterday"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1853,10 +1974,12 @@
      "seen": false,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
+     "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1876,6 +1999,7 @@
      "seen": false,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
+     "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "when": "2d ago"
     }
    ],
@@ -1904,6 +2028,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -1923,10 +2048,12 @@
      "seen": true,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
+     "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "when": "1w ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1946,10 +2073,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Quilt pattern ideas",
+     "thread_id": "rf:ada@example.test:c5862e0831764395",
      "when": "1w ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -1969,6 +2098,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Kickoff notes",
+     "thread_id": "rf:bea@example.test:b8304c2862f5ab91",
      "when": "2w ago"
     }
    ],
@@ -1997,6 +2127,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2016,10 +2147,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Notes for the review",
+     "thread_id": "rf:ada@example.test:a9a397439969c343",
      "when": "3h ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -2039,10 +2172,12 @@
      "seen": false,
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
+     "thread_id": "gm:cy@example.test:1800000000000000004",
      "when": "4h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "spam/scam",
      "commitment_worthy": false,
@@ -2062,10 +2197,12 @@
      "seen": false,
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+     "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "when": "9h ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2085,10 +2222,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "16h ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2108,10 +2247,12 @@
      "seen": false,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
+     "thread_id": "rf:ada@example.test:14318281301a68a3",
      "when": "yesterday"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "personal/protected",
      "commitment_worthy": false,
@@ -2131,10 +2272,12 @@
      "seen": true,
      "snippet": "We noticed a new sign-in from a Mac. If this was you, no action is needed.",
      "subject": "New sign-in to your account",
+     "thread_id": "rf:bea@example.test:b3330a7a33c000ec",
      "when": "yesterday"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2154,10 +2297,12 @@
      "seen": false,
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
+     "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2177,10 +2322,12 @@
      "seen": false,
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
+     "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "when": "2d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2200,10 +2347,12 @@
      "seen": false,
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
+     "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2223,10 +2372,12 @@
      "seen": false,
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
+     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "when": "3d ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2246,10 +2397,12 @@
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
+     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
      "when": "3d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -2269,10 +2422,12 @@
      "seen": false,
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
+     "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
      "when": "4d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "automated-notifications",
      "commitment_worthy": false,
@@ -2292,10 +2447,12 @@
      "seen": true,
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
+     "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "when": "4d ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2315,10 +2472,12 @@
      "seen": false,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
+     "thread_id": "gm:cy@example.test:1800000000000000001",
      "when": "4d ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2338,10 +2497,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Guild meetup venue",
+     "thread_id": "gm:cy@example.test:1800000000000000001",
      "when": "4d ago"
     },
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2361,10 +2522,12 @@
      "seen": true,
      "snippet": "Shall we book the library hall again?",
      "subject": "Guild meetup venue",
+     "thread_id": "gm:cy@example.test:1800000000000000001",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -2384,10 +2547,12 @@
      "seen": false,
      "snippet": "",
      "subject": "This week: five new patterns",
+     "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "when": "5d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2407,10 +2572,12 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "newsletters/marketing",
      "commitment_worthy": false,
@@ -2430,10 +2597,12 @@
      "seen": true,
      "snippet": "",
      "subject": "20% off all yarn this weekend",
+     "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "when": "1w ago"
     },
     {
      "account": "bea@example.test",
+     "action": null,
      "alias": "Bea",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2453,6 +2622,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Kickoff notes",
+     "thread_id": "rf:bea@example.test:b8304c2862f5ab91",
      "when": "2w ago"
     }
    ],
@@ -2481,6 +2651,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2500,10 +2671,12 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     },
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2523,6 +2696,7 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -2574,6 +2748,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2593,6 +2768,7 @@
      "seen": false,
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
+     "thread_id": "rf:ada@example.test:14318281301a68a3",
      "when": "yesterday"
     }
    ],
@@ -2644,6 +2820,7 @@
    "items": [
     {
      "account": "ada@example.test",
+     "action": null,
      "alias": "Ada",
      "bucket": "other/personal-ish",
      "commitment_worthy": false,
@@ -2663,6 +2840,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
+     "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "when": "6d ago"
     }
    ],
@@ -2691,6 +2869,7 @@
    "items": [
     {
      "account": "cy@example.test",
+     "action": null,
      "alias": "Cy",
      "bucket": "receipts/transactional",
      "commitment_worthy": false,
@@ -2710,6 +2889,7 @@
      "seen": false,
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
+     "thread_id": "gm:cy@example.test:1800000000000000004",
      "when": "4h ago"
     }
    ],
