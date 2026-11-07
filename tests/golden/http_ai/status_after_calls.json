@@ -80,7 +80,7 @@
   "value": {
    "engine": "api",
    "key_from": "ANTHROPIC_API_KEY",
-   "last_error": "Claude API 400: bad request",
+   "last_error": "the API answered 400",
    "last_ok": false,
    "last_ts": 1793620800,
    "limit_micros": 15000000,

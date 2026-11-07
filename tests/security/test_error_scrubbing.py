@@ -173,16 +173,12 @@ def test_the_digest_says_why_a_call_failed_in_words_of_its_own(app, world, ai, s
     assert not holds_it(r, SECRET)
 
 
-# ── pinned: what these say today ─────────────────────────────────────────────────────────────────
-
 @pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
 def test_a_sweep_or_a_reconcile_says_an_account_failed_in_words_of_its_own(app, world, path):
     world.server.fail("LOGIN", f"NO [AUTHENTICATIONFAILED] {SECRET}", times=None)
     assert not holds_it(app.post(path, body_for(world.pk(SEEN))), SECRET)
 
 
-@pytest.mark.xfail(strict=True, reason="assistant.application.calls._plain falls back on the first 140 characters of what the API said, "
-                                       "and /api/digest's `ai` shows them")
 @pytest.mark.parametrize("status, kind", [(400, "invalid_request_error"), (500, "api_error")])
 def test_the_digest_never_repeats_what_the_claude_api_said(app, world, ai, status, kind):
     assert not holds_it(digest_after_a_failed_call(app, ai, status, kind), SECRET)
