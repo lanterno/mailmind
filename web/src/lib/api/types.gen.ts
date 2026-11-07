@@ -703,6 +703,7 @@ export interface GetAnswers {
     has_more?: boolean;
     items?: ({
       account: string;
+      action: string | null;
       alias: string;
       bucket: string;
       commitment_worthy: boolean;
@@ -722,6 +723,7 @@ export interface GetAnswers {
       seen: boolean;
       snippet: string;
       subject: string;
+      thread_id: string;
       when: string;
     })[];
     offset?: number;
@@ -986,7 +988,7 @@ export interface PostAnswers {
     msg: string;
     ok: boolean;
     status?: string;
-    undoable: boolean;
+    undoable?: boolean;
   };
   "/api/briefing": {
     cached: boolean;
@@ -1137,13 +1139,13 @@ export interface PostAnswers {
     msg: string;
     ok: boolean;
     status?: string;
-    undoable: boolean;
+    undoable?: boolean;
   };
   "/api/move": {
     msg: string;
     ok: boolean;
     status?: string;
-    undoable: boolean;
+    undoable?: boolean;
   };
   "/api/mute": {
     ok: boolean;
@@ -1280,7 +1282,7 @@ export interface PostAnswers {
     msg: string;
     ok: boolean;
     status?: string;
-    undoable: boolean;
+    undoable?: boolean;
   };
   "/api/send": {
     ok: boolean;
