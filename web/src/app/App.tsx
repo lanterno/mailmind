@@ -24,6 +24,7 @@ import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
+import { badAccounts } from "../features/status/model";
 import { AccountAlert } from "../features/status/Status";
 import { ConfirmDialog } from "../lib/confirm";
 import { OverLimitDialog } from "../lib/overLimit";
@@ -240,7 +241,7 @@ export function App() {
       <TopBar m={m} readOnly={isReadOnly} />
       <AccountAlert m={m} />
       <main className="split">
-        <FolderRail accounts={accounts} aliases={aliases} source={source} />
+        <FolderRail accounts={accounts} aliases={aliases} source={source} down={badAccounts(m.digest)} />
         <Splitter />
         <section className="list" id="list">
           <div className="listhead">

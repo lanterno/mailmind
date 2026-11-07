@@ -1,6 +1,7 @@
 // The rail: which account, then its folders and the views that aren't folders. Each row is a link, so it opens in a new
 // tab and Back works.
-import { Button, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import { useEffect, useRef } from "react";
+import { Button, Menu, MenuItem, MenuTrigger, Popover, Separator } from "react-aria-components";
 import { go, pathOf, type ListSource } from "../../app/route";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
@@ -8,10 +9,11 @@ import { post } from "../../lib/api/client";
 import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScreener } from "../curation";
+import { settingsOpen } from "../settings";
 import { useFolders, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 
-const ALL = "__all__";
+const ALL = "__all__", MANAGE = "__manage__";
 
 const acctColor = (accounts: string[], a: string) => `var(--acct-${(Math.max(0, accounts.indexOf(a)) % 6) + 1})`;
 
@@ -23,25 +25,39 @@ function Dots({ accounts, of }: { accounts: string[]; of: string[] }) {
   );
 }
 
-function AccountSwitch({ accounts, aliases, current }: { accounts: string[]; aliases: Record<string, string | null>; current: string }) {
+function AccountSwitch({ accounts, aliases, current, down }: { accounts: string[]; aliases: Record<string, string | null>; current: string; down: string[] }) {
   const nameOf = (a: string) => aliases[a] || shortAddress(a);
   const name = current === ALL ? "All inboxes" : nameOf(current);
-  const sub = (a: string) => (a === ALL ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}, one inbox` : a);
-  const choose = (a: string) => go({ source: a === ALL ? { kind: "allInboxes" } : { kind: "folder", account: a, folder: "INBOX" }, opened: null });
+  const isDown = (a: string) => down.includes(a);
+  const sub = (a: string) => (a === ALL ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}, one inbox` : isDown(a) ? "can’t connect" : a);
+  const head = current === ALL && down.length ? `${down.length} of ${accounts.length} can’t connect` : sub(current);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => button.current?.setAttribute("title", `${name} — switch account`), [name]);   // React Aria's Button drops a title
+  const choose = (a: string) => {
+    if (a === MANAGE) settingsOpen.set(true);
+    else go({ source: a === ALL ? { kind: "allInboxes" } : { kind: "folder", account: a, folder: "INBOX" }, opened: null });
+  };
   return (
     <MenuTrigger>
-      <Button className="acct-sw" aria-label={`Account: ${name}. Switch account`}>
+      <Button className="acct-sw" id="acctSw" ref={button} aria-label={`Account: ${name}${down.length ? ` (${head})` : ""}. Switch account`}>
         <Dots accounts={accounts} of={current === ALL ? accounts : [current]} />
-        <span className="as-txt"><b>{name}</b><small>{sub(current)}</small></span>
+        <span className="as-txt"><b>{name}</b><small className={down.length && (current === ALL || isDown(current)) ? "err" : undefined}>{head}</small></span>
+        <Icon name="down" className="as-chev" />
       </Button>
       <Popover className="acct-menu rac" placement="bottom start" offset={6}>
-        <Menu selectionMode="single" selectedKeys={[current]} autoFocus="first" onAction={(key) => choose(String(key))}>
+        <div className="am-ttl" aria-hidden="true">Show mail from</div>
+        <Menu selectionMode="single" selectedKeys={[current]} autoFocus onAction={(key) => choose(String(key))}>
           {[ALL, ...accounts].map((a) => (
             <MenuItem key={a} id={a} textValue={a === ALL ? "All inboxes" : nameOf(a)} className="am-item">
               <Dots accounts={accounts} of={a === ALL ? accounts : [a]} />
-              <span className="am-txt"><b>{a === ALL ? "All inboxes" : nameOf(a)}</b><small>{sub(a)}</small></span>
+              <span className="am-txt"><b>{a === ALL ? "All inboxes" : nameOf(a)}</b><small className={a !== ALL && isDown(a) ? "err" : undefined}>{sub(a)}</small></span>
+              {a === current && <Icon name="check" className="am-chk" />}
             </MenuItem>
           ))}
+          <Separator />
+          <MenuItem id={MANAGE} textValue="Add or manage accounts" className="am-item">
+            <Icon name="sliders" /><span className="am-txt"><b>Add or manage accounts</b></span>
+          </MenuItem>
         </Menu>
       </Popover>
     </MenuTrigger>
@@ -117,7 +133,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
   );
 }
 
-export function FolderRail({ accounts, aliases, source }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null }) {
+export function FolderRail({ accounts, aliases, source, down }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null; down: string[] }) {
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : source?.kind === "allInboxes" ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
   const screener = useScreener(account).data?.total ?? 0;
@@ -131,7 +147,7 @@ export function FolderRail({ accounts, aliases, source }: { accounts: string[]; 
   ] : [];
   return (
     <aside className="folderrail" id="rail" aria-label="Accounts and folders">
-      <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} current={current} />}</div>
+      <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} current={current} down={down} />}</div>
       <nav className="frail-list" id="folderrail" aria-label="Folders">
         {source?.kind === "allInboxes" && <div className="frail-acct">{accounts.length} inboxes, newest first</div>}
         {isError && !data && (
