@@ -95,10 +95,13 @@ def test_no_other_answer_may_be_framed(app, world):
 
 
 def test_it_is_what_the_sanitizer_left(app, world):
+    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.content import sanitize
     pk, key = delivered(world, HOSTILE)
+    assert app.get(f"/api/message/{pk}/body").json["html"] in document(app, pk, key, "0").body.decode()
     for images, tracker in (("0", False), ("1", True)):
         got = document(app, pk, key, images).body.decode()
-        assert app.get(f"/api/message/{pk}/body?images={images}").json["html"] in got
+        assert sanitize.sanitize(ingest.fetch_body(pk)["html"], load_images=tracker)[0] in got
         assert "<script" not in got and "onclick" not in got and "pwned" not in got
         assert (TRACKER in got) is tracker
         assert got.startswith("<!doctype html>")

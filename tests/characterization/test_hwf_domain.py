@@ -703,9 +703,9 @@ def test_hwf_cleanup_skips_senders_a_parent_domain_rule_decided(world):
     for n in range(4):                                       # enough unread issues to rank as noise
         world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
                                                 Date=f"Sun, 0{n + 1} Nov 2026 07:00:00 +0000"))
-    assert "news@loom.example.test" in [s["from_addr"] for s in curation.cleanup.senders({})["senders"]]
+    assert "news@loom.example.test" in [s["from_addr"] for s in curation.cleanup.senders()["senders"]]
     rules.add("example.test", "block")                       # every sender in the world is under it
-    assert curation.cleanup.senders({})["senders"] == []
+    assert curation.cleanup.senders()["senders"] == []
 
 
 # -- saved views and the rules file on disk -----------------------------------

@@ -100,7 +100,7 @@ def test_a_cleanup_blocks_and_sweeps_and_undo_reverses_both(app, golden, world, 
     golden.note("SMTP messages", len(world.smtp.messages))
     golden.note("server writes", world.writes(since))
     state(golden, world, "after")
-    golden.record("the audit trail", app.get("/api/audit?kind=all"))
+    golden.record("the audit trail", app.get("/api/audit"))
     since = world.mark()
     golden.record("undo", app.post("/api/undo", {}))
     golden.note("server writes for the undo", world.writes(since))
