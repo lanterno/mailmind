@@ -559,8 +559,8 @@ def trash_probe(monkeypatch):
 def test_cleanup_and_block_trash_mail_under_the_imap_lock(home, trash_probe):
     for _ in range(2):
         _message(sender="promo@example.test")
-    res, code = curation.cleanup.execute({"from_addr": "promo@example.test"})
-    assert code == 200 and res["swept"] == 2, (code, res)
+    res = curation.cleanup.execute({"from_addr": "promo@example.test"})
+    assert res["swept"] == 2, res
     assert trash_probe == [True, True]
     trash_probe.clear()
     pk = _message(sender="spam@example.test")
@@ -628,7 +628,7 @@ def test_two_cleanups_of_one_sender_undo_separately(home, trash_probe):
     groups = []
     for _ in range(2):
         _message(sender="weekly@example.test")
-        res, _ = curation.cleanup.execute({"from_addr": "weekly@example.test"})
+        res = curation.cleanup.execute({"from_addr": "weekly@example.test"})
         groups.append(res["undo_group"])
     assert groups[0] != groups[1], groups
 
