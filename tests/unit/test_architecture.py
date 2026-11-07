@@ -75,7 +75,7 @@ def test_the_assistants_ports_only_read():
     allowed = {"_Mail": {"fetch_body", "pk_now", "accounts", "get_message", "for_asking", "brief_rows", "delta_rows", "sent_since", "received_since",
                          "received_by_bucket", "needs_you_rows", "awaited_threads", "replylater_due", "senders_cleaned",
                          "draft_candidates", "thread_stamps", "message_stamp", "thread_anchor_pk",
-                         "conversation_rows", "message_to_reply_to"},   # fetch_body fills a local cache, and writes to no server
+                         "conversation_rows", "message_to_reply_to", "any_copy"},   # fetch_body fills a local cache, and writes to no server
                "_Search": {"parse", "reach", "sweeps_whole_mailbox"}}
     for name, methods in allowed.items():
         declared = {m for m in vars(getattr(assistant, name)) if not m.startswith("__")}
