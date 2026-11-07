@@ -4,12 +4,14 @@ module: it answers the `IcsReader` port in the domain's own shapes.
 
 An invite is a stranger's text and this runs on request threads, so nothing here raises, however broken the text, and
 each call has a budget of this thread's time to answer in. A call that uses it up answers as for a text or a rule it
-can't read. Three things the libraries would do with that text are not done:
+can't read. Four things the libraries would do with that text are not done:
 
-- `_Parser` doesn't let `icalendar` act on a VTIMEZONE, which would expand the zone's rules through to year 9999, however
-  often they fire, and remember the result for the whole process under a name the sender chose.
+- `_Parser` doesn't let `icalendar` act on a VTIMEZONE, which would remember a zone for the whole process, under a name the
+  sender chose, made from rules it expands through to year 9999 however often they fire.
 - It doesn't let it look up a TZID either. One rule says what a TZID means, `invite.zone`, as it does for `ics_reader`:
   a name the zone database doesn't know makes the time floating.
+- It doesn't let it decode the escapes of what isn't text (`_AS_SAID`). An RSVP echoes a UID and writes to an organizer, and
+  a stranger's `\\n` there would be a line of their own in the reply.
 - `Component.from_ical` opens a text with no line break in it as a path, if a file is there. The parser doesn't.
 """
 import sys
@@ -33,6 +35,7 @@ _MAX_EVENTS = 200                           # of one text: the Agenda reads all 
 _EXPANDS = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}     # anything finer: no date a person would want, and a CPU bomb
 _DAY = timedelta(days=1)
 _READING = ("dateutil.", "icalendar", "recurring_ical_events", "x_wr_timezone", __name__)
+_AS_SAID = {"RRULE", "UID", "ORGANIZER", "ATTENDEE"}
 
 
 class _Spent(BaseException):
@@ -61,6 +64,14 @@ def _within(seconds: float, otherwise: Any, work: Callable[..., Any], *args: Any
         sys.settrace(before)
 
 
+class _Said(vText):
+    """A value as its line said it, its escapes and all."""
+
+    @classmethod
+    def get_value_from_content_line(cls, line: Any) -> str:
+        return line.raw_parts()[2]
+
+
 class _Parser(ComponentIcalParser):
     """The library's parser, with what the module's docstring says it doesn't do left out. As lenient as `ics_reader`
     otherwise: what it can't read in a calendar it leaves out, and goes on."""
@@ -82,7 +93,7 @@ class _Parser(ComponentIcalParser):
         super().parse_and_add_property(name, params, val, None, line)   # the wall clock, and `params` keep the TZID
 
     def get_factory_for_property(self, name: str, params: Any) -> Any:
-        return vText if name == "RRULE" else super().get_factory_for_property(name, params)   # as said, until it's asked of
+        return _Said if name in _AS_SAID else super().get_factory_for_property(name, params)
 
     def handle_line_parse_error(self, exception: Exception) -> None:
         pass
@@ -111,8 +122,9 @@ def _last(component: Any, name: str) -> Any:
 
 
 def _param(prop: Any, name: str) -> str:
+    """On one line: RFC 6868's `^n` can say a line break, and a name goes on to an RSVP's headers."""
     value = prop.params.get(name, "")
-    return str(value[0] if isinstance(value, list) and value else value)
+    return " ".join(str(value[0] if isinstance(value, list) and value else value).splitlines())
 
 
 def _params(prop: Any) -> dict[str, str]:
