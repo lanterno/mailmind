@@ -9,6 +9,7 @@ the whole MATCH string is passed as one bound parameter; structured values are b
 import sqlite3
 
 from mailmind.discovery.domain.query import Kind
+from mailmind.kernel.snoozed import not_snoozed_sql, snoozed_sql
 
 # How much a hit counts in each msg_fts column: subject, from_name, from_addr, recipients, snippet,
 # body_text. Search and Ask both rank by it: a subject above a sender above the body, and a snippet is
@@ -41,7 +42,7 @@ def to_sql(spec):
             where.append(f"m.{column} = ?")
             params.append((1 - on) if c.negated else on)
         elif c.kind is Kind.SNOOZED:
-            where.append("m.snoozed_until IS " + ("NULL" if c.negated else "NOT NULL"))
+            where.append(not_snoozed_sql() if c.negated else snoozed_sql())
         elif c.kind in _EXACT:
             column, unlike = _EXACT[c.kind]
             where.append(f"{column} {unlike if c.negated else '='} ?")
@@ -67,7 +68,7 @@ def to_sql(spec):
 def visible(where):
     """`where`, leaving out snoozed mail unless the query asks about it. A snoozed message is out of
     sight until it wakes, in a search and in what a command acts on."""
-    return where if any("m.snoozed_until" in w for w in where) else where + ["m.snoozed_until IS NULL"]
+    return where if any(w in (snoozed_sql(), not_snoozed_sql()) for w in where) else where + [not_snoozed_sql()]
 
 
 def index_message(c, pk):
