@@ -1,6 +1,7 @@
 """An account as `mailmind.config.json` holds it: an entry's defaults, what the API may show of it, and
 what an edit may change. Credential styles are mailmind.accounts.domain.credential's."""
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from mailmind.accounts.domain.credential import CredentialMask, CredentialRef
@@ -54,25 +55,44 @@ TYPE_DEFAULTS: dict[str, TypeDefaults] = {
 _SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_starttls")
 
 
+@dataclass(frozen=True)
+class Endpoint:
+    """Where a server listens, and how TLS starts there. Whatever the entry leaves out comes from its type's defaults."""
+    host: str | None
+    port: int
+    starttls: bool
+
+
+def _defaults(entry: Mapping[str, Any]) -> TypeDefaults:
+    return TYPE_DEFAULTS.get(entry.get("type", "imap"), TYPE_DEFAULTS["imap"])
+
+
+def imap_endpoint(entry: Mapping[str, Any]) -> Endpoint:
+    d = _defaults(entry)
+    return Endpoint(entry.get("host", d["host"]), entry.get("port", d["port"]), entry.get("starttls", d["starttls"]))
+
+
+def smtp_endpoint(entry: Mapping[str, Any]) -> Endpoint:
+    """An explicit override, else the type's default; generic IMAP has none, so it is the IMAP host. So an account with
+    an IMAP endpoint always has an SMTP one."""
+    d = _defaults(entry)
+    return Endpoint(entry.get("smtp_host") or d["smtp_host"] or imap_endpoint(entry).host,
+                    entry.get("smtp_port", d["smtp_port"]), entry.get("smtp_starttls", d["smtp_starttls"]))
+
+
 def normalized(a: Entry) -> Entry | None:
     """An account's entry in the file as the rest of the app reads it, its type's defaults filled in.
     None for one that can't be used: disabled, or a generic IMAP account with no host."""
     if a.get("disabled"):
         return None
-    t = a.get("type", "imap")
-    d = TYPE_DEFAULTS.get(t, TYPE_DEFAULTS["imap"])
-    host = a.get("host", d["host"])
-    if not host:
+    imap, smtp, d = imap_endpoint(a), smtp_endpoint(a), _defaults(a)
+    if not imap.host:
         return None
     return {
-        "email": a["email"], "kind": t, "host": host,
-        "port": a.get("port", d["port"]), "starttls": a.get("starttls", d["starttls"]),
+        "email": a["email"], "kind": a.get("type", "imap"), "host": imap.host,
+        "port": imap.port, "starttls": imap.starttls,
         "trash": a.get("trash", d["trash"]), "strip_spaces": a.get("strip_spaces", d["strip_spaces"]),
-        # SMTP transport: explicit override, else the type default; for generic
-        # IMAP the default smtp_host is None, so fall back to the IMAP host.
-        "smtp_host": a.get("smtp_host") or d["smtp_host"] or host,
-        "smtp_port": a.get("smtp_port", d["smtp_port"]),
-        "smtp_starttls": a.get("smtp_starttls", d["smtp_starttls"]),
+        "smtp_host": smtp.host, "smtp_port": smtp.port, "smtp_starttls": smtp.starttls,
         "alias": (a.get("alias") or "").strip() or None,
         "credential": a.get("credential", {}),
         # "imapclient" asks the new door for IMAPClient (mailmind.bootstrap.mailbox)
@@ -84,18 +104,14 @@ def masked_row(entry: Entry) -> MaskedRow:
     """Re-shape ONE raw account entry into the secret-free row the API returns.
     Echoes effective host/port/etc (with a defaults_applied flag) and masks the
     credential. The handler must NEVER serialize a raw entry directly."""
-    t = entry.get("type", "imap")
-    d = TYPE_DEFAULTS.get(t, TYPE_DEFAULTS["imap"])
+    imap, smtp = imap_endpoint(entry), smtp_endpoint(entry)
     applied = {k: (k not in entry) for k in ("host", "port", "starttls", "trash", *_SMTP_KEYS)}
-    eff_host = entry.get("host", d["host"])
     return {
-        "email": entry.get("email"), "type": t,
+        "email": entry.get("email"), "type": entry.get("type", "imap"),
         "alias": (entry.get("alias") or "").strip() or None,
-        "host": eff_host, "port": entry.get("port", d["port"]),
-        "starttls": entry.get("starttls", d["starttls"]), "trash": entry.get("trash", d["trash"]),
-        "smtp_host": entry.get("smtp_host") or d["smtp_host"] or eff_host,
-        "smtp_port": entry.get("smtp_port", d["smtp_port"]),
-        "smtp_starttls": entry.get("smtp_starttls", d["smtp_starttls"]),
+        "host": imap.host, "port": imap.port,
+        "starttls": imap.starttls, "trash": entry.get("trash", _defaults(entry)["trash"]),
+        "smtp_host": smtp.host, "smtp_port": smtp.port, "smtp_starttls": smtp.starttls,
         "disabled": bool(entry.get("disabled")),
         "defaults_applied": applied,
         "credential": CredentialRef.parse(entry.get("credential")).masked(),
@@ -166,5 +182,4 @@ def validate_new(entry: Entry) -> None:
 
 
 def strip_for(entry: Entry) -> bool:
-    t = entry.get("type", "imap")
-    return entry.get("strip_spaces", TYPE_DEFAULTS.get(t, TYPE_DEFAULTS["imap"])["strip_spaces"])
+    return entry.get("strip_spaces", _defaults(entry)["strip_spaces"])
