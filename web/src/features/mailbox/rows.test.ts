@@ -20,7 +20,7 @@ describe("a row", () => {
   });
   it("comes from a search as a single message", () => {
     const hit = { ...folderRow(), account: "a", alias: "a", commitment_worthy: false, date: "", folder: "Later", importance: null, needs_you: true, reply_worthy: false, safe_to_file: false } as SearchRow;
-    expect(fromSearch(hit)).toMatchObject({ folder: "Later", threadId: "", count: 1, needsYou: true });
+    expect(fromSearch(hit)).toMatchObject({ folder: "Later", threadId: folderRow().thread_id, count: 1, needsYou: true });
   });
 });
 
