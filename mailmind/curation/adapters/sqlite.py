@@ -14,7 +14,7 @@ _uow = UnitOfWork()
 def sender_unsub_put(c, from_addr, info, accounts, when):
     """Keep how to unsubscribe from a sender, past the sender's mail. A newest message offering no way
     ends it: the list has stopped offering one."""
-    if info["method"] == "none":
+    if not unsubscribe.offers_a_way(info):
         c.execute("DELETE FROM sender_unsub WHERE from_addr=?", (from_addr,))
     else:
         c.execute("INSERT OR REPLACE INTO sender_unsub(from_addr, raw, accounts, updated_at) VALUES(?,?,?,?)",

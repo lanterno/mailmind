@@ -4,7 +4,6 @@ import email.message
 import email.policy
 import email.utils
 import json
-import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -12,7 +11,8 @@ from datetime import datetime, timezone
 from mailmind.content import mime
 from mailmind.content.mime import UnsubWay
 from mailmind.curation.application.ports import ListHeaders, SafeHttp, SenderMail, SystemSend
-from mailmind.curation.domain.unsubscribe import NO_METHOD, TERMINAL, parse_list_unsub
+from mailmind.curation.domain import unsubscribe
+from mailmind.curation.domain.unsubscribe import NO_METHOD, Attempt, parse_list_unsub
 from mailmind.kernel.row import Row
 from mailmind.platform import profile
 
@@ -43,7 +43,7 @@ class Unsubscribing:
             return None
         parsed = parse_list_unsub(raw)
         self._mail.remember_unsub(row["pk"], parsed)
-        return parsed if parsed["method"] != "none" else NO_METHOD
+        return unsubscribe.said(parsed)
 
     def resolve(self, from_addr: str) -> tuple[UnsubWay, list[str]]:
         """Authoritative unsubscribe method for a sender = the newest message's List-Unsubscribe: from what's
@@ -64,57 +64,45 @@ class Unsubscribing:
         """Send the mailto: unsubscribe from EACH affected account (the list identifies you by your From), through
         the outbox, so a server that's away only makes it wait, and it's filed in Sent like anything else you send.
         Host/creds come from config keyed by the account email — never the request → no SMTP-SSRF."""
-        to = info.get("mailto_to") or ""
-        if not re.fullmatch(r"[^\s@<>,;:\"()\[\]\\]+@[^\s@<>,;:\"()\[\]\\]+", to):
-            return False                                     # one plain address, or nothing is sent
-        subj = re.sub(r"[\r\n]", " ", (info.get("mailto_subject") or "unsubscribe"))[:200]
-        text = re.sub(r"[\r\n]{3,}", "\n\n", (info.get("mailto_body") or "Please unsubscribe me."))[:1000]
+        mailto = unsubscribe.mailto_of(info)
+        if mailto is None:
+            return False
         sent = 0
         for em in acct_emails:
             try:
                 m = email.message.EmailMessage()
                 m["From"] = em
-                m["To"] = to
-                m["Subject"] = subj
+                m["To"] = mailto.to
+                m["Subject"] = mailto.subject
                 m["Date"] = email.utils.format_datetime(datetime.now(timezone.utc))
                 m["Message-ID"] = email.utils.make_msgid(domain=em.rpartition("@")[2] or None)
                 m["Auto-Submitted"] = "auto-generated"
-                m.set_content(text)
-                self._send.send(em, m.as_bytes(policy=email.policy.SMTP), m["Message-ID"], to, subj,   # CRLF, as SMTP wants
-                                f"{key}:{em}")
+                m.set_content(mailto.text)
+                self._send.send(em, m.as_bytes(policy=email.policy.SMTP),     # CRLF, as SMTP wants
+                                m["Message-ID"], mailto.to, mailto.subject, f"{key}:{em}")
                 sent += 1
             except Exception:
                 pass                                         # a removed or stale account: skip it, not the cleanup
         return sent > 0
 
-    def attempt(self, from_addr: str, resolved: tuple[UnsubWay, list[str]]) -> tuple[str, str, int | None, str | None]:
-        """Try the way `resolved` (what resolve gave) names. Returns (status, method, http status, a URL for
-        the person to open)."""
-        status, method = "skipped", "none"
-        http_status: int | None = None
-        browser_url: str | None = None
+    def attempt(self, from_addr: str, resolved: tuple[UnsubWay, list[str]]) -> Attempt:
+        """Try the way `resolved` (what resolve gave) names."""
         if not profile.writes_allowed():
-            return "read_only", method, http_status, browser_url   # sends nothing outside; not latched, so retryable
-        key = "unsub:" + from_addr
-        prior = self._mail.attempt(key)
-        if prior and prior["status"] in TERMINAL:      # already done → never re-fire
-            status, method = prior["status"], prior["method"]
-            if method == "http-page":
-                browser_url = resolved[0].get("https_uri")
-            return status, method, http_status, browser_url
+            return unsubscribe.READ_ONLY
+        key = unsubscribe.attempt_key(from_addr)
         info, accts = resolved
-        method = info["method"]
-        if method == "one-click":
+        repeat = unsubscribe.repeat_of(self._mail.attempt(key), info)
+        if repeat is not None:
+            return repeat
+        if info["method"] == "one-click":
             rate_gate()
             ok, http_status, _reason = self._http.one_click_post(info["https_uri"] or "")
-            status = "unsubscribed_oneclick" if ok else "failed"
-        elif method == "mailto":
+            tried = unsubscribe.after_one_click(ok, http_status)
+        elif info["method"] == "mailto":
             rate_gate()
-            status = "mailto_sent" if self._mailto(info, accts, key) else "failed"
-        elif method == "http-page":
-            status, browser_url = "needs_browser", info.get("https_uri")
+            tried = unsubscribe.after_mailto(self._mailto(info, accts, key))
         else:
-            status = "no_method"
-        if status in TERMINAL:                         # record ONLY terminal success; leave failures retryable
-            self._mail.record_attempt(from_addr, method, status, http_status, key, accts)
-        return status, method, http_status, browser_url
+            tried = unsubscribe.without_sending(info)
+        if tried.latched:
+            self._mail.record_attempt(from_addr, tried.method, tried.status, tried.http_status, key, accts)
+        return tried

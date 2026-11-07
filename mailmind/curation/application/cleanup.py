@@ -2,7 +2,6 @@
 and stand whatever the unsubscribe does; the unsubscribe can't be taken back, so it wants the preview's token."""
 import secrets
 import time
-import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -93,14 +92,9 @@ class Cleanup:
         info, accts = self._unsub.resolve(addr)
         affected = [{"pk": t["pk"], "account": t["account"], "folder": t["folder"],
                      "subject": t["subject"], "seen": t["seen"]} for t in targets]
-        unsub: dict[str, str | None] = {"method": info["method"]}
-        if info["method"] == "one-click" or info["method"] == "http-page":
-            unsub["https_host"] = urllib.parse.urlparse(info["https_uri"] or "").hostname
-        if info["method"] == "mailto":
-            unsub["mailto_to"] = info.get("mailto_to")
         return {"ok": True, "from_addr": addr, "count": n, "unseen": unseen,
                 "accounts": accts, "domain": rulebook.domain_of(addr),
-                "unsub": unsub, "sweep_count": len(affected), "sweep_capped": capped,
+                "unsub": unsubscribe.preview(info), "sweep_count": len(affected), "sweep_capped": capped,
                 "reversible": cleanup_plan.REVERSIBLE,
                 "confirm_token": tokens.mint(self._secret(), unsubscribe.TOKEN_PURPOSE, unsubscribe.preview_said(addr, info), time.time())}
 
@@ -137,17 +131,11 @@ class Cleanup:
 
         # 3) UNSUBSCRIBE (irreversible, best-effort) — only with a valid confirm_token; idempotent on
         #    TERMINAL outcomes only (a transient failure/no-method is never latched, so it stays retryable).
-        status, method = "skipped", "none"
-        http_status: int | None = None
-        browser_url: str | None = None
-        if unsub is not None and token_ok:
-            status, method, http_status, browser_url = self._unsub.attempt(from_addr, unsub)
-        elif do_unsub and not token_ok:
-            status = "no_token"                          # outbound refused; block+sweep still stand
+        tried = self._unsub.attempt(from_addr, unsub) if unsub is not None and token_ok else unsubscribe.not_tried(do_unsub)
 
-        self._audit.cleaned_up(from_addr, block_token, swept.swept, status)
-        return {"ok": True, "status": status, "method": method, "blocked_token": block_token,
+        self._audit.cleaned_up(from_addr, block_token, swept.swept, tried.status)
+        return {"ok": True, "status": tried.status, "method": tried.method, "blocked_token": block_token,
                 "block_scope": plan.scope, "swept": swept.swept, "sweep_failed": swept.failed, "sweep_queued": swept.queued,
-                "sweep_capped": capped, "browser_url": browser_url,
-                "http_status": http_status, "undo_group": grp,
+                "sweep_capped": capped, "browser_url": tried.browser_url,
+                "http_status": tried.http_status, "undo_group": grp,
                 "reversible": cleanup_plan.REVERSIBLE}, 200
