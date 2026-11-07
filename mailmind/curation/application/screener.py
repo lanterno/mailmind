@@ -6,6 +6,8 @@ from mailmind.curation.application.ports import FilingCommands, Mailboxes, RuleB
 from mailmind.curation.domain import rulebook
 from mailmind.kernel.when import rel_time
 
+SHOWN = 100         # the most the queue lists, of however many are left to decide on
+
 
 class Screener:
     def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, filing: FilingCommands):
@@ -16,28 +18,22 @@ class Screener:
         their address or domain). One human decision each → Allow (keep) or Screen-out (block)."""
         if not account or account not in self._boxes.known():
             return {"ok": True, "account": account, "items": [], "total": 0}
-        r = self._rules.sets()
-        items: list[dict[str, Any]] = []
-        for row in self._mail.inbox_senders(account):
-            addr = row["addr"]
-            dom = addr.rpartition("@")[2]
-            if rulebook.decided(addr, dom, r):   # kept or blocked, sub-domains too
-                continue
-            items.append({"from_addr": addr, "from_name": row["name"] or addr, "domain": dom,
-                          "count": row["n"], "when": rel_time(row["iso"])})
-        return {"ok": True, "account": account, "items": items[:100], "total": len(items)}
+        items = [{"from_addr": row["addr"], "from_name": row["name"] or row["addr"], "domain": rulebook.domain_of(row["addr"]),
+                  "count": row["n"], "when": rel_time(row["iso"])}
+                 for row in rulebook.undecided(self._mail.inbox_senders(account), self._rules.sets())]
+        return {"ok": True, "account": account, "items": items[:SHOWN], "total": len(items)}
 
     def rule(self, b: Mapping[str, Any]) -> dict[str, Any]:
         """A keep, block or remove from the person, on a sender or a domain."""
-        token = (b.get("token") or "").strip().lower()
+        token = rulebook.token_of(b.get("token") or "")
         verdict = b.get("verdict")
         pk = b.get("pk")
-        if not token or ("." not in token and "@" not in token):
+        if not rulebook.is_token(token):
             return {"ok": False, "msg": "invalid token (need a domain or an address)"}
         if verdict == "remove":
             self._rules.remove(token)
             placed = None
-        elif verdict in ("keep", "block"):
+        elif verdict in rulebook.VERDICTS:
             _, placed = self._rules.add(token, verdict)
         else:
             return {"ok": False, "msg": "verdict must be keep|block|remove"}

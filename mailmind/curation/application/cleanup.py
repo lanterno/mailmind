@@ -51,11 +51,9 @@ class Cleanup:
         r = self._rules.sets()
         now = time.time()
         cands: list[dict[str, Any]] = []
-        for row in self._mail.noisy_senders(buckets, min_count):
+        for row in rulebook.undecided(self._mail.noisy_senders(buckets, min_count), r):
             addr = row["addr"]
-            dom = addr.rpartition("@")[2]
-            if rulebook.decided(addr, dom, r):   # a rule covers sub-domains
-                continue
+            dom = rulebook.domain_of(addr)
             n = row["n"] or 0
             unseen = row["unseen"] or 0
             ratio = (unseen / n) if n else 0

@@ -5,14 +5,17 @@ Screener and expiry.
 Expiry rules are separate from keep and block: a kept sender can also expire. Keep decides what the
 classifier shows, expiry how long it stays.
 """
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import Any, Final, Literal, TypedDict
+
+from mailmind.kernel.row import Row
 
 type ListKey = Literal["keep_senders", "block_senders", "keep_domains", "block_domains"]
 type RuleSets = Mapping[str, frozenset[str]]     # each of KEYS, as the classifier reads it
 
 KEYS: tuple[ListKey, ...] = ("keep_senders", "block_senders", "keep_domains", "block_domains")
 EXPIRE: Final = "expire_hours"   # {sender-or-domain: hours}
+VERDICTS: Final = ("keep", "block")
 _LISTS: dict[tuple[str, bool], ListKey] = {("keep", False): "keep_senders", ("block", False): "block_senders",
                                            ("keep", True): "keep_domains", ("block", True): "block_domains"}
 
@@ -57,13 +60,32 @@ def for_saving(rules: Rules) -> Rules:
     return data
 
 
+def token_of(raw: str) -> str:
+    """A sender or a domain as a rule keeps it."""
+    return raw.strip().lower()
+
+
+def is_token(token: str) -> bool:
+    """Whether a rule could name this: an address or a domain, and a bare word is neither."""
+    return bool(token) and ("." in token or "@" in token)
+
+
 def is_domain(token: str) -> bool:
     return "@" not in token and "." in token
 
 
+def domain_of(addr: str) -> str:
+    return addr.rpartition("@")[2]
+
+
+def domain_covers(domain: str, entry: str) -> bool:
+    """`domain` is `entry` or one of its sub-domains, and no lookalike. The one matcher."""
+    return domain == entry or domain.endswith("." + entry)
+
+
 def domain_listed(domain: str, listed: Iterable[str]) -> bool:
     """True if domain equals or is a sub-domain of any entry in `listed`."""
-    return any(domain == d or domain.endswith("." + d) for d in listed)
+    return any(domain_covers(domain, d) for d in listed)
 
 
 def decided(addr: str, domain: str, rules: Mapping[str, Collection[str]]) -> bool:
@@ -71,6 +93,17 @@ def decided(addr: str, domain: str, rules: Mapping[str, Collection[str]]) -> boo
     return (addr in rules.get("keep_senders", []) or addr in rules.get("block_senders", [])
             or domain_listed(domain, rules.get("keep_domains", []))
             or domain_listed(domain, rules.get("block_domains", [])))
+
+
+def undecided(senders: Iterable[Row], rules: Mapping[str, Collection[str]]) -> Iterator[Row]:
+    """Those of `senders`, rows naming each by `addr`, that no keep or block rule covers yet: who is left to decide on."""
+    return (r for r in senders if not decided(r["addr"], domain_of(r["addr"]), rules))
+
+
+def keep_ruled(addr: str | None, rules: Mapping[str, Collection[str]]) -> bool:
+    """A keep rule covers this sender, by address or by domain, whatever anything else made of its mail."""
+    addr = (addr or "").lower()
+    return addr in rules["keep_senders"] or domain_listed(addr.partition("@")[2], rules["keep_domains"])
 
 
 def add(rules: Rules, token: str, verdict: str) -> ListKey:
@@ -105,5 +138,5 @@ def expiry_hours(addr: str | None, expire: Mapping[str, int]) -> int | None:
     if addr in expire:
         return expire[addr]
     dom = addr.partition("@")[2]
-    hits = [h for t, h in expire.items() if is_domain(t) and (dom == t or dom.endswith("." + t))]
+    hits = [h for t, h in expire.items() if is_domain(t) and domain_covers(dom, t)]
     return min(hits) if hits else None

@@ -123,7 +123,7 @@ def save(rules):
 def add(token, verdict):
     """verdict in {'keep','block'}. Routes a sender/domain into the right list
     and removes it from the opposite verdict to avoid contradictions."""
-    token = token.strip().lower()
+    token = rulebook.token_of(token)
     rules = load()
     placed = rulebook.add(rules, token, verdict)
     save(rules)
@@ -132,7 +132,7 @@ def add(token, verdict):
 
 def remove(token):
     """Drop a keep/block entry. Leaves any expiry rule alone."""
-    token = token.strip().lower()
+    token = rulebook.token_of(token)
     rules = load()
     rulebook.remove(rules, token)
     save(rules)
@@ -140,7 +140,7 @@ def remove(token):
 
 def set_expiry(token, hours):
     """Expire INBOX mail from `token` (sender or domain) after `hours`; 0 clears."""
-    token = token.strip().lower()
+    token = rulebook.token_of(token)
     hours = int(hours)
     rules = load()
     rulebook.set_expiry(rules, token, hours)

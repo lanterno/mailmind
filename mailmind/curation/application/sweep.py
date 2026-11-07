@@ -10,7 +10,7 @@ from mailmind.content.mime import dec
 from mailmind.curation.application.ports import AuditLog, FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain import classifier
 from mailmind.curation.domain.live import Classified, Read
-from mailmind.curation.domain.rulebook import domain_listed
+from mailmind.curation.domain.rulebook import keep_ruled
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
 from mailmind.platform.logging import get_logger
@@ -134,12 +134,6 @@ class Sweeps:
         current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. Move to Trash
         (reversible), verified + audited; prune the local DB by Message-ID."""
         r = self._rules.sets()
-        keep_senders, keep_domains = r["keep_senders"], r["keep_domains"]
-
-        def _keep_ruled(fa: str | None) -> bool:
-            fa = (fa or "").lower(); dom = fa.partition("@")[2]
-            return fa in keep_senders or domain_listed(dom, keep_domains)
-
         junk_mids = self._mail.ai_junk_ids(acct["email"])
         out: dict[str, Any] = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
                                "kept_by_rule": 0, "error": None}
@@ -157,7 +151,7 @@ class Sweeps:
             kept = 0
             for h in live:
                 if h.get("mid") and h["mid"] in junk_mids:
-                    if _keep_ruled(h["from"]):
+                    if keep_ruled(h["from"], r):
                         kept += 1
                     else:
                         targets.append(h)
