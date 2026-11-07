@@ -20,9 +20,7 @@
      "senders": 3,
      "stragglers": []
     }
-   ],
-   "total_moved": 0,
-   "total_planned": 3
+   ]
   },
   "headers": {
    "cache-control": "no-store",
@@ -58,9 +56,7 @@
      "senders": 3,
      "stragglers": []
     }
-   ],
-   "total_moved": 3,
-   "total_planned": 3
+   ]
   },
   "headers": {
    "cache-control": "no-store",

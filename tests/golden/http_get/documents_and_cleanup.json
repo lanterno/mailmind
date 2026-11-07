@@ -99,11 +99,7 @@
   "body": {
    "generated": "2026-11-02T12:00:00+00:00",
    "ok": true,
-   "senders": [],
-   "totals": {
-    "candidate_messages": 0,
-    "candidate_senders": 0
-   }
+   "senders": []
   },
   "headers": {
    "cache-control": "no-store",
@@ -138,19 +134,10 @@
      "last_seen": "5d ago",
      "lu_likely": true,
      "noise_score": 2.52,
-     "sample_subjects": [
-      "This week: five new patterns",
-      "Issue 217: weaving notes",
-      "Issue 216: weaving notes"
-     ],
      "unseen": 3,
      "unseen_ratio": 1.0
     }
-   ],
-   "totals": {
-    "candidate_messages": 3,
-    "candidate_senders": 1
-   }
+   ]
   },
   "headers": {
    "cache-control": "no-store",
