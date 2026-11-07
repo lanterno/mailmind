@@ -1,6 +1,6 @@
 """AI rewrite/tone/translate for the composer, via Claude (summarize's API-or-CLI engine).
 One schema-constrained call returning {"text": ...}; shares summarize_thread's 2-proc cap. The
-input is UNTRUSTED data — the prompt forbids following instructions inside it; output is plain
+input is UNTRUSTED data — the system prompt forbids following instructions inside it; output is plain
 text only.
 """
 from mailmind.assistant.application.calls import Calls

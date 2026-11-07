@@ -138,7 +138,7 @@ class Assessments:
         estimate, cutoff = 0, 0
         for r in rows[keep:]:
             text = self._triage_prompt(r)
-            cost = pricing.batch_estimate(name, len(text))
+            cost = pricing.batch_estimate(name, len(prompts.SYSTEM) + len(text))
             if room is not None and estimate + cost > room // self.BATCH_SHARE:
                 break
             requests.append((str(r["message_key"]), text))

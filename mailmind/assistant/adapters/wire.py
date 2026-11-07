@@ -7,6 +7,8 @@ def body(prompt: Prompt) -> dict:
     """The JSON body of a POST /v1/messages for `prompt`, `fallbacks` included when it asks."""
     out = {"model": prompt.model, "max_tokens": prompt.max_tokens,
            "messages": [{"role": "user", "content": prompt.text}]}
+    if prompt.system:
+        out["system"] = prompt.system
     config = {}
     if prompt.schema is not None:
         config["format"] = {"type": "json_schema", "schema": prompt.schema}

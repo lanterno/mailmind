@@ -24,13 +24,14 @@ type ConversationBy = Literal["thread_id", "message_id", "pk"]     # what a conv
 
 @dataclass(frozen=True)
 class Prompt:
-    """One user turn, ready to send."""
+    """One user turn, ready to send, under its system prompt."""
     text: str
     model: str
     max_tokens: int
     schema: dict[str, Any] | None = None       # structured output's form of the schema (domain.schema)
     effort: str | None = None        # None: the model takes no effort setting
     fallback: bool = False           # ask for the server-side refusal fallback
+    system: str | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import (BatchResult, LanguageModel, ModelError, NotSent, Prompt,
                                                   Reply, Spend, Usage, UsageLedger)
 from mailmind.assistant.domain import features, models, pricing
+from mailmind.assistant.domain.prompts import SYSTEM
 from mailmind.assistant.domain.schema import structured
 from mailmind.platform.logging import get_logger
 
@@ -51,7 +52,7 @@ class Gateway:
 
     def ask(self, text: str, schema: dict[str, Any] | None = None, *, feature: str, model: str | None = None,
             effort: str | None = None) -> Reply:
-        """Send `text` as one user turn to `model` (the default one unless named), with structured
+        """Send `text` as one user turn under the system prompt to `model` (the default one unless named), with structured
         output when `schema` is given, at `effort` (medium unless named) where the model takes
         one, and the refusal fallback where it takes that. Raises ModelError when no reply came,
         and one of NotSent's when no call was made: AIOff, or what the cost governor raises when
@@ -79,7 +80,7 @@ class Gateway:
         return Prompt(text=text, model=name, max_tokens=MAX_TOKENS,
                       schema=None if schema is None else structured(schema),
                       effort=(effort or models.EFFORT) if models.takes_effort(name) else None,
-                      fallback=fallback)
+                      fallback=fallback, system=SYSTEM)
 
     def submit_batch(self, requests: list[tuple[str, str]], schema: dict[str, Any] | None = None, *, feature: str,
                      model: str | None = None, effort: str | None = None) -> str:

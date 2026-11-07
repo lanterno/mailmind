@@ -2,7 +2,7 @@
 Calls.call_claude (the Claude API). Cached in thread_summaries
 (content-fingerprinted, so a new reply invalidates it). Single-flight per
 (account,thread_id,scope) + a global concurrency cap so double-clicks never pile up Claude calls. Untrusted email is bounded and
-the prompt tells the model to treat it as data, not instructions.
+the system prompt tells the model to treat it as data, not instructions.
 """
 from datetime import datetime, timezone
 import json
