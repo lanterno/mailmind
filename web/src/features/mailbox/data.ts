@@ -12,7 +12,11 @@ const q = encodeURIComponent;
 
 export interface ListPage { rows: Row[]; hasMore: boolean; total: number; syncing: boolean; syncFailed: boolean; catchingUp: boolean; error?: string }
 
-export const useDigest = () => useQuery({ queryKey: ["digest"], queryFn: () => get("/api/digest?min=1&account=") });
+export const useDigest = () => useQuery({
+  queryKey: ["digest"],
+  queryFn: () => get("/api/digest?min=1&account="),
+  refetchInterval: (q) => (q.state.status === "error" ? 5000 : false),     // the first read failed: the server may be starting
+});
 
 export const useFolders = (account: string | undefined) =>
   useQuery({ queryKey: ["folders", account], queryFn: () => get(`/api/folders?account=${q(account!)}`), enabled: Boolean(account) });

@@ -181,6 +181,8 @@ export function useMailbox() {
     aliases,
     account,
     digest: digest.data,
+    digestFailed: digest.isLoadingError,
+    retryDigest: () => void digest.refetch(),
     grouped,
     tab,
     list,
