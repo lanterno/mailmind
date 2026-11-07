@@ -1,21 +1,16 @@
 """Shelf life: moving INBOX mail past its rule's age to Trash. Ages come from the live server, so it's right
 whether or not the store is synced. Verified and audited, and the audit comes before the move."""
-import email
 import imaplib
 import time
 from typing import Any
 
-from mailmind.content import mime
-from mailmind.content.mime import dec
 from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailboxes, RuleBookRepository, SenderMail
-from mailmind.curation.domain.expiry import arrival_ts, select_expired
-from mailmind.curation.domain.live import Aged
+from mailmind.curation.domain.expiry import AGE_FIELDS, aged_from_headers, audited, select_expired
 from mailmind.curation.domain.rulebook import EXPIRE
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
 log = get_logger("expire")
-EXP_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "DATE")
 
 
 class Expiry:
@@ -46,20 +41,13 @@ class Expiry:
                     raise
                 except imaplib.IMAP4.error:     # a refused search finds nothing
                     pass
-            rows: list[Aged] = []
-            for h in s.headers(sorted(uids), EXP_FIELDS, internaldate=True):
-                msg = email.message_from_bytes(h.raw)
-                rows.append({"uid": str(h.uid), "from": mime.sender_of(msg)[1].lower(),
-                             "subject": dec(msg.get("Subject", "")),
-                             "mid": (msg.get("Message-ID", "") or "").strip(),
-                             "ts": arrival_ts(h.internaldate, msg)})
+            rows = [aged_from_headers(h.uid, h.raw, h.internaldate)
+                    for h in s.headers(sorted(uids), AGE_FIELDS, internaldate=True)]
             targets = select_expired(rows, expire, now if now is not None else time.time())
             out["planned"] = len(targets)
             if dry or not targets:
                 return out
-            self._audit.swept(acct["email"], [      # log BEFORE moving so a crash still records intent
-                {"uid": t["uid"], "from": t["from"], "subject": t["subject"], "bucket": "expired",
-                 "reason": f"expire rule: older than {t['hours']}h"} for t in targets])
+            self._audit.swept(acct["email"], audited(targets))   # log BEFORE moving so a crash still records intent
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
                                                           self._boxes.trash_folder(acct))
         except Exception as e:
