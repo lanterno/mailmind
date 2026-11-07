@@ -30,7 +30,8 @@ def _plain(e: Exception) -> str:
         return "rate-limited for now"
     if "timed out" in s.lower():
         return "it timed out"
-    return s[:140] or type(e).__name__
+    status = getattr(e, "status", None)        # never what the API said: it can quote the request back
+    return f"the API answered {status}" if status else type(e).__name__
 
 
 def _loose_json(out: str) -> dict[str, Any]:
