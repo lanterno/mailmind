@@ -3,6 +3,7 @@ thread summaries, replies drafted ahead and message batches. Each function takes
 from datetime import datetime, timedelta, timezone
 
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.assessment import Assessment
 
 
 # ----------------------------------------------------------- thread summaries (AI)
@@ -175,13 +176,13 @@ def batch_open(c):
     return c.execute(f"SELECT * FROM ai_batches WHERE state IN {_BATCH_OUT} ORDER BY id DESC LIMIT 1").fetchone()
 
 
-def batch_begin(c, feature, model, keys, estimate_micros, cutoff_ts, now):
+def batch_begin(c, feature, model, keys, estimate_micros, cutoff_ts, now, prompt_version=None):
     """Record a batch about to be sent and hold its messages, so nothing triages them meanwhile: the caller commits
     this before it sends, which is a network call. None if another is out already."""
     cur = c.execute(
-        "INSERT INTO ai_batches(feature, model, state, requests, estimate_micros, cutoff_ts, created_at) "
-        f"SELECT ?, ?, 'submitting', ?, ?, ?, ? WHERE NOT EXISTS(SELECT 1 FROM ai_batches WHERE state IN {_BATCH_OUT})",
-        (feature, model, len(keys), estimate_micros, cutoff_ts, now))
+        "INSERT INTO ai_batches(feature, model, state, requests, estimate_micros, cutoff_ts, created_at, prompt_version) "
+        f"SELECT ?, ?, 'submitting', ?, ?, ?, ?, ? WHERE NOT EXISTS(SELECT 1 FROM ai_batches WHERE state IN {_BATCH_OUT})",
+        (feature, model, len(keys), estimate_micros, cutoff_ts, now, prompt_version))
     if cur.rowcount != 1:
         return None
     batch_id = cur.lastrowid
@@ -229,8 +230,10 @@ def batch_forget_finished(c, now_ts, days=30):
     c.execute("DELETE FROM ai_batches WHERE state='done' AND ended_at < ?", (now_ts - days * 86400,))
 
 
-def save_summary(c, pk, summary, importance, category, action, model, created_at):
-    """What the AI said of a message, for this copy, the others and any that comes later."""
+def save_summary(c, pk, summary, importance, category, action, model, created_at, served_by=None, prompt_version=None,
+                 outcome=None):
+    """What the AI said of a message, for this copy, the others and any that comes later. How it came to say it is kept
+    under the key alone, which outlives the copies."""
     said = (summary, importance, category, action, model, created_at)
     row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
     key = row["message_key"] if row else None
@@ -247,17 +250,30 @@ def save_summary(c, pk, summary, importance, category, action, model, created_at
             (copy, *said),
         )
     if key is not None:
-        save_assessment(c, key, *said)
+        save_assessment(c, key, *said, served_by, prompt_version, outcome)
 
 
-def save_assessment(c, key, summary, importance, category, action, model, created_at):
+def save_assessment(c, key, summary, importance, category, action, model, created_at, served_by=None, prompt_version=None,
+                    outcome=None):
     """What the AI said of a message, under its key, for a copy that comes later."""
     c.execute(
-        """INSERT INTO assessments (message_key,summary,importance,category,action,model,created_at)
-           VALUES (?,?,?,?,?,?,?)
+        """INSERT INTO assessments (message_key,summary,importance,category,action,model,created_at,
+                                    served_by,prompt_version,outcome)
+           VALUES (?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(message_key) DO UPDATE SET
             summary=excluded.summary, importance=excluded.importance,
             category=excluded.category, action=excluded.action,
-            model=excluded.model, created_at=excluded.created_at""",
-        (key, summary, importance, category, action, model, created_at),
+            model=excluded.model, created_at=excluded.created_at,
+            served_by=excluded.served_by, prompt_version=excluded.prompt_version, outcome=excluded.outcome""",
+        (key, summary, importance, category, action, model, created_at, served_by, prompt_version, outcome),
     )
+
+
+def assessment(c, key):
+    """What is kept of a message under its key, or None. What a row from before migration 43 never said stays unknown."""
+    r = c.execute("""SELECT summary, importance, category, action, model, served_by, prompt_version, outcome
+                     FROM assessments WHERE message_key=?""", (key,)).fetchone()
+    if r is None:
+        return None
+    return Assessment(r["summary"] or "", r["importance"], r["category"] or "", r["action"] or "", r["model"] or "",
+                      r["served_by"], r["prompt_version"], r["outcome"])

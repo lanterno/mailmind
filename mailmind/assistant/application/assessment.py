@@ -2,16 +2,16 @@
 price."""
 import os
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
-from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent
+from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent, Reply
 from mailmind.assistant.domain import models, pricing, prompts
 from mailmind.assistant.domain.schema import object_in
+from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -19,7 +19,6 @@ from mailmind.platform.logging import get_logger
 assess_log = get_logger("assess")
 
 type Log = Callable[[str], None]
-type Assessment = tuple[str, int, str, str, str]    # what's stored of a message: summary, importance, category, action, model
 
 WORKERS = 4
 
@@ -66,24 +65,27 @@ class Assessments:
         return prompts.TRIAGE.fill(frm=frm, subject=row["subject"] or "(no subject)",
                                    date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
 
-    def _assessment(self, row: Row, obj: Mapping[str, Any]) -> Assessment:
+    def _assessment(self, row: Row, reply: Reply, prompt_version: int | None) -> Assessment:
         """What to store for a message from what triage answered. A reply with no usable summary stores a
         fallback, so a message doesn't go round for ever."""
+        obj = object_in(reply.text)
         if obj.get("summary"):
-            try:
-                imp = max(1, min(5, int(obj.get("importance", 2))))
-            except Exception:
-                imp = 2
-            return (str(obj["summary"])[:600], imp, str(obj.get("category", "other"))[:32],
-                    str(obj.get("action", ""))[:200], self._calls.model_label())
-        return ((row["subject"] or "(no subject)"), 2, "other", "", "parse-error")
+            return Assessment(str(obj["summary"])[:600], obj.get("importance", 2), str(obj.get("category", "other"))[:32],
+                              str(obj.get("action", ""))[:200], self._calls.model_label(),
+                              reply.model, prompt_version, ASSESSED)
+        return Assessment(row["subject"] or "(no subject)", 2, "other", "", "parse-error",
+                          reply.model, prompt_version, REFUSED if reply.refused else UNUSABLE)
+
+    def _save(self, c: Connection, pk: int, said: Assessment, when: str) -> None:
+        self._answers.save_summary(c, pk, said.summary, said.importance, said.category, said.action, said.model, when,
+                                   said.served_by, said.prompt_version, said.outcome)
 
     def summarize_one(self, row: Row) -> tuple[int, Assessment | None]:
         try:
-            obj = self._calls.call_claude_json(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT, feature="triage")
+            reply = self._calls.reply_to(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT, feature="triage")
         except Exception:
             return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
-        return row["pk"], self._assessment(row, obj)
+        return row["pk"], self._assessment(row, reply, prompts.TRIAGE.version)
 
     def summarize_pending(self, limit: int = 200, workers: int = WORKERS, log: Log = lambda _: None) -> int:
         """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
@@ -101,13 +103,11 @@ class Assessments:
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futs = {ex.submit(self.summarize_one, r): r for r in rows}
             for f in as_completed(futs):
-                pk, payload = f.result()
-                if payload is None:
+                pk, said = f.result()
+                if said is None:
                     continue  # transient failure -> stays in needs_summary for next run
-                s, imp, cat, act, model = payload
                 with self._uow.write() as c:
-                    self._answers.save_summary(c, pk, s, imp, cat, act, model,
-                                       datetime.now(timezone.utc).isoformat())
+                    self._save(c, pk, said, datetime.now(timezone.utc).isoformat())
                 done += 1
                 if done % 25 == 0 or done == len(rows):
                     log(f"  {done}/{len(rows)}")
@@ -148,7 +148,8 @@ class Assessments:
         if not requests:
             return 0
         with self._uow.write() as c:                # committed before the network: sending it is a call
-            batch_id = self._answers.batch_begin(c, self.BATCH_FEATURE, name, keys, estimate, cutoff, int(time.time()))
+            batch_id = self._answers.batch_begin(c, self.BATCH_FEATURE, name, keys, estimate, cutoff, int(time.time()),
+                                                 prompts.TRIAGE.version)
         if batch_id is None:
             return 0
         try:
@@ -171,11 +172,12 @@ class Assessments:
             if key not in keys or r.reply is None:
                 continue                            # no answer: it is waiting again once the batch is closed
             row = self._mail.any_copy(c, key)
-            obj = object_in(r.reply.text)
+            said = self._assessment(row or {"subject": ""}, r.reply, batch["prompt_version"])
             if row is not None:
-                self._answers.save_summary(c, row["pk"], *self._assessment(row, obj), when)
-            elif obj.get("summary"):                # every copy has gone: it may come back
-                self._answers.save_assessment(c, key, *self._assessment({"subject": ""}, obj), when)
+                self._save(c, row["pk"], said, when)
+            elif said.outcome == ASSESSED:          # every copy has gone: it may come back
+                self._answers.save_assessment(c, key, said.summary, said.importance, said.category, said.action, said.model,
+                                              when, said.served_by, said.prompt_version, said.outcome)
             stored += 1
         return stored
 

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from mailmind.assistant.application.gateway import DayCost, Gateway
+from mailmind.assistant.application.ports import Reply
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.schema import object_in
@@ -41,6 +42,12 @@ class Calls:
         """Plain text result (a thread's digest). `feature` names the call in the usage ledger."""
         return self.noting(lambda: self._gateway().ask(prompt, feature=feature, model=self.MODEL).text)
 
+    def reply_to(self, prompt: str, schema: dict[str, Any], effort: str | None = None, feature: str = "other") -> Reply:
+        """The whole reply to what call_claude_json asks, for a caller that keeps which model served it and whether it
+        was refused. It fails as that does."""
+        return self.noting(lambda: self._gateway().ask(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
+                                                       feature=feature, model=self.MODEL, effort=effort))
+
     def call_claude_json(self, prompt: str, schema: dict[str, Any], effort: str | None = None,
                          feature: str = "other") -> dict[str, Any]:
         """Ask Claude for a JSON object matching `schema`. Returns the dict structured output
@@ -48,6 +55,4 @@ class Calls:
         RuntimeError ONLY when no reply came (AIOff, one, when AI is off), so the caller can tell
         retry from fallback; a successful-but-unparseable reply yields {}. `feature` names the call in
         the usage ledger."""
-        out = self.noting(lambda: self._gateway().ask(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
-                                                      feature=feature, model=self.MODEL, effort=effort).text)
-        return object_in(out)
+        return object_in(self.reply_to(prompt, schema, effort, feature).text)
