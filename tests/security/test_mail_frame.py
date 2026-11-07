@@ -1,5 +1,5 @@
 """A mail body's own document, what the app's frame loads: its policy, who may frame it,
-and what it holds. tests/e2e/browser/test_next_mail_frame.py holds what a browser makes of it."""
+and what it holds. tests/e2e/browser/test_mail_frame.py holds what a browser makes of it."""
 import pytest
 
 from fixtures import world as w
