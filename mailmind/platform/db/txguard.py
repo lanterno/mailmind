@@ -52,6 +52,25 @@ def refuse_network(what: str) -> None:
         raise TxAcrossNetworkError(f"{what} while a transaction is open on this thread")
 
 
+def release_thread() -> int:
+    """Roll back and close the connections this thread's work left open, and say how many held a transaction. A thread that
+    dies takes them with it once nothing refers to them. One from a pool goes on to its next request, which would find what
+    this one left: every other writer waiting on its lock, and each network call refused."""
+    conns = getattr(_local, "conns", None)
+    left = 0
+    for c in list(conns or ()):
+        try:
+            if c.in_transaction:
+                left += 1
+                c.rollback()
+            c.close()
+        except sqlite3.ProgrammingError:               # closed
+            pass
+    if conns is not None:
+        conns.clear()
+    return left
+
+
 def guard_calls(obj, name: str, what: str | Callable[..., str]):
     """Make each call of `obj.name` pass refuse_network first, naming the call `what`, or
     `what(*args)` when it is a function. Returns obj. An object without that method (a test's
