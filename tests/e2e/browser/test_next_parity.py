@@ -620,6 +620,7 @@ def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on
     page.clock.run_for(1_600)
     until(page, lambda: "/api/briefing/since" in asked, "the pill's line was never asked for")
     clean(page)
+
 def test_a_digest_that_wont_come_says_the_server_cant_be_reached_and_offers_retry(page, app, world):
     page.route("**/api/digest*", lambda route: route.abort())
     page.goto("/next")
@@ -673,3 +674,11 @@ def test_the_question_mark_opens_help_over_settings_and_escape_comes_back(page, 
     expect(title).to_be_visible()
     clean(page)
 
+def test_a_custom_send_time_already_gone_says_pick_a_future_one(page, world):
+    opened(page)
+    page.locator("#composeBtn").click()
+    page.locator("#cmpSchedule").click()
+    page.locator("#slWhen").fill("2026-01-01T09:00")
+    expect(page.locator("#toast")).to_have_text("Pick a future time")
+    expect(page.locator("#slWhen")).to_be_visible()             # still choosing
+    clean(page)
