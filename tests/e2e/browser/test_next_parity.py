@@ -484,3 +484,31 @@ def test_closing_a_bulk_action_takes_the_command_out_of_the_search_box(page, wor
     expect(box).to_have_value("")
     clean(page)
 
+def test_with_the_event_stream_down_the_counts_and_the_tray_are_still_read(page, app, world):
+    page.route("**/api/events", lambda route: route.abort())
+    asked = []
+    page.on("request", lambda r: asked.append(r.url))
+    opened(page)
+    page.wait_for_timeout(100)                                  # the stream has said it is down
+    asked.clear()
+    page.clock.run_for(21_000)
+    until(page, lambda: any("/api/outbox" in u for u in asked), "the tray was never read again")
+    assert not any("/api/digest" in u for u in asked)
+    page.clock.run_for(25_000)
+    until(page, lambda: any("/api/digest" in u for u in asked), "the counts were never read again")
+    assert all("/api/events" in p or "ERR_FAILED" in p for p in page.problems), page.problems
+    page.problems.clear()
+    assert page.blocked == [], page.blocked
+
+
+def test_with_the_event_stream_up_nothing_is_read_on_a_timer(page, app, world):
+    asked = []
+    opened(page)
+    expect(page.get_by_role("option").first).to_be_visible()
+    page.wait_for_timeout(300)                                  # the stream has opened
+    page.on("request", lambda r: asked.append(r.url))
+    page.clock.run_for(46_000)
+    page.wait_for_timeout(200)
+    assert not any("/api/digest" in u or "/api/outbox" in u for u in asked), asked
+    clean(page)
+
