@@ -230,6 +230,18 @@ def list_waiting(c, account):
            ORDER BY f.due_ts DESC""", (account,)).fetchall()
 
 
+def waiting_on_others(c, accounts, limit):
+    """A row like list_waiting's per sent thread still with no reply, in those accounts, the longest wait first."""
+    return c.execute(
+        """SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
+                  (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account AND mm.thread_id=m.thread_id) AS thread_count
+           FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
+           WHERE f.account IN (%s) AND f.state='due' AND f.kind='sent'
+             AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
+                       ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
+           ORDER BY m.ts, m.pk LIMIT ?""" % ",".join("?" for _ in accounts), (*accounts, limit)).fetchall()
+
+
 def waiting_count(c, account):
     return c.execute(
         "SELECT COUNT(DISTINCT f.thread_id) FROM followups f "

@@ -839,6 +839,10 @@ def _message_count(c, where, params):
 _IN_FOLDER = "m.account=? AND m.folder=?"
 
 
+def _in_inboxes(accounts):
+    return "m.folder='INBOX' AND m.account IN (%s)" % ",".join("?" for _ in accounts)
+
+
 def folder_conversation_rows(c, account, folder, limit, offset):
     """A folder collapsed to conversations."""
     return _conversation_rows(c, _IN_FOLDER, (account, folder), "m.thread_id", limit, offset)
@@ -856,6 +860,25 @@ def folder_rows(c, account, folder, limit, offset):
 
 def folder_count(c, account, folder):
     return _message_count(c, _IN_FOLDER, (account, folder))
+
+
+def inboxes_conversation_rows(c, accounts, limit, offset):
+    """Those accounts' Inboxes collapsed to conversations, as one list. A thread id means something within its account."""
+    return _conversation_rows(c, _in_inboxes(accounts), tuple(accounts), "m.account, m.thread_id", limit, offset)
+
+
+def inboxes_conversation_count(c, accounts):
+    return c.execute(f"SELECT COUNT(*) FROM (SELECT DISTINCT m.account, m.thread_id FROM messages m "
+                     f"WHERE {_listed(_in_inboxes(accounts))})", tuple(accounts)).fetchone()[0]
+
+
+def inboxes_rows(c, accounts, limit, offset):
+    """Those accounts' Inboxes as one list, newest first."""
+    return _message_rows(c, _in_inboxes(accounts), tuple(accounts), limit, offset)
+
+
+def inboxes_count(c, accounts):
+    return _message_count(c, _in_inboxes(accounts), tuple(accounts))
 
 
 def stored_folder_counts(c, account):

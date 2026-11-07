@@ -6,8 +6,11 @@ from mailmind.kernel import attention as verdict
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.ports import Attention, StoredMail
+from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
 from mailmind.platform.db.uow import UnitOfWork
+
+
+_INBOX = "INBOX"
 
 
 def _attention(r: Row) -> dict[str, bool]:
@@ -52,11 +55,15 @@ def _waiting_item(r: Row) -> dict[str, Any]:
 
 
 class Queries:
-    def __init__(self, uow: UnitOfWork, store: StoredMail, attention: Attention, folders: Folders):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, attention: Attention, folders: Folders, accounts: Accounts):
         self._uow = uow
         self._store = store
         self._attention = attention
         self._folders = folders
+        self._accounts = accounts
+
+    def _emails(self) -> list[str]:
+        return [str(a["email"]) for a in self._accounts.accounts()]
 
     def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
@@ -107,6 +114,14 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
+    def waiting_on_others(self, limit: int) -> dict[str, Any]:
+        """Every account's sent threads still with no reply, the longest wait first. Pure-local."""
+        emails = self._emails()
+        with self._uow.read() as c:
+            rows = self._attention.waiting_on_others(c, emails, limit)
+        return {"ok": True, "items": [{**_waiting_item(r), "account": r["account"]} for r in rows]}
+
+
     def replylater_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
         with self._uow.read() as c:
@@ -147,6 +162,23 @@ class Queries:
         items = [_listed_item(r, group) for r in rows]
         return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
+
+
+    def all_inboxes(self, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
+        """Every account's Inbox as one list, newest first, each row naming its account. It answers from what is stored, so
+        an account that's away or still on its first scan holds up no one."""
+        emails = self._emails()
+        scanning = [e for e in emails if self._folders.scanning_first(e, _INBOX)] if offset == 0 else []
+        with self._uow.read() as c:
+            if group:
+                rows = self._store.inboxes_conversation_rows(c, emails, limit, offset)
+                total = self._store.inboxes_conversation_count(c, emails)
+            else:
+                rows = self._store.inboxes_rows(c, emails, limit, offset)
+                total = self._store.inboxes_count(c, emails)
+        items = [_listed_item(r, group) for r in rows]
+        return {"ok": True, "folder": _INBOX, "items": items, "grouped": group, "total": total, "offset": offset,
+                "has_more": offset + len(items) < total, **({"syncing": True} if scanning else {})}
 
 
     def thread_json(self, account: str, thread_id: str) -> dict[str, Any]:

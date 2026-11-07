@@ -58,6 +58,15 @@ def routes(mailbox):
                                            int(req.arg("offset", "0")), int(req.arg("limit", "80")),
                                            group=(req.arg("group", "") == "thread"))
 
+    @r.get("/api/inboxes")
+    def inboxes(req):
+        return mailbox.queries.all_inboxes(int(req.arg("offset", "0")), int(req.arg("limit", "80")),
+                                           group=(req.arg("group", "") == "thread"))
+
+    @r.get("/api/waiting-on-others")
+    def waiting_on_others(req):
+        return mailbox.queries.waiting_on_others(int(req.arg("limit", "100")))
+
     @r.get("/api/thread")
     def thread(req):
         return mailbox.queries.thread_json(req.arg("account"), req.arg("thread_id"))

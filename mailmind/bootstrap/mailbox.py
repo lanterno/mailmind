@@ -234,6 +234,10 @@ class _Attention:
         from mailmind.bootstrap import attention
         return attention.book.list_waiting(c, account)
 
+    def waiting_on_others(self, c, accounts, limit):
+        from mailmind.bootstrap import attention
+        return attention.book.waiting_on_others(c, accounts, limit)
+
     def list_replylater(self, c, account):
         from mailmind.bootstrap import attention
         return attention.book.list_replylater(c, account)
@@ -281,7 +285,7 @@ warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
 realtime = Realtime(_directory, _open)
 stats = LiveStats(_directory, _Curation())
 folders = Folders(_uow, store, _directory, pool, ingest, _attention)
-queries = Queries(_uow, store, _attention, folders)
+queries = Queries(_uow, store, _attention, folders, _directory)
 bodies = Bodies(_uow, store, ingest, _Reader())
 reversals = Reversals(_uow, store, _directory, server_ops, commands, ingest)
 

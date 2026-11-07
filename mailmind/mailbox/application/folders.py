@@ -236,6 +236,13 @@ class Folders:
         sse.publish("reconcile", {"account": account, "folder": folder, "pruned": 1})
 
 
+    def scanning_first(self, account: str, folder: str) -> bool:
+        """Whether a first scan of the folder is still to finish, starting one if none runs. A list across accounts waits
+        for none of them: what's stored now, then folder-synced."""
+        if self._ingest.folder_synced(account, folder):
+            return False
+        return not self._folder_sync(account, folder, full=True).wait(0)
+
     def on_open(self, account: str, folder: str) -> dict[str, bool]:
         """A folder opens: its first scan, or a catch-up if one is due, waited for a moment. Returns how the
         sync went, for the list's answer."""
