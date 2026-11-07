@@ -57,6 +57,8 @@ uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved 
 uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's reopen helpers, run in node (25)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (138)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (58)
+uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (493)
+uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers, through both doors (54)
 ```
 
 `test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
@@ -319,7 +321,15 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
-  (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
+  (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one, and `parsed` also
+  reads a number off a request: `as_int` gives None for what won't read, or for one past 2^53 (JSON can say Infinity, and SQLite
+  raises past 64 bits), and `required_int` refuses it. `errors` holds what a use case raises when it can't do what was asked
+  (see Routing). `ids` holds `Pk`, `MessageKey`, `AccountId`, `ThreadRef` and `FolderName`, each a `NewType`: plain at run time
+  and to the database, and a type of its own to pyright. A port that takes several ids of one base type names them, so a pair handed
+  over in the wrong order fails `just lint`. So far: all of Attention's book, the Assistant's `Mail` and `Answers`, the methods of
+  the Mailbox's `StoredMail` and Compose's ports that take an account and a folder or thread together. A pk stays an `int` in the
+  Mailbox, where naming it costs far more than it would catch. What a row holds is `Any` and goes in as it is, so a swap of two
+  values read straight off rows isn't caught.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes), `status` (`Status`, how AI stands, and each call's outcome),
   `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `context` (`ContextAssembler`, what the model reads of a conversation: the first message and the
@@ -490,6 +500,22 @@ shares, then ask `mailmind.http.routing.Routes` for the route. A route names its
 an object, `(object, code)`, or `ANSWERED` when it wrote the answer itself. A router gets its context's wiring as an
 argument (`routes(attention)`), and `mailmind.bootstrap.web` binds them all, since http may not import bootstrap. The
 routers run on the old door too, so they are plain tables, standard library only, and hold no schemas yet.
+
+A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and
+`do_GET` and `do_POST` answer it as `{"ok": false, "error": ..., ...}` by `handler._STATUS`: `NotFound` 404, `Conflict` and `Busy`
+409, `Locked` 423, `Refused` 400, `Unreachable` 502 (a retry can help), `Unreadable` 422. `gates.Busy` is the kernel's. A use case
+returns only the answer it has, a dict, and a route with a catch of its own lets `Problem` through ahead of it (`except Problem:
+raise`). Unexpected exceptions still answer the fixed 500, with the class logged. `AIOff`, `OverLimit`, `ReadOnlyError` and
+`TxAcrossNetworkError` keep the paths the sections below give them. What a request can't mean is refused before it does harm:
+`Request.int_arg` and `required_int` for a number, `H._body` for a body with anything but text in a `_TEXT_FIELDS` name. `do_POST`
+still turns any `TypeError` or `ValueError` into the 400. `do_GET` doesn't, and `/api/messages` still answers a bad `limit` or
+`offset` with the 500 its golden pins.
+
+The wire stays as both clients read it until `/` flips: RFC 9457 and ending `ok: false` with a 200 wait for that day. Filing's
+`{"ok": false, "msg": ...}`, `Undo.undo_last`, `Screener.rule`, `SavedViews.post`, `search.bad_query`, `Cleanup.sender`,
+`Bodies.message_body`, `Queries.thread_json` and `Connections.test` and `change` still answer a refusal that way. The literals
+that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
+each route's own worded 500.
 
 Consequence: to find a route, grep the literal path. A path that matches by shape (`@r.matching`, a message's body or
 attachment, `/api/accounts/<action>`) is asked only when no literal path answers.
