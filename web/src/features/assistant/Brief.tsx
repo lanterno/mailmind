@@ -79,11 +79,11 @@ function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
       {upcoming.length > 0 && (
         <section className="bs-card" aria-label="Today and next">
           <h3><Icon name="cal" />Today &amp; next</h3>
-          {upcoming.map((e) => {
+          {upcoming.map((e, i) => {
             const [big, small] = eventWhen(e, now);
             const sub = [e.location, e.organizer].filter(Boolean).join(" · ");
             return (
-              <div className="bs-ev" key={`${e.pk}|${e.start}`}>
+              <div className="bs-ev" key={`${e.pk}|${e.start}|${i}`}>
                 <time dateTime={e.start}>{big}<small>{small}</small></time>
                 <div style={{ minWidth: 0 }}>
                   <button className="bs-t" onClick={() => m.openAny(e.pk)}>{e.summary || "(no title)"}</button>
