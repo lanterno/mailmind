@@ -17,7 +17,11 @@ from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("folders")
+sync_log = get_logger("folder-sync")
 
 
 class RailFolder(TypedDict):
@@ -141,10 +145,10 @@ class Folders:
             return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE)
         except Exception as e:
             if hit:
-                print(f"[folders] {account}: live refresh failed ({type(e).__name__}), serving cached", flush=True)
+                log.warning("%(account)s: live refresh failed, serving cached", {"account": account}, exc_info=e)
                 return hit["folders"]
             if isinstance(e, UNREACHABLE):
-                print(f"[folders] {account}: unreachable ({type(e).__name__}), serving the stored folders", flush=True)
+                log.warning("%(account)s: unreachable, serving the stored folders", {"account": account}, exc_info=e)
                 return self._stored_folder_list(account)
             raise
 
@@ -201,7 +205,8 @@ class Folders:
             except Exception as e:
                 if full:
                     self._first_sync_failed[key] = sync_errors.kind_of(e)
-                print(f"[folder-sync] {account}/{folder!r}: {e!r}", flush=True)     # a name a request gave us
+                sync_log.warning("%(account)s/%(folder)s", {"account": account, "folder": repr(folder)},   # a name a request gave us
+                                 exc_info=e)
             finally:
                 with self._folder_syncs_lock:
                     self._folder_syncs.pop(key, None)

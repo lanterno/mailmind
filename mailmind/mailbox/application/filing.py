@@ -13,9 +13,12 @@ from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import command
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.undo import Undo
 from mailmind.platform.workers import gates
 
+pending_log = get_logger("pending")
+do_log = get_logger("do")
 _FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
 _REFUSED = {"archive": "the server refused the archive"}
 _NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
@@ -121,7 +124,7 @@ class Filing:
                 try:
                     self._ingest.ingest_message(self._accounts.get(gone["account"]), gone["src_folder"], gone["message_id"])
                 except Exception as e:                # the next open of the folder has another chance
-                    print(f"[pending] reading a discarded move's message back: {self._accounts.quiet_error(e)}", flush=True)
+                    pending_log.warning("reading a discarded move's message back: %(why)s", {"why": self._accounts.quiet_error(e)})
             return True
         try:
             ok = gates.run(row["account"], job, priority=gates.Priority.INTERACTIVE, deadline=self.PENDING_WAIT)
@@ -246,7 +249,7 @@ class Filing:
             try:
                 res: dict[str, Any] = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
             except Exception as e:                 # the rest still go: this run has no second try
-                print(f"[do] {verb} failed: {type(e).__name__}", flush=True)
+                do_log.warning("%(what)s failed", {"what": verb}, exc_info=e)
                 res = {}
             if res.get("ok"):
                 done["count"] += 1

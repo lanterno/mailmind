@@ -26,14 +26,19 @@ from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import settings, sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("sync")
+reconcile_log = get_logger("reconcile")
+warm_log = get_logger("warm")
 
 
 def _reconcile_secs() -> int:
     try:
         return int(os.environ.get("MAILMIND_RECONCILE_SECS", "1800"))  # full-cycle target; 0 disables
     except ValueError:
-        print("[reconcile] bad MAILMIND_RECONCILE_SECS — using 1800", flush=True)
+        reconcile_log.warning("bad MAILMIND_RECONCILE_SECS — using 1800")
         return 1800
 
 
@@ -89,7 +94,7 @@ class Syncing:
                 except Exception as e:
                     self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
                     self._store.record_sync_result(hc, a["email"], False, type(e).__name__, sync_errors.kind_of(e)); hc.commit()
-                    print(f"[sync] {a['email']}: {type(e).__name__}: {e}", flush=True)
+                    log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         finally:
             hc.close()
         return new
@@ -140,7 +145,7 @@ class Syncing:
                 warmed = True
                 n = self._accounts.preload_creds()  # 0 when every credential is plaintext
                 if n:
-                    print(f"Warmed {n} 1Password-backed credential(s).", flush=True)
+                    log.info("warmed %d 1Password-backed credential(s)", n)
             self.sync_once()
         return sync_round
 
@@ -181,11 +186,11 @@ class Syncing:
             self._kick("assess")
         self._sync["result"] = f"{new} new"
         self._sync["last"] = now_iso()
-        print(f"[sync] {self._sync['result']}", flush=True)
+        log.info("%d new", new)
         try:
             self._warm.warm_tick(emails)        # optional background folder warming (OFF unless MAILMIND_WARM_FOLDERS)
         except Exception as e:
-            print(f"[warm] tick error: {type(e).__name__}: {e}", flush=True)
+            warm_log.warning("tick error", exc_info=e)
 
 
     def _reconcile_folders(self, acct: Account, dry_run: bool = False, force: bool = False,
@@ -233,7 +238,7 @@ class Syncing:
             sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
         except Exception:
             pass
-        print(f"[reconcile] auto: {acct['email']} pruned {res['pruned']} ghost row(s)", flush=True)
+        reconcile_log.info("auto: %(account)s pruned %(count)s ghost row(s)", {"account": acct["email"], "count": res["pruned"]})
 
 
     def reconcile_rounds(self) -> Callable[[], int]:
@@ -250,7 +255,7 @@ class Syncing:
                 try:
                     self._auto_reconcile_one(accts[rr % len(accts)])
                 except Exception as e:
-                    print(f"[reconcile] loop error: {type(e).__name__}: {e}", flush=True)
+                    reconcile_log.warning("loop error", exc_info=e)
                 rr += 1
             return max(30, self._RECONCILE_INTERVAL // n)       # spread the full cycle across accounts
         return reconcile_round

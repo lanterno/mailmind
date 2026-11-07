@@ -18,7 +18,9 @@ from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Cl
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
+from mailmind.platform.logging import get_logger
 
+log = get_logger("ingest")
 CUTOFF_DAYS = 90
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
@@ -89,7 +91,7 @@ class Ingest:
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:
-                print(f"[ingest] SEARCH MODSEQ refused {email}: reading the newest instead", flush=True)
+                log.warning("SEARCH MODSEQ refused %(account)s: reading the newest instead", {"account": email})
         c = self._store.conn()
         try:
             waiting = {r["message_id"] for r in c.execute(
@@ -179,7 +181,7 @@ class Ingest:
                     except imaplib.IMAP4.abort:
                         raise
                     except imaplib.IMAP4.error:   # refused (vs a genuinely empty body): surface it
-                        print(f"[ingest] body fetch {acct['email']} uid {r['uid']}: NO", flush=True)
+                        log.warning("body fetch %(account)s uid %(id)s: NO", {"account": acct["email"], "id": r["uid"]})
                         raw = b""
                     msg = email.message_from_bytes(raw)
                     snippet = text_body(msg)
@@ -204,7 +206,7 @@ class Ingest:
                 try:
                     self._keep_body(c, pk, invite, mime.parse(invite))
                 except Exception as e:
-                    print(f"[ingest] keep invite {acct['email']} uid {r['uid']}: {e}", flush=True)
+                    log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
             c.commit()
         if advance:
             self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)

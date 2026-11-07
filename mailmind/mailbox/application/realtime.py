@@ -18,7 +18,9 @@ from mailmind.mailbox.application.ports import Account, Accounts, OpenSession
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.platform import bus
+from mailmind.platform.logging import get_logger
 
+log = get_logger("idle")
 _ENDPOINT = ("kind", "host", "port", "starttls", "credential", "strip_spaces",   # how it's reached
              "imap_adapter")
 
@@ -103,14 +105,14 @@ class Realtime:
         backoff = 5
         while not watch.leaving():
             if not self._wanted(acct):
-                print(f"[idle] {email}: removed, disabled or changed; this worker stops", flush=True)
+                log.info("%(account)s: removed, disabled or changed; this worker stops", {"account": email})
                 self.reconcile()                  # changed by hand: a worker for the new settings, if running
                 return
             session = None
             try:
                 session = self._open_session(acct)
                 if "IDLE" not in session.capabilities:
-                    print(f"[idle] {email}: server has no IDLE — falling back to periodic sync", flush=True)
+                    log.warning("%(account)s: server has no IDLE — falling back to periodic sync", {"account": email})
                     try:
                         session.logout()
                     except Exception:
@@ -130,7 +132,7 @@ class Realtime:
                         break                         # the loop's top says so and stops
             except Exception as e:
                 if not watch.leaving():
-                    print(f"[idle] {email}: {type(e).__name__}: {e}", flush=True)
+                    log.warning("%(account)s: IDLE failed", {"account": email}, exc_info=e)
                 self._rest(watch, min(backoff, 300))
                 backoff = min(backoff * 2, 300)
             finally:
@@ -178,7 +180,7 @@ class Realtime:
             try:
                 wanted = {a["email"]: a for a in self._accounts.accounts()}
             except Exception as e:
-                print(f"[idle] can't read the accounts ({type(e).__name__}); watching as before", flush=True)
+                log.warning("can't read the accounts; watching as before", exc_info=e)
                 return 0
             for email, watch in list(self._watchers.items()):
                 if email not in wanted or not _same_endpoint(watch.acct, wanted[email]):
@@ -205,9 +207,8 @@ class Realtime:
         threading.Thread(target=self._dispatch_loop, daemon=True).start()
         configured = self.reconcile()
         if configured > self.MAX_IDLE_ACCOUNTS:
-            print(f"[idle] {configured} accounts > cap {self.MAX_IDLE_ACCOUNTS}; "
-                  "extras rely on the periodic sync", flush=True)
-        print(f"[idle] watching {len(self.watching())} account(s) in real time", flush=True)
+            log.warning("%d accounts > cap %d; extras rely on the periodic sync", configured, self.MAX_IDLE_ACCOUNTS)
+        log.info("watching %d account(s) in real time", len(self.watching()))
 
 
     def stop(self) -> None:

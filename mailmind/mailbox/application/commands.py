@@ -24,9 +24,11 @@ from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.domain import command
 from mailmind.mailbox.domain.events import Applied, Restored
 from mailmind.platform import bus, profile, undo
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
+log = get_logger("commands")
 _UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
 
 
@@ -379,17 +381,17 @@ class MailCommands:
             terminal, delay = self._commit(later)
             if terminal:
                 bus.publish(Restored(mid, row["account"]))
-            print(f"[commands] #{mid} unreachable ({err}); "
-                  f"{'giving up' if terminal else f'retry {delay}s'}", flush=True)
+            log.warning("#%(id)s unreachable (%(why)s); %(what)s",
+                        {"id": mid, "why": err, "what": "giving up" if terminal else f"retry {delay}s"})
             return
         if outcome in command.WONT_HAPPEN:               # no retry can make it happen
             why = "account removed" if outcome == command.REMOVED else outcome
             self._commit(lambda c: self._restore(c, row, why))
             bus.publish(Restored(mid, row["account"]))
-            print(f"[commands] #{mid} won't apply ({why}); its message is listed again", flush=True)
+            log.warning("#%(id)s won't apply (%(why)s); its message is listed again", {"id": mid, "why": why})
         elif outcome == command.APPLIED:
             bus.publish(Applied(mid, row["account"]))
-            print(f"[commands] applied #{mid} {row['kind']}", flush=True)
+            log.info("applied #%(id)s %(what)s", {"id": mid, "what": row["kind"]})
 
 
     def drain(self) -> None:

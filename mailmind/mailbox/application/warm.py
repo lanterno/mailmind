@@ -25,6 +25,9 @@ from typing import Protocol
 
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, Stored
+from mailmind.platform.logging import get_logger
+
+log = get_logger("warm")
 
 WARM_RECENT = 1500     # cap a first-touch warm to the most recent N messages per folder
 _ROLES = {                          # what to warm -> the folder roles that may play it, in order
@@ -77,7 +80,7 @@ class Warming:
                 except Exception:
                     pass
         except Exception as e:
-            print(f"[warm] resolve {acct['email']}: {type(e).__name__}", flush=True)
+            log.warning("resolve %(account)s", {"account": acct["email"]}, exc_info=e)
             return {}                       # don't cache a failed resolve — retry next tick
         with self._lock:
             self._resolved[acct["email"]] = out
@@ -110,7 +113,7 @@ class Warming:
                 try:
                     r = self._sync_folder(a, folder, full=False, recent=WARM_RECENT)
                     if r and (r[0] or 0):
-                        print(f"[warm] {a['email']} {folder}: +{r[0]}", flush=True)
+                        log.info("%(account)s %(folder)s: +%(count)s", {"account": a["email"], "folder": folder, "count": r[0]})
                 except Exception as e:
-                    print(f"[warm] {a['email']} {folder}: {type(e).__name__}: {e}", flush=True)
+                    log.warning("%(account)s %(folder)s", {"account": a["email"], "folder": folder}, exc_info=e)
                 time.sleep(0.5)
