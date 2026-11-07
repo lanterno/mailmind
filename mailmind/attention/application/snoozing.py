@@ -58,7 +58,7 @@ class Snoozing:
             where: list[list[str] | None] = []
             for pk in pks:
                 r = self._messages.get(c, pk)
-                prev.append(r["snoozed_until"] if r else None)
+                prev.append(r["snooze_until"] if r else None)
                 where.append([r["message_key"], r["folder"]] if r else None)   # pk isn't stable: the stack outlives it
                 self._book.set_snooze(c, pk, until)
         if pks:

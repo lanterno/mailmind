@@ -177,7 +177,10 @@ def clear_sync_error(c, account):
 
 
 def get_message(c, pk):
-    return c.execute("SELECT * FROM messages WHERE pk=?", (pk,)).fetchone()
+    """A message's row, and `snooze_until`, when `snoozes` says it wakes, if it's snoozed."""
+    return c.execute("""SELECT m.*, z.until AS snooze_until FROM messages m
+                        LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder
+                        WHERE m.pk=?""", (pk,)).fetchone()
 
 
 def get_message_by_msgid(c, account, message_id):
@@ -696,7 +699,7 @@ def needs_you_rows(c, accounts, n):
 
 _DRAFT_CAND_SQL = """
 SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
-       m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
+       m.is_junk, m.answered, NULL AS snooze_until, m.ts, s.importance, s.category
 FROM messages m
 JOIN assessments s ON s.message_key=m.message_key
 WHERE m.folder = 'INBOX'

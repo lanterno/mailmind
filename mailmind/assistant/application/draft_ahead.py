@@ -75,7 +75,7 @@ class DraftAhead:
     def _draft_eligible(self, row: Row | None) -> bool:
         """Replyable to a real human + not already handled. (The client pre-filters action/importance.)
         Your own message isn't: draft_ahead_gc drops as moot a draft for a thread ending in a Sent copy."""
-        if not row or row["is_junk"] or row["answered"] or row["snoozed_until"]:
+        if not row or row["is_junk"] or row["answered"] or row["snooze_until"]:
             return False
         if (row["from_addr"] or "").lower() == row["account"].lower() or "sent" in (row["folder"] or "").lower():
             return False
