@@ -451,3 +451,23 @@ def test_a_review_that_cant_be_written_says_why(page, world, ai):
     panel = page.get_by_role("dialog", name="Weekly review")
     expect(panel.locator(".rv-err")).to_contain_text("The mail couldn't be read")
     clean(page)
+
+
+def test_search_scope_narrows_to_this_account_and_is_remembered(page, world, ai):
+    opened(page)
+    page.locator("#search").fill("in:INBOX")
+    page.keyboard.press("Enter")
+    toggle = page.locator("#scopeTog")
+    expect(toggle).to_have_text("all accounts ▾")
+    expect(page.locator("#rows .acctchip", has_text="Bea").first).to_be_visible()
+    toggle.click()
+    expect(toggle).to_have_text("this account ▾")
+    expect(page.locator("#rows .acctchip", has_text="Bea")).to_have_count(0)
+    expect(page.locator("#rows .row").first).to_be_visible()
+    page.pw.reload()
+    expect(page.locator("#scopeTog")).to_have_text("this account ▾")
+    with page.pw.expect_request("**/api/ai/ask") as asked:
+        page.locator("#search").fill("? when is lunch")
+        page.keyboard.press("Enter")
+    assert asked.value.post_data_json["account"] == w.ADA
+    clean(page)
