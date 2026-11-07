@@ -67,6 +67,13 @@ def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at
     }
 
 
+def pk_of_original(r: Row) -> int | None:
+    """The pk to find a send's original by, for a row with no Message-ID to go by: one queued before migration 27, or a
+    reply to a message that has none. Any other row goes by `orig_account` and `orig_message_id`, since a pk may be
+    another message's by now. This is the one place the stored column is read."""
+    return None if r["orig_message_id"] else r["in_reply_to_pk"]
+
+
 def listed(r: Row) -> Listed:
     """A row as the outbox lists it."""
     rcpt: dict[str, Any] = {}

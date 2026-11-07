@@ -149,11 +149,12 @@ class Outbox:
             except Exception as e:
                 owed = f"sent copy failed: {type(e).__name__}"
                 log.warning("Sent-copy failed for #%(id)s: %(why)s", {"id": oid, "why": self._transport.sanitize_error(e)})
-        replied_to = row["in_reply_to_pk"] or row["orig_message_id"]
+        replied_to = row["orig_message_id"] or outbox_item.pk_of_original(row)
         if replied_to and not row["answered_set"]:
             try:
-                gates.run(row["orig_account"] or self._effects.account_of(row["in_reply_to_pk"]) or gates.EVERY_ACCOUNT,
-                          lambda: self._effects.mark_answered(row["in_reply_to_pk"], row["orig_account"], row["orig_message_id"]),
+                pk = self._original_pk(row)
+                gates.run(row["orig_account"] or self._effects.account_of(pk) or gates.EVERY_ACCOUNT,
+                          lambda: self._effects.mark_answered(pk, row["orig_account"], row["orig_message_id"]),
                           priority=gates.Priority.AFTER_USER)
                 self._commit(lambda c: self._book.outbox_set(c, oid, answered_set=1))
             except Exception as e:
@@ -163,11 +164,11 @@ class Outbox:
         # has no local thread_id until its Sent copy syncs). Best-effort, done-once, never fails the send.
         if replied_to and not row["followup_recorded"]:
             try:
-                orig = self._mail.original(row["in_reply_to_pk"], row["orig_account"], row["orig_message_id"])
+                orig = self._mail.original(self._original_pk(row), row["orig_account"], row["orig_message_id"])
                 tid = (orig["thread_id"] if orig else None) or row["orig_thread_id"]
                 if tid:
                     with self._uow.write() as c:
-                        self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else row["in_reply_to_pk"],
+                        self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else None,
                                                     _now(), datetime.now(timezone.utc).isoformat())
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
@@ -199,6 +200,16 @@ class Outbox:
                 owed = owed or f"removing the draft's copy failed: {type(e).__name__}"
                 log.warning("draft cleanup failed for #%(id)s", {"id": oid}, exc_info=e)
         return owed
+
+    def _original_pk(self, row: Row) -> int | None:
+        """What pk_of_original gives, if it can still be the original. A row that names its account was queued as a reply
+        to a message with no Message-ID, so a row in another account, or one with a Message-ID, isn't that message. One
+        queued before migration 27 names nothing to check its pk against, and goes by it as it always has."""
+        pk = outbox_item.pk_of_original(row)
+        if pk is None or not row["orig_account"]:
+            return pk
+        named = self._mail.message(pk)
+        return pk if named and named["account"] == row["orig_account"] and not named["message_id"] else None
 
     def draft_copy_is_ours(self, d: Row) -> bool:
         """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
