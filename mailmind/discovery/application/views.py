@@ -5,6 +5,7 @@ from typing import Any
 from mailmind.discovery.application.ports import ViewsFile
 from mailmind.discovery.domain import views
 from mailmind.discovery.domain.views import ListedView, View
+from mailmind.kernel.errors import Refused
 
 
 class SavedViews:
@@ -36,6 +37,8 @@ class SavedViews:
 
     def post(self, b: Mapping[str, Any]) -> dict[str, Any]:
         """A change /api/views asked for, and the views after it."""
+        if any(not isinstance(b.get(name), str | None) for name in ("id", "name", "q")):
+            raise Refused()
         verb = b.get("verb")
         if verb == "create":
             if not self.add(b.get("name"), b.get("q")):
