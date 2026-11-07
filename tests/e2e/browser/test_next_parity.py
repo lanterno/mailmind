@@ -18,6 +18,7 @@ window.Notification = class { constructor(title, o) { this.title = title; Object
 window.Notification.permission = "granted";
 window.away = false;
 Object.defineProperty(document, "hidden", { get: () => window.away });
+Object.defineProperty(document, "visibilityState", { get: () => (window.away ? "hidden" : "visible") });
 """
 
 
@@ -587,3 +588,13 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
         monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 60)   # that open was due one; the reads after it aren't
     expect(rows).to_have_count(2)
     clean(page)
+
+def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
+    page.goto(f"/next/m/{w.ADA}/INBOX")
+    archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
+    expect(archive).to_be_visible()
+    page.evaluate("window.dispatchEvent(new Event('offline'))")  # the Wi-Fi went; the server is on this machine
+    archive.click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    clean(page)
+
