@@ -5,6 +5,9 @@ import urllib.parse
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http.routing import ANSWERED, Routes
+from mailmind.platform import perimeter
+
+_BODY_DOCUMENT = re.compile(r"/api/message/([0-9]{1,18})/body\.html")
 
 
 def _safe_filename(name):
@@ -77,6 +80,14 @@ def routes(mailbox):
     def body(req):
         return mailbox.bodies.message_body(int(req.path.split("/")[3]), req.arg("images", "0") == "1",
                                            prefetch=(req.arg("prefetch", "0") == "1"))
+
+    @r.matching("GET", _BODY_DOCUMENT.fullmatch)
+    def body_document(req):
+        load_images = req.arg("images", "0") == "1"
+        code, doc = mailbox.bodies.as_document(int(req.path.split("/")[3]), req.arg("key", ""), load_images)
+        req.handler._send(code, doc.encode("utf-8", "replace"), "text/html; charset=utf-8",
+                          perimeter.mail_frame_headers(load_images))
+        return ANSWERED
 
     @r.post("/api/pending/retry")
     def pending_retry(req):

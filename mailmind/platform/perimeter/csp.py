@@ -19,3 +19,19 @@ def page_policy():
         "frame-ancestors 'none'",
         "object-src 'none'",
     ])
+
+
+def mail_frame_policy(load_images):
+    """The policy on a mail body's own document. A sandbox set here holds even if the frame's attribute goes, which a
+    <meta> can't do. Allowing the same origin is what lets the parent size the frame and take its link clicks, and it is
+    safe only because nothing here lets a script run. Remote images come only when asked for."""
+    return "; ".join([
+        "sandbox allow-same-origin",
+        "default-src 'none'",
+        "img-src data: https:" if load_images else "img-src data:",
+        "style-src 'unsafe-inline'",
+        "font-src data:",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+    ])

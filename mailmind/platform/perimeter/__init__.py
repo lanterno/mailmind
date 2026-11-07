@@ -16,16 +16,16 @@ policy `page_policy` writes.
 
 Callers import this package and ask it by these names; which module holds each is its own affair.
 """
-from mailmind.platform.perimeter.csp import page_policy
+from mailmind.platform.perimeter.csp import mail_frame_policy, page_policy
 from mailmind.platform.perimeter.csrf import refuse_mutation, token_matches
 from mailmind.platform.perimeter.errors import Refusal
 from mailmind.platform.perimeter.fetch_metadata import refuse_cross_site
-from mailmind.platform.perimeter.headers import answer_headers
+from mailmind.platform.perimeter.headers import answer_headers, mail_frame_headers
 from mailmind.platform.perimeter.host import refuse_host
 from mailmind.platform.perimeter.limits import refuse_body
 
-__all__ = ["Refusal", "answer_headers", "page_policy", "refuse_body", "refuse_cross_site", "refuse_get",
-           "refuse_host", "refuse_mutation", "refuse_post", "token_matches"]
+__all__ = ["Refusal", "answer_headers", "mail_frame_headers", "mail_frame_policy", "page_policy", "refuse_body",
+           "refuse_cross_site", "refuse_get", "refuse_host", "refuse_mutation", "refuse_post", "token_matches"]
 
 
 def refuse_get(path, headers, *, port):

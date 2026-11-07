@@ -3,11 +3,14 @@ import base64
 import re
 from typing import Any
 
-from mailmind.content import mime, sanitize
+from mailmind.content import frame, mime, sanitize
 from mailmind.content.mime import Parsed
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("mailbox")
 
 _CID_IMG = re.compile(r"""src\s*=\s*(['"])cid:([^'"]+)\1""", re.I)
 _RASTER = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
@@ -93,6 +96,29 @@ class Bodies:
             "references": row["refs"],
             **self._reader.draft_info(row),
         }
+
+    def as_document(self, pk: int, key: str, load_images: bool) -> tuple[int, str]:
+        """(status, the document a message's frame loads). A frame shows what it is sent, and a browser's own error page
+        for an answer it may not frame, so a failure comes as a document too. Asks nothing of the AI.
+
+        `key` must be the key of the row `pk` names: a pk can come to name another message (reconcile renumbers), and the
+        bar above the frame speaks for the message the page read, so a frame never shows another's body under it."""
+        try:
+            c = self._store.conn()
+            row = self._store.get_message(c, pk)
+            c.close()
+            parsed = None
+            if row and str(row["message_key"]) == key:
+                parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
+                                   priority=gates.Priority.INTERACTIVE)
+            if parsed is None:
+                return 404, frame.of_text("This message isn’t here any more.")
+            if not parsed.get("html"):
+                return 200, frame.of_text(parsed.get("text"))
+            return 200, frame.of_html(self._safe_html(pk, parsed, load_images)[0])
+        except Exception as e:                # scrub: log the detail, never echo it to the client
+            log.error("message %(id)s: its document failed", {"id": pk}, exc_info=e)
+            return 500, frame.of_text("Couldn’t load this message.")
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""

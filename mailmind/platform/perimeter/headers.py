@@ -1,4 +1,5 @@
 """The headers every answer carries."""
+from mailmind.platform.perimeter.csp import mail_frame_policy
 from mailmind.platform.perimeter.fetch_metadata import is_api
 
 # What every answer carries, unless its route set the header itself.
@@ -23,3 +24,9 @@ def answer_headers(path):
     """The headers every answer to `path` carries, as (name, value) pairs. A front door adds each
     one the route didn't set itself."""
     return _API_HEADERS if is_api(path) else _ANSWER_HEADERS
+
+
+def mail_frame_headers(load_images):
+    """What a mail body's document sets itself: its own policy, and that this origin alone may frame it, which is the one
+    answer that isn't DENY."""
+    return (("Content-Security-Policy", mail_frame_policy(load_images)), ("X-Frame-Options", "SAMEORIGIN"))
