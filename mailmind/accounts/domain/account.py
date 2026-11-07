@@ -175,10 +175,28 @@ def validate_new(entry: Entry) -> None:
     t = entry.get("type", "imap")
     if t not in TYPE_DEFAULTS:
         raise ValueError("type must be gmail, imap, or proton")
-    if t == "imap" and not (entry.get("host") or "").strip():
+    if t == "imap" and not str(entry.get("host") or "").strip():
         raise ValueError("a host is required for a generic IMAP account")
     if "port" in entry and not (1 <= int(entry["port"]) <= 65535):
         raise ValueError("port must be 1–65535")
+
+
+def _names_a_host(held: object) -> bool:
+    return isinstance(held, str) and bool(held) and all(ch.isprintable() and not ch.isspace() for ch in held)
+
+
+def refuse_bad_endpoints(entry: Entry, before: Mapping[str, Any]) -> None:
+    """A write may not leave an endpoint no connection could reach. Only what the write changes counts: what the file
+    held `before` it is the owner's, and asking for a new alias is no time to refuse it."""
+    def changed(key: str) -> bool:
+        return key in entry and entry[key] != before.get(key)
+
+    if changed("host") and not _names_a_host(entry["host"]):
+        raise ValueError("host must be a host name")
+    if changed("smtp_host") and not _names_a_host(entry["smtp_host"]):
+        raise ValueError("SMTP host must be a host name")
+    if changed("smtp_port") and not (1 <= int(entry["smtp_port"]) <= 65535):
+        raise ValueError("SMTP port must be 1–65535")
 
 
 def strip_for(entry: Entry) -> bool:

@@ -155,6 +155,7 @@ class Directory:
             if cred is None:
                 raise ValueError("a credential is required")
             entry["credential"] = cred
+            account.refuse_bad_endpoints(entry, {})
             account.validate_new(entry)
             raw["accounts"].append(entry)
             self.save(raw)
@@ -168,12 +169,14 @@ class Directory:
             if entry is None:
                 return None
             old_cred = entry.get("credential")
+            before = dict(entry)
             account.apply_fields(entry, p)
             if "credential" in p:
                 new = credential_from(p["credential"])
                 if new is not None:          # only replace when a real value/ref/var was given
                     entry["credential"] = new
                     self._secrets.evict(old_cred)
+            account.refuse_bad_endpoints(entry, before)
             account.validate_new(entry)
             self.save(raw)
         bus.publish(events.AccountChanged(entry["email"]))
