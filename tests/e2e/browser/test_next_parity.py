@@ -319,3 +319,15 @@ def test_a_message_slow_to_come_shows_what_is_known_and_says_so(page, world):
     expect(page.locator("#reader .rd-subj")).to_have_text(receipt.locator(".sj").inner_text())
     expect(page.locator("#rdSkelHint")).to_contain_text("Still fetching from the server", timeout=7000)
     clean(page)
+
+
+def test_a_message_that_wont_load_offers_retry(page, world):
+    opened(page)
+    page.pw.route(re.compile(r"/api/message/\d+/body"), lambda route: route.fulfill(status=500, body="{}"))
+    row(page, world, RECEIPT).click()
+    expect(page.locator("#reader .nores")).to_contain_text("Couldn’t load.", timeout=7000)
+    page.pw.unroute(re.compile(r"/api/message/\d+/body"))
+    page.locator("#reader").get_by_role("button", name="Retry").click()
+    expect(page.locator("#reader .rd-frame, #reader iframe").first).to_be_visible()
+    page.problems[:] = [p for p in page.problems if "500" not in p]
+    clean(page)
