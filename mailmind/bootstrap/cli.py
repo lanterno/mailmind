@@ -1,6 +1,5 @@
 """What `python -m mailmind <command>` does for the commands that reach mail, rules, views or an
-export. Each imports what it needs when it runs, so `db` and `ai` load none of it, and each legacy
-module it names is on tests/legacy_ratchet.txt until that code moves into its context.
+export. Each imports what it needs when it runs, so `db` and `ai` load none of it.
 """
 import imaplib
 
