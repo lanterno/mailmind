@@ -76,11 +76,11 @@ def test_everything_on_the_agenda_needs_you():
 @pytest.mark.parametrize("alias", ["s", ""])
 def test_the_sql_answers_as_the_python_does(alias):
     db = sqlite3.connect(":memory:")
-    db.execute("CREATE TABLE summaries(importance, category, action)")
-    table = "summaries s" if alias else "summaries"
+    db.execute("CREATE TABLE assessments(importance, category, action)")
+    table = "assessments s" if alias else "assessments"
     for row in GRID:
-        db.execute("DELETE FROM summaries")
-        db.execute("INSERT INTO summaries VALUES(?,?,?)", row)
+        db.execute("DELETE FROM assessments")
+        db.execute("INSERT INTO assessments VALUES(?,?,?)", row)
         i, c, a = row
         got = db.execute(f"SELECT 1 FROM {table} WHERE {attention.needs_you_sql(alias)}").fetchone()
         assert bool(got) == attention.needs_you(i, c, a), row
