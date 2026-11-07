@@ -758,7 +758,7 @@ Every request passes `mailmind.platform.perimeter` before any route, through eit
 `H.do_GET` and `H.do_POST` call it, and so does the new door's `Perimeter` middleware.
 It is standard library only. Callers ask the package by these names (`perimeter.refuse_host`); inside it
 `host`, `origin`, `fetch_metadata`, `csrf` and `limits` hold the checks, `headers` and `csp` what an answer
-carries, and `errors` the `Refusal`.
+carries, `errors` the `Refusal`, and `tokens` a confirm token, which a use case imports for itself.
 
 - `refuse_host` — the Host must be this server's (127.0.0.1 or localhost on its port), and an
   Origin, when sent, its own. Blocks DNS rebinding. Every request, `/` included.
@@ -955,8 +955,8 @@ that can say: those columns, a stored body, or for older mail the two headers re
 `UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
 so a second try after a cleanup's sweep still knows the way.
 
-The preview's `confirm_token` (`curation.domain.unsubscribe`) is `<time>.<hmac>`, over the sender, the way out it showed
-and where that goes, under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date
+The preview's `confirm_token` (`perimeter.tokens`) is `<time>.<hmac>`, over the purpose, the sender, the way out it showed
+and where that goes (`unsubscribe.preview_said`), under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date
 or naming another way out sends nothing and answers `no_token`, and its block and sweep stand.
 
 ## Conventions
