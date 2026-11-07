@@ -433,3 +433,12 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
     sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 2})
     expect(page.locator("#toast")).to_have_text("2 snoozed messages back")
     clean(page)
+
+
+def test_a_week_with_nothing_unanswered_says_so(page, world, ai):
+    page.goto("/next")
+    page.get_by_role("button", name="Your week").click()
+    panel = page.get_by_role("dialog", name="Weekly review")
+    expect(panel.locator(".rv-empty")).to_have_text("Nothing important is unanswered.")
+    expect(panel.locator(".rv-sec", has_text="Still needs you")).to_have_text("Still needs you")
+    clean(page)
