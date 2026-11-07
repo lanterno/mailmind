@@ -463,6 +463,43 @@ def digest(c, min_importance=1, account=None, limit=300):
     return c.execute(q, args).fetchall()
 
 
+# ------------------------------------------------------------------- what the Assistant reads (its Mail port)
+def brief_rows(c, accounts, n):
+    """What a brief is made from: the mail the AI said is worth a glance, most important first."""
+    sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
+           "s.summary, s.importance, s.category, s.action "
+           "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
+           "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
+           "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
+    params = []
+    if accounts:
+        sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts)
+        params += list(accounts)
+    sql += "ORDER BY s.importance DESC, m.ts DESC LIMIT ?"
+    params.append(n)
+    return c.execute(sql, params).fetchall()
+
+
+def delta_rows(c, accounts, since_ts, n):
+    """What a delta is made from: the mail newer than `since_ts`, newest first."""
+    sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
+           "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
+           "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
+           "FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
+           # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
+           # so it matches the pill count; only drop spam/blocked and snoozed/muted.
+           "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
+           "AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND m.ts > ? "
+           "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
+    params = [since_ts]
+    if accounts:
+        sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts)
+        params += list(accounts)
+    sql += "ORDER BY m.ts DESC LIMIT ?"       # newest first
+    params.append(n)
+    return c.execute(sql, params).fetchall()
+
+
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],

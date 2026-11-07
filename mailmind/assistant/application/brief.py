@@ -15,7 +15,7 @@ from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel import attention
 from mailmind.kernel.parsed import is_object
-from mailmind.kernel.row import Connection, Row
+from mailmind.kernel.row import Row
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers.singleflight import SingleFlight
 
@@ -119,20 +119,6 @@ class Briefs:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _top_rows(self, c: Connection, accounts_set: Collection[str], n: int = TOP_N) -> list[Row]:
-        sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
-               "s.summary, s.importance, s.category, s.action "
-               "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
-               "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
-               "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
-        params: list[str | int] = []
-        if accounts_set:
-            sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts_set)
-            params += list(accounts_set)
-        sql += "ORDER BY s.importance DESC, m.ts DESC LIMIT ?"
-        params.append(n)
-        return c.execute(sql, params).fetchall()
-
     def _accounts_key(self, accounts_set: Iterable[str]) -> str:
         return ",".join(sorted(accounts_set))
 
@@ -212,25 +198,6 @@ class Briefs:
         return {"ok": True, "narrative": narrative, "groups": groups, "model": model,
                 "generated": created_at, "cached": cached, "stale": stale}
 
-    def _delta_rows(self, c: Connection, accounts_set: Collection[str], since_ts: int,
-                    n: int = DELTA_TOP_N) -> list[Row]:
-        sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
-               "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
-               "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
-               "FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
-               # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
-               # so it matches the pill count; only drop spam/blocked and snoozed/muted.
-               "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
-               "AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND m.ts > ? "
-               "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
-        params: list[str | int] = [since_ts]
-        if accounts_set:
-            sql += "AND m.account IN (%s) " % ",".join("?" for _ in accounts_set)
-            params += list(accounts_set)
-        sql += "ORDER BY m.ts DESC LIMIT ?"       # newest first
-        params.append(n)
-        return c.execute(sql, params).fetchall()
-
     def _clean_delta(self, obj: Mapping[str, Any]) -> tuple[str, list[DeltaItem]]:
         headline = str(obj.get("headline") or "")[:300]
         items: list[DeltaItem] = []
@@ -258,7 +225,7 @@ class Briefs:
         With generate=False it only reads: nothing stored yet -> {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
         c = self._connect()
-        rows = self._delta_rows(c, accounts_set, since_ts)
+        rows = self._mail.delta_rows(c, accounts_set, since_ts, DELTA_TOP_N)
         c.close()
         if not rows:
             return {"ok": True, "empty": True, "count": 0}, 200
@@ -320,7 +287,7 @@ class Briefs:
         accounts_set = set(accounts_set or [])
         accounts, day = self._accounts_key(accounts_set), self._today()
         c = self._connect()
-        rows = self._top_rows(c, accounts_set)
+        rows = self._mail.brief_rows(c, accounts_set, TOP_N)
         cached = self._answers.get_brief(c, accounts, day)
         c.close()
         fp = self._fingerprint(rows)

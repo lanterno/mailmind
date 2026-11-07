@@ -161,6 +161,14 @@ class _Mail:
         from mailmind.bootstrap import discovery
         return discovery.search.for_asking(match, accounts, limit)
 
+    def brief_rows(self, c, accounts, n):
+        from mailmind.bootstrap.mailbox import store
+        return store.brief_rows(c, accounts, n)
+
+    def delta_rows(self, c, accounts, since_ts, n):
+        from mailmind.bootstrap.mailbox import store
+        return store.delta_rows(c, accounts, since_ts, n)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""
