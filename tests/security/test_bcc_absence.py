@@ -154,7 +154,6 @@ def test_a_person_both_to_and_bcc_is_written_for_the_to(app, world):
     assert HIDDEN in d.rcpts and HIDDEN.encode() in d.data
 
 
-@pytest.mark.xfail(strict=True, reason="build_message dedupes within To, Cc and Bcc but not across them: two RCPT TOs")
 @pytest.mark.parametrize("field", ["to", "cc"])
 def test_a_person_named_twice_is_one_recipient_of_the_envelope(field):
     from mailmind.compose.api import build_message
