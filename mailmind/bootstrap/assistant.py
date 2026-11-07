@@ -213,6 +213,14 @@ class _Mail:
         from mailmind.bootstrap.mailbox import store
         return store.thread_anchor_pk(c, account, thread_id)
 
+    def conversation_rows(self, c, account, by, value):
+        from mailmind.bootstrap.mailbox import store
+        return store.conversation_rows(c, account, by, value)
+
+    def message_to_reply_to(self, c, pk):
+        from mailmind.bootstrap.mailbox import store
+        return store.message_to_reply_to(c, pk)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""
@@ -238,7 +246,7 @@ _mail = _Mail()
 threads = ThreadDigest(calls, answers, _connect, _mail)
 briefs = Briefs(calls, answers, _connect, _mail)
 reviews = Reviews(calls, answers, _connect, _mail)
-replies = ReplyDrafts(calls, threads, _connect)
+replies = ReplyDrafts(calls, threads, _connect, _mail)
 rewriter = Rewriter(calls)
 asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _connect, _mail)

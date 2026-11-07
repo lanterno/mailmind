@@ -4,7 +4,7 @@ model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft —
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Connect, NotSent, Result
+from mailmind.assistant.application.ports import Connect, Mail, NotSent, Result
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.platform.logging import get_logger
 
@@ -30,15 +30,14 @@ Subject: {subject}
 Conversation (oldest first):
 {blocks}
 """
-_MSG_COLS = ("SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,"
-             "body_fetched FROM messages WHERE pk=?")
 
 
 class ReplyDrafts:
-    def __init__(self, calls: Calls, threads: ThreadDigest, connect: Connect):
+    def __init__(self, calls: Calls, threads: ThreadDigest, connect: Connect, mail: Mail):
         self._calls = calls
         self._threads = threads
         self._connect = connect
+        self._mail = mail
 
     def draft(self, account: str, thread_id: str | None = None, pk: int | None = None, instruction: str = "",
               tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
@@ -49,7 +48,7 @@ class ReplyDrafts:
             if thread_id:
                 rows = self._threads.rows(c, account, thread_id)
             elif pk is not None:
-                rows = list(c.execute(_MSG_COLS, (int(pk),)).fetchall())
+                rows = self._mail.message_to_reply_to(c, int(pk))
             else:
                 rows = []
         finally:

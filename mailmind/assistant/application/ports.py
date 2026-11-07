@@ -9,7 +9,7 @@ the cost governor raises when it holds a call back (OverLimit, Deferred).
 """
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 from mailmind.content.mime import Parsed
 from mailmind.kernel.row import Connection, Row
@@ -20,6 +20,7 @@ RETRIED = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
 
 type Connect = Callable[[], Connection]
 type Result = tuple[dict[str, Any], int]      # what a request is answered with: its JSON, and the HTTP status
+type ConversationBy = Literal["thread_id", "message_id", "pk"]     # what a conversation's messages share
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,8 @@ class Mail(Protocol):
     def thread_stamps(self, c: Connection, account: str, thread_id: str) -> list[Row]: ...
     def message_stamp(self, c: Connection, pk: int) -> Row | None: ...
     def thread_anchor_pk(self, c: Connection, account: str, thread_id: str) -> int | None: ...
+    def conversation_rows(self, c: Connection, account: str, by: ConversationBy, value: str) -> list[Row]: ...
+    def message_to_reply_to(self, c: Connection, pk: int) -> list[Row]: ...
 
 
 class Filter(Protocol):

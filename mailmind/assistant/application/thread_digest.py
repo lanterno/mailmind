@@ -10,7 +10,7 @@ import re
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Answers, Connect, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Answers, Connect, ConversationBy, Mail, NotSent, Result
 from mailmind.assistant.domain import fingerprint
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.logging import get_logger
@@ -71,11 +71,9 @@ class ThreadDigest:
 
     def rows(self, c: Connection, account: str, thread_id: str) -> list[Row]:
         kind, _, value = str(thread_id).partition(":")
-        column, value = {"m": ("message_id", value), "pk": ("pk", value)}.get(kind, ("thread_id", thread_id))
-        rows = c.execute(
-            f"""SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
-               FROM messages WHERE account=? AND {column}=? ORDER BY ts ASC, pk ASC""",
-            (account, value)).fetchall()
+        lone: dict[str, tuple[ConversationBy, str]] = {"m": ("message_id", value), "pk": ("pk", value)}
+        by, value = lone.get(kind, ("thread_id", thread_id))
+        rows = self._mail.conversation_rows(c, account, by, value)
         seen: set[str] = set()
         out: list[Row] = []
         for r in rows:

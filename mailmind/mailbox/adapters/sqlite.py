@@ -590,6 +590,21 @@ def thread_anchor_pk(c, account, thread_id):
     return r["pk"] if r else None
 
 
+def conversation_rows(c, account, by, value):
+    """A conversation's copies, oldest first. `by` names what they share: the column `thread_id`, or for a message with
+    no thread its `message_id` or `pk`, never anything a request wrote."""
+    return c.execute(
+        f"""SELECT pk,account,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,body_fetched,ts
+           FROM messages WHERE account=? AND {by}=? ORDER BY ts ASC, pk ASC""",
+        (account, value)).fetchall()
+
+
+def message_to_reply_to(c, pk):
+    """A message with no thread as a reply is drafted from it, in a list as a conversation's are."""
+    return c.execute("SELECT pk,from_name,from_addr,date_iso,subject,snippet,body_text,message_id,"
+                     "body_fetched FROM messages WHERE pk=?", (pk,)).fetchall()
+
+
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],
