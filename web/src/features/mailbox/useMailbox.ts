@@ -8,7 +8,7 @@ import { go, useRoute, type ListSource, type Opened, type Route } from "../../ap
 import { createStore, store, stored } from "../../lib/store";
 import { settingsOpen } from "../settings";
 import * as actions from "./actions";
-import { groupedPref, saveGroupedPref, useDigest, useFolders, useMessages, useViews } from "./data";
+import { groupedPref, saveGroupedPref, useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";
 
 function initialTab(): InboxTab {
@@ -48,6 +48,7 @@ export function useMailbox() {
   const folder = source?.kind === "folder" ? source.folder : allInboxes ? "INBOX" : "";
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : allInboxes ? undefined : accounts[0];
   const { data: folderData } = useFolders(account);
+  const everyFolder = useEveryAccountsFolders(accounts);
   const inInbox = allInboxes || folder.toUpperCase() === "INBOX";
 
   const pages = list.data?.pages ?? [];
@@ -170,6 +171,7 @@ export function useMailbox() {
     list,
     folder,
     folders: folderData,
+    everyFolder,
     searching,
     allInboxes,
     inInbox,

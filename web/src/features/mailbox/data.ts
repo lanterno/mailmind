@@ -1,6 +1,6 @@
 // What the mailbox reads, and when it reads it again. The event stream says what changed (app/realtime.ts); a query
 // refetches in place, so the row you are on and what you were reading stay put.
-import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, type InfiniteData, useQueries } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
 import { sourceKey, type ListSource } from "../../app/route";
 import { store, stored } from "../../lib/store";
@@ -78,6 +78,12 @@ export function useMessages(source: ListSource | null, grouped: boolean) {
 }
 
 export type ListData = InfiniteData<ListPage, number>;
+
+// Every account's folders, so the palette reaches them all.
+export function useEveryAccountsFolders(accounts: string[]) {
+  const answers = useQueries({ queries: accounts.map((a) => ({ queryKey: ["folders", a], queryFn: () => get(`/api/folders?account=${q(a)}`) })) });
+  return new Map(accounts.map((a, i) => [a, answers[i]?.data?.folders ?? []]));
+}
 
 export const useBody = (pk: number | null) =>
   useQuery({

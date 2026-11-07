@@ -58,10 +58,8 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   add({ id: "review", group: "Navigation", label: "Weekly review — how your week went", run: () => panel.set("week") });
   for (const a of m.accounts) {
     add({ id: `acct:${a}`, group: "Navigation", label: `Account · ${nameOf(a)}`, run: () => go({ source: { kind: "folder", account: a, folder: "INBOX" }, opened: null }) });
-    if (a === m.account) {
-      for (const f of m.folders?.folders ?? []) {
-        add({ id: `fold:${a}:${f.name}`, group: "Navigation", label: `${nameOf(a)} / ${roleLabel(f)}`, run: () => go({ source: { kind: "folder", account: a, folder: f.name }, opened: null }) });
-      }
+    for (const f of m.everyFolder.get(a) ?? []) {
+      add({ id: `fold:${a}:${f.name}`, group: "Navigation", label: `${nameOf(a)} / ${roleLabel(f)}`, run: () => go({ source: { kind: "folder", account: a, folder: f.name }, opened: null }) });
     }
     for (const name of ["__snoozed__", "__waiting__"]) {
       add({ id: `fold:${a}:${name}`, group: "Navigation", label: `${nameOf(a)} / ${VIRTUAL_TITLE[name]}`, run: () => go({ source: { kind: "folder", account: a, folder: name }, opened: null }) });
