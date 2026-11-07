@@ -6,6 +6,7 @@ from mailmind.attention.application.ports import AttentionBook, Messages, Undo
 from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import mute
 from mailmind.attention.domain.events import ThreadMuted, ThreadUnmuted
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
@@ -24,33 +25,31 @@ class Muting:
         for r in rows:
             self._messages.queue_flags(c, r, {"seen": True}, f"mute:{r['pk']}:{when}", when)
 
-    def mute(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def mute(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
-                return {"ok": False, "error": "bad mute target"}, 400
+                raise Refused("bad mute target")
             todo = mute.plan(self._book.is_muted(c, acct, tid), acct, tid, self._book.unread_in_thread(c, acct, tid),
                              self._book.a_member(c, acct, tid))
             if todo is None:
-                return {"ok": True, "thread_id": tid}, 200
+                return {"ok": True, "thread_id": tid}
             self._mark_read(c, todo.mark_read, now_iso())
             self._book.mute_thread(c, acct, tid, now_iso())
         self._undo.push(todo.undo, body.get("undo_group"))
         bus.publish(ThreadMuted(acct, tid))
         if todo.mark_read:
             self._messages.flags_queued()
-        return {"ok": True, "thread_id": tid}, 200
+        return {"ok": True, "thread_id": tid}
 
-    def unmute(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def unmute(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
-                return {"ok": False, "error": "bad mute target"}, 400
+                raise Refused("bad mute target")
             self._book.unmute_thread(c, acct, tid)
         bus.publish(ThreadUnmuted(acct, tid))
-        return {"ok": True, "thread_id": tid}, 200
+        return {"ok": True, "thread_id": tid}
 
     def _thread_now(self, c: object, d: dict[str, Any]) -> list[str]:
         """A merge moves a mute to the thread that took this one in, and an undo entry doesn't hear of it, so ask a

@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import as_int, is_list, is_object
 from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
@@ -311,7 +312,10 @@ class Filing:
                 "queued": 0, "undoable": False}
         if verb == "snooze":
             if pks:
-                res, _ = self._attention.snooze({"pks": pks, "preset": preset, "undo_group": group})
+                try:
+                    res = self._attention.snooze({"pks": pks, "preset": preset, "undo_group": group})
+                except Refused:            # a preset that says no time: none of them went
+                    res = {}
                 done.update(count=res.get("count", 0), failed=len(pks) - res.get("count", 0), undoable=bool(res.get("ok")))
             return done
         for pk in pks:

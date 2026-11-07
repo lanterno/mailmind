@@ -6,6 +6,7 @@ from typing import Any
 from mailmind.attention.application.ports import AttentionBook, Messages, Undo
 from mailmind.attention.domain import snooze
 from mailmind.attention.domain.events import SnoozeLifted, SnoozeSet, SnoozeWoke
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
@@ -40,11 +41,10 @@ class Snoozing:
         thread = snooze.named_thread(body)
         return self._book.thread_pks(c, *thread) if thread else snooze.named_pks(body)
 
-    def snooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def snooze(self, body: dict[str, Any]) -> dict[str, Any]:
         until = snooze.wake_time(body, datetime.now().astimezone())
         if until is None:
-            return {"ok": False, "error": "bad snooze time"}, 400
+            raise Refused("bad snooze time")
         with self._uow.write() as c:
             pks = self._pks(c, body)
             before: list[Row | None] = []
@@ -54,16 +54,15 @@ class Snoozing:
         if pks:
             self._undo.push(snooze.undo_entry(pks, before), body.get("undo_group"))
         bus.publish(SnoozeSet(len(pks)))
-        return {"ok": True, "count": len(pks), "until": until}, 200
+        return {"ok": True, "count": len(pks), "until": until}
 
-    def unsnooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def unsnooze(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._uow.write() as c:
             pks = self._pks(c, body)
             for pk in pks:
                 self._book.clear_snooze(c, pk)
         bus.publish(SnoozeLifted(len(pks)))
-        return {"ok": True, "count": len(pks)}, 200
+        return {"ok": True, "count": len(pks)}
 
     def wake_due(self) -> None:
         """Resurface messages whose snooze time has passed: clear the snooze, mark unread, and push a realtime event

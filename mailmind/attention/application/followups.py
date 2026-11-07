@@ -7,6 +7,7 @@ from mailmind.attention.application.snoozing import Snoozing
 from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.attention.domain.events import FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
@@ -38,23 +39,21 @@ class FollowUps:
         if after != before:                               # set comparison catches swaps, not just count deltas
             bus.publish(FollowUpsChanged(len(after)))
 
-    def dismiss(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def dismiss(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
-                return {"ok": False, "error": "bad target"}, 400
+                raise Refused("bad target")
             self._book.dismiss_followup(c, acct, tid, now_iso())
         bus.publish(FollowUpDismissed(acct, tid))
-        return {"ok": True, "thread_id": tid}, 200
+        return {"ok": True, "thread_id": tid}
 
-    def reply_later(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """Pin/un-pin a thread to the Reply-Later stack. on=true pins (supersedes auto-nudges), on=false clears.
-        (result, code)."""
+    def reply_later(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Pin/un-pin a thread to the Reply-Later stack. on=true pins (supersedes auto-nudges), on=false clears."""
         with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
-                return {"ok": False, "error": "bad target"}, 400
+                raise Refused("bad target")
             on = body.get("on", True)
             if on:
                 anchor = int(body["pk"]) if body.get("pk") is not None else None
@@ -62,7 +61,7 @@ class FollowUps:
             else:
                 self._book.clear_replylater(c, acct, tid)
         bus.publish(ReplyLaterChanged(acct, tid))
-        return {"ok": True, "thread_id": tid, "on": bool(on)}, 200
+        return {"ok": True, "thread_id": tid, "on": bool(on)}
 
 
 class Clocked:
