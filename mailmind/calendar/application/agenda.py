@@ -44,7 +44,10 @@ class Agenda:
                 occ = self._reader.next_occurrence({**inv, "rrule": ""}, now)
             if occ is None:
                 continue
-            start, end = (agenda.local_naive(d) for d in occ)
+            try:
+                start, end = (agenda.local_naive(d) for d in occ)
+            except (OverflowError, ValueError):                      # a date this machine's zone pushes past year 1 or 9999
+                continue
             org = inv.get("organizer") or Party()
             items.append({
                 "pk": r["pk"], "key": r["message_key"], "account": r["account"], "thread_id": r["thread_id"],

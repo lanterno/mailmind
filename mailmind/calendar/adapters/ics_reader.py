@@ -12,7 +12,7 @@ import calendar
 from datetime import datetime, timedelta
 
 from mailmind.calendar.domain.agenda import local_naive
-from mailmind.calendar.domain.invite import Fields, Invite, invite_of, party, read_time, rule_parts, until_bound
+from mailmind.calendar.domain.invite import Fields, Invite, invite_of, length, party, read_time, rule_parts, until_bound
 
 try:
     from zoneinfo import ZoneInfo
@@ -172,15 +172,20 @@ def _occurrences(start, kv):
 def next_occurrence(inv: Invite, after: datetime) -> tuple[datetime, datetime] | None:
     """(start, end) of the first occurrence of a parsed invite that hasn't ended by `after`, in the
     invite's own terms (aware in its zone, or floating). A one-off event is its only occurrence.
-    None when every occurrence has ended, or for an RRULE this reader doesn't expand."""
+    None when every occurrence has ended, for an RRULE this reader doesn't expand, or for a time at
+    the very edge of what a datetime holds, which this machine's zone would push past it."""
     try:
-        start = datetime.fromisoformat(inv["start_iso"])
-        end = datetime.fromisoformat(inv["end_iso"]) if inv.get("end_iso") else None
-        if inv.get("tzid") and start.tzinfo and ZoneInfo:   # back into its zone: DST moves wall-clock time
-            start = start.astimezone(ZoneInfo(inv["tzid"]))
+        return _next(inv, after)
     except Exception:
         return None
-    dur = max((end - start) if end else timedelta(days=1 if inv.get("all_day") else 0), timedelta(0))
+
+
+def _next(inv, after):
+    start = datetime.fromisoformat(inv["start_iso"])
+    end = datetime.fromisoformat(inv["end_iso"]) if inv.get("end_iso") else None
+    if inv.get("tzid") and start.tzinfo and ZoneInfo:   # back into its zone: DST moves wall-clock time
+        start = start.astimezone(ZoneInfo(inv["tzid"]))
+    dur = length(start, end, inv.get("all_day", False))
     now = local_naive(after)
     kv = rule_parts(inv.get("rrule"))
     if not kv:

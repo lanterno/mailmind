@@ -1,6 +1,6 @@
 """An invite as a reader of its text gives it, which agenda and rsvp read and the reader's card shows. A reader finds an
 event's `Fields`; what they come to, the card's words included, is the same whichever reader found them."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
@@ -144,6 +144,16 @@ def rule_in_words(r: str | None) -> str:
         if d:
             base += " until " + local(d).strftime("%b %-d, %Y")
     return base
+
+
+def length(start: datetime, end: datetime | None, all_day: bool) -> timedelta:
+    """How long an event runs, an all-day one with no end a day. An end that floats where its start doesn't, or the other
+    way about (a TZID only one of them could use), is read by its wall clock, as though in the start's terms."""
+    if end is None:
+        return timedelta(days=1 if all_day else 0)
+    if bool(end.tzinfo) != bool(start.tzinfo):
+        end = end.replace(tzinfo=start.tzinfo)
+    return max(end - start, timedelta(0))
 
 
 def rule_parts(r: str | None) -> dict[str, str]:
