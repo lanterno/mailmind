@@ -732,6 +732,11 @@ def any_copy(c, message_key):
     return c.execute("SELECT * FROM messages WHERE message_key=? LIMIT 1", (message_key,)).fetchone()
 
 
+def stored_accounts(c):
+    """Each account that has mail stored."""
+    return [row[0] for row in c.execute("SELECT DISTINCT account FROM messages ORDER BY account").fetchall()]
+
+
 def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],

@@ -47,7 +47,7 @@ class Digest:
             "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
             "thread_id": r["thread_id"], "folder": r["folder"], "ts": r["ts"],
         } for r in rows]
-        accts = [row[0] for row in c.execute("SELECT DISTINCT account FROM messages ORDER BY account").fetchall()]
+        accts = self._store.stored_accounts(c)
         st = self._store.stats(c)
         c.close()
         # send_accounts = the authoritative configured (enabled) identities — the compose
