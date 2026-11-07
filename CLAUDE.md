@@ -739,6 +739,10 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
   moved stored thread summaries onto it. A stored brief and a stored review name their messages by
   key and folder (below), and a read gives the pks they have now (`store.pk_now`).
+  `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk` and `followups.anchor_pk` are still written, for a
+  rollback, and go unread: a send goes by `orig_*`, a draft by its own In-Reply-To, the other two by thread or Message-ID.
+  `tests/unit/test_architecture.py` holds that, and names the one read left (`outbox_item.pk_of_original`): a send with no
+  Message-ID to go by, queued before migration 27 or replying to a message that has none.
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
