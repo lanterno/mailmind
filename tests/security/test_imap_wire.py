@@ -244,10 +244,8 @@ def test_an_expiry_rule_holding_a_line_break(world, wire):
 # mailbox_arg and imap_quote check everything else.
 TYPED_LOGINS = [("dee@example.test" + INJECTED, "app-password"), ("dee@example.test", "app-password" + INJECTED),
                 ("dee@example.test\x00", "app-password"), ("dee@example.test", "app\npassword")]
-_LOGIN_BUG = "a login's user and password reach the wire unchecked: nothing refuses a line break or a NUL in them"
 
 
-@pytest.mark.xfail(strict=True, reason=_LOGIN_BUG)
 @pytest.mark.parametrize("user, password", TYPED_LOGINS)
 def test_trying_an_account_typed_with_a_line_break_in_its_login(app, world, wire, user, password):
     """The settings page sends what was typed, to a host that was typed too, and answers with what the login said."""
@@ -258,7 +256,6 @@ def test_trying_an_account_typed_with_a_line_break_in_its_login(app, world, wire
     assert on_the_wire(wire) == []
 
 
-@pytest.mark.xfail(strict=True, reason=_LOGIN_BUG)
 @pytest.mark.parametrize("user, password", TYPED_LOGINS)
 def test_opening_a_session_with_a_line_break_in_its_login(world, adapter, wire, user, password):
     """A saved account's address, or a password pasted with its line end into the config, on either adapter."""
