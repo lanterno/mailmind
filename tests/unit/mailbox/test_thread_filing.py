@@ -1,5 +1,7 @@
 """Filing a whole conversation (/api/thread/archive and /api/thread/trash): which messages it takes,
 one Undo for all of them, and what a failure leaves. Through each door, on the fake IMAP server."""
+import pytest
+
 from fixtures import world as w
 
 LUNCH = "ada-inbox-01-lunch.eml"
@@ -121,3 +123,139 @@ def test_a_missing_or_bad_anchor(app):
     assert app.post("/api/thread/archive", {"pk": 999}).json["ok"] is False
     assert app.post("/api/thread/archive", {"pk": "x"}).json["msg"] == "bad pk"
     assert app.post("/api/thread/archive", {}).json["msg"] == "bad pk"
+
+
+# -- one transaction accepts them all, and each is tried by itself ------------
+
+class Crash(BaseException):
+    """The process died here: not an Exception, so no handler on the way out takes it for a failure."""
+
+
+def commands():
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        return [dict(r) for r in c.execute("SELECT * FROM mail_commands ORDER BY id")]
+    finally:
+        c.close()
+
+
+def hidden():
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        return [r["pk"] for r in c.execute("SELECT pk FROM messages WHERE pending_removal IS NOT NULL")]
+    finally:
+        c.close()
+
+
+def restart():
+    from mailmind.bootstrap.mailbox import commands as path, store
+    c = store.conn()
+    path.QUEUE.reset_stuck(c)
+    c.commit()
+    c.close()
+
+
+def test_the_whole_conversation_leaves_the_lists_before_the_first_try(app, world, monkeypatch):
+    from mailmind.bootstrap.mailbox import server_ops
+    real, listed = server_ops.apply, []
+
+    def looks(row, first_try=False):
+        listed.append([world.where(n)["db"] for n in (LUNCH, CONFIRM)])
+        return real(row, first_try)
+    monkeypatch.setattr(server_ops, "apply", looks)
+    assert app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json["count"] == 2
+    assert listed[0] == [[], []]
+
+
+def test_a_crash_while_accepting_leaves_all_of_it_as_it_was(world, monkeypatch):
+    from mailmind.bootstrap import mailbox
+    real, pushed = mailbox.undo.push_within, []
+
+    def dies_at_the_second(c, entry, group=None):
+        pushed.append(entry)
+        if len(pushed) == 2:
+            raise Crash
+        real(c, entry, group)
+    monkeypatch.setattr(mailbox.undo, "push_within", dies_at_the_second)
+    since = world.mark()
+    with pytest.raises(Crash):
+        mailbox.filing.do_thread_file("/api/thread/archive", {"pk": world.pk(CONFIRM)})
+    assert (commands(), hidden(), stack()) == ([], [], [])
+    assert world.writes(since) == []
+    assert boxes(world, LUNCH) == ["INBOX"] and world.where(LUNCH)["db"]
+
+
+def test_a_crash_in_the_first_try_leaves_the_rest_for_the_next_start(world, monkeypatch):
+    from mailmind.bootstrap import mailbox
+
+    def dies(row, first_try=False):
+        raise Crash
+    with monkeypatch.context() as m:
+        m.setattr(mailbox.server_ops, "apply", dies)
+        with pytest.raises(Crash):
+            mailbox.filing.do_thread_file("/api/thread/archive", {"pk": world.pk(CONFIRM)})
+    assert [r["state"] for r in commands()] == ["running", "running"]
+    assert sorted(hidden()) == sorted([world.pk(LUNCH), world.pk(CONFIRM)])
+    assert len(stack()[0]["children"]) == 2
+    restart()
+    mailbox.commands.drain()
+    assert [r["state"] for r in commands()] == ["done", "done"]
+    assert boxes(world, LUNCH) == ["Archive"] and boxes(world, CONFIRM) == ["Archive"]
+
+
+def test_a_try_that_raises_leaves_it_queued_and_the_rest_still_go(world, monkeypatch):
+    from mailmind.bootstrap import mailbox
+    real, tried = mailbox.server_ops.apply, []
+
+    def first_breaks(row, first_try=False):
+        tried.append(row["message_id"])
+        if len(tried) == 1:
+            raise RuntimeError("something nobody expected")
+        return real(row, first_try)
+    monkeypatch.setattr(mailbox.server_ops, "apply", first_breaks)
+    r = mailbox.filing.do_thread_file("/api/thread/archive", {"pk": world.pk(CONFIRM)})
+    assert (r["ok"], r["count"], r["failed"], r["queued"], r["undoable"]) == (True, 2, 0, 1, True)
+    assert len(set(tried)) == 2
+    assert sorted(x["state"] for x in commands()) == ["done", "queued"]     # nothing left to wait for a restart
+    mailbox.commands.drain()
+    assert boxes(world, LUNCH) == ["Archive"] and boxes(world, CONFIRM) == ["Archive"]
+
+
+def test_a_refusal_gives_back_only_its_own_message(app, world):
+    refuse_moves(world, LUNCH)
+    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
+    assert (r["count"], r["failed"]) == (1, 1)
+    assert hidden() == [] and world.where(LUNCH)["db"] and world.where(CONFIRM)["db"] == []
+    assert [x["message_id"] for x in commands()] == [w.message_id(CONFIRM)]
+    [entry] = stack()
+    assert [d["message_id"] for d in entry["children"]] == [w.message_id(CONFIRM)]
+    world.server.clear_faults()
+    assert app.post("/api/undo", {}).json["reversed"] == 1
+    assert boxes(world, CONFIRM) == ["INBOX"] and boxes(world, LUNCH) == ["INBOX"]
+
+
+def test_an_undo_before_any_try_landed_lists_all_of_it_again(app, world):
+    from mailmind.bootstrap.mailbox import commands as path
+    world.server.drop("SELECT", user=w.ADA, times=None)
+    assert app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json["queued"] == 2
+    since = world.mark()
+    r = app.post("/api/undo", {}).json
+    assert (r["ok"], r["reversed"], r["failed"]) == (True, 2, 0)
+    assert (commands(), hidden(), stack()) == ([], [], [])
+    world.server.clear_faults()
+    path.drain()
+    assert world.writes(since) == [] and boxes(world, LUNCH) == ["INBOX"] and world.where(CONFIRM)["db"]
+
+
+def test_a_gmail_conversation_loses_its_inbox_label_and_gets_it_back(app, world):
+    start, end = "cy-inbox-01-thread-start.eml", "cy-inbox-02-thread-end.eml"
+    r = app.post("/api/thread/archive", {"pk": world.pk(end)}).json
+    assert (r["ok"], r["count"], r["failed"]) == (True, 2, 0)
+    assert "INBOX" not in boxes(world, start) and "INBOX" not in boxes(world, end)
+    assert "[Gmail]/All Mail" in boxes(world, start) and "[Gmail]/All Mail" in boxes(world, end)
+    [entry] = stack()
+    assert [(d["kind"], d["dest_folder"]) for d in entry["children"]] == [("gmail_archive", "")] * 2
+    assert app.post("/api/undo", {}).json["reversed"] == 2
+    assert "INBOX" in boxes(world, start) and "INBOX" in boxes(world, end)

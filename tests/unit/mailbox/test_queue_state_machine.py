@@ -18,7 +18,8 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, 
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
 
-NAMES = ("ada-inbox-01-lunch.eml", "ada-inbox-03-newsletter.eml", "ada-inbox-05-receipt.eml")
+LUNCH = ("ada-inbox-01-lunch.eml", "ada-inbox-02-lunch-confirm.eml")     # one conversation in the Inbox
+NAMES = (*LUNCH, "ada-inbox-03-newsletter.eml", "ada-inbox-05-receipt.eml")
 OPS = {"archive": "Archive", "trash": "Trash", "junk": "Junk"}
 FOLDERS = ("INBOX", "Archive", "Trash", "Junk")
 FRAGILE = ("SELECT", "UID MOVE", "UID COPY", "UID STORE", "UID EXPUNGE")
@@ -107,6 +108,56 @@ class Machine(RuleBasedStateMachine):
         got = mailbox.filing.do_trash(body) if op == "trash" else mailbox.filing.do_write(f"/api/{op}", body)
         assert got["ok"] in (True, False)
 
+    def members(self, name):
+        return LUNCH if name in LUNCH else (name,)
+
+    def file_conversation(self, name, op):
+        pk = self.pk_in_inbox(name)
+        if not pk:
+            return
+        self.mutation += 1
+        for member in self.members(name):
+            self.allow(member, OPS[op])
+        got = mailbox.filing.do_thread_file(f"/api/thread/{op}", {"pk": pk, "mutation_id": f"t-{self.mutation}"})
+        assert got["ok"] in (True, False)
+
+    @rule(name=st.sampled_from(NAMES), op=st.sampled_from(("archive", "trash")))
+    def file_the_conversation(self, name, op):
+        self.file_conversation(name, op)
+
+    def crash_during_a_conversation(self, name, op, target, attribute, effect):
+        with mock.patch.object(target, attribute, effect(getattr(target, attribute))):
+            try:
+                self.file_conversation(name, op)
+            except Crash:
+                pass
+        self.restart()
+
+    @rule(name=st.sampled_from(LUNCH), op=st.sampled_from(("archive", "trash")))
+    def crash_while_accepting_a_conversation(self, name, op):
+        before, pushed = self.rows(), []
+
+        def effect(real):
+            def die_at_the_second(c, entry, group=None):
+                pushed.append(entry)
+                if len(pushed) == 2:
+                    raise Crash
+                real(c, entry, group)
+            return die_at_the_second
+        self.crash_during_a_conversation(name, op, mailbox.undo, "push_within", effect)
+        if len(pushed) == 2:                          # both were still there to accept: neither was
+            assert self.rows() == before
+
+    @rule(name=st.sampled_from(NAMES), op=st.sampled_from(("archive", "trash")))
+    def crash_in_the_first_try_at_a_conversation(self, name, op):
+        from mailmind.bootstrap.mailbox import server_ops
+
+        def effect(_real):
+            def die(_row, _first_try=False):
+                raise Crash
+            return die
+        self.crash_during_a_conversation(name, op, server_ops, "apply", effect)
+
     @rule(name=st.sampled_from(NAMES), flag=st.sampled_from(("flagged", "seen")), on=st.booleans())
     def flag_it(self, name, flag, on):
         pk = self.pk_in_inbox(name)
@@ -124,9 +175,10 @@ class Machine(RuleBasedStateMachine):
         c.close()
         if entries:                                   # the newest goes back where it came from
             top = entries[-1]
-            for name in NAMES:
-                if w.message_id(name) == top.get("message_id"):
-                    self.allow(name, top.get("src_folder"))
+            for d in top.get("children", [top]):      # a conversation's, all of them
+                for name in NAMES:
+                    if w.message_id(name) == d.get("message_id"):
+                        self.allow(name, d.get("src_folder"))
         mailbox.undo.undo_last()
 
     @rule(which=st.integers(0, 3))
