@@ -1026,6 +1026,17 @@ export interface PostAnswers {
     }[];
     ok: boolean;
   };
+  "/api/bulk/file": {
+    count: number;
+    failed: number;
+    msg: string;
+    ok: boolean;
+    partial: boolean;
+    pks: number[];
+    queued: number;
+    rows_failed: number;
+    undoable: boolean;
+  };
   "/api/cleanup/execute": {
     block_scope: string;
     blocked_token: string;
