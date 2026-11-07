@@ -44,9 +44,15 @@ def preload_creds():
     return config.preload()
 
 
-def _open_session(acct, timeout):
+def _probe(acct, timeout):
+    """The login goes through the Mailbox's open_session, which picks the IMAP adapter, so this is no adapter of
+    Accounts' own: it would have to import another context's."""
     from mailmind.bootstrap import mailbox
-    return mailbox.open_session(acct, timeout=timeout)
+    session = mailbox.open_session(acct, timeout=timeout)
+    try:
+        session.logout()
+    except Exception:
+        pass
 
 
 def _retry_sync(body):
@@ -64,5 +70,5 @@ def _sync_record():
     return mailbox.syncing.sync_record()
 
 
-connections = Connections(config, get, accounts, _open_session, quiet_error, _retry_sync, _forget_status)
+connections = Connections(config, get, accounts, _probe, quiet_error, _retry_sync, _forget_status)
 health = Health(_sync_record)

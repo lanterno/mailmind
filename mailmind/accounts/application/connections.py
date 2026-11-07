@@ -4,18 +4,18 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from mailmind.accounts.application.directory import Directory
-from mailmind.accounts.application.ports import OpenSession
+from mailmind.accounts.application.ports import ConnectionProbe
 from mailmind.accounts.domain.account import Entry
 
 
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
-                 open_session: OpenSession, quiet_error: Callable[[BaseException], str],
+                 probe: ConnectionProbe, quiet_error: Callable[[BaseException], str],
                  retry_sync: Callable[[Entry], tuple[dict[str, Any], int]], forget_status: Callable[[str | None], None]):
         self._config = config
         self._get = get
         self._accounts = accounts
-        self._open_session = open_session
+        self._probe = probe
         self._quiet_error = quiet_error
         self._retry_sync = retry_sync
         self._forget_status = forget_status
@@ -47,14 +47,9 @@ class Connections:
                                                   "before then only a typed password is tried"}
             else:
                 acct = self._get(body["email"])
-            # stateless probe — shares no IMAP state, selects no folder, uses no pooled conn, so it needs no
-            # IMAP gate (holding it here froze all mail ops for up to 60s on a mistyped/black-holed host);
+            # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host;
             # a short timeout also gives the user fast feedback on a bad host.
-            s = self._open_session(acct, timeout=15)
-            try:
-                s.logout()
-            except Exception:
-                pass
+            self._probe(acct, timeout=15)
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:

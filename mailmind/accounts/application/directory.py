@@ -23,7 +23,7 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from mailmind.accounts.application.ports import ConfigStore, Secrets
+from mailmind.accounts.application.ports import AccountRepository, SecretResolver
 from mailmind.accounts.domain import account, events
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.kernel.parsed import is_object
@@ -36,7 +36,7 @@ log = get_logger("accounts")
 class Directory:
     TYPE_DEFAULTS = account.TYPE_DEFAULTS
 
-    def __init__(self, file: ConfigStore, secrets: Secrets, ai_key: Callable[[], str | None]):
+    def __init__(self, file: AccountRepository, secrets: SecretResolver, ai_key: Callable[[], str | None]):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
         self._write_lock = threading.Lock()
 
