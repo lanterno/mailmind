@@ -17,13 +17,13 @@ import pytest
 
 import app_client
 from fixtures import world as w
-from mailmind.bootstrap import accounts, assistant, background, curation, mailbox, web
+from mailmind.bootstrap import accounts, assistant, background, curation, mailbox
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap.mailbox import commands, ingest, server_ops, store
 from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
 from mailmind.mailbox.domain.command import ServerAnswer
-from mailmind.platform import settings
+from mailmind.platform import perimeter, settings
 from mailmind.platform.workers import gates
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -253,7 +253,7 @@ def bare_get(app, path, headers=None):
 @pytest.mark.parametrize("host", ["127.0.0.1", "localhost"])
 def test_the_app_still_loads_on_its_own_host(host, app):
     r = bare_get(app, "/", {"Host": f"{host}:{app.port}"})
-    assert r.status == 200 and web.H.CSRF in str(r.body), r.status
+    assert r.status == 200 and perimeter.CSRF in str(r.body), r.status
 
 
 def test_the_api_answers_its_own_origin(app):
@@ -264,7 +264,7 @@ def test_the_api_answers_its_own_origin(app):
 def test_a_rebound_name_reads_nothing(path, app):
     r = bare_get(app, path, {"Host": f"rebound.example.test:{app.port}"})
     assert r.status == 403
-    assert web.H.CSRF not in str(r.body)
+    assert perimeter.CSRF not in str(r.body)
 
 
 @pytest.mark.parametrize("path", _READS)
@@ -326,7 +326,7 @@ def test_a_read_another_site_starts_is_refused(site, path, app):
 def test_another_site_can_link_to_the_app_but_not_frame_it(app):
     nav = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}
     r = bare_get(app, "/", {**nav, "Sec-Fetch-Dest": "document"})
-    assert r.status == 200 and web.H.CSRF in str(r.body), r.status
+    assert r.status == 200 and perimeter.CSRF in str(r.body), r.status
     assert bare_get(app, "/", {**nav, "Sec-Fetch-Dest": "iframe"}).status == 403
     assert bare_get(app, "/api/digest", {**nav, "Sec-Fetch-Dest": "document"}).status == 403
 
@@ -340,7 +340,7 @@ def test_the_api_answers_only_the_pages_own_reads(headers, app):
     # a typed URL; a browser too old to say, or a script
     assert bare_get(app, "/api/digest", headers).status == 403
     r = bare_get(app, "/", headers)     # the page itself still opens
-    assert r.status == 200 and web.H.CSRF in str(r.body), r.status
+    assert r.status == 200 and perimeter.CSRF in str(r.body), r.status
 
 
 @pytest.mark.parametrize("path", ["/", "/api/digest", "/api/no-such-route"])

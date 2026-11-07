@@ -20,8 +20,8 @@ from datetime import datetime, timezone
 import pytest
 
 import guard
-from mailmind.bootstrap import web
 from mailmind.bootstrap import mailbox
+from mailmind.platform import perimeter
 from mailmind.platform.logging import stop as stop_logging
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -222,7 +222,7 @@ def app(world, monkeypatch):
     from mailmind.bootstrap import wiring
     app_client.reset_state()
     schema_contract.watch_reads(monkeypatch)
-    monkeypatch.setattr(web.H, "CSRF", app_client.CSRF)
+    monkeypatch.setattr(perimeter, "CSRF", app_client.CSRF)
     wiring.wire()                 # as wiring.start does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
