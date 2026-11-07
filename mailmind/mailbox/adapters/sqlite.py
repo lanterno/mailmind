@@ -600,7 +600,7 @@ def reconcile(c, account, folder, live_uids, when, among=None):
 
 def digest(c, min_importance=1, account=None, limit=300):
     q = """SELECT m.*, s.summary, s.importance, s.category, s.action
-           FROM messages m JOIN summaries s ON s.message_pk = m.pk
+           FROM messages m JOIN assessments s ON s.message_key=m.message_key
            WHERE m.is_junk = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance >= ?
              AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)"""
     args = [min_importance]
@@ -624,7 +624,7 @@ def brief_rows(c, accounts, n):
     """What a brief is made from: the mail the AI said is worth a glance, most important first."""
     sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
-           "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
+           "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
            "WHERE m.is_junk=0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL AND s.importance>=2 "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = []
@@ -641,7 +641,7 @@ def delta_rows(c, accounts, since_ts, n):
     sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
            "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
            "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
-           "FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
+           "FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key "
            # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
            # so it matches the pill count; only drop spam/blocked and snoozed/muted.
            "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
@@ -680,12 +680,12 @@ def received_by_bucket(c, accounts, since_ts):
 
 def needs_you_rows(c, accounts, n):
     """Who's waiting on the person to reply: open, important, unanswered INBOX mail (mirrors the brief's "needs you"
-    set; joins summaries so we get importance/action, excludes junk/snoozed/muted/answered)."""
+    set; joins assessments so we get importance/action, excludes junk/snoozed/muted/answered)."""
     ac, ap = _among(accounts, "m.account")
     return c.execute(
         "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
         "       s.importance, s.action, s.category "
-        "FROM messages m JOIN summaries s ON s.message_pk=m.pk "
+        "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
         "WHERE m.folder='INBOX' AND m.is_junk=0 AND m.snoozed_until IS NULL AND m.answered=0 "
         "  AND m.pending_removal IS NULL "
         f"  AND {verdict.needs_you_sql()} "
@@ -697,7 +697,7 @@ _DRAFT_CAND_SQL = """
 SELECT m.pk, m.account, m.folder, m.thread_id, m.message_id, m.from_addr,
        m.is_junk, m.answered, m.snoozed_until, m.ts, s.importance, s.category
 FROM messages m
-JOIN summaries s ON s.message_pk = m.pk
+JOIN assessments s ON s.message_key=m.message_key
 WHERE m.folder = 'INBOX'
   AND m.is_junk = 0 AND m.answered = 0 AND m.snoozed_until IS NULL AND m.pending_removal IS NULL
   AND """ + verdict.reply_worthy_sql() + """
@@ -767,11 +767,11 @@ def stats(c):
     return {
         "total": c.execute("SELECT COUNT(*) FROM messages").fetchone()[0],
         "kept": c.execute("SELECT COUNT(*) FROM messages WHERE is_junk=0").fetchone()[0],
-        "summarized": c.execute("SELECT COUNT(*) FROM summaries").fetchone()[0],
+        "summarized": c.execute("SELECT COUNT(*) FROM messages m JOIN assessments s ON s.message_key=m.message_key").fetchone()[0],
         "verified": c.execute("SELECT COUNT(*) FROM messages WHERE verified=1").fetchone()[0],
         "needs": c.execute(
-            """SELECT COUNT(*) FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-               WHERE m.is_junk=0 AND s.message_pk IS NULL""").fetchone()[0],
+            """SELECT COUNT(*) FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
+               WHERE m.is_junk=0 AND s.message_key IS NULL""").fetchone()[0],
     }
 
 
@@ -786,7 +786,7 @@ def snoozed_rows(c, account, limit, offset):
         """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   m.snoozed_until, s.importance, s.category, s.action
-           FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+           FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
            WHERE m.account=? AND m.snoozed_until IS NOT NULL AND m.pending_removal IS NULL
            ORDER BY m.snoozed_until ASC LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
 
@@ -807,7 +807,7 @@ def folder_conversation_rows(c, account, folder, limit, offset):
                SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
                MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
                MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
-             FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+             FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
              WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
         + _MUTED_EXCL.format(t="m") + """)
            SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
@@ -827,7 +827,7 @@ def folder_rows(c, account, folder, limit, offset):
         """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                   s.summary, s.action, s.category
-           FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+           FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
            WHERE m.account=? AND m.folder=? AND m.snoozed_until IS NULL AND m.pending_removal IS NULL """
         + _MUTED_EXCL.format(t="m") + """
            ORDER BY m.ts DESC LIMIT ? OFFSET ?""",

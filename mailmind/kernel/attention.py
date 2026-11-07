@@ -42,12 +42,12 @@ def answers(importance: int | None, category: str | None, action: str | None) ->
 
 
 def reply_worthy_sql(s: str = "s") -> str:
-    """`reply_worthy` over a summaries row named `s`, or its bare columns if `s` is empty."""
+    """`reply_worthy` over an assessments row named `s`, or its bare columns if `s` is empty."""
     p = f"{s}." if s else ""
     return f"({p}importance>=4 OR {p}category='{ACTION_NEEDED}')"
 
 
 def needs_you_sql(s: str = "s") -> str:
-    """`needs_you` over a summaries row named `s`, or its bare columns if `s` is empty."""
+    """`needs_you` over an assessments row named `s`, or its bare columns if `s` is empty."""
     p = f"{s}." if s else ""
     return f"({p}importance>=4 OR {p}category='{ACTION_NEEDED}' OR TRIM(COALESCE({p}action,''))!='')"
