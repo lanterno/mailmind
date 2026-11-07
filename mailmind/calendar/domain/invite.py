@@ -1,5 +1,5 @@
-"""An invite as a reader of its text gives it, which agenda and rsvp read and the reader's card shows. A reader finds an
-event's `Fields`; what they come to, the card's words included, is the same whichever reader found them."""
+"""An invite as the reader of its text gives it, which agenda and rsvp read and the card shows. The reader finds an event's
+`Fields`; `invite_of` says what they come to, the card's words included."""
 from datetime import date, datetime, timedelta, timezone
 from typing import NotRequired, TypedDict
 from zoneinfo import ZoneInfo
@@ -32,11 +32,11 @@ class Invite(TypedDict):
     exdates: list[str]
     recurrence_id: str
     tzid: str
-    rdates: NotRequired[list[str]]          # only where a reader of RDATE found some
+    rdates: NotRequired[list[str]]          # only where the text has some
 
 
 class Fields(TypedDict, total=False):
-    """What a reader found in one event, each as it was said. A time is aware, or naive where the invite floats."""
+    """What the reader found in one event, each as it was said. A time is aware, or naive where the invite floats."""
     summary: str
     location: str
     description: str

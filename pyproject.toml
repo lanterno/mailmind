@@ -209,16 +209,16 @@ forbidden_modules = ["imapclient"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "only the library's reader of invites reaches icalendar and recurring-ical-events"
+name = "only the reader of invites reaches icalendar and recurring-ical-events"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.content", "mailmind.kernel", "mailmind.assistant",
                   "mailmind.accounts", "mailmind.attention", "mailmind.compose", "mailmind.curation", "mailmind.discovery", "mailmind.mailbox",
                   "mailmind.calendar.application", "mailmind.calendar.domain",
-                  "mailmind.calendar.adapters.ics_reader", "mailmind.calendar.adapters.sqlite"]
+                  "mailmind.calendar.adapters.sqlite"]
 forbidden_modules = ["icalendar", "recurring_ical_events"]
 
 [[tool.importlinter.contracts]]
-# bootstrap.calendar loads that reader when use("icalendar") asks for it, and only then.
+# bootstrap.calendar binds that reader as it loads. The command line never loads it: test_cli.py runs it with nothing installed.
 name = "bootstrap imports icalendar and recurring-ical-events only through that reader"
 type = "forbidden"
 source_modules = ["mailmind.bootstrap"]

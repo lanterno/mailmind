@@ -1,6 +1,5 @@
-"""An invite's text read through `icalendar` and `recurring-ical-events`, which `python -m mailmind serve` asks for;
-`mailmind.bootstrap.calendar` picks. Nothing of either library leaves this
-module: it answers the `IcsReader` port in the domain's own shapes.
+"""An invite's text read through `icalendar` and `recurring-ical-events`, the one reader there is. Nothing of either library
+leaves this module: it answers the `IcsReader` port in the domain's own shapes.
 
 An invite is a stranger's text and this runs on request threads, so nothing here raises, however broken the text, and
 each call has a budget of this thread's time to answer in. A call that uses it up answers as for a text or a rule it
@@ -8,8 +7,8 @@ can't read. Four things the libraries would do with that text are not done:
 
 - `_Parser` doesn't let `icalendar` act on a VTIMEZONE, which would remember a zone for the whole process, under a name the
   sender chose, made from rules it expands through to year 9999 however often they fire.
-- It doesn't let it look up a TZID either. One rule says what a TZID means, `invite.zone`, as it does for `ics_reader`:
-  a name the zone database doesn't know makes the time floating.
+- It doesn't let it look up a TZID either. One rule says what a TZID means, `invite.zone`: a name the zone database
+  doesn't know makes the time floating.
 - It doesn't let it decode the escapes of what isn't text (`_AS_SAID`). An RSVP echoes a UID and writes to an organizer, and
   a stranger's `\\n` there would be a line of their own in the reply.
 - `Component.from_ical` opens a text with no line break in it as a path, if a file is there. The parser doesn't.
@@ -77,8 +76,8 @@ class _Said(vText):
 
 
 class _Parser(ComponentIcalParser):
-    """The library's parser, with what the module's docstring says it doesn't do left out. As lenient as `ics_reader`
-    otherwise: what it can't read in a calendar it leaves out, and goes on."""
+    """The library's parser, with what the module's docstring says it doesn't do left out. Lenient otherwise: what
+    it can't read in a calendar it leaves out, and goes on."""
 
     def handle_begin_component(self, vals: str) -> None:
         super().handle_begin_component(vals)
@@ -120,7 +119,7 @@ def _each(component: Any, name: str) -> list[Any]:
 
 
 def _last(component: Any, name: str) -> Any:
-    """A property said more than once: the last, as ics_reader takes it."""
+    """A property said more than once: the last."""
     each = _each(component, name)
     return each[-1] if each else None
 
@@ -244,7 +243,7 @@ def _rule(kv: dict[str, str], start: datetime) -> vRecur:
         raise ValueError("not a frequency this expands")
     parts = {**kv, "INTERVAL": str(max(1, int(kv.get("INTERVAL", "1"))))}     # below 1, dateutil would stand still for ever
     parts.pop("UNTIL", None)
-    if not kv.get("COUNT", "").isdigit():                                     # says nothing, as to ics_reader
+    if not kv.get("COUNT", "").isdigit():                                     # says nothing
         parts.pop("COUNT", None)
     until = until_bound(kv, start)
     if until is not None:

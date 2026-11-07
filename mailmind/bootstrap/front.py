@@ -1,14 +1,13 @@
 """The app on FastAPI and uvicorn, `python -m mailmind serve [port]`.
 
 It starts the workers through wiring.start and serves the handler through a HandlerBridge. It talks
-to the Claude API through the Anthropic SDK, an account whose config asks for IMAPClient
-("imap_adapter": "imapclient") reaches its server through it, and it reads an invite through
-icalendar and recurring-ical-events. The command line, which doesn't come through here, does none
-of the three.
+to the Claude API through the Anthropic SDK, and an account whose config asks for IMAPClient
+("imap_adapter": "imapclient") reaches its server through it. The command line, which doesn't come
+through here, does neither.
 """
 import dataclasses
 
-from mailmind.bootstrap import assistant, calendar, wiring, mailbox, web
+from mailmind.bootstrap import assistant, wiring, mailbox, web
 from mailmind.http import serving
 from mailmind.http.app import create_app
 from mailmind.http.bridge import HandlerBridge
@@ -20,11 +19,10 @@ def build():
     """The ASGI app over the handler, and the coroutine function to await when
     shutdown begins. A POST's body may hold up to the route's own cap, and the bridge reads no
     other body: the handler reads none. The perimeter checks the page's token as the handler does, so
-    both see the same one. AI calls go through the Anthropic SDK from here on, an account that
-    asks for IMAPClient gets it, and invites are read through the library."""
+    both see the same one. AI calls go through the Anthropic SDK from here on, and an account that
+    asks for IMAPClient gets it."""
     assistant.use("sdk")
     mailbox.offer("imapclient")
-    calendar.use("icalendar")
 
     def body_cap(method, path):
         return web.post_body_cap(path) if method == "POST" else 0
