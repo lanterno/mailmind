@@ -393,3 +393,14 @@ def test_a_folder_on_a_desktop_opens_on_its_first_message_and_closing_it_stays_c
     page.wait_for_timeout(100)
     expect(first).not_to_have_class(re.compile(r"\bsel\b"))
     clean(page)
+
+
+def test_reconcile_says_how_many_stand(page, world):
+    opened(page)
+    with world.server.lock:                                      # deleted in another client
+        world.server.mailbox(w.ADA, "INBOX").messages.pop(world.uid(RECEIPT))
+    page.keyboard.press("ControlOrMeta+k")
+    page.locator("#pq").fill("Reconcile")
+    page.keyboard.press("Enter")
+    expect(page.locator("#toast")).to_have_text(re.compile(r"^Struck 1 deleted items · [\d,]+ stand$"), timeout=7000)
+    clean(page)
