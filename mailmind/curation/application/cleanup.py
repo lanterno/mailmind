@@ -30,16 +30,15 @@ class Cleanup:
             return False, d.get("account"), None
         return True, d.get("account"), None
 
-    def senders(self, qs: Query) -> dict[str, Any]:
+    def senders(self) -> dict[str, Any]:
         """Ranked cleanup-candidate senders — pure local SQL, no AI, no IMAP, no outbound. Grouped by
         lower(from_addr) across all accounts+folders, bucket-filtered, post-filtered against rules so an
         already-decided sender never reappears."""
-        ask = noise.asked(qs)
-        rows = rulebook.undecided(self._mail.noisy_senders(ask.buckets, ask.min_count), self._rules.sets())
+        rows = rulebook.undecided(self._mail.noisy_senders(list(noise.BUCKETS), noise.MIN_COUNT), self._rules.sets())
         cands: list[dict[str, Any]] = [
             {"from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
              "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso), "bucket": c.bucket, "lu_likely": c.list_likely,
-             "noise_score": c.score} for c in noise.ranked(rows, time.time(), ask.limit)]
+             "noise_score": c.score} for c in noise.ranked(rows, time.time(), noise.LIMIT)]
         # per-account rollup + sample subjects for just the shown senders
         addrs = [x["from_addr"] for x in cands]
         if addrs:

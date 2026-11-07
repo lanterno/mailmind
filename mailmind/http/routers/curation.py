@@ -27,7 +27,7 @@ def routes(curation):
 
     @r.get("/api/cleanup/senders")
     def cleanup_senders(req):
-        return curation.cleanup.senders(req.query)
+        return curation.cleanup.senders()
 
     @r.get("/api/cleanup/sender")
     def cleanup_sender(req):

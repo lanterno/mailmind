@@ -1,16 +1,15 @@
 """How much of a nuisance a sender is, for ranking who to clean up first."""
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from mailmind.curation.domain.classifier import MKT, NOTIF
 from mailmind.curation.domain.rulebook import domain_of
 from mailmind.kernel.row import Row
 
-BUCKETS = (MKT, NOTIF)      # whose mail is worth asking about, unless a request names others
-MIN_COUNT = 3
-LIMIT = 40
-MAX_LIMIT = 200
+BUCKETS = (MKT, NOTIF)      # whose mail is worth asking about
+MIN_COUNT = 3               # how many messages make a candidate
+LIMIT = 40                  # how many to list
 MIN_SCORE = 1.5
 
 
@@ -18,29 +17,6 @@ def noise_score(count: int, unseen: int, age_days: float) -> float:
     """More mail, more of it unread and more recent all score higher."""
     ratio = (unseen / count) if count else 0
     return count * (0.3 + 0.7 * ratio) * math.exp(-age_days / 30.0)
-
-
-@dataclass(frozen=True)
-class Asked:
-    """Whose mail a request asks about, how many messages make a candidate and how many to list."""
-    buckets: list[str]
-    min_count: int
-    limit: int
-
-
-def _number(qs: Mapping[str, Sequence[str]], name: str, default: int) -> int | None:
-    try:
-        return int((qs.get(name) or [default])[0])
-    except Exception:
-        return None
-
-
-def asked(qs: Mapping[str, Sequence[str]]) -> Asked:
-    """What a query string asks for. A number that won't read goes back to the default, and one out of range to the range."""
-    min_count, limit = _number(qs, "min_count", MIN_COUNT), _number(qs, "limit", LIMIT)
-    return Asked([b for b in ((qs.get("buckets") or [",".join(BUCKETS)])[0]).split(",") if b],
-                 MIN_COUNT if min_count is None else max(1, min_count),
-                 LIMIT if limit is None else max(1, min(MAX_LIMIT, limit)))
 
 
 def age_in_days(last_ts: float | None, now: float) -> float:
