@@ -49,6 +49,8 @@ class Reversals:
                     n = 0
                 if n:
                     return (True, d["account"], src), d
+                if not d.get("dest_folder"):     # it left by no doing of ours: nothing names where to look, and asking for a
+                    return (True, d["account"], src), d    # folder of no name would keep this entry on top of the stack
                 # re-ingest found nothing (UID gone) → fall through to the normal reverse
             return None, d
         if q is not None:
