@@ -1,7 +1,10 @@
-"""What kind of trouble a sync had."""
+"""How an account stands, from what its syncs came to. The Mailbox reports what happened, and this says what it means."""
+from typing import Literal
+
+type ErrorKind = Literal["TIMEOUT", "AUTH", "UIDVALIDITY", "NETWORK", "TLS_PIN", "IMAP", "UNKNOWN"]
 
 
-def kind_of(e: BaseException) -> str:
+def error_kind(e: BaseException) -> ErrorKind:
     """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
     never its message (which can carry credentials/host strings)."""
     n = type(e).__name__.lower()

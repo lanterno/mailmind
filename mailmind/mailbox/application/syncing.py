@@ -11,7 +11,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
-from mailmind.mailbox.domain import body_backfill, sync_errors
+from mailmind.mailbox.domain import body_backfill
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -69,7 +69,7 @@ class Syncing:
             except Exception as e:
                 self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
                 with self._uow.write() as c:
-                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, sync_errors.kind_of(e))
+                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, self._accounts.error_kind(e))
                 log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
 

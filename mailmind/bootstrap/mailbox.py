@@ -174,6 +174,9 @@ class _Accounts:
     def quiet_error(self, e):
         return accounts.quiet_error(e)
 
+    def error_kind(self, e):
+        return accounts.error_kind(e)
+
     def preload_creds(self):
         return accounts.preload_creds()
 

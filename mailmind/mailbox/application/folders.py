@@ -15,7 +15,6 @@ from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import roles as folder_roles
-from mailmind.mailbox.domain import sync_errors
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -196,7 +195,7 @@ class Folders:
                 self._first_sync_failed.pop(key, None)
             except Exception as e:
                 if full:
-                    self._first_sync_failed[key] = sync_errors.kind_of(e)
+                    self._first_sync_failed[key] = self._accounts.error_kind(e)
                 sync_log.warning("%(account)s/%(folder)s", {"account": account, "folder": repr(folder)},   # a name a request gave us
                                  exc_info=e)
             finally:
