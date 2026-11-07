@@ -6,6 +6,8 @@ import base64
 import re
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from fixtures import world as w
 
 HIDDEN = "hidden.person@example.test"
@@ -150,6 +152,15 @@ def test_a_person_both_to_and_bcc_is_written_for_the_to(app, world):
     deliver(app)
     d = only_delivery(world)
     assert HIDDEN in d.rcpts and HIDDEN.encode() in d.data
+
+
+@pytest.mark.xfail(strict=True, reason="build_message dedupes within To, Cc and Bcc but not across them: two RCPT TOs")
+@pytest.mark.parametrize("field", ["to", "cc"])
+def test_a_person_named_twice_is_one_recipient_of_the_envelope(field):
+    from mailmind.compose.api import build_message
+    built = build_message({"account": w.ADA, "to": ["lin@example.test"], "subject": "Hi", "text": "Hello",
+                           **({field: [HIDDEN, "lin@example.test"] if field == "to" else [HIDDEN]}), "bcc": [HIDDEN]})
+    assert built["envelope"].count(HIDDEN) == 1
 
 
 def test_replying_to_the_sent_copy_finds_no_one_hidden(app, world):
