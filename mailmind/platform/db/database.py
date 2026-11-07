@@ -21,7 +21,7 @@ def connect(path):
     enforced. txguard tracks it, so a network call made while it has a transaction open raises."""
     try:
         os.close(os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600))
-    except OSError:
+    except (FileExistsError, FileNotFoundError, NotADirectoryError):
         pass                                    # there already, or nowhere to put it: SQLite says which
     c = sqlite3.connect(path, timeout=60, factory=txguard.Connection)
     txguard.track(c)
