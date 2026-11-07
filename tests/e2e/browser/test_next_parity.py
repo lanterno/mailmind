@@ -210,3 +210,18 @@ def test_the_account_menu_names_itself_marks_yours_says_who_cant_connect_and_lea
     page.locator(".acct-menu .am-item", has_text="Add or manage accounts").click()
     expect(page.get_by_role("heading", name="Email connections")).to_be_visible()
     clean(page)
+
+
+def test_the_rail_keeps_the_pages_order_and_all_inboxes_is_one_inbox(page, world):
+    opened(page)
+    names = page.locator("#folderrail .frow .fn")
+    expect(names.last).to_have_text("Snoozed")
+    labels = names.all_inner_texts()
+    assert labels[0] == "Inbox" and labels.index("Feed") < labels.index("Snoozed")
+    assert labels.index("Feed") > labels.index("Sent")           # folders, then views, then what isn't a folder
+    page.locator("#acctSw").click()
+    page.get_by_role("menuitemradio", name=re.compile("^All inboxes")).click()
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    expect(page.locator("#folderrail .frow.on .fn")).to_have_text("Inbox")
+    expect(page.locator("#folderrail")).not_to_contain_text("newest first")
+    clean(page)
