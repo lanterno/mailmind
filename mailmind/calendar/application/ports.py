@@ -8,8 +8,10 @@ from mailmind.kernel.row import Row
 
 
 class IcsReader(Protocol):
-    """An invite's text as a display-ready dict, and when it next happens."""
+    """An invite's text as a display-ready dict, and when it next happens. `parse` is the one event a card shows,
+    `events` every event the text holds that this reader reads."""
     def parse(self, text: str) -> Invite | None: ...
+    def events(self, text: str) -> list[Invite]: ...
     def next_occurrence(self, inv: Invite, after: datetime) -> tuple[datetime, datetime] | None: ...
 
 

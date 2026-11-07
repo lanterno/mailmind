@@ -1,6 +1,7 @@
 """Minimal iCalendar (RFC 5545) reader — stdlib only. Parses a text/calendar invite into a
 display-ready dict for the reader's Invite card. Read-only; no network. Total — never raises.
 
+  events(text)  ->  [parse(text)], or [] where that is None
   inv = parse(text)  ->  None, or
         {"summary","location","description","when","all_day","start_iso","end_iso",
          "organizer":{name,email}, "attendees":[{name,email}], "recurrence","method","status",
@@ -97,6 +98,12 @@ def parse(text: str) -> Invite | None:
     if not events:
         return None
     return invite_of(events[0], method)
+
+
+def events(text: str) -> list[Invite]:
+    """This reader reads only the first."""
+    inv = parse(text)
+    return [inv] if inv else []
 
 
 # ------------------------------------------------------------- recurrence (RRULE)

@@ -22,15 +22,16 @@ class Agenda:
         found: list[tuple[Row, Invite]] = []
         for r, text in self._stored.invite_parts(int(now.timestamp()) - days * 86400, account, agenda.SKIPPED_ROLES):
             try:
-                invite = self._reader.parse(text)
+                events = self._reader.events(text)
             except Exception:
                 continue
-            if not invite or not invite.get("start_iso"):
-                continue
-            key = agenda.event_key(invite)
-            if key not in seen:
-                seen.add(key)
-                found.append((r, invite))
+            for invite in events:
+                if not invite.get("start_iso"):
+                    continue
+                key = agenda.event_key(invite)
+                if key not in seen:
+                    seen.add(key)
+                    found.append((r, invite))
         moved, gone = agenda.changed_occurrences([inv for _r, inv in found])
         items: list[dict[str, Any]] = []
         for r, inv in found:
