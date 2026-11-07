@@ -359,3 +359,10 @@ def test_the_palette_reaches_every_accounts_folders(page, world):
     expect(page.locator("#listTitle")).to_have_text("All mail")
     expect(page.locator("#acctSw")).to_contain_text("Cy")
     clean(page)
+
+
+def test_the_theme_button_says_which_theme(page, world):
+    opened(page)
+    page.locator("#themeBtn").click()
+    expect(page.locator("#toast")).to_have_text(re.compile(r"^(Day|Dusk|Night) theme$"))
+    clean(page)
