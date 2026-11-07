@@ -22,9 +22,9 @@ CSP_VIOLATION = "violates the following Content Security Policy directive"
 
 @pytest.fixture(scope="session")
 def built(tmp_path_factory):
-    """The React app, built once for the session into a folder of its own, so a build on this machine doesn't matter."""
+    """The app, built once for the session into a folder of its own, so a build on this machine doesn't matter."""
     from mailmind.platform import webroot
-    out = tmp_path_factory.mktemp("next-dist")
+    out = tmp_path_factory.mktemp("dist")
     web = os.path.join(webroot.REPO, "web")
     if not os.path.isdir(os.path.join(web, "node_modules")):
         pytest.skip("web/node_modules isn't installed")

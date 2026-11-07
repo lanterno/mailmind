@@ -13,9 +13,10 @@ from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 from mailmind.content import sanitize
 
-pytestmark = pytest.mark.browser
+pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
 FRAME = "iframe.rd-iframe"
+QUOTE = 'iframe[title="The message you’re answering"]'
 AWAY = "https://away.example.test"
 
 
@@ -25,7 +26,7 @@ def fire(name):
 
 HOSTILE = f"""<!doctype html><html><head>
 <script>{fire("head script")}</script>
-<script src="/assets/legacy/theme.js"></script>
+<script src="/assets/theme.js"></script>
 <meta http-equiv="refresh" content="0;url=javascript:{fire("refresh")}">
 <meta http-equiv="refresh" content="1;url={AWAY}/refresh">
 <link rel="stylesheet" href="{AWAY}/sheet.css">
@@ -65,22 +66,8 @@ def delivered(world, raw, mid="<hostile@example.test>"):
 OWN_DOCUMENT = re.compile(r"/api/message/\d+/body\.html\?key=\d+&images=0$")
 
 
-def on_the_page(page, pk):
-    page.goto("/")
-    page.get_by_role("tab", name=re.compile("^Everything")).click()
-    page.locator(f'#rows .row[data-pk="{pk}"]').click()
-
-
-def on_the_react_app(page, pk):
+def opening(page, pk):
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
-
-
-@pytest.fixture(params=["page", "react"])
-def opening(request):
-    if request.param == "react":
-        request.getfixturevalue("serve_the_build")
-        return on_the_react_app
-    return on_the_page
 
 
 @pytest.fixture(params=["sanitized", "no sanitizer"])
@@ -96,7 +83,7 @@ def asked_by_frames(page):
     asked = []
 
     def note(req):
-        own_document = req.is_navigation_request() and OWN_DOCUMENT.search(req.url)    # the React app's frame loads its body
+        own_document = req.is_navigation_request() and OWN_DOCUMENT.search(req.url)    # the frame loads its body
         if req.frame.parent_frame is not None and req.url.startswith("http") and not own_document:
             asked.append(req.url)
     page.pw.on("requestfinished", note)
@@ -109,7 +96,7 @@ def click_if_there(where):
         where.click(timeout=3000)
 
 
-def test_nothing_in_a_message_runs_or_asks_for_anything(page, world, opening, wall, asked_by_frames):
+def test_nothing_in_a_message_runs_or_asks_for_anything(page, world, wall, asked_by_frames):
     opening(page, delivered(world, message(HOSTILE)))
     frame = page.frame_locator(FRAME).first
     expect(frame.get_by_text("A message with everything in it")).to_be_visible()
@@ -125,11 +112,11 @@ def test_nothing_in_a_message_runs_or_asks_for_anything(page, world, opening, wa
     assert set(asked_by_frames) <= only
     assert set(page.blocked) <= only
     where = page.pw.evaluate(f"document.querySelector('{FRAME}').contentWindow.location.href")
-    assert OWN_DOCUMENT.search(where) if opening is on_the_react_app else where == "about:srcdoc"
+    assert OWN_DOCUMENT.search(where)
     assert [p for p in page.problems if p.startswith("pageerror")] == []
 
 
-def test_a_name_or_subject_written_as_html_stays_text_on_the_page(page, world, opening):
+def test_a_name_or_subject_written_as_html_stays_text_on_the_page(page, world):
     """They go into the frame's title and the reader's head, on the page itself, where a script is the page's."""
     opening(page, delivered(world, message("<p>Hello</p>")))
     expect(page.frame_locator(FRAME).first.get_by_text("Hello")).to_be_visible()
@@ -138,10 +125,35 @@ def test_a_name_or_subject_written_as_html_stays_text_on_the_page(page, world, o
     assert page.pw.evaluate("window.__ran || []") == []
 
 
-def test_plain_text_written_as_html_stays_text(page, world, opening, wall):
+def test_plain_text_written_as_html_stays_text(page, world, wall):
     written = f"<script>{fire('text script')}</script><img src=data:, onerror={fire('text img')}>"
     opening(page, delivered(world, message(written, kind="plain")))
     frame = page.frame_locator(FRAME).first
     expect(frame.locator("body")).to_contain_text("<script>")
     assert frame.locator("body script, body img").count() == 0
     assert page.pw.evaluate("window.__ran || []") == []
+
+
+def quoted_in_a_reply(page, world, body):
+    """A reply's quote: a srcdoc, so it answers to the page's policy as well as its own sandbox."""
+    opening(page, delivered(world, message(body)))
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("r")
+    page.locator("#cmpQToggle").click()
+    expect(page.locator(QUOTE)).to_have_attribute("sandbox", "")
+    return page.frame_locator(QUOTE)
+
+
+def test_nothing_in_a_message_runs_in_the_quote_of_a_reply(page, world, wall):
+    frame = quoted_in_a_reply(page, world, HOSTILE)
+    expect(frame.get_by_text("A message with everything in it")).to_be_visible()
+    page.pw.wait_for_timeout(1500)           # past the second meta refresh
+    assert page.pw.evaluate("window.__ran || []") == []
+    assert [p for p in page.problems if p.startswith("pageerror")] == []
+
+
+def test_the_quote_of_a_reply_breaks_no_policy(page, world):
+    """Its styles are the page's policy's to allow, and the fake clock's script is its sandbox's to refuse (SANDBOX_REFUSAL)."""
+    frame = quoted_in_a_reply(page, world, "<p>Hello</p>")
+    expect(frame.get_by_text("Hello")).to_be_visible()
+    assert page.problems == [], page.problems

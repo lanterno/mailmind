@@ -373,7 +373,7 @@ def test_a_message_gone_by_the_time_its_frame_asks_says_so_in_the_frame(page, wo
 
 def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, world):
     answer = page.goto("/")
-    assert answer.header_value("content-security-policy") == perimeter.next_page_policy()
+    assert answer.header_value("content-security-policy") == perimeter.page_policy()
     page.evaluate("""url => {
         const i = document.createElement("img");
         i.src = url;

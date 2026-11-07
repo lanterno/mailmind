@@ -58,16 +58,6 @@ def test_a_link_from_when_the_app_lived_at_next_opens_the_same_place(page, world
     clean(page)
 
 
-def test_the_top_bar_opens_the_old_page_which_still_works_at_legacy(page, world):
-    opened(page)
-    page.get_by_role("link", name="Old page").click()
-    expect(page.pw).to_have_url(re.compile(r"/legacy$"))
-    page.get_by_role("tab", name=re.compile("^Everything")).click()
-    expect(row(page, world, RECEIPT)).to_be_visible()
-    assert page.locator("#root").count() == 0
-    clean(page)
-
-
 def test_it_opens_the_first_accounts_inbox_with_its_rail_and_list(page, world):
     opened(page)
     assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX")

@@ -171,16 +171,7 @@ def test_each_hub_draws_its_own_run():
     assert sse.publish("outbox", {}).startswith(sse.HUB.run + "-")
 
 
-def test_the_page_listens_for_every_topic_for_resync_and_hello_and_nothing_else():
-    import os
-    import re
-    path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "web", "assets", "legacy", "app.js")
-    with open(path, encoding="utf-8") as f:
-        heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', f.read()))
-    assert heard == sse.TOPICS | {RESYNC, sse.HELLO}
-
-
-def test_the_react_app_listens_for_every_topic_for_resync_and_hello_and_nothing_else():
+def test_the_app_listens_for_every_topic_for_resync_and_hello_and_nothing_else():
     import os
     import re
     path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "web", "src", "app", "realtime.ts")

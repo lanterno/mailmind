@@ -8,11 +8,7 @@ Everything runs against the fake Claude API (tests/fakes/anthropic_api.py) and t
 world. The draft-ahead rounds run in the test's own thread, the frozen clock moved on before each
 as the background wait between them would (see run_tick).
 """
-import json
 import os
-import re
-import shutil
-import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -402,24 +398,16 @@ def test_hwf_the_tick_drafts_by_the_same_bar(app, world, ai, monkeypatch, presen
     assert got == [want for _, want in KICK_BAR]
 
 
-def test_hwf_the_client_kick_bar_is_what_the_server_says(app, world, tmp_path):
-    # The page has no copy of the rule. It reads `reply_worthy` off the row the server listed, and
+def test_hwf_the_client_kick_bar_is_what_the_server_says(app, world):
+    # The app has no copy of the rule. It reads `reply_worthy` off the row the server listed, and
     # that is the bar the kick route holds to, tested above.
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("node is not installed")
-    with open(os.path.join(os.path.dirname(__file__), "..", "..", "web", "assets", "legacy", "app.js"), encoding="utf-8") as f:
-        fn = re.search(r"function _draftEligibleClient\(it\)\{[^{}]*\}", f.read()).group(0)
     pk = world.pk(QUILT)
-    items = []
+    said = []
     for (importance, category, action), _ in KICK_BAR:
         summarize_as(pk, importance, category, action)
         [row] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"] if i["pk"] == pk]
-        items.append(row)
-    out = subprocess.run([node, "-e", fn + f"\nconsole.log(JSON.stringify({json.dumps(items)}"
-                                           ".map(it => !!_draftEligibleClient(it))));"],
-                         capture_output=True, text=True, timeout=20, cwd=tmp_path)
-    assert json.loads(out.stdout) == [want for _, want in KICK_BAR], out.stderr
+        said.append(row["reply_worthy"])
+    assert said == [want for _, want in KICK_BAR]
 
 
 def test_hwf_a_warm_pre_draft_answers_the_draft_button_for_free(app, world, ai):
