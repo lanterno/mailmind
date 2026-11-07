@@ -241,3 +241,12 @@ def test_a_saved_view_doesnt_offer_to_be_saved_again(page, world):
     page.keyboard.press("Enter")
     expect(page.locator("#clientCtx .ctx-save")).to_be_visible()
     clean(page)
+
+
+def test_a_click_anywhere_on_a_flooding_sender_opens_its_cleanup(page, world):
+    for i in range(2):
+        world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{300 + i}@loom.example.test>", Subject=f"Issue {300 + i}"))
+    d = curate_drawer(page)
+    d.locator(".flood-row .flood-nm").first.click()
+    expect(page.get_by_role("dialog", name="Clean up a sender")).to_be_visible()
+    clean(page)
