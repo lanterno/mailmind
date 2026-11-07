@@ -320,12 +320,16 @@ def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
 def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
-    real = store.reconcile
+    real = store.get_uidvalidity
+    landed = []
 
-    def sync_lands_first(c, account, folder, live, when, **kw):
-        world.deliver(w.ADA, "INBOX", late())       # the 300 s sync passes no IMAP gate
-        return real(c, account, folder, live, when, **kw)
+    def sync_lands_after_the_search(c, account, folder):     # what reconcile asks next, before its write lock
+        if not landed:
+            landed.append(True)
+            world.deliver(w.ADA, "INBOX", late())   # the 300 s sync passes no IMAP gate
+        return real(c, account, folder)
 
-    monkeypatch.setattr(store, "reconcile", sync_lands_first)
+    monkeypatch.setattr(store, "get_uidvalidity", sync_lands_after_the_search)
     ingest.reconcile_account(acct())
+    assert landed
     assert NEW in [m for _, m in inbox()]
