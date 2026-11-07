@@ -36,9 +36,10 @@ class AccountHealth:
 
 def error_kind(e: BaseException) -> ErrorKind:
     """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
-    never its message (which can carry credentials/host strings)."""
-    n = type(e).__name__.lower()
-    if n == "tlspinmismatch":
+    never its message (which can carry credentials/host strings). The type's bases count, and its
+    full name, since imaplib calls its own `IMAP4.error` and `IMAP4.abort` (a lost connection)."""
+    n = " ".join(c.__qualname__ for c in type(e).__mro__).lower()
+    if "tlspinmismatch" in n:
         return "TLS_PIN"
     if "timeout" in n:
         return "TIMEOUT"
@@ -46,7 +47,7 @@ def error_kind(e: BaseException) -> ErrorKind:
         return "AUTH"
     if "uidvalidity" in n:
         return "UIDVALIDITY"
-    if any(w in n for w in ("gaierror", "connection", "socket", "ssl", "dns", "resolve")):
+    if any(w in n for w in ("gaierror", "connection", "socket", "ssl", "dns", "resolve", "abort")):
         return "NETWORK"
     if "imap" in n:
         return "IMAP"
