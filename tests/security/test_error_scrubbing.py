@@ -107,8 +107,11 @@ REPEAT_A_SERVER = {("POST", "/api/reconcile"), ("POST", "/api/sweep")}
 
 
 @pytest.mark.parametrize("refuses", ["login", "every mailbox command", "only a move"])
-def test_what_an_imap_server_says_stays_out_of_every_answer(app, world, refuses):
-    """The account's password goes on the wire at each login, so nothing of it may come back either."""
+def test_what_an_imap_server_says_stays_out_of_every_answer(app, world, refuses, monkeypatch):
+    """The account's password goes on the wire at each login, so nothing of it may come back either. A refused login is
+    held back, which would leave all routes but the first with nothing a server said to hold, so here it isn't."""
+    from mailmind.bootstrap import accounts
+    monkeypatch.setattr(accounts.logins, "held", lambda acct: False)
     pk = world.pk(SEEN)
     commands = {"login": ("LOGIN",), "every mailbox command": MAILBOX_COMMANDS, "only a move": ("UID MOVE", "UID COPY")}[refuses]
     for command in commands:

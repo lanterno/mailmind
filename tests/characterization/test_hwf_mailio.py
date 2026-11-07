@@ -18,6 +18,7 @@ import pytest
 
 import gate
 from fixtures import world as w
+from mailmind.accounts.domain import login_hold
 from mailmind.bootstrap import curation
 from mailmind.compose.domain import outbox_item
 from mailmind.bootstrap.compose import book
@@ -510,6 +511,7 @@ def test_hwf_a_refused_login_queues_the_move_instead_of_dropping_it(app, world):
     r = app.post("/api/archive", {"pk": world.pk(RECEIPT), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [])
+    app.clock.shift(timedelta(seconds=login_hold.FIRST + 1))     # it isn't sent again before then
     commands.drain()                                             # the login works again
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
 

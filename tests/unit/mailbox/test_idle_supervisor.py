@@ -155,6 +155,45 @@ def test_a_worker_backing_off_stops_at_once_when_its_account_goes(world, supervi
     assert not worker.is_alive() and time.monotonic() - began < 2     # its backoff is 5 seconds
 
 
+@pytest.fixture
+def refused_logins_held(monkeypatch, supervisor):
+    """As wiring.wire does, with a worker that rests for moments rather than seconds, so it has every chance to try again."""
+    from mailmind.accounts.domain import events
+    from mailmind.bootstrap import accounts
+    from mailmind.platform import bus
+    monkeypatch.setattr(supervisor, "FIRST_REST", 0.01)
+    monkeypatch.setattr(supervisor, "LONGEST_REST", 0.02)
+    ends = [bus.subscribe(events.CredentialsRejected, accounts.logins.rejected),
+            bus.subscribe(events.AccountChanged, accounts.logins.changed)]
+    yield
+    for end in ends:
+        end()
+    accounts.logins.forget(w.ADA)
+
+
+REFUSED = "NO [AUTHENTICATIONFAILED] invalid credentials"
+
+
+def test_a_refused_login_stops_a_worker_sending_it(world, supervisor, refused_logins_held):
+    world.server.fail("LOGIN", REFUSED, user=w.ADA, times=None)
+    supervisor.start()
+    assert wait_until(lambda: count(world, "LOGIN") == 1)
+    assert idling(world, w.BEA) and idling(world, w.CY)         # the others are no worse off
+    time.sleep(0.3)                                             # a dozen rests or more
+    assert count(world, "LOGIN") == 1
+    assert w.ADA in supervisor.watching()                       # it is still there for when the hold ends
+
+
+def test_a_worker_for_a_refused_login_starts_afresh_on_a_new_password(world, supervisor, refused_logins_held):
+    from mailmind.bootstrap.accounts import config
+    world.server.accounts[w.ADA].password = "the-new-password"
+    supervisor.start()
+    assert wait_until(lambda: count(world, "LOGIN") == 1)
+    config.update_account(w.ADA, {"credential": {"style": "plain", "value": "the-new-password"}})
+    assert idling(world, w.ADA)
+    assert count(world, "LOGIN") == 2
+
+
 def test_a_server_without_idle_ends_its_worker_and_is_logged_out_of(world, supervisor):
     world.server.without = {"IDLE"}
     logouts = count(world, "LOGOUT")

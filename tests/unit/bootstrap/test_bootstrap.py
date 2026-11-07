@@ -45,9 +45,21 @@ def test_an_account_added_changed_or_removed_brings_idle_in_line(unwired):
     topics = (events.AccountAdded, events.AccountChanged, events.AccountRemoved)
     wiring.wire()
     wiring.wire()
-    assert [BUS.subscribers(t) for t in topics] == [(realtime.reconcile,)] * 3
+    assert [BUS.subscribers(t)[-1:] for t in topics] == [(realtime.reconcile,)] * 3
     wiring.unwire()
     assert [BUS.subscribers(t) for t in topics] == [()] * 3
+
+
+def test_a_refused_login_is_held_back_until_the_account_changes(unwired):
+    from mailmind.bootstrap.accounts import logins
+    from mailmind.accounts.domain import events
+    from mailmind.platform.bus import BUS
+    wiring.wire()
+    wiring.wire()
+    assert BUS.subscribers(events.CredentialsRejected) == (logins.rejected,)
+    assert BUS.subscribers(events.AccountChanged)[0] == BUS.subscribers(events.AccountRemoved)[0] == logins.changed    # ahead of IDLE
+    wiring.unwire()
+    assert BUS.subscribers(events.CredentialsRejected) == ()
 
 
 def test_an_idle_change_syncs_those_accounts(unwired, monkeypatch):

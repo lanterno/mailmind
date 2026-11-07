@@ -479,8 +479,25 @@ def test_a_dropped_connection_raises_abort_or_oserror(world, session):
 def test_a_refused_login_is_unreachable(world, kind):
     from mailmind.bootstrap import accounts
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
-    with pytest.raises(accounts.LoginUnreachable):
+    with pytest.raises(accounts.LoginUnreachable) as no:
         open_session()
+    assert no.value.refused is True
+
+
+def test_a_server_down_for_now_is_unreachable_and_refuses_nothing(world, kind):
+    from mailmind.bootstrap import accounts
+    world.server.fail("LOGIN", "NO [UNAVAILABLE] try later", user=w.ADA)
+    with pytest.raises(accounts.LoginUnreachable) as no:
+        open_session()
+    assert no.value.refused is False
+
+
+def test_a_connection_lost_during_login_is_unreachable_and_refuses_nothing(world, kind):
+    from mailmind.bootstrap.mailbox import commands
+    world.server.drop("LOGIN", user=w.ADA)
+    with pytest.raises(commands.UNREACHABLE) as no:
+        open_session()
+    assert getattr(no.value, "refused", False) is False
 
 
 def test_a_changed_certificate_is_refused_before_login(world, kind):
