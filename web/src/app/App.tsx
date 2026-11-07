@@ -22,6 +22,7 @@ import { Curate } from "../features/curation/Curate";
 import { Docs } from "../features/discovery/Docs";
 import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
+import { settingsOpen } from "../features/settings";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
 import { badAccounts } from "../features/status/model";
@@ -118,6 +119,11 @@ function useKeys(m: Mailbox, commands: Command[]) {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const at = e.target as Element | null;
+      if (settingsOpen.get() && (e.key === "," || e.key === "g") && !at?.closest?.("input,textarea,select")) {
+        e.preventDefault();
+        settingsOpen.set(false);
+        return;
+      }
       if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="alertdialog"]')) return;
       if (at?.closest?.('[role="separator"]') && e.key.startsWith("Arrow")) return;
       if (stored("mm_nokeys") === "1" && e.key !== "Escape" && e.key !== "?") return;

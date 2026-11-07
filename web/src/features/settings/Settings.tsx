@@ -1,6 +1,6 @@
 // Email connections: who MailMind reads, and how it reaches each. A password goes to the server once and never comes back;
 // what the page shows of a stored one is only how it is kept.
-import { useEffect, useState } from "react";
+import { useEffect, useState, useEffectEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
@@ -212,6 +212,16 @@ function ConnectionRow({ r, h, status, edit, again }: { r: Connection; h: Health
   const qc = useQueryClient();
   const [tested, setTested] = useState<Tested>(null);
   const [arming, setArming] = useState(false);
+  useEffect(() => {
+    if (!arming) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();   // out of asking, and no further
+      setArming(false);
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [arming]);
   const label = r.alias || shortAddress(r.email);
   useEffect(() => {
     if (!arming) return;
@@ -276,6 +286,21 @@ function Connections() {
   const health = useQuery({ queryKey: ["accountHealth"], queryFn: () => get("/api/account-health"), staleTime: 0, gcTime: 0 });
   const { data: digest } = useDigest();
   const [editing, setEditing] = useState<string | "new" | null>(null);
+  // Esc steps back one thing at a time: out of a field, out of the form, and only then out of Settings.
+  const stepBack = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    const at = e.target as HTMLElement;
+    if (at.closest?.("input,textarea,select")) at.blur();
+    else if (editing !== null) setEditing(null);
+    else return;
+    e.stopPropagation();
+    e.preventDefault();
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => stepBack(e);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, []);
   const rows = accounts.data?.accounts ?? [];
   const again = () => {
     void qc.invalidateQueries({ queryKey: ["accounts"] });
