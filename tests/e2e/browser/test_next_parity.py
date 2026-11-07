@@ -420,3 +420,16 @@ def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invi
     page.pw.evaluate("notes.find((x) => x.tag.startsWith('mailmind-soon-')).onclick()")
     expect(row(page, world, RECEIPT)).to_have_class(re.compile(r"\bsel\b"))
     clean(page)
+
+
+def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
+    opened(page)
+    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
+    page.wait_for_timeout(200)
+    expect(page.locator("#toast")).not_to_have_text("1 snoozed message back")    # it's on the list you're looking at
+    page.locator("#search").fill("from:lin")
+    page.keyboard.press("Enter")
+    expect(page.locator("#clientCtx")).to_be_visible()
+    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 2})
+    expect(page.locator("#toast")).to_have_text("2 snoozed messages back")
+    clean(page)
