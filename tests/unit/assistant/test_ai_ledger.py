@@ -200,7 +200,7 @@ def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
     assert app.post("/api/ai/summarize", {"pk": lunch}).status == 200
     assert app.post("/api/briefing", {}).status == 200
     assert app.post("/api/briefing/since", {"since": 0}).status == 200
-    assert app.post("/api/review", {"account": w.ADA}).status == 200
+    assert app.post("/api/review", {}).status == 200
     assert app.post("/api/ai/draft-reply", {"pk": lunch, "tone": "warm"}).status == 200
     app.clock.shift(timedelta(seconds=46))         # drafting ahead yields to the calls just made
     assert app.get(f"/api/ai/draft-ahead?pk={lunch}").json["status"] == "generating"

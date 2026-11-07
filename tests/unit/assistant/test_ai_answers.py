@@ -61,20 +61,20 @@ def message_ids(pks):
 
 def brief_of(ai, app, pks):
     ai.queue(fa.answer({"narrative": NARRATIVE, "groups": [{"label": "Lunch", "count": len(pks), "pks": pks}]}))
-    return app.post("/api/briefing", {"account": w.ADA}).json
+    return app.post("/api/briefing", {}).json
 
 
 def brief_now(app):
-    return app.get(f"/api/briefing?account={w.ADA}").json
+    return app.get("/api/briefing").json
 
 
 def review_of(ai, app):
     ai.queue(fa.answer({"narrative": WEEK, "next": ["Answer Lin"]}))
-    return app.post("/api/review", {"account": w.ADA}).json
+    return app.post("/api/review", {}).json
 
 
 def review_now(app):
-    return app.get(f"/api/review?account={w.ADA}").json
+    return app.get("/api/review").json
 
 
 def waiting_on(thread_id):
@@ -98,7 +98,7 @@ def test_a_stored_brief_says_which_messages_it_holds_by_key(app, world, ai):
     summarize_as(anchor["pk"])
     brief_of(ai, app, [anchor["pk"]])
     [row] = q("SELECT * FROM briefs")
-    assert (row["accounts"], row["narrative"]) == (w.ADA, NARRATIVE)
+    assert (row["accounts"], row["narrative"]) == (",".join((w.ADA, w.BEA, w.CY)), NARRATIVE)
     assert json.loads(row["groups_json"]) == [{"label": "Lunch", "messages": [[anchor["message_key"], "INBOX"]]}]
 
 
@@ -242,8 +242,8 @@ def test_each_table_keeps_a_week(app, world, ai):
     old = "2026-01-01T00:00:00+00:00"
     for table in ("briefs", "deltas", "reviews"):
         execute(f"UPDATE {table} SET created_at=?, {'day' if table != 'deltas' else 'since_ts'}=?", old, 1)
-    app.post("/api/briefing/refresh", {"account": w.ADA})
-    app.post("/api/review/refresh", {"account": w.ADA})
+    app.post("/api/briefing/refresh", {})
+    app.post("/api/review/refresh", {})
     world.deliver(w.ADA, "INBOX", new_mail(1))
     delta(app, ai, "Two new.")
     for table in ("briefs", "deltas", "reviews"):

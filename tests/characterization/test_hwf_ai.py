@@ -709,8 +709,9 @@ def test_the_review_counts_only_this_accounts_cleanups(app, world, ai):
         c.commit()
     finally:
         c.close()
-    assert app.post("/api/review", {"account": w.ADA}).json["stats"]["cleaned"] == 1
-    assert app.post("/api/review", {"account": w.BEA}).json["stats"]["cleaned"] == 0    # Loom only ever wrote to Ada
+    from mailmind.bootstrap.assistant import reviews
+    assert reviews.build({w.ADA})["stats"]["cleaned"] == 1
+    assert reviews.build({w.BEA})["stats"]["cleaned"] == 0    # Loom only ever wrote to Ada
 
 
 def test_an_ai_spending_get_the_page_didnt_make_spends_nothing(app, world, ai):

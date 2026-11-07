@@ -135,10 +135,6 @@ def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, 
     golden.note("calls for the repeats", len(ai.requests))
     golden.record(f"POST {route}/refresh", app.post(f"{route}/refresh", {}))
     golden.note("calls for the refresh", len(ai.requests))
-    ai.requests.clear()
-    golden.record(f"GET {route} for Bea", app.get(f"{route}?account={w.BEA}"))
-    golden.record(f"POST {route} for Bea", app.post(route, {"account": w.BEA}))
-    sent(golden, ai, "sent for Bea")
 
 
 def test_since_you_last_looked(app, golden, world, ai):

@@ -115,7 +115,7 @@ def test_a_reply_naming_what_cant_be_its_original(app, junk):
 
 
 @pytest.mark.parametrize("path, field", [("/api/ai/ask", "account"), ("/api/ai/draft-reply", "account"), ("/api/ai/summarize", "account"),
-                                         ("/api/briefing", "account"), ("/api/review", "account"), ("/api/draft", "account"),
+                                         ("/api/briefing/since", "account"), ("/api/draft", "account"),
                                          ("/api/send", "account"), ("/api/reconcile", "account"), ("/api/sweep", "account"),
                                          ("/api/snooze", "account"), ("/api/unsnooze", "account"), ("/api/sync-retry", "account"),
                                          ("/api/accounts/add", "email"), ("/api/accounts/edit", "email"),

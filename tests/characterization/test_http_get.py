@@ -241,10 +241,10 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
     ("/api/ai/ask", {"question": "When is lunch with Lin?"}),
     ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
     ("/api/briefing/refresh", {}),
-    ("/api/review/refresh", {"account": "ada@example.test"}),
+    ("/api/review/refresh", {}),
     ("/api/briefing", {}),
     ("/api/briefing/since", {"since": 0}),
-    ("/api/review", {"account": "ada@example.test"})])
+    ("/api/review", {})])
 def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api, capfd, path, body):
     from mailmind.bootstrap.mailbox import store
     lunch = world.pk(LUNCH)
