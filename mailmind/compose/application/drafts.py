@@ -133,9 +133,7 @@ class Drafts:
         base = body.get("base_version")
         now, stamp = _now(), now_iso()
         bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
-        c = self._book.connect()
-        try:
-            c.execute("BEGIN IMMEDIATE")
+        with self._book.transaction() as c:
             prev = self._book.draft_get(c, did) if did else (self._book.draft_by_key(c, key) if key else None)
             waiting = self._book.journal_get(c, prev["id"]) if prev else None
             if waiting is not None and waiting["discard"]:   # as good as gone: this save is a draft of its own
@@ -165,17 +163,12 @@ class Drafts:
                                    hashlib.sha256(built["raw"]).hexdigest(), lf(spec["own"]),
                                    lf(spec["tail"]["text"]) if spec["tail"]["text"] else None, spec["tail"]["html"],
                                    json.dumps(bcc) if bcc else None, now, due, attempts)
-            c.commit()
             return new_id, version, None
-        finally:
-            c.close()
 
     def _discard(self, did: int) -> Answer:
         """Discard a draft. A copy on the server goes first and the row after it, so a server that's away
         leaves the journal asking until it's back; with no copy there's nothing to wait for."""
-        c = self._book.connect()
-        try:
-            c.execute("BEGIN IMMEDIATE")
+        with self._book.transaction() as c:
             row = self._book.draft_get(c, did)
             if row is None:
                 return {"ok": True, "deleted": True}, 200
@@ -188,9 +181,6 @@ class Drafts:
             else:
                 self._book.draft_delete(c, did)
                 there = False
-            c.commit()
-        finally:
-            c.close()
         if there and profile.writes_allowed():
             self._try_push(did, priority=gates.Priority.INTERACTIVE, deadline=PUSH_WAIT)
         self._screen.outbox_changed()
