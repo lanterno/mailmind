@@ -6,7 +6,7 @@ import json
 import pytest
 
 from mailmind.compose.domain import draft_journal as journal
-from mailmind.compose.domain.draft_journal import BACKOFF_MOST, PUSH_EVERY, PUSH_TICK, WAITING_AFTER
+from mailmind.compose.domain.draft_journal import BACKOFF_FIRST, BACKOFF_MOST, PUSH_EVERY, PUSH_TICK, WAITING_AFTER
 
 
 def spec(**kw):
@@ -47,9 +47,8 @@ def test_any_other_save_goes_now_and_afresh():
 
 
 def test_a_push_that_fails_goes_again_later_and_later_up_to_a_limit():
-    waits = [journal.due_after_failing(1000, n) - 1000 for n in range(1, 12)]
-    assert waits == sorted(waits) and waits[0] < waits[1]
-    assert waits[-1] == BACKOFF_MOST
+    waits = [journal.due_after_failing(1000, n) - 1000 for n in range(1, 8)]
+    assert waits == [BACKOFF_FIRST, 40, 80, 160, 320, 640, BACKOFF_MOST]
 
 
 def test_the_wait_stays_at_the_limit_however_many_tries_it_has_had():
