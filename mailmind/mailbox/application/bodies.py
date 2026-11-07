@@ -99,8 +99,7 @@ class Bodies:
         gates.run(row["account"], lambda: self._ingest.fetch_body(pk),   # ensure body + attachment metadata exist
                   priority=gates.Priority.INTERACTIVE)
         c = self._store.conn()
-        att = c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
-                        (pk, part_id)).fetchone()
+        att = self._store.attachment_of(c, pk, part_id)
         raw = self._store.get_body(c, pk)
         c.close()
         if not att or not raw:

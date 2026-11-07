@@ -349,6 +349,12 @@ def get_body(c, pk):
     return r["raw"] if r else None
 
 
+def attachment_of(c, pk, part_id):
+    """What's kept of one part of a message: its filename and content type."""
+    return c.execute("SELECT filename,content_type FROM attachments WHERE message_pk=? AND part_id=?",
+                     (pk, part_id)).fetchone()
+
+
 def has_attachments(c, pk):
     return c.execute("SELECT 1 FROM attachments WHERE message_pk=?", (pk,)).fetchone() is not None
 
