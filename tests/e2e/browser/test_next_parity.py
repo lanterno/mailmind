@@ -726,3 +726,48 @@ def test_a_saved_view_can_be_removed_from_the_keyboard(page):
     page.keyboard.press("Enter")
     expect(saved).to_have_count(0)
     clean(page)
+
+
+# -- Esc backs out one step, which the owner chose over the page's on 2026-11-07 --------------------
+
+def test_escape_closes_a_message_before_it_leaves_the_search_it_was_opened_from(page, world):
+    opened(page)
+    box = page.get_by_role("textbox", name="Search")
+    box.fill("lunch")
+    box.press("Enter")
+    expect(page.pw).to_have_url(re.compile("search"))
+    page.get_by_role("option").first.click()
+    expect(page.locator("#bodyframe, iframe").first).to_be_visible()
+    box.blur()
+    page.keyboard.press("Escape")                               # the message, and the search stays
+    expect(page.locator("#bodyframe, iframe")).to_have_count(0)
+    expect(page.pw).to_have_url(re.compile("search"))
+    expect(page.get_by_role("option").first).to_be_visible()
+    page.keyboard.press("Escape")                               # then the search
+    expect(page.pw).not_to_have_url(re.compile("search"))
+    clean(page)
+
+
+def test_escape_closes_a_message_on_a_desktop(page, world):
+    opened(page)
+    expect(page.locator("#bodyframe, iframe")).to_have_count(0)
+    page.get_by_role("option").first.click()
+    expect(page.locator("#bodyframe, iframe").first).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#bodyframe, iframe")).to_have_count(0)
+    expect(page.get_by_role("option").first).to_be_visible()
+    clean(page)
+
+
+def test_escape_in_the_search_box_clears_the_search_and_goes_home(page, world):
+    opened(page)
+    box = page.get_by_role("textbox", name="Search")
+    box.fill("lunch")
+    box.press("Enter")
+    expect(page.pw).to_have_url(re.compile("search"))
+    box.focus()
+    box.press("Escape")
+    expect(page.pw).not_to_have_url(re.compile("search"))
+    expect(box).to_have_value("")
+    expect(page.get_by_role("option").first).to_be_visible()
+    clean(page)
