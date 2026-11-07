@@ -75,10 +75,10 @@ export function useMessages(source: ListSource | null, grouped: boolean, account
 
 export type ListData = InfiniteData<ListPage, number>;
 
-export const useBody = (pk: number | null, images: boolean) =>
+export const useBody = (pk: number | null) =>
   useQuery({
-    queryKey: ["body", pk, images],
-    queryFn: () => get(`/api/message/${pk!}/body${images ? "?images=1" : ""}`),
+    queryKey: ["body", pk],
+    queryFn: () => get(`/api/message/${pk!}/body`),
     enabled: pk !== null,
     staleTime: 60_000,
     refetchOnWindowFocus: false,

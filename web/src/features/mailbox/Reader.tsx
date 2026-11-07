@@ -152,8 +152,7 @@ function UpNext({ m, canArchive }: { m: Mailbox; canArchive: boolean }) {
   );
 }
 
-function ExternalBar({ d }: { d: Body }) {
-  const blocked = (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
+function ExternalBar({ d, blocked }: { d: Body; blocked: number }) {
   const domain = (d.from_addr ?? "").split("@")[1]?.toLowerCase();
   return (
     <div className="rd-extbar">
@@ -197,17 +196,17 @@ function Attachments({ d }: { d: Body }) {
   );
 }
 
-// What stands around a body in either view, then the body. Asking for images fetches it again with them.
+// What stands around a body in either view, then the body. Asking for images loads its frame again with them, and nothing else.
 function MailContent({ pk, minHeight, pad }: { pk: number; minHeight: number; pad: number }) {
   const [images, setImages] = useState(false);
-  const { data: d, isError } = useBody(pk, images);
+  const { data: d, isError } = useBody(pk);
   if (isError) return <div className="nores">Couldn’t load.</div>;
   if (!d) return <div className="nores" role="status">Loading…</div>;
   if (!d.ok) return <div className="nores">{d.error ?? "error"}</div>;
-  const blocked = (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
+  const blocked = images ? 0 : (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
   return (
     <>
-      <ExternalBar d={d} />
+      <ExternalBar d={d} blocked={blocked} />
       <Invite d={d} />
       {blocked > 0 && (
         <div className="rd-imgbar">
@@ -216,13 +215,13 @@ function MailContent({ pk, minHeight, pad }: { pk: number; minHeight: number; pa
         </div>
       )}
       <Attachments d={d} />
-      <MailFrame body={d as MailBody} minHeight={minHeight} pad={pad} />
+      <MailFrame body={d as MailBody} images={images} minHeight={minHeight} pad={pad} />
     </>
   );
 }
 
 function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
-  const { data: d } = useBody(pk, false);
+  const { data: d } = useBody(pk);
   const row = m.openRow;
   useEffect(() => {
     if (row?.seen === false) armDwell(m.qc, pk);
