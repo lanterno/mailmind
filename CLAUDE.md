@@ -306,8 +306,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   drafting ahead (`assistant.drafting.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
   library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
-  checks an upgrade on a copy (see Schema migrations). It is standard library only, since
-  `python3 server.py` uses it.
+  checks an upgrade on a copy (see Schema migrations), and holds `uow.UnitOfWork`, how a use case gets a connection. It is
+  standard library only, since `python3 server.py` uses it.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
@@ -401,8 +401,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `move_verified` is `mailbox.application.bulk_moves`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
-  `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
-  `application` holds `ports.py` and the use cases
+  `snoozes`, `muted` and `followups`. `application` holds `ports.py` and the use cases
   `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
   `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention (`attention.muting.mute(body)`,
   `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
@@ -459,6 +458,15 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   all it sends (`SmtpTransport.connect`), a Claude API request and a one-click unsubscribe check
   it, in tests and in use. Commit before talking to a server; a new network path calls
   `refuse_network` first, or wraps the connection's method with `txguard.guard_calls`.
+- A use case never runs a connection by hand (`tests/unit/test_architecture.py` holds it to that). It gets a
+  `UnitOfWork` as its first argument and says what each step is, one connection a block: `with self._uow.read() as c:`, or
+  `with self._uow.write() as c:`, which takes `BEGIN IMMEDIATE` up front, commits as the block ends and rolls back if it
+  raises. The order is read and let go, then the network, then a short write. A loop that commits midway is a block for each
+  commit. A block that writes only sometimes reads first and opens a write only if there is something to do, unless what it
+  read decides what it writes, where the read belongs in the write. `read()` raises `WroteInARead` if its block left a
+  transaction open, since closing would lose it. `write()` raises `NestedWrite` inside a transaction on the same thread,
+  which would otherwise wait out `busy_timeout` on itself. Hand-run connections remain outside use cases: `store.conn()`
+  for the command line, the bootstrap and the tests, `Undo`, and `DurableQueue`, which takes `uow.connect`.
 - `migrations.MIGRATIONS` is a list of `(target_user_version, callable)` run against
   `PRAGMA user_version`. Migrations 1 to 20 are frozen in `migrations/m0001_m0020.py`, beside
   `BASE_SCHEMA`, `LEGACY_COLS` (pre-versioning column adds) and copies of the code they call
