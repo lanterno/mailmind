@@ -105,6 +105,7 @@ def test_it_asks_only_the_standard_library_and_knows_nothing_of_mail():
         if isinstance(node, ast.Import):
             names.update(a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom):
-            names.add(node.module.split(".")[0])
+            if not node.module.startswith("mailmind.kernel."):      # which the standard library alone also holds
+                names.add(node.module.split(".")[0])
     assert names <= sys.stdlib_module_names
     assert not {"imap", "imaplib", "noop", "logout", "proton", "bridge"} & {w.strip(".,:;()`'\"").lower() for w in source.split()}

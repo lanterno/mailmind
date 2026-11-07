@@ -15,6 +15,7 @@ import pytest
 from hypothesis import HealthCheck, settings as hsettings, strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule, run_state_machine_as_test
 
+from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
 
@@ -185,13 +186,13 @@ class Machine(RuleBasedStateMachine):
     @precondition(lambda self: self.open_rows() or self.stuck_rows())
     def discard(self, which):
         rows = self.open_rows() + self.stuck_rows()
-        mailbox.filing.do_pending_discard(rows[which % len(rows)]["id"])
+        answered(mailbox.filing.do_pending_discard, rows[which % len(rows)]["id"])
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.stuck_rows())
     def retry(self, which):
         rows = self.stuck_rows()
-        mailbox.filing.do_pending_retry(rows[which % len(rows)]["id"])
+        answered(mailbox.filing.do_pending_retry, rows[which % len(rows)]["id"])
 
     # ── what the server and the process do ─────────────────────────────
 
