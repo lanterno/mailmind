@@ -83,27 +83,13 @@ def test_the_assistants_ports_only_read():
         assert declared == methods, name
 
 
-def test_the_assistants_and_composes_use_cases_hold_no_sql():
-    """What they ask of a table goes through a port, to an adapter: no statement, no connection run by hand, no sqlite3."""
+def test_no_use_case_holds_sql():
+    """What one asks of a table goes through a port, to an adapter: no statement, no connection run by hand, no sqlite3.
+    A docstring doesn't count: a Mailbox's may well speak of IMAP's SELECT."""
     runs = re.compile(r"\.execute(many|script)?\(")
     statement = re.compile(r"\b(SELECT|INSERT INTO|DELETE FROM|BEGIN IMMEDIATE)\b|\bUPDATE \w+ SET\b")
     found = set()
-    for context in ("assistant", "compose"):
-        for path in sorted((PACKAGE / context / "application").glob("*.py")):
-            text = path.read_text(encoding="utf-8")
-            literals = (n.value for n in ast.walk(ast.parse(text)) if isinstance(n, ast.Constant) and isinstance(n.value, str))
-            if runs.search(text) or "sqlite3" in set(imports(path)) or any(statement.search(s) for s in literals):
-                found.add(rel(path))
-    assert found == set()
-
-
-def test_the_mailboxs_use_cases_hold_no_sql():
-    """What they ask of a table goes through StoredMail, to the adapter. It asks what the test above asks, so the two can
-    become one, but reads no docstring: a Mailbox's may well speak of IMAP's SELECT."""
-    runs = re.compile(r"\.execute(many|script)?\(")
-    statement = re.compile(r"\b(SELECT|INSERT INTO|DELETE FROM|BEGIN IMMEDIATE)\b|\bUPDATE \w+ SET\b")
-    found = set()
-    for path in sorted((PACKAGE / "mailbox" / "application").glob("*.py")):
+    for path in sorted(PACKAGE.glob("*/application/*.py")):
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text)
         prose = {ast.get_docstring(n, clean=False) for n in ast.walk(tree)
