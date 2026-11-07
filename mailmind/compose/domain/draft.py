@@ -97,7 +97,7 @@ def handed_over(spec: Composed) -> HandedOver:
 
 
 def tracked(account: str, message_id: str | None, subject: str | None, mode: str, at: str, *, folder: str | None = None,
-            uid: int | None = None, uidvalidity: int | None = None, in_reply_to_pk: int | None = None) -> dict[str, Any]:
+            uid: int | None = None, uidvalidity: int | None = None) -> dict[str, Any]:
     """A new `drafts` row. Saved here first it has no copy yet: only another app's draft, found on the server, says where."""
     return {"id": None, "account": account, "folder": folder, "uid": uid, "message_id": message_id, "uidvalidity": uidvalidity,
-            "in_reply_to_pk": in_reply_to_pk, "mode": mode, "subject": subject, "created_at": at, "updated_at": at}
+            "mode": mode, "subject": subject, "created_at": at, "updated_at": at}

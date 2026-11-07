@@ -165,8 +165,7 @@ class Outbox:
                 tid = outbox_item.thread_of_reply(row, orig)
                 if tid:
                     with self._uow.write() as c:
-                        self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else None,
-                                                    _now(), datetime.now(timezone.utc).isoformat())
+                        self._effects.followup_sent(c, row["account"], tid, _now(), datetime.now(timezone.utc).isoformat())
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
                 log.warning("followup record failed for #%(id)s", {"id": oid}, exc_info=e)

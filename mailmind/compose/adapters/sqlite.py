@@ -19,10 +19,10 @@ def outbox_insert(c, row):
         return existing["id"], False
     try:
         cur = c.execute(
-            """INSERT INTO outbox(account,idempotency_key,message_id,in_reply_to_pk,
+            """INSERT INTO outbox(account,idempotency_key,message_id,
                  orig_account,orig_message_id,orig_thread_id,original_key,
                  envelope,recipients,subject,raw,state,next_attempt_at,wait_kind,draft_id,created_at)
-               VALUES(:account,:idempotency_key,:message_id,:in_reply_to_pk,
+               VALUES(:account,:idempotency_key,:message_id,
                  :orig_account,:orig_message_id,:orig_thread_id,:original_key,
                  :envelope,:recipients,:subject,:raw,'queued',:next_attempt_at,:wait_kind,:draft_id,:created_at)
                RETURNING id""", {"orig_account": None, "orig_message_id": None, "orig_thread_id": None, "original_key": None,
@@ -95,13 +95,13 @@ def draft_upsert(c, row):
     so the copy just saved is tracked rather than left behind by every later save."""
     if row.get("id"):
         cur = c.execute("""UPDATE drafts SET account=:account, folder=:folder, uid=:uid, message_id=:message_id,
-                       uidvalidity=:uidvalidity, in_reply_to_pk=:in_reply_to_pk, mode=:mode,
+                       uidvalidity=:uidvalidity, mode=:mode,
                        subject=:subject, updated_at=:updated_at WHERE id=:id""", row)
         if cur.rowcount:
             return row["id"]
     cur = c.execute("""INSERT INTO drafts(account,folder,uid,message_id,uidvalidity,
-                         in_reply_to_pk,mode,subject,created_at,updated_at)
-                       VALUES(:account,:folder,:uid,:message_id,:uidvalidity,:in_reply_to_pk,
+                         mode,subject,created_at,updated_at)
+                       VALUES(:account,:folder,:uid,:message_id,:uidvalidity,
                          :mode,:subject,:created_at,:updated_at) RETURNING id""", row)
     return cur.fetchone()["id"]
 
@@ -137,10 +137,10 @@ def draft_delete(c, did):
     c.execute("DELETE FROM drafts WHERE id=?", (did,))
 
 
-def draft_note_save(c, did, mode, in_reply_to_pk, subject, version, saved_by, updated_at):
+def draft_note_save(c, did, mode, subject, version, saved_by, updated_at):
     """A save's facts about the composition. What says where the copy is waits for the push."""
-    c.execute("UPDATE drafts SET mode=?, in_reply_to_pk=?, subject=?, version=?, saved_by=?, updated_at=? WHERE id=?",
-              (mode, in_reply_to_pk, subject, version, saved_by, updated_at, did))
+    c.execute("UPDATE drafts SET mode=?, subject=?, version=?, saved_by=?, updated_at=? WHERE id=?",
+              (mode, subject, version, saved_by, updated_at, did))
 
 
 def draft_note_discard(c, did, version, updated_at):

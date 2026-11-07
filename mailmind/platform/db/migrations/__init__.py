@@ -12,11 +12,12 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
                                              m0032_outbox_wire_begun, m0033_snoozes, m0034_sender_unsub,
                                              m0035_message_recipients, m0036_ai_batches, m0037_ai_answers,
                                              m0038_contentless_search, m0039_mail_commands, m0040_draft_journal, m0041_outbox_wait_kind,
-                                             m0042_thread_links, m0043_assessment_record, m0044_outbox_original_key)
+                                             m0042_thread_links, m0043_assessment_record, m0044_outbox_original_key,
+                                             m0045_rollback_columns)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
-__all__ = ["BASE_SCHEMA", "BASE_UNTIL", "LEGACY_COLS", "MIGRATIONS", "REBUILT", "RETIRED", "add_column"]
+__all__ = ["BASE_SCHEMA", "BASE_UNTIL", "FILLED", "LEGACY_COLS", "MIGRATIONS", "REBUILT", "RETIRED", "add_column"]
 
 add_column = _addcol
 
@@ -46,8 +47,10 @@ MIGRATIONS = [
     (42, m0042_thread_links.migrate),
     (43, m0043_assessment_record.migrate),
     (44, m0044_outbox_original_key.migrate),
+    (45, m0045_rollback_columns.migrate),
 ]
 
 BASE_UNTIL = _FROZEN[-1][0]     # a database at this version or later has all the base schema gave it
-RETIRED = {"notes": 18, "briefing_cache": 37, "read_mutations": 39}     # a table a migration ended, and that migration's version
+RETIRED = {"notes": 18, "briefing_cache": 37, "read_mutations": 39, "summaries": 45}     # a table a migration ended, and that migration's version
 REBUILT = {"msg_fts": 38}                         # one a migration built afresh, so its count may change
+FILLED = {"assessments": 45, "snoozes": 45, "message_identity": 45}     # one a migration may add rows to, carrying over what it ends

@@ -32,7 +32,7 @@ def days_before(now: int, days: int) -> int:
 
 @dataclass(frozen=True)
 class FollowUp:
-    """One thread's row. `anchor_pk` isn't here: it's written for a rollback, and nothing goes by it."""
+    """One thread's row."""
     kind: str
     state: str
     first_sent_ts: int | None = None

@@ -110,9 +110,9 @@ class _Effects:
         from mailmind.bootstrap.mailbox import server_ops
         return server_ops.mark_answered(pk, account, message_id)
 
-    def followup_sent(self, c, account, thread_id, pk, now, at):
+    def followup_sent(self, c, account, thread_id, now, at):
         from mailmind.bootstrap import attention
-        attention.book.followup_record_sent(c, account, thread_id, pk, now, at)
+        attention.book.followup_record_sent(c, account, thread_id, now, at)
 
 
 class _Screen:

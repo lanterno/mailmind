@@ -95,7 +95,7 @@ class PreparedReplies:
                 now = int(time.time())
                 with self._uow.write() as c:
                     self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                                  res.get("model"), pk, mid, source, now)
+                                                  res.get("model"), mid, source, now)
                     self._answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
                                                                   # no orphan sweeps — a reset_folder reingest may be mid-flight
                 ok = True
@@ -271,8 +271,7 @@ class PreparedReplies:
             try:
                 with self._uow.write() as c:
                     self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                          res.get("model"), row["pk"], row["message_id"],
-                                          "demand", int(time.time()))
+                                          res.get("model"), row["message_id"], "demand", int(time.time()))
             except Exception:
                 pass                                        # banking is best-effort; the reply itself already succeeded
         return res

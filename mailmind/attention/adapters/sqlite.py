@@ -1,4 +1,4 @@
-"""Attention's tables: `snoozes`, `muted` and `followups`, and `messages.snoozed_until`, which only a rollback would read.
+"""Attention's tables: `snoozes`, `muted` and `followups`.
 Each function takes its caller's connection and leaves the commit to it."""
 from mailmind.attention.domain import followups
 from mailmind.kernel import attention
@@ -12,18 +12,9 @@ def thread_pks(c, account, thread_id):
         (account, thread_id))]
 
 
-def _write_column(c, pk, until):
-    """`messages.snoozed_until`, written for a rollback to an older commit: on the row, and on any other copy in its
-    folder, since `snoozes` hides them all. Nothing here reads it."""
-    c.execute("UPDATE messages SET snoozed_until=? WHERE pk=?", (until, pk))
-    c.execute("""UPDATE messages SET snoozed_until=? WHERE (message_key, folder) IN
-                 (SELECT message_key, folder FROM messages WHERE pk=?)""", (until, pk))
-
-
 def set_snooze(c, pk, until):
     """Hide message `pk` until `until`. It's kept under the message's key and folder, so it outlives
     the row: a copy that arrives in that folder is hidden too."""
-    _write_column(c, pk, int(until))
     c.execute("""INSERT OR REPLACE INTO snoozes(message_key, folder, until)
                  SELECT message_key, folder, ? FROM messages WHERE pk=? AND message_key IS NOT NULL""",
               (int(until), pk))
@@ -32,7 +23,6 @@ def set_snooze(c, pk, until):
 def clear_snooze(c, pk):
     c.execute("""DELETE FROM snoozes WHERE (message_key, folder) IN
                  (SELECT message_key, folder FROM messages WHERE pk=?)""", (pk,))
-    _write_column(c, pk, None)
 
 
 def due_snoozes(c, now_ts):
@@ -119,18 +109,17 @@ def _followup(c, account, thread_id):
                               r["resolved_at"]) if r else None
 
 
-def _put_followup(c, account, thread_id, f, anchor_pk):
-    c.execute("""INSERT OR REPLACE INTO followups(account,thread_id,kind,state,anchor_pk,first_sent_ts,last_msg_ts,due_ts,
-                   created_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-              (account, thread_id, f.kind, f.state, anchor_pk, f.first_sent_ts, f.last_msg_ts, f.due_ts, f.created_at,
-               f.resolved_at))
+def _put_followup(c, account, thread_id, f):
+    c.execute("""INSERT OR REPLACE INTO followups(account,thread_id,kind,state,first_sent_ts,last_msg_ts,due_ts,
+                   created_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?)""",
+              (account, thread_id, f.kind, f.state, f.first_sent_ts, f.last_msg_ts, f.due_ts, f.created_at, f.resolved_at))
 
 
-def followup_record_sent(c, account, thread_id, anchor_pk, now_ts, when):
+def followup_record_sent(c, account, thread_id, now_ts, when):
     """Seed a sent-no-reply follow-up when a reply is sent, unless domain.followups.on_reply_sent says the thread has one."""
     seed = followups.on_reply_sent(_followup(c, account, thread_id), now_ts, when)
     if seed:
-        _put_followup(c, account, thread_id, seed, anchor_pk)
+        _put_followup(c, account, thread_id, seed)
 
 
 # How each condition of domain.followups's rules reads in SQL. A statement is built from the domain's names, so a condition
@@ -166,8 +155,8 @@ _RECEIVED_NUDGE = {
     "not_muted": "NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)",
     "no_follow_up_yet": "NOT EXISTS (SELECT 1 FROM followups f WHERE f.account=m.account AND f.thread_id=m.thread_id)",
 }
-_DETECT = ("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,due_ts,created_at)
-        SELECT m.account, m.thread_id, 'received', 'due', m.pk, m.ts, :now, :when
+_DETECT = ("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,last_msg_ts,due_ts,created_at)
+        SELECT m.account, m.thread_id, 'received', 'due', m.ts, :now, :when
         FROM messages m
         WHERE """ + " AND ".join(_RECEIVED_NUDGE[name] for name in followups.RECEIVED_NUDGE))
 
@@ -208,11 +197,11 @@ def resolve_followups(c, account):
 
 
 # ----- Reply Later: a user-pinned stack of threads to answer (kind='replylater') -----
-def set_replylater(c, account, thread_id, anchor_pk, when):
+def set_replylater(c, account, thread_id, when):
     """Pin a thread to the Reply-Later stack, whatever domain.followups.pinned makes of a follow-up already on it."""
     last_ts = c.execute("SELECT MAX(ts) FROM messages WHERE account=? AND thread_id=? AND draft=0",
                         (account, thread_id)).fetchone()[0]
-    _put_followup(c, account, thread_id, followups.pinned(_followup(c, account, thread_id), last_ts, when), anchor_pk)
+    _put_followup(c, account, thread_id, followups.pinned(_followup(c, account, thread_id), last_ts, when))
 
 
 def clear_replylater(c, account, thread_id):
@@ -291,8 +280,7 @@ def _among(accounts):
 def awaited_threads(c, accounts, n):
     """Who the person is waiting on, for a review: SENT-no-reply follow-ups only (kind='sent'; you replied, no answer
     yet). kind='received' is the inverse (they're waiting on you). Subject and recipients come from the thread's LATEST
-    message on the STABLE (account,thread_id) key: anchor_pk is advisory and doesn't survive a reconcile/reset_folder
-    re-pk (would blank the row)."""
+    message on the STABLE (account,thread_id) key."""
     fac, fap = _among(accounts)
     return c.execute(
         "SELECT f.account, f.thread_id, m.pk, m.message_key, m.folder, f.first_sent_ts, m.subject, m.recipients "

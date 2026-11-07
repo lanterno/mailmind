@@ -1,4 +1,4 @@
-"""What the AI said and what it was asked: summaries and assessments, the brief, the delta and the review,
+"""What the AI said and what it was asked: assessments, the brief, the delta and the review,
 thread summaries, replies drafted ahead and message batches. Each function takes its caller's connection."""
 from datetime import datetime, timedelta, timezone
 
@@ -81,16 +81,16 @@ def draft_ahead_get(c, account, ref_key):
                      (account, ref_key)).fetchone()
 
 
-def draft_ahead_put(c, account, ref_key, fp, body, tone, model, src_pk, src_mid, source, now):
+def draft_ahead_put(c, account, ref_key, fp, body, tone, model, src_mid, source, now):
     c.execute("""INSERT INTO draft_ahead(account,ref_key,fp,body,tone,model,source,
-                   src_pk,src_message_id,created_ts,last_hit_ts,fail_ts,fail_count)
-                 VALUES(?,?,?,?,?,?,?,?,?,?,NULL,0,0)
+                   src_message_id,created_ts,last_hit_ts,fail_ts,fail_count)
+                 VALUES(?,?,?,?,?,?,?,?,?,NULL,0,0)
                  ON CONFLICT(account,ref_key) DO UPDATE SET
                    fp=excluded.fp, body=excluded.body, tone=excluded.tone, model=excluded.model,
-                   source=excluded.source, src_pk=excluded.src_pk,
+                   source=excluded.source,
                    src_message_id=excluded.src_message_id, created_ts=excluded.created_ts,
                    fail_ts=0, fail_count=0""",
-              (account, ref_key, fp, body, tone, model, source, src_pk, src_mid, now))
+              (account, ref_key, fp, body, tone, model, source, src_mid, now))
 
 
 def draft_ahead_fail(c, account, ref_key, now):
@@ -232,25 +232,12 @@ def batch_forget_finished(c, now_ts, days=30):
 
 def save_summary(c, pk, summary, importance, category, action, model, created_at, served_by=None, prompt_version=None,
                  outcome=None):
-    """What the AI said of a message, for this copy, the others and any that comes later. How it came to say it is kept
-    under the key alone, which outlives the copies."""
-    said = (summary, importance, category, action, model, created_at)
+    """What the AI said of a message, for this copy, the others and any that comes later: it is kept under the key,
+    which outlives the copies."""
     row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
-    key = row["message_key"] if row else None
-    copies = [pk] if key is None else [r["pk"] for r in
-                                       c.execute("SELECT pk FROM messages WHERE message_key=?", (key,))]
-    for copy in copies:
-        c.execute(
-            """INSERT INTO summaries (message_pk,summary,importance,category,action,model,created_at)
-               VALUES (?,?,?,?,?,?,?)
-               ON CONFLICT(message_pk) DO UPDATE SET
-                summary=excluded.summary, importance=excluded.importance,
-                category=excluded.category, action=excluded.action,
-                model=excluded.model, created_at=excluded.created_at""",
-            (copy, *said),
-        )
-    if key is not None:
-        save_assessment(c, key, *said, served_by, prompt_version, outcome)
+    if row and row["message_key"] is not None:
+        save_assessment(c, row["message_key"], summary, importance, category, action, model, created_at, served_by,
+                        prompt_version, outcome)
 
 
 def save_assessment(c, key, summary, importance, category, action, model, created_at, served_by=None, prompt_version=None,

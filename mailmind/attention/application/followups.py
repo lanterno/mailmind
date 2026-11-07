@@ -8,8 +8,6 @@ from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
 from mailmind.attention.domain.events import FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged
 from mailmind.kernel.errors import Refused
-from mailmind.kernel.ids import Pk
-from mailmind.kernel.parsed import required_int
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
@@ -58,8 +56,7 @@ class FollowUps:
                 raise Refused("bad target")
             on = body.get("on", True)
             if on:
-                anchor = Pk(required_int(body["pk"])) if body.get("pk") is not None else None
-                self._book.set_replylater(c, acct, tid, anchor, now_iso())
+                self._book.set_replylater(c, acct, tid, now_iso())
             else:
                 self._book.clear_replylater(c, acct, tid)
         bus.publish(ReplyLaterChanged(acct, tid))

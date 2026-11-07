@@ -78,13 +78,13 @@ class Drafts:
         if body.get("delete") and body.get("draft_id"):
             return self._discard(required_int(body["draft_id"]))
         try:
-            spec, in_reply_to_pk, acct = self._composing.spec(body)
+            spec, _, acct = self._composing.spec(body)
             if draft.is_empty(spec):
                 return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}
             built = build_message(spec, draft=True)
         except ValueError as e:                       # our own words: they hold nothing secret
             raise Refused(str(e)) from e
-        did, version = self._accept(body, spec, built, acct, in_reply_to_pk)
+        did, version = self._accept(body, spec, built, acct)
         answer: dict[str, Any] = {"ok": True, "draft_id": did, "version": version, "message_id": built["message_id"], "pushed": False}
         if not body.get("autosave") and profile.writes_allowed():
             uid = self._try_push(did, priority=gates.Priority.INTERACTIVE, deadline=PUSH_WAIT)
@@ -94,8 +94,7 @@ class Drafts:
             answer.update(draft.handed_over(spec))
         return answer
 
-    def _accept(self, body: Mapping[str, Any], spec: Composed, built: Built, acct: Account,
-                in_reply_to_pk: int | None) -> tuple[int, int]:
+    def _accept(self, body: Mapping[str, Any], spec: Composed, built: Built, acct: Account) -> tuple[int, int]:
         """Write the save to the journal, in one transaction with the draft's row. Returns the row's id and its version.
         A save that may not go in raises, with nothing written."""
         did = required_int(body["draft_id"]) if body.get("draft_id") else None
@@ -117,10 +116,10 @@ class Drafts:
                 new_id = prev["id"]
             else:
                 new_id = self._book.draft_upsert(c, draft.tracked(acct["email"], built["message_id"], spec["subject"],
-                                                                  body.get("mode", "new"), stamp, in_reply_to_pk=in_reply_to_pk))
+                                                                  body.get("mode", "new"), stamp))
                 if key:
                     self._book.draft_set_key(c, new_id, key)
-            self._book.draft_note_save(c, new_id, body.get("mode", "new"), in_reply_to_pk, spec["subject"], version, key, stamp)
+            self._book.draft_note_save(c, new_id, body.get("mode", "new"), spec["subject"], version, key, stamp)
             due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None)
             self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"], record["raw_sha"],
                                    record["own_text"], record["tail_text"], record["tail_html"], record["bcc"], now, due, attempts)
@@ -369,7 +368,7 @@ class Drafts:
         with self._uow.write() as c:
             now = now_iso()
             new_id = self._book.draft_upsert(c, draft.tracked(j["account"], j["message_id"], d["subject"], d["mode"], now))
-            self._book.draft_note_save(c, new_id, d["mode"], None, d["subject"], d["version"], None, now)
+            self._book.draft_note_save(c, new_id, d["mode"], d["subject"], d["version"], None, now)
             self._book.journal_move(c, d["id"], new_id)
 
     def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,

@@ -63,7 +63,6 @@ def new_row(built: Built, meta: SendMeta, orig: Row | None, due: int, created_at
         "account": meta["account"],
         "idempotency_key": meta["idempotency_key"],
         "message_id": built["message_id"],
-        "in_reply_to_pk": meta.get("in_reply_to_pk"),
         "orig_account": orig["account"] if orig else meta["account"] if meta.get("orig_message_id") else None,
         "orig_message_id": orig["message_id"] if orig else meta.get("orig_message_id"),
         "orig_thread_id": orig["thread_id"] if orig else None,

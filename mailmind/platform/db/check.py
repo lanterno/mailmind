@@ -13,7 +13,8 @@ counts what was there before the migrations too, and fails only on what they add
 
 A table a migration retires on purpose (`migrations.RETIRED`) is no loss, and the report says so. Nor
 is a change in the count of one it builds afresh (`migrations.REBUILT`); the full-text check says whether
-that one holds every message. The index's own tables (`msg_fts_data` and the like) aren't listed.
+that one holds every message. Nor is the growth of a table a migration carries something over to
+(`migrations.FILLED`), though its shrinking would be. The index's own tables (`msg_fts_data` and the like) aren't listed.
 """
 import collections
 import os
@@ -50,9 +51,10 @@ def check_upgrade(path, say=print):
         b, a = before.get(table), after.get(table)
         retired = a is None and migrations.RETIRED.get(table, 0) > v_before
         rebuilt = migrations.REBUILT.get(table, 0) > v_before
+        filled = b is not None and a is not None and a > b and migrations.FILLED.get(table, 0) > v_before
         note = ("" if a == b else "  new" if b is None else "  retired" if retired
-                else "  rebuilt" if rebuilt else "  CHANGED")
-        if b is not None and a != b and not retired and not rebuilt:
+                else "  rebuilt" if rebuilt else "  carried over" if filled else "  CHANGED")
+        if b is not None and a != b and not retired and not rebuilt and not filled:
             changed.append(table)
         say(f"  {table:<{width}}  {_n(b):>10}  {_n(a):>10}{note}")
     say("")
