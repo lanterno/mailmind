@@ -140,16 +140,17 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
   const folder = source?.kind === "folder" ? source.folder : "";
   const to = (name: string): ListSource => ({ kind: "folder", account: account!, folder: name });
   const current = source?.kind === "allInboxes" ? ALL : account ?? ALL;
-  const views: [string, string, string, number | undefined][] = data ? [
+  const virtual: [string, string, string, number | undefined][] = data ? [
     ["__replylater__", "bookmark", "Reply later", data.replylater],
     ["__waiting__", "hourglass", "Waiting", data.waiting],
+    ["__snoozed__", "clock", "Snoozed", data.snoozed],
     ["__muted__", "bell-off", "Muted", data.muted],
   ] : [];
   return (
     <aside className="folderrail" id="rail" aria-label="Accounts and folders">
       <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} current={current} down={down} />}</div>
       <nav className="frail-list" id="folderrail" aria-label="Folders">
-        {source?.kind === "allInboxes" && <div className="frail-acct">{accounts.length} inboxes, newest first</div>}
+        {source?.kind === "allInboxes" && <div className="frow on"><span className="ic2"><Icon name="inbox" /></span><span className="fn">Inbox</span></div>}
         {isError && !data && (
           <>
             <div className="frail-acct">Couldn’t list folders</div>
@@ -159,10 +160,9 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
         {data?.folders.map((f: FolderInfo) => (
           <RailRow key={f.name} source={to(f.name)} on={f.name === folder} icon={FOLDER_ICON[f.role] ?? "folder"} label={roleLabel(f)} count={f.unseen} />
         ))}
-        {data && <RailRow source={to("__snoozed__")} on={folder === "__snoozed__"} icon="clock" label="Snoozed" count={data.snoozed} />}
-        {views.map(([name, icon, label, n]) => (n ? <RailRow key={name} source={to(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
-        {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
         <Views source={source} account={account ?? ""} />
+        {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
+        {virtual.map(([name, icon, label, n]) => (n || name === "__snoozed__" ? <RailRow key={name} source={to(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
       </nav>
     </aside>
   );

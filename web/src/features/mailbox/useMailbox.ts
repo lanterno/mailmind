@@ -180,7 +180,7 @@ export function useMailbox() {
     openRow,
     marks,
     markedRows,
-    title: allInboxes ? "All inboxes" : source?.kind === "search" ? (source.lane ? LANE_TITLE[source.lane] : "Search") : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),
+    title: allInboxes ? "Inbox" : source?.kind === "search" ? (source.lane ? LANE_TITLE[source.lane] : "Search") : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),
     hasMore: Boolean(list.hasNextPage),
     isWhole,
     open,
