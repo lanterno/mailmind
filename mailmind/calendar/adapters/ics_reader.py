@@ -8,18 +8,16 @@ display-ready dict for the reader's Invite card. Read-only; no network. Total �
   next_occurrence(inv, after)  ->  (start, end) of the first occurrence still running at `after`
 """
 import calendar
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import datetime, timedelta
 
-from mailmind.calendar.domain.invite import Invite
+from mailmind.calendar.domain.invite import Fields, Invite, invite_of, party, read_time
 
 try:
     from zoneinfo import ZoneInfo
 except Exception:                       # pragma: no cover
     ZoneInfo = None
 
-_FREQ = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}
-_DAYS = {"MO": "Mon", "TU": "Tue", "WE": "Wed", "TH": "Thu", "FR": "Fri", "SA": "Sat", "SU": "Sun"}
+_FREQ = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}
 _WDAY = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
 
 
@@ -51,97 +49,10 @@ def _uesc(v):
     return (v or "").replace("\\n", "\n").replace("\\N", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\").strip()
 
 
-def _addr(val, params):
-    email = (val or "").strip()
-    if email.lower().startswith("mailto:"):
-        email = email[7:]
-    return {"name": params.get("CN", "").strip(), "email": email.strip()}
-
-
-def _parse_dt(val, params):
-    """-> (aware-or-naive datetime | None, all_day bool)."""
-    v = (val or "").strip()
-    if len(v) == 8 and v.isdigit():
-        try:
-            return datetime.strptime(v, "%Y%m%d"), True
-        except Exception:
-            return None, True
-    z = v.endswith("Z")
-    vv = v[:-1] if z else v
-    d = None
-    for fmt in ("%Y%m%dT%H%M%S", "%Y%m%dT%H%M"):
-        try:
-            d = datetime.strptime(vv, fmt)
-            break
-        except Exception:
-            pass
-    if d is None:
-        return None, False
-    if z:
-        d = d.replace(tzinfo=timezone.utc)
-    elif params.get("TZID") and ZoneInfo:
-        try:
-            d = d.replace(tzinfo=ZoneInfo(params["TZID"]))
-        except Exception:
-            pass
-    return d, False
-
-
-def _local(d):
-    """Render an aware dt in the machine's local zone; a naive (floating) dt as-is."""
-    try:
-        return d.astimezone() if d.tzinfo else d
-    except Exception:
-        return d
-
-
-def _when(start, end, all_day):
-    if not start:
-        return ""
-    s = _local(start)
-    if all_day:
-        return s.strftime("%a, %b ") + str(s.day)
-    head = s.strftime("%a, %b ") + str(s.day) + " · " + s.strftime("%-I:%M %p")
-    if end:
-        e = _local(end)
-        if e.date() == s.date():
-            return head + "–" + e.strftime("%-I:%M %p")
-        return head + " → " + e.strftime("%a, %b ") + str(e.day) + " " + e.strftime("%-I:%M %p")
-    return head
-
-
-def _rrule_human(r):
-    if not r:
-        return ""
-    kv: dict[str, str] = {}
-    for p in r.split(";"):
-        if "=" in p:
-            k, v = p.split("=", 1)
-            kv[k.upper()] = v
-    freq = _FREQ.get(kv.get("FREQ", "").upper())
-    if not freq:
-        return ""
-    try:
-        n = int(kv.get("INTERVAL", "1"))
-    except Exception:
-        n = 1
-    base = ("Every " + str(n) + " " + freq + "s") if n > 1 else ("Every " + freq)
-    if kv.get("BYDAY"):
-        days = ", ".join(_DAYS.get(x.strip()[-2:].upper(), x) for x in kv["BYDAY"].split(","))
-        base += " on " + days
-    if kv.get("COUNT"):
-        base += " ×" + kv["COUNT"]
-    elif kv.get("UNTIL"):
-        d, _ = _parse_dt(kv["UNTIL"], {})
-        if d:
-            base += " until " + _local(d).strftime("%b %-d, %Y")
-    return base
-
-
 def parse(text: str) -> Invite | None:
     lines = _unfold(text)
     method, in_ev = "", False
-    ev: dict[str, Any] | None = None
+    ev: Fields | None = None
     events = []
     for ln in lines:
         name, params, val = _split(ln)
@@ -151,7 +62,7 @@ def parse(text: str) -> Invite | None:
         if name == "METHOD":
             method = up
         elif name == "BEGIN" and up == "VEVENT":
-            ev, in_ev = {"attendees": []}, True
+            ev, in_ev = Fields(attendees=[]), True
         elif name == "END" and up == "VEVENT":
             if ev:
                 events.append(ev)
@@ -162,7 +73,7 @@ def parse(text: str) -> Invite | None:
             elif name == "LOCATION":
                 ev["location"] = _uesc(val)
             elif name == "DESCRIPTION":
-                ev["description"] = _uesc(val)[:1500]
+                ev["description"] = _uesc(val)
             elif name == "UID":
                 ev["uid"] = val.strip()
             elif name == "STATUS":
@@ -171,41 +82,21 @@ def parse(text: str) -> Invite | None:
                 ev["rrule"] = val.strip()
             elif name == "EXDATE":
                 ev.setdefault("exdates", []).extend(
-                    d for d, _ in (_parse_dt(v, params) for v in val.split(",")) if d)
+                    d for d, _ in (read_time(v, params) for v in val.split(",")) if d)
             elif name == "RECURRENCE-ID":
-                ev["recurrence_id"], _ = _parse_dt(val, params)
+                ev["recurrence_id"], _ = read_time(val, params)
             elif name == "DTSTART":
-                ev["start"], ev["all_day"] = _parse_dt(val, params)
-                ev["tzid"] = params.get("TZID", "") if ev["start"] and ev["start"].tzinfo else ""
+                start, ev["all_day"] = read_time(val, params)
+                ev["start"], ev["tzid"] = start, params.get("TZID", "") if start and start.tzinfo else ""
             elif name == "DTEND":
-                ev["end"], _ = _parse_dt(val, params)
+                ev["end"], _ = read_time(val, params)
             elif name == "ORGANIZER":
-                ev["organizer"] = _addr(val, params)
+                ev["organizer"] = party(val, params.get("CN", ""))
             elif name == "ATTENDEE":
-                ev["attendees"].append(_addr(val, params))
+                ev.setdefault("attendees", []).append(party(val, params.get("CN", "")))
     if not events:
         return None
-    e = events[0]
-    start, end, all_day = e.get("start"), e.get("end"), bool(e.get("all_day"))
-    return {
-        "summary": e.get("summary", "(no title)"),
-        "location": e.get("location", ""),
-        "description": e.get("description", ""),
-        "when": _when(start, end, all_day),
-        "all_day": all_day,
-        "start_iso": (start.isoformat() if start else ""),
-        "end_iso": (end.isoformat() if end else ""),
-        "organizer": e.get("organizer") or {},
-        "attendees": [a for a in e.get("attendees", []) if a.get("email")][:25],
-        "recurrence": _rrule_human(e.get("rrule")),
-        "method": method,
-        "status": e.get("status", ""),
-        "uid": e.get("uid", ""),
-        "rrule": e.get("rrule", ""),
-        "exdates": [d.isoformat() for d in e.get("exdates", [])],
-        "recurrence_id": (e["recurrence_id"].isoformat() if e.get("recurrence_id") else ""),
-        "tzid": e.get("tzid", ""),
-    }
+    return invite_of(events[0], method)
 
 
 # ------------------------------------------------------------- recurrence (RRULE)
@@ -285,7 +176,7 @@ def _occurrences(start, kv):
 
 def _until(kv, start):
     """UNTIL as a bound comparable with the event's own starts (inclusive), or None."""
-    u, date_only = _parse_dt(kv.get("UNTIL", ""), {})
+    u, date_only = read_time(kv.get("UNTIL", ""), {})
     if u is None:
         return None
     if date_only:
