@@ -8,6 +8,7 @@ from typing import Any
 from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBookRepository, SenderMail
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.platform.perimeter import tokens
 
@@ -77,14 +78,14 @@ class Cleanup:
         except Exception:
             return {}
 
-    def execute(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
+    def execute(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Commit for ONE sender. ALWAYS-FIRST + reversible: a block rule + verified INBOX sweep to
         Trash (undo_push under one undo_group → a single `z` reverses both). THEN best-effort the chosen
         unsubscribe (irreversible; idempotent via unsub_log). Requires CSRF + strict-origin (route level)
         + a confirm_token echoed from the preview before ANY outbound request fires."""
         plan = cleanup_plan.plan_from(body)
         if plan is None:
-            return {"ok": False, "error": "bad address"}, 400
+            raise Refused("bad address")
         from_addr, do_unsub, token, block_token = plan.from_addr, plan.do_unsubscribe, plan.confirm_token, plan.block_token
         grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
         # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
@@ -111,4 +112,4 @@ class Cleanup:
                 "block_scope": plan.scope, "swept": swept.swept, "sweep_failed": swept.failed, "sweep_queued": swept.queued,
                 "sweep_capped": capped, "browser_url": tried.browser_url,
                 "http_status": tried.http_status, "undo_group": grp,
-                "reversible": cleanup_plan.REVERSIBLE}, 200
+                "reversible": cleanup_plan.REVERSIBLE}
