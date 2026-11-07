@@ -314,7 +314,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
   quote after it) and `frame` (a body as the document its frame loads). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
@@ -906,6 +906,13 @@ means no key, never a fall-through to the environment's. With no key the model i
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
 
+An assessment keeps how it came to be (migration 43, `kernel.assessment`): `served_by`, the model `Reply.model` names, which
+a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
+the stand-in stored so a message doesn't go round for ever. `assessments.model` stays the label shown beside a summary, the
+model asked for or `parse-error`. `Calls.reply_to` is the whole `Reply` for a caller that keeps these. A batch's answers take
+the version its row was sent with, since they can come in after an upgrade. A row from before has all three NULL, and
+`answers.assessment` reads them as None: unknown, never worked out. So far nothing but that read looks at them.
+
 `domain.prompts` is every word the model is told. `SYSTEM` goes on every call, a batch's requests included, and is the
 one statement that the mail is untrusted data. Each kind of call has a `Template` and a version, which says what to do and
 leaves that to `SYSTEM`; only the plan's adds a word about its command, which is typed and not mail. `Template.fill` fills the
@@ -926,7 +933,7 @@ failing; keep that property. A call that was never sent raises a `NotSent`: `AIO
 (`except NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
 catch for `OverLimit` and `AIOff`, so `H.do_GET` and `H.do_POST` can answer
 them: `OverLimit` as a 402 (below), `AIOff` as a 409 with `ai_off: true`, which the page shows as
-"AI is off" rather than an error to retry. `call_claude` and `call_claude_json` go through `Status.noting`,
+"AI is off" rather than an error to retry. `call_claude`, `call_claude_json` and `reply_to` go through `Status.noting`,
 which records each call's outcome for `assistant.status.report()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
