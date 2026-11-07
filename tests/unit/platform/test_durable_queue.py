@@ -27,7 +27,7 @@ def q(tmp_path):
 def laned(q):
     """The same table, its rows in lanes; the worker drains only when kicked."""
     return DurableQueue("jobs", "jobs", running="busy", finished="over", finished_at="finished_at", gate="done",
-                        connect=q._connect, poll=30, lane="lane")
+                        connect=q._uow.connect, poll=30, lane="lane")
 
 
 def wait_until(cond, timeout=5.0):
@@ -40,7 +40,7 @@ def wait_until(cond, timeout=5.0):
 
 
 def run(q, fn):
-    c = q._connect()
+    c = q._uow.connect()
     try:
         out = fn(c)
         c.commit()

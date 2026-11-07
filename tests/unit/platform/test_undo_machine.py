@@ -15,6 +15,7 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, rule, run_stat
 
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import undo
+from mailmind.platform.db.uow import UnitOfWork
 from property_runs import runs
 
 START = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
@@ -48,7 +49,7 @@ class Machine(RuleBasedStateMachine):
         self.raises = False
 
     def fresh(self):
-        made = undo.Undo(store.conn, {"move": self.reverse}, lambda: None, lambda e: type(e).__name__)
+        made = undo.Undo(UnitOfWork(store.conn), {"move": self.reverse}, lambda: None, lambda e: type(e).__name__)
         made.UNDO_MAX = HELD
         return made
 
