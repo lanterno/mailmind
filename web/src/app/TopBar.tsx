@@ -68,6 +68,14 @@ export function RailScrim() {
 const searchText = createStore("");
 export const clearSearchBox = () => searchText.set("");
 
+// The compact top bar keeps search behind an icon; open, it spans the bar until cleared or cancelled.
+const folded = createStore(true);
+const compactTop = matchMedia("(max-width:760px)");
+export function openSearchBar() {
+  if (compactTop.matches) folded.set(false);
+  document.querySelector<HTMLInputElement>("#search")?.focus();
+}
+
 export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
   const { source } = m;
   const current = theme.useValue();
@@ -75,15 +83,15 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
   const query = source?.kind === "search" ? source.q : "";
   const text = searchText.useValue(), setText = searchText.set;
   const [shown, setShown] = useState(query);
-  const [folded, setFolded] = useState(true);
+  const isFolded = folded.useValue(), setFolded = folded.set;
   if (query !== shown) {     // the URL moved (Back, a rail click): the box follows it
     setShown(query);
     setText(query);
   }
   useEffect(() => {
-    document.body.classList.toggle("search-open", !folded);
-    if (!folded) input.current?.focus();     // only now is it on screen
-  }, [folded]);
+    document.body.classList.toggle("search-open", !isFolded);
+    if (!isFolded) input.current?.focus();     // only now is it on screen
+  }, [isFolded]);
   const home: ListSource | null = source?.kind === "search"
     ? source.account ? { kind: "folder", account: source.account, folder: "INBOX" } : { kind: "allInboxes" }
     : null;
@@ -116,6 +124,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
           aria-label="Search"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onBlur={() => { if (!text.trim()) setFolded(true); }}
           onKeyDown={(e) => {
             if (e.key === "Escape") leave();
             else if (e.key === "Enter") {

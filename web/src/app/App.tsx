@@ -38,7 +38,7 @@ import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
 import { go, type ListSource } from "./route";
 import { Splitter } from "./Splitter";
-import { clearSearchBox, closeRailDrawer, RailScrim, TopBar, toggleRail } from "./TopBar";
+import { clearSearchBox, closeRailDrawer, openSearchBar, RailScrim, TopBar, toggleRail } from "./TopBar";
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS: [InboxTab, string][] = [["needs", "Needs you"], ["all", "Everything"], ["unread", "Unread"]];
@@ -209,7 +209,7 @@ export function App() {
     (pk) => m.file(all.find((r) => r.pk === pk) ?? { pk }, "archive"),
     (pk) => m.snooze({ pk }, { preset: "tomorrow" }, [pk]),
   );
-  const commands = buildCommands(m, { toggleRail, saveSearch: () => void saveSearch(m) });
+  const commands = buildCommands(m, { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m) });
   useKeys(m, commands);
 
   const pages = list.data?.pages ?? [];

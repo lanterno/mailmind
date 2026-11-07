@@ -46,7 +46,7 @@ export function goChord(m: Mailbox, key: string) {
 // A saved view is saved already: nothing offers to save it again.
 export const onSavedView = (m: Pick<Mailbox, "source" | "views">) => m.source?.kind === "search" && m.views.some((v) => viewQuery(v) === (m.source as { q: string }).q);
 
-export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSearch: () => void }): Command[] {
+export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSearch: () => void; openSearchBar: () => void }): Command[] {
   const out: Command[] = [];
   const add = (c: Command) => out.push(c);
   const any = m.marks.size > 0;
@@ -137,7 +137,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   }
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });
-  add({ id: "search", group: "Commands", label: "Search", keys: ["/"], hint: "/", run: () => document.querySelector<HTMLInputElement>("#search")?.focus() });
+  add({ id: "search", group: "Commands", label: "Search", keys: ["/"], hint: "/", run: ui.openSearchBar });
   if (m.searching && !onSavedView(m)) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
   for (const t of (["day", "dusk", "night"] as const).filter((x) => x !== theme.get())) {
     add({ id: `theme:${t}`, group: "Commands", label: `Theme → ${THEME_LABEL[t]}`, run: () => { setTheme(t); toast(`${THEME_LABEL[t]} theme`); } });
