@@ -589,6 +589,97 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
     expect(rows).to_have_count(2)
     clean(page)
 
+
+def test_a_catch_up_that_fails_stops_saying_its_reading_and_keeps_the_list(page, world, monkeypatch):
+    from gate import held_elsewhere
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
+    opened(page)
+    rows = page.locator("#rows .row[data-pk]")
+    page.locator('#folderrail .frow[data-folder="Archive"]').click()
+    expect(rows).to_have_count(1)
+    page.locator('#folderrail .frow[data-folder="INBOX"]').click()
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
+    with held_elsewhere(w.ADA):
+        page.locator('#folderrail .frow[data-folder="Archive"]').click()
+        expect(page.locator("#list")).to_contain_text("reading the rest")
+        monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 60)
+    expect(page.locator("#list")).not_to_contain_text("reading the rest")
+    expect(rows).to_have_count(1)
+    clean(page)
+
+
+def test_a_folder_still_on_its_first_read_says_so_then_fills_in_by_itself(page, world, monkeypatch):
+    from gate import held_elsewhere
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    rows = page.locator("#rows .row[data-pk]")
+    with held_elsewhere(w.ADA):
+        page.locator('#folderrail .frow[data-folder="Junk"]').click()
+        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
+        expect(rows).to_have_count(0)
+    expect(rows).to_have_count(1)
+    expect(page.locator("#rows")).not_to_contain_text("Reading this folder for the first time…")
+    clean(page)
+
+
+def test_a_folder_whose_first_read_fails_says_so_and_retry_reads_it(page, world):
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    page.locator('#folderrail .frow[data-folder="Junk"]').click()
+    expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
+    world.server.clear_faults()
+    page.locator("#rows").get_by_role("button", name="Retry").click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows")).not_to_contain_text("Couldn’t sync this folder.")
+    clean(page)
+
+
+def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_person_tries_again(page, world, monkeypatch):
+    from gate import held_elsewhere
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    with held_elsewhere(w.ADA):
+        page.locator('#folderrail .frow[data-folder="Junk"]').click()
+        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
+    expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
+    page.wait_for_timeout(500)                            # a read that went round again would have logged in many times by now
+    assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "Junk"]) == 1
+    world.server.clear_faults()
+    page.locator("#rows").get_by_role("button", name="Retry").click()
+    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    clean(page)
+
+
+def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_and_isnt_read_again(page, world):
+    from gate import held_elsewhere
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        store.set_scan_state(c, w.ADA, "INBOX", "never")
+        c.commit()
+    finally:
+        c.close()
+    world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    with held_elsewhere(w.ADA):
+        page.goto("/all")
+        expect(page.locator("#list")).to_contain_text("reading the rest")
+    expect(page.locator("#list")).not_to_contain_text("reading the rest")
+    page.wait_for_timeout(500)                            # a read that went round again would have logged in many times by now
+    assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "INBOX"]) == 1
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    expect(page.locator("#rows .row[data-pk]").first).to_be_visible()   # what is stored stays
+    clean(page)
+
+
 def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
     page.goto(f"/m/{w.ADA}/INBOX")
     archive = page.locator("#folderrail .frow", has_text=re.compile("^Archive"))
