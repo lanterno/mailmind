@@ -326,21 +326,30 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.triage`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
-- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. So far it
-  holds `adapters.config_file`, which `application.directory.Directory` reads and writes `mailmind.config.json`
+- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`).
+  `application.ports` holds `AccountRepository`, `SecretResolver` and `ConnectionProbe`. `adapters.config_file` is the first, which `application.directory.Directory` reads and writes `mailmind.config.json`
   through. `ConfigFile.read` parses the file again only when its inode, size or modification
   time changed, and hands each caller a copy of its own; `write` replaces it atomically, readable
-  by its owner only. `adapters.secrets` resolves a credential in each style the file allows
-  (plain, `op`, `env`, the Bridge password), caching an `op` read only when it succeeds.
+  by its owner only. `adapters.secrets` is the second, caching an `op` read only when it succeeds, and
+  `domain.credential.CredentialRef` the one reader of the styles the file allows (plain, `op`, `env`, the Bridge password).
   `Directory` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
-  both. `domain.provider.ProviderProfile` says what an account's server does on its own and its
+  both. `ConnectionProbe` is bound in `mailmind.bootstrap.accounts`, and is no adapter of Accounts': a login goes through the Mailbox's sessions, which pick the IMAP adapter.
+  An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,
+  and an SMTP host left out is the IMAP host, so an account with one endpoint has both. `add_account` refuses an address already there. Both it and `update_account` refuse a credential no login could read, and an endpoint no connection could reach, the last only for what the
+  write changes (`refuse_bad_endpoints`): what the file already held is the owner's, and an entry is read however it stands. `validate_new` still judges a whole entry, as it did: an edit of one with an unknown type, a port out of range or a generic account's host gone says so. `domain.draft` says what an unsaved account may try (see Security model).
+  `domain.provider.ProviderProfile` says what an account's server does on its own and its
   quirks: Gmail files sent mail itself, archives by dropping `\Inbox` and threads by X-GM-THRID;
   Proton Bridge (or any loopback STARTTLS server) is fragile, recycled sooner in the pool and never
   bulk-expunged, and marks trashed mail read; `with_capabilities` adds what CAPABILITY says.
-  `provider.resolve(acct)` replaces checking `kind == "gmail"`. `domain.events` holds
+  `provider.resolve(acct)` replaces checking `kind == "gmail"`. `domain.health` says how an account stands: `error_kind` is what kind of trouble an error names, from its class and never its text, and `AccountHealth` the
+  read model. The Mailbox only reports (`syncing.sync_record`, and `accounts.error_kind` through its port), and `application.health.Health` answers `/api/account-health`. `domain.events` holds
   `AccountAdded`, `AccountChanged` and `AccountRemoved`, which `config.add_account`,
   `update_account` and `remove_account` publish on the bus once the file holds the change (a
-  refused change publishes nothing). `domain.tls_pin` says how a loopback certificate is pinned
+  refused change publishes nothing), and `CredentialsRejected`, which `mailbox.try_login` publishes when a server says no to a login. `application.logins.Logins` hears it and holds that login back (`domain.login_hold`):
+  five minutes, twice that for each refusal after a hold ended, up to an hour, since a server counts them and everything the app does opens a connection of its own. `mailbox.open_session` asks first and raises `LoginUnreachable` with nothing sent, so the sync, IDLE's workers,
+  the backfill, the queues and a click all do as they did on the refusal, and health reads the same. A connection lost during LOGIN and `[UNAVAILABLE]` are no refusal. A hold names the server, address and credential together, so another of any of them isn't held, a file edited by hand included. `AccountChanged`,
+  `AccountRemoved`, a login that works and the page's Retry (`syncing.do_sync_retry`) end it, and Test goes whatever it says (`mailbox.try_login`); a draft (`mailbox.session_for`) neither asks nor tells. It is process state, wired by `wiring.wire`, so a restart ends it and the command line has none. SMTP has its own: a refused AUTH is a 5xx, and the outbox gives up on its first try.
+  `domain.tls_pin` says how a loopback certificate is pinned, and `is_loopback` is the one list of hosts whose certificate checks `tls_context` may skip
   (see Security model). It is standard library only.
 - `mailmind.mailbox` is the third: the mail on each server and its folders. So far it holds
   `domain.roles`, which says which folder plays which role (`inbox`, `sent`, `drafts`, `archive`,
@@ -374,7 +383,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `front.build` does (`offer`). The old door ignores the ask and never imports `imapclient`.
   `use(kind)` makes one adapter every account's, as the contract tests do, and an autouse fixture
   resets both before each test. It opens a session (`open_session(acct)`) the same way for both:
-  TLS, the pin, login, txguard, `ReadOnlySession` read-only. Every IMAP connection the app opens
+  TLS, the pin, login, txguard, `ReadOnlySession` read-only, and a login its server refused not at all until its hold ends (`accounts.logins`, above). Every IMAP connection the app opens
   comes from it, and only the imaplib adapter calls `accounts.connect`.
   `tests/contract/test_mail_session_contract.py` runs every case through each against the fake, and
   `tests/contract/test_mail_session_dovecot.py` against Dovecot. `application` also holds `commands` (`MailCommands`, the one path a change to the mail on a server takes), `server_ops` (`ServerOps`, what a try asks of the server, and the reversals), `sync` (`Ingest`, mail into the database), `syncing` (`Syncing`, each account's sync and the body backfill), `reconcile` (`Reconciler`, what the server no longer holds), `folders` (`Folders`, the rail and a folder's sync as it opens), `queries` (`Queries`, what the page lists), `bodies` (`Bodies`, a message opened), `filing` (`Filing`, a person's filing, and the tray), `reversal` (`Reversals`, what reverses a move), `stats` (`LiveStats`), `pool`, `warm` and `realtime` (IDLE's workers), and `domain.events` the events they publish. `mailmind.bootstrap.mailbox` binds them, and it's how the routers and the tests reach them: `commands`, `server_ops`, `ingest`, `syncing`, `reconciler`, `folders`, `queries`, `bodies`, `filing`, `undo`, `stats`, `pool`, `warm` and `realtime`. A snooze, a mute and a block are reversed by their own contexts (`Snoozing.reverse`, `Muting.reverse`, `Cleanup.reverse_block`), and `Undo`, in `platform`, is handed each kind's reverser there. The rest of the context is standard
@@ -832,8 +841,8 @@ An unsaved draft pins nothing. A new TLS connection calls `check_pin` too.
 
 A credential goes only to its own account's server. `/api/accounts/test` logs a saved account in
 at its saved endpoint, and tries a draft (an account not yet saved) only with a password typed
-into it, at the host typed with it. A draft naming a stored secret (`op`, `env`, the Bridge
-password) is refused, since the request names the host.
+into it, at the host typed with it (`domain.draft.throwaway_account`). A draft naming a stored
+secret (`op`, `env`, the Bridge password) is refused, since the request names the host.
 
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
