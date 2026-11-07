@@ -12,26 +12,7 @@ from typing import Any
 from mailmind.assistant.application.gateway import DayCost, Gateway
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.domain import models
-from mailmind.kernel.parsed import is_object
-
-
-def _loose_json(out: str) -> dict[str, Any]:
-    m = re.search(r"\{.*\}", out, re.S)
-    return json.loads(m.group(0)) if m else {}
-
-
-def object_in(out: str) -> dict[str, Any]:
-    """The JSON object a reply holds, or {} when it holds none."""
-    try:
-        obj = json.loads(out)
-    except ValueError:
-        obj = None
-    if is_object(obj):
-        return obj
-    try:
-        return _loose_json(out)
-    except Exception:
-        return {}
+from mailmind.assistant.domain.schema import object_in
 
 
 def parse(out: str) -> tuple[str, int, str, str]:

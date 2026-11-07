@@ -1,5 +1,9 @@
-"""A JSON Schema in the form structured output accepts."""
+"""A JSON Schema in the form structured output accepts, and the JSON object a reply holds."""
+import json
+import re
 from typing import Any, cast
+
+from mailmind.kernel.parsed import is_object
 
 # JSON Schema keywords structured output doesn't support. Callers clamp what they read anyway.
 _UNSUPPORTED = frozenset({"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
@@ -24,3 +28,22 @@ def structured(schema: Any) -> Any:
     if out.get("type") == "object":
         out["additionalProperties"] = False
     return out
+
+
+def _loose_json(out: str) -> dict[str, Any]:
+    m = re.search(r"\{.*\}", out, re.S)
+    return json.loads(m.group(0)) if m else {}
+
+
+def object_in(out: str) -> dict[str, Any]:
+    """The JSON object a reply holds, or {} when it holds none."""
+    try:
+        obj = json.loads(out)
+    except ValueError:
+        obj = None
+    if is_object(obj):
+        return obj
+    try:
+        return _loose_json(out)
+    except Exception:
+        return {}

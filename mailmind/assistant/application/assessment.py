@@ -7,10 +7,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
-from mailmind.assistant.application.calls import Calls, object_in
+from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent
 from mailmind.assistant.domain import models, pricing
+from mailmind.assistant.domain.schema import object_in
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
