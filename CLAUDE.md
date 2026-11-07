@@ -313,7 +313,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
   quote after it) and `frame` (a body as the document its frame loads). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
@@ -746,14 +746,21 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
-  said to every copy and under the key (`assessments`), and `store.upsert_message` gives it to a copy that
-  arrives, so a move, an Undo, a renumber or Gmail's All Mail copy pays for no second call.
-  `needs_summary` offers one copy of each. A key with no copy left waits 30 days (`gone_at`) for one to
-  come back, then the `forget` job ends it. `store.init` gives a key to a row an older commit wrote. Message
-  rows in the API carry it as `key`, beside `pk`. New durable state about a message keys on it.
-- **A snooze outlives its row.** `attention.book.set_snooze` writes `messages.snoozed_until` and a `snoozes` row
-  (migration 33, by key and folder), and `upsert_message` gives it to a copy that arrives in that folder, so a
-  resync keeps it and a copy filed elsewhere isn't hidden. An Undo of filing brings it back; one come due with
+  said under the key (`assessments`), and every query joins that on `message_key`, so a move, an Undo, a
+  renumber or Gmail's All Mail copy pays for no second call. `needs_summary` offers one copy of each, and no
+  row without a key. `summaries`, a row for each copy, stays written (`save_summary`, `upsert_message`) only
+  for a rollback to an older commit, until it is dropped: read it nowhere. A key with no copy left waits 30
+  days (`gone_at`) for one to come back, then the `forget` job ends it. `store.init` (`store.repair_keys`)
+  gives a key to a row an older commit wrote, and brings what such a run wrote only to `summaries` or
+  `messages.snoozed_until` across, the one read of those two outside the migrations
+  (`tests/unit/test_architecture.py` holds that). Message rows in the API carry the key as `key`, beside
+  `pk`. New durable state about a message keys on it.
+- **A snooze outlives its row.** `attention.book.set_snooze` writes a `snoozes` row (migration 33, by key and
+  folder), and every query asks that (`kernel.snoozed`: `not_snoozed_sql`, `snoozed_sql`), so a resync keeps it,
+  each copy in that folder is hidden and a copy filed elsewhere isn't. `messages.snoozed_until` stays written only
+  for a rollback, until it is dropped: read it nowhere, `row["snoozed_until"]` on a `SELECT *` included. A row read
+  alone says `snooze_until` (`store.get_message`), and the Snoozed view's row has the old name as an alias.
+  An Undo of filing brings it back; one come due with
   no copy in its folder ends at `attention.book.due_snoozes`. The undo entry names rows by key and folder too (`where`).
   A message that wakes is unread on the server as well: `Snoozing.wake_due` queues the mark for read mail
   (`store.queue_flags`), or the next sync that read its flags would take it back.
