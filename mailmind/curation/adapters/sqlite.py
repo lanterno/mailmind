@@ -153,7 +153,7 @@ class SenderMail:
                                 WHERE account=? AND folder='INBOX' AND deleted=0""", (account,)).fetchall()
 
     def ai_junk_ids(self, account):
-        """The Message-IDs of INBOX mail MailMind's AI called junk, and no snoozed mail."""
+        """The Message-IDs of INBOX mail stored as junk, and no snoozed mail. The classifier said so, at ingest."""
         with _uow.read() as c:
             return set(m for (m,) in c.execute(
                 f"""SELECT message_id FROM messages WHERE account=? AND folder='INBOX' AND is_junk=1

@@ -1,5 +1,5 @@
 """What a sweep would take, worked out from mail already read: how an inbox falls into buckets, which of it is junk and what
-an AI verdict may reach. Moving it, verified and audited, is the use case's."""
+a sweep of what's stored as junk may reach. Moving it, verified and audited, is the use case's."""
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable
 from typing import TypedDict
@@ -57,7 +57,7 @@ def junk(rows: Iterable[Classified]) -> list[Classified]:
 
 
 def ai_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets) -> tuple[list[Read], int]:
-    """(what an AI sweep takes of the live inbox, how many a keep rule held back). It matches by Message-ID, so a UID is
+    """(what sweep-ai takes of the live inbox, how many a keep rule held back). It matches by Message-ID, so a UID is
     always current, and mail with none is out of its reach."""
     targets: list[Read] = []
     kept = 0

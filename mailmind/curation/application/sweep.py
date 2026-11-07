@@ -45,7 +45,7 @@ class Sweeps:
         """Stored twin of plan — NO IMAP, instant. Re-classifies the STORED INBOX rows with the same
         classifier (so it reflects current keep/block rules and matches what a live sweep would move).
         Accurate because auto-reconcile keeps the stored INBOX in sync with the server. Used by the
-        Curate drawer (/api/stats), which was a ~3s live 8-account header scan; the Sweep buttons still
+        Curate drawer (/api/stats), which was a slow live header scan of every account; the Sweep buttons still
         re-verify live before moving anything."""
         res: dict[str, Any] = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
                                "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
@@ -86,9 +86,8 @@ class Sweeps:
         return out
 
     def sweep_ai(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
-        """AI-verdict sweep: trash INBOX messages MailMind flagged is_junk=1 (the AI
-        classifier that reads the body — catches header-less newsletters the classifier's
-        header sweep misses). Matched to the LIVE inbox by Message-ID so UIDs are always
+        """Trash the INBOX mail stored as is_junk=1, which is the classifier's verdict at ingest, whatever its rules say
+        of the headers now (the name is older than that: no AI is asked). Matched to the LIVE inbox by Message-ID so UIDs are always
         current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. Move to Trash
         (reversible), verified + audited; prune the local DB by Message-ID."""
         r = self._rules.sets()
