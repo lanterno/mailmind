@@ -1,9 +1,5 @@
 """A draft: saving it on the server, removing it, and opening it back into the composer from its own bytes."""
-import email
-import email.policy
 import enum
-import hashlib
-import json
 import time
 from collections.abc import Mapping
 from typing import Any, Literal
@@ -11,13 +7,10 @@ from typing import Any, Literal
 from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
-from mailmind.compose.domain import draft, draft_journal, limits
+from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.compose.domain.errors import Refused
-from mailmind.compose.domain.resume import MODES, PARTICIPANT, resume_files, resume_split
-from mailmind.content import mime
 from mailmind.content.headers import header_chips, header_text
-from mailmind.kernel import addresses
 from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
@@ -283,10 +276,7 @@ class Drafts:
         if seen is None:
             return None
         cur, there = seen
-        known = self._mail.uidvalidity(acct["email"], folder)
-        if cur is not None and known is not None and cur != known:
-            return False                                     # every UID we hold for this folder is void
-        return there
+        return reopening.copy_is_there(cur, self._mail.uidvalidity(acct["email"], folder), there)
 
     def resume(self, body: Mapping[str, Any]) -> Answer:
         """Open a saved draft back into the composer from its own stored bytes: your text, the quote
@@ -309,8 +299,6 @@ class Drafts:
         except KeyError:
             return {"ok": False, "error": "That draft’s account isn’t set up in MailMind any more."}, 400
         unreachable = {"ok": False, "error": "Couldn’t load this draft from the mail server. Try again in a moment."}
-        elsewhere = " Edit it in the app that made it."
-        unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
         with self._uow.read() as c:
             before = self._book.draft_by_msgid(c, row["account"], row["message_id"])
             queued = before is not None and self._book.outbox_holds_draft(c, before["id"])
@@ -327,9 +315,7 @@ class Drafts:
             # or removed the copy the row tracked (do_draft and the outbox move the row under it too)
             with self._uow.read() as c:
                 now = self._book.draft_get(c, before["id"]) if before is not None else None
-            moved = before is not None and (now is None or (now["uid"], now["message_id"])
-                                            != (before["uid"], before["message_id"]))
-            if live is False or moved:
+            if live is False or reopening.copy_moved(before, now):
                 self._mail.remove(pk)
                 try:                                         # full: only a full scan brings back older UIDs
                     self._mail.sync_whole(acct, row["folder"])
@@ -346,7 +332,7 @@ class Drafts:
             return unreachable, 502
         except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
             resume_log.warning("draft unreadable", exc_info=e)
-            return unreadable, 422
+            return {"ok": False, "error": reopening.UNREADABLE}, 422
         if changed:
             return changed
         raw = self._mail.body(pk)
@@ -358,20 +344,16 @@ class Drafts:
             j = self._book.journal_get(c, did)
         assert d is not None                               # info() has just made sure of it
         cur = self._mail.uidvalidity(row["account"], row["folder"])
-        same_copy = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
-                     and (d["uidvalidity"] is None or cur is None or d["uidvalidity"] == cur))
-        exact = bool(same_copy or (d["raw_sha"] and d["raw_sha"] == hashlib.sha256(raw).hexdigest()))
+        trust = reopening.trust(d, row, cur, raw)
         record = d
         if draft_journal.holds_a_save(j):
-            if exact:                                      # the copy is as pushed: the journal may be newer
+            if trust.exact:                                # the copy is as pushed: the journal may be newer
                 raw, record = j["raw"], j
             else:                                          # another app changed it: neither one takes the other's place
                 self._keep_apart(d, j)
-        if not same_copy:                                  # the next save or send replaces the copy opened
-            repoint = (row["folder"], row["uid"], cur, not exact)
-        else:
-            repoint = None
-        return self._opened(raw, d, record, exact, row["account"], row["subject"], repoint)
+        # the next save or send replaces the copy opened
+        repoint = None if trust.same_copy else (row["folder"], row["uid"], cur, not trust.exact)
+        return self._opened(raw, d, record, trust.exact, row["account"], row["subject"], repoint)
 
     def _resume_saved(self, draft_id: Any) -> Answer:
         """Open a draft by its journal, for one that may not be on the server yet."""
@@ -402,65 +384,30 @@ class Drafts:
     def _opened(self, raw: bytes, d: Row, record: Row, exact: bool, account: str, subject_then: str | None,
                 repoint: tuple[str, int, int | None, bool] | None) -> Answer:
         """A draft's bytes, in the composer's terms. `record` is what MailMind knows of those very bytes."""
-        elsewhere = " Edit it in the app that made it."
-        unreadable = {"ok": False, "error": "MailMind can’t read this draft." + elsewhere}
         try:
-            msg = email.message_from_bytes(raw, policy=email.policy.default)
-            parsed = mime.parse(raw)
-        except Exception as e:
-            resume_log.warning("draft unreadable", exc_info=e)
-            return unreadable, 422
-        try:
-            files, inline = resume_files(msg, parsed, elsewhere)
+            msg, parsed = reopening.read(raw)
+            files, inline = reopening.resume_files(msg, parsed)
         except Refused as h:
             return {"ok": False, "error": h.msg}, h.code
         except Exception as e:
             resume_log.warning("draft unreadable", exc_info=e)
-            return unreadable, 422
-        split = resume_split(parsed["text"], {"own_text": record["own_text"], "tail_text": record["tail_text"]}, exact)
-        if split is None:
-            return {"ok": False, "error": "This draft only has formatted text. Edit it in the app that made it, "
-                                          "so its links and formatting aren’t lost."}, 422
-        own, tail, how = split
-        # every save and send of it carries the files as base64 and the text and quote as JSON: past
-        # limits.MAX_SEND_POST each one would be refused, and edits made in the composer lost on close
-        size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode())
-                                                       for t in (own, tail))
-        if size + limits.RESUME_HEADROOM > limits.MAX_SEND_POST:
-            return {"ok": False, "error": "This draft is too large for MailMind to save or send, with its files "
-                                          "and the text it quotes." + elsewhere}, 422
+            return {"ok": False, "error": reopening.UNREADABLE}, 422
+        try:
+            own, tail, how = reopening.split_to_fit(parsed["text"], record, exact, files)
+        except Refused as h:
+            return {"ok": False, "error": h.msg}, h.code
         irt, refs = thread_ids(header_text(msg, "In-Reply-To"), header_text(msg, "References"))
-        mode = d["mode"] if d["mode"] in MODES else "new"
-        if mode == "new" and irt:                            # MailMind's own new drafts never carry one
-            mode = "reply"
-        orig_pk: int | None = None
-        participants: list[str] = []
-        if mode in ("reply", "replyall") and irt:
-            orow = self._mail.by_msgid(account, irt)
-            if orow:
-                orig_pk = orow["pk"]
-                for a in [orow["from_addr"] or ""] + PARTICIPANT.findall(orow["recipients"] or ""):
-                    a = a.strip().lower()
-                    if a and a not in participants:
-                        participants.append(a)
-        def key(chip: str) -> str:
-            try:
-                return addresses.parse_addr_list([chip])[0][1].lower()
-            except (ValueError, IndexError):
-                return ""
-        hdr = header_chips(msg, "Bcc")                         # another app may keep Bcc in the draft itself
-        had = {key(x) for x in hdr}
-        recorded: list[str] = json.loads(record["bcc"]) if record["bcc"] else []
-        missing = [x for x in recorded if key(x) and key(x) not in had]
-        bcc, dropped = (hdr + missing, 0) if exact else (hdr, len(missing))   # the record is only this copy's
+        mode = reopening.mode_of(d["mode"], irt)
+        original = self._mail.by_msgid(account, irt) if mode in reopening.REPLIES and irt else None
+        bcc, dropped = reopening.bcc_of(msg, record["bcc"], exact)
         if repoint:
             folder, uid, uidvalidity, forget = repoint
             with self._uow.write() as c:
                 self._book.draft_repoint(c, d, folder, uid, uidvalidity, forget=forget)
-        subject = header_text(msg, "Subject")                 # as drafted: the synced row's copy is unfolded with spaces
         return {"ok": True, "draft_id": d["id"], "version": d["version"], "mode": mode, "account": account,
-                "subject": subject if subject is not None else (subject_then or ""),
+                "subject": reopening.subject_of(msg, subject_then),
                 "to": header_chips(msg, "To"), "cc": header_chips(msg, "Cc"), "bcc": bcc,
                 "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
-                "orig_pk": orig_pk, "participants": participants, "files": files, "split": how,
+                "orig_pk": original["pk"] if original else None,
+                "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,
                 "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}, 200

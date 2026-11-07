@@ -1,12 +1,11 @@
 """What a draft still asks of its server (decision D5): a save is local, and a push follows it on close, on an explicit save
 and at most every PUSH_EVERY seconds while someone types. Its one row holds that save's bytes and what the composer held at
 it, or that the copy is to go."""
-import hashlib
 import json
 from typing import Any, TypedDict, TypeGuard
 
 from mailmind.compose.domain.builder import Built, Composed
-from mailmind.compose.domain.resume import lf
+from mailmind.compose.domain.resume import lf, sha_of
 from mailmind.content.headers import addr_chip
 from mailmind.kernel import addresses
 from mailmind.kernel.row import Row
@@ -25,10 +24,6 @@ class Record(TypedDict):
     tail_text: str | None
     tail_html: str | None
     bcc: str | None
-
-
-def sha_of(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
 
 
 def record_of(spec: Composed, built: Built) -> Record:

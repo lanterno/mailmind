@@ -1,16 +1,27 @@
-"""A saved draft, opened back up: what you typed, the quote it carries and its files."""
+"""A saved draft, opened back up: which copy may be believed, what you typed, the quote it carries and its files."""
 import base64
+from dataclasses import dataclass
+import email
+import email.policy
 from email.message import EmailMessage
+import hashlib
+import json
 import mimetypes
 import re
 from typing import TypedDict
 
 from mailmind.compose.domain import limits
 from mailmind.compose.domain.errors import Refused
-from mailmind.content.mime import Parsed, decoded
+from mailmind.content.headers import header_chips, header_text
+from mailmind.content.mime import Parsed, decoded, parse
+from mailmind.kernel import addresses
+from mailmind.kernel.row import Row
 
 MODES = ("new", "reply", "replyall", "forward")
+REPLIES = ("reply", "replyall")
 PARTICIPANT = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
+ELSEWHERE = " Edit it in the app that made it."
+UNREADABLE = "MailMind can’t read this draft." + ELSEWHERE
 
 
 class Record(TypedDict, total=False):
@@ -27,9 +38,45 @@ class ResumedFile(TypedDict):
     b64: str
 
 
+@dataclass(frozen=True)
+class Trust:
+    """What a draft's record may be believed of, for the copy being reopened."""
+    same_copy: bool             # the very copy the row tracks
+    exact: bool                 # that, or the very bytes it recorded: only then does what it says hold for this copy
+
+
 def lf(s: str | None) -> str:
     """Text with LF line ends only."""
     return (s or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def sha_of(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def trust(d: Row, row: Row, uidvalidity: int | None, raw: bytes) -> Trust:
+    """`d` is the draft's row, `row` the copy opened with `raw` its bytes, and `uidvalidity` its folder's epoch now. The same
+    copy is the same folder and UID, in the same epoch where both are known. A server may rewrite the bytes of a copy it
+    keeps, and another app may give the same bytes a new UID, so either vouches."""
+    same = (d["uid"] is not None and d["uid"] == row["uid"] and d["folder"] == row["folder"]
+            and (d["uidvalidity"] is None or uidvalidity is None or d["uidvalidity"] == uidvalidity))
+    return Trust(same, bool(same or (d["raw_sha"] and d["raw_sha"] == sha_of(raw))))
+
+
+def copy_moved(before: Row | None, now: Row | None) -> bool:
+    """Did the draft's row move while this waited for the gate? A save or a send that held it may have replaced or removed
+    the copy the row tracked."""
+    return before is not None and (now is None or (now["uid"], now["message_id"]) != (before["uid"], before["message_id"]))
+
+
+def copy_is_there(uidvalidity: int | None, known: int | None, there: bool) -> bool:
+    """What a probe of a copy says, given the epoch it saw and the one held: every UID held for a folder renumbered is void."""
+    return False if uidvalidity is not None and known is not None and uidvalidity != known else there
+
+
+def read(raw: bytes) -> tuple[EmailMessage, Parsed]:
+    """A draft's bytes, for what follows here. Raises on bytes that won't parse."""
+    return email.message_from_bytes(raw, policy=email.policy.default), parse(raw)
 
 
 def resume_split(text: str | None, rec: Record | None, exact: bool) -> tuple[str, str, str] | None:
@@ -53,14 +100,69 @@ def resume_split(text: str | None, rec: Record | None, exact: bool) -> tuple[str
     return (t[:-1] if t.endswith("\n") else t), "", "whole"   # set_content's own trailing newline
 
 
-def resume_files(msg: EmailMessage, parsed: Parsed, elsewhere: str) -> tuple[list[ResumedFile], int]:
+def split_to_fit(text: str | None, record: Row, exact: bool, files: list[ResumedFile]) -> tuple[str, str, str]:
+    """resume_split's answer, if the draft can come back at all. Refused(422) with formatted text only, whose links and
+    formatting would be lost, and past what a save can carry: every save and send of it carries the files as base64 and the
+    text and quote as JSON, so past limits.MAX_SEND_POST each would be refused, and edits made in the composer lost on
+    close."""
+    split = resume_split(text, {"own_text": record["own_text"], "tail_text": record["tail_text"]}, exact)
+    if split is None:
+        raise Refused(422, "This draft only has formatted text. Edit it in the app that made it, "
+                           "so its links and formatting aren’t lost.")
+    size = sum(len(f["b64"]) for f in files) + sum(len(json.dumps(t, ensure_ascii=False).encode()) for t in split[:2])
+    if size + limits.RESUME_HEADROOM > limits.MAX_SEND_POST:
+        raise Refused(422, "This draft is too large for MailMind to save or send, with its files "
+                           "and the text it quotes." + ELSEWHERE)
+    return split
+
+
+def mode_of(stored: str | None, in_reply_to: str | None) -> str:
+    """How a draft reopens. MailMind's own new drafts never carry an In-Reply-To, so one that does was written as a reply."""
+    mode = stored if stored in MODES else "new"
+    return "reply" if mode == "new" and in_reply_to else mode
+
+
+def participants_of(original: Row) -> list[str]:
+    """Who a reply-all drafted from this original could reach: each once, lowercase, as far as the stored row names them."""
+    out: list[str] = []
+    for a in [original["from_addr"] or ""] + PARTICIPANT.findall(original["recipients"] or ""):
+        a = a.strip().lower()
+        if a and a not in out:
+            out.append(a)
+    return out
+
+
+def _address_of(chip: str) -> str:
+    try:
+        return addresses.parse_addr_list([chip])[0][1].lower()
+    except (ValueError, IndexError):
+        return ""
+
+
+def bcc_of(msg: EmailMessage, recorded: str | None, exact: bool) -> tuple[list[str], int]:
+    """(the draft's Bcc as chips, how many were dropped). Another app may keep Bcc in the draft itself. What MailMind recorded
+    joins it only where the record is this copy's, and is otherwise counted, so the composer can say some went."""
+    hdr = header_chips(msg, "Bcc")
+    had = {_address_of(x) for x in hdr}
+    kept: list[str] = json.loads(recorded) if recorded else []
+    missing = [x for x in kept if _address_of(x) and _address_of(x) not in had]
+    return (hdr + missing, 0) if exact else (hdr, len(missing))
+
+
+def subject_of(msg: EmailMessage, then: str | None) -> str:
+    """As drafted: the synced row's copy is unfolded with spaces. Failing that, what the row said."""
+    subject = header_text(msg, "Subject")
+    return subject if subject is not None else (then or "")
+
+
+def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], int]:
     """A draft's files as the composer takes them, [{filename, content_type, size, b64}], and how
     many were pictures in the text: every part must come back as the text or a file, or this
     raises Refused(422). Headers parse as they're read, so a hostile one raises here as well."""
-    lost = "Part of this draft is something MailMind can’t reopen without losing it." + elsewhere
+    lost = "Part of this draft is something MailMind can’t reopen without losing it." + ELSEWHERE
     if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
         raise Refused(422, "This draft has an email attached as a file, which MailMind can’t "
-                         "reattach yet." + elsewhere)
+                         "reattach yet." + ELSEWHERE)
     if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
            for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
         raise Refused(422, lost)
@@ -76,7 +178,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed, elsewhere: str) -> tuple[lis
         ct = p.get_content_type()
         if ct == "text/calendar" and not p.get_filename() and p.get_content_disposition() != "attachment":
             raise Refused(422, "This draft is a calendar invite, which MailMind can’t send on as "
-                             "one." + elsewhere)
+                             "one." + ELSEWHERE)
         if i in listed or p is body or id(p) in covered:
             continue                                     # a file, the text, or formatting of that same text
         if ct == "text/html" and body is None and ct not in bodies:
@@ -94,7 +196,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed, elsewhere: str) -> tuple[lis
         total += len(data)
         if total > limits.MAX_ATTACH_BYTES:
             raise Refused(422, "This draft’s files add up to more than 25 MB, more than MailMind "
-                             "can send." + elsewhere)
+                             "can send." + ELSEWHERE)
         name = a["filename"]
         if a["content_id"] and a["is_inline"]:
             inline += 1                                  # a picture in the text: it comes back as a file
