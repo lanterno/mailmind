@@ -263,3 +263,19 @@ def test_an_audit_line_opens_its_account(page, world):
     expect(d).to_have_count(0)
     expect(page.locator("#acctSw")).to_contain_text(w.BEA)
     clean(page)
+
+
+def test_aborting_a_sweep_says_so_and_escape_aborts_it(page, world):
+    world.deliver(w.ADA, "INBOX", w.raw("ada-inbox-12-scam.eml"))
+    d = curate_drawer(page)
+    sweep = d.get_by_role("button", name=re.compile(r"^Sweep \d+")).first
+    sweep.click()
+    d.get_by_role("button", name="Abort").click()
+    expect(page.locator("#toast")).to_have_text("Aborted")
+    expect(d.locator(".armline")).to_have_count(0)
+    sweep.click()
+    expect(d.locator(".armline")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(d.locator(".armline")).to_have_count(0)
+    expect(d).to_be_visible()                                   # the sweep, not the drawer
+    clean(page)
