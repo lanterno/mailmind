@@ -366,3 +366,15 @@ def test_the_theme_button_says_which_theme(page, world):
     page.locator("#themeBtn").click()
     expect(page.locator("#toast")).to_have_text(re.compile(r"^(Day|Dusk|Night) theme$"))
     clean(page)
+
+
+def test_the_slash_key_opens_the_folded_search_on_a_phone_and_an_empty_one_folds_back(page, world):
+    page.set_viewport_size({"width": 420, "height": 800})
+    opened(page)
+    page.keyboard.press("/")
+    body = page.locator("body")
+    expect(body).to_have_class(re.compile("search-open"))
+    expect(page.locator("#search")).to_be_focused()
+    page.locator("#search").blur()
+    expect(body).not_to_have_class(re.compile("search-open"))
+    clean(page)
