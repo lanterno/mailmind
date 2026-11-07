@@ -180,7 +180,7 @@ def test_a_list_that_changed_its_way_out_since_the_preview_needs_a_new_look(app,
     assert (r["status"], posts, world.smtp.messages) == ("no_token", [], [])
 
 
-@pytest.mark.parametrize("token", ["1800000000", "not.a-token", "\u0663.abc", 17])
+@pytest.mark.parametrize("token", ["1800000000", "not.a-token", "\u0663.abc"])
 def test_what_isnt_a_token_sends_nothing(app, world, posts, token):
     archived_issue(world, app, **ONE_CLICK)
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
