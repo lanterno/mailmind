@@ -177,9 +177,7 @@ class MailCommands:
             return
         pks = self._store.pending_removal_pks(c, row["id"])
         if not pks and row["message_id"]:
-            r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
-                          "ORDER BY pk DESC LIMIT 1",
-                          (row["account"], row["src_folder"], row["message_id"])).fetchone()
+            r = self._store.newest_copy_in(c, row["account"], row["src_folder"], row["message_id"])
             pks = [r["pk"]] if r else []
         for pk in pks:
             self._store.delete_message(c, pk)
@@ -259,8 +257,7 @@ class MailCommands:
         """The local row a flag change is for: the one in the folder it was asked in, else the newest with its
         Message-ID, else the row it was asked on."""
         if row["message_id"]:
-            r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
-                          "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+            r = self._store.newest_copy_in(c, row["account"], row["src_folder"], row["message_id"])
             return r or self._store.get_message_by_msgid(c, row["account"], row["message_id"])
         pk = json.loads(row["params"] or "{}").get("pk")
         return self._store.get_message(c, pk) if pk else None
@@ -299,8 +296,7 @@ class MailCommands:
             self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
             return
         if row["message_id"]:
-            r = c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
-                          "ORDER BY pk DESC LIMIT 1", (row["account"], row["src_folder"], row["message_id"])).fetchone()
+            r = self._store.newest_copy_in(c, row["account"], row["src_folder"], row["message_id"])
         else:
             r = self._store.get_message(c, params.get("pk")) if params.get("pk") else None
         if r is not None:

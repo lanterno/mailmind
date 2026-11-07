@@ -188,6 +188,12 @@ def get_message_by_msgid(c, account, message_id):
                      (account, message_id)).fetchone()
 
 
+def newest_copy_in(c, account, folder, message_id):
+    """The pk, as a row, of the newest copy of a message in `folder`, on its way out or not; None if there is none."""
+    return c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
+                     "ORDER BY pk DESC LIMIT 1", (account, folder, message_id)).fetchone()
+
+
 def delete_message(c, pk):
     row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
     _index.forget_message(c, pk)                       # drop the FTS row first (single delete chokepoint)
