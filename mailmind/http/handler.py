@@ -5,65 +5,23 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from mailmind.assistant.api import AIOff, OverLimit, allowing_over
-from mailmind.compose.api import MAX_SEND_POST
+from mailmind.assistant.api import allowing_over
+from mailmind.http import shared
 from mailmind.http.routing import ANSWERED, Request, Routes
-from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Refused, Unreachable, Unreadable
-from mailmind.platform import perimeter, profile, settings
-from mailmind.platform.logging import for_request, get_logger
-
-log = get_logger("http")
-
-MAX_POST = 1 << 20                        # 1 MB cap for control routes
-
-
-def post_body_cap(path):
-    """The most a POST to `path` may carry, in bytes, checked against its Content-Length before
-    the body is read: 38 MB where mail and its attachments go up, 1 MB everywhere else."""
-    return MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
-
-
-_UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/stats",
-             "/api/upcoming",         # the meeting reminder reads it every minute, from a hidden tab too
-             "/api/ai/draft-ahead",   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
-                                      # or the tick's own events would hold the vacation gate open forever
-             "/api/debug/health"}     # asking how the app is doing changes nothing, this included
-
+from mailmind.http.shared import AI_OVER_HEADER
+from mailmind.http.shared import STATUS as _STATUS      # noqa: F401
+from mailmind.http.shared import UI_QUIET as _UI_QUIET  # noqa: F401
+from mailmind.platform import perimeter, settings
+from mailmind.platform.logging import for_request
 
 # What a route reads as text under these names, wherever it reads them: anything else here is a malformed request.
 _TEXT_FIELDS = ("account", "email", "thread_id", "from_addr", "token", "decision", "mode", "subject", "text", "undo_group",
                 "idempotency_key")
 
-AI_OVER_HEADER = "X-MailMind-AI-Over-Limit"   # "allow": the user said this request may go over
-
-
-# The status each answers with. 502 says asking again can help, and 422 that it won't.
-_STATUS = {NotFound: 404, Conflict: 409, Locked: 423, Refused: 400, Unreachable: 502, Unreadable: 422, Busy: 409}
-_PROBLEMS = tuple(_STATUS)
-
-
-def problem_answer(e):
-    """A Problem as the app reads one, {ok: false, error}, and its status."""
-    said = {"error": e.said} if e.said else {}
-    return {"ok": False, **said, **e.more}, next(code for kind, code in _STATUS.items() if isinstance(e, kind))
-
-
-def _over_limit_answer(e):
-    """The 402 an interactive AI request gets at the daily limit. The page asks the user, then
-    sends the request again with AI_OVER_HEADER."""
-    return {"ok": False, "error": "today's AI spending has reached the daily limit", "over_limit": True,
-            "spent_micros": e.spent_micros, "limit_micros": e.limit_micros}, 402
-
-
-def _ai_off_answer():
-    """The 409 an AI request gets with AI off. Nothing was sent, and asking again won't help."""
-    return {"ok": False, "error": "AI is off: MailMind has no Claude API key", "ai_off": True}, 409
-
 
 class H(BaseHTTPRequestHandler):
     CSRF = secrets.token_urlsafe(32)          # per-process; required on every mutating POST
-    routes = Routes()                         # mailmind.bootstrap.web binds them, with someone_here
-    someone_here = staticmethod(lambda: None)
+    routes = Routes()                         # mailmind.bootstrap.web binds them
 
     def log_message(self, *a):
         pass
@@ -125,13 +83,6 @@ class H(BaseHTTPRequestHandler):
             return None
         return b
 
-    def _ui_touch(self, path):
-        """Someone is here, for the cost governor's presence gate on drafting ahead. _UI_QUIET routes
-        are excluded because the SSE followup/outbox listeners re-fetch them even from a hidden,
-        forgotten-open tab."""
-        if path.startswith("/api/") and path not in _UI_QUIET:
-            self.someone_here()
-
     def _route(self, method, req):
         """Answer `req` with the route the table names, or 404."""
         route = self.routes.find(method, req.path)
@@ -153,28 +104,18 @@ class H(BaseHTTPRequestHandler):
         if no:
             return self._json(no.answer(), no.status)
         q = parse_qs(u.query)
-        self._ui_touch(u.path)
-        over = allowing_over(self.headers.get(AI_OVER_HEADER) == "allow")
-        over.__enter__()
-        try:
-            self._route("GET", Request(self, u.path, q))
-        except _PROBLEMS as e:
-            self._json(*problem_answer(e))
-        except OverLimit as e:      # the page asks before it goes over
-            self._json(*_over_limit_answer(e))
-        except AIOff:               # no key: nothing was sent, and nothing will be until one is set
-            self._json(*_ai_off_answer())
-        except Exception as e:                # scrub: log the detail, never echo it to the client
-            log.error("GET %(path)s failed", {"path": u.path}, exc_info=e)
-            self._json({"ok": False, "error": "request failed"}, 500)
-        finally:
-            over.__exit__(None, None, None)
+        shared.touched(u.path)
+        with allowing_over(self.headers.get(AI_OVER_HEADER) == "allow"):
+            try:
+                self._route("GET", Request(self, u.path, q))
+            except Exception as e:
+                self._json(*shared.failure_answer(e, "GET", u.path))
 
     def do_POST(self):
         u = urlparse(self.path)
         # 1) Cap the body size BEFORE reading it, so an unauthenticated/cross-tab
         #    request can't make us read+parse an arbitrary-size payload.
-        no = perimeter.refuse_body(self.headers, post_body_cap(u.path))
+        no = perimeter.refuse_body(self.headers, shared.post_body_cap(u.path))
         if no:
             self.close_connection = True
             return self._json(no.answer(), no.status)
@@ -184,31 +125,16 @@ class H(BaseHTTPRequestHandler):
         if no:
             return self._json(no.answer(), no.status)
         if b is None:
-            return self._json({"ok": False, "error": "bad request"}, 400)
-        self._ui_touch(u.path)            # only a request that got past the guards: someone is here
-        over = allowing_over(self.headers.get(AI_OVER_HEADER) == "allow")
-        over.__enter__()
-        try:
-            self._route("POST", Request(self, u.path, {}, b))
-        except _PROBLEMS as e:
-            self._json(*problem_answer(e))
-        except (TypeError, ValueError):       # malformed request input (bad/missing int id/pk) → clean 400
-            self._json({"ok": False, "error": "bad request"}, 400)
-        except profile.ReadOnlyError as e:    # a write this process may not make (and nothing queued it)
-            log.info("POST %(path)s refused, read-only: %(what)s", {"path": u.path, "what": str(e)})
-            self._json({"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409)
-        except OverLimit as e:      # the page asks before it goes over
-            self._json(*_over_limit_answer(e))
-        except AIOff:               # no key: nothing was sent, and nothing will be until one is set
-            self._json(*_ai_off_answer())
-        except Exception as e:                # scrub: log the detail, never echo it to the client
-            log.error("POST %(path)s failed", {"path": u.path}, exc_info=e)
-            self._json({"ok": False, "error": "request failed"}, 500)
-        finally:
-            over.__exit__(None, None, None)
+            return self._json(shared.BAD_REQUEST, 400)
+        shared.touched(u.path)            # only a request that got past the guards: someone is here
+        with allowing_over(self.headers.get(AI_OVER_HEADER) == "allow"):
+            try:
+                self._route("POST", Request(self, u.path, {}, b))
+            except Exception as e:
+                self._json(*shared.failure_answer(e, "POST", u.path))
 
 
 def bind(routes, someone_here):
-    """Give the handler its table, and what it tells when someone uses the app."""
+    """Give the handler its table, and say what's told when someone uses the app."""
     H.routes = routes
-    H.someone_here = staticmethod(someone_here)
+    shared.tell_of_someone(someone_here)

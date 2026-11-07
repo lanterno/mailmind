@@ -1,7 +1,7 @@
 """The routes, over the contexts, on the one handler the app serves."""
 from mailmind.bootstrap import accounts, assistant, attention, background, calendar, compose, curation, discovery, mailbox
 from mailmind.http import handler, static
-from mailmind.http.handler import AI_OVER_HEADER, H, post_body_cap
+from mailmind.http.handler import H
 from mailmind.http.routers import accounts as accounts_routes
 from mailmind.http.routers import assistant as assistant_routes
 from mailmind.http.routers import attention as attention_routes
@@ -12,6 +12,7 @@ from mailmind.http.routers import debug, events, export
 from mailmind.http.routers import discovery as discovery_routes
 from mailmind.http.routers import mailbox as mailbox_routes
 from mailmind.http.routing import Routes
+from mailmind.http.shared import AI_OVER_HEADER, post_body_cap
 
 __all__ = ["AI_OVER_HEADER", "H", "post_body_cap"]
 

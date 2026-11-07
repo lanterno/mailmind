@@ -20,6 +20,7 @@ import urllib.parse
 
 import anyio
 
+from mailmind.http.shared import TOO_LARGE, ClientGone, read_body, send_whole
 from mailmind.platform.logging import get_logger
 
 log = get_logger("http.bridge")
@@ -35,7 +36,6 @@ _CALL_FAILED = (Exception, asyncio.CancelledError)
 # How often a handler's thread, waiting on the event loop, checks that the loop still runs.
 _LOOP_CHECK = 0.5
 
-_TOO_LARGE = (413, [(b"content-type", b"text/plain; charset=utf-8")], b"payload too large")
 _FAILED = (500, [(b"content-type", b"text/plain; charset=utf-8")], b"request failed")
 
 
@@ -64,11 +64,11 @@ class HandlerBridge:
         if scope["type"] != "http":
             raise RuntimeError(f"HandlerBridge serves HTTP only, not {scope['type']!r}")
         try:
-            body = await self._read_body(scope, receive)
-        except _ClientGone:
+            body = await read_body(scope, receive, self.body_cap(scope["method"], _raw_path(scope).decode("latin-1")))
+        except ClientGone:
             return
         if body is None:
-            await _send_whole(send, *_TOO_LARGE)
+            await send_whole(send, *TOO_LARGE)
             return
         x = _Exchange(send)
         self._live.add(x)
@@ -84,33 +84,6 @@ class HandlerBridge:
                     tg.cancel_scope.cancel()
         finally:
             self._live.discard(x)
-
-    async def _read_body(self, scope, receive):
-        """The request body: b"" when the handler won't read it (over the cap, or a body the
-        handler never reads), or None when it runs past the cap without declaring a length."""
-        cap = self.body_cap(scope["method"], _raw_path(scope).decode("latin-1"))
-        declared = _header(scope, b"content-length")
-        if declared is not None:
-            try:
-                if not 0 <= int(declared) <= cap:
-                    return b""
-            except ValueError:
-                return b""                      # the handler answers a malformed length
-        elif cap == 0:
-            return b""
-        chunks, size = [], 0
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                raise _ClientGone
-            chunk = message.get("body", b"")
-            size += len(chunk)
-            if size > cap:
-                return None
-            chunks.append(chunk)
-            if not message.get("more_body", False):
-                break
-        return b"".join(chunks)
 
     def _handle(self, raw, scope, x):
         """Run the handler on one request, on the request's own thread."""
@@ -133,10 +106,6 @@ class HandlerBridge:
         except BrokenPipeError:
             pass                                # the response was ended, or the event loop is gone
         x.say_finished()
-
-
-class _ClientGone(Exception):
-    """The client left before its request body arrived."""
 
 
 class _Exchange:
@@ -274,23 +243,10 @@ def _parse_head(head):
     return status, headers
 
 
-async def _send_whole(send, status, headers, body):
-    await send({"type": "http.response.start", "status": status,
-                "headers": [*headers, (b"content-length", str(len(body)).encode())]})
-    await send({"type": "http.response.body", "body": body, "more_body": False})
-
-
 async def _watch_for_disconnect(receive, gone):
     while (await receive())["type"] != "http.disconnect":
         pass
     gone.set()
-
-
-def _header(scope, name):
-    for key, value in scope["headers"]:
-        if key == name:
-            return value
-    return None
 
 
 def _raw_path(scope):
