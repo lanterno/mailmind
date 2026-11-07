@@ -79,7 +79,9 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
       </div>
       {(d.next?.length ?? 0) > 0 && <div className="rv-sec next"><Icon name="wind" /> Start next week with</div>}
       {d.next?.map((t) => <div className="rv-item" key={t}><span className="ic">→</span><div className="body"><div className="t">{t}</div></div></div>)}
-      {(d.needs?.length ?? 0) > 0 && <div className="rv-sec">Still needs you ({d.needs!.length})</div>}
+      {(d.needs?.length ?? 0) > 0
+        ? <div className="rv-sec">Still needs you ({d.needs!.length})</div>
+        : <><div className="rv-sec">Still needs you</div><div className="rv-empty">Nothing important is unanswered.</div></>}
       {d.needs?.map((n) => (
         <button className="rv-item need" key={n.pk} onClick={() => open(n.pk, n.account, n.thread_id)}>
           <span className="ic">●</span>
