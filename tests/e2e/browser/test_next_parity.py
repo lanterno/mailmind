@@ -41,6 +41,15 @@ def opened(page):
     return page
 
 
+def curate_drawer(page):
+    page.goto(f"/next/m/{w.ADA}/INBOX")
+    page.locator("#statusBtn").click()
+    page.get_by_role("button", name=re.compile("^Curate")).click()
+    d = page.get_by_role("dialog", name="Curate")
+    expect(d).to_be_visible()
+    return d
+
+
 def row(page, world, name):
     pk = world.pk(name)
     assert pk is not None, f"{name} has no row in the database"
@@ -179,4 +188,25 @@ def test_help_names_every_search_operator_the_page_does(page, world):
     opened(page)
     page.keyboard.press("?")
     expect(page.locator(".legsearch")).to_contain_text("-exclude")
+    clean(page)
+
+
+def test_the_account_menu_names_itself_marks_yours_says_who_cant_connect_and_leads_to_settings(page, app, world):
+    digest = app.get("/api/digest?min=1&account=").json
+    digest["status"] = {**digest["status"], w.BEA: {"health": "error"}}
+    page.pw.route(re.compile(r"/api/digest"), lambda route: route.fulfill(json=digest))
+    opened(page)
+    switch = page.locator("#acctSw")
+    expect(switch).to_have_attribute("title", "Ada — switch account")
+    expect(switch.locator(".as-chev")).to_have_count(1)
+    switch.click()
+    expect(page.locator(".am-ttl")).to_have_text("Show mail from")
+    menu = page.locator(".acct-menu")
+    expect(menu.locator(".am-item", has_text="Ada").locator(".am-chk")).to_have_count(1)
+    expect(menu.locator(".am-item", has_text="Bea").locator(".err")).to_have_text("can’t connect")
+    menu.get_by_role("menuitemradio", name=re.compile("^All inboxes")).click()
+    expect(switch.locator("small.err")).to_have_text(re.compile(r"^1 of \d can’t connect$"))
+    switch.click()
+    page.locator(".acct-menu .am-item", has_text="Add or manage accounts").click()
+    expect(page.get_by_role("heading", name="Email connections")).to_be_visible()
     clean(page)
