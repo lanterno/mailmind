@@ -115,6 +115,20 @@ def test_with_one_gate_for_all_another_account_waits_too(kind):
         t.join(5)
 
 
+def test_left_unset_every_account_shares_the_one_lock(monkeypatch):
+    """Which is the default until the owner has soaked a gate for each account."""
+    monkeypatch.delenv("MAILMIND_WORKERS")
+    assert not gates.per_account()
+    t, release = holding(ADA)
+    try:
+        with pytest.raises(gates.Busy):
+            gates.run(BEA, lambda: "never", priority=NOW, wait=False)
+        assert gates.held(BEA)
+    finally:
+        release.set()
+        t.join(5)
+
+
 # ── a gate for each account ────────────────────────────────────────────────────────────────────
 
 def test_a_held_account_holds_up_only_its_own_jobs(per_account):
