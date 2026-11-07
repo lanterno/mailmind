@@ -217,12 +217,10 @@ class Ingest:
         token = token.strip().lower()
         c = self._store.conn()
         try:
-            cols = "pk, from_addr, from_name, subject, bucket, reason, list_unsub_method"
             if "@" in token:
-                rows = c.execute(f"SELECT {cols} FROM messages WHERE lower(from_addr)=?", (token,)).fetchall()
+                rows = self._store.classified_from_address(c, token)
             else:                                        # the domain and its sub-domains; the classifier decides
-                rows = c.execute(f"SELECT {cols} FROM messages WHERE lower(from_addr) LIKE ? OR lower(from_addr) LIKE ?",
-                                 (f"%@{token}", f"%.{token}")).fetchall()
+                rows = self._store.classified_from_domain(c, token)
             changed = 0
             for r in rows:
                 bucket, confidence, reason = self._curation.classify((r["from_addr"] or "").lower(), r["subject"] or "",
@@ -231,8 +229,7 @@ class Ingest:
                 if not (self._curation.by_rule(reason) or self._curation.by_rule(r["reason"])):
                     continue
                 if (bucket, reason) != (r["bucket"], r["reason"]):
-                    c.execute("UPDATE messages SET bucket=?, confidence=?, reason=?, is_junk=? WHERE pk=?",
-                              (bucket, confidence, reason, int(self._curation.is_junk(bucket)), r["pk"]))
+                    self._store.set_classification(c, r["pk"], bucket, confidence, reason, int(self._curation.is_junk(bucket)))
                     changed += 1
             c.commit()
             return changed

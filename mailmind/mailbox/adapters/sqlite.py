@@ -367,6 +367,25 @@ def set_local_flags(c, pk, **flags):
     c.execute(f"UPDATE messages SET {sets} WHERE pk=?", [*cols.values(), pk])
 
 
+_CLASSIFIED = "pk, from_addr, from_name, subject, bucket, reason, list_unsub_method"
+
+
+def classified_from_address(c, addr):
+    """What the classifier reads and said of each stored message from this address."""
+    return c.execute(f"SELECT {_CLASSIFIED} FROM messages WHERE lower(from_addr)=?", (addr,)).fetchall()
+
+
+def classified_from_domain(c, domain):
+    """The same, of mail from this domain and its sub-domains."""
+    return c.execute(f"SELECT {_CLASSIFIED} FROM messages WHERE lower(from_addr) LIKE ? OR lower(from_addr) LIKE ?",
+                     (f"%@{domain}", f"%.{domain}")).fetchall()
+
+
+def set_classification(c, pk, bucket, confidence, reason, is_junk):
+    c.execute("UPDATE messages SET bucket=?, confidence=?, reason=?, is_junk=? WHERE pk=?",
+              (bucket, confidence, reason, is_junk, pk))
+
+
 def flag_rows_newest(c, account, folder, limit):
     """The newest stored rows of the folder, none on its way out, to compare with the server's flags."""
     return c.execute(_FLAG_ROW + "AND pending_removal IS NULL ORDER BY uid DESC LIMIT ?",
