@@ -50,22 +50,24 @@ class Asking:
         v = qs_or_body.get(name) if is_object(qs_or_body) else None
         return (v[0] if v else None) if is_list(v) else v
 
+    def _enabled(self) -> set[str]:
+        return {a["email"] for a in self._mail.accounts()}
+
     def _accounts(self, qs_or_body: object) -> set[str]:
-        """The enabled accounts, or the one a passed ?account=/account names (matches the digest's
-        per-account view), like digest_json's send_accounts."""
-        enabled = {a["email"] for a in self._mail.accounts()}
+        """The enabled accounts, or the one a passed ?account=/account names."""
+        enabled = self._enabled()
         acct = self._one(qs_or_body, "account") or None
         return {acct} if (acct and acct in enabled) else enabled
 
-    def briefing(self, qs_or_body: object, force: bool = False, generate: bool = True) -> Result:
+    def briefing(self, force: bool = False, generate: bool = True) -> Result:
         """The synthesized 'Today' card. GET only reads what is stored (generate=False); POST
         /api/briefing writes it once, and /api/briefing/refresh again (force)."""
-        return self._briefs.build(self._accounts(qs_or_body), force=force, generate=generate)
+        return self._briefs.build(self._enabled(), force=force, generate=generate)
 
-    def review(self, qs_or_body: object, force: bool = False, generate: bool = True) -> Result:
+    def review(self, force: bool = False, generate: bool = True) -> Result:
         """The Weekly Review — retrospective over the last 7 days. GET only reads what is stored;
         POST /api/review writes it once, and /api/review/refresh again (force)."""
-        return self._reviews.build(self._accounts(qs_or_body), force=force, generate=generate)
+        return self._reviews.build(self._enabled(), force=force, generate=generate)
 
     def delta(self, qs_or_body: object, generate: bool = True) -> Result:
         """The 'since you last looked' delta digest. GET only reads what is stored; POST writes it.

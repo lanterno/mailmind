@@ -28,11 +28,11 @@ def routes(assistant, mailbox):
 
     @r.get("/api/briefing")          # what is stored of the "Today" card; POST writes it
     def briefing(req):
-        return assistant.asking.briefing(req.query, generate=False)
+        return assistant.asking.briefing(generate=False)
 
     @r.get("/api/review")            # what is stored of the Weekly Review; POST writes it
     def review(req):
-        return assistant.asking.review(req.query, generate=False)
+        return assistant.asking.review(generate=False)
 
     @r.get("/api/briefing/since")    # what is stored of the "since you last looked" delta
     def delta(req):
@@ -57,11 +57,11 @@ def routes(assistant, mailbox):
     # read-only: NL command → validated, capped action PREVIEW
     r.post("/api/ai/do-plan")(_scrubbed("do-plan error", "plan failed", lambda req: assistant.bulk.plan(req.body)))
     # write each once, if none is stored
-    r.post("/api/briefing")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing(req.body)))
-    r.post("/api/review")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review(req.body)))
+    r.post("/api/briefing")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing()))
+    r.post("/api/review")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review()))
     r.post("/api/briefing/since")(_scrubbed("delta error", "delta failed", lambda req: assistant.asking.delta(req.body)))
     # write each again
-    r.post("/api/review/refresh")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review(req.body, force=True)))
-    r.post("/api/briefing/refresh")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing(req.body, force=True)))
+    r.post("/api/review/refresh")(_scrubbed("review error", "review failed", lambda req: assistant.asking.review(force=True)))
+    r.post("/api/briefing/refresh")(_scrubbed("briefing error", "briefing failed", lambda req: assistant.asking.briefing(force=True)))
 
     return r
