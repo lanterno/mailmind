@@ -12,7 +12,7 @@ from mailmind.platform import webroot
 
 # A route that matches by shape names no path, so each has one here. A new one fails test_every_shape_has_a_path_here.
 SHAPED = {("GET", "next_app"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
-          ("GET", "attachment"): "/api/message/1/attachment/1", ("GET", "body"): "/api/message/1/body",
+          ("GET", "attachment"): "/api/message/1/attachment/1", ("GET", "body"): "/api/message/1/body", ("GET", "body_document"): "/api/message/1/body.html",
           ("POST", "change"): "/api/accounts/test"}
 BAD_HOST = "bad host/origin"
 CROSS_SITE = "cross-site request"
