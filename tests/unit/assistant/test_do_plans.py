@@ -7,6 +7,7 @@ import pytest
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.application import plans
+from mailmind.assistant.domain import action_plan
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import assistant
 
@@ -133,7 +134,7 @@ def test_only_the_message_the_preview_counted_files_not_its_conversation(app, wo
 
 
 def test_a_capped_plan_files_the_newest(app, world, ai, monkeypatch):
-    monkeypatch.setattr(assistant.bulk, "_DO_CAP", 1)
+    monkeypatch.setattr(action_plan, "CAP", 1)
     plan = preview(app, ai)
     assert plan["capped"] is True and plan["count"] >= 2
     assert confirm(app, plan).json["count"] == 1
@@ -232,7 +233,7 @@ def test_a_plan_can_be_confirmed_once(app, world, ai):
 
 def test_a_plan_lasts_ten_minutes(app, world, ai):
     plan = preview(app, ai)
-    app.clock.shift(timedelta(seconds=plans.TTL))
+    app.clock.shift(timedelta(seconds=action_plan.TTL))
     since = world.mark()
     r = confirm(app, plan)
     assert r.status == 410 and r.json["expired"] is True
@@ -241,7 +242,7 @@ def test_a_plan_lasts_ten_minutes(app, world, ai):
 
 def test_a_plan_is_good_up_to_then(app, world, ai):
     plan = preview(app, ai)
-    app.clock.shift(timedelta(seconds=plans.TTL - 1))
+    app.clock.shift(timedelta(seconds=action_plan.TTL - 1))
     assert confirm(app, plan).status == 200
 
 
@@ -346,7 +347,7 @@ def test_with_the_server_down_a_move_queues_as_it_does_from_a_click(app, world, 
 
 def test_the_book_keeps_the_newest_plans():
     book = plans.PlanBook()
-    made = [book.open("archive", None, [(1, "INBOX")]) for _ in range(plans.KEPT + 2)]
+    made = [book.open("archive", None, [(1, "INBOX")]) for _ in range(action_plan.KEPT + 2)]
     assert book.take(made[0].id) is None and book.take(made[1].id) is None
     assert all(book.take(p.id) == p for p in made[2:])
 
