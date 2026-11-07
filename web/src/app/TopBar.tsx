@@ -10,6 +10,7 @@ import { helpOpen } from "../features/status/Help";
 import { SoonPill, StatusPill } from "../features/status/Status";
 import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
+import { toast } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
 import { go, type ListSource } from "./route";
 import { useLayer } from "../lib/backTrap";
@@ -149,7 +150,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
           <a className="tbtn" href="/" title="The current app, until this one takes its place">Current app</a>
           <button className="tbtn icon" id="helpBtn" title="Keyboard help (?)" aria-label="Keyboard help" onClick={() => helpOpen.set(true)}><Icon name="keyboard" /></button>
           <button className="tbtn icon" id="settingsBtn" title="Settings — manage connections (,)" aria-label="Settings" onClick={m.openSettings}><Icon name="sliders" /></button>
-          <button className="tbtn icon" id="themeBtn" aria-label={`Theme: ${THEME_LABEL[current]} — switch to ${THEME_LABEL[nextTheme(current)]}`} title="Day, Dusk or Night" onClick={() => setTheme(nextTheme(current))}>
+          <button className="tbtn icon" id="themeBtn" aria-label={`Theme: ${THEME_LABEL[current]} — switch to ${THEME_LABEL[nextTheme(current)]}`} title="Day, Dusk or Night" onClick={() => { const t = nextTheme(current); setTheme(t); toast(`${THEME_LABEL[t]} theme`); }}>
             <Icon name={current === "day" ? "sun" : current === "dusk" ? "dusk" : "moon"} />
           </button>
         </div>
