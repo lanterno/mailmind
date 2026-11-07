@@ -77,9 +77,9 @@ export function fromSearch(it: SearchRow): Row {
     isJunk: Boolean(it.is_junk),
     replyWorthy: Boolean(it.reply_worthy),
     bucket: it.bucket,
-    threadId: "",
+    threadId: it.thread_id ?? "",
     count: 1,
-    action: "",
+    action: String(it.action ?? "").trim(),
     summary: (it as { summary?: string }).summary ?? "",
     needsYou: Boolean(it.needs_you),
   };
