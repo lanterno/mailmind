@@ -21,6 +21,11 @@ def repeats(inv: Invite) -> bool:
     return bool(inv.get("rrule") or inv.get("rdates"))
 
 
+def first_date(inv: Invite) -> Invite:
+    """The event as though it happened only once, on the date it starts."""
+    return {**inv, "rrule": "", "rdates": []}
+
+
 def changed_occurrences(invites: Iterable[Invite]) -> tuple[dict[str, list[str]], set[str]]:
     """Per series: its rescheduled or cancelled occurrences, and the series that are gone."""
     moved: dict[str, list[str]] = {}

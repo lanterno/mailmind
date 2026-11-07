@@ -1,4 +1,5 @@
 """Today & next. Pure-local: it reads only stored bodies, never IMAP."""
+import time
 from datetime import datetime
 from typing import Any
 
@@ -6,6 +7,8 @@ from mailmind.calendar.application.ports import IcsReader, StoredInvites
 from mailmind.calendar.domain import agenda
 from mailmind.calendar.domain.invite import Invite, Party
 from mailmind.kernel.row import Row
+
+_EXPAND_SECONDS = 1.0       # of this thread's time, on one list: a reader bounds each rule, but one message can hold many
 
 
 class Agenda:
@@ -34,14 +37,16 @@ class Agenda:
                     found.append((r, invite))
         moved, gone = agenda.changed_occurrences([inv for _r, inv in found])
         items: list[dict[str, Any]] = []
+        expand_until = time.thread_time() + _EXPAND_SECONDS
         for r, inv in found:
             if agenda.dead(inv) or (inv.get("recurrence_id") and inv.get("uid") in gone):
                 continue
             if agenda.repeats(inv) and not inv.get("recurrence_id"):
                 inv: Invite = {**inv, "exdates": inv["exdates"] + moved.get(inv.get("uid"), [])}
-            occ = self._reader.next_occurrence(inv, now)
-            if occ is None and inv.get("rrule"):                     # a rule the reader can't expand: its first date
-                occ = self._reader.next_occurrence({**inv, "rrule": ""}, now)
+            over = agenda.repeats(inv) and time.thread_time() > expand_until
+            occ = None if over else self._reader.next_occurrence(inv, now)
+            if occ is None and agenda.repeats(inv):                  # a rule the reader can't expand, or isn't asked to: its first date
+                occ = self._reader.next_occurrence(agenda.first_date(inv), now)
             if occ is None:
                 continue
             try:
