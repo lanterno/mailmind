@@ -166,6 +166,29 @@ def test_a_server_without_idle_ends_its_worker_and_is_logged_out_of(world, super
     assert world.server.commands_for(w.ADA, "SELECT") == [] and supervisor._conns == []
 
 
+def test_a_server_without_idle_is_asked_to_log_out_once(world, supervisor, monkeypatch):
+    """The wire can't show the second ask, which goes to a socket the first closed: the session can."""
+    world.server.without = {"IDLE"}
+    asked = []
+    opening = supervisor._open_session
+
+    def counting(acct):
+        session = opening(acct)
+        logout = session.logout
+
+        def logging_out():
+            asked.append(acct["email"])
+            return logout()
+        session.logout = logging_out
+        return session
+    monkeypatch.setattr(supervisor, "_open_session", counting)
+    supervisor.start()
+    worker = supervisor._watchers[w.ADA].thread
+    worker.join(5)
+    assert not worker.is_alive()
+    assert asked.count(w.ADA) == 1
+
+
 def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(world, supervisor, monkeypatch):
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
