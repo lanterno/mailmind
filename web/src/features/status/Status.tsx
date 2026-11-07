@@ -180,15 +180,17 @@ export function SoonPill({ m }: { m: Mailbox }) {
   const when = minutes > 0 ? `in ${minutes} min` : "now";
   const title = event?.summary || "(no title)";
   const message = `${title} starts ${when}`;
+  const openInvite = useEffectEvent((pk: number) => m.openAny(pk));   // when it's clicked, on the list as it is by then
   const tell = useEffectEvent(() => {
     if (!key || told.has(key)) return;
     told.add(key);
     if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
       try {
-        const n = new Notification(message, { tag: `mailmind-soon-${key}` });
+        const n = new Notification(message, { body: [event && eventWhen(event, new Date(now))[0], event?.location].filter(Boolean).join(" · "), tag: `mailmind-soon-${key}` });
         n.onclick = () => {
           window.focus();
           n.close();
+          if (event) openInvite(event.pk);
         };
       } catch { /* the pill still shows */ }
     } else announce(message);
