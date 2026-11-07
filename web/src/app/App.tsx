@@ -237,7 +237,7 @@ export function App() {
   let empty: React.ReactNode = <div className="nores">{searching ? "No matches." : m.source?.kind === "digest" ? "Nothing left here." : "Nothing here."}</div>;
   if (m.digestFailed) empty = <div className="nores">Couldn’t reach the server. <button className="ai-rerun" id="dgRetry" onClick={m.retryDigest}>Retry</button></div>;
   else if (m.digest && !accounts.length) empty = <div className="nores firstrun"><div className="fr-h">Welcome to MailMind</div><div className="fr-b">No email accounts connected yet.</div><button className="abtn prim" id="frAdd" onClick={m.openSettings}>+ Connect your first account</button></div>;
-  else if (list.isError) empty = <div className="nores" role="status">Couldn’t load this list. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
+  else if (list.isError) empty = <div className="nores" role="status">{searching ? "Search failed." : "Couldn’t load messages."} <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
   else if (list.isPending && source) empty = <div className="nores" role="status">Loading…</div>;
   else if (last?.error) empty = <div className="nores">{last.error}</div>;
   else if (inInbox && !searching && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? "Nothing needs you." : "Nothing unread."} Everything else is in <button className="linkbtn" onClick={() => setInboxTab("all")}>Everything</button>.</div>;
