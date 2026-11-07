@@ -23,7 +23,7 @@ from mailmind.curation.domain import rulebook
 from mailmind.bootstrap import curation
 from mailmind.discovery.domain import views as builtin
 from mailmind.bootstrap import discovery
-from mailmind.bootstrap import attention
+from mailmind.bootstrap import attention, calendar
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.compose import composing
 from mailmind.compose.domain import attachments
@@ -999,20 +999,27 @@ def _next(rule, *extra, start="20261005T100000", end="20261005T103000", after=da
     return got and got[0]
 
 
-def test_hwf_only_the_first_event_of_a_calendar_is_read():
+@pytest.fixture(params=calendar.KINDS)
+def each_reader(request):
+    calendar.use(request.param)
+    yield request.param
+    calendar.reset()
+
+
+def test_hwf_only_the_first_event_of_a_calendar_is_read(each_reader):     # what a card shows: `events` has the others where they're read
     from mailmind.bootstrap.calendar import ics
     inv = ics.parse(_cal(["UID:a", "SUMMARY:First", "DTSTART:20261110T100000"],
                          ["UID:b", "SUMMARY:Second", "DTSTART:20261111T100000"]))
     assert (inv["uid"], inv["summary"], inv["start_iso"]) == ("a", "First", "2026-11-10T10:00:00")
 
 
-def test_hwf_count_includes_occurrences_an_exdate_removes():
+def test_hwf_count_includes_occurrences_an_exdate_removes(each_reader):
     # Mondays from Oct 5: COUNT=5 ends on Nov 2, which EXDATE removes; it still counts
     assert _next("FREQ=WEEKLY;COUNT=5", "EXDATE:20261102T100000") is None
     assert _next("FREQ=WEEKLY;COUNT=6", "EXDATE:20261102T100000") == datetime(2026, 11, 9, 10, 0)
 
 
-def test_hwf_an_all_day_series_skips_an_exdate_by_its_date():
+def test_hwf_an_all_day_series_skips_an_exdate_by_its_date(each_reader):
     assert _next("FREQ=WEEKLY", "EXDATE:20261102T090000", start="20261005", end="20261006") == datetime(2026, 11, 9)
 
 

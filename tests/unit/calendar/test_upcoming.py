@@ -161,7 +161,7 @@ def test_cancelling_the_series_drops_its_moved_occurrences_too(data_dir):
 
 
 def test_a_rule_it_cannot_expand_shows_its_first_date_while_ahead(data_dir):
-    rule = "RRULE:FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1\r\n"
+    rule = "RRULE:FREQ=HOURLY\r\n"
     _msg(_ics("a", NOW + timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", rule + "END:VEVENT"))
     assert [x["start"] for x in _up()] == ["2026-11-02T12:00"]
@@ -257,10 +257,14 @@ def test_an_all_day_series_and_a_floating_one():
     assert ics.next_occurrence(inv, datetime(2026, 11, 1, 12, 0))[0] == datetime(2026, 11, 2, 10, 0)
 
 
-@pytest.mark.parametrize("rule", ["FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1", "FREQ=WEEKLY;BYDAY=XX", "FREQ=HOURLY",
-                                  "FREQ=YEARLY;INTERVAL=9000"])   # the last is past year 9999
+@pytest.mark.parametrize("rule", ["FREQ=WEEKLY;BYDAY=XX", "FREQ=HOURLY", "FREQ=YEARLY;INTERVAL=9000"])   # the last is past year 9999
 def test_a_rule_it_cannot_read_gives_none_not_a_wrong_date(rule):
     assert _next(rule) is None
+
+
+def test_bysetpos_is_a_rule_only_the_library_expands(reader):
+    expected = ("2026-11-02T10:00+01:00", "2026-11-02T10:30+01:00") if reader == "icalendar" else None
+    assert _next("FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1") == expected
 
 
 def test_a_one_off_event_is_its_own_only_occurrence():

@@ -21,7 +21,7 @@ import pytest
 
 import guard
 from mailmind.bootstrap import web
-from mailmind.bootstrap import mailbox
+from mailmind.bootstrap import calendar, mailbox
 from mailmind.platform.logging import stop as stop_logging
 
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -113,6 +113,12 @@ def _imap_adapters():
     """imaplib for every account and nothing else offered, as a process starts: a test that offers
     IMAPClient, or a new door an earlier test built, can't leave it to the next."""
     mailbox.reset()
+
+
+@pytest.fixture(autouse=True)
+def _ics_reader():
+    """The hand-rolled reader of invites, as a process starts: a new door an earlier test built asked for the library's."""
+    calendar.reset()
 
 
 @pytest.fixture(autouse=True)
