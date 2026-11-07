@@ -103,9 +103,8 @@ def test_a_list_keeps_its_order_and_each_address_once_whatever_its_case(specs):
     assert email.utils.getaddresses([", ".join(out)]) == [("", s) for s in out]
 
 
-# IDNA's normalization runs after the check for what an address may not hold, and it turns the fullwidth or small form
-# of a separator into the separator itself: one chip the person sees, and a header or an envelope that reads otherwise.
-@pytest.mark.xfail(strict=True, reason="validate_pair looks for separators in the domain before IDNA makes them")
+# IDNA turns the fullwidth or small form of a separator into the separator itself: one chip the person sees, and a header
+# or an envelope that would read otherwise.
 @pytest.mark.parametrize("typed", [
     "bo@example\uff0cother.test", "bo@example\uff20other.test", "bo@exa\uff1cmple.test", "bo@exa\uff1emple.test",
     "bo@exa\uff1bmple.test", "bo@exa\uff1ample.test", "bo@exa\uff08mple.test", "bo@exa\uff3bmple.test",
