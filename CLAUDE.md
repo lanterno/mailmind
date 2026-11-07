@@ -417,7 +417,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
   (`mailbox.copies`). A message's row through `store`, and what's kept about folders through `mailbox.folders`. It is standard library only.
-- Two checks hold the shape. import-linter's contracts in `pyproject.toml` run in `just lint`:
+- Three checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, and each table to its owner. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic` and `imapclient` packages each reached only through its adapter. `tests/legacy_ratchet.txt` lists
