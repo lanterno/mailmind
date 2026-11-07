@@ -5,6 +5,7 @@ from typing import Any
 
 from mailmind.discovery.application.ports import AccountNames, ContactMail, FolderRoles, KeptSenders
 from mailmind.discovery.domain import contacts, known
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import ago, rel_time
 
 
@@ -17,13 +18,13 @@ class Contacts:
         rows = self._mail.senders_like(contacts.needle(q))
         return {"ok": True, "items": [contacts.suggestion(r) for r in rows]}
 
-    def card(self, addr: str | None) -> tuple[dict[str, Any], int]:
-        """One sender's card. (result, code)."""
+    def card(self, addr: str | None) -> dict[str, Any]:
+        """One sender's card."""
         a = contacts.address(addr)
         if a is None:
-            return {"ok": False, "error": "bad address"}, 400
+            raise Refused("bad address")
         agg, accounts, recent = self._mail.card(a)
-        return contacts.card(a, agg, accounts, recent, ago, rel_time), 200
+        return contacts.card(a, agg, accounts, recent, ago, rel_time)
 
 
 class KnownContacts:
@@ -34,17 +35,17 @@ class KnownContacts:
         self._rules = rules
 
     def ask(self, addrs: object, own: Iterable[str] | None = None,
-            min_history: int = known.MIN_HISTORY) -> tuple[dict[str, Any], int]:
+            min_history: int = known.MIN_HISTORY) -> dict[str, Any]:
         """Which of these addresses you've exchanged mail with. The answer carries no subjects, counts or dates.
-        `thin` means too little history to call anyone new. (result, code), like the contact card."""
+        `thin` means too little history to call anyone new."""
         try:
             question = known.asked(addrs)
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}, 400
+        except ValueError as e:               # our own words: they hold nothing typed
+            raise Refused(str(e)) from e
         facts = self._mail.known_facts(list(question.want), min_history)
         yours = ({o.lower() for o in own} if own is not None
                  else known.own_addresses(self._accounts.emails(), self._accounts.aliases(), facts.accounts))
         wanted = set(question.want)
         hit = known.vouched(facts, wanted, yours, self._folders.role_by_name)
         hit |= self._rules.kept() & wanted
-        return {"ok": True, "items": known.verdicts(question, yours, hit), "bad": question.bad, "thin": facts.thin}, 200
+        return {"ok": True, "items": known.verdicts(question, yours, hit), "bad": question.bad, "thin": facts.thin}

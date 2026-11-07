@@ -1,5 +1,6 @@
 """What the page asks of Discovery: search, saved views, documents and who you know."""
 from mailmind.http.routing import Routes
+from mailmind.kernel.errors import Problem
 from mailmind.platform.logging import get_logger
 
 log = get_logger("contacts")
@@ -36,6 +37,8 @@ def routes(discovery):
     def known(req):
         try:
             return discovery.known.ask(req.body.get("addrs"))
+        except Problem:
+            raise
         except Exception as ex:             # class only: the payload is a list of addresses
             log.error("known error", exc_info=ex)
             return {"ok": False, "error": "lookup failed"}, 500
