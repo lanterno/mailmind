@@ -32,7 +32,9 @@ class Perimeter:
             refusal = perimeter.refuse_post(path, headers, port=port, token=self.token(),
                                             cap=self.body_cap(method, path))
         if refusal is None:
-            return await self.app(scope, receive, send)
+            # The ASGI server decodes `path`, so /%61pi/digest would pass here as no part of the API and match a route as
+            # /api/digest. Whatever runs next goes by the path as judged, and as sent.
+            return await self.app({**scope, "path": path}, receive, send)
         body = json.dumps(refusal.answer()).encode()
         await send({"type": "http.response.start", "status": refusal.status,
                     "headers": [(b"content-type", b"application/json"),
