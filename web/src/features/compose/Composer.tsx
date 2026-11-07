@@ -1,4 +1,4 @@
-// The composer, on the page's own classes: what you see of the machine in compose.ts. Each control asks the machine, and
+// The composer: what you see of the machine in compose.ts. Each control asks the machine, and
 // what it shows is the copy the machine published.
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "../../lib/toast";

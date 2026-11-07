@@ -1,4 +1,4 @@
-/* What the React app needs beyond the page's own stylesheet, which it shares. */
+/* What the app needs beyond assets/styles/app.css. */
 a.frow{text-decoration:none}
 button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12px;text-align:left;color:var(--mute)}
 .rows-box:focus{outline:none}
