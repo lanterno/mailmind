@@ -24,6 +24,7 @@ import { Docs } from "../features/discovery/Docs";
 import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
 import { settingsOpen } from "../features/settings";
+import { helpOpen } from "../features/status/Help";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
 import { badAccounts } from "../features/status/model";
@@ -126,10 +127,17 @@ function useKeys(m: Mailbox, commands: Command[]) {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const at = e.target as Element | null;
-      if (settingsOpen.get() && (e.key === "," || e.key === "g") && !at?.closest?.("input,textarea,select")) {
-        e.preventDefault();
-        settingsOpen.set(false);
-        return;
+      if (settingsOpen.get() && !at?.closest?.("input,textarea,select")) {
+        if (e.key === "," || e.key === "g") {
+          e.preventDefault();
+          settingsOpen.set(false);
+          return;
+        }
+        if (e.key === "?") {
+          e.preventDefault();
+          helpOpen.set(!helpOpen.get());
+          return;
+        }
       }
       if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="alertdialog"]')) return;
       if (at?.closest?.('[role="separator"]') && e.key.startsWith("Arrow")) return;
