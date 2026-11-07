@@ -155,6 +155,17 @@ def test_a_worker_backing_off_stops_at_once_when_its_account_goes(world, supervi
     assert not worker.is_alive() and time.monotonic() - began < 2     # its backoff is 5 seconds
 
 
+def test_a_server_without_idle_ends_its_worker_and_is_logged_out_of(world, supervisor):
+    world.server.without = {"IDLE"}
+    logouts = count(world, "LOGOUT")
+    supervisor.start()
+    worker = supervisor._watchers[w.ADA].thread
+    worker.join(5)
+    assert not worker.is_alive() and supervisor.watching()[w.ADA] is False    # the periodic sync has it
+    assert count(world, "LOGOUT") == logouts + 1 and count(world, "IDLE") == 0
+    assert world.server.commands_for(w.ADA, "SELECT") == [] and supervisor._conns == []
+
+
 def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(world, supervisor, monkeypatch):
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
