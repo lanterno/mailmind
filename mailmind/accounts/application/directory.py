@@ -28,6 +28,9 @@ from mailmind.accounts.domain import account, events
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus, settings
+from mailmind.platform.logging import get_logger
+
+log = get_logger("accounts")
 
 
 class Directory:
@@ -92,7 +95,7 @@ class Directory:
                     self.resolve_credential(a)
                     ok += 1
                 except Exception as e:
-                    print(f"  ! preload failed for {a['email']}: {e}")
+                    log.warning("%(account)s: a credential's preload failed", {"account": a["email"]}, exc_info=e)
         return ok
 
     def tls_pin(self, email: str, endpoint: str, seen: str) -> str | None:
