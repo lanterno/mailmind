@@ -660,3 +660,16 @@ def test_a_list_or_a_search_that_fails_says_so_in_the_pages_words(page, app, wor
     page.problems.clear()
     assert page.blocked == [], page.blocked
 
+def test_the_question_mark_opens_help_over_settings_and_escape_comes_back(page, world):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    title = page.get_by_role("heading", name="Email connections")
+    expect(title).to_be_visible()
+    page.keyboard.press("?")
+    keys = page.get_by_role("dialog", name="Keyboard")
+    expect(keys).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(keys).to_be_hidden()
+    expect(title).to_be_visible()
+    clean(page)
+
