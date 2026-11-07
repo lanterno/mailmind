@@ -344,7 +344,7 @@ def test_a_held_draft_refuses_a_save_and_isnt_pushed(app, world):
 
 
 def test_discarding_a_draft_with_no_row_answers_as_gone(data_dir):
-    assert drafts.save({"delete": True, "draft_id": 12345}) == ({"ok": True, "deleted": True}, 200)
+    assert drafts.save({"delete": True, "draft_id": 12345}) == {"ok": True, "deleted": True}
 
 
 def test_a_send_about_to_go_keeps_its_draft_from_being_pushed(app, world):

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from mailmind.compose.domain import limits, resume
-from mailmind.compose.domain.errors import Refused
+from mailmind.kernel.errors import Unreadable
 
 RAW = b"From: ada@example.test\r\nSubject: Plans\r\n\r\nHello\r\n"
 SHA = hashlib.sha256(RAW).hexdigest()
@@ -83,9 +83,9 @@ def record(**kw):
 
 
 def test_formatted_text_alone_cant_come_back_without_losing_it():
-    with pytest.raises(Refused) as refused:
+    with pytest.raises(Unreadable) as refused:
         resume.split_to_fit(None, record(), False, [])
-    assert refused.value.code == 422 and "formatted text" in refused.value.msg
+    assert "formatted text" in refused.value.said
 
 
 def test_what_the_record_says_holds_for_an_exact_copy_and_not_otherwise():
@@ -100,14 +100,14 @@ def test_a_draft_just_too_large_to_save_is_refused_and_one_just_small_enough_isn
     fits = [{"filename": "a", "content_type": "text/plain", "size": 0, "b64": "x" * (room - empty_text)}]
     assert resume.split_to_fit("", record(own_text=""), True, fits) == ("", "", "exact")
     over = [{"filename": "a", "content_type": "text/plain", "size": 0, "b64": "x" * (room - empty_text + 1)}]
-    with pytest.raises(Refused) as refused:
+    with pytest.raises(Unreadable) as refused:
         resume.split_to_fit("", record(own_text=""), True, over)
-    assert refused.value.code == 422 and refused.value.msg.endswith(resume.ELSEWHERE)
+    assert refused.value.said.endswith(resume.ELSEWHERE)
 
 
 def test_the_size_counts_the_text_as_the_bytes_of_its_json():
     room = limits.MAX_SEND_POST - limits.RESUME_HEADROOM
-    with pytest.raises(Refused):
+    with pytest.raises(Unreadable):
         resume.split_to_fit("", record(own_text="é" * (room // 2)), True, [])     # two bytes each, not one
 
 

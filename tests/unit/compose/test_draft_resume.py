@@ -13,6 +13,7 @@ from email.message import EmailMessage
 import pytest
 
 import app_client
+from answered import answered
 from mailmind.bootstrap import accounts, mailbox
 from mailmind.bootstrap.compose import book, drafts, outbox, sending
 from mailmind.bootstrap.mailbox import store
@@ -88,7 +89,7 @@ def calls(home, recorders):
 def _save(account=ACCT, draft_id=None, **kw):
     body = {"mode": "new", "account": account, "to": ["bo@example.test"], "subject": "Plans",
             "text": "Saturday works.", "draft_id": draft_id, **kw}
-    res, code = drafts.save(body)
+    res, code = answered(drafts.save, body)
     assert code == 200 and res["ok"], (code, res)
     return res
 
@@ -140,7 +141,7 @@ def _saved_and_synced(calls, **kw):
 
 
 def _resume(pk):
-    return drafts.resume({"pk": pk})
+    return answered(drafts.resume, {"pk": pk})
 
 
 def _foreign(parts, headers=()):
@@ -356,7 +357,7 @@ def test_failed_save_under_a_new_from_keeps_the_old_copy(calls, monkeypatch):
     def unreachable(acct, raw, **kw):
         raise OSError("connection refused")
     monkeypatch.setattr(mailbox.copies, "append_to_drafts", unreachable)
-    res, code = drafts.save({"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
+    res, code = answered(drafts.save, {"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
                              "subject": "Plans", "text": "Saturday works.", "draft_id": did})
     assert code == 200 and res["ok"] and res["pushed"] is False, (code, res)   # the journal holds it
     assert calls.deleted == [], calls.deleted
@@ -894,10 +895,10 @@ def test_draft_whose_saves_would_be_too_large_is_refused(calls, monkeypatch):
 
 def test_bad_pk_unknown_and_not_a_draft(calls):
     opk = _original()
-    assert drafts.resume({"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
-    assert drafts.resume({})[1] == 400
-    assert drafts.resume({"pk": 99999})[1] == 404
-    r, code = drafts.resume({"pk": opk})
+    assert answered(drafts.resume, {"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
+    assert answered(drafts.resume, {})[1] == 400
+    assert answered(drafts.resume, {"pk": 99999})[1] == 404
+    r, code = answered(drafts.resume, {"pk": opk})
     assert code == 400 and r["error"] == "That message isn’t a draft.", r
 
 
@@ -910,7 +911,7 @@ def test_resume_route_requires_csrf(app, recorders):
 
 def test_resumed_reply_sends_one_quote(calls):
     opk, r = _reply_resumed(calls, bcc=["dee@example.test"])
-    res, code = sending.send(_payload(r))
+    res, code = answered(sending.send, _payload(r))
     assert code == 200 and res["ok"], res
     m, meta, built = _sent(calls)
     text, html = _parts(m)
@@ -926,7 +927,7 @@ def test_resumed_forward_sends_each_file_once(calls):
     opk = _original()
     pk, _ = _saved_and_synced(calls, mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, _ = _resume(pk)
-    res, code = sending.send(_payload(r, to=["dee@example.test"]))
+    res, code = answered(sending.send, _payload(r, to=["dee@example.test"]))
     assert code == 200, res
     m, meta, _ = _sent(calls)
     files = [p.get_filename() for p in m.iter_attachments()]
@@ -942,7 +943,7 @@ def test_send_never_fetches_the_original(calls, monkeypatch):
     def refuse(pk):
         raise AssertionError(f"fetched pk {pk}")
     monkeypatch.setattr(mailbox.ingest, "fetch_body", refuse)
-    res, code = sending.send(_payload(r))
+    res, code = answered(sending.send, _payload(r))
     assert code == 200 and res["ok"], res
 
 
@@ -963,7 +964,7 @@ def test_deleted_original_sends_threaded_without_answered(calls):
     store.delete_message(c, opk)
     c.commit()
     c.close()
-    res, code = sending.send(_payload(r))
+    res, code = answered(sending.send, _payload(r))
     assert code == 200, res
     m, meta, _ = _sent(calls)
     assert str(m["In-Reply-To"]) == "<orig1@example.test>" and meta["in_reply_to_pk"] is None, meta
@@ -993,7 +994,7 @@ def test_whole_resume_sends_as_typed(calls):
 def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
     _, r = _reply_resumed(calls, bcc=["dee@example.test"])
     for i in range(3):
-        res, code = drafts.save(_payload(r, text=r["text"] + f"\nEdit {i}."))
+        res, code = answered(drafts.save, _payload(r, text=r["text"] + f"\nEdit {i}."))
         assert code == 200 and res["ok"], res
         r, code = _resume(_synced(calls.appended[-1]["raw"], res["uid"]))
         assert code == 200 and r["split"] == "exact", r
@@ -1004,13 +1005,13 @@ def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
 
 def test_bad_resume_shape_is_400(calls):
     _, r = _reply_resumed(calls)
-    res, code = sending.send(_payload(r, resume="x"))
+    res, code = answered(sending.send, _payload(r, resume="x"))
     assert (code, res["error"]) == (400, "bad draft data"), res
     assert calls.sent == []
 
 
 def test_unflagged_reply_still_needs_its_original(calls):
-    res, code = sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
+    res, code = answered(sending.send, {"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
     assert (code, res["error"]) == (400, "missing original message"), res
 
@@ -1107,7 +1108,7 @@ def test_long_subject_reopens_as_drafted_however_often_it_is_saved(calls):
         assert code == 200 and r["subject"] == subj, (code, r["subject"])
         _save(draft_id=res["draft_id"], subject=r["subject"], text=r["text"])
         pk = _synced(calls.appended[-1]["raw"], uid)
-    res, code = sending.send(_payload(_resume(pk)[0], in_reply_to_pk=None))
+    res, code = answered(sending.send, _payload(_resume(pk)[0], in_reply_to_pk=None))
     assert code == 200 and str(_sent(calls)[0]["Subject"]) == subj, str(_sent(calls)[0]["Subject"])
 
 
@@ -1134,7 +1135,7 @@ def test_raw_utf8_headers_come_back_as_text_and_send_cleanly(calls):
     r, code = _resume(_synced(raw, 22))
     assert code == 200 and r["to"] == ["José Ñúñez <jose@bücher.example>", "Bo <bo@example.test>"], r
     assert r["cc"] == ["Zoë <zoe@example.test>"], r["cc"]
-    res, code = sending.send(_payload(r, in_reply_to_pk=None))
+    res, code = answered(sending.send, _payload(r, in_reply_to_pk=None))
     assert code == 200, res
     m, _, built = _sent(calls)
     assert b"unknown-8bit" not in built["raw"] and b"xn--bcher-kva.example" in built["raw"], built["raw"][:400]

@@ -1247,7 +1247,7 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     t = threading.Thread(target=worker, name="outbox-worker", daemon=True)
     t.start()
     try:
-        assert sending.send(new(idempotency_key="k-soon"))[1] == 200
+        assert sending.send(new(idempotency_key="k-soon"))["ok"]
         wait_until(lambda: world.smtp.messages, timeout=15)      # due within a second; the worker polls every 30
         assert world.smtp.messages
     finally:

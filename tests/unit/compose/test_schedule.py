@@ -1,7 +1,7 @@
 """The time a person asks a send to go at, judged with no clock but the one it's given."""
 import pytest
 
-from mailmind.compose.domain.errors import Refused
+from mailmind.kernel.errors import Refused
 from mailmind.compose.domain.schedule import FURTHEST, send_after
 
 NOW = 1_800_000_000
@@ -32,7 +32,7 @@ def test_a_time_ahead_is_kept(asked, at):
 def test_a_time_it_cant_keep_is_refused_as_a_bad_request(asked, says):
     with pytest.raises(Refused) as refused:
         send_after(asked, NOW)
-    assert (refused.value.code, refused.value.msg) == (400, says)
+    assert refused.value.said == says
 
 
 def test_the_furthest_is_a_year_and_a_day():
