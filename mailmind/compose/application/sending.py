@@ -7,6 +7,7 @@ from typing import Any
 from mailmind.compose.application.composing import Composing, composer_key
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Book
+from mailmind.compose.domain import schedule
 from mailmind.compose.domain.builder import build_message
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.outbox_item import SendMeta
@@ -19,19 +20,8 @@ class Sending:
 
     def send(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Validate a compose/reply/forward request, build the message, enqueue it."""
-        send_after = 0
-        try:                                  # send-later: epoch secs; 0/absent = now (after the grace window)
-            sa = int(body.get("send_after") or 0)
-        except (TypeError, ValueError):
-            return {"ok": False, "error": "bad send time"}, 400
-        if sa:                                # refused before the spec, so no original-body fetch
-            now = time.time()
-            if sa <= now:                     # never quietly turn a missed schedule into "send now"
-                return {"ok": False, "error": "that send time has passed"}, 400
-            if sa >= now + 366 * 86400:
-                return {"ok": False, "error": "pick a send time within a year"}, 400
-            send_after = sa
         try:
+            send_after = schedule.send_after(body.get("send_after"), time.time())
             spec, in_reply_to_pk, acct = self._composing.spec(body)
             built = build_message(spec)       # validates addresses/headers; raises ValueError
         except Refused as h:
