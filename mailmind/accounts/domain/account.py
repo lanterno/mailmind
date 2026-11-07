@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from mailmind.accounts.domain.credential import CredentialMask, CredentialRef
+from mailmind.kernel.parsed import as_int
 
 # An entry of the file, or what a request asked of one: JSON as it parsed, so what a key holds is the file's
 # word for it, Any on purpose. `normalized` says which keys the rest of the app may count on.
 type Entry = dict[str, Any]
+
+_PORT_SAID = {"port": "port must be 1–65535", "smtp_port": "SMTP port must be 1–65535"}
 
 
 class TypeDefaults(TypedDict):
@@ -162,10 +165,17 @@ def apply_fields(entry: Entry, p: Mapping[str, Any]) -> None:
             entry[k] = p[k]
     for k in ("port", "smtp_port"):
         if k in p and p[k] not in (None, ""):
-            entry[k] = int(p[k])
+            entry[k] = _port(k, p[k])
     for k in ("starttls", "strip_spaces", "disabled", "smtp_starttls"):
         if k in p and isinstance(p[k], bool):
             entry[k] = p[k]
+
+
+def _port(key: str, given: object) -> int:
+    number = as_int(given)
+    if number is None:
+        raise ValueError(_PORT_SAID[key])
+    return number
 
 
 def validate_new(entry: Entry) -> None:
@@ -177,8 +187,8 @@ def validate_new(entry: Entry) -> None:
         raise ValueError("type must be gmail, imap, or proton")
     if t == "imap" and not str(entry.get("host") or "").strip():
         raise ValueError("a host is required for a generic IMAP account")
-    if "port" in entry and not (1 <= int(entry["port"]) <= 65535):
-        raise ValueError("port must be 1–65535")
+    if "port" in entry and not (1 <= _port("port", entry["port"]) <= 65535):
+        raise ValueError(_PORT_SAID["port"])
 
 
 def _names_a_host(held: object) -> bool:
@@ -195,8 +205,8 @@ def refuse_bad_endpoints(entry: Entry, before: Mapping[str, Any]) -> None:
         raise ValueError("host must be a host name")
     if changed("smtp_host") and not _names_a_host(entry["smtp_host"]):
         raise ValueError("SMTP host must be a host name")
-    if changed("smtp_port") and not (1 <= int(entry["smtp_port"]) <= 65535):
-        raise ValueError("SMTP port must be 1–65535")
+    if changed("smtp_port") and not (1 <= _port("smtp_port", entry["smtp_port"]) <= 65535):
+        raise ValueError(_PORT_SAID["smtp_port"])
 
 
 def strip_for(entry: Entry) -> bool:

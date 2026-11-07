@@ -7,7 +7,8 @@ from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.application.ports import ConnectionProbe
 from mailmind.accounts.domain.account import Entry
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
-from mailmind.kernel.errors import NotFound
+from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.parsed import is_object
 
 
 PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick word of a bad host
@@ -30,6 +31,8 @@ class Connections:
         is mailmind.accounts.domain.draft's to say). Errors are sanitized — never echoes the attempted password or
         server banner."""
         t0 = time.time()
+        if body.get("draft") and not is_object(body["draft"]):
+            raise Refused()
         try:
             # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host
             if body.get("draft"):
