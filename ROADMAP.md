@@ -215,10 +215,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   Make the SDK the one transport, and every command a `uv run python -m mailmind ...`, and `UrllibModel`, the doubled contract
   runs and that part of `wire` go. The same step lets the command line take IMAPClient once its soak ends, and imaplib's
   adapter go after it.
-- **Page-only CSS in `web/assets/styles/app.css`** · low value · effort S — The app still shares the old page's stylesheet,
-  and `web/src/app/app.css` holds what it needs beyond that. `.heal-out`, `.sendpill`, `.sn` and `.tm-sun`, `.tm-dusk` and `.tm-moon`
-  are names nothing in `web/src` uses. A check by name finds only those, so a browser coverage run over `tests/e2e/browser/`
-  is what finds a selector whose parts each exist but never meet. Remove what is dead and merge the two files.
 
 ## Keyboard, screen readers and reversibility
 
