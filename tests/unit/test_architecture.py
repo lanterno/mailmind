@@ -37,16 +37,11 @@ CROSSINGS = {
 
 # The columns that name a message by pk, which can come to name another (outbox.in_reply_to_pk, drafts.in_reply_to_pk,
 # draft_ahead.src_pk, followups.anchor_pk). They are still written, for a rollback, and everything goes by what outlasts
-# a row instead: `orig_*`, a draft's own In-Reply-To, the thread or the Message-ID.
+# a row instead: `orig_*` and `original_key`, a draft's own In-Reply-To, the thread or the Message-ID.
 PK_COLUMNS = ("in_reply_to_pk", "src_pk", "anchor_pk")
 
 # Where one is still read, and how many times. It may only shrink.
-PK_READS = {
-    # outbox_item.pk_of_original: outbox.in_reply_to_pk, for a row with no Message-ID to go by. One queued before
-    # migration 27 has no `orig_*` at all, and a reply to a message with no Message-ID has nothing else to name it by,
-    # since the outbox keeps no message key. Outbox._original_pk checks the second against the account it names.
-    "compose/domain/outbox_item.py": 1,
-}
+PK_READS: dict[str, int] = {}
 
 # What holds `in_reply_to_pk` as a request said it, a moment old and no stored column: the page's composer sends it.
 PK_REQUESTS = {"body", "meta"}

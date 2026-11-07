@@ -7,7 +7,7 @@ from mailmind.compose.domain.outbox_item import owed
 
 def row(**kw):
     return {"state": "queued", "wire_begun": 0, "delivered": 0, "sent_appended": 0, "answered_set": 0, "followup_recorded": 0,
-            "draft_id": None, "draft_deleted": 0, "orig_message_id": None, "in_reply_to_pk": None, "message_id": "<a@example.test>",
+            "draft_id": None, "draft_deleted": 0, "orig_message_id": None, "original_key": None, "message_id": "<a@example.test>",
             "attempts": 0, **kw}
 
 
@@ -94,7 +94,7 @@ def test_a_sent_copy_once_flagged_is_never_owed_again(saves_sent):
     assert (owes.sent_copy, owes.sent_filed_for_us) == (False, False)
 
 
-@pytest.mark.parametrize("original", [{"orig_message_id": "<o@example.test>"}, {"in_reply_to_pk": 7}])
+@pytest.mark.parametrize("original", [{"orig_message_id": "<o@example.test>"}, {"original_key": 7}])
 def test_a_reply_owes_the_mark_and_the_follow_up_each_until_its_own_flag(original):
     both = owed(row(**original), saves_sent=True)
     assert (both.answered, both.followup) == (True, True)
@@ -121,15 +121,6 @@ def test_tries_count_from_the_delivery_not_on_from_the_sends():
 
 
 # -- the original ---------------------------------------------------------------
-
-def test_a_row_can_be_a_sends_original_only_in_its_account_and_with_no_message_id():
-    send = row(orig_account="ada@example.test")
-    assert outbox_item.still_the_original(send, {"account": "ada@example.test", "message_id": None}) is True
-    assert outbox_item.still_the_original(send, {"account": "ada@example.test", "message_id": ""}) is True
-    assert outbox_item.still_the_original(send, {"account": "bea@example.test", "message_id": None}) is False
-    assert outbox_item.still_the_original(send, {"account": "ada@example.test", "message_id": "<x@example.test>"}) is False
-    assert outbox_item.still_the_original(send, None) is False
-
 
 def test_a_followup_goes_by_the_originals_thread_as_it_stands_and_else_as_it_was():
     send = row(orig_thread_id="rf:then")

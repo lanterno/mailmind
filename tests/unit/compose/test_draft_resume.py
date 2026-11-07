@@ -1072,7 +1072,7 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock(calls, monkeypatch):
     monkeypatch.setattr(book, "draft_settle_push", lambda c, *a: (held.append(("settle", gates.held(ACCT))), real_settle(c, *a))[1])
     monkeypatch.setattr(book, "draft_delete", lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1])
     did = _save()["draft_id"]
-    outbox._side_effects(1, {"sent_appended": 1, "in_reply_to_pk": None, "orig_message_id": None, "answered_set": 1,
+    outbox._side_effects(1, {"sent_appended": 1, "original_key": None, "orig_message_id": None, "answered_set": 1,
                              "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                          {"email": ACCT})
     assert held == [("settle", True), ("delete", True)], held
