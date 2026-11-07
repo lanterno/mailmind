@@ -153,7 +153,10 @@ export function replyLaterDone(qc: QueryClient, target: Target, rows: number[], 
 
 export type BulkVerb = Filing | "read" | "unread" | "star" | "mute";
 
-// A verb on every marked row, one request each, under one undo group.
+// What one request may file (`Filing.BULK_MAX`): more go as more requests, under one undo group.
+const BULK_MAX = 500;
+
+// A verb on every marked row, under one undo group: filing as one request, the rest one request each.
 export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole: (r: Row) => boolean, after: Route | null) {
   clearMarks();
   const pks = rows.map((r) => r.pk);
@@ -202,17 +205,15 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
     rows: pks,
     after,
     call: async () => {
-      for (const r of rows) {
-        const path = verb !== "junk" && isWhole(r) ? (`/api/thread/${verb}` as const) : (`/api/${verb}` as const);
+      for (let at = 0; at < rows.length; at += BULK_MAX) {
+        const chunk = rows.slice(at, at + BULK_MAX);
         try {
-          const a: Answer = await post(path, { pk: r.pk, undo_group: group });
-          if (!a.ok) failed++;
-          else {
-            undoable ||= Boolean(a.undoable);
-            partial ||= Boolean(a.failed);
-          }
+          const a = await post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ pk: r.pk, whole: isWhole(r) })), undo_group: group });
+          failed += a.rows_failed;
+          partial ||= a.partial;
+          undoable ||= Boolean(a.undoable);
         } catch {
-          failed++;
+          failed += chunk.length;
         }
       }
       return { ok: true };
