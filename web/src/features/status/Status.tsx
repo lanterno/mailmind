@@ -31,7 +31,7 @@ export async function syncNow(qc: QueryClient) {
   for (let n = 0; n < 40; n++) {
     await pause(3000);
     try {
-      const d = await get("/api/digest?min=1&account=");
+      const d = await get("/api/digest");
       qc.setQueryData(["digest"], d);
       if (!syncOf(d).running) break;
     } catch { /* try again */ }
@@ -50,7 +50,7 @@ export async function reconcile(qc: QueryClient) {
     else {
       toast(`Reconciling — striking ${dry.total_ghosts} ghosts…`);
       const real = await post("/api/reconcile", { account: "all", dry_run: false });
-      const d = await get("/api/digest?min=1&account=");
+      const d = await get("/api/digest");
       qc.setQueryData(["digest"], d);
       readAgain(qc);
       toast(`Struck ${(real.total_pruned ?? 0).toLocaleString()} deleted items · ${(d.stats?.kept ?? 0).toLocaleString()} stand`);

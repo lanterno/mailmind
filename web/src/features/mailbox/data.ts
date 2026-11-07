@@ -14,7 +14,7 @@ export interface ListPage { rows: Row[]; hasMore: boolean; total: number; syncin
 
 export const useDigest = () => useQuery({
   queryKey: ["digest"],
-  queryFn: () => get("/api/digest?min=1&account="),
+  queryFn: () => get("/api/digest"),
   refetchInterval: (q) => (q.state.status === "error" ? 5000 : false),     // the first read failed: the server may be starting
 });
 
@@ -64,7 +64,7 @@ async function allInboxesPage(grouped: boolean, offset: number): Promise<ListPag
 
 // What the digest answers, as a list. Nothing here asks the AI: a topic comes from the brief as it is stored.
 async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Promise<ListPage> {
-  const { items } = await get("/api/digest?min=1&account=");
+  const { items } = await get("/api/digest");
   let chosen: DigestItem[];
   if (source.list === "topic") {
     const groups = (await get("/api/briefing")).groups ?? [];
