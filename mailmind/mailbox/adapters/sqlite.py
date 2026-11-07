@@ -817,7 +817,7 @@ def _conversation_rows(c, where, params, partition, limit, offset):
                MAX(m.has_attach) OVER (PARTITION BY {partition}) any_attach
              FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
              WHERE {_listed(where)})
-           SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
+           SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC, pk DESC LIMIT ? OFFSET ?""",
         (*params, limit, offset)).fetchall()
 
 
@@ -828,7 +828,7 @@ def _message_rows(c, where, params, limit, offset):
                   s.summary, s.action, s.category
            FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
            WHERE {_listed(where)}
-           ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
+           ORDER BY m.ts DESC, m.pk DESC LIMIT ? OFFSET ?""",
         (*params, limit, offset)).fetchall()
 
 
