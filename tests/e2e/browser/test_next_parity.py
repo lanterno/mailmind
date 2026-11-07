@@ -147,3 +147,16 @@ def test_filing_the_server_refuses_puts_you_back_on_the_message(page, world):
     expect(page.locator("#toast")).to_have_text("Couldn’t archive")
     expect(receipt).to_have_class(re.compile(r"\bsel\b"))
     clean(page)
+
+
+def test_a_star_says_so_either_way(page, world):
+    opened(page)
+    row(page, world, RECEIPT).click()
+    page.keyboard.press("s")
+    expect(page.locator("#toast")).to_have_text("Starred")
+    page.keyboard.press("s")
+    expect(page.locator("#toast")).to_have_text("Unstarred")
+    world.server.fail("UID STORE", user=w.ADA, times=None)
+    page.keyboard.press("s")
+    expect(page.locator("#toast")).to_have_text("Couldn’t star")
+    clean(page)
