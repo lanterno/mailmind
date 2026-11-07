@@ -54,8 +54,10 @@ uv run pytest tests/security/test_hardening.py              # security and data-
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (159)
 uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers (28)
-uv run pytest tests/unit/http/test_route.py                 # what a route on a router does around its handler, on a toy router (140)
-uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads (32)
+uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (181)
+uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (116)
+uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
+uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (7)
 ```
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
@@ -163,7 +165,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   system fonts), and `web/assets/theme.js` the one classic script, a file since the page's policy forbids an inline one. A new top-level script
   joins `CLASSIC` in `web/vite.config.js`. `just build-web` (Vite, Node) writes it all, named by content, to `mailmind/http/dist` (gitignored),
   and `just run` builds it first. `mailmind.platform.webroot` serves only that folder, with gzip and an ETag, so an edit reaches the app through a
-  build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. With nothing built `/` and each place in the app (`static._is_place`, as
+  build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. With nothing built `/` and each place in the app (`routers/static._is_place`, as
   `app/route.ts` writes one) answer 404 and say how to build, and `python -m mailmind serve` logs a line saying so. `/next` redirects, to the app's own
   places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
   restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
@@ -237,15 +239,13 @@ The app lives in `mailmind/`.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
   bound to 127.0.0.1. Its `build` picks the Anthropic SDK, offers IMAPClient to an account
   that asks for it (see the Mailbox paragraph). A line at startup says which IMAP adapter
-  serves how many accounts (`[imap] ...`). A route that has moved runs on a FastAPI router, on a thread of
-  AnyIO's pool, whose limit `http.app` raises to 64 at startup, and the rest in `mailmind.http.handler.H` (see Routing):
-  `mailmind.http.bridge.HandlerBridge`,
-  the FastAPI router's fallback, hands it each request without a socket, on a daemon thread of
-  its own, and streams back what it writes, the event stream and the export included.
+  serves how many accounts (`[imap] ...`). Every route runs on a FastAPI router, on a thread of
+  AnyIO's pool, whose limit `http.app` raises to 64 at startup (see Routing).
   `mailmind.http.middleware.Perimeter` runs the perimeter (see Security model) before any of it,
-  and before a body is read. `mailmind.http.serving.Server` ends open streams as shutdown begins
-  (`HandlerBridge.close`), so Ctrl-C stops at once. A request still blocked after the 3 s of grace (`serving.GRACE_SECONDS`) is
-  cancelled, and its thread, a daemon on either path, doesn't hold the exit.
+  and before a body is read. A tab on the event stream holds none of that pool: `routers/events.py` waits for its next event on
+  a thread under a limiter of the stream's own, and how many there are is what the hub lets listen. `mailmind.http.serving.Server`
+  ends open streams as shutdown begins (`Hub.end_streams`), so Ctrl-C stops at once. A request still blocked after the 3 s of grace
+  (`serving.GRACE_SECONDS`) is cancelled, and its thread, a daemon, doesn't hold the exit.
 - `mailmind.platform.profile` says how the process runs, `full` or `read-only` (see Writes,
   undo, and offline).
 - `mailmind.platform.workers.gates` is the IMAP gate every live-IMAP job passes (see
@@ -273,7 +273,7 @@ The app lives in `mailmind/`.
   field joins `ALLOWED` only if its value can never be a person's. A line goes to stdout for someone at a
   terminal (`[jobs] sync failed: ConnectionResetError`), from the moment the module loads, the command line
   included. Once `wiring.start` has called `setup()`, it also goes as a JSON object to `mailmind.log` in the data
-  directory, rotated and readable by its owner only, with `request_id` (`H.handle_one_request`, `Route`) and `job_id`
+  directory, rotated and readable by its owner only, with `request_id` (`Route`) and `job_id`
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
   the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
@@ -419,8 +419,8 @@ The app lives in `mailmind/`.
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
   binds them, and it's how the routers and the command line reach Curation (`curation.cleanup.execute(body)`,
-  `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token still comes
-  from the handler (`H.CSRF`). A sweep's
+  `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token comes
+  from the perimeter (`perimeter.CSRF`). A sweep's
   `move_verified` is `mailbox.application.bulk_moves`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date within its window, what a request names and what Undo gives back), `mute` (a repeat does nothing,
@@ -477,16 +477,13 @@ The app lives in `mailmind/`.
 
 ### Routing
 
-Two tables run side by side until the last file moves, and a request goes to the first that names it. **A route on a router** is
-FastAPI's: `mailmind/http/routers/<context>.py` gives `router(context)`, which `mailmind.bootstrap.web.ROUTERS` hands the app, and
-`mailmind/http/schemas/<context>.py` its models. Every context's routes have moved. **A route on the handler** is every other, `static`, `events` and `export`:
-what no router matches falls through to `app.router.default`, the bridge, and `mailmind.http.handler.H`, one
-`BaseHTTPRequestHandler` subclass whose `do_GET` and `do_POST` run the perimeter and the catches every route shares, then ask
-`mailmind.http.routing.Routes`. Its routes take a `Request` and return an object, `(object, code)`, or `ANSWERED` when they wrote
-the answer. The event stream and the export move last, then `H` and `HandlerBridge` go. Both paths share one copy of what a
-failure answers, who counts as someone here and how far a body may run: `mailmind.http.shared`.
+Every route is FastAPI's: `mailmind/http/routers/<context>.py` gives `router(context)`, which `mailmind.bootstrap.web.ROUTERS` hands
+the app, and `mailmind/http/schemas/<context>.py` its models. What a failure answers, who counts as someone here and how far a body
+may run are in `mailmind.http.shared`. What no route matches is `_no_route` in `http/app.py`, the app's `router.default`, after the
+perimeter like the rest: `not found` as a 404 for a GET or a POST, and `not implemented` as a 501 for any other method, reading no
+body. An absolute-form request line is no route either, since the path goes as sent.
 
-To move a route file, as `routers/attention.py` did:
+A route, as `routers/attention.py` writes one:
 
 ```python
 r = route.router()      # mailmind.http.route
@@ -500,31 +497,35 @@ def snooze(body: SnoozeBody):
   the literal paths it could shadow). `Route` refuses an `async def`, a `response_model` and a POST with no body model, `NoBody` if
   it reads nothing, as that model is what refuses a body that isn't a JSON object. It returns an object, `(object, code)` or a
   `Response` for what isn't JSON, naming `Content-Type` in `headers=`, since `media_type` adds a charset.
-- `Route` does what `do_GET` and `do_POST` do, so a handler holds none of it: `for_request`, `allowing_over`, `shared.touched`, the
-  error mapping below, and `txguard.release_thread`, since a pooled thread outlives its request. It hands FastAPI what the handler
-  read: a query string's first value for each name with a blank as none, a body as JSON whatever its Content-Type, and {} for one
-  with no declared length. It writes an answer in the handler's bytes, on the thread. A method the route doesn't take falls through.
+- `Route` does what every route needs, so a handler holds none of it: `for_request`, `allowing_over`, `shared.touched`, the
+  error mapping below, and `txguard.release_thread`, since a pooled thread outlives its request. It hands FastAPI a query string's
+  first value for each name with a blank as none (`route.query_as_sent` keeps it as the client wrote it, for what repeats it), a body
+  as JSON whatever its Content-Type, and {} for one with no declared length. It writes an answer in `json.dumps`' bytes, on the
+  thread. A method the route doesn't take goes to `_no_route`.
+- A `Response` runs after the handler has returned, on the event loop, past what a failure answers. So a handler does what can fail
+  first, and an answer that streams is a `StreamingResponse` with a `__call__` of its own around `super().__call__`, for what must be
+  given back however it ends (`routers/events.py`, `routers/export.py`): a generator a client left at its `yield` runs its `finally`
+  only when it is collected.
 - A request's model (`schemas.common.RequestBody`, or `QueryArgs` as `Annotated[Model, Query()]`, whose `as_query()` is for a use
   case that takes the query whole) names every field its use case reads, typed in `common`'s words: `str | None`, `Number`
   (`kernel.parsed`'s reading, nothing past 2^53) and `Flag`. It stays optional unless going without already answers `bad request`,
   so a use case keeps its own words for what is left out. What the model refuses answers `{"ok": false, "error": "bad request"}`
-  with 400, GET included. That is the one change a move makes to the wire: say which statuses and words change.
+  with 400, GET included.
 - An answer's model (`schemas.common.Answer`) is documentation: `responses=answers(Ok, {409: MoreSaid})`, never `response_model`,
   which would filter and refuse. `Ok` may be a union, for `ok: false` with a 200. `answers` gives each failure status `Failure`; a
   route whose `Problem` says more names a subclass of `Failure`.
-- Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route on a router must fit its model,
+- Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route must fit its model,
   with no field it doesn't name, and a use case reading a name its model doesn't declare fails the test. So the suite is what says
   a model is true, and a golden that changes is a question, not an update. `web/src/lib/api/types.gen.ts` holds the shapes the
   suite saw, a place to start. What walks the routes (`tests/route_tables.py`: the perimeter matrix, the error scrubbing, the
-  malformed-input walk) reads both tables, so a moved route needs no edit there, and a stand-in for a handler is `route.work`.
+  malformed-input walk) reads the routers, so a new route needs no edit there, and a stand-in for a handler is `route.work`.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and
 `shared.failure_answer` answers it as `{"ok": false, "error": ..., ...}` by `shared.STATUS`: `NotFound` 404, `Conflict` and `Busy`
 409, `Locked` 423, `Refused` 400, `Unreachable` 502 (a retry can help), `Unreadable` 422. `gates.Busy` is the kernel's. A use case
 returns only the answer it has, a dict, and a route with a catch of its own lets `Problem` through ahead of it (`except Problem:
 raise`). Unexpected exceptions still answer the fixed 500, with the class logged. `AIOff`, `OverLimit`, `ReadOnlyError` and
-`TxAcrossNetworkError` keep the paths the sections below give them. On the handler, what a request can't mean is refused before it does
-harm by `Request.int_arg` and `required_int` for a number, and by `H._body` for a body with anything but text in a `_TEXT_FIELDS` name.
+`TxAcrossNetworkError` keep the paths the sections below give them.
 On a POST, any `TypeError` or `ValueError` is still the 400. On a GET it isn't.
 
 RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
@@ -533,8 +534,7 @@ RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
 that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
 each route's own worded 500.
 
-Consequence: to find a route, grep the literal path. On the handler, a path that matches by shape (`@r.matching`, a place in the app,
-`/next` and `/assets/`) is asked only when no literal path answers.
+Consequence: to find a route, grep the literal path.
 
 ### Schema migrations
 
@@ -897,7 +897,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
 ### Security model
 
 Every request passes `mailmind.platform.perimeter` before any route: the `Perimeter` middleware
-calls it, and `H.do_GET` and `H.do_POST` do again for what reaches them. What runs next goes by the path it judged, as sent, and not as the
+calls it, once. What runs next goes by the path it judged, as sent, and not as the
 ASGI server decoded it.
 It is standard library only. Callers ask the package by these names (`perimeter.refuse_host`); inside it
 `host`, `origin`, `fetch_metadata`, `csrf` and `limits` hold the checks, `headers` and `csp` what an answer
@@ -917,8 +917,8 @@ Every method but GET and HEAD goes through the POST checks, and a refusal comes 
 
 Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP `same-origin`, a
-Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
-an answer didn't set itself, and so does the middleware. The page also carries
+Permissions-Policy, and under `/api/` `Cache-Control: no-store`. The middleware adds each one
+an answer didn't set itself. The page also carries
 `Content-Security-Policy` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
 only, framed by no one, and nothing in it for mail: no `https:` images and no `data:` fonts. The browser tests fail on any violation.
 
@@ -943,7 +943,7 @@ Any other quoted value (a Message-ID, an expiry token) goes through `accounts.im
 refuses CR, LF and NUL with `BadValue`, an `IMAP4.error` too: a sender can fold the Message-ID
 header so the ID stored holds a line break.
 
-`CSRF` is a per-process token. `web/index.html` ships a `__CSRF_TOKEN__` placeholder in a
+`perimeter.CSRF` is a per-process token. `web/index.html` ships a `__CSRF_TOKEN__` placeholder in a
 `<meta>` tag that `webroot.page` substitutes at serve time; `request` in `lib/api/client.ts`
 attaches it to every request, GETs included.
 

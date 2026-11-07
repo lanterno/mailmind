@@ -186,9 +186,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## The API, now that one client and one door read it
 
-- **The last routes onto FastAPI** · high value · effort M — `static`, `events` and `export` still run in
-  `mailmind.http.handler.H`, which `HandlerBridge`, the FastAPI router's fallback, hands each request on a daemon thread of its own.
-  They write their own answers (`ANSWERED`). Once they have moved, `H`, `HandlerBridge` and `mailmind.http.routing` go, and
+- **`types.gen.ts` from the schemas** · high value · effort M — Every route is on FastAPI with a model in `http/schemas/`, so
   `web/src/lib/api/types.gen.ts` comes from the schemas rather than from the JSON the suite saw (`just gen-api`,
   `tests/gen_api_types.py`).
 - **`/api/v2`, with `pk` out of the API** · high value · effort L — A `pk` isn't stable, since reconcile can renumber rows,
@@ -200,7 +198,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   above, takes and answers that, and `route.ts`, `useBody` and `features/mailbox`'s filing move across. One client reads the
   API, so the old paths can go in the same change.
 - **RFC 9457 errors, and no `ok: false` with a 200** · medium value · effort M — A use case raises one of `kernel.errors`, and
-  `do_GET` and `do_POST` answer it as `{"ok": false, "error": ...}` by `handler._STATUS`. Those become problem documents,
+  `shared.failure_answer` answers it as `{"ok": false, "error": ...}` by `shared.STATUS`. Those become problem documents,
   and these stop answering a refusal with a 200: Filing's `{"ok": false, "msg": ...}`, `Undo.undo_last`, `Screener.rule`,
   `SavedViews.post`, `search.bad_query`, `Cleanup.sender`, `Bodies.message_body`, `Queries.thread_json`, `Connections.test`
   and `change`. The literals that mean none of the seven stay (410 for a plan expired, 413, 503, 504, each route's own worded
@@ -316,5 +314,5 @@ implementation.
 
 1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
-2. **What the old door's going unblocks** (high) — FastAPI routers with `http/schemas/`, then `/api/v2` with `pk` out of the
+2. **What the old door's going unblocks** (high) — `types.gen.ts` from the schemas, then `/api/v2` with `pk` out of the
    API, and RFC 9457 errors with it, all above.
