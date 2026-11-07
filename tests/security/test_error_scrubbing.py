@@ -175,8 +175,6 @@ def test_the_digest_says_why_a_call_failed_in_words_of_its_own(app, world, ai, s
 
 # ── pinned: what these say today ─────────────────────────────────────────────────────────────────
 
-@pytest.mark.xfail(strict=True, reason="Each account's result carries f'{type(e).__name__}: {e}', the server's own words "
-                                       "(Sweeps.sweep's and Syncing's reconcile, in curation/application/sweep.py and mailbox/application/sync.py)")
 @pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
 def test_a_sweep_or_a_reconcile_says_an_account_failed_in_words_of_its_own(app, world, path):
     world.server.fail("LOGIN", f"NO [AUTHENTICATIONFAILED] {SECRET}", times=None)
