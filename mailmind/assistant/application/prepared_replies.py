@@ -16,7 +16,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
-from mailmind.assistant.domain import fingerprint
+from mailmind.assistant.domain import fingerprint, prepared_reply
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -29,17 +29,11 @@ _WARM = object()                                      # what warm() finds: a fre
 
 
 class PreparedReplies:
-    DRAFT_DB_TTL = 24 * 3600         # servable age; fp is the correctness gate, this is temporal-drift hygiene
-    DRAFT_FAIL_TTL = 60              # GET-route re-kick suppression (interactive dwell recovers fast)
-    DRAFT_FAIL_BASE = 300            # tick backoff after the 1st failure: 5 min…
-    DRAFT_FAIL_CAP = 6 * 3600        # …doubling per consecutive failure, capped at 6h (persisted in the table)
     DRAFT_TICK_INTERVAL = 180        # one tick cycle per 3 min
     DRAFT_TICK_STARTUP_DELAY = 120   # let the startup sync + summarize backlog settle first
     DRAFT_TOPK = 6                   # maintain warm drafts for at most the 6 best candidates (batch=1 per cycle)
     DRAFT_TOPK_PER_ACCOUNT = 2       # fairness across accounts
     DRAFT_RECENCY_WINDOW = 3 * 86400 # only mail from the last 72h; older mail drafts on demand
-    DRAFT_TICK_TRIP = 3              # consecutive led-generation failures → circuit breaker…
-    DRAFT_TICK_SUSPEND = 1800        # …open for 30 min (AI outage)
 
     def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail,
                  replies: ReplyDrafts, looks_human: Callable[[str], bool]):
@@ -52,37 +46,8 @@ class PreparedReplies:
         self._looks_human = looks_human
         self.DRAFT_FLIGHTS = SingleFlight()   # one generation at a time for each (account, ref_key)
 
-    def _draft_key(self, row: Row) -> tuple[str, str] | None:
-        """Natural draft identity (account, ref_key) — survives reconcile/reset_folder
-        delete+reinsert; NEVER messages.pk (same rule as muted/followups/mail_commands).
-        Thread-scoped ('t:') so two pks in one thread can never double-spend claude.
-        Returns None for keyless malformed mail (pre-gen refuses; on-demand still works)."""
-        tid = (row["thread_id"] or "").strip()
-        if tid:
-            return (row["account"], "t:" + tid)
-        mid = (row["message_id"] or "").strip()
-        if mid:
-            return (row["account"], "m:" + mid)
-        return None
-
-    def _tick_backoff_active(self, da: Row | None, now: int) -> bool:
-        """Persisted per-key exponential backoff (tick only — the GET keeps the flat 60s)."""
-        if not da or not da["fail_ts"]:
-            return False
-        wait = min(self.DRAFT_FAIL_CAP, self.DRAFT_FAIL_BASE * (2 ** max(0, da["fail_count"] - 1)))
-        return (now - da["fail_ts"]) < wait
-
     def _draft_eligible(self, row: Row | None) -> bool:
-        """Replyable to a real human + not already handled. (The client pre-filters action/importance.)
-        Your own message isn't: draft_ahead_gc drops as moot a draft for a thread ending in a Sent copy."""
-        if not row or row["is_junk"] or row["answered"] or row["snooze_until"]:
-            return False
-        if (row["from_addr"] or "").lower() == row["account"].lower() or "sent" in (row["folder"] or "").lower():
-            return False
-        local = (row["from_addr"] or "").split("@")[0].lower()
-        if not local or not self._looks_human(local):   # excludes no-reply/notifications/role senders
-            return False
-        return True
+        return prepared_reply.eligible(row, self._looks_human)
 
     def _draft_fp(self, c: Connection, account: str, thread_id: str | None, pk: int) -> str:
         """Thread-state hash. Stable across reconcile/reset_folder (built only from
@@ -107,7 +72,7 @@ class PreparedReplies:
         ignores None (a neutral must neither trip nor reset the consecutive-failure count)."""
         with self._uow.read() as c:
             row = self._mail.get_message(c, int(pk))
-            key = self._draft_key(row) if row else None
+            key = prepared_reply.key_of(row) if row else None
             if not row or key is None or not self._draft_eligible(row):
                 return None                               # neutral: nothing to (pre-)generate
             acct = account or row["account"]
@@ -118,8 +83,7 @@ class PreparedReplies:
         def warm() -> object | None:                      # a draft for the thread as it is now
             with self._uow.read() as c:
                 da = self._answers.draft_ahead_get(c, key[0], key[1])
-            fresh = da and da["body"] and da["fp"] == fp and (int(time.time()) - da["created_ts"]) < self.DRAFT_DB_TTL
-            return _WARM if fresh else None
+            return _WARM if prepared_reply.servable(da, fp, int(time.time())) else None
 
         def make() -> bool | None:
             ok = False
@@ -178,22 +142,22 @@ class PreparedReplies:
                 return {"ok": True, "status": "none"}, 200
             acct = row["account"]
             tid = row["thread_id"] or None
-            if tid and pk != self._mail.thread_anchor_pk(c, acct, tid):
+            if not prepared_reply.for_the_anchor(pk, tid, self._mail.thread_anchor_pk(c, acct, tid) if tid else None):
                 return {"ok": True, "status": "none"}, 200
             if not self._draft_eligible(row):
                 return {"ok": True, "status": "none"}, 200
-            key = self._draft_key(row)
+            key = prepared_reply.key_of(row)
             if key is None:
                 return {"ok": True, "status": "none"}, 200
             fp = self._draft_fp(c, acct, tid, pk)
             da = self._answers.draft_ahead_get(c, key[0], key[1])
             now = int(time.time())
-            if da is None or not da["body"] or da["fp"] != fp or (now - da["created_ts"]) >= self.DRAFT_DB_TTL:
+            if da is None or not prepared_reply.servable(da, fp, now):
                 if self.DRAFT_FLIGHTS.busy(key):
                     return {"ok": True, "status": "generating"}, 200
                 if peek:
                     return {"ok": True, "status": "none"}, 200
-                if da and da["fail_ts"] and (now - da["fail_ts"]) < self.DRAFT_FAIL_TTL:
+                if prepared_reply.failed_lately(da, now):
                     return {"ok": True, "status": "none"}, 200   # recently failed → back off (client falls to on-demand)
                 if not self._answers.reply_worthy(c, pk):
                     return {"ok": True, "status": "none"}, 200
@@ -219,19 +183,19 @@ class PreparedReplies:
                     break                                            # warm set is full — nothing to do
                 if not self._draft_eligible(r):
                     continue                                         # human-sender check (Python-only)
-                key = self._draft_key(r)
+                key = prepared_reply.key_of(r)
                 if not key or key in seen:
                     continue
                 seen.add(key)
                 da = self._answers.draft_ahead_get(c, key[0], key[1])
                 fp = self._draft_fp(c, r["account"], r["thread_id"] or None, r["pk"])
-                if da and da["body"] and da["fp"] == fp and now - da["created_ts"] < self.DRAFT_DB_TTL:
+                if prepared_reply.servable(da, fp, now):
                     warm_total += 1
                     warm_acct[r["account"]] = warm_acct.get(r["account"], 0) + 1
                     continue                                         # already warm — the restart-storm killer
                 if warm_acct.get(r["account"], 0) >= self.DRAFT_TOPK_PER_ACCOUNT:
                     continue                                         # per-account fairness
-                if self._tick_backoff_active(da, now):
+                if prepared_reply.backing_off(da, now):
                     continue                                         # persisted exponential backoff
                 if self.DRAFT_FLIGHTS.busy(key):
                     continue
@@ -246,12 +210,10 @@ class PreparedReplies:
         drafts at most one reply ahead, only when the cost governor would let it go (nobody is using
         AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it), then
         collects the expired drafts."""
-        fails, suspended_until = 0, 0.0
+        breaker = prepared_reply.Breaker()
 
         def draft_ahead_round() -> None:
-            nonlocal fails, suspended_until
-            now = time.time()
-            if now < suspended_until:
+            if breaker.is_open(time.time()):
                 pass                                                 # circuit breaker open (an outage)
             elif self._gateway().held_back("draft-ahead", self._calls.MODEL):
                 pass                                                 # yielding, away, at the limit, rejected
@@ -259,13 +221,7 @@ class PreparedReplies:
                 cand = self._pick_draft_candidate()
                 if cand is not None:
                     ok = self._gen_draft_ahead(cand["account"], cand["pk"], source="topk")
-                    if ok is True:
-                        fails = 0
-                    elif ok is False:                                # neutral (None) leaves the count untouched
-                        fails += 1
-                    if fails >= self.DRAFT_TICK_TRIP:
-                        suspended_until = time.time() + self.DRAFT_TICK_SUSPEND
-                        fails = 0
+                    if breaker.heard(ok, time.time()):
                         tick_log.warning("tick suspended 30m after repeated failures")
                 with self._uow.write() as c:
                     self._answers.draft_ahead_gc(c, int(time.time()))
@@ -278,7 +234,7 @@ class PreparedReplies:
         pk = body.get("pk")
         tone = str(body.get("tone") or "balanced")[:16]
         instruction = str(body.get("instruction") or "")[:400]
-        default_shape = (not instruction.strip()) and tone == "balanced"
+        default_shape = prepared_reply.default_shaped(instruction, tone)
         row: Row | None = None
         fp: str | None = None
         key: tuple[str, str] | None = None
@@ -287,15 +243,14 @@ class PreparedReplies:
                 row = self._mail.get_message(c, int(pk))
                 if not row:
                     return {"ok": False, "error": "not found"}, 404
-                key = self._draft_key(row)
+                key = prepared_reply.key_of(row)
                 # fp captured BEFORE generation (same load-bearing rule as _gen_draft_ahead):
                 # a mid-generation thread change must mismatch on read → regenerate, never stale-serve.
                 fp = self._draft_fp(c, row["account"], row["thread_id"] or None, row["pk"])
                 da = self._answers.draft_ahead_get(c, key[0], key[1]) if default_shape and key is not None else None
             # A fp-fresh banked draft answers a default-shaped request for free — the pre-gen
             # paths already paid for it (and this covers SSE-outage strandings).
-            if key is not None and da and da["body"] and da["fp"] == fp and \
-                    (int(time.time()) - da["created_ts"]) < self.DRAFT_DB_TTL:
+            if key is not None and da and prepared_reply.servable(da, fp, int(time.time())):
                 with self._uow.write() as c:
                     self._answers.draft_ahead_touch(c, key[0], key[1], int(time.time()))
                 return {"ok": True, "body": da["body"], "tone": da["tone"] or tone,
