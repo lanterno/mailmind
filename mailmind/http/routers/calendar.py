@@ -11,7 +11,7 @@ def routes(calendar):
 
     @r.get("/api/upcoming")     # read-only: invites in fetched mail, nothing fetched
     def upcoming(req):
-        return calendar.agenda.upcoming(req.arg("account") or None)
+        return calendar.agenda.upcoming()
 
     @r.post("/api/invite/rsvp")
     def rsvp(req):

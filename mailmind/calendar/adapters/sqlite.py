@@ -15,17 +15,17 @@ class StoredInvites:
     def __init__(self, folders):
         self._folders = folders
 
-    def invite_parts(self, since, account, skipped_roles):
+    def invite_parts(self, since, skipped_roles):
         """Every calendar part of mail fetched since then, newest first, as (row, text), leaving out folders that
         play those roles and any part that can't be read. One body at a time: they can be large."""
         with _uow.read() as c:
             rows = c.execute(
                 """SELECT m.pk, m.message_key, m.account, m.folder, m.thread_id, a.part_id
                    FROM attachments a JOIN messages m ON m.pk=a.message_pk
-                   WHERE m.body_fetched=1 AND m.ts>=? AND (? IS NULL OR m.account=?) AND m.pending_removal IS NULL
+                   WHERE m.body_fetched=1 AND m.ts>=? AND m.pending_removal IS NULL
                      AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')
                    ORDER BY m.ts DESC, m.pk DESC""",
-                (since, account, account)).fetchall()
+                (since,)).fetchall()
             for r in rows:
                 if self._folders.role_by_name(r["folder"]) in skipped_roles:
                     continue

@@ -16,14 +16,14 @@ class Agenda:
         self._stored = stored
         self._reader = reader
 
-    def upcoming(self, account: str | None = None, now: datetime | None = None, limit: int = 5, days: int = 60) -> dict[str, Any]:
+    def upcoming(self, now: datetime | None = None, limit: int = 5, days: int = 60) -> dict[str, Any]:
         """The events in calendar invites from the last `days` of mail that haven't ended yet, soonest first; a
         repeating one at its next occurrence. One row per event UID, from the newest message that carries it. Times
         are local wall-clock ISO strings."""
         now = now or datetime.now()
         seen: set[tuple[str | tuple[str, str], str]] = set()
         found: list[tuple[Row, Invite]] = []
-        for r, text in self._stored.invite_parts(int(now.timestamp()) - days * 86400, account, agenda.SKIPPED_ROLES):
+        for r, text in self._stored.invite_parts(int(now.timestamp()) - days * 86400, agenda.SKIPPED_ROLES):
             try:
                 events = self._reader.events(text)
             except Exception:
