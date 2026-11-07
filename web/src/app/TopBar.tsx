@@ -68,6 +68,7 @@ export function RailScrim() {
 // The box's text, so finishing a bulk action can clear it.
 const searchText = createStore("");
 export const clearSearchBox = () => searchText.set("");
+export const clearCommandFromBox = () => { if (searchText.get().startsWith("!")) searchText.set(""); };   // not a search you had there
 
 // The compact top bar keeps search behind an icon; open, it spans the bar until cleared or cancelled.
 const folded = createStore(true);
