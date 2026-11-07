@@ -373,7 +373,10 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
 export function Reader({ m }: { m: Mailbox }) {
   const { opened } = m;
   if (!opened && m.inInbox && !m.searching) return <section className="reader brief-pane" id="reader"><BriefPane m={m} /></section>;
-  if (!opened) return <section className="reader empty-pane" id="reader">Select a message to read its summary.</section>;
+  if (!opened) {
+    const reading = m.list.data?.pages.at(-1)?.syncing;
+    return <section className="reader empty-pane" id="reader">{m.all.length ? "No message selected." : m.list.isPending ? "" : reading ? "Reading this folder for the first time…" : "No messages in this folder."}</section>;
+  }
   return (
     <section className="reader" id="reader" aria-label="Message">
       {opened.kind === "message"

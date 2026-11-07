@@ -1,6 +1,6 @@
 // The mailbox as the app's parts see it: where you are, what the list shows now, and each thing you can do from here.
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
@@ -94,6 +94,21 @@ export function useMailbox() {
   useEffect(() => {
     if (copyGone) moveOffGoneCopy();   // once, as it goes: a list refreshing after that must not send you anywhere
   }, [copyGone]);
+
+  // On a desktop a folder opens on its first message, as the Inbox opens on the brief. A phone stays on the list. Once per
+  // list, so a message you closed stays closed, and not over a message already open.
+  const sourceNow = JSON.stringify(source), hasFirst = Boolean(rows[0]);
+  const stillReading = Boolean(pages[pages.length - 1]?.syncing);
+  const openFirst = useEffectEvent(() => {
+    if (opened || source?.kind !== "folder" || inInbox || source.folder === "__screener__" || !rows[0]) return;
+    if (!matchMedia("(max-width:820px)").matches) go({ source, opened: opening(rows[0]) }, { replace: true });
+  });
+  const openedFirstOf = useRef<string | null>(null);
+  useEffect(() => {
+    if (!list.isSuccess || openedFirstOf.current === sourceNow || (!hasFirst && stillReading)) return;
+    openedFirstOf.current = sourceNow;
+    openFirst();
+  }, [list.isSuccess, sourceNow, hasFirst, stillReading]);
 
   // Where to go once `pks` leave the list: on to the next, if what you were reading is among them.
   const afterLeaving = (pks: number[]): Route | null => {
