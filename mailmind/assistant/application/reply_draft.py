@@ -4,8 +4,8 @@ model returns a guaranteed `{"body": ...}` object. Returns an EDITABLE draft —
 The thread text is fed as UNTRUSTED DATA; the prompt forbids following instructions in it.
 """
 from mailmind.assistant.application.calls import Calls
+from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.ports import Mail, NotSent, Result
-from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -34,9 +34,9 @@ Conversation (oldest first):
 
 
 class ReplyDrafts:
-    def __init__(self, calls: Calls, threads: ThreadDigest, uow: UnitOfWork, mail: Mail):
+    def __init__(self, calls: Calls, context: ContextAssembler, uow: UnitOfWork, mail: Mail):
         self._calls = calls
-        self._threads = threads
+        self._context = context
         self._uow = uow
         self._mail = mail
 
@@ -46,7 +46,7 @@ class ReplyDrafts:
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
         with self._uow.read() as c:
             if thread_id:
-                rows = self._threads.rows(c, account, thread_id)
+                rows = self._context.rows(c, account, thread_id)
             elif pk is not None:
                 rows = self._mail.message_to_reply_to(c, int(pk))
             else:
@@ -54,7 +54,7 @@ class ReplyDrafts:
         if not rows:
             return {"ok": False, "error": "nothing to reply to"}, 404
 
-        blocks, _omitted = self._threads.gather(rows)
+        blocks, _omitted = self._context.gather(rows)
         subject = rows[0]["subject"] or "(no subject)"
         tone_word = _TONES.get(tone, _TONES["balanced"])
         instr = (f'Follow this instruction for the reply: "{instruction.strip()[:400]}".'

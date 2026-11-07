@@ -28,6 +28,7 @@ from mailmind.assistant.application.asking import Asking
 from mailmind.assistant.application.brief import Briefs
 from mailmind.assistant.application.bulk import BulkCommands
 from mailmind.assistant.application.calls import Calls
+from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.draft_ahead import DraftAhead
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
@@ -40,7 +41,7 @@ from mailmind.assistant.domain import limits
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -244,10 +245,11 @@ def _looks_human(local):
 
 _mail = _Mail()
 triage = Triage(calls, lambda: gateway(), answers, _uow, _mail)
-threads = ThreadDigest(calls, answers, _uow, _mail)
+context = ContextAssembler(_mail)
+threads = ThreadDigest(calls, answers, _uow, context)
 briefs = Briefs(calls, answers, _uow, _mail)
 reviews = Reviews(calls, answers, _uow, _mail)
-replies = ReplyDrafts(calls, threads, _uow, _mail)
+replies = ReplyDrafts(calls, context, _uow, _mail)
 rewriter = Rewriter(calls)
 asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)

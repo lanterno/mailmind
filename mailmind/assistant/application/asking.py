@@ -6,6 +6,7 @@ from typing import Any
 
 from mailmind.assistant.application.ask import Asker
 from mailmind.assistant.application.brief import Briefs
+from mailmind.assistant.application.context import lone_key
 from mailmind.assistant.application.ports import Mail, Result
 from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
@@ -36,7 +37,7 @@ class Asking:
             if not row:
                 return {"ok": False, "error": "not found"}, 404
             account = row["account"]
-            thread_id = row["thread_id"] or self._threads.lone_key(row)
+            thread_id = row["thread_id"] or lone_key(row)
             scope = "message" if not row["thread_id"] else "thread"
         if not account or account not in {a["email"] for a in self._mail.accounts()} or not thread_id:
             return {"ok": False, "error": "bad request"}, 400
