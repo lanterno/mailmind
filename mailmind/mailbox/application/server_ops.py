@@ -75,10 +75,9 @@ class ServerOps:
         """The account the message `pk` is in, or None when there's no such message."""
         c = self._store.conn()
         try:
-            r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
+            return self._store.account_of(c, pk)
         finally:
             c.close()
-        return r["account"] if r else None
 
 
     def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T]) -> T:

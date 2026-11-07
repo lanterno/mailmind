@@ -188,6 +188,12 @@ def get_message_by_msgid(c, account, message_id):
                      (account, message_id)).fetchone()
 
 
+def account_of(c, pk):
+    """The account the message `pk` is in, or None when there's no such message."""
+    r = c.execute("SELECT account FROM messages WHERE pk=?", (pk,)).fetchone()
+    return r["account"] if r else None
+
+
 def newest_copy_in(c, account, folder, message_id):
     """The pk, as a row, of the newest copy of a message in `folder`, on its way out or not; None if there is none."""
     return c.execute("SELECT pk FROM messages WHERE account=? AND folder=? AND message_id=? "
