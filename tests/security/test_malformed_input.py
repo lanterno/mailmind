@@ -160,3 +160,19 @@ def test_asking_after_an_account_there_is_no_such_of(app, path):
 def test_acting_on_an_account_there_is_no_such_of(app, path):
     r = app.post(path, {"account": "nobody@example.test", "dry_run": True})
     assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
+
+
+@pytest.mark.parametrize("field, said", [("port", "port must be 1–65535"), ("smtp_port", "SMTP port must be 1–65535")])
+@pytest.mark.parametrize("junk", ["x", [1], 10 ** 30, float("inf")])
+def test_a_port_that_cant_be_a_number(app, field, said, junk):
+    added = app.post("/api/accounts/add", {"email": "new@example.test", "type": "imap", "host": "mail.example.test",
+                                           "credential": {"style": "plain", "value": "p"}, field: junk})
+    assert (added.status, added.json) == (400, {"ok": False, "error": said})
+    edited = app.post("/api/accounts/edit", {"email": w.ADA, field: junk})
+    assert (edited.status, edited.json) == (400, {"ok": False, "error": said})
+
+
+@pytest.mark.parametrize("junk", [[1], "x", 5, True])
+def test_a_connection_test_of_what_cant_be_a_draft(app, junk):
+    r = app.post("/api/accounts/test", {"draft": junk})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
