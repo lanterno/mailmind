@@ -195,34 +195,46 @@ class Filing:
         kind = "archive" if path == "/api/thread/archive" else "trash"
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
-            row = self._store.get_message(c, pk)
-            if not row:
-                pks = []
-            elif (row["thread_id"] or "").strip():
-                pks = self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
-            else:
-                pks = [pk]
+            pks = self._conversation_of(c, pk)
             accepted = [(p, self._commands.accept_move_within(c, kind, p, None, body.get("mutation_id"), push)) for p in pks]
         if not accepted:
             return {"ok": False, "msg": "not found"}
-        filed: list[int] = []
-        queued, undoable, msg = 0, False, ""
+        return self._heard(accepted, self._try_each(kind, accepted))
+
+
+    def _conversation_of(self, c: Connection, pk: int) -> list[int]:
+        """The messages a conversation's row stands for: its thread in its folder. A message without a thread id is a
+        conversation of one, never the folder's unthreaded pool."""
+        row = self._store.get_message(c, pk)
+        if not row:
+            return []
+        if (row["thread_id"] or "").strip():
+            return self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
+        return [pk]
+
+
+    def _try_each(self, kind: str, accepted: Sequence[tuple[int, command.Accepted | None]]) -> dict[int, dict[str, Any]]:
+        """Moves accepted and committed: a try at each, as filing one message is, on the gate with no transaction open."""
+        out: dict[int, dict[str, Any]] = {}
         for p, one in accepted:
             try:
-                res = self._submit_move(kind, one)
+                out[p] = self._submit_move(kind, one)
             except Exception as e:                   # it's back in the queue; the rest are claimed, and wait on this loop
                 do_log.warning("%(what)s failed", {"what": kind}, exc_info=e)
                 self.flags_queued()
-                res = {"ok": True, "status": command.QUEUED, "undoable": bool(one and one.undoable)}
-            if res.get("ok"):
-                filed.append(p)
-                queued += res.get("status") == "queued"
-                undoable = undoable or bool(res.get("undoable"))
-            else:
-                msg = res.get("msg") or msg
+                out[p] = {"ok": True, "status": command.QUEUED, "undoable": bool(one and one.undoable)}
+        return out
+
+
+    def _heard(self, accepted: Sequence[tuple[int, command.Accepted | None]],
+               results: Mapping[int, Mapping[str, Any]]) -> dict[str, Any]:
+        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed."""
+        filed = [p for p, _ in accepted if results[p].get("ok")]
+        queued = sum(results[p].get("status") == "queued" for p in filed)
+        msg = next((str(results[p].get("msg") or "") for p, _ in accepted if not results[p].get("ok")), "")
         return {"ok": bool(filed), "msg": msg if not filed else ("queued" if queued else "filed"),
                 "pks": filed, "count": len(filed), "failed": len(accepted) - len(filed),
-                "queued": queued, "undoable": undoable}
+                "queued": queued, "undoable": any(results[p].get("undoable") for p in filed)}
 
 
     def settled(self, _event: object = None) -> None:
