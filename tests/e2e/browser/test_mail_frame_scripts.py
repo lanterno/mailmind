@@ -62,6 +62,9 @@ def delivered(world, raw, mid="<hostile@example.test>"):
     return pk
 
 
+OWN_DOCUMENT = re.compile(r"/api/message/\d+/body\.html\?key=\d+&images=0$")
+
+
 def on_the_page(page, pk):
     page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
@@ -93,7 +96,8 @@ def asked_by_frames(page):
     asked = []
 
     def note(req):
-        if req.frame.parent_frame is not None and req.url.startswith("http"):
+        own_document = req.is_navigation_request() and OWN_DOCUMENT.search(req.url)    # the React app's frame loads its body
+        if req.frame.parent_frame is not None and req.url.startswith("http") and not own_document:
             asked.append(req.url)
     page.pw.on("requestfinished", note)
     return asked
@@ -120,7 +124,8 @@ def test_nothing_in_a_message_runs_or_asks_for_anything(page, world, opening, wa
     only = {f"{AWAY}/pixel.png", f"{AWAY}/back.png"} if wall == "no sanitizer" else set()
     assert set(asked_by_frames) <= only
     assert set(page.blocked) <= only
-    assert page.pw.evaluate(f"document.querySelector('{FRAME}').contentWindow.location.href") == "about:srcdoc"
+    where = page.pw.evaluate(f"document.querySelector('{FRAME}').contentWindow.location.href")
+    assert OWN_DOCUMENT.search(where) if opening is on_the_react_app else where == "about:srcdoc"
     assert [p for p in page.problems if p.startswith("pageerror")] == []
 
 
