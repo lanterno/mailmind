@@ -9,6 +9,7 @@ import threading
 import pytest
 
 from gate import held_elsewhere
+from answered import answered
 from mailmind.bootstrap import discovery
 from mailmind.bootstrap.compose import book, outbox
 from mailmind.bootstrap.mailbox import store
@@ -62,8 +63,7 @@ def _outbox(envelope, delivered):
 
 
 def _known(addrs, **kw):
-    res, code = discovery.known.ask(addrs, **kw)
-    assert code == 200, (code, res)
+    res = discovery.known.ask(addrs, **kw)
     return {k: v["known"] for k, v in res["items"].items()}
 
 
@@ -136,24 +136,24 @@ def test_keep_senders_count_keep_domains_do_not(home):
 
 
 def test_own_addresses_are_self(home):
-    res, _ = discovery.known.ask(["ADA@example.test", "lio@example.test"])
+    res = discovery.known.ask(["ADA@example.test", "lio@example.test"])
     assert res["items"]["ada@example.test"] == {"known": True, "self": True}, res
     assert res["items"]["lio@example.test"] == {"known": False, "self": False}, res
-    res, _ = discovery.known.ask(["lio@example.test", "ada@example.test"], own=["Lio@example.test"])
+    res = discovery.known.ask(["lio@example.test", "ada@example.test"], own=["Lio@example.test"])
     assert res["items"]["lio@example.test"]["self"] is True, res
     assert res["items"]["ada@example.test"]["self"] is False, res
 
 
 @pytest.mark.parametrize("addrs", ["lio@example.test", None])
 def test_input_that_is_no_list_is_refused(addrs, home):
-    assert discovery.known.ask(addrs)[1] == 400
+    assert answered(discovery.known.ask, addrs)[1] == 400
 
 
 def test_input_shape_and_limits(home):
-    res, code = discovery.known.ask([f"p{i}@example.test" for i in range(101)])
+    res, code = answered(discovery.known.ask, [f"p{i}@example.test" for i in range(101)])
     assert code == 400 and res["error"] == "too many addresses", res
     _msg("lio@example.test")
-    res, code = discovery.known.ask(["nobody", "a@b@c", "Lio <LIO@Example.test>",
+    res, code = answered(discovery.known.ask, ["nobody", "a@b@c", "Lio <LIO@Example.test>",
                                      "LIO@example.test", "lio@example.test"])
     assert code == 200 and res["bad"] == ["nobody", "a@b@c"], res
     assert res["items"]["lio <lio@example.test>"]["known"] is True, res
@@ -164,30 +164,30 @@ def test_thin_history_flag(home):
     for i in range(2):
         _msg(f"p{i}@example.test")
     _msg("junk@example.test", is_junk=1)
-    res, _ = discovery.known.ask(["p0@example.test"], min_history=3)
+    res = discovery.known.ask(["p0@example.test"], min_history=3)
     assert res["thin"] is True, res
     _msg("p2@example.test")
-    res, _ = discovery.known.ask(["p0@example.test"], min_history=3)
+    res = discovery.known.ask(["p0@example.test"], min_history=3)
     assert res["thin"] is False, res
 
 
 def test_the_delivered_address_is_judged_not_the_display_name(home):
     _msg("bob@company.example")
     _msg("ann@example.test")
-    res, _ = discovery.known.ask(['"bob@company.example" <bob@evil.example>',
+    res = discovery.known.ask(['"bob@company.example" <bob@evil.example>',
                                   "Bob (bob@company.example) <bob@evil.example>",
                                   "'ann@example.test", ".ann@example.test"])
     assert {k: v["known"] for k, v in res["items"].items()} == {
         '"bob@company.example" <bob@evil.example>': False,
         "bob (bob@company.example) <bob@evil.example>": False,
         "'ann@example.test": False, ".ann@example.test": False}, res
-    res, _ = discovery.known.ask(["a@example.test, b@example.test"])
+    res = discovery.known.ask(["a@example.test, b@example.test"])
     assert res["bad"] == ["a@example.test, b@example.test"] and not res["items"], res
 
 
 def test_items_carry_only_known_and_self(home):
     _msg("lio@example.test")
-    res, _ = discovery.known.ask(["lio@example.test", "new@example.test"])
+    res = discovery.known.ask(["lio@example.test", "new@example.test"])
     assert set(res) == {"ok", "items", "bad", "thin"}, res
     assert all(set(v) == {"known", "self"} for v in res["items"].values()), res
 
@@ -206,4 +206,4 @@ def test_never_waits_on_the_imap_lock(home):
         t = threading.Thread(target=lambda: done.append(discovery.known.ask(["lio@example.test"])), daemon=True)
         t.start()
         t.join(5)
-        assert done and done[0][1] == 200, done          # while the gate is still held
+        assert done and done[0]["ok"], done               # while the gate is still held
