@@ -545,3 +545,26 @@ def test_a_view_that_wont_go_says_so_in_the_pages_words(page, app, world):
     page.problems.clear()
     assert page.blocked == [], page.blocked
 
+def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
+    from fakes import anthropic_api as fa
+    from mailmind.bootstrap.assistant import answers
+    from mailmind.bootstrap.mailbox import store
+    lunch, receipt = "ada-inbox-01-lunch.eml", RECEIPT
+    c = store.conn()
+    try:
+        for name in (lunch, receipt):
+            answers.save_summary(c, world.pk(name), "A summary.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
+        c.commit()
+    finally:
+        c.close()
+    ai.responder = lambda req: (fa.answer({"narrative": "Lin is waiting.", "groups": []})
+                                if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
+    page.goto("/next")
+    page.locator(f'.bf-need[data-pk="{world.pk(receipt)}"]').get_by_role("button", name=re.compile("^Archive")).click()
+    expect(page.locator("#toast")).to_have_text("Archived \u00b7 in the mailbox's Archive")
+    expect(page.locator("#undoFloat")).to_contain_text("Archived")
+    page.locator(f'.bf-need[data-pk="{world.pk(lunch)}"]').get_by_role("button", name=re.compile("^Delete")).click()
+    expect(page.locator("#toast")).to_have_text("Deleted \u00b7 in the mailbox's Trash")
+    expect(page.locator("#undoFloat")).to_contain_text("Deleted")
+    clean(page)
+
