@@ -398,8 +398,11 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - `mailmind.discovery` is the fourth: finding mail by what a person types. `domain.query.QuerySpec` is the search
   grammar parsed, by a parser no input can make raise. `narrows()` is what a bulk command must pass: a folder or an
   account alone spans nearly everything, and a negation never narrows by itself. `domain` also holds `guard` (a filter
-  resolving to 60% of all mail is a sweep of the whole mailbox), `views`, `documents` and `known` (who the stored mail
-  vouches for, given the facts). `adapters` holds `fts` (`to_sql` turns a parsed query into a MATCH and bound SQL, and
+  resolving to 60% of all mail is a sweep of the whole mailbox), `search` (what a request asks around its `QuerySpec`, one
+  result a message, a page and how a hit reads), `views` (what makes one and which may go), `documents` (what the hub asks,
+  counts as one file and shows), `known` (what is asked after, in which forms, who the stored mail vouches for given the
+  facts, and how the answer reads) and `contacts` (autocomplete's needle and the card). None of them reads a clock: a use
+  case hands in `rel_time` or `now_iso`'s value. `adapters` holds `fts` (`to_sql` turns a parsed query into a MATCH and bound SQL, and
   `index_message` and `forget_message` keep the index up to date), `sqlite` (`StoredMail`, which reads `messages` and the
   rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
   `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
@@ -460,8 +463,12 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `tests/contract/test_ics_reader_contract.py` holds what any reader must do, and `tests/contract/test_ics_differential.py` compares the two:
   a difference its `DIFFERS` doesn't list, with why, fails.
 - `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
-  else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `resume` (a saved draft split back into your text, its quote and its
-  files), `attachments`, `limits`, `outbox_item`, `events` and `errors`. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
+  else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `composition` (what a request to send or save comes to: its text,
+  its quote and the HTML that goes with it), `schedule` (the limits on a send's time), `draft` (what makes a save, whether one may go in, what
+  is a draft and which copy is ours to remove), `draft_journal` (what a save records, when its push is due and what its row says), `resume` (a saved
+  draft split back into your text, its quote and its files, and which copy may be believed), `attachments`, `limits`, `outbox_item` (a try's numbers,
+  what one leaves on a row and what a delivered send still owes), `events` and `errors`. A row's state changes stay in `DurableQueue`, whose conditional
+  UPDATEs the worker can't race, so `outbox_item` holds no copy of them. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
   and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Sending`, `Drafts`
   and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the routers, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
