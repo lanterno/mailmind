@@ -21,12 +21,12 @@ ROUTERS = [attention_routes.router(attention),
            calendar_routes.router(calendar),
            mailbox_routes.router(mailbox),
            accounts_routes.router(accounts, mailbox),
-           debug.router(mailbox, compose, background, assistant)]
+           debug.router(mailbox, compose, background, assistant),
+           curation_routes.router(curation)]
 
 handler.bind(Routes(static.routes(),
                     events.routes(),
                     export.routes(),
-                    curation_routes.routes(curation),
                     discovery_routes.routes(discovery),
                     compose_routes.routes(compose),
                     assistant_routes.routes(assistant, mailbox)),
