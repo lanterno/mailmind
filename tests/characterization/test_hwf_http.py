@@ -119,25 +119,25 @@ def test_hwf_background_reconcile_and_expiry_yield_to_a_user_op(app, world):
     ada = accounts.get(w.ADA)
     since = len(world.server.commands)
     with gate.held_elsewhere():                              # a user op holds the lock
-        mailbox.syncing._auto_reconcile_one(ada)
+        mailbox.reconciler._auto_reconcile_one(ada)
         curation.expiry.auto_one(ada)
     assert world.server.commands[since:] == []               # both skipped this cycle
-    mailbox.syncing._auto_reconcile_one(ada)
+    mailbox.reconciler._auto_reconcile_one(ada)
     curation.expiry.auto_one(ada)
     assert len(world.server.commands_for(w.ADA, "LOGIN")) >= 2   # and run once the lock is free
 
 
 def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     real, jobs = gates.run, []
 
     def counted(account, fn, **kw):
         jobs.append(account)
         return real(account, fn, **kw)
     monkeypatch.setattr(gates, "run", counted)
-    mailbox.syncing._auto_reconcile_one(accounts.get(w.ADA))              # never holds the gate across folders
-    assert len(ingest.reconciled_folders(w.ADA)) > 1
-    assert jobs == [w.ADA] * len(ingest.reconciled_folders(w.ADA))
+    mailbox.reconciler._auto_reconcile_one(accounts.get(w.ADA))              # never holds the gate across folders
+    assert len(reconciler.reconciled_folders(w.ADA)) > 1
+    assert jobs == [w.ADA] * len(reconciler.reconciled_folders(w.ADA))
 
 
 def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):

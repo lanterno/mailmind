@@ -251,10 +251,10 @@ def gone(world, name):
 
 
 def test_reconcile_prunes_what_the_server_lost_and_stamps_the_rest(world):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
-    res = ingest.reconcile_account(acct())
+    res = reconciler.reconcile_account(acct())
     assert {k: res[k] for k in ("stored", "live", "ghosts", "pruned", "error")} == {
         "stored": len(before), "live": len(before) - 1, "ghosts": 1, "pruned": 1, "error": None}
     assert world.where("ada-inbox-04-ci.eml")["db"] == []
@@ -262,27 +262,28 @@ def test_reconcile_prunes_what_the_server_lost_and_stamps_the_rest(world):
 
 
 def test_a_dry_run_counts_the_ghosts_and_changes_nothing(world):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
-    res = ingest.reconcile_account(acct(), dry_run=True)
+    res = reconciler.reconcile_account(acct(), dry_run=True)
     assert (res["ghosts"], res["pruned"]) == (1, 0)
     assert inbox() == before
 
 
 def test_reconcile_never_lowers_the_watermark(world):
     from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     uid = world.server.deliver(w.ADA, "INBOX", late())
     ingest.sync_new(acct())
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages.pop(uid)
-    assert ingest.reconcile_account(acct())["pruned"] == 1
+    assert reconciler.reconcile_account(acct())["pruned"] == 1
     assert watermark() == uid
 
 
 @pytest.mark.parametrize("trouble", ["a refused SEARCH", "a dropped connection", "a refused EXAMINE"])
 def test_reconcile_never_prunes_when_the_server_misbehaves(world, trouble):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     gone(world, "ada-inbox-04-ci.eml")
     before = inbox()
     if trouble == "a refused SEARCH":
@@ -291,34 +292,34 @@ def test_reconcile_never_prunes_when_the_server_misbehaves(world, trouble):
         world.server.drop("UID SEARCH", user=w.ADA)
     else:
         world.server.fail("EXAMINE", user=w.ADA)          # reconcile selects read-only
-    res = ingest.reconcile_account(acct())
+    res = reconciler.reconcile_account(acct())
     assert res["error"] and res["pruned"] == 0
     assert inbox() == before
 
 
 def test_reconcile_never_prunes_across_a_uidvalidity_change(world):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     before = inbox()
     world.server.renumber(w.ADA, "INBOX")
-    res = ingest.reconcile_account(acct())
+    res = reconciler.reconcile_account(acct())
     assert "UIDVALIDITY changed" in res["error"] and res["pruned"] == 0
     assert inbox() == before
 
 
 def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     before = inbox()
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages.clear()
-    res = ingest.reconcile_account(acct())
+    res = reconciler.reconcile_account(acct())
     assert res["error"].startswith("empty SEARCH") and res["pruned"] == 0
     assert inbox() == before
-    assert ingest.reconcile_account(acct(), force=True)["pruned"] == len(before)
+    assert reconciler.reconcile_account(acct(), force=True)["pruned"] == len(before)
     assert inbox() == []
 
 
 def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     from mailmind.bootstrap.mailbox import store
     real = store.get_uidvalidity
     landed = []
@@ -330,6 +331,6 @@ def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch)
         return real(c, account, folder)
 
     monkeypatch.setattr(store, "get_uidvalidity", sync_lands_after_the_search)
-    ingest.reconcile_account(acct())
+    reconciler.reconcile_account(acct())
     assert landed
     assert NEW in [m for _, m in inbox()]

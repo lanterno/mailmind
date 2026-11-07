@@ -227,7 +227,7 @@ def test_mail_deleted_elsewhere_leaves_an_open_folder_list(page, world):
         world.server.mailbox(w.ADA, "Archive").messages.pop(world.uid(gone))
 
     def pruned():                         # the ghost pruner's round, which yields while the page reads
-        mailbox.syncing._auto_reconcile_one(accounts.get(w.ADA))
+        mailbox.reconciler._auto_reconcile_one(accounts.get(w.ADA))
         return world.pk(gone) is None
     until(page, pruned, "the ghost pruned")
     expect(listed).to_have_count(0)

@@ -308,6 +308,7 @@ class Machine(RuleBasedStateMachine):
         lists show each message where the server has it, with the flags the server has."""
         from mailmind.bootstrap import accounts
         from mailmind.bootstrap.mailbox import ingest
+        from mailmind.bootstrap.mailbox import reconciler
         from mailmind.bootstrap.mailbox import commands
         self.server.clear_faults()
         self.restart()
@@ -320,7 +321,7 @@ class Machine(RuleBasedStateMachine):
         assert not self.open_rows()
         for folder in FOLDERS:
             ingest.sync_folder(accounts.get(w.ADA), folder)
-            ingest.reconcile_account(accounts.get(w.ADA), force=True, folder=folder)
+            reconciler.reconcile_account(accounts.get(w.ADA), force=True, folder=folder)
         for name in NAMES:
             where = self.world.where(name)
             # A copy flagged \\Deleted is one whose EXPUNGE didn't happen: nearly gone, listed or not.

@@ -176,14 +176,14 @@ def test_read_only_schedules_snooze_wake_alone(monkeypatch):
 
 
 def test_a_job_switched_off_is_left_out(monkeypatch):
-    monkeypatch.setattr(mailbox.syncing, "_RECONCILE_INTERVAL", 0)
+    monkeypatch.setattr(mailbox.reconciler, "_RECONCILE_INTERVAL", 0)
     monkeypatch.setattr(background, "_EXPIRE_INTERVAL", 0)
     assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "draft-push", "assess",
                                                                                       "backfill", "forget"]
 
 
 def test_a_short_reconcile_cycle_still_waits_30_seconds_between_rounds(monkeypatch):
-    monkeypatch.setattr(mailbox.syncing, "_RECONCILE_INTERVAL", 10)
+    monkeypatch.setattr(mailbox.reconciler, "_RECONCILE_INTERVAL", 10)
     assert ("reconcile", 30, 10) in scheduled(monkeypatch)
 
 

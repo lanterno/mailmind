@@ -441,7 +441,7 @@ def test_hwf_a_sync_tells_an_open_list_of_mail_read_elsewhere(app, world, monkey
 # -- reconcile -------------------------------------------------------------
 
 def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, monkeypatch):
-    from mailmind.bootstrap.mailbox import ingest
+    from mailmind.bootstrap.mailbox import reconciler
     from mailmind.bootstrap import mailbox
     real, timeouts = mailbox.open_session, []
     monkeypatch.setattr(mailbox, "open_session", lambda a, timeout=60: (timeouts.append(timeout), real(a, timeout))[1])
@@ -449,7 +449,7 @@ def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, 
         if trouble:
             world.server.fail(trouble, user=w.ADA)
         logins, logouts = count(world, "LOGIN"), count(world, "LOGOUT")
-        res = ingest.reconcile_account(acct())
+        res = reconciler.reconcile_account(acct())
         assert bool(res["error"]) == bool(trouble), (trouble, res)
         assert (count(world, "LOGIN"), count(world, "LOGOUT")) == (logins + 1, logouts + 1), trouble
     assert timeouts == [15, 15, 15]
@@ -1111,7 +1111,7 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
 
     def background():
         got = {"prefetch": mailbox.bodies.message_body(pk, False, prefetch=True)}
-        mailbox.syncing._auto_reconcile_one(acct())
+        mailbox.reconciler._auto_reconcile_one(acct())
         curation.expiry.auto_one(acct())
         got["backfill"] = mailbox.syncing.backfill_round()               # yielded, its backlog left for the next round
         return got
