@@ -178,3 +178,15 @@ def test_the_page_listens_for_every_topic_for_resync_and_hello_and_nothing_else(
     with open(path, encoding="utf-8") as f:
         heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', f.read()))
     assert heard == sse.TOPICS | {RESYNC, sse.HELLO}
+
+
+def test_the_react_app_listens_for_every_topic_for_resync_and_hello_and_nothing_else():
+    import os
+    import re
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "web", "src", "app", "realtime.ts")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    listed = re.search(r"MAIL_CHANGED = \[(.*?)\]", text, re.S)
+    assert listed
+    heard = set(re.findall(r'\bes\.addEventListener\("([a-z-]+)"', text)) | set(re.findall(r'"([a-z-]+)"', listed.group(1)))
+    assert heard == sse.TOPICS | {RESYNC, sse.HELLO}
