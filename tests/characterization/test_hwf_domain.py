@@ -326,7 +326,7 @@ def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
     day = 86400
     asked = put(db, "<a@example.test>", thread_id="T", ts=NOW_TS - 5 * day, seen=1)
     put(db, "<b@example.test>", thread_id="T", ts=NOW_TS - day, from_addr=A, draft=1)
-    db.execute("INSERT INTO summaries(message_pk, importance, category) VALUES (?, 5, 'action-needed')", (asked,))
+    answers.save_summary(db, asked, "A summary.", 5, "action-needed", "", "m", "now")
 
     def nudged():
         attention.book.followup_detect_received(db, NOW_TS, 3, 14)
