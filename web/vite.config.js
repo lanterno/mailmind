@@ -1,4 +1,4 @@
-// `just build-web`: the page's files, named by their content, in mailmind/http/dist, and the React app at /next.
+// `just build-web`: the page's files, named by their content, in mailmind/http/dist, and the React app, which is `/`.
 // The page's scripts stay classic scripts, with their top-level names shared and run in order, so they are copied as
 // they are, not bundled.
 import { readFileSync } from "node:fs";

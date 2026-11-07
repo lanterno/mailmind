@@ -20,11 +20,10 @@ export type Opened = { kind: "message"; pk: number } | { kind: "thread"; id: str
 // `brief` is the phone's way to say the brief is showing: there a pane is either the list or what's open.
 export interface Route { source: ListSource | null; opened: Opened; brief?: boolean }
 
-const BASE = "/next";
 const seg = encodeURIComponent;
 
 export function pathOf({ source, opened, brief }: Route): string {
-  let path = BASE;
+  let path = "";
   const query = new URLSearchParams();
   if (source?.kind === "folder") path += `/m/${seg(source.account)}/${seg(source.folder)}`;
   else if (source?.kind === "allInboxes") path += "/all";
@@ -43,12 +42,12 @@ export function pathOf({ source, opened, brief }: Route): string {
     query.set("ca", opened.account);
   }
   const q = query.toString();
-  return q ? `${path}?${q}` : path;
+  return `${path || "/"}${q ? `?${q}` : ""}`;
 }
 
 export function parseRoute(pathname: string, search: string): Route {
   const q = new URLSearchParams(search);
-  const parts = pathname.replace(/^\/next\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   let source: ListSource | null = null;
   if (parts[0] === "m" && parts[1] && parts[2]) source = { kind: "folder", account: parts[1], folder: parts[2] };
   else if (parts[0] === "all") source = { kind: "allInboxes" };

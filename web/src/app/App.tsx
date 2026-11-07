@@ -190,7 +190,7 @@ export function App() {
   const asked = asking.useValue();
   const focused = readFocus.useValue();
 
-  // /next on its own opens the first account's Inbox.
+  // `/` on its own opens the first account's Inbox.
   const firstAccount = accounts[0];
   useEffect(() => {
     if (!source && firstAccount) go({ source: { kind: "folder", account: firstAccount, folder: "INBOX" }, opened: null }, { replace: true });
