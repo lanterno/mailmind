@@ -214,7 +214,23 @@ export interface GetAnswers {
           calls: number;
           cost_micros: number;
         };
+        delta?: {
+          calls: number;
+          cost_micros: number;
+        };
+        plan?: {
+          calls: number;
+          cost_micros: number;
+        };
+        review?: {
+          calls: number;
+          cost_micros: number;
+        };
         rewrite?: {
+          calls: number;
+          cost_micros: number;
+        };
+        thread?: {
           calls: number;
           cost_micros: number;
         };
@@ -273,10 +289,13 @@ export interface GetAnswers {
     profile: string;
     queues: {
       commands: {
+        done?: number;
         queued?: number;
       };
       drafts_waiting: number;
-      outbox: Record<string, never>;
+      outbox: {
+        queued?: number;
+      };
     };
   };
   "/api/debug/jobs": {
@@ -363,9 +382,12 @@ export interface GetAnswers {
       total: number;
       verified: number;
     };
-    status: Record<string, never>;
+    status: Record<string, {
+      health: string;
+      msg: string;
+    }>;
     sync: {
-      last: null;
+      last: string | null;
       result: string;
       running: boolean;
     };
@@ -416,6 +438,41 @@ export interface GetAnswers {
     replylater: number;
     snoozed: number;
     waiting: number;
+  };
+  "/api/inboxes": {
+    folder: string;
+    grouped: boolean;
+    has_more: boolean;
+    items: {
+      account: string;
+      action: string;
+      bucket: string;
+      category: null;
+      commitment_worthy: boolean;
+      count?: number;
+      flagged: boolean;
+      from_addr: string;
+      from_name: string;
+      has_attach: boolean;
+      importance: null;
+      is_junk: boolean;
+      key: number;
+      needs_you: boolean;
+      pk: number;
+      reply_worthy: boolean;
+      safe_to_file: boolean;
+      seen: boolean;
+      snippet: string;
+      subject: string;
+      summary: string;
+      thread_id: string;
+      ts: number;
+      when: string;
+    }[];
+    offset: number;
+    ok: boolean;
+    syncing?: boolean;
+    total: number;
   };
   "/api/message/{pk}/body": {
     account?: string;
@@ -744,6 +801,32 @@ export interface GetAnswers {
       name: string;
       q: string;
     }[];
+  };
+  "/api/waiting-on-others": {
+    items: {
+      account: string;
+      bucket: string;
+      count: number;
+      flagged: boolean;
+      folder: string;
+      from_addr: string;
+      from_name: string;
+      has_attach: boolean;
+      is_junk: boolean;
+      key: number;
+      kind: string;
+      pk: number;
+      seen: boolean;
+      snippet: string;
+      subject: string;
+      thread_id: string;
+      to: string;
+      ts: number;
+      waiting: boolean;
+      waiting_label: string;
+      when: string;
+    }[];
+    ok: boolean;
   };
 }
 
@@ -1204,15 +1287,15 @@ export interface PostAnswers {
     dry_run: boolean;
     generated: string;
     ok: boolean;
-    results: {
+    results: ({
       account: string;
-      by_bucket: Record<string, number>;
-      error: null;
-      moved: number;
+      by_bucket?: Record<string, number>;
+      error: string | null;
+      moved?: number;
       planned: number;
-      senders: number;
-      stragglers: unknown[];
-    }[];
+      senders?: number;
+      stragglers?: unknown[];
+    })[];
     total_moved: number;
     total_planned: number;
   };
@@ -1230,13 +1313,13 @@ export interface PostAnswers {
     undoable?: boolean;
   };
   "/api/thread/trash": {
-    count: number;
-    failed: number;
+    count?: number;
+    failed?: number;
     msg: string;
     ok: boolean;
-    pks: number[];
-    queued: number;
-    undoable: boolean;
+    pks?: number[];
+    queued?: number;
+    undoable?: boolean;
   };
   "/api/trash": {
     msg: string;
