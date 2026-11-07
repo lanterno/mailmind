@@ -67,6 +67,12 @@ def test_the_sql_wakes_what_the_domain_calls_due(app, world):
         c.close()
 
 
+def test_a_time_too_large_to_be_a_number_is_refused_like_any_other_bad_time(app, world):
+    r = app.post("/api/snooze", {"pk": world.pk(RECEIPT), "until": float("inf")})
+    assert (r.status, r.json["ok"]) == (400, False)
+    assert world.row(RECEIPT)["subject"] in listed(app)
+
+
 def test_it_wakes_on_time_on_the_row_it_has_now(app, world):
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)

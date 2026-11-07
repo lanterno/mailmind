@@ -36,7 +36,7 @@ def test_an_iso_time_outside_the_window_is_refused():
     assert snooze.wake_time({"until": "2028-11-03T09:00:00+02:00"}, NOW) is None
 
 
-@pytest.mark.parametrize("until", ["soon", "", [1], {}, True])
+@pytest.mark.parametrize("until", ["soon", "", [1], {}, True, float("inf"), float("-inf"), float("nan")])
 def test_what_isnt_a_time_is_refused(until):
     assert snooze.wake_time({"until": until}, NOW) is None
 
