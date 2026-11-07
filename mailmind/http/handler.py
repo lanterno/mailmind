@@ -9,8 +9,6 @@ from mailmind.assistant.api import allowing_over
 from mailmind.http import shared
 from mailmind.http.routing import ANSWERED, Request, Routes
 from mailmind.http.shared import AI_OVER_HEADER
-from mailmind.http.shared import STATUS as _STATUS      # noqa: F401
-from mailmind.http.shared import UI_QUIET as _UI_QUIET  # noqa: F401
 from mailmind.platform import perimeter, settings
 from mailmind.platform.logging import for_request
 

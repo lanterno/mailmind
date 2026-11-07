@@ -1,5 +1,5 @@
 """What a route over a use case would answer, for a test that calls the use case itself."""
-from mailmind.http.handler import problem_answer
+from mailmind.http.shared import problem_answer
 from mailmind.kernel.errors import Problem
 
 
