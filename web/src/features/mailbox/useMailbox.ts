@@ -153,9 +153,9 @@ export function useMailbox() {
   // What a reply answers: the message, or the conversation's latest that isn't yours.
   const replyPk = (): number | null => (opened?.kind === "thread" ? qc.getQueryData<GetAnswers["/api/thread"]>(["thread", opened.account, opened.id])?.reply_pk ?? null : openPk);
 
-  const file = (r: Pick<Row, "pk">, kind: actions.Filing) => {
+  const file = (r: Pick<Row, "pk">, kind: actions.Filing, from?: "card") => {
     const whole = opened?.kind === "thread" && opened.pk === r.pk ? true : "threadId" in r ? isWhole(r as Row) : false;
-    void actions.fileRow(qc, kind, r, whole, afterLeaving([r.pk]));
+    void actions.fileRow(qc, kind, r, whole, afterLeaving([r.pk]), from);
   };
   const fileOpen = (kind: actions.Filing) => {
     if (openPk !== null) file(openRow ?? { pk: openPk }, kind);

@@ -16,6 +16,12 @@ const WORDS: Record<Filing, { verb: string; act: string }> = {
   junk: { verb: "Marked junk", act: "mark junk" },
 };
 
+// A card on the brief or in Commitments has no list behind it to see the row leave, so it says where the mail went.
+const FROM_A_CARD: Partial<Record<Filing, { said: string; undo: string }>> = {
+  archive: { said: "Archived · in the mailbox's Archive", undo: "Archived" },
+  trash: { said: "Deleted · in the mailbox's Trash", undo: "Deleted" },
+};
+
 // Rows on their way out, by pk. A refetch that lands meanwhile can't bring one back.
 export const filing = createStore<ReadonlySet<number>>(new Set());
 const hide = (pks: number[]) => filing.set(new Set([...filing.get(), ...pks]));
@@ -92,16 +98,20 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   }
 }
 
-export function fileRow(qc: QueryClient, kind: Filing, row: Pick<Row, "pk">, whole: boolean, after: Route | null) {
+export function fileRow(qc: QueryClient, kind: Filing, row: Pick<Row, "pk">, whole: boolean, after: Route | null, from?: "card") {
   const { verb, act: doing } = WORDS[kind];
+  const card = from === "card" ? FROM_A_CARD[kind] : undefined;
   const path = whole && kind !== "junk" ? (`/api/thread/${kind}` as const) : (`/api/${kind}` as const);
   const n = (r: Answer) => r.count || 1;
   return act(qc, {
     rows: [row.pk],
     after,
     call: () => post(path, { pk: row.pk }),
-    say: (r) => filedWords(verb, r, readOnly.get()),
-    undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `${verb} ${n(r)}` : verb) : null),
+    say: (r) => {
+      const said = filedWords(verb, r, readOnly.get());
+      return card && said === verb ? card.said : said;
+    },
+    undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `${verb} ${n(r)}` : card?.undo ?? verb) : null),
     fail: () => `Couldn’t ${doing}`,
   });
 }

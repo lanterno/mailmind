@@ -36,7 +36,7 @@ function Commitments({ m }: { m: Mailbox }) {
           const link = typeof it.link === "string" && it.link.startsWith("https://") ? it.link : null;
           return (
             <div className="commit-row" key={it.pk} data-pk={it.pk}>
-              <button className="cm-check" title="Done — archive" aria-label="Done" onClick={() => m.file({ pk: it.pk }, "archive")}>✓</button>
+              <button className="cm-check" title="Done — archive" aria-label="Done" onClick={() => m.file({ pk: it.pk }, "archive", "card")}>✓</button>
               <button className="cm-main" onClick={() => { close(); m.openAny(it.pk); }}>
                 <div className="cm-action">{it.action}</div>
                 <div className="cm-meta"><span className="who">{it.from_name || it.from_addr || "—"}</span> · {(it.subject || "(no subject)").slice(0, 64)} · p{level}</div>

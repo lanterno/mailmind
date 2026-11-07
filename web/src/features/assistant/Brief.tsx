@@ -61,8 +61,8 @@ function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean
           <button className="bf-act quiet" onClick={() => m.openAny(it.pk)}><Icon name="eye" />Read</button>
           <span className="sp" />
           <button className="bf-ic" title="Snooze" aria-label={`Snooze “${subject}”`} onClick={(e) => snoozeAsk.set({ target: { pk: it.pk }, rows: [it.pk], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /></button>
-          <button className="bf-ic" title="Archive" aria-label={`Archive “${subject}”`} onClick={() => m.file({ pk: it.pk }, "archive")}><Icon name="archive" /></button>
-          <button className="bf-ic del" title="Delete" aria-label={`Delete “${subject}”`} onClick={() => m.file({ pk: it.pk }, "trash")}><Icon name="trash" /></button>
+          <button className="bf-ic" title="Archive" aria-label={`Archive “${subject}”`} onClick={() => m.file({ pk: it.pk }, "archive", "card")}><Icon name="archive" /></button>
+          <button className="bf-ic del" title="Delete" aria-label={`Delete “${subject}”`} onClick={() => m.file({ pk: it.pk }, "trash", "card")}><Icon name="trash" /></button>
         </footer>
       </div>
     </article>
