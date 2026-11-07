@@ -197,11 +197,36 @@ function Attachments({ d }: { d: Body }) {
 }
 
 // What stands around a body in either view, then the body. Asking for images loads its frame again with them, and nothing else.
-function MailContent({ pk, minHeight, pad }: { pk: number; minHeight: number; pad: number }) {
+// A body can take a while: the first open of an older message goes to the server.
+function useSlow() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return slow;
+}
+
+function SlowWords({ first, then }: { first: string; then: string }) {
+  const slow = useSlow();
+  return <div className="nores" role="status"><span className="spin">↻</span> {slow ? then : first}</div>;
+}
+
+function Fetching({ whole }: { whole: boolean }) {
+  const slow = useSlow();
+  return (
+    <>
+      <div className="rd-skel" role="status" aria-label="Loading"><div className="skb" /><div className="skb" /><div className="skb short" /><div className="skb" /><div className="skb" /><div className="skb short" /></div>
+      <div className="rd-skelhint" id="rdSkelHint">{slow && <><span className="spin">↻</span> {whole ? "Still fetching from the server — the first open of an older message can take up to a minute." : "Still fetching this message…"}</>}</div>
+    </>
+  );
+}
+
+function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHeight: number; pad: number; whole?: boolean }) {
   const [images, setImages] = useState(false);
   const { data: d, isError } = useBody(pk);
   if (isError) return <div className="nores">Couldn’t load.</div>;
-  if (!d) return <div className="nores" role="status">Loading…</div>;
+  if (!d) return <Fetching whole={whole} />;
   if (!d.ok) return <div className="nores">{d.error ?? "error"}</div>;
   const blocked = images ? 0 : (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
   return (
@@ -252,6 +277,13 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
         )}
         <ReaderNav m={m} />
       </div>
+      {!d && row && (
+        <>
+          <div className="rd-top"><span className="rd-tag">{m.title}</span></div>
+          <div className="rd-subj">{row.subject}</div>
+          <div className="rd-from"><span className="nm">{row.fromName}</span> <span className="ad">{row.fromAddr}</span></div>
+        </>
+      )}
       {d?.ok && (
         <>
           <div className="rd-top"><span className="rd-tag">{m.title}</span><span className="rd-when">{d.date}</span></div>
@@ -263,7 +295,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
         </>
       )}
       <AiCard target={m.target()} row={row} />
-      <MailContent key={pk} pk={pk} minHeight={400} pad={30} />
+      <MailContent key={pk} pk={pk} minHeight={400} pad={30} whole />
       {quick && <QuickReplies pk={pk} />}
       <UpNext m={m} canArchive={!isDraft} />
     </>
@@ -333,7 +365,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
           <UpNext m={m} canArchive />
         </>
       )}
-      {!d && !isError && <div className="nores" role="status">Loading conversation…</div>}
+      {!d && !isError && <SlowWords first="Loading conversation…" then="Still fetching — the first open can be slow." />}
     </>
   );
 }
