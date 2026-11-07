@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from mailmind.kernel.parsed import as_int
+from mailmind.kernel.parsed import as_int, is_list, is_object
 from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.folders import Folders
@@ -29,6 +29,7 @@ _NOT_FOUND: dict[str, Any] = {"ok": False, "msg": "not found", "undoable": False
 
 class Filing:
     PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
+    BULK_MAX = 500          # rows one request may file: the page sends more as more requests, under one undo group
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, commands: MailCommands, ingest: Ingest,
                  undo: Undo, stats: LiveStats, folders: Folders, attention: Attention):
@@ -201,6 +202,39 @@ class Filing:
         if not accepted:
             return {"ok": False, "msg": "not found"}
         return self._heard(accepted, self._try_each(kind, accepted))
+
+
+    def file_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Archive, trash or junk the marked rows as one: `rows` is [{pk, whole}], `whole` for a row that stands for its
+        conversation in its folder, which junk never does. As with a conversation, one transaction accepts them all under
+        one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed, and is
+        `partial` if some were."""
+        verb, rows = body.get("verb"), body.get("rows")
+        if verb not in ("archive", "trash", "junk") or not is_list(rows) or len(rows) > self.BULK_MAX:
+            raise ValueError("bad filing")          # the handler answers malformed input with a 400
+        wanted: list[tuple[int, bool]] = []
+        for one in rows:
+            if not is_object(one):
+                raise ValueError("bad row")
+            pk = as_int(one.get("pk"))
+            if pk is None:
+                raise ValueError("bad row")
+            wanted.append((pk, one.get("whole") is True and verb != "junk"))
+        push = self._pushing(body.get("undo_group") or "bulk:" + secrets.token_hex(6))
+        accepted: list[tuple[int, command.Accepted | None]] = []
+        taken: set[int] = set()
+        with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
+            members = [self._conversation_of(c, pk) if whole else [pk] for pk, whole in wanted]    # before any leaves a list
+            for pks in members:
+                for p in pks:
+                    if p not in taken:               # two rows of one conversation
+                        taken.add(p)
+                        accepted.append((p, self._commands.accept_move_within(c, verb, p, None, body.get("mutation_id"), push)))
+        results = self._try_each(verb, accepted)
+        heard = self._heard(accepted, results)
+        each = [sum(bool(results.get(p, {}).get("ok")) for p in pks) for pks in members]
+        return {**heard, "rows_failed": each.count(0),
+                "partial": any(0 < n < len(pks) for n, pks in zip(each, members))}
 
 
     def _conversation_of(self, c: Connection, pk: int) -> list[int]:

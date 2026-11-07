@@ -111,6 +111,10 @@ def routes(mailbox):
     def thread_file(req):
         return mailbox.filing.do_thread_file(req.path, req.body)
 
+    @r.post("/api/bulk/file")
+    def bulk_file(req):
+        return mailbox.filing.file_many(req.body)
+
     @r.post("/api/flag")
     @r.post("/api/seen")
     @r.post("/api/archive")
