@@ -1,5 +1,5 @@
-"""mailmind.bootstrap.wiring: what `python3 server.py` and the app fixture connect before anything
-runs, what a front door starts, and the background jobs each profile schedules."""
+"""mailmind.bootstrap.wiring: what `python -m mailmind serve` and the app fixture connect before anything
+runs, what serving starts, and the background jobs each profile schedules."""
 import threading
 import time
 
@@ -148,26 +148,25 @@ def test_an_account_gets_imapclient_only_where_it_is_offered(world):
         for s in sessions.values():
             s.logout()
         return {who: type(s).__name__ for who, s in sessions.items()}
-    assert adapters() == {w.ADA: "ImaplibSession", w.CY: "ImaplibSession"}       # the old door's
+    assert adapters() == {w.ADA: "ImaplibSession", w.CY: "ImaplibSession"}       # the command line's
     assert mailbox.describe() == "mail through imaplib"
-    mailbox.offer("imapclient")                                                  # the new door's
+    mailbox.offer("imapclient")                                                  # front.build's
     assert adapters() == {w.ADA: "ImaplibSession", w.CY: "ImapClientSession"}
     assert mailbox.describe() == "mail through imaplib, imapclient for 1 account that asked"
     mailbox.use("imapclient")                                                    # every account's
     assert adapters() == {w.ADA: "ImapClientSession", w.CY: "ImapClientSession"}
 
 
-def test_each_door_runs_the_account_that_asks_on_its_own_adapter(app):
+def test_the_app_runs_the_account_that_asks_on_imapclient(app):
     from mailmind.bootstrap import accounts
     from fixtures import world as w
     from mailmind.bootstrap import mailbox
-    expected = "imapclient" if app.door == "new" else "imaplib"
-    assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == (expected, "imaplib")
+    assert (mailbox.kind_for(accounts.get(w.CY)), mailbox.kind_for(accounts.get(w.ADA))) == ("imapclient", "imaplib")
 
 
-def test_each_door_reads_an_invite_through_its_own_reader(app):
+def test_the_app_reads_an_invite_through_the_library(app):
     from mailmind.bootstrap import calendar
-    assert calendar.kind() == ("icalendar" if app.door == "new" else "stdlib")
+    assert calendar.kind() == "icalendar"
 
 
 def scheduled(monkeypatch, **env):

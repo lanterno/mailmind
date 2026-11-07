@@ -3,8 +3,7 @@ how a tab that reconnects resumes, and how the stream ends. The golden files are
 tests/golden/http_events/, each event's id written <run>-<n>.
 
 The stream is read over a raw socket, as EventSource would: a GET without the CSRF header, which
-EventSource can't send. Its body may run until the connection closes (the old front door's
-HTTP/1.0 answer) or come in chunks (uvicorn's HTTP/1.1); either reads the same, and the headers
+EventSource can't send. Its body comes in chunks (uvicorn's HTTP/1.1), and the headers
 that only frame the connection are left out of the record. The keepalive interval is cut to a fraction of a second, so a closed
 listener is noticed (and its thread ends) within the test.
 """

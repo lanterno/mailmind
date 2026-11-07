@@ -1,4 +1,4 @@
-"""The HTTP layer's hard-won fixes, one test each, so a rewrite of server.py can't drop one quietly:
+"""The HTTP layer's hard-won fixes, one test each, so a rewrite of it can't drop one quietly:
 the IMAP lock around mail moves and the places that must never wait on it, the offline queue's
 undo data, undo that fails and keeps the action, the snooze presets' edges, the delta's clamped
 window, draft-ahead's fingerprint and presence rules, the folder rail's cache, cleanup's
@@ -27,7 +27,6 @@ from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import mailbox
-from mailmind.bootstrap import old_door
 from mailmind.bootstrap import accounts
 
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -475,20 +474,6 @@ def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, wo
 
 
 # -- the server's own plumbing ---------------------------------------------
-
-def test_hwf_a_browser_dropping_its_connection_prints_no_traceback(capsys):
-    srv = object.__new__(old_door._Server)
-    try:
-        raise ConnectionResetError("reset by peer")
-    except ConnectionResetError:
-        srv.handle_error(None, ("127.0.0.1", 50000))
-    assert capsys.readouterr().err == ""
-    try:
-        raise RuntimeError("a real fault")
-    except RuntimeError:
-        srv.handle_error(None, ("127.0.0.1", 50000))
-    assert "RuntimeError: a real fault" in capsys.readouterr().err
-
 
 def test_a_refused_folder_list_keeps_the_last_list(app, world):
     first = app.get(f"/api/folders?account={w.ADA}").json["folders"]

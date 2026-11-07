@@ -1,5 +1,5 @@
-"""Every test here reads its invites through each reader there is: the hand-rolled one, which the old front door runs on,
-and the library one, which the new door runs on. `tests/contract/test_ics_differential.py` says where the two differ."""
+"""Every test here reads its invites through each reader there is: the hand-rolled one, which a process starts on,
+and the library one, which serving asks for. `tests/contract/test_ics_differential.py` says where the two differ."""
 import pytest
 
 from mailmind.bootstrap import calendar

@@ -21,7 +21,7 @@ def _restore():
 def test_unset_home_is_the_repo_root_where_the_data_has_always_lived():
     s = settings.from_env({})
     assert os.path.realpath(s.home) == REPO
-    assert os.path.isfile(os.path.join(s.home, "server.py"))
+    assert os.path.isfile(os.path.join(s.home, "pyproject.toml"))
     assert s.port == 8721
 
 

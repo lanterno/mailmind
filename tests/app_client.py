@@ -12,8 +12,6 @@ import os
 import threading
 import time
 from dataclasses import dataclass
-from mailmind.bootstrap import web
-from mailmind.bootstrap import old_door
 from mailmind.bootstrap import mailbox
 
 CSRF = "test-csrf-token"
@@ -68,8 +66,8 @@ def reset_state():
     from mailmind.platform import sse
     wiring.unwire()                          # the server's subscriptions on the bus, as wire() made them
     sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
-    assistant.use("urllib")                  # the old door's client; the new door's build picks the SDK
-    mailbox.reset()                          # imaplib alone; the new door's build offers IMAPClient
+    assistant.use("urllib")                  # as a process starts, for the command line; front.build picks the SDK
+    mailbox.reset()                          # imaplib alone; front.build offers IMAPClient
     assistant.governor().forget()            # a restart: no interactive call lately, someone here now
 
 
@@ -146,28 +144,9 @@ class AppClient:
         return self.request("POST", path, body, **kw)
 
 
-class RunningApp:
-    """The old front door: web.H on ThreadingHTTPServer, on a random loopback port, serving
-    from a background thread."""
-
-    def __init__(self):
-        self.httpd = old_door._Server(("127.0.0.1", 0), web.H)
-        self.port = self.httpd.server_address[1]
-        self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
-                                       name="app-http", daemon=True)
-
-    def start(self):
-        self.thread.start()
-        return self
-
-    def stop(self):
-        self.httpd.shutdown()
-        self.httpd.server_close()
-
-
 class RunningAsgiApp:
-    """The new front door: web.H behind FastAPI and uvicorn, as `python -m mailmind serve`
-    builds it, on a random loopback port, serving from a background thread."""
+    """The app: web.H behind FastAPI and uvicorn, as `python -m mailmind serve` builds it, on a
+    random loopback port, serving from a background thread."""
 
     def __init__(self):
         from asgi_server import Uvicorn

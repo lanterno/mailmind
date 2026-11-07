@@ -1,5 +1,5 @@
-"""The two readers of an invite side by side: `ics_reader`, the hand-rolled one the old front door runs on, and
-`icalendar_acl`, over icalendar and recurring-ical-events, which the new door runs on. Every text below goes through both
+"""The two readers of an invite side by side: `ics_reader`, the hand-rolled one a process starts on, and
+`icalendar_acl`, over icalendar and recurring-ical-events, which `python -m mailmind serve` asks for. Every text below goes through both
 at every instant, in three machine zones, and what comes back must agree: the card (`parse`), the events found, the next
 occurrence and what Today & next lists.
 

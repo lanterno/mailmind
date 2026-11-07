@@ -1,5 +1,5 @@
 """The one path a change to the mail takes, online or offline: accepted in one transaction, tried, settled in one
-transaction. What the routes answered before it came is pinned elsewhere; this is what it adds. Through each door, on the
+transaction. What the routes answered before it came is pinned elsewhere; this is what it adds, on the
 fake IMAP server."""
 import dataclasses
 from datetime import datetime, timedelta, timezone

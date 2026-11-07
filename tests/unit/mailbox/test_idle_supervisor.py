@@ -242,7 +242,7 @@ def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(wo
 
 def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, supervisor, monkeypatch):
     from mailmind.bootstrap import mailbox
-    mailbox.offer("imapclient")                         # the new door's
+    mailbox.offer("imapclient")                         # front.build's
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
     assert idling(world, w.ADA)

@@ -1,5 +1,5 @@
 """Filing a whole conversation (/api/thread/archive and /api/thread/trash): which messages it takes,
-one Undo for all of them, and what a failure leaves. Through each door, on the fake IMAP server."""
+one Undo for all of them, and what a failure leaves, on the fake IMAP server."""
 import pytest
 
 from fixtures import world as w

@@ -27,10 +27,10 @@ def test_every_command_the_justfile_names_parses(argv):
     parser().parse_args(argv)
 
 
-def test_no_recipe_runs_a_script_at_the_root_but_the_old_door():
+def test_no_recipe_runs_a_script_at_the_root():
     text = (ROOT / "justfile").read_text(encoding="utf-8")
     scripts = re.findall(r"^\s+(?:\{\{py\}\}|python3?|uv run python) ([a-z_]+\.py)\b", text, flags=re.M)
-    assert scripts == ["server.py"]
+    assert scripts == []
 
 
 def test_check_says_ok_and_prints_no_secret(world, capsys):

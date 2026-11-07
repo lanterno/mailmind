@@ -398,7 +398,7 @@ def test_gmail_labels_come_off_and_go_back_on(world, kind):
         lines = sent(world, since, user=w.CY)
     finally:
         s.logout()
-    # Both adapters send the form the old door always has: a system label bare, any other quoted.
+    # Both adapters send the one form: a system label bare, any other quoted.
     assert [line for line in lines if line.startswith("UID STORE")] == [
         f"UID STORE {uid_of(world, name)} -X-GM-LABELS (\\Inbox)",
         f'UID STORE {uid} +X-GM-LABELS (\\Inbox "Work/Clients")']

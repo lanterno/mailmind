@@ -1,6 +1,5 @@
 """A login its server refused (CredentialsRejected, accounts.logins): nothing the app does sends it again until its hold
-ends, the account changes or someone asks. Each test runs through both doors, and Cy's Gmail goes through IMAPClient on
-the new one."""
+ends, the account changes or someone asks."""
 from datetime import timedelta
 
 import pytest

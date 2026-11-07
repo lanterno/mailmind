@@ -111,7 +111,7 @@ def _pristine_state():
 @pytest.fixture(autouse=True)
 def _imap_adapters():
     """imaplib for every account and nothing else offered, as a process starts: a test that offers
-    IMAPClient, or a new door an earlier test built, can't leave it to the next."""
+    IMAPClient, or an app an earlier test built, can't leave it to the next."""
     mailbox.reset()
 
 
@@ -125,7 +125,7 @@ def _no_build(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _ics_reader():
-    """The hand-rolled reader of invites, as a process starts: a new door an earlier test built asked for the library's."""
+    """The hand-rolled reader of invites, as a process starts: an app an earlier test built asked for the library's."""
     calendar.reset()
 
 
@@ -209,48 +209,32 @@ def world(world_template, data_dir):
         yield w.World(srv, placed, data_dir, smtp)
 
 
-# The two front doors every app test runs through: python3 server.py's and python -m mailmind serve's.
-DOORS = ("old", "new")
-_DOOR_IDS = tuple(f"door={d}" for d in DOORS)
-
-
-@pytest.fixture(params=DOORS, ids=_DOOR_IDS)
-def app(request, world, monkeypatch):
-    """The app's HTTP server over this test's world, with the clock frozen at NOW and every
-    module's process state reset, through each front door in turn. Yields an AppClient; its
-    .clock moves the frozen time (clock.shift(timedelta(...)), clock.move_to(datetime)), and
-    its .door says which door it is ("old" or "new")."""
+@pytest.fixture
+def app(world, monkeypatch):
+    """The app as `python -m mailmind serve` builds it, over this test's world, with the clock frozen at NOW and every
+    module's process state reset. Yields an AppClient; its .clock moves the frozen time (clock.shift(timedelta(...)),
+    clock.move_to(datetime))."""
     import dataclasses
     import time_machine
     import app_client
     from mailmind.bootstrap import wiring
     app_client.reset_state()
     monkeypatch.setattr(web.H, "CSRF", app_client.CSRF)
-    wiring.wire()                 # as server.__main__ does, without starting the workers' threads
+    wiring.wire()                 # as wiring.start does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
         from mailmind.bootstrap import assistant
         assistant.governor().forget()   # someone here at NOW, not at the real time reset_state ran at
-        running = (app_client.RunningApp() if request.param == "old" else app_client.RunningAsgiApp()).start()
+        running = app_client.RunningAsgiApp().start()
         try:
             with settings.use(dataclasses.replace(settings.current(), port=running.port)):
                 client = app_client.AppClient(running.port)
                 client.clock = clock
-                client.door = request.param
                 yield client
                 client.settle()
         finally:
             running.stop()
             app_client.reset_state()
-
-
-def _without_door(nodeid):
-    """The test's id without the front door it ran through: both doors answer to one golden file."""
-    head, bracket, params = nodeid.partition("[")
-    if not bracket:
-        return nodeid
-    kept = [p for p in params.removesuffix("]").split("-") if p not in _DOOR_IDS]
-    return head + (f"[{'-'.join(kept)}]" if kept else "")
 
 
 @pytest.fixture
@@ -259,7 +243,7 @@ def golden(request, world, app):
     --update-golden, written to) the test's file in tests/golden/ when the test passes."""
     import golden as g
     from mailmind.platform import sse
-    rec = g.Golden(_without_door(request.node.nodeid), request.config.getoption("--update-golden"),
+    rec = g.Golden(request.node.nodeid, request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
                          (f"localhost:{app.port}", "localhost:<app>"), (f"id: {sse.HUB.run}-", "id: <run>-"),
                          (f"127.0.0.1:{world.server.port}", "127.0.0.1:<imap>"),

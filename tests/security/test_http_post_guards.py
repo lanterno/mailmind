@@ -99,11 +99,8 @@ def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(a
     assert governor._last_seen == time.time()
 
 
-def test_the_new_door_refuses_a_post_before_reading_its_body(app):
-    """Its perimeter runs ahead of the handler, so a refused POST costs no read. (The old server
-    reads a body before it checks the token, and would wait here for one that never comes.)"""
-    if app.door == "old":
-        pytest.skip("the old server reads the body before it checks the token")
+def test_a_post_is_refused_before_its_body_is_read(app):
+    """The perimeter runs ahead of the handler, so a refused POST costs no read."""
     conn = http.client.HTTPConnection("127.0.0.1", app.port, timeout=5)
     try:
         conn.putrequest("POST", "/api/seen", skip_host=True, skip_accept_encoding=True)

@@ -1,6 +1,0 @@
-# The legacy ratchet: every import of a legacy module (an app module at the repo root) from inside
-# the mailmind package, one per line as `<mailmind module> <legacy module>`. tests/test_ratchet.py
-# fails whenever the code and this list differ.
-#
-# The refactor moved the code out of the legacy modules, and the list is empty. Add one only with a reason, and only in mailmind.bootstrap, the one place
-# new code may reach legacy code. When the legacy modules are gone, so is every line.

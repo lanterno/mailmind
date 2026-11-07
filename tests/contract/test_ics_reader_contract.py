@@ -1,5 +1,5 @@
-"""A reader of invites' contract, through each reader the app runs: `ics_reader` (the old front door, with nothing installed)
-and `icalendar_acl` (the new one, on `icalendar` and `recurring-ical-events`). An invite is a stranger's text, read on request
+"""A reader of invites' contract, through each reader there is: `ics_reader` (hand-rolled, what a process starts on)
+and `icalendar_acl` (what serving asks for, on `icalendar` and `recurring-ical-events`). An invite is a stranger's text, read on request
 threads: nothing raises however broken it is, what comes back is plain data, and no text or rule costs more than a bound, in
 time or in memory. test_ics_differential.py compares what the two answer. All addresses are fictional.
 """
@@ -219,8 +219,8 @@ def test_an_unknown_tzid_makes_the_time_floating(ics, tzid):
 
 @pytest.mark.parametrize("tzid", ["W. Europe Standard Time", "Pacific Standard Time", "/freeassociation.sourceforge.net/Europe/Berlin", "Customized Time Zone"])
 def test_a_name_only_a_vtimezone_or_a_guess_could_explain_floats_too(ics, tzid):
-    """The library alone would map a Windows name or guess past a vendor's prefix. A VTIMEZONE doesn't count on either door,
-    or an invite would mean another hour on the old one; the world's Outlook invite holds them to it, in one golden file."""
+    """The library alone would map a Windows name or guess past a vendor's prefix. A VTIMEZONE doesn't count through either reader,
+    or an invite would mean another hour through the other; the differential test holds the two to it."""
     zone = ["BEGIN:VTIMEZONE", f"TZID:{tzid}", "BEGIN:STANDARD", "DTSTART:19701025T030000", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "END:STANDARD", "END:VTIMEZONE"]
     inv = ics.parse(cal(*zone, "BEGIN:VEVENT", "UID:u", f"DTSTART;TZID={tzid}:20261102T100000", "END:VEVENT"))
     assert (inv["start_iso"], inv["tzid"]) == ("2026-11-02T10:00:00", "")

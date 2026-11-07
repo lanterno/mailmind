@@ -1,6 +1,6 @@
 """The fake Claude API answers the way the app's tests rely on: 401 without its key, a reply built
 from the request's schema, queued replies first, and a record of every request. Driven through the
-Assistant's gateway, with the urllib client, the one the old front door runs (test_ai_contract.py
+Assistant's gateway, with the urllib client, the one the command line talks through (test_ai_contract.py
 runs the SDK too)."""
 import pytest
 
