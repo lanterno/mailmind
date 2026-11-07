@@ -355,6 +355,7 @@ def test_a_crash_while_sending_gives_its_messages_back_in_time(backlog, ai):
     c = store.conn()
     keys = [r["message_key"] for r in _waiting()[:2]]
     answers.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, int(time.time()))
+    c.commit()
     c.close()
     assistant.triage.batch_collect()
     assert assistant.triage.batch_status()["waiting"] == 2     # it may still be going

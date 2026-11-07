@@ -1242,6 +1242,7 @@ def test_the_sync_menu_says_when_mail_is_out_in_a_batch(page, world, ai):
     c = store.conn()
     keys = [r["message_key"] for r in answers.needs_summary(c, 3)]
     answers.batch_begin(c, "triage-batch", "claude-opus-5-5", keys, 10, 0, 1)
+    c.commit()
     c.close()
     page.goto("/")
     expect(page.locator("body")).to_be_visible()
