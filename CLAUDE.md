@@ -297,8 +297,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   numbers each event `<run>-<n>` and keeps the last 512. A tab resumes after the `Last-Event-ID`
   its EventSource sends; one the hub can't resume (an earlier run, or further back than it keeps)
   gets one `resync`. `sse.TOPICS` lists every topic and `publish` refuses any other;
-  `tests/unit/platform/test_sse.py` checks that `connectEvents` in `app.js` listens for each, and for
-  `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
+  `tests/unit/platform/test_sse.py` checks that `connectEvents` in `app.js` and `useRealtime` in `web/src/app/realtime.ts` each
+  listen for every one, and for `resync` and `hello`, and nothing else. Data carries ids and counts, never a subject. Golden files write the
   run as `<run>`.
 - `mailmind.platform.workers.durable_queue.DurableQueue` is the queue the outbox and the offline
   move queue share (see Writes, undo, and offline). It is standard library only.
@@ -712,8 +712,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   caller holding a write uses), under one undo group, so a crash can't leave half of them marked. Each
   is then tried on its own once that commits: a refusal gives back only its own message, and a try
   that raises counts as queued, with the rest still tried.
-- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; the page sends more as more requests
-  under one undo group): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
+- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; the React app sends more as more requests
+  under one undo group, and the page still sends one a row): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
   own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
   (`commands.leave_to_worker`), and every row has left the lists by then.
 - Every account's Inbox is one list and one query (`/api/inboxes`, `queries.all_inboxes`), read from what is stored: an account
