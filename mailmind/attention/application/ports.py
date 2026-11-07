@@ -1,14 +1,12 @@
 """What Attention needs from outside it. Each is bound in mailmind.bootstrap.attention."""
-from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from mailmind.kernel.row import Row
 
 
 class AttentionBook(Protocol):
-    """Snoozes, mutes and follow-ups, and how a change to them commits. See adapters.sqlite, whose functions take the
-    connection `transaction()` gives. To a use case that connection is only something to pass back, hence `object`."""
-    def transaction(self) -> AbstractContextManager[object]: ...
+    """Snoozes, mutes and follow-ups. See adapters.sqlite, whose functions take the connection a unit of work's block
+    gives. To a use case that connection is only something to pass back, hence `object`."""
     def thread_pks(self, c: object, account: str, thread_id: str) -> list[int]: ...
     def set_snooze(self, c: object, pk: int, until: int) -> None: ...
     def clear_snooze(self, c: object, pk: int) -> None: ...

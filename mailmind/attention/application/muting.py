@@ -7,10 +7,12 @@ from mailmind.attention.application.threads import Threads
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 
 
 class Muting:
-    def __init__(self, book: AttentionBook, messages: Messages, threads: Threads, undo: Undo, screen: Screen):
+    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, threads: Threads, undo: Undo, screen: Screen):
+        self._uow = uow
         self._book = book
         self._messages = messages
         self._threads = threads
@@ -23,7 +25,7 @@ class Muting:
 
     def mute(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
                 return {"ok": False, "error": "bad mute target"}, 400
@@ -44,7 +46,7 @@ class Muting:
 
     def unmute(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
                 return {"ok": False, "error": "bad mute target"}, 400
@@ -65,7 +67,7 @@ class Muting:
         """Undo of a mute: unmuted, and unread again what it marked read. `prev_seen` is an entry's from when muting
         told the server nothing."""
         marked, when = False, now_iso()
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             for tid in {d["thread_id"], *self._thread_now(c, d)}:
                 self._book.unmute_thread(c, d["account"], tid)
             for pk, prev in d.get("prev_seen", []):

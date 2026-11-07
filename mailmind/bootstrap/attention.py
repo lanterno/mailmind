@@ -7,6 +7,7 @@ from mailmind.attention.application.muting import Muting
 from mailmind.attention.application.snoozing import Snoozing
 from mailmind.attention.application.threads import Threads
 from mailmind.bootstrap import mailbox
+from mailmind.platform.db.uow import UnitOfWork
 
 __all__ = ["book", "clocked", "followups", "muting", "snoozing"]
 
@@ -53,7 +54,8 @@ class _Screen:
 
 
 _threads = Threads(_Messages(), _Accounts())
-snoozing = Snoozing(book, _Messages(), _Undo(), _Screen())
-muting = Muting(book, _Messages(), _threads, _Undo(), _Screen())
-followups = FollowUps(book, _threads, _Accounts(), _Screen())
+_uow = UnitOfWork()
+snoozing = Snoozing(_uow, book, _Messages(), _Undo(), _Screen())
+muting = Muting(_uow, book, _Messages(), _threads, _Undo(), _Screen())
+followups = FollowUps(_uow, book, _threads, _Accounts(), _Screen())
 clocked = Clocked(snoozing, followups)

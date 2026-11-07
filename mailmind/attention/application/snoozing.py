@@ -7,13 +7,15 @@ from mailmind.attention.application.ports import AttentionBook, Messages, Screen
 from mailmind.attention.domain import snooze
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
 log = get_logger("snooze")
 
 
 class Snoozing:
-    def __init__(self, book: AttentionBook, messages: Messages, undo: Undo, screen: Screen):
+    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, undo: Undo, screen: Screen):
+        self._uow = uow
         self._book = book
         self._messages = messages
         self._undo = undo
@@ -22,7 +24,7 @@ class Snoozing:
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
         """Undo of a snooze: each message as it was. An entry from before `where` names the row by pk alone."""
         where: list[Any] = d.get("where") or []
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             for i, pk in enumerate(d["pks"]):
                 pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
                 if i < len(where):
@@ -50,7 +52,7 @@ class Snoozing:
         until = snooze.wake_time(body, datetime.now().astimezone())
         if until is None:
             return {"ok": False, "error": "bad snooze time"}, 400
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             pks = self._pks(c, body)
             prev: list[int | None] = []
             where: list[list[str] | None] = []
@@ -67,7 +69,7 @@ class Snoozing:
 
     def unsnooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             pks = self._pks(c, body)
             for pk in pks:
                 self._book.clear_snooze(c, pk)
@@ -80,7 +82,7 @@ class Snoozing:
         the next sync that read the flags would take it back."""
         now = int(time.time())
         marked = False
-        with self._book.transaction() as c:
+        with self._uow.write() as c:
             due = self._book.due_snoozes(c, now)
             for r in due:
                 self._book.clear_snooze(c, r["pk"])

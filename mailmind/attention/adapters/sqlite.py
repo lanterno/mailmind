@@ -1,22 +1,7 @@
-"""Attention's tables: `snoozes` and `messages.snoozed_until`, `muted` and `followups`. Each function takes the
-connection `transaction()` gave, or its caller's, and leaves the commit to it."""
-from contextlib import contextmanager
-
+"""Attention's tables: `snoozes` and `messages.snoozed_until`, `muted` and `followups`. Each function takes its caller's
+connection and leaves the commit to it."""
 from mailmind.kernel import attention
 from mailmind.kernel.when import now_iso
-from mailmind.platform import settings
-from mailmind.platform.db import database
-
-
-@contextmanager
-def transaction():
-    """One change to Attention's tables: committed if the block ends, gone if it raises."""
-    c = database.connect(settings.current().db)
-    try:
-        yield c
-        c.commit()
-    finally:
-        c.close()
 
 
 def thread_pks(c, account, thread_id):
