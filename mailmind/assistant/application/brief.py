@@ -14,6 +14,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.domain import brief, fingerprint, prompts
 from mailmind.assistant.domain.brief import DELTA_TOP_N, Group
+from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -110,13 +111,13 @@ class Briefs:
                 "generated": created_at, "cached": cached, "stale": stale}
 
     def build_delta(self, accounts_set: Iterable[str] | None, since_ts: int, generate: bool = True) -> Result:
-        """-> (result_dict, http_code). 0 new -> {empty:true}; AI fail -> {ok:false} (client keeps the count).
+        """0 new -> {empty:true}; AI fail raises Unreachable (client keeps the count).
         With generate=False it only reads: nothing stored yet -> {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
         with self._uow.read() as c:
             rows = self._mail.delta_rows(c, accounts_set, since_ts, DELTA_TOP_N)
         if not rows:
-            return {"ok": True, "empty": True, "count": 0}, 200
+            return {"ok": True, "empty": True, "count": 0}
         # Stored by what it was made from: if the window changes (more mail since the same watermark, even
         # past DELTA_TOP_N) it is written once more instead of serving a stale headline, and an unchanged
         # window stays free to read again.
@@ -128,7 +129,7 @@ class Briefs:
             if row is None:
                 return None
             return {"ok": True, "empty": False, "headline": row["headline"],
-                    "items": json.loads(row["items_json"]), "count": len(rows), "cached": True}, 200
+                    "items": json.loads(row["items_json"]), "count": len(rows), "cached": True}
 
         def make() -> Result:
             lines: list[str] = []
@@ -148,7 +149,7 @@ class Briefs:
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache
                 log.warning("delta failed", exc_info=e)
-                return {"ok": False, "error": "delta unavailable", "retry": True}, 502
+                raise Unreachable("delta unavailable", retry=True)
             headline, items = brief.clean_delta(obj)
             model = self._calls.model_label()
             if not headline:                        # replied but unusable -> deterministic, cached once
@@ -157,15 +158,17 @@ class Briefs:
             with self._uow.write() as c:
                 self._answers.save_delta(c, accounts, since, fp, headline, json.dumps(items), model, self._now())
             return {"ok": True, "empty": False, "headline": headline,
-                    "items": items, "count": len(rows), "cached": False}, 200
+                    "items": items, "count": len(rows), "cached": False}
 
         if not generate:
-            return read() or ({"ok": True, "empty": False, "missing": True, "count": len(rows)}, 200)
-        return (read() or self._FLIGHTS.run(("delta", accounts, since, fp), make, read, wait=30)   # another tab may be making it
-                or ({"ok": False, "error": "delta unavailable", "retry": True}, 502))
+            return read() or {"ok": True, "empty": False, "missing": True, "count": len(rows)}
+        answer = read() or self._FLIGHTS.run(("delta", accounts, since, fp), make, read, wait=30)   # another tab may be making it
+        if answer is None:
+            raise Unreachable("delta unavailable", retry=True)
+        return answer
 
     def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
-        """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
+        """With generate=False it only reads: nothing stored yet ->
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
         accounts, day = self._accounts_key(accounts_set), self._today()
@@ -176,15 +179,15 @@ class Briefs:
 
         def stored(row: Row) -> Result:
             return self._result(row["narrative"], self._groups_now(row["groups_json"]), row["model"], row["created_at"],
-                           True, row["fingerprint"] != fp), 200
+                           True, row["fingerprint"] != fp)
 
         if cached and not force:
             return stored(cached)
         if not rows:
             return {"ok": True, "narrative": "Nothing needs you right now — your inbox is quiet.",
-                    "groups": [], "model": "empty", "generated": self._now(), "cached": False, "stale": False}, 200
+                    "groups": [], "model": "empty", "generated": self._now(), "cached": False, "stale": False}
         if not generate:
-            return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}, 200
+            return {"ok": True, "missing": True, "narrative": "", "groups": [], "cached": False, "stale": False}
 
         def read() -> Result | None:
             with self._uow.read() as c:
@@ -210,7 +213,7 @@ class Briefs:
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache
                 log.warning("briefing failed", exc_info=e)
-                return {"ok": False, "error": "briefing unavailable", "retry": True}, 502
+                raise Unreachable("briefing unavailable", retry=True)
             narrative, groups = brief.clean(obj, valid)
             model = self._calls.model_label()
             if not narrative:                       # replied but unusable: cache a deterministic card
@@ -219,7 +222,9 @@ class Briefs:
             created = self._now()
             with self._uow.write() as c:
                 self._answers.save_brief(c, accounts, day, fp, narrative, json.dumps(self._stored_groups(groups, rows)), model, created)
-            return self._result(narrative, groups, model, created, False, False), 200
+            return self._result(narrative, groups, model, created, False, False)
 
-        return (self._FLIGHTS.run(("brief", accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
-                or ({"ok": False, "error": "briefing unavailable", "retry": True}, 502))
+        answer = self._FLIGHTS.run(("brief", accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
+        if answer is None:
+            raise Unreachable("briefing unavailable", retry=True)
+        return answer

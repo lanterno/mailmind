@@ -1,5 +1,4 @@
-"""What a request asks of the AI: its fields read, its account checked, and which use case answers. Each returns
-(result, code)."""
+"""What a request asks of the AI: its fields read, its account checked, and which use case answers."""
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -12,6 +11,7 @@ from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import brief
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.parsed import is_list, is_object
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -27,8 +27,8 @@ class Asking:
         self._uow = uow
         self._mail = mail
 
-    def summarize(self, body: Mapping[str, Any]) -> Result:
-        """On-demand thread/message summary via claude. Returns (result, code)."""
+    def summarize(self, body: Mapping[str, Any]) -> Result | tuple[Result, int]:
+        """On-demand thread/message summary via claude."""
         scope = "thread"
         account = body.get("account")
         thread_id = body.get("thread_id")
@@ -36,12 +36,12 @@ class Asking:
             with self._uow.read() as c:
                 row = self._mail.get_message(c, int(body["pk"]))
             if not row:
-                return {"ok": False, "error": "not found"}, 404
+                raise NotFound("not found")
             account = row["account"]
             thread_id = row["thread_id"] or lone_key(row)
             scope = "message" if not row["thread_id"] else "thread"
         if not account or account not in {a["email"] for a in self._mail.accounts()} or not thread_id:
-            return {"ok": False, "error": "bad request"}, 400
+            raise Refused()
         return self._threads.summarize(account, thread_id, scope, force=bool(body.get("force")))
 
     def _one(self, qs_or_body: object, name: str) -> Any:
@@ -78,18 +78,18 @@ class Asking:
         return self._briefs.build_delta(accts, brief.delta_since(since, int(time.time())), generate=generate)
 
     def rewrite(self, body: Mapping[str, Any]) -> Result:
-        """Rewrite/tone/translate the composer text via claude. Returns (result, code)."""
+        """Rewrite/tone/translate the composer text via claude."""
         return self._rewriter.rewrite(str(body.get("text") or ""), str(body.get("op") or ""),
                                lang=str(body.get("lang") or "English"))
 
     def ask(self, body: Mapping[str, Any]) -> Result:
         """Ask-your-inbox: answer a natural-language question about the user's mail via claude.
         Pure read (FTS retrieve → bounded claude read), no mutation/SMTP — like summarize/
-        rewrite. Account is validated before any mail is touched. Returns (result, code)."""
+        rewrite. Account is validated before any mail is touched."""
         account = (body.get("account") or "all").strip() or "all"
         question = str(body.get("question") or "").strip()[:8000]
         if account != "all" and account not in {a["email"] for a in self._mail.accounts()}:
-            return {"ok": False, "error": "bad request"}, 400
+            raise Refused()
         if not question:
-            return {"ok": False, "error": "question required"}, 400
+            raise Refused("question required")
         return self._asker.ask(account, question)

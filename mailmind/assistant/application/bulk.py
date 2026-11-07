@@ -13,6 +13,7 @@ from mailmind.assistant.application import plans
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import NotSent, Result, Search
 from mailmind.assistant.domain import action_plan, prompts
+from mailmind.kernel.errors import Refused, Unreachable
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -41,10 +42,10 @@ class BulkCommands:
     def plan(self, body: Mapping[str, Any]) -> Result:
         """Plan an NL bulk command → a validated, capped PREVIEW with the id of the plan it froze. READ-ONLY:
         generates no mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted,
-        safely-scoped action. Returns (result, code)."""
+        safely-scoped action."""
         cmd = action_plan.command_of(body.get("cmd"))
         if not cmd:
-            return {"ok": False, "error": "empty command"}, 400
+            raise Refused("empty command")
         today = datetime.now().astimezone().date().isoformat()
         prompt = prompts.PLAN.fill(today=today, cmd=cmd)
         try:
@@ -52,30 +53,30 @@ class BulkCommands:
         except NotSent:                 # AI off, or over the daily limit: the route answers it
             raise
         except Exception:
-            return {"ok": False, "error": "planner unavailable", "retry": True}, 502
+            raise Unreachable("planner unavailable", retry=True)
         filt = action_plan.filter_told(plan)
         verb = action_plan.verb_told(plan)
         if verb is None:                                   # degrade: just show a search (act on nothing)
-            return {"ok": True, "intent": "search", "filter": filt}, 200
+            return {"ok": True, "intent": "search", "filter": filt}
         # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
         spec = self._search.parse(filt)
         if not spec.narrows():                             # empty / scope-only / negation-only → not a scoped action
-            return {"ok": True, "intent": "search", "filter": filt}, 200
+            return {"ok": True, "intent": "search", "filter": filt}
         cap = action_plan.cap_of(verb)
         apart = action_plan.out_of_reach(verb, spec.names_folder())
         count, messages, sample, matched = self._search.reach(spec, cap, apart, action_plan.SAMPLE)
         if count is None:                                  # unparseable resolved query → degrade
-            return {"ok": True, "intent": "search", "filter": filt}, 200
+            return {"ok": True, "intent": "search", "filter": filt}
         if not messages:                                   # nothing matches → nothing to confirm
-            return {"ok": True, "intent": "search", "filter": filt, "empty": True}, 200
+            return {"ok": True, "intent": "search", "filter": filt, "empty": True}
         if self._search.sweeps_whole_mailbox(matched):  # blast-radius backstop: refuse what's still most of the mailbox
-            return {"ok": True, "intent": "search", "filter": filt}, 200
+            return {"ok": True, "intent": "search", "filter": filt}
         preset = action_plan.preset_told(plan, verb)
         frozen = self._DO_PLANS.open(verb, preset, messages)
         return {"ok": True, "intent": "act", "verb": verb, "filter": filt,
                 "snooze_preset": preset,
                 "count": count, "cap": cap, "capped": count > cap,
-                "plan": frozen.id, "sample": sample}, 200
+                "plan": frozen.id, "sample": sample}
 
     def take(self, plan_id: str) -> action_plan.ActionPlan | None:
         """What a preview froze, once, or None when its plan has expired. The Assistant only says what it was: the mail's

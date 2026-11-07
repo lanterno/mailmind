@@ -7,6 +7,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.ports import Mail, NotSent, Result
 from mailmind.assistant.domain import prompts
+from mailmind.kernel.errors import NotFound, Unreachable
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -27,7 +28,7 @@ class ReplyDrafts:
 
     def draft(self, account: str, thread_id: str | None = None, pk: int | None = None, instruction: str = "",
               tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
-        """-> (result_dict, http_code). Gathers a thread (thread_id) or a single message (pk).
+        """Gathers a thread (thread_id) or a single message (pk).
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
         with self._uow.read() as c:
             if thread_id:
@@ -37,7 +38,7 @@ class ReplyDrafts:
             else:
                 rows = []
         if not rows:
-            return {"ok": False, "error": "nothing to reply to"}, 404
+            raise NotFound("nothing to reply to")
 
         blocks, _omitted = self._context.gather(rows)
         subject = rows[0]["subject"] or "(no subject)"
@@ -52,8 +53,8 @@ class ReplyDrafts:
             raise
         except Exception as e:                      # timeout / rate-limit: retryable
             log.warning("draft failed", exc_info=e)
-            return {"ok": False, "error": "draft unavailable", "retry": True}, 502
+            raise Unreachable("draft unavailable", retry=True)
         body = (obj.get("body") or "").strip()
         if not body:
-            return {"ok": False, "error": "no draft produced", "retry": True}, 502
-        return {"ok": True, "body": body[:6000], "tone": tone, "model": self._calls.model_label()}, 200
+            raise Unreachable("no draft produced", retry=True)
+        return {"ok": True, "body": body[:6000], "tone": tone, "model": self._calls.model_label()}

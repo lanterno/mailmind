@@ -15,6 +15,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.domain import prompts, review
 from mailmind.assistant.domain.review import Awaited, Needed, Retrospective, Stats
+from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -103,7 +104,7 @@ class Reviews:
                 "model": model, "generated": created_at, "cached": cached, "stale": stale}
 
     def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
-        """-> (result_dict, http_code). With generate=False it only reads: nothing stored yet ->
+        """With generate=False it only reads: nothing stored yet ->
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
         import time
@@ -120,12 +121,12 @@ class Reviews:
                 stored_waiting = self._items_now(c, json.loads(row["waiting_json"]))
             return self._result(json.loads(row["stats_json"]), stored_needs, stored_waiting,
                            {"narrative": row["narrative"], "next": json.loads(row["next_json"])},
-                           row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts), 200
+                           row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts)
 
         if cached_row and not force:
             return stored(cached_row)
         if not generate:
-            return {"ok": True, "missing": True}, 200
+            return {"ok": True, "missing": True}
 
         def read() -> Result | None:
             with self._uow.read() as c:
@@ -156,13 +157,15 @@ class Reviews:
                 raise
             except Exception as e:
                 log.warning("review failed", exc_info=e)
-                return {"ok": False, "error": "review unavailable", "retry": True}, 502
+                raise Unreachable("review unavailable", retry=True)
 
             created = self._now()
             with self._uow.write() as c:
                 self._answers.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
                                   json.dumps(needs), json.dumps(waiting), model, created)
-            return self._result(stats, needs, waiting, ai, model, created, False, False, since_ts), 200
+            return self._result(stats, needs, waiting, ai, model, created, False, False, since_ts)
 
-        return (self._FLIGHTS.run((accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
-                or ({"ok": False, "error": "review unavailable", "retry": True}, 502))
+        answer = self._FLIGHTS.run((accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
+        if answer is None:
+            raise Unreachable("review unavailable", retry=True)
+        return answer

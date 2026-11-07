@@ -13,6 +13,7 @@ from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.ports import Answers, NotSent, Result
 from mailmind.assistant.domain import digest, fingerprint, prompts
 from mailmind.assistant.domain.digest import Digest
+from mailmind.kernel.errors import NotFound, Unreachable
 from mailmind.kernel.row import Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -47,18 +48,17 @@ class ThreadDigest:
                 "participants": _j(row["participants"]), "message_count": row["message_count"],
                 "model": row["model"], "created_at": row["created_at"]}
 
-    def summarize(self, account: str, thread_id: str, scope: str = "thread", force: bool = False) -> Result:
-        """-> (result_dict, http_code)."""
+    def summarize(self, account: str, thread_id: str, scope: str = "thread", force: bool = False) -> Result | tuple[Result, int]:
         with self._uow.read() as c:
             rows = self._context.rows(c, account, thread_id)
         if not rows:
-            return {"ok": False, "error": "nothing to summarize"}, 404
+            raise NotFound("nothing to summarize")
         fp = self._fingerprint(rows)
         with self._uow.read() as c:
             cached = self._answers.get_thread_summary(c, account, thread_id, scope)
         if cached and not force:
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
-                    "cached": True, "stale": cached["fingerprint"] != fp, **self._expand(cached)}, 200
+                    "cached": True, "stale": cached["fingerprint"] != fp, **self._expand(cached)}
 
         def read() -> Result | None:                    # a summary of the thread as it is now
             with self._uow.read() as c:
@@ -66,7 +66,7 @@ class ThreadDigest:
             if row is None or row["fingerprint"] != fp:
                 return None
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
-                    "cached": True, "stale": False, **self._expand(row)}, 200
+                    "cached": True, "stale": False, **self._expand(row)}
 
         def make() -> Result:
             blocks, omitted = self._context.gather(rows)
@@ -81,7 +81,7 @@ class ThreadDigest:
                 raise
             except Exception as e:                      # claude missing / timeout / rate-limit: retryable, no cache
                 log.warning("claude failed", exc_info=e)
-                return {"ok": False, "error": "summary unavailable", "retry": True}, 502
+                raise Unreachable("summary unavailable", retry=True)
             parsed: Digest | None = digest.parse(out)
             model = self._calls.model_label()
             if parsed is None:                          # replied but not JSON: cache a safe fallback, don't loop
@@ -99,7 +99,7 @@ class ThreadDigest:
             return {"ok": True, "account": account, "thread_id": thread_id, "scope": scope,
                     "cached": False, "stale": False, "tldr": parsed["tldr"], "points": parsed["points"],
                     "action": parsed["action"], "participants": parsed["participants"],
-                    "message_count": len(rows), "model": model, "created_at": row["created_at"]}, 200
+                    "message_count": len(rows), "model": model, "created_at": row["created_at"]}
 
         return (self._FLIGHTS.run((account, thread_id, scope), make, read, wait=60, recheck=not force)
                 or ({"ok": False, "error": "still summarizing"}, 504))

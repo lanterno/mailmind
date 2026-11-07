@@ -19,7 +19,7 @@ from mailmind.kernel.row import Connection, Row
 # error. Both adapters retry these, twice; any other 4xx says the request itself won't do.
 RETRIED = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
 
-type Result = tuple[dict[str, Any], int]      # what a request is answered with: its JSON, and the HTTP status
+type Result = dict[str, Any]                  # what a request is answered with: its JSON
 type ConversationBy = Literal["thread_id", "message_id", "pk"]     # what a conversation's messages share
 
 

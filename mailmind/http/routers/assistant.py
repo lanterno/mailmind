@@ -2,6 +2,7 @@
 can start a call is drafting ahead's kick, which needs the page's token."""
 from mailmind.assistant.api import AIOff, OverLimit
 from mailmind.http.routing import Routes
+from mailmind.kernel.errors import Problem
 from mailmind.platform import perimeter
 from mailmind.platform.logging import get_logger
 
@@ -9,12 +10,12 @@ log = get_logger("ai")
 
 
 def _scrubbed(what, failed, answer):
-    """A route's answer, with a failure logged and answered in general terms. The two the handler answers go through: the
-    402 (the page asks) and the 409."""
+    """A route's answer, with a failure logged and answered in general terms. What the handler answers goes through: a
+    Problem, the 402 (the page asks) and the 409."""
     def route(req):
         try:
             return answer(req)
-        except (OverLimit, AIOff):
+        except (OverLimit, AIOff, Problem):
             raise
         except Exception as ex:
             log.error("%(what)s", {"what": what}, exc_info=ex)

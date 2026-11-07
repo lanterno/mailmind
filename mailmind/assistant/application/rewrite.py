@@ -6,6 +6,7 @@ text only.
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import NotSent, Result
 from mailmind.assistant.domain import prompts
+from mailmind.kernel.errors import Refused, Unreachable
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
@@ -17,13 +18,12 @@ class Rewriter:
         self._calls = calls
 
     def rewrite(self, text: str | None, op: str, lang: str = "English") -> Result:
-        """-> (result_dict, http_code)."""
         text = (text or "").strip()
         if not text:
-            return {"ok": False, "error": "nothing to rewrite"}, 400
+            raise Refused("nothing to rewrite")
         instr = prompts.REWRITE_OPS.get(op)
         if not instr:
-            return {"ok": False, "error": "unknown op"}, 400
+            raise Refused("unknown op")
         prompt = prompts.REWRITE.fill(instr=instr.replace("{lang}", (lang or "English")[:40]), text=text[:8000])
         try:
             obj = self._calls.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")
@@ -31,8 +31,8 @@ class Rewriter:
             raise
         except Exception as e:
             log.warning("rewrite failed", exc_info=e)
-            return {"ok": False, "error": "rewrite unavailable", "retry": True}, 502
+            raise Unreachable("rewrite unavailable", retry=True)
         out = (obj.get("text") or "").strip()
         if not out:
-            return {"ok": False, "error": "no rewrite produced", "retry": True}, 502
-        return {"ok": True, "text": out[:12000], "op": op}, 200
+            raise Unreachable("no rewrite produced", retry=True)
+        return {"ok": True, "text": out[:12000], "op": op}

@@ -17,6 +17,7 @@ from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint, prepared_reply
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -88,23 +89,18 @@ class PreparedReplies:
         def make() -> bool | None:
             ok = False
             try:
-                res, code = self._replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct,
-                                              feature="draft-ahead")
+                res = self._replies.draft(acct, thread_id=tid, pk=(None if tid else int(pk)), me=acct, feature="draft-ahead")
                 now = int(time.time())
                 with self._uow.write() as c:
-                    if code == 200 and res.get("ok") and res.get("body"):
-                        self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
-                                              res.get("model"), int(pk), mid, source, now)
-                        self._answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
-                                                                      # no orphan sweeps — a reset_folder reingest may be mid-flight
-                        ok = True
-                    else:
-                        self._answers.draft_ahead_fail(c, key[0], key[1], now)
-                if ok:
-                    try:
-                        sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
-                    except Exception:
-                        pass
+                    self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
+                                                  res.get("model"), int(pk), mid, source, now)
+                    self._answers.draft_ahead_gc(c, now, orphans=False)   # opportunistic hygiene (NOSYNC has no tick);
+                                                                  # no orphan sweeps — a reset_folder reingest may be mid-flight
+                ok = True
+                try:
+                    sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                except Exception:
+                    pass
             except NotSent:
                 return None                                   # neutral: AI is off, or the governor said not now
             except Exception as e:
@@ -132,40 +128,40 @@ class PreparedReplies:
         try:
             pk = int((qs.get("pk") or ["0"])[0])
         except Exception:
-            return {"ok": False, "error": "bad pk"}, 400
+            raise Refused("bad pk")
         peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
         if not pk:
-            return {"ok": True, "status": "none"}, 200
+            return {"ok": True, "status": "none"}
         with self._uow.read() as c:
             row = self._mail.get_message(c, pk)
             if not row:
-                return {"ok": True, "status": "none"}, 200
+                return {"ok": True, "status": "none"}
             acct = row["account"]
             tid = row["thread_id"] or None
             if not prepared_reply.for_the_anchor(pk, tid, self._mail.thread_anchor_pk(c, acct, tid) if tid else None):
-                return {"ok": True, "status": "none"}, 200
+                return {"ok": True, "status": "none"}
             if not self._draft_eligible(row):
-                return {"ok": True, "status": "none"}, 200
+                return {"ok": True, "status": "none"}
             key = prepared_reply.key_of(row)
             if key is None:
-                return {"ok": True, "status": "none"}, 200
+                return {"ok": True, "status": "none"}
             fp = self._draft_fp(c, acct, tid, pk)
             da = self._answers.draft_ahead_get(c, key[0], key[1])
             now = int(time.time())
             if da is None or not prepared_reply.servable(da, fp, now):
                 if self.DRAFT_FLIGHTS.busy(key):
-                    return {"ok": True, "status": "generating"}, 200
+                    return {"ok": True, "status": "generating"}
                 if peek:
-                    return {"ok": True, "status": "none"}, 200
+                    return {"ok": True, "status": "none"}
                 if prepared_reply.failed_lately(da, now):
-                    return {"ok": True, "status": "none"}, 200   # recently failed → back off (client falls to on-demand)
+                    return {"ok": True, "status": "none"}   # recently failed → back off (client falls to on-demand)
                 if not self._answers.reply_worthy(c, pk):
-                    return {"ok": True, "status": "none"}, 200
+                    return {"ok": True, "status": "none"}
                 threading.Thread(target=self._gen_draft_ahead, args=(acct, pk), daemon=True).start()
-                return {"ok": True, "status": "generating"}, 200
+                return {"ok": True, "status": "generating"}
         with self._uow.write() as c:                          # only a draft served is touched: asking takes no lock
             self._answers.draft_ahead_touch(c, key[0], key[1], now)
-        return {"ok": True, "status": "ready", "body": da["body"], "tone": da["tone"]}, 200
+        return {"ok": True, "status": "ready", "body": da["body"], "tone": da["tone"]}
 
     def _pick_draft_candidate(self) -> Row | None:
         """One tick's worth of work: the single best reply-worthy message that isn't already
@@ -228,7 +224,7 @@ class PreparedReplies:
         return draft_ahead_round
 
     def reply(self, body: Mapping[str, Any]) -> Result:
-        """Draft an editable reply to a thread/message via claude. Returns (result, code)."""
+        """Draft an editable reply to a thread/message via claude."""
         account = body.get("account")
         thread_id = body.get("thread_id")
         pk = body.get("pk")
@@ -242,7 +238,7 @@ class PreparedReplies:
             with self._uow.read() as c:
                 row = self._mail.get_message(c, int(pk))
                 if not row:
-                    return {"ok": False, "error": "not found"}, 404
+                    raise NotFound("not found")
                 key = prepared_reply.key_of(row)
                 # fp captured BEFORE generation (same load-bearing rule as _gen_draft_ahead):
                 # a mid-generation thread change must mismatch on read → regenerate, never stale-serve.
@@ -254,7 +250,7 @@ class PreparedReplies:
                 with self._uow.write() as c:
                     self._answers.draft_ahead_touch(c, key[0], key[1], int(time.time()))
                 return {"ok": True, "body": da["body"], "tone": da["tone"] or tone,
-                        "model": da["model"] or "cache"}, 200
+                        "model": da["model"] or "cache"}
             account = account or row["account"]
             thread_id = thread_id or row["thread_id"]      # prefer the whole thread for context
             if not row["thread_id"]:
@@ -262,15 +258,14 @@ class PreparedReplies:
             else:
                 pk = None
         if not account or account not in {a["email"] for a in self._mail.accounts()}:
-            return {"ok": False, "error": "bad request"}, 400
+            raise Refused()
         # The mail is in its own account's rows. `account` is who's replying: From may name another.
-        res, code = self._replies.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
-                                      instruction=instruction, tone=tone, me=account)
+        res = self._replies.draft(row["account"] if row is not None else account, thread_id=thread_id, pk=pk,
+                                  instruction=instruction, tone=tone, me=account)
         # Bank a default-shaped success into the draft-ahead cache (the user already paid for
         # this call; a closed-and-reopened composer or same-thread revisit is then free).
         # Custom instruction / non-default tone are personal one-offs — never banked.
-        if code == 200 and res.get("ok") and res.get("body") and default_shape \
-                and row is not None and key is not None and fp is not None:
+        if default_shape and row is not None and key is not None and fp is not None:
             try:
                 with self._uow.write() as c:
                     self._answers.draft_ahead_put(c, key[0], key[1], fp, res["body"], res.get("tone"),
@@ -278,4 +273,4 @@ class PreparedReplies:
                                           "demand", int(time.time()))
             except Exception:
                 pass                                        # banking is best-effort; the reply itself already succeeded
-        return res, code
+        return res

@@ -6,7 +6,7 @@ Claude (summarize's API-or-CLI engine) under a strict schema, and the model retu
 answer plus the pks it actually used. Citations are intersected with what was retrieved+shown,
 so the model can never cite (or leak) a message outside the account-scoped candidate set.
 
-  result, code = assistant.asker.ask(account, question)   # account="all" → across every enabled mailbox
+  result = assistant.asker.ask(account, question)   # account="all" → across every enabled mailbox
 
 Read-only: only SELECTs, no IMAP fetch (never blocks), no mutation, no SMTP. Shares the
 2-process AI cap with the other bridges. The mail never leaves 127.0.0.1.
@@ -17,6 +17,7 @@ import re
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Mail, NotSent, Result
 from mailmind.assistant.domain import citations, prompts
+from mailmind.kernel.errors import Refused, Unreachable
 from mailmind.kernel.row import Row
 
 MAX_QUESTION = 8000     # defensive re-trim (the route already caps)
@@ -73,11 +74,11 @@ class Asker:
     def ask(self, account: str | None, question: str | None) -> Result:
         question = (question or "").strip()[:MAX_QUESTION]
         if not question:
-            return {"ok": False, "error": "question required"}, 400
+            raise Refused("question required")
 
         found = self._mail.for_asking(self._fts_match(question), self._scope(account), CAND_LIMIT)
         if found is None:
-            return {"ok": False, "error": "bad query"}, 400
+            raise Refused("bad query")
         once: set[int] = set()                                # a message counts once, however many folders hold it
         rows = [r for r in found
                 if not ((r["message_key"] or -r["pk"]) in once or once.add(r["message_key"] or -r["pk"]))]
@@ -86,7 +87,7 @@ class Asker:
             return {"ok": True, "account": account, "question": question,
                     "answer": "I couldn’t find any messages matching that in your mail.",
                     "cited_pks": [], "sources": [], "model": self._calls.model_label(),
-                    "generated": datetime.now(timezone.utc).isoformat()}, 200
+                    "generated": datetime.now(timezone.utc).isoformat()}
 
         # body-coverage cascade + bounded packing; only packed pks are citable
         blocks: list[str] = []
@@ -111,7 +112,7 @@ class Asker:
             return {"ok": True, "account": account, "question": question,
                     "answer": "I found related messages but none have readable text indexed yet.",
                     "cited_pks": [], "sources": [], "model": self._calls.model_label(),
-                    "generated": datetime.now(timezone.utc).isoformat()}, 200
+                    "generated": datetime.now(timezone.utc).isoformat()}
 
         prompt = prompts.ASK.fill(question=question, blocks="\n\n".join(blocks))
         try:
@@ -119,11 +120,11 @@ class Asker:
         except NotSent:                         # AI off, or over the daily limit: the route answers it
             raise
         except Exception:
-            return {"ok": False, "error": "ask unavailable", "retry": True}, 502
+            raise Unreachable("ask unavailable", retry=True)
 
         answer = (str(obj.get("answer")) if obj.get("answer") else "").strip()[:4000]
         if not answer:
-            return {"ok": False, "error": "ask unavailable", "retry": True}, 502
+            raise Unreachable("ask unavailable", retry=True)
 
         cited = citations.in_answer(obj.get("cited_pks"), set(by_pk))     # what was account-scoped AND shown to the model
         sources = [{
@@ -135,4 +136,4 @@ class Asker:
 
         return {"ok": True, "account": account, "question": question, "answer": answer,
                 "cited_pks": cited, "sources": sources, "model": self._calls.model_label(),
-                "generated": datetime.now(timezone.utc).isoformat()}, 200
+                "generated": datetime.now(timezone.utc).isoformat()}
