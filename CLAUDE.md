@@ -57,7 +57,7 @@ uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved 
 uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's reopen helpers, run in node (25)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (138)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (58)
-uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (493)
+uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (319)
 uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers, through both doors (54)
 ```
 
