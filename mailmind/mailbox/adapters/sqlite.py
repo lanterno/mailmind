@@ -688,6 +688,16 @@ def folder_count(c, account, folder):
                      (account, folder)).fetchone()[0]
 
 
+def stored_folder_counts(c, account):
+    """{folder: (unseen, total)} of what is stored for the account, each folder a sync has read among them."""
+    counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
+        "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
+        "AND pending_removal IS NULL GROUP BY folder", (account,))}
+    for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
+        counts.setdefault(r["folder"], (0, 0))
+    return counts
+
+
 def thread_rows(c, account, thread_id):
     """A conversation's messages in the account, oldest first, every copy of each."""
     return c.execute(

@@ -106,11 +106,7 @@ class Folders:
         certificate changed). Roles by name, the shallower folder first; counts as stored."""
         c = self._store.conn()
         try:
-            counts = {r["folder"]: (r["unseen"], r["total"]) for r in c.execute(
-                "SELECT folder, SUM(seen=0) AS unseen, COUNT(*) AS total FROM messages WHERE account=? "
-                "AND pending_removal IS NULL GROUP BY folder", (account,))}
-            for r in c.execute("SELECT folder FROM sync_state WHERE account=?", (account,)):
-                counts.setdefault(r["folder"], (0, 0))
+            counts = self._store.stored_folder_counts(c, account)
         finally:
             c.close()
         counts.setdefault("INBOX", (0, 0))
@@ -169,9 +165,7 @@ class Folders:
         acct = self._accounts.get(account)
         out = self._folders_list_cached(account, acct)
         c = self._store.conn()
-        snoozed = c.execute("SELECT COUNT(*) FROM messages WHERE account=? AND snoozed_until IS NOT NULL "
-                            "AND pending_removal IS NULL",
-                            (account,)).fetchone()[0]
+        snoozed = self._store.snoozed_count(c, account)
         muted = self._attention.muted_count(c, account)
         waiting = self._attention.waiting_count(c, account)
         replylater = self._attention.replylater_count(c, account)
