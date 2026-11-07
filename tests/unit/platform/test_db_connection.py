@@ -34,3 +34,11 @@ def test_a_commit_is_on_the_disk_itself_before_it_returns(c):
     on macOS."""
     assert pragma(c, "synchronous") == 2
     assert pragma(c, "fullfsync") == 1
+
+
+def test_what_a_big_sort_holds_of_the_mail_stays_in_memory(tmp_path):
+    c = database.connect(str(tmp_path / "m.db"))
+    try:
+        assert c.execute("PRAGMA temp_store").fetchone()[0] == 2     # MEMORY
+    finally:
+        c.close()
