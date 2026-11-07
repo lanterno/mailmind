@@ -19,11 +19,11 @@ export type Asking =
 export const asking = createStore<Asking | null>(null);
 let askSeq = 0;
 
-export async function ask(question: string) {
+export async function ask(question: string, account = "all") {
   const seq = ++askSeq;
   asking.set({ question, state: "loading" });
   try {
-    const d = await post("/api/ai/ask", { account: "all", question }, { askOverLimit });
+    const d = await post("/api/ai/ask", { account, question }, { askOverLimit });
     if (seq !== askSeq) return;      // a newer one took its place
     if (!d.ok) {
       asking.set({ question, state: "error", error: (d as { error?: string }).error || "couldn’t answer" });

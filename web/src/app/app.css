@@ -6,6 +6,7 @@ button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12p
 .acct-menu.rac [role="menu"]{display:flex;flex-direction:column;gap:1px;outline:none}
 .acct-menu.rac .am-item{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--r-sm);color:var(--soft);cursor:pointer;outline:none}
 .acct-menu.rac .am-item[data-focused],.acct-menu.rac .am-item[data-selected]{background:var(--sel)}
+button.scopetog{background:none;border:none;border-radius:0;border-bottom:1px dotted var(--primary-ink);padding:0;font:inherit}
 .racts .ract{width:30px;height:30px;display:grid;place-items:center;border:none;background:none;border-radius:var(--r-sm); color:var(--mute);font-size:14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
 .racts .ract:hover{background:var(--panel-hi);color:var(--ink)}
 .snooze-menu.rac{position:fixed}

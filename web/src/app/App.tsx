@@ -10,6 +10,7 @@ import { cameBack, lookedAt, NewMailPill } from "../features/assistant/NewMail";
 import { Panels } from "../features/assistant/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, readOnly, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
+import { searchScope, setSearchScope } from "../features/mailbox/data";
 import { FolderRail } from "../features/mailbox/FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
 import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
@@ -63,6 +64,12 @@ function Floats() {
       </div>
     </>
   );
+}
+
+function ScopeToggle({ account }: { account: string }) {
+  const scope = searchScope.useValue();
+  if (!account) return <>all accounts</>;
+  return <button type="button" className="scopetog" id="scopeTog" onClick={() => setSearchScope(scope === "all" ? "account" : "all")}>{scope === "all" ? "all accounts" : "this account"} ▾</button>;
 }
 
 function BulkBar({ m }: { m: Mailbox }) {
@@ -261,13 +268,13 @@ export function App() {
             </div>
             {lane && (
               <div className="client-ctx" id="clientCtx">
-                <Icon name={lane === "feed" ? "book" : "receipt"} /> <b>{title}</b> · {lane === "feed" ? "a calm reading river" : "receipts & invoices"} · all accounts
+                <Icon name={lane === "feed" ? "book" : "receipt"} /> <b>{title}</b> · {lane === "feed" ? "a calm reading river" : "receipts & invoices"} · <ScopeToggle account={source?.kind === "search" ? source.account : ""} />
               </div>
             )}
             {screening && <div className="client-ctx" id="clientCtx"><b>Screener</b> · {toScreen} new sender{toScreen === 1 ? "" : "s"} awaiting a decision</div>}
             {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
-                <Icon name="search" /> <b>{source.q}</b> · {all.length} · all accounts
+                <Icon name="search" /> <b>{source.q}</b> · {all.length} <ScopeToggle account={source.account} />
                 {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
               </div>
             )}

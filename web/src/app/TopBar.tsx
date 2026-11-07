@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ask, doing, runDo, stopAsking } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
+import { searchScope } from "../features/mailbox/data";
 import { setReadFocus } from "../features/mailbox/Reader";
 import type { Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
@@ -130,7 +131,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
             else if (e.key === "Enter") {
               const q = text.trim();
               const words = q.slice(1).trim();
-              if (q.startsWith("?") && words) void ask(words);
+              if (q.startsWith("?") && words) void ask(words, searchScope.get() === "account" && account ? account : "all");
               else if (q.startsWith("!")) {
                 stopAsking();
                 if (words) void runDo(words, (filter) => go({ source: { kind: "search", q: filter, account }, opened: null }));

@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useQuery, type InfiniteData, useQueries } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
 import { sourceKey, type ListSource } from "../../app/route";
-import { store, stored } from "../../lib/store";
+import { createStore, store, stored } from "../../lib/store";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
@@ -30,8 +30,16 @@ async function folderPage(account: string, folder: string, grouped: boolean, off
   };
 }
 
-async function searchPage(query: string, account: string, offset: number): Promise<ListPage> {
-  const d = await get(`/api/search?q=${q(query)}&scope=all&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
+// Search all your accounts or the one you're on, kept across reloads. With no account in mind, all of them.
+export type SearchScope = "all" | "account";
+export const searchScope = createStore<SearchScope>(stored("mm_searchscope") === "account" ? "account" : "all");
+export function setSearchScope(s: SearchScope) {
+  searchScope.set(s);
+  store("mm_searchscope", s);
+}
+
+async function searchPage(query: string, account: string, offset: number, scope: SearchScope): Promise<ListPage> {
+  const d = await get(`/api/search?q=${q(query)}&scope=${account ? scope : "all"}&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
   return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
 }
 
@@ -63,13 +71,14 @@ async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Prom
 }
 
 export function useMessages(source: ListSource | null, grouped: boolean) {
+  const scope = searchScope.useValue();
   return useInfiniteQuery({
-    queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : false],
+    queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : source?.kind === "search" ? scope : false],
     enabled: Boolean(source) && !(source?.kind === "folder" && source.folder === "__screener__"),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
-      if (source?.kind === "search") return searchPage(source.q, source.account, pageParam);
+      if (source?.kind === "search") return searchPage(source.q, source.account, pageParam, scope);
       if (source?.kind === "digest") return digestPage(source);
       return allInboxesPage(grouped, pageParam);
     },
