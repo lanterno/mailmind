@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fakes import anthropic_api as fa
-from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
