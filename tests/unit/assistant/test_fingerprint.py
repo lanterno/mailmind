@@ -102,7 +102,7 @@ def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
     c.close()
     c = store.conn()
     try:
-        rows = assistant.threads.rows(c, ADA, "t-lunch")
+        rows = assistant.context.rows(c, ADA, "t-lunch")
     finally:
         c.close()
     raw = sqlite3.connect(path)

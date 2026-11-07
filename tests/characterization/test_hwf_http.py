@@ -192,7 +192,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
 
     pk = world.pk("bea-inbox-01-client.eml")                  # its body was never fetched
     fetches = lock_spy(world, "UID FETCH", user=w.BEA)
-    assistant.threads.gather([{"pk": pk, "account": w.BEA, "body_text": None, "snippet": "", "body_fetched": 0,
+    assistant.context.gather([{"pk": pk, "account": w.BEA, "body_text": None, "snippet": "", "body_fetched": 0,
                                "from_name": "Bea", "from_addr": w.BEA, "date_iso": ""}])
     assert fetches == [True]
 
