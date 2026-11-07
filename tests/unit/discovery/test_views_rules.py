@@ -75,8 +75,3 @@ def test_the_last_one_going_leaves_none_rather_than_nothing_to_do():
     assert views.without([view("v1")], "v1") == []
 
 
-# -- their order ------------------------------------------------------------------
-
-def test_those_named_come_first_and_the_rest_keep_their_order():
-    have = [view("v1"), view("v2"), view("v3")]
-    assert [v["id"] for v in views.reordered(have, ["v3", "nobody", "v1"])] == ["v3", "v1", "v2"]

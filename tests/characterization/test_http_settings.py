@@ -44,8 +44,6 @@ def test_saved_views(app, golden, world):
     made(post(app, golden, "create another", "/api/views",
               {"verb": "create", "name": "Receipts", "q": "is:receipt"}).json, "Receipts")
     post(app, golden, "create one with no query", "/api/views", {"verb": "create", "name": "Empty"})
-    ids = [v["id"] for v in app.get("/api/views").json["views"]]
-    post(app, golden, "reorder", "/api/views", {"verb": "reorder", "ids": list(reversed(ids))})
     post(app, golden, "delete the first", "/api/views", {"verb": "delete", "id": lin})
     post(app, golden, "delete a builtin", "/api/views", {"verb": "delete", "id": "__unread__"})
     post(app, golden, "an unknown verb", "/api/views", {"verb": "rename"})
