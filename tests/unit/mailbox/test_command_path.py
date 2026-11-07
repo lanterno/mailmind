@@ -64,6 +64,37 @@ def test_a_move_that_lands_leaves_its_command_done(app, world):
     assert boxes(world, RECEIPT) == ["Archive"]
 
 
+def changes_sent(world, since, user=w.ADA):
+    """What a try asked the server to change, by command: the lines after `since`, without their tags."""
+    lines = [c["line"].split(" ", 1)[1] for c in world.server.commands[since:] if c["user"] == user]
+    return [line for line in lines if line.startswith(("UID MOVE", "UID COPY", "UID STORE", "UID EXPUNGE"))]
+
+
+def test_a_server_that_offers_move_gets_a_move(app, world):
+    since = len(world.server.commands)
+    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert [" ".join(line.split(" ")[:2]) for line in changes_sent(world, since)] == ["UID MOVE"]
+    assert boxes(world, RECEIPT) == ["Archive"]
+
+
+def test_a_server_that_doesnt_gets_a_copy_then_an_expunge_of_that_uid(app, world):
+    world.server.without = {"MOVE"}
+    [(_, _, uid, _)] = world.where(RECEIPT)["server"]
+    since = len(world.server.commands)
+    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert [line.split(" ")[:3] for line in changes_sent(world, since)] == [
+        ["UID", "COPY", str(uid)], ["UID", "STORE", str(uid)], ["UID", "EXPUNGE", str(uid)]]
+    assert boxes(world, RECEIPT) == ["Archive"]
+
+
+def test_a_gmail_archive_only_drops_the_label(app, world):
+    name = "cy-inbox-03-unrelated.eml"
+    since = len(world.server.commands)
+    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
+    [change] = changes_sent(world, since, w.CY)
+    assert change.startswith("UID STORE") and "-X-GM-LABELS" in change and "Inbox" in change
+
+
 def test_while_the_server_is_asked_the_message_is_hidden_and_undo_already_knows_it(app, world, monkeypatch):
     from mailmind.bootstrap.mailbox import server_ops
     pk, seen = world.pk(RECEIPT), {}
