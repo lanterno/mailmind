@@ -30,7 +30,7 @@ def routes(mailbox, compose, background, assistant):
 
     @r.get("/api/debug/ai")      # what AI cost each local day, by feature
     def ai(req):
-        days = max(1, min(366, int(req.arg("days", "30"))))
+        days = max(1, min(366, req.int_arg("days", 30)))
         return {"ok": True, "days": assistant.calls.usage(days), "governor": assistant.governor().snapshot(),
                 "batch": assistant.assessments.batch_status(), "generated": now_iso()}
 

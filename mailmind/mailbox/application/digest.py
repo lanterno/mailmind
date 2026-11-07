@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.mailbox.application.ports import Directory, StoredMail
@@ -26,7 +27,7 @@ class Digest:
         self._ai_status = ai_status
 
     def answer(self, qs: Mapping[str, Sequence[str]]) -> dict[str, Any]:
-        min_imp = int(qs.get("min", ["1"])[0])
+        min_imp = required_int(qs.get("min", ["1"])[0])
         account = qs.get("account", [None])[0] or None
         with self._uow.read() as c:
             rows = self._store.digest(c, min_importance=min_imp, account=account, limit=400)

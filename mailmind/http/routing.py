@@ -8,6 +8,8 @@ Standard library only: python3 server.py uses it.
 """
 from dataclasses import dataclass
 
+from mailmind.kernel.parsed import required_int
+
 ANSWERED = object()
 
 
@@ -21,6 +23,11 @@ class Request:
     def arg(self, name, default=None):
         """The first value the query string gives `name`."""
         return self.query.get(name, [default])[0]
+
+    def int_arg(self, name, default):
+        """The number the query string gives `name`, or `default` with none. Refused if it won't read as one."""
+        given = self.arg(name)
+        return default if given is None else required_int(given)
 
 
 class Routes:

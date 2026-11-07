@@ -6,6 +6,7 @@ import urllib.parse
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http.routing import ANSWERED, Routes
 from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.parsed import required_int
 from mailmind.platform import perimeter
 
 _BODY_DOCUMENT = re.compile(r"/api/message/([0-9]{1,18})/body\.html")
@@ -56,17 +57,17 @@ def routes(mailbox):
     @r.get("/api/messages")
     def messages(req):
         return mailbox.queries.messages_in(req.arg("account"), req.arg("folder", "INBOX"),
-                                           int(req.arg("offset", "0")), int(req.arg("limit", "80")),
+                                           req.int_arg("offset", 0), req.int_arg("limit", 80),
                                            group=(req.arg("group", "") == "thread"))
 
     @r.get("/api/inboxes")
     def inboxes(req):
-        return mailbox.queries.all_inboxes(int(req.arg("offset", "0")), int(req.arg("limit", "80")),
+        return mailbox.queries.all_inboxes(req.int_arg("offset", 0), req.int_arg("limit", 80),
                                            group=(req.arg("group", "") == "thread"))
 
     @r.get("/api/waiting-on-others")
     def waiting_on_others(req):
-        return mailbox.queries.waiting_on_others(int(req.arg("limit", "100")))
+        return mailbox.queries.waiting_on_others(req.int_arg("limit", 100))
 
     @r.get("/api/thread")
     def thread(req):
@@ -79,12 +80,12 @@ def routes(mailbox):
     @r.matching("GET", lambda path: path.startswith("/api/message/") and "/attachment/" in path)
     def attachment(req):
         parts = req.path.split("/")     # ['', 'api', 'message', '<pk>', 'attachment', '<part_id>']
-        _attachment(req.handler, mailbox, int(parts[3]), parts[5])
+        _attachment(req.handler, mailbox, required_int(parts[3]), parts[5])
         return ANSWERED
 
     @r.matching("GET", lambda path: path.startswith("/api/message/") and path.endswith("/body"))
     def body(req):
-        return mailbox.bodies.message_body(int(req.path.split("/")[3]), req.arg("images", "0") == "1",
+        return mailbox.bodies.message_body(required_int(req.path.split("/")[3]), req.arg("images", "0") == "1",
                                            prefetch=(req.arg("prefetch", "0") == "1"))
 
     @r.matching("GET", _BODY_DOCUMENT.fullmatch)

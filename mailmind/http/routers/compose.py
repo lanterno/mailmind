@@ -12,7 +12,7 @@ def routes(compose):
 
     @r.get("/api/outbox")
     def outbox(req):
-        return {**compose.outbox.list_recent(int(req.arg("limit", "50"))), "drafts": compose.drafts.waiting()}
+        return {**compose.outbox.list_recent(req.int_arg("limit", 50)), "drafts": compose.drafts.waiting()}
 
     @r.post("/api/send")
     def send(req):

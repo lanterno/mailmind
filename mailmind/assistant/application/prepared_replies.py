@@ -18,6 +18,7 @@ from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint, prepared_reply
 from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -125,9 +126,8 @@ class PreparedReplies:
         to burn generations). Never generates synchronously, never sends; fingerprint + TTL +
         eligibility + thread-anchor are revalidated on EVERY serve so a stale draft is never
         surfaced."""
-        try:
-            pk = int((qs.get("pk") or ["0"])[0])
-        except Exception:
+        pk = as_int((qs.get("pk") or ["0"])[0])
+        if pk is None:
             raise Refused("bad pk")
         peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
         if not pk:

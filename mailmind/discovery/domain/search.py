@@ -5,6 +5,7 @@ from typing import Any
 
 from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
+from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
 NO_SUBJECT = "(no subject)"
@@ -22,15 +23,15 @@ class Asked:
 
 
 def asked(qs: Mapping[str, list[str]]) -> Asked | None:
-    """What a request asks, or None with nothing typed. A limit or an offset that won't read raises only after that, so an
-    empty box answers whatever else the request holds."""
+    """What a request asks, or None with nothing typed. A limit or an offset that won't read is refused only after that, so
+    an empty box answers whatever else the request holds."""
     q = (qs.get("q", [""])[0] or "").strip()
     if not q:
         return None
     scope = qs.get("scope", ["account"])[0]
     return Asked(q, QuerySpec.parse(q), scope, None if scope == "all" else qs.get("account", [None])[0],
                  qs.get("sort", ["rank"])[0],
-                 max(1, min(200, int(qs.get("limit", ["80"])[0]))), max(0, int(qs.get("offset", ["0"])[0])))
+                 max(1, min(200, required_int(qs.get("limit", ["80"])[0]))), max(0, required_int(qs.get("offset", ["0"])[0])))
 
 
 def nothing_asked() -> dict[str, Any]:
