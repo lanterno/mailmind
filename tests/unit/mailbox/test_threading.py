@@ -94,6 +94,20 @@ def test_a_copy_placed_again_keeps_its_rf_id():
     assert place([Copy(1, "<a@example.test>", thread_id="rf:kept")]).given == {1: "rf:kept"}
 
 
+def test_a_copy_placed_again_keeps_its_gmail_id_with_no_message_id_to_be_found_by():
+    placed = place([Copy(1, "", refs="<elsewhere@example.test>", thread_id=f"gm:{A}:1781")])
+    assert placed.given == {1: f"gm:{A}:1781"} and placed.merged == {}
+
+
+def test_the_repair_trusts_a_gmail_id_only_while_a_gmail_copy_backs_it():
+    gmail, elsewhere = f"gm:{A}:1781", minted("<elsewhere@example.test>")
+    apart = Copy(2, "", refs="<elsewhere@example.test>", thread_id=gmail)
+    placed = Threader(A).regroup([Copy(1, "<g@example.test>", "1781", thread_id=gmail), apart])
+    assert placed.given == {1: gmail, 2: elsewhere} and placed.merged == {}
+    placed = Threader(A).regroup([apart])
+    assert placed.given == {2: elsewhere} and placed.merged == {gmail: elsewhere}
+
+
 def test_a_forged_references_header_counts_for_its_nearest_ids():
     far = "<far@example.test>"
     near = [f"<n{i}@example.test>" for i in range(REFERENCES_MAX)]
@@ -263,6 +277,34 @@ def test_a_message_named_differently_when_stored_again_is_placed_again(db):
     thread(db, pks=[a])
     assert tid(db, a) == tid(db, b)
     assert "<b@example.test>" in links(db, a)
+
+
+def test_a_copy_with_no_message_id_stays_in_its_gmail_thread_when_it_names_something_else(db):
+    """It has no id of its own for its links to find its thread by, and an id goes only to a merge."""
+    gmail = add(db, "<g@example.test>", gm="1781")
+    other = add(db, "", refs="<g@example.test>")
+    thread(db)
+    db.execute("UPDATE messages SET refs='<elsewhere@example.test>' WHERE pk=?", (other,))
+    thread(db, pks=[other])
+    assert tid(db, other) == tid(db, gmail) == f"gm:{A}:1781"
+    assert links(db, other) == ["<elsewhere@example.test>"]
+
+
+def test_a_mute_stays_with_the_last_copy_of_a_gmail_thread_when_it_names_something_else(db):
+    """Nothing else holds the id then, so the copy leaving it unannounced would strand the mute. The repair moves both."""
+    from mailmind.bootstrap.mailbox import store
+    gmail = add(db, "<g@example.test>", gm="1781")
+    other = add(db, "", refs="<g@example.test>")
+    thread(db)
+    db.execute("INSERT INTO muted(account, thread_id, muted_at) VALUES (?,?,?)", (A, f"gm:{A}:1781", "2026-11-01"))
+    store.delete_message(db, gmail)
+    db.execute("UPDATE messages SET refs='<elsewhere@example.test>' WHERE pk=?", (other,))
+    thread(db, pks=[other])
+    muted = lambda: [r[0] for r in db.execute("SELECT thread_id FROM muted")]
+    assert tid(db, other) == f"gm:{A}:1781" and muted() == [tid(db, other)]
+    store.recompute_threads(db, A)
+    db.commit()
+    assert tid(db, other) == minted("<elsewhere@example.test>") and muted() == [tid(db, other)]
 
 
 def test_with_nothing_to_do_no_transaction_opens(db):

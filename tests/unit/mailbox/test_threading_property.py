@@ -256,8 +256,8 @@ def test_what_each_context_keeps_follows_its_thread(db, arrivals, keep):
 def test_mail_that_goes_leaves_threads_that_still_hold(db, merges, steps, gmail):
     """A copy can go at any time, and one stored again can name something new. Mail still joined by what it names stays
     one thread, the links follow the copy, and an id goes only to a merge. A split doesn't split: what was one thread
-    keeps its one id, as a whole recompute also leaves it. Without Gmail the repair then has nothing to do. With it, the
-    repair drops a gm: id whose Gmail copies have gone."""
+    keeps its one id. Without Gmail a whole recompute leaves it so too, and the repair has nothing to do. With it, the
+    repair parts what no longer reaches a Gmail copy, and drops a gm: id with none left."""
     from mailmind.bootstrap.mailbox import store
     fresh(db)
     box = Mailbox(db, "going")
