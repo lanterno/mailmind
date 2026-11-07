@@ -20,7 +20,6 @@ from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
-ingest_log = get_logger("ingest")
 reconcile_log = get_logger("reconcile")
 
 
@@ -76,7 +75,7 @@ class Reconciler:
                 except Exception:
                     pass
         except Exception as e:
-            ingest_log.warning("reconcile: an account failed", exc_info=e)
+            reconcile_log.warning("an account failed", exc_info=e)
             res["error"] = type(e).__name__      # what a server said stays out of the answer
             return res  # never prune on error
         # UIDVALIDITY guard: if the server renumbered UIDs (mailbox recreation / Bridge
