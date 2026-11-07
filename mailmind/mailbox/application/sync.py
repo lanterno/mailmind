@@ -193,8 +193,7 @@ class Ingest:
             self._store.set_recipients(c, pk, r["recipient_addrs"])
             if stored is not None and self._store.needs_threading(c, pk, r["in_reply_to"], r["refs"]):
                 stored.append(pk)
-            c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
-                      (r["in_reply_to"], r["refs"], r["recipients"], pk))
+            self._store.set_ingested_headers(c, pk, r["in_reply_to"], r["refs"], r["recipients"])
             self._index.index_message(c, pk)               # refresh FTS so recipients is searchable immediately
             if invite:                           # Today & next reads invites from stored bodies only
                 try:
@@ -407,30 +406,22 @@ class Ingest:
             return
         c = self._store.conn()
         try:
-            if not c.execute("SELECT 1 FROM attachments WHERE message_pk=?", (pk,)).fetchone():
-                self._insert_parts(c, pk, parsed)
+            if not self._store.has_attachments(c, pk):
+                self._store.insert_attachments(c, pk, parsed["attachments"])
                 c.commit()
         finally:
             c.close()
-
-
-    def _insert_parts(self, c: Connection, pk: int, parsed: Parsed) -> None:
-        for a in parsed["attachments"]:
-            c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
-                         VALUES(?,?,?,?,?,?,?)""",
-                      (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
-                       a["content_id"], a["is_inline"]))
 
 
     def _keep_body(self, c: Connection, pk: int, raw: bytes, parsed: Parsed) -> None:
         """Store one message's raw RFC822 with what opening it records: attachment metadata, the
         parsed recipients and the full-text body. The caller commits."""
         self._store.store_body(c, pk, raw, datetime.now(timezone.utc).isoformat())
-        c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
-        self._insert_parts(c, pk, parsed)
+        self._store.delete_attachments(c, pk)
+        self._store.insert_attachments(c, pk, parsed["attachments"])
         if parsed["attachments"]:
-            c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
-        c.execute("UPDATE messages SET recipients=? WHERE pk=?", (self._store.recipients_of(parsed), pk))
+            self._store.mark_has_attachments(c, pk)
+        self._store.set_recipients_text(c, pk, self._store.recipients_of(parsed))
         self._store.set_recipients(c, pk, mime.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
         self._store.fts_set_body(c, pk, body_text_of(parsed))   # full body + recipients now searchable
 

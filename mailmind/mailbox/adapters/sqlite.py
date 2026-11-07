@@ -324,6 +324,26 @@ def get_body(c, pk):
     return r["raw"] if r else None
 
 
+def has_attachments(c, pk):
+    return c.execute("SELECT 1 FROM attachments WHERE message_pk=?", (pk,)).fetchone() is not None
+
+
+def insert_attachments(c, pk, attachments):
+    for a in attachments:
+        c.execute("""INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline)
+                     VALUES(?,?,?,?,?,?,?)""",
+                  (pk, a["part_id"], a["filename"], a["content_type"], a["size"],
+                   a["content_id"], a["is_inline"]))
+
+
+def delete_attachments(c, pk):
+    c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
+
+
+def mark_has_attachments(c, pk):
+    c.execute("UPDATE messages SET has_attach=1 WHERE pk=?", (pk,))
+
+
 # ------------------------------------------------------------------------- FTS
 RECIPIENT_ROWS_MAX = 5000
 RECIPIENTS_CHARS: int = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
@@ -335,6 +355,17 @@ def set_recipients(c, pk, addrs):
     c.execute("DELETE FROM message_recipients WHERE message_pk=?", (pk,))
     c.executemany("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)",
                   [(pk, a) for a in addrs[:RECIPIENT_ROWS_MAX]])
+
+
+def set_recipients_text(c, pk, recipients):
+    """To and Cc as the text search reads (`recipients_of`)."""
+    c.execute("UPDATE messages SET recipients=? WHERE pk=?", (recipients, pk))
+
+
+def set_ingested_headers(c, pk, in_reply_to, refs, recipients):
+    """What ingest read of a message's headers beyond its row: whom it answers, and To and Cc as text."""
+    c.execute("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?",
+              (in_reply_to, refs, recipients, pk))
 
 
 def recipients_of(parsed):
