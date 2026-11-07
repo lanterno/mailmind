@@ -1,5 +1,5 @@
 """The AI routes with a key, against the fake Claude API: what each route answers, and what it sent
-— the prompt, the model, the effort and the output schema. A changed prompt therefore shows up as
+— the system prompt, the prompt, the model, the effort and the output schema. A changed prompt therefore shows up as
 a golden diff to review, like any other behaviour change. The golden files are in
 tests/golden/http_ai/.
 
@@ -35,7 +35,7 @@ def triaged(ai):
 def sent(golden, ai, label):
     """Note every request the fake received since the last call, then forget them."""
     golden.note(label, [{"model": r.body.get("model"), "effort": (r.body.get("output_config") or {}).get("effort"),
-                         "schema": r.schema, "prompt": r.prompt} for r in ai.requests])
+                         "schema": r.schema, "system": r.system, "prompt": r.prompt} for r in ai.requests])
     ai.requests.clear()
 
 

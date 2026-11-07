@@ -38,6 +38,10 @@ class Request:
         return self.body["messages"][0]["content"]
 
     @property
+    def system(self):
+        return self.body.get("system")
+
+    @property
     def schema(self):
         return ((self.body.get("output_config") or {}).get("format") or {}).get("schema")
 

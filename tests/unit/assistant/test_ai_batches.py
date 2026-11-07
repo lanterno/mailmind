@@ -7,6 +7,7 @@ import pytest
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
+from mailmind.assistant.domain.prompts import SYSTEM
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import assistant
 from mailmind.bootstrap import background
@@ -47,6 +48,7 @@ def test_a_batch_carries_each_request_and_never_the_fallback(gw, ai):
     assert [r["custom_id"] for r in sent] == ["11", "12"]
     p = sent[0]["params"]
     assert p["messages"] == [{"role": "user", "content": "first"}]
+    assert p["system"] == sent[1]["params"]["system"] == SYSTEM
     assert p["output_config"]["effort"] == "low" and p["output_config"]["format"]["schema"]["additionalProperties"] is False
     assert "fallbacks" not in p and "fallback" not in str(posts(ai)[0].headers.get("anthropic-beta", ""))
     assert posts(ai)[0].key == ai.KEY
@@ -392,10 +394,19 @@ def test_a_batch_takes_only_its_share_of_what_the_limit_leaves(backlog, ai):
     from mailmind.bootstrap import assistant
     from mailmind.assistant.domain import pricing
     rows = _waiting()[2:]
-    each = [pricing.batch_estimate("claude-opus-5-5", len(assistant.assessments._triage_prompt(r))) for r in rows]
+    each = [pricing.batch_estimate("claude-opus-5-5", len(SYSTEM) + len(assistant.assessments._triage_prompt(r))) for r in rows]
     _limit(backlog.dir, (sum(each[:3]) + each[3] // 2) * assistant.assessments.BATCH_SHARE / 1_000_000)
     assert assistant.gateway().room() // assistant.assessments.BATCH_SHARE >= sum(each[:3])
     assert assistant.assessments.batch_submit() == 3
+
+
+def test_what_a_batch_books_counts_the_system_prompt_each_request_carries(backlog, ai):
+    from mailmind.bootstrap import assistant
+    from mailmind.assistant.domain import pricing
+    rows = _waiting()[assistant.assessments.BATCH_KEEP_NEWEST:]
+    assert assistant.assessments.batch_submit(at_least=1) == len(rows) > 0
+    assert assistant.assessments.batch_status()["estimate_micros"] == sum(
+        pricing.batch_estimate("claude-opus-5-5", len(SYSTEM) + len(assistant.assessments._triage_prompt(r))) for r in rows)
 
 
 def test_at_the_limit_no_batch_goes(backlog, ai):

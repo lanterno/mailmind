@@ -13,6 +13,7 @@ import pytest
 
 from fakes import anthropic_api as fa
 from mailmind.assistant.application.ports import AIOff
+from mailmind.assistant.domain.prompts import SYSTEM
 
 TRANSPORTS = ["sdk", "urllib"]
 
@@ -64,6 +65,20 @@ def test_a_request_carries_the_key_the_version_and_the_refusal_fallback(api):
     assert req.body["model"] == "claude-opus-5-5" and req.body["fallbacks"] == "default"
     assert req.body["messages"] == [{"role": "user", "content": "Triage this."}]
     assert not {"temperature", "top_p", "top_k", "thinking"} & set(req.body)
+
+
+def test_every_call_goes_under_the_system_prompt_with_the_mail_in_the_user_turn(api, monkeypatch):
+    from mailmind.bootstrap import assistant
+    assistant.assessments.summarize_one(ROW)                                        # first: it yields to the others
+    assistant.calls.call_claude("Say hello.")                                       # beta: it takes the fallback
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")               # plain: it doesn't
+    assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    triage, plain, schema, no_fallback = api.requests
+    assert [r.system for r in api.requests] == [SYSTEM] * 4
+    assert "fallbacks" in plain.body and "fallbacks" not in no_fallback.body
+    assert plain.prompt == "Say hello." and schema.prompt == "Triage this."
+    assert "Saturday market" in triage.prompt and "Saturday market" not in triage.system
 
 
 def test_the_schema_goes_out_closed_and_without_bounds(api):
