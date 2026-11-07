@@ -71,19 +71,6 @@ class SenderMail:
                 by_acct.setdefault(row["addr"], []).append({"email": row["account"], "count": row["n"]})
         return by_acct
 
-    def subjects_by_sender(self, addrs, keep):
-        """{sender: the subjects of their newest `keep` messages that have one}."""
-        aph = ",".join("?" for _ in addrs)
-        subj = {}
-        with _uow.read() as c:
-            for row in c.execute(
-                    f"SELECT lower(from_addr) addr, subject, ts FROM messages "
-                    f"WHERE lower(from_addr) IN ({aph}) ORDER BY ts DESC", addrs):
-                lst = subj.setdefault(row["addr"], [])
-                if len(lst) < keep and row["subject"]:
-                    lst.append(row["subject"])
-        return subj
-
     def counts(self, addr):
         """(how many messages from this sender, how many unread)."""
         with _uow.read() as c:

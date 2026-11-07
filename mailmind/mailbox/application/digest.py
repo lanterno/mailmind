@@ -28,7 +28,6 @@ class Digest:
     def answer(self) -> dict[str, Any]:
         with self._uow.read() as c:
             rows = self._store.digest(c, limit=400)
-            keys: set[str] = set(rows[0].keys()) if rows else set()
             amap = self._accounts.alias_map()
             wmap = self._accounts.webmail_map()
             items = [{
@@ -38,11 +37,7 @@ class Digest:
                 "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
                 "summary": r["summary"], "importance": r["importance"], **_attention(r),
                 "category": r["category"], "action": r["action"] or "", "link": self._accounts.deep_link(r, wmap),
-                "bucket": (r["bucket"] if "bucket" in keys else None),
-                "confidence": (r["confidence"] if "confidence" in keys else None),
-                "reason": (r["reason"] if "reason" in keys else None),
-                "verified": (bool(r["verified"]) if "verified" in keys else False),
-                "last_seen": rel_time(r["last_seen"]) if "last_seen" in keys and r["last_seen"] else None,
+                "bucket": r["bucket"],
                 # what a Mailbox row needs to draw a digest item like a folder item (Needs you, briefing topics)
                 "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
                 "thread_id": r["thread_id"], "folder": r["folder"], "ts": r["ts"],

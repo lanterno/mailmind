@@ -39,18 +39,13 @@ class Cleanup:
             {"from_addr": c.addr, "from_name": c.name, "domain": c.domain, "count": c.count, "unseen": c.unseen,
              "unseen_ratio": c.unseen_ratio, "last_seen": rel_time(c.last_iso), "bucket": c.bucket, "lu_likely": c.list_likely,
              "noise_score": c.score} for c in noise.ranked(rows, time.time(), noise.LIMIT)]
-        # per-account rollup + sample subjects for just the shown senders
+        # per-account rollup for just the shown senders
         addrs = [x["from_addr"] for x in cands]
         if addrs:
             by_acct = self._mail.accounts_by_sender(addrs)
-            subj = self._mail.subjects_by_sender(addrs, 3)
             for x in cands:
                 x["accounts"] = by_acct.get(x["from_addr"], [])
-                x["sample_subjects"] = subj.get(x["from_addr"], [])
-        return {"ok": True, "generated": now_iso(),
-                "totals": {"candidate_senders": len(cands),
-                           "candidate_messages": sum(x["count"] for x in cands)},
-                "senders": cands}
+        return {"ok": True, "generated": now_iso(), "senders": cands}
 
     def sender(self, qs: Query) -> dict[str, Any]:
         """Mandatory-preview detail for ONE sender: authoritative unsubscribe method + the exact INBOX

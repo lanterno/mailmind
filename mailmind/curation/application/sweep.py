@@ -146,7 +146,6 @@ class Sweeps:
         if not dry_run:
             self._filing.stats_changed()
         return {"ok": True, "dry_run": dry_run, "results": results,
-                "total_planned": sum(r.get("planned", 0) for r in results),
-                "total_moved": sum(r.get("moved", 0) for r in results), "generated": now_iso()}
+                "generated": now_iso()}
 
 
