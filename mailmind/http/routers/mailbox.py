@@ -120,7 +120,6 @@ def routes(mailbox):
     @r.post("/api/flag")
     @r.post("/api/seen")
     @r.post("/api/archive")
-    @r.post("/api/move")
     @r.post("/api/junk")
     def write(req):
         return mailbox.filing.do_write(req.path, req.body)

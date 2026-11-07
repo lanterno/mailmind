@@ -23,7 +23,7 @@ from mailmind.platform.workers import gates
 
 pending_log = get_logger("pending")
 do_log = get_logger("do")
-_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
+_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked"}
 _REFUSED = {"archive": "the server refused the archive"}
 _NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
 _NOT_FOUND: dict[str, Any] = {"ok": False, "msg": "not found", "undoable": False}
@@ -58,10 +58,9 @@ class Filing:
         return push
 
 
-    def _file(self, kind: str, pk: int, dest: str | None, undo_group: str | None, mutation_id: object,
-              undo: bool = True) -> dict[str, Any]:
+    def _file(self, kind: str, pk: int, undo_group: str | None, mutation_id: object, undo: bool = True) -> dict[str, Any]:
         """A move, through the command path: what the person hears of it."""
-        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, self._pushing(undo_group) if undo else None)
+        accepted = self._commands.accept_move(kind, pk, mutation_id, self._pushing(undo_group) if undo else None)
         return self._submit_move(kind, accepted)
 
 
@@ -145,7 +144,7 @@ class Filing:
 
 
     def do_write(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Per-message mailbox writes (flags/seen/archive/move)."""
+        """Per-message mailbox writes (flags/seen/archive/junk)."""
         pk = as_int(body.get("pk"))
         if pk is None:
             return {"ok": False, "msg": "bad pk"}
@@ -157,13 +156,10 @@ class Filing:
             flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
                      else {body.get("flag", "flagged"): bool(body.get("on", True))})
             return self._set_flags(pk, flags, body.get("mutation_id"))
-        moves: dict[str, tuple[str, str | None]] = {"/api/archive": ("archive", None), "/api/move": ("move", body.get("dest")), "/api/junk": ("junk", None)}
+        moves = {"/api/archive": "archive", "/api/junk": "junk"}
         if path not in moves:
             return {"ok": False, "msg": "unknown", "undoable": False}
-        kind, dest = moves[path]
-        if kind == "move" and not dest:
-            return dict(_NOT_FOUND)
-        return self._file(kind, pk, dest, body.get("undo_group"), body.get("mutation_id"))
+        return self._file(moves[path], pk, body.get("undo_group"), body.get("mutation_id"))
 
 
     def do_trash(self, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -171,12 +167,12 @@ class Filing:
         pk = as_int(body.get("pk"))
         if pk is None:
             raise Refused()
-        return self._file("trash", pk, None, body.get("undo_group"), body.get("mutation_id"))
+        return self._file("trash", pk, body.get("undo_group"), body.get("mutation_id"))
 
 
     def trash_now(self, pk: int) -> bool:
         """Trash with nothing for Undo to reverse, as blocking a sender does: whether it went or will go."""
-        return self._file("trash", int(pk), None, None, None, undo=False)["ok"]
+        return self._file("trash", int(pk), None, None, undo=False)["ok"]
 
 
     def do_thread_file(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -196,7 +192,7 @@ class Filing:
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             pks = self._conversation_of(c, pk)
-            accepted = [(p, self._commands.accept_move_within(c, kind, p, None, body.get("mutation_id"), push)) for p in pks]
+            accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push)) for p in pks]
         if not accepted:
             return {"ok": False, "msg": "not found"}
         return self._heard(accepted, self._try_each(kind, accepted))
@@ -227,7 +223,7 @@ class Filing:
                 for p in pks:
                     if p not in taken:               # two rows of one conversation
                         taken.add(p)
-                        accepted.append((p, self._commands.accept_move_within(c, verb, p, None, body.get("mutation_id"), push)))
+                        accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push)))
         results = self._try_each(verb, accepted)
         heard = self._heard(accepted, results)
         each = [sum(bool(results.get(p, {}).get("ok")) for p in pks) for pks in members]

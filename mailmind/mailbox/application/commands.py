@@ -30,7 +30,7 @@ from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
 log = get_logger("commands")
-_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
+_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk"}
 
 
 def _now() -> int:
@@ -98,24 +98,24 @@ class MailCommands:
         return self.QUEUE.claim(c, id_)
 
 
-    def _known_destination(self, kind: str, email: str, named: str | None) -> destination.Destination:
+    def _known_destination(self, kind: str, email: str) -> destination.Destination:
         """Where a move goes, as far as that is known with no server: kept for an Undo before it lands."""
         try:
             acct = self._accounts.get(email)
-            return destination.known_without_server(kind, named=named, trash=self._accounts.trash_folder(acct),
+            return destination.known_without_server(kind, trash=self._accounts.trash_folder(acct),
                                                     archive_is_label_removal=self._accounts.profile(acct).archive_is_label_removal)
         except KeyError:                             # the account is gone, which a try finds out
-            return destination.Destination(named)
+            return destination.Destination()
 
 
-    def accept_move(self, kind: str, pk: int, dest: str | None, mutation_id: object,
+    def accept_move(self, kind: str, pk: int, mutation_id: object,
                     push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
         """Accept a move of message `pk` in a transaction of its own: see accept_move_within."""
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
-            return self.accept_move_within(c, kind, pk, dest, mutation_id, push_undo)
+            return self.accept_move_within(c, kind, pk, mutation_id, push_undo)
 
 
-    def accept_move_within(self, c: Connection, kind: str, pk: int, dest: str | None, mutation_id: object,
+    def accept_move_within(self, c: Connection, kind: str, pk: int, mutation_id: object,
                            push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
         """Accept a move of message `pk` in the caller's write block, which commits it with whatever else it accepts: an
         Accepted, or None when there is no such message, or it is on its way out already. `push_undo(c, entry)`, on the
@@ -125,7 +125,7 @@ class MailCommands:
         if not row or row["pending_removal"] is not None:
             return None
         email, mid = row["account"], (row["message_id"] or "").strip()
-        where = self._known_destination(kind, email, dest)
+        where = self._known_destination(kind, email)
         params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
                   "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
         id_, created = self._store.command_insert(c, {

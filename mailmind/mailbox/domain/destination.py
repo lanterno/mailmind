@@ -18,7 +18,8 @@ class Destination:
 
 def resolve(kind: str, *, named: str | None, archive_is_label_removal: bool, trash: str | None,
             junk_fallback: str | None, find: FindRole) -> Destination:
-    """The Destination of a `kind` of filing. `named` is where the command already says it goes."""
+    """The Destination of a `kind` of filing. `named` is where the command's row already says it goes, which is how a
+    `move` row from before /api/move went still lands: no new one is accepted, but one may be queued, or in the tray."""
     if kind == "archive" and archive_is_label_removal:
         return Destination(drop_inbox_label=True)
     if named:
@@ -36,8 +37,8 @@ def _no_server(*_roles: str) -> str | None:
     return None
 
 
-def known_without_server(kind: str, *, named: str | None, archive_is_label_removal: bool, trash: str | None) -> Destination:
+def known_without_server(kind: str, *, archive_is_label_removal: bool, trash: str | None) -> Destination:
     """As much of `resolve` as holds with no server to ask, as a command is accepted and its Undo written. A folder only
     the server can name is left for a try to find, so no folder here doesn't yet mean nowhere to go."""
-    return resolve(kind, named=named, archive_is_label_removal=archive_is_label_removal, trash=trash, junk_fallback=None,
+    return resolve(kind, named=None, archive_is_label_removal=archive_is_label_removal, trash=trash, junk_fallback=None,
                    find=_no_server)
