@@ -1,6 +1,6 @@
 // The list: a real listbox. Focus stays on the box and aria-activedescendant says which row you're on, so j and k move a
 // screen reader's place too. A row's own actions are for the mouse: an option can't hold a control, and the keyboard has
-// e and d.
+// e, d and h.
 import { useEffect, useRef } from "react";
 import { minute } from "../../lib/clock";
 import { avatarHue, dayGroup, initialsOf } from "../../lib/text";
@@ -10,7 +10,7 @@ import { inDaySections, type Row } from "./rows";
 
 const rowId = (pk: number) => `row-${pk}`;
 
-function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }: {
+function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze }: {
   row: Row;
   whole: boolean;
   selected: boolean;
@@ -18,6 +18,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }
   showAccount: string | null;
   onOpen: () => void;
   onFile: (kind: Filing) => void;
+  onSnooze: (anchor: Element) => void;
 }) {
   const needs = Boolean(row.action);
   const what = whole ? " conversation" : "";
@@ -53,12 +54,14 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile }
         <span className="ract" title={`Archive${what} (e)`} onClick={act("archive")}><Icon name="archive" /></span>
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the d key is the keyboard's */}
         <span className="ract del" title={`Delete${what} (d)`} onClick={act("trash")}><Icon name="trash" /></span>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the h key is the keyboard's */}
+        <span className="ract" data-racts="snooze" title="Snooze (h)" onClick={(e) => { e.stopPropagation(); onSnooze(e.currentTarget); }}><Icon name="clock" /></span>
       </div>
     </div>
   );
 }
 
-export function MessageList({ above, rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, empty, footer }: {
+export function MessageList({ above, rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, empty, footer }: {
   above?: React.ReactNode;
   rows: Row[];
   openPk: number | null;
@@ -69,6 +72,7 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
   accountChip: (r: Row) => string | null;
   onOpen: (r: Row) => void;
   onFile: (r: Row, kind: Filing) => void;
+  onSnooze: (r: Row, anchor: Element) => void;
   empty: React.ReactNode;
   footer: React.ReactNode;
 }) {
@@ -88,7 +92,7 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
     const here = sections && row.ts !== null ? dayGroup(row.ts, new Date(now)) : "";
     if (here && here !== section) items.push(<div key={`g-${here}`} className="rgrp" role="presentation">{here}</div>);
     if (here) section = here;
-    items.push(<RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} />);
+    items.push(<RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} />);
   }
   return (
     <div id="rows">
