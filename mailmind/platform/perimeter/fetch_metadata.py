@@ -14,7 +14,7 @@ def refuse_cross_site(headers, path):
 
     Under /api/ only same-origin passes: the page's own fetches, its event stream and its
     downloads. A request that says nothing (a browser too old to send the header, or not a
-    browser) or comes from no page (a typed URL) is refused as well. The page itself, `/`, also
+    browser) or comes from no page (a typed URL) is refused as well. The app itself, `/`, also
     opens from a typed or bookmarked URL, or from another site's link: a top-level visit does
     nothing, and its contents can't be read across origins."""
     site = (headers.get("Sec-Fetch-Site") or "").lower()

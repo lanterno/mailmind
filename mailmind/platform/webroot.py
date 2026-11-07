@@ -1,11 +1,11 @@
-"""The page and its files, as both front doors serve them.
+"""The app and the old page, and their files, as both front doors serve them.
 
 The source in `web/` runs as it stands, classic scripts and plain CSS, so `python3 server.py` serves the
 app with nothing installed and nothing built. `just build-web` writes the same files, named by their
 content, to `mailmind/http/dist`. That is what gets served while it is at least as new as every source
 file, so an edit or a checkout never leaves the app on old files.
 
-The React app at /next exists only as built: `web/src` doesn't run as it stands.
+The React app, at `/`, exists only as built: `web/src` doesn't run as it stands.
 
 Standard library only: python3 server.py uses it.
 """
@@ -101,7 +101,7 @@ def asset(url_path):
         return None
     root = _root()
     path = os.path.join(root, "assets", *relative.split("/"))
-    if not os.path.isfile(path) and root != DIST:     # one of /next's, which only a build has
+    if not os.path.isfile(path) and root != DIST:     # one of the React app's, which only a build has
         root = DIST
         path = os.path.join(root, "assets", *relative.split("/"))
     if not os.path.isfile(path) or not os.path.realpath(path).startswith(os.path.realpath(root) + os.sep):
