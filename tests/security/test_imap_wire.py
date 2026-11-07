@@ -166,6 +166,30 @@ def test_a_line_break_is_refused_before_anything_is_sent(world, adapter, wire, c
     assert world.server.mailbox(w.ADA, "Archive") is not None
 
 
+# IMAPClient's search takes a list and quotes an item only if it holds a space. So by_message_id, the one call that hands
+# it a value in a list, sends a sender's Message-ID as bare syntax: a bracket makes the command one the server
+# refuses, and {5} at the end of the line tells the server a literal follows, which it then waits for. The session sits
+# there until the connection times out, under the account's gate.
+_BARE = pytest.mark.xfail(strict=True, reason="ImapClientSession.by_message_id doesn't quote the id, as the imaplib adapter does")
+ODD_IDS = ("<a(b@example.test>", "<a)b@example.test>", "{5}")
+
+
+@pytest.mark.parametrize("kind, message_id", [
+    *[("imaplib", i) for i in ODD_IDS], *[pytest.param("imapclient", i, marks=_BARE) for i in ODD_IDS],
+    ("imaplib", "<a b@example.test>"), ("imapclient", "<a b@example.test>")])
+def test_a_message_id_is_one_argument_whatever_it_holds(world, kind, message_id):
+    from mailmind.bootstrap import accounts, mailbox
+    uid = world.server.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID=message_id))
+    mailbox.use(kind)
+    s = mailbox.open_session(accounts.get(w.ADA), timeout=1)
+    try:
+        s.select("INBOX")
+        assert s.by_message_id(message_id) == uid
+    finally:
+        s.shutdown()
+        mailbox.use("imaplib")
+
+
 # ── from the routes in ───────────────────────────────────────────────────────────────────────────
 
 EVIL = "Archive" + INJECTED
