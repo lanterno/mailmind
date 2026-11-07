@@ -116,3 +116,21 @@ def test_changing_from_swaps_the_signature_and_leaves_one_you_edited(page, world
     page.locator("#cmpFrom").select_option(w.ADA)
     expect(text).to_have_value("Hello\n\n-- \nBea, edited")    # yours now: it stays
     clean(page)
+
+
+def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it_is_said(page, world):
+    page.pw.add_init_script(AWAY)
+    opened(page)
+    page.pw.evaluate("window.away = true")
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 2})
+    expect(page.pw).to_have_title("(2) MailMind")
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    expect(page.pw).to_have_title("(3) MailMind")
+    first = page.pw.evaluate("({ title: notes[0].title, body: notes[0].body, tag: notes[0].tag })")
+    assert first == {"title": "New mail · Ada", "body": "2 new messages", "tag": f"mailmind-{w.ADA}"}
+    page.pw.evaluate("window.away = false; document.dispatchEvent(new Event('visibilitychange'))")
+    expect(page.pw).to_have_title("MailMind")
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    expect(page.locator("#srLive")).to_have_text("1 new message arrived in Ada")
+    assert page.pw.evaluate("notes.length") == 2               # with someone here, no desktop notification
+    clean(page)
