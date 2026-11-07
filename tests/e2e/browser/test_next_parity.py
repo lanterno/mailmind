@@ -309,3 +309,13 @@ def test_escape_in_settings_steps_back_one_thing_at_a_time(page, world):
     page.keyboard.press("Escape")
     expect(title).to_be_hidden()
     clean(page)
+
+
+def test_a_message_slow_to_come_shows_what_is_known_and_says_so(page, world):
+    opened(page)
+    page.pw.route(re.compile(r"/api/message/\d+/body"), lambda route: None)    # no answer yet
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    expect(page.locator("#reader .rd-subj")).to_have_text(receipt.locator(".sj").inner_text())
+    expect(page.locator("#rdSkelHint")).to_contain_text("Still fetching from the server", timeout=7000)
+    clean(page)
