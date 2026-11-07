@@ -252,9 +252,18 @@ export function createComposing(env: Env) {
   function setFrom(value: string) {
     if (!c) return;
     c.from = value;
+    const sig = env.signature(value), block = sig ? `\n\n-- \n${sig}` : "";
+    let caret: [number, number] | null = null;
+    if (c.sigBlock ? c.body.endsWith(c.sigBlock) : block) {   // a signature you edited is yours, and stays
+      const keep = c.body.length - c.sigBlock.length, [start, end] = env.selection();
+      c.body = c.body.slice(0, keep) + block;
+      caret = [Math.min(start, keep), Math.min(end, keep)];   // the caret stays in what you wrote
+    }
+    c.sigBlock = block;
     markEdited(c);
     retireGuard(c);
     publish();
+    if (caret) env.select(caret[0], caret[1]);
   }
   function setTyped(field: Field, value: string) {
     if (!c) return;
