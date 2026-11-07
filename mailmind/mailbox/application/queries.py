@@ -15,6 +15,42 @@ def _attention(r: Row) -> dict[str, bool]:
     return verdict.answers(r["importance"], r["category"], r["action"])
 
 
+def _listed_item(r: Row, group: bool) -> dict[str, Any]:
+    """A row of a list of a folder or of the Inboxes, one conversation's latest message if `group`."""
+    it: dict[str, Any] = {
+        "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
+        "from_addr": r["from_addr"],
+        "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
+        "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
+        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
+        "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
+        "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
+        "ts": r["ts"], "account": r["account"],
+    }
+    if group:
+        it.update({"count": r["cnt"], "seen": not r["unread"],
+                   "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
+    return it
+
+
+def _waiting_item(r: Row) -> dict[str, Any]:
+    if r["f_kind"] == "sent":
+        label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
+    else:
+        label = "Awaiting your reply · " + rel_time(r["date_iso"])
+    return {
+        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "from_name": r["from_name"] or r["from_addr"],
+        "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
+        "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
+        "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
+        "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
+        "ts": r["ts"], "count": r["thread_count"], "waiting": True,
+        "waiting_label": label, "kind": r["f_kind"],
+        "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
+    }
+
+
 class Queries:
     def __init__(self, uow: UnitOfWork, store: StoredMail, attention: Attention, folders: Folders):
         self._uow = uow
@@ -66,23 +102,7 @@ class Queries:
             all_rows = self._attention.list_waiting(c, account)
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
-        items: list[dict[str, Any]] = []
-        for r in rows:
-            if r["f_kind"] == "sent":
-                label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
-            else:
-                label = "Awaiting your reply · " + rel_time(r["date_iso"])
-            items.append({
-                "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
-            "from_name": r["from_name"] or r["from_addr"],
-                "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-                "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-                "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-                "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-                "ts": r["ts"], "count": r["thread_count"], "waiting": True,
-                "waiting_label": label, "kind": r["f_kind"],
-                "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
-            })
+        items = [_waiting_item(r) for r in rows]
         return {"ok": True, "account": account, "folder": "__waiting__", "items": items, "waiting": True,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
@@ -124,22 +144,7 @@ class Queries:
             else:
                 rows = self._store.folder_rows(c, account, folder, limit, offset)
                 total = self._store.folder_count(c, account, folder)
-        items: list[dict[str, Any]] = []
-        for r in rows:
-            it: dict[str, Any] = {
-                "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
-                "from_addr": r["from_addr"],
-                "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-                "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-                "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-                "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
-                "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
-                "ts": r["ts"], "account": account,
-            }
-            if group:
-                it.update({"count": r["cnt"], "seen": not r["unread"],
-                           "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
-            items.append(it)
+        items = [_listed_item(r, group) for r in rows]
         return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
 

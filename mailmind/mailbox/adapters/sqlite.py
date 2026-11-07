@@ -800,48 +800,62 @@ def snoozed_count(c, account):
                      (account,)).fetchone()[0]
 
 
-def folder_conversation_rows(c, account, folder, limit, offset):
-    """A folder collapsed to conversations: one row per thread (the latest message) + rollups."""
+def _listed(where):
+    """What a list shows of the rows `where` picks, on `m`: none on its way out, snoozed or muted."""
+    return f"{where} AND m.pending_removal IS NULL AND {not_snoozed_sql()} " + _MUTED_EXCL.format(t="m")
+
+
+def _conversation_rows(c, where, params, partition, limit, offset):
+    """One row per conversation (its latest message) + rollups, newest first. `partition` is what names a conversation here."""
     return c.execute(
-        """WITH fm AS (
+        f"""WITH fm AS (
              SELECT m.*, s.importance, s.summary, s.action, s.category,
-               ROW_NUMBER() OVER (PARTITION BY m.thread_id ORDER BY m.ts DESC, m.pk DESC) rn,
-               COUNT(*)        OVER (PARTITION BY m.thread_id) cnt,
-               SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY m.thread_id) unread,
-               MAX(m.flagged)  OVER (PARTITION BY m.thread_id) any_flagged,
-               MAX(m.has_attach) OVER (PARTITION BY m.thread_id) any_attach
+               ROW_NUMBER() OVER (PARTITION BY {partition} ORDER BY m.ts DESC, m.pk DESC) rn,
+               COUNT(*)        OVER (PARTITION BY {partition}) cnt,
+               SUM(CASE WHEN m.seen=0 THEN 1 ELSE 0 END) OVER (PARTITION BY {partition}) unread,
+               MAX(m.flagged)  OVER (PARTITION BY {partition}) any_flagged,
+               MAX(m.has_attach) OVER (PARTITION BY {partition}) any_attach
              FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-             WHERE m.account=? AND m.folder=? AND m.pending_removal IS NULL AND """ + not_snoozed_sql() + " "
-        + _MUTED_EXCL.format(t="m") + """)
+             WHERE {_listed(where)})
            SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC LIMIT ? OFFSET ?""",
-        (account, folder, limit, offset)).fetchall()
+        (*params, limit, offset)).fetchall()
+
+
+def _message_rows(c, where, params, limit, offset):
+    return c.execute(
+        f"""SELECT m.pk, m.message_key, m.account, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
+                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
+                  s.summary, s.action, s.category
+           FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
+           WHERE {_listed(where)}
+           ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
+        (*params, limit, offset)).fetchall()
+
+
+def _message_count(c, where, params):
+    return c.execute(f"SELECT COUNT(*) FROM messages m WHERE {_listed(where)}", params).fetchone()[0]
+
+
+_IN_FOLDER = "m.account=? AND m.folder=?"
+
+
+def folder_conversation_rows(c, account, folder, limit, offset):
+    """A folder collapsed to conversations."""
+    return _conversation_rows(c, _IN_FOLDER, (account, folder), "m.thread_id", limit, offset)
 
 
 def folder_conversation_count(c, account, folder):
-    return c.execute("SELECT COUNT(DISTINCT thread_id) FROM messages "
-                     f"WHERE account=? AND folder=? AND pending_removal IS NULL AND {not_snoozed_sql('messages')} "
-                     + _MUTED_EXCL.format(t="messages"),
+    return c.execute(f"SELECT COUNT(DISTINCT m.thread_id) FROM messages m WHERE {_listed(_IN_FOLDER)}",
                      (account, folder)).fetchone()[0]
 
 
 def folder_rows(c, account, folder, limit, offset):
     """A folder's messages, newest first."""
-    return c.execute(
-        """SELECT m.pk, m.message_key, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
-                  m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
-                  s.summary, s.action, s.category
-           FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.account=? AND m.folder=? AND m.pending_removal IS NULL AND """ + not_snoozed_sql() + " "
-        + _MUTED_EXCL.format(t="m") + """
-           ORDER BY m.ts DESC LIMIT ? OFFSET ?""",
-        (account, folder, limit, offset)).fetchall()
+    return _message_rows(c, _IN_FOLDER, (account, folder), limit, offset)
 
 
 def folder_count(c, account, folder):
-    return c.execute("SELECT COUNT(*) FROM messages "
-                     f"WHERE account=? AND folder=? AND pending_removal IS NULL AND {not_snoozed_sql('messages')} "
-                     + _MUTED_EXCL.format(t="messages"),
-                     (account, folder)).fetchone()[0]
+    return _message_count(c, _IN_FOLDER, (account, folder))
 
 
 def stored_folder_counts(c, account):
