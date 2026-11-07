@@ -54,21 +54,20 @@ def test_a_move_naming_nothing_goes_nowhere():
     assert where("move") == Destination()
 
 
-def known(kind, *, named=None, by_label=False, trash="Trash"):
-    return known_without_server(kind, named=named, archive_is_label_removal=by_label, trash=trash)
+def known(kind, *, by_label=False, trash="Trash"):
+    return known_without_server(kind, archive_is_label_removal=by_label, trash=trash)
 
 
 def test_as_a_command_is_accepted_only_what_needs_no_server_is_known():
     assert known("trash") == Destination("Trash")
-    assert known("move", named="Receipts") == Destination("Receipts")
     assert known("archive", by_label=True) == Destination(drop_inbox_label=True)
     assert known("archive") == Destination() and known("junk") == Destination()
 
 
-@pytest.mark.parametrize("kind, named", [("trash", None), ("archive", None), ("junk", None), ("move", "Receipts")])
+@pytest.mark.parametrize("kind", ["trash", "archive", "junk"])
 @pytest.mark.parametrize("by_label", [False, True])
-def test_what_is_known_at_accept_never_disagrees_with_what_a_try_resolves(kind, named, by_label):
-    early = known(kind, named=named, by_label=by_label)
-    later = where(kind, named=named, by_label=by_label, junk_fallback="Spam", find=playing(archive="Archive", junk="Junk"))
+def test_what_is_known_at_accept_never_disagrees_with_what_a_try_resolves(kind, by_label):
+    early = known(kind, by_label=by_label)
+    later = where(kind, by_label=by_label, junk_fallback="Spam", find=playing(archive="Archive", junk="Junk"))
     assert early.drop_inbox_label == later.drop_inbox_label
     assert early.folder in (None, later.folder)

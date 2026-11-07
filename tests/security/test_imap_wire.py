@@ -190,11 +190,11 @@ def test_a_message_id_is_one_argument_whatever_it_holds(world, kind, message_id)
 EVIL = "Archive" + INJECTED
 
 
-def test_a_move_to_an_injected_folder(app, world, wire):
-    pk = world.pk(RECEIPT)
+def test_a_queued_move_to_an_injected_folder(app, world, wire):
+    from mailmind.bootstrap.mailbox import commands
+    world.queued_move(RECEIPT, EVIL)
     since = world.mark()
-    r = app.post("/api/move", {"pk": pk, "dest": EVIL})
-    assert r.json["ok"] is False
+    commands.drain()
     assert on_the_wire(wire) == [] and world.writes(since) == []
     assert world.where(RECEIPT)["server"][0][1] == "INBOX"
 

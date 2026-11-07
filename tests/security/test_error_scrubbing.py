@@ -35,7 +35,7 @@ def every_route(pk):
 
 def body_for(pk, **more):
     """A body with something for any route to go on, so that as many as can get as far as a server."""
-    return {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "dest": "Archive", "seen": True, "flagged": True,
+    return {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "seen": True, "flagged": True,
             "id": 1, "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": False,
             "token": "lin@example.test", "verdict": "keep", "cmd": "archive what lin sent", "question": "what did lin say",
             "q": "lunch", "preset": "tomorrow", "from_addr": "lin@example.test", "do_unsubscribe": False, "in_reply_to_pk": pk,

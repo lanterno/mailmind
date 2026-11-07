@@ -116,7 +116,7 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
     from mailmind.bootstrap.mailbox import commands
     since = world.mark()
     for path, name, extra in (("/api/archive", RECEIPT, {}), ("/api/trash", SCAM, {}),
-                              ("/api/junk", NEWSLETTER, {}), ("/api/move", CI, {"dest": "Archive"})):
+                              ("/api/junk", NEWSLETTER, {}), ("/api/archive", CI, {})):
         r = app.post(path, {"pk": world.pk(name), "mutation_id": f"m-{name}", **extra}).json
         assert (r["ok"], r["status"]) == (True, "queued"), (path, r)
     assert app.post("/api/thread/archive", {"pk": world.pk(LUNCH_CONFIRM)}).json["ok"]

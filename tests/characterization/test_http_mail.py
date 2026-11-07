@@ -1,4 +1,4 @@
-"""The mail actions, over HTTP against the fake server: seen, flag, archive, move, junk, trash, whole
+"""The mail actions, over HTTP against the fake server: seen, flag, archive, junk, trash, whole
 conversations, and Undo. Each step pins the answer, the IMAP commands that changed mail on the
 server, and where the message is afterwards, on the server and in the database. The golden
 files are in tests/golden/http_mail/.
@@ -48,7 +48,7 @@ def test_a_refused_flag_change_leaves_the_local_row_alone(app, world):
     assert (r.json["ok"], world.row(name)["seen"]) == (False, 0)
 
 
-# ── archive, move, junk, trash, and their undo ─────────────────────────────
+# ── archive, junk, trash, and their undo ─────────────────────────────
 
 def test_archive_on_each_provider_and_undo(app, golden, world):
     for name in ("ada-inbox-05-receipt.eml", "bea-inbox-01-client.eml", "cy-inbox-03-unrelated.eml"):
@@ -56,29 +56,6 @@ def test_archive_on_each_provider_and_undo(app, golden, world):
     for name in ("cy-inbox-03-unrelated.eml", "bea-inbox-01-client.eml", "ada-inbox-05-receipt.eml"):
         undo(app, golden, world, name, name)
     undo(app, golden, world, "once more than there is")
-
-
-def test_move_to_a_folder_and_undo(app, golden, world):
-    name = "bea-inbox-01-client.eml"
-    act(app, golden, world, "move to Folders/Clients", "/api/move",
-        {"pk": world.pk(name), "dest": "Folders/Clients"}, name)
-    undo(app, golden, world, "the move", name)
-    pk = _pk_of(world, name)                       # back in INBOX under a new UID
-    act(app, golden, world, "move to a folder that isn't there", "/api/move",
-        {"pk": pk, "dest": "Folders/Nowhere"}, name)
-    act(app, golden, world, "move to a name IMAP can't quote", "/api/move",
-        {"pk": pk, "dest": 'Folders/"quoted"'}, name)
-    act(app, golden, world, "move with no destination", "/api/move", {"pk": pk}, name)
-
-
-def _pk_of(world, name):
-    from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        return c.execute("SELECT pk FROM messages WHERE message_id=? AND folder='INBOX'",
-                         (w.message_id(name),)).fetchone()["pk"]
-    finally:
-        c.close()
 
 
 def test_junk_on_each_provider_and_undo(app, golden, world):

@@ -74,7 +74,7 @@ def test_a_message_named_in_a_body_by_what_cant_be_a_number(app, path, field, sa
     assert (r.status, r.json) == (400, {"ok": False, "error": said})
 
 
-@pytest.mark.parametrize("path", ["/api/seen", "/api/flag", "/api/archive", "/api/junk", "/api/move", "/api/thread/archive",
+@pytest.mark.parametrize("path", ["/api/seen", "/api/flag", "/api/archive", "/api/junk", "/api/thread/archive",
                                   "/api/thread/trash"])
 @pytest.mark.parametrize("junk", ["x", 10 ** 30])
 def test_filing_what_cant_be_a_message_answers_as_any_refused_filing_does(app, path, junk):
@@ -194,7 +194,7 @@ def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai
     """Every POST route, each field a route has choked on, each kind of junk that got past the handler's own catch, within
     a body otherwise good enough to get as far as reading it."""
     pk = world.pk("ada-inbox-05-receipt.eml")
-    good = {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "dest": "Archive", "seen": True, "id": 1,
+    good = {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "seen": True, "id": 1,
             "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}

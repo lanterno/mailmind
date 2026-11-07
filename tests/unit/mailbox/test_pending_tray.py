@@ -28,10 +28,8 @@ def queue_archive(app, world, name=RECEIPT, group=None):
 
 
 def test_a_move_says_where_it_is_going(app, world):
-    world.server.drop("SELECT", user=w.ADA)
-    answer = app.post("/api/move", {"pk": world.pk(RECEIPT), "dest": "Folders/Clients", "mutation_id": "m-1"}).json
-    assert answer["status"] == "queued"
-    assert [i["dest"] for i in tray(app)["items"]] == ["Folders/Clients"]
+    world.queued_move(RECEIPT, "Folders/Clients")
+    assert [(i["op"], i["dest"]) for i in tray(app)["items"]] == [("move", "Folders/Clients")]
 
 
 def queue_star(app, world, name=RECEIPT):

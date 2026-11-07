@@ -63,6 +63,28 @@ def test_a_queued_archive_applies_once_the_server_is_back(app, world):
     assert world.writes(since) == []
 
 
+def test_a_move_from_before_the_route_went_lands_and_undo_brings_it_back(app, world):
+    name = "bea-inbox-01-client.eml"
+    world.queued_move(name, "Folders/Clients")
+    since = world.mark()
+    drain()
+    assert world.writes(since) == [f'{w.BEA} [INBOX] UID MOVE {world.uid(name)} "Folders/Clients"']
+    assert boxes(world, name)[0] == [(w.BEA, "Folders/Clients")]
+    assert app.post("/api/undo", {}).json["ok"]
+    assert boxes(world, name)[0] == [(w.BEA, "INBOX")]
+
+
+@pytest.mark.parametrize("dest", ["Folders/Nowhere", 'Folders/"quoted"'])
+def test_a_move_from_before_the_route_went_that_cant_land_goes_to_the_tray_and_gives_the_message_back(app, world, dest):
+    name = "bea-inbox-01-client.eml"
+    world.queued_move(name, dest)
+    drain()
+    [r] = rows()
+    assert (r["kind"], r["state"], r["applied"]) == ("move", "error", 0)
+    assert boxes(world, name)[0] == [(w.BEA, "INBOX")]
+    assert world.pk(name) in {m["pk"] for m in app.get(f"/api/messages?account={w.BEA}&folder=INBOX").json["items"]}
+
+
 def test_a_queued_gmail_archive_drops_the_inbox_label(app, world):
     name = "cy-inbox-03-unrelated.eml"
     uid = world.uid(name)

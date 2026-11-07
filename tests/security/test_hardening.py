@@ -411,7 +411,6 @@ def _refusing():
     pytest.param(lambda pk: mailbox.filing.do_trash({"pk": pk}), id="trash"),
     pytest.param(lambda pk: mailbox.filing.do_write("/api/archive", {"pk": pk}), id="archive"),
     pytest.param(lambda pk: mailbox.filing.do_write("/api/junk", {"pk": pk}), id="junk"),
-    pytest.param(lambda pk: mailbox.filing.do_write("/api/move", {"pk": pk, "dest": "Archive"}), id="move"),
 ])
 def test_a_refused_move_keeps_the_message_and_says_so(op, home, connected):
     pk = _message()
@@ -450,7 +449,7 @@ def test_the_route_reports_a_refusal_and_offers_no_undo(home, connected):
     pk = _message()
     depth = len(mailbox.undo.entries())
     connected(_refusing())
-    res = mailbox.filing.do_write("/api/move", {"pk": pk, "dest": "Archive"})
+    res = mailbox.filing.do_write("/api/archive", {"pk": pk})
     assert res["ok"] is False and res["undoable"] is False, res
     assert len(mailbox.undo.entries()) == depth
     assert _still_there(pk)

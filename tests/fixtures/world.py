@@ -228,6 +228,27 @@ class World:
                           for uid, m in box.messages.items()
                           if (m.headers().get("Message-ID") or "").strip() == message_id)
 
+    def queued_move(self, name, dest):
+        """A move to a folder someone chose, as /api/move left one in the queue and on the undo stack before it went. None
+        is accepted now, but a row from then can still be queued or in the tray, so the worker, Undo and the tray read one."""
+        from mailmind.bootstrap.mailbox import store, undo
+        acct, folder, _ = self.placed[name]
+        row, mid = self.row(name), message_id(name)
+        c = store.conn()
+        try:
+            id_, _ = store.command_insert(c, {
+                "account": acct, "idempotency_key": f"move:{acct}:{mid}:{name}", "kind": "move", "message_id": mid,
+                "src_folder": folder, "dest": dest, "next_attempt_at": 0, "created_at": "2026-11-02T12:00:00+00:00",
+                "params": json.dumps({"pk": row["pk"], "uid": row["uid"], "epoch": store.get_uidvalidity(c, acct, folder),
+                                      "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]})})
+            store.mark_pending_removal(c, row["pk"], id_)
+            undo.push_within(c, {"kind": "move", "command": id_, "account": acct, "src_folder": folder, "dest_folder": dest,
+                                 "message_id": mid, "label": "Moved", "subject": row["subject"], "thread_id": row["thread_id"]})
+            c.commit()
+        finally:
+            c.close()
+        return id_
+
     def row(self, name):
         from mailmind.bootstrap.mailbox import store
         c = store.conn()

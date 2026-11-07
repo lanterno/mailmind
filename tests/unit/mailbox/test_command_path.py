@@ -302,12 +302,12 @@ def test_undo_takes_off_the_read_mark_a_server_set_on_the_way_to_trash(app, worl
 
 def test_undo_of_a_plain_move_to_trash_takes_off_the_read_mark_too(app, world, monkeypatch):
     from mailmind.bootstrap import mailbox
-    from mailmind.bootstrap.mailbox import server_ops
+    from mailmind.bootstrap.mailbox import commands, server_ops
     real = server_ops._accounts.profile
     monkeypatch.setattr(mailbox._directory, "profile", lambda acct: dataclasses.replace(real(acct), marks_trash_read=True))
-    pk = world.pk(RECEIPT)
     assert not world.row(RECEIPT)["seen"]
-    assert app.post("/api/move", {"pk": pk, "dest": "Trash"}).json["ok"]
+    world.queued_move(RECEIPT, "Trash")
+    commands.drain()
     assert "unseen" in (rows()[0]["outcome"] or "")
     assert app.post("/api/undo", {}).json["ok"]
     [(_, box, _, flags)] = world.where(RECEIPT)["server"]
