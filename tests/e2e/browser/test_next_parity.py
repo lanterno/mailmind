@@ -26,6 +26,14 @@ def clean(page):
     assert page.blocked == [], page.blocked
 
 
+def until(page, check, what):
+    for _ in range(100):
+        if check():
+            return
+        page.wait_for_timeout(50)
+    assert check(), what
+
+
 def opened(page):
     page.goto("/next")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
@@ -71,4 +79,20 @@ def test_a_double_click_on_a_row_reads_it_in_focus(page, world):
     receipt.locator(".sj").dblclick()
     expect(receipt).to_have_class(re.compile(r"\bsel\b"))
     expect(page.locator("body")).to_have_class(re.compile("read-focus"))
+    clean(page)
+
+
+def test_asking_for_the_folders_leaves_focus_reading_and_focus_reading_closes_their_drawer(page, world):
+    page.set_viewport_size({"width": 1000, "height": 800})      # the rail is a drawer here, and focus reading still is one
+    opened(page)
+    row(page, world, RECEIPT).click()
+    body = page.locator("body")
+    page.keyboard.press("Enter")
+    expect(body).to_have_class(re.compile("read-focus"))
+    page.keyboard.press("[")
+    expect(body).not_to_have_class(re.compile("read-focus"))
+    expect(body).to_have_class(re.compile("rail-open"))
+    page.keyboard.press("Enter")
+    expect(body).to_have_class(re.compile("read-focus"))
+    expect(body).not_to_have_class(re.compile("rail-open"))
     clean(page)
