@@ -33,10 +33,10 @@ const landedHere = (source: ListSource | null, account: string, folder: string) 
   source?.kind === "allInboxes" ? folder.toUpperCase() === "INBOX"
     : source?.kind === "folder" && source.account === account && source.folder.toUpperCase() === folder.toUpperCase();
 
-let writing = false, timer: ReturnType<typeof setTimeout> | undefined;
+let writing = false, aiOn = false, timer: ReturnType<typeof setTimeout> | undefined;
 async function headline(ai: boolean) {
   const p = pending.get();
-  if (!p || !ai || writing) return;
+  if (!p || !ai || writing || document.hidden) return;     // nobody's reading it, and asking would count as someone here
   writing = true;
   try {
     const since = Math.floor(p.since / 1000);
@@ -55,6 +55,11 @@ const showTitle = () => { document.title = cameIn > 0 ? `(${cameIn}) MailMind` :
 export function cameBack() {
   cameIn = 0;
   showTitle();
+  const p = pending.get();
+  if (p && !p.headline) {
+    clearTimeout(timer);
+    timer = setTimeout(() => void headline(aiOn), 1500);
+  }
 }
 
 function tell(account: string, count: number, name: string) {
@@ -86,6 +91,7 @@ export function onNewMail(d: { account?: string; folder?: string; count?: number
     headline: was?.headline ?? "",
   });
   clearTimeout(timer);
+  aiOn = ai;
   timer = setTimeout(() => void headline(ai), 1500);   // a burst is one call
 }
 

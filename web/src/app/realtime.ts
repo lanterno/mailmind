@@ -22,7 +22,9 @@ export function useRealtime() {
   const qc = useQueryClient();
   useEffect(() => {
     const es = new EventSource("/api/events");
-    const again = (key: string) => void qc.invalidateQueries({ queryKey: [key] });
+    // A tab nobody is looking at reads nothing: most reads count as someone here, and that lets the AI go on drafting ahead.
+    // It marks what changed, and that is read when the tab comes back.
+    const again = (key: string) => void qc.invalidateQueries({ queryKey: [key], refetchType: document.hidden ? "none" : "active" });
     let digestSoon: ReturnType<typeof setTimeout> | undefined;
     const mail = () => {
       again("messages");
