@@ -2,7 +2,7 @@
 reply or an API error can hold a login, a path or a key, and a mail server is someone else's to word. Here each is forced
 to carry a secret, and no answer may hold it.
 
-test_hardening.py has one read and test_http_bridge.py the bridge's own 500. What the log may hold is logging's to say.
+test_hardening.py has one read. What the log may hold is logging's to say.
 """
 import imaplib
 import json
@@ -14,12 +14,10 @@ import pytest
 import route_tables
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.bootstrap import web
-from mailmind.platform import profile, webroot
+from mailmind.platform import profile
 
 SECRET = "hunter2-secret-token"
 SEEN = "ada-inbox-05-receipt.eml"
-SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css"}
 # What never ends, or isn't an answer about anything: the page and its files, which read no mail.
 NOT_WALKED = {("GET", "/api/events"), ("GET", "/")}
 QUERY = ("?account={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_id=t&kind=all&format=eml"
@@ -27,9 +25,7 @@ QUERY = ("?account={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_i
 
 
 def every_route(pk):
-    """In either table. A route by shape that moves to a router names its path, and leaves SHAPED behind."""
-    shaped = {(method, path.format(pk=pk)) for (method, name), path in SHAPED.items() if (method, name) in route_tables.shapes_on_the_handler()}
-    return sorted((route_tables.by_name(pk) | shaped) - NOT_WALKED)
+    return sorted(route_tables.paths(pk) - NOT_WALKED)
 
 
 def body_for(pk, **more):
@@ -45,21 +41,6 @@ def holds_it(r, *secrets):
     text = json.dumps(r.body, default=repr) if isinstance(r.body, (dict, list)) else bytes(r.body).decode("utf-8", "replace")
     text += json.dumps(r.headers)
     return [s for s in secrets if s in text]
-
-
-class Raising:
-    """The route table with each route raising what it's given."""
-
-    def __init__(self, real, make):
-        self.real, self.make = real, make
-
-    def find(self, method, path):
-        if self.real.find(method, path) is None:
-            return None
-
-        def boom(req):
-            raise self.make()
-        return boom
 
 
 def walk_for_leaks(app, routes, body, secrets):
@@ -86,8 +67,7 @@ def test_whatever_a_route_raises_its_answer_says_only_that_it_failed(app, monkey
     pk = 1
     routes = every_route(pk)
     assert ("POST", "/api/send") in routes and ("GET", "/api/digest") in routes
-    monkeypatch.setattr(web.H, "routes", Raising(web.H.routes, RAISED[what]))
-    route_tables.raise_on_routers(monkeypatch, RAISED[what])
+    route_tables.raise_on_every_route(monkeypatch, RAISED[what])
     answers = {}
     for method, path in routes:
         r = app.post(path, {}) if method == "POST" else app.get(path)

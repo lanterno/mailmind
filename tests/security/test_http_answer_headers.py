@@ -23,6 +23,6 @@ def test_a_refusal(app):
     assert r.status == 403 and carries_the_perimeters_headers(r, "/api/seen")
 
 
-def test_an_error_http_server_writes_itself(app):
+def test_a_method_the_app_doesnt_implement(app):
     r = app.request("PUT", "/api/seen", headers={"Origin": app.origin})
     assert r.status == 501 and carries_the_perimeters_headers(r, "/api/seen")

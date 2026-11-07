@@ -45,12 +45,8 @@ def slow():
     return {}
 
 
-async def no_route(scope, receive, send):
-    raise AssertionError(f"nothing here should fall through: {scope['path']}")
-
-
 def serving(grace=GRACE):
-    return Uvicorn(create_app(no_route, routers=[events.router(), helpers], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0),
+    return Uvicorn(create_app(routers=[events.router(), helpers], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0),
                    grace=grace).start()
 
 

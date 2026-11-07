@@ -94,8 +94,8 @@ class AppClient:
 
     def started_threads(self):
         """Threads alive now that weren't when the client was made, other than the fakes', the
-        app's serving thread and the pool the routes on routers run on, whose threads wait for the
-        next request: work a request started in the background (a sync, a draft)."""
+        app's serving thread and the pool the routes run on, whose threads wait for the next
+        request: work a request started in the background (a sync, a draft)."""
         return [t for t in threading.enumerate()
                 if t not in self._before and t is not threading.current_thread()
                 and not t.name.startswith(("fake-", "app-http", "AnyIO worker"))]
@@ -153,8 +153,8 @@ class RunningAsgiApp:
         import schema_contract
         from asgi_server import Uvicorn
         from mailmind.bootstrap import front
-        self.asgi, before_shutdown = front.build()
-        self.uvicorn = Uvicorn(schema_contract.HoldingAnswers(self.asgi), before_shutdown=before_shutdown)
+        self.asgi = front.build()
+        self.uvicorn = Uvicorn(schema_contract.HoldingAnswers(self.asgi))
         self.port = self.uvicorn.port
 
     def start(self):

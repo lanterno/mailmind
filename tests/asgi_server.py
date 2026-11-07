@@ -6,11 +6,11 @@ import time
 
 
 class Uvicorn:
-    def __init__(self, app, name="app-http", grace=5, before_shutdown=None):
+    def __init__(self, app, name="app-http", grace=5):
         from mailmind.http import serving
         self.sock = socket.create_server(("127.0.0.1", 0))
         self.port = self.sock.getsockname()[1]
-        self.server = serving.Server(serving.config(app, port=self.port, grace=grace), before_shutdown)
+        self.server = serving.Server(serving.config(app, port=self.port, grace=grace))
         self.thread = threading.Thread(target=self.server.run, kwargs={"sockets": [self.sock]},
                                        name=name, daemon=True)
 

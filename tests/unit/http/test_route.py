@@ -1,5 +1,5 @@
-"""mailmind.http.route.Route: what a route on a router goes through, on a toy router behind the real app and perimeter. It answers
-as the handler answered, in the same bytes, so a route moved across changes nothing but what its schema refuses.
+"""mailmind.http.route.Route: what a route goes through, on a toy router behind the real app and perimeter, and what the app answers
+where no route matches.
 """
 import dataclasses
 import http.client
@@ -30,7 +30,6 @@ from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import correlation
 
 BAD_REQUEST = {"ok": False, "error": "bad request"}
-FELL_THROUGH = b"the fallback"
 
 
 class Body(RequestBody):
@@ -92,15 +91,10 @@ def on(path, method):
     return next(route for route in toy.routes if route.path == path and method in route.methods)
 
 
-async def fallback(scope, receive, send):
-    await send({"type": "http.response.start", "status": 418, "headers": [(b"content-type", b"text/plain")]})
-    await send({"type": "http.response.body", "body": FELL_THROUGH})
-
-
 @pytest.fixture
 def served(data_dir):
-    """The toy router behind the real perimeter and the fallback, on uvicorn: a client as the page is one."""
-    server = Uvicorn(create_app(fallback, routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 1 << 20), grace=0.2)
+    """The toy router behind the real perimeter, on uvicorn: a client as the page is one."""
+    server = Uvicorn(create_app(routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 1 << 20), grace=0.2)
     server.start()
     try:
         with settings.use(dataclasses.replace(settings.current(), port=server.port)):
@@ -122,9 +116,9 @@ def raw(client, method, path, body=None, headers=None, chunked=False):
         conn.close()
 
 
-# ── what it answers, as the handler wrote it ─────────────────────────────────────────────────────────
+# ── what it answers ──────────────────────────────────────────────────────────────────────────────────
 
-def test_an_answer_is_in_the_bytes_the_handler_wrote(served, monkeypatch):
+def test_an_answer_is_in_json_dumps_bytes(served, monkeypatch):
     monkeypatch.setattr(on("/api/toy-work", "GET"), "work", lambda: {"ok": True, "got": {"name": "é", "n": float("inf")}})
     monkeypatch.setattr(schema_contract, "HOLDING", False)
     status, headers, body = raw(served, "GET", "/api/toy-work")
@@ -175,28 +169,71 @@ def test_what_a_route_may_not_be_is_refused_as_it_is_written(wrong):
                 return {}
 
 
-# ── a request that doesn't name a route of this method goes on, as it did ────────────────────────────
+# ── where no route matches ───────────────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("method, path", [("GET", "/api/toy-empty"), ("POST", "/api/toy-only-read"), ("PUT", "/api/toy"), ("DELETE", "/api/toy"),
-                                          ("HEAD", "/api/toy"), ("OPTIONS", "/api/toy"), ("PATCH", "/api/toy")])
-def test_a_method_the_route_doesnt_take_is_the_fallbacks(served, method, path):
-    status, _, body = raw(served, method, path)
-    assert status == 418 and body in (FELL_THROUGH, b"")
+def not_found(answer):
+    status, headers, body = answer
+    return (status, headers["content-type"], headers["content-length"], body) == (404, "text/plain", "9", b"not found")
+
+
+@pytest.mark.parametrize("method, path", [("GET", "/api/toy-empty"), ("POST", "/api/toy-only-read"), ("GET", "/api/no-such-route"),
+                                          ("POST", "/api/no-such-route"), ("GET", "/no-such-page"), ("POST", "/no-such-page"), ("POST", "/")])
+def test_a_get_or_a_post_no_route_takes_is_not_found(served, method, path):
+    assert not_found(raw(served, method, path, b"{}" if method == "POST" else None))
+
+
+@pytest.mark.parametrize("body", [b"not json", b"[1]", b'{"account": 5}'])
+def test_it_never_looks_at_a_post_it_has_no_route_for(served, body):
+    assert not_found(raw(served, "POST", "/api/no-such-route", body))
+
+
+def test_a_post_it_has_no_route_for_may_run_past_any_cap_undeclared(served):
+    assert not_found(raw(served, "POST", "/api/no-such-route", iter([b"x" * (1 << 20), b"y"]), {"Transfer-Encoding": "chunked"}, chunked=True))
+
+
+@pytest.mark.parametrize("path", ["/api/toy", "/api/no-such-route", "/no-such-page", "/", "*"])
+@pytest.mark.parametrize("method", ["HEAD", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"])
+def test_any_other_method_isnt_implemented(served, method, path):
+    status, headers, body = raw(served, method, path)
+    assert (status, headers["content-type"], body) == (501, "text/plain", b"" if method == "HEAD" else b"not implemented")
+    assert headers["x-frame-options"] == "DENY"
+
+
+@pytest.mark.parametrize("path", ["/api/toy-work", "/"])
+@pytest.mark.parametrize("site", ["same-origin", "none"])
+def test_an_absolute_form_request_line_names_no_route(served, monkeypatch, path, site):
+    """The perimeter reads the whole of it as the path, which is no part of the API, so it must then match nothing either."""
+    monkeypatch.setattr(on("/api/toy-work", "GET"), "work", lambda: pytest.fail("a route ran"))
+    assert not_found(raw(served, "GET", f"http://127.0.0.1:{served.port}{path}", headers={"Sec-Fetch-Site": site}))
+
+
+@pytest.mark.parametrize("path", ["/api/toy-work", "/api/no-such-route"])
+def test_a_body_a_get_declares_is_not_waited_for(served, monkeypatch, path):
+    """It may never come, and nothing on this path reads it."""
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=5)
+    try:
+        conn.putrequest("GET", path, skip_host=True)
+        for name, value in (("Host", f"127.0.0.1:{served.port}"), ("Sec-Fetch-Site", "same-origin"), ("Content-Length", "5")):
+            conn.putheader(name, value)
+        conn.endheaders()
+        assert conn.getresponse().status == (200 if path == "/api/toy-work" else 404)
+    finally:
+        conn.close()
 
 
 @pytest.mark.parametrize("path", ["/%61pi/toy", "/api%2Ftoy", "/api/toy/", "//api/toy", "/API/toy", "/api/toy%00", "/api/toy;x", "/api//toy"])
 def test_a_path_written_oddly_is_no_route_of_this_table(served, path):
     """uvicorn decodes a path, so `/%61pi/toy` would pass the perimeter as no part of the API and then match as /api/toy."""
     status, _, body = raw(served, "GET", path, headers={"Sec-Fetch-Site": ""})
-    assert (status, body) in ((418, FELL_THROUGH), (403, b'{"ok": false, "error": "same-origin request required"}'))
+    assert (status, body) in ((404, b"not found"), (403, b'{"ok": false, "error": "same-origin request required"}'))
 
 
 @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"])
 def test_the_schema_isnt_served(served, path):
-    assert raw(served, "GET", path)[0] == 418
+    assert not_found(raw(served, "GET", path))
 
 
-# ── a query string, as the handler read it ───────────────────────────────────────────────────────────
+# ── a query string ───────────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("query, got", [("", {"limit": 5, "q": ""}), ("?limit=7&q=a%20b", {"limit": 7, "q": "a b"}), ("?limit=", {"limit": 5, "q": ""}),
                                         ("?limit=1&limit=x", {"limit": 1, "q": ""}), ("?q=first&q=second", {"limit": 5, "q": "first"}),
@@ -215,7 +252,7 @@ def test_a_use_case_that_takes_the_query_whole_gets_it_as_parse_qs_gives_it(serv
     assert served.get("/api/toy-query?limit=7&q=a").json["got"] == {"limit": ["7"], "q": ["a"]}
 
 
-# ── a body, as the handler read it ───────────────────────────────────────────────────────────────────
+# ── a body ───────────────────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("body", [b"[1]", b'"x"', b"5", b"null", b"true", b"not json", b"{", b"\xff\xfe\xff", b" "])
 @pytest.mark.parametrize("path", ["/api/toy", "/api/toy-empty"])
@@ -236,7 +273,7 @@ def test_a_body_is_json_whatever_its_content_type_says(served, ctype):
 
 
 def test_a_body_with_no_length_counts_for_nothing(served):
-    """The handler read as many bytes as Content-Length said."""
+    """It reads as many bytes as Content-Length says."""
     status, _, said = raw(served, "POST", "/api/toy", iter([b'{"number": ', b"7}"]), {"Transfer-Encoding": "chunked"}, chunked=True)
     assert (status, said) == (200, b'{"ok": true, "got": {}}')
 
@@ -250,6 +287,21 @@ def test_a_body_that_runs_past_its_cap_undeclared_stops_there(served):
 def test_a_declared_length_past_the_cap_is_the_perimeters(served):
     status, _, said = raw(served, "POST", "/api/toy", b"x" * ((1 << 20) + 1), {"Content-Type": "application/json"})
     assert (status, json.loads(said)) == (413, {"ok": False, "error": "payload too large"})
+
+
+def test_a_declared_length_past_the_cap_isnt_waited_for(served):
+    """It goes by the length alone, and the bytes may never come."""
+    conn = http.client.HTTPConnection("127.0.0.1", served.port, timeout=5)
+    try:
+        conn.putrequest("POST", "/api/toy", skip_host=True)
+        conn.putheader("Host", f"127.0.0.1:{served.port}")
+        conn.putheader("Content-Length", str((1 << 20) + 1))
+        conn.endheaders()
+        conn.send(b"{}")
+        r = conn.getresponse()
+        assert (r.status, json.loads(r.read())) == (413, {"ok": False, "error": "payload too large"})
+    finally:
+        conn.close()
 
 
 def test_it_comes_after_the_perimeter(served):
@@ -303,7 +355,7 @@ def asked(served, how):
                                                   (OverLimit(7, 5), 402, {"error": "today's AI spending has reached the daily limit", "over_limit": True, "spent_micros": 7, "limit_micros": 5}),
                                                   (AIOff("hunter2"), 409, {"error": "AI is off: MailMind has no Claude API key", "ai_off": True})],
                          ids=lambda v: type(v).__name__ if isinstance(v, Exception) else "")
-def test_a_problem_answers_as_it_does_on_the_handler(served, monkeypatch, how, raised, status, said):
+def test_a_problem_answers_what_it_means(served, monkeypatch, how, raised, status, said):
     raising(monkeypatch, raised)
     monkeypatch.setattr(schema_contract, "HOLDING", False)
     r = asked(served, how)
@@ -442,10 +494,10 @@ def test_more_requests_wait_at_once_than_anyio_starts_with(served, monkeypatch):
 
 
 def test_a_blocked_handler_doesnt_hold_the_server_past_its_grace(data_dir, monkeypatch):
-    """Today a request's thread is a daemon and a blocked one doesn't hold the exit, which a thread from the pool mustn't change."""
+    """A blocked one doesn't hold the exit: the pool's threads are daemons."""
     release = threading.Event()
     monkeypatch.setattr(on("/api/toy-work", "GET"), "work", lambda: release.wait(30) and {"ok": True, "got": {}})
-    server = Uvicorn(create_app(fallback, routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0), grace=0.2)
+    server = Uvicorn(create_app(routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0), grace=0.2)
     server.start()
     try:
         with settings.use(dataclasses.replace(settings.current(), port=server.port)):
@@ -469,7 +521,7 @@ def _quietly(client):
 # ── the schema a script can have ─────────────────────────────────────────────────────────────────────
 
 def test_openapi_reads_what_a_route_takes_and_answers(data_dir):
-    app = create_app(fallback, routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0)
+    app = create_app(routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0)
     assert app.openapi_url is None
     schema = get_openapi(title="MailMind", version="0", routes=app.routes)
     post = schema["paths"]["/api/toy"]["post"]
@@ -489,7 +541,7 @@ def test_a_union_of_answers_reads_as_one(data_dir):
     @r.post("/api/either", responses=answers(Said | Refused_))
     def either(body: NoBody):
         return {"ok": True, "got": {}}
-    schema = get_openapi(title="MailMind", version="0", routes=create_app(fallback, routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
+    schema = get_openapi(title="MailMind", version="0", routes=create_app(routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
     assert len(schema["paths"]["/api/either"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["anyOf"]) == 2
 
 

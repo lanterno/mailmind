@@ -53,7 +53,7 @@ def test_a_request_to_a_moved_route_counts_as_someone_here(app, world, monkeypat
 
 
 def test_a_refused_request_counts_as_no_one(app, monkeypatch):
-    """As on the handler, a request gets as far as its route to count: no further than the perimeter or its schema doesn't."""
+    """A request gets as far as its route to count: no further than the perimeter or its schema doesn't."""
     seen = []
     monkeypatch.setattr(assistant.governor(), "saw_someone", lambda: seen.append(1))
     assert app.post("/api/mute", {}, headers={"X-CSRF-Token": "wrong"}).status == 403

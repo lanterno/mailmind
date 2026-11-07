@@ -130,7 +130,7 @@ def test_ctrl_c_stops_it_with_a_route_on_a_router_still_blocked(tmp_path, tiny_b
         if proc.poll() is None:
             proc.kill()
             proc.wait()
-    # uvicorn logs the cancelled request's stack, as it does one blocked on the bridge: code, and nothing of the request.
+    # uvicorn logs the cancelled request's stack: code, and nothing of the request.
     out = proc.stdout.read() if proc.stdout else ""
     assert "Tripwire" not in out, out
 

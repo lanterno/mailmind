@@ -117,7 +117,7 @@ def test_a_reply_naming_what_cant_be_its_original(app, junk):
 @pytest.mark.parametrize("path, field", [("/api/ai/ask", "account"), ("/api/ai/draft-reply", "account"), ("/api/ai/summarize", "account"),
                                          ("/api/briefing/since", "account"), ("/api/draft", "account"),
                                          ("/api/send", "account"), ("/api/reconcile", "account"), ("/api/sweep", "account"),
-                                         ("/api/snooze", "account"), ("/api/unsnooze", "account"), ("/api/sync-retry", "account"),
+                                         ("/api/snooze", "account"), ("/api/unsnooze", "account"), ("/api/sync-retry-account", "account"),
                                          ("/api/accounts/add", "email"), ("/api/accounts/edit", "email"),
                                          ("/api/accounts/trust-cert", "email"), ("/api/ai/draft-reply", "thread_id"),
                                          ("/api/followups/dismiss", "thread_id"), ("/api/mute", "thread_id"),
@@ -189,14 +189,14 @@ WALK_JUNK = ([1], 10 ** 30, float("inf"))
 
 
 def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai):
-    """Every POST route, each field a route has choked on, each kind of junk that got past the handler's own catch, within
+    """Every POST route, each field a route has choked on, each kind of junk that once got past the catch around a route, within
     a body otherwise good enough to get as far as reading it."""
     pk = world.pk("ada-inbox-05-receipt.eml")
     good = {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "seen": True, "id": 1,
             "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}
-    routes = sorted(path for method, path in route_tables.by_name() if method == "POST" and path not in WALK_LEAVES_OUT)
+    routes = sorted(path for method, path in route_tables.paths() if method == "POST" and path not in WALK_LEAVES_OUT)
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
            if app.post(path, {**good, field: junk}).status >= 500]
     app.settle(120)

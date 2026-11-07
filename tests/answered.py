@@ -4,7 +4,7 @@ from mailmind.kernel.errors import Problem
 
 
 def answered(call, *args, **kw):
-    """(body, status), with a Problem it raised as the handler says it."""
+    """(body, status), with a Problem it raised as the app says it."""
     try:
         got = call(*args, **kw)
     except Problem as e:

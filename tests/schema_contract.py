@@ -1,7 +1,7 @@
 """Under test, the schemas are held to what the routes really do. At run time an answer's model is documentation and a body's only
 says what gets through, so nothing else would notice them going wrong:
 
-- Each JSON answer of a route on a router must fit the model `responses` gives its status, with no field it doesn't name
+- Each JSON answer of a route must fit the model `responses` gives its status, with no field it doesn't name
   (`HoldingAnswers`, which the `app` fixture serves the app through).
 - A use case that reads a name its request's model doesn't declare would get nothing, whatever the client sent, because the model
   dropped it (`watch_reads`).
@@ -21,8 +21,8 @@ _adapters = {}
 
 
 def route_for(method, path):
-    """The route on a router that answers this request, or None. `path` is as sent."""
-    for route in route_tables.on_routers():
+    """The route that answers this request, or None. `path` is as sent."""
+    for route in route_tables.every_route():
         if method in route.methods and route.path_regex.match(path):
             return route
     return None
@@ -42,7 +42,7 @@ def fault_in(route, status, answer):
 
 
 class HoldingAnswers:
-    """An ASGI app that passes everything to `app`, and looks at what a route on a router answered."""
+    """An ASGI app that passes everything to `app`, and looks at what a route answered."""
 
     def __init__(self, app):
         self.app = app

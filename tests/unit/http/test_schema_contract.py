@@ -1,4 +1,4 @@
-"""tests/schema_contract.py, which holds the schemas to what the routes do, and a walk of what has moved. A check that never fires says
+"""tests/schema_contract.py, which holds the schemas to what the routes do, and a walk of every route. A check that never fires says
 nothing, so here each is made to.
 """
 import pytest
@@ -93,14 +93,14 @@ def test_what_a_model_dump_holds_still_reads_as_it_should(monkeypatch):
     assert isinstance(BaseModel.model_dump(Reads()), dict)
 
 
-# ── what has moved ───────────────────────────────────────────────────────────────────────────────────
+# ── every route ──────────────────────────────────────────────────────────────────────────────────────
 
 def body_model(route):
     return route.body_field.field_info.annotation if route.body_field else None
 
 
-@pytest.mark.parametrize("route", route_tables.on_routers(), ids=lambda route: f"{sorted(route.methods)[0]} {route.path}")
-def test_a_route_that_moved_says_what_it_takes_and_answers(route):
+@pytest.mark.parametrize("route", route_tables.every_route(), ids=lambda route: f"{sorted(route.methods)[0]} {route.path}")
+def test_a_route_says_what_it_takes_and_answers(route):
     """Every one in the same words, so the whole suite holds it to them."""
     def is_answer(model):
         members = getattr(model, "__args__", (model,))
