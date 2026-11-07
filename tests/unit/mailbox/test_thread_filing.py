@@ -259,3 +259,15 @@ def test_a_gmail_conversation_loses_its_inbox_label_and_gets_it_back(app, world)
     assert [(d["kind"], d["dest_folder"]) for d in entry["children"]] == [("gmail_archive", "")] * 2
     assert app.post("/api/undo", {}).json["reversed"] == 2
     assert "INBOX" in boxes(world, start) and "INBOX" in boxes(world, end)
+
+
+def test_a_conversations_click_waits_about_as_long_as_for_one_message_and_the_worker_has_the_rest(app, world, monkeypatch):
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.commands, "FILE_WAIT", 0)
+    since = world.mark()
+    a = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
+    assert (a["ok"], a["count"], a["failed"]) == (True, 2, 0)
+    tried = [name for name in (LUNCH, CONFIRM) if "INBOX" not in boxes(world, name)]
+    assert len(tried) == 1 and world.writes(since)
+    mailbox.commands.drain()
+    assert all("INBOX" not in boxes(world, name) for name in (LUNCH, CONFIRM))
