@@ -323,8 +323,10 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `context` (`ContextAssembler`, what the model reads of a conversation: the first message and the
   last 19, trimmed and within the caps, with a missing body asked of the `Mail` port at interactive priority), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
   `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `prepared_replies` (`PreparedReplies`, drafting ahead) and
-  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, `prepared_reply`
-  (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served), and
+  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, `prompts` (the book of what the model is told, below), `prepared_reply`
+  (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served),
+  `brief`, `review` and `digest` (what is taken from a model's answer, within its caps, and what stands in when it won't do), `citations` (only the ids the model was shown)
+  and `action_plan` (what is taken from a plan, and how far a verb may reach), and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.status`, `.assessments`, `.context`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
@@ -886,7 +888,7 @@ Everything routes through `assistant.calls.call_claude_json(prompt, schema)` (or
 Claude API is the only engine (decision D8). The `Gateway` builds each request from
 `mailmind.assistant.domain`: effort where the model takes one (`models.takes_effort`), the
 refusal fallback where it takes that (`models.takes_fallback`), the schema in structured
-output's form (`schema.structured`). It sends it through a `LanguageModel` and gets back a
+output's form (`schema.structured`) and the system prompt. It sends it through a `LanguageModel` and gets back a
 `Reply`: the text, the model that served it, its `Usage` and its stop reason. A call with no
 reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
 
@@ -903,6 +905,12 @@ means no key, never a fall-through to the environment's. With no key the model i
 `application.ports`) before anything is sent.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm.
+
+`domain.prompts` is every word the model is told. `SYSTEM` goes on every call, a batch's requests included, and is the
+one statement that the mail is untrusted data. Each kind of call has a `Template` and a version, which says what to do and
+leaves that to `SYSTEM`; only the plan's adds a word about its command, which is typed and not mail. `Template.fill` fills the
+slots in one pass, so a subject holding `{blocks}` stays those words, and a template's own braces need no doubling. Words
+that change raise the version (all of them, for `SYSTEM`), and `tests/unit/assistant/test_prompts.py` holds the two together.
 
 `schema.structured` drops the keywords structured output rejects (`minimum`, `maximum`,
 `maxLength`) and closes every object, so callers must keep clamping what they read. Both
