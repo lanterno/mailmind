@@ -130,7 +130,7 @@
  },
  {
   "body": {
-   "error": "bad attachments",
+   "error": "bad request",
    "ok": false
   },
   "headers": {
@@ -166,7 +166,7 @@
  },
  {
   "body": {
-   "error": "bad draft data",
+   "error": "bad request",
    "ok": false
   },
   "headers": {

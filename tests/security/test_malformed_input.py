@@ -65,8 +65,8 @@ def test_a_queued_item_named_by_what_cant_be_a_number(app, path, junk):
                                                ("/api/unmute", "pk", "bad request"), ("/api/followups/dismiss", "pk", "bad request"),
                                                ("/api/replylater", "pk", "bad request"), ("/api/snooze", "pk", "bad request"),
                                                ("/api/unsnooze", "pk", "bad request"), ("/api/invite/rsvp", "pk", "bad request"),
-                                               ("/api/draft/resume", "draft_id", "Missing draft."),
-                                               ("/api/draft/resume", "pk", "Missing draft.")])
+                                               ("/api/draft/resume", "draft_id", "bad request"),
+                                               ("/api/draft/resume", "pk", "bad request")])
 @pytest.mark.parametrize("junk", [[1], 10 ** 30])
 def test_a_message_named_in_a_body_by_what_cant_be_a_number(app, path, field, said, junk):
     r = app.post(path, {field: junk, "preset": "tomorrow"})
@@ -111,7 +111,7 @@ def test_a_discard_naming_what_cant_be_a_draft(app, junk):
 @pytest.mark.parametrize("junk", ["x", 10 ** 30])
 def test_a_reply_naming_what_cant_be_its_original(app, junk):
     r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": junk, "to": ["lin@example.test"], "text": "Hello"})
-    assert (r.status, r.json) == (400, {"ok": False, "error": "missing original message"})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
 @pytest.mark.parametrize("path, field", [("/api/ai/ask", "account"), ("/api/ai/draft-reply", "account"), ("/api/ai/summarize", "account"),
