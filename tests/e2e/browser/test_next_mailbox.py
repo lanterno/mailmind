@@ -361,8 +361,11 @@ def test_marked_rows_file_together_and_one_undo_brings_them_all_back(page, world
         one.hover()
         one.locator(".cbx").click()
     expect(page.locator(".bulkbar .bcount")).to_have_text("2 selected")
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url) if "/api/" in r.url and r.method == "POST" else None)
     page.locator(".bulkbar .bb").filter(has_text="Archive").click()
     expect(page.locator("#toast")).to_have_text("Archived 2")
+    assert [u for u in asked if "archive" in u or "bulk" in u] == [page.pw.url.split("/next")[0] + "/api/bulk/file"]
     until(page, lambda: all(mailbox(world, n) == "Archive" for n in names), "they weren't filed")
     expect(rows).to_have_count(before - 2)
     expect(page.locator(".bulkbar")).to_have_count(0)
