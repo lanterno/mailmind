@@ -9,7 +9,7 @@ import { backFromDigest, BriefRow } from "../features/assistant/Brief";
 import { lookedAt, NewMailPill } from "../features/assistant/NewMail";
 import { Panels } from "../features/assistant/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
-import { clearMarks, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
+import { clearMarks, readOnly, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { FolderRail } from "../features/mailbox/FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
 import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
@@ -172,6 +172,8 @@ export function App() {
   useEffect(() => {
     if (!source && firstAccount) go({ source: { kind: "folder", account: firstAccount, folder: "INBOX" }, opened: null }, { replace: true });
   }, [source, firstAccount]);
+  const isReadOnly = m.digest?.profile === "read-only";
+  useEffect(() => readOnly.set(isReadOnly), [isReadOnly]);   // what filing says: it waits for a full run
   const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
@@ -230,7 +232,7 @@ export function App() {
   };
   return (
     <>
-      <TopBar m={m} readOnly={m.digest?.profile === "read-only"} />
+      <TopBar m={m} readOnly={isReadOnly} />
       <AccountAlert m={m} />
       <main className="split">
         <FolderRail accounts={accounts} aliases={aliases} source={source} />
