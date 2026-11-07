@@ -8,6 +8,7 @@ import { onNewMail } from "../features/assistant/NewMail";
 import { composing } from "../features/compose/compose";
 import { onDraftReady } from "../features/compose/draftAhead";
 import { marked } from "../features/mailbox/actions";
+import type { ListData } from "../features/mailbox/data";
 import { createStore } from "../lib/store";
 import { shortAddress } from "../lib/text";
 import { toast } from "../lib/toast";
@@ -16,7 +17,7 @@ import { parseRoute } from "./route";
 export const newBuild = createStore(false);
 const LOADED = document.querySelector<HTMLMetaElement>('meta[name="mailmind-build"]')?.content ?? "";
 
-const MAIL_CHANGED = ["new-mail", "snooze-wake", "mute", "reconcile", "flags-changed", "folder-synced", "followup", "undo-done", "commands-changed", "resync"];
+const MAIL_CHANGED = ["new-mail", "snooze-wake", "mute", "reconcile", "flags-changed", "followup", "undo-done", "commands-changed", "resync"];
 
 export function useRealtime() {
   const qc = useQueryClient();
@@ -34,6 +35,15 @@ export function useRealtime() {
       digestSoon = setTimeout(() => again("digest"), 400);
     };
     for (const topic of MAIL_CHANGED) es.addEventListener(topic, mail);
+    es.addEventListener("folder-synced", (e) => {
+      const d = JSON.parse((e as MessageEvent<string>).data) as { account?: string; folder?: string; ok?: boolean };
+      if (d.ok) return mail();
+      // A read that failed: the list says so and stays. Reading it again would read the folder again, and the end of that
+      // would come back here, for as long as the server says no. Retry, or opening the folder again, is a person asking.
+      const settled = (failed: boolean) => (list?: ListData) => list && { ...list, pages: list.pages.map((p) => ({ ...p, syncing: false, catchingUp: false, syncFailed: p.syncFailed || (failed && p.syncing) })) };
+      qc.setQueriesData<ListData>({ queryKey: ["messages", "folder", d.account, d.folder] }, settled(true));
+      qc.setQueriesData<ListData>({ queryKey: ["messages", "all"] }, settled(false));
+    });
     es.addEventListener("new-mail", (e) => {
       const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
       onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, parseRoute(location.pathname, location.search), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
