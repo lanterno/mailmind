@@ -13,7 +13,7 @@ from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 from mailmind.content import sanitize
 
-pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
+pytestmark = pytest.mark.browser
 
 FRAME = "iframe.rd-iframe"
 QUOTE = 'iframe[title="The message you’re answering"]'

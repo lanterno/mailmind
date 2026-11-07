@@ -8,7 +8,7 @@ from playwright.sync_api import expect
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
 
-pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
+pytestmark = pytest.mark.browser
 
 
 def clean(page):

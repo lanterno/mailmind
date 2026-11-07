@@ -13,7 +13,7 @@ from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import perimeter
 
-pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
+pytestmark = pytest.mark.browser
 
 TRACKER = "https://tracker.example.test/open.png"
 SAID = re.compile(r"violates the following Content Security Policy directive|frame is sandboxed|The document is sandboxed")

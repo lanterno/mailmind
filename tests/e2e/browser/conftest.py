@@ -1,5 +1,5 @@
-"""Browser fixtures: one Chromium for the session, and per test a page on the app fixture's
-server (the fake IMAP world, a temporary database, the frozen clock).
+"""Browser fixtures: one Chromium and one build of the app for the session, and per test a page on the
+app fixture's server (the fake IMAP world, a temporary database, the frozen clock).
 
 The page may reach only the app's own origin: any other request is answered with an empty response
 here and listed in `page.blocked`, which `clean` holds empty, so no test sends anything off the machine. The page's clock is set to the server's NOW, so "today"
@@ -33,8 +33,9 @@ def built(tmp_path_factory):
     return str(out)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def serve_the_build(built, monkeypatch):
+    """The app exists only as built, so every test here serves that build."""
     from mailmind.platform import webroot
     monkeypatch.setattr(webroot, "DIST", built)
 

@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 
 from fixtures import world as w
 
-pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
+pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 THIMBLE = "orders@thimble.example.test"
