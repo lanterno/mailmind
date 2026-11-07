@@ -194,6 +194,19 @@ def newest_copy_in(c, account, folder, message_id):
                      "ORDER BY pk DESC LIMIT 1", (account, folder, message_id)).fetchone()
 
 
+def has_copy_in(c, account, folder, message_id):
+    """Whether a copy of a message is in `folder`, on its way out or not."""
+    return c.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=?",
+                     (account, folder, message_id)).fetchone() is not None
+
+
+def thread_pks_in(c, account, folder, thread_id):
+    """The pks of a conversation's messages in `folder`, none on its way out, newest first."""
+    return [r["pk"] for r in c.execute(
+        "SELECT pk FROM messages WHERE account=? AND folder=? AND thread_id=? "
+        "AND pending_removal IS NULL ORDER BY ts DESC, pk DESC", (account, folder, thread_id))]
+
+
 def delete_message(c, pk):
     row = c.execute("SELECT message_key FROM messages WHERE pk=?", (pk,)).fetchone()
     _index.forget_message(c, pk)                       # drop the FTS row first (single delete chokepoint)

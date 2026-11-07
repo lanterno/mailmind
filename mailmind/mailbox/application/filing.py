@@ -117,8 +117,7 @@ class Filing:
             if gone is None or gone["kind"] == "flag" or not gone["message_id"]:
                 return gone is not None
             cc = self._store.conn()
-            listed = cc.execute("SELECT 1 FROM messages WHERE account=? AND folder=? AND message_id=?",
-                                (gone["account"], gone["src_folder"], gone["message_id"])).fetchone()
+            listed = self._store.has_copy_in(cc, gone["account"], gone["src_folder"], gone["message_id"])
             cc.close()
             if not listed:
                 try:
@@ -186,9 +185,7 @@ class Filing:
         if not row:
             pks = []
         elif (row["thread_id"] or "").strip():
-            pks = [r["pk"] for r in c.execute(
-                "SELECT pk FROM messages WHERE account=? AND folder=? AND thread_id=? "
-                "AND pending_removal IS NULL ORDER BY ts DESC, pk DESC", (row["account"], row["folder"], row["thread_id"]))]
+            pks = self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
         else:
             pks = [pk]
         c.close()
