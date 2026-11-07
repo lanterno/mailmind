@@ -265,8 +265,8 @@ class Ingest:
             uidv = selected.uidvalidity
             modseq = selected.highest_modseq if condstore else None
             c = self._store.conn()
-            stored = self._store.get_uidvalidity(c, acct["email"], folder)
-            if uidv and stored and uidv != stored:
+            known = self._store.get_uidvalidity(c, acct["email"], folder)
+            if uidv and known and uidv != known:
                 self._store.reset_folder(c, acct["email"], folder)  # server reset UIDs -> re-sync clean
                 c.commit()
                 full = True
@@ -284,7 +284,7 @@ class Ingest:
                     scan = "recent"
             else:
                 uids = [u for u in s.uids("UID", f"{wm + 1}:*") if u > wm]   # N:* always matches the last
-            stored = []
+            stored: list[int] = []
             result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored)
             if scan:
                 c = self._store.conn()
@@ -332,7 +332,7 @@ class Ingest:
                 uid = None
             if uid is None:
                 return 0
-            stored = []
+            stored: list[int] = []
             self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False, stored=stored)
             c = self._store.conn()
             try:
