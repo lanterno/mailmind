@@ -10,7 +10,7 @@ there. So a condition joins or leaves a rule in this file, and tests/unit/attent
 the same threads.
 """
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 GRACE_DAYS = 3      # grace window before a sent-no-reply / unanswered thread surfaces as "Waiting"
@@ -143,3 +143,26 @@ def expired(f: FollowUp, now: int) -> bool:
 
 def met(f: FollowUp, thread: Thread) -> bool:
     return f.live and any(holds(f, thread) for holds in MET.values())
+
+
+def on_reply_sent(current: FollowUp | None, now: int, when: str) -> FollowUp | None:
+    """A reply went out, so a `sent` one starts, unless the thread has one already, whatever its state: one to a thread,
+    and a dismissal stays dismissed. None if there's nothing to write."""
+    return None if current else FollowUp(SENT, PENDING, first_sent_ts=now, last_msg_ts=now, created_at=when)
+
+
+def pinned(current: FollowUp | None, last_msg_ts: int | None, when: str) -> FollowUp:
+    """The thread pinned to Reply Later. That supersedes any nudge, since an explicit "I'll reply" beats an aging guess, and
+    re-activates a dismissal, which only a person asking may. What it says of when a send went out and came due stays."""
+    return replace(current or FollowUp(REPLY_LATER, DUE), kind=REPLY_LATER, state=DUE, last_msg_ts=last_msg_ts, created_at=when,
+                   resolved_at=None)
+
+
+def dismissed(current: FollowUp | None, when: str) -> FollowUp | None:
+    """A person dismissed it. The row stays, so that nothing starts another on this thread. With none, nothing to write."""
+    return replace(current, state=DISMISSED, resolved_at=when) if current else None
+
+
+def unpinning_ends(current: FollowUp | None) -> bool:
+    """Un-pinning ends only a pin: a nudge on the thread isn't the stack's to take."""
+    return current is not None and current.kind == REPLY_LATER

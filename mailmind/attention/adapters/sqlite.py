@@ -111,12 +111,26 @@ def muted_count(c, account):
 
 
 # ----------------------------------------------------------- follow-up nudges
+def _followup(c, account, thread_id):
+    """The thread's follow-up, as domain.followups reads one, or None."""
+    r = c.execute("SELECT kind, state, first_sent_ts, last_msg_ts, due_ts, created_at, resolved_at "
+                  "FROM followups WHERE account=? AND thread_id=?", (account, thread_id)).fetchone()
+    return followups.FollowUp(r["kind"], r["state"], r["first_sent_ts"], r["last_msg_ts"], r["due_ts"], r["created_at"],
+                              r["resolved_at"]) if r else None
+
+
+def _put_followup(c, account, thread_id, f, anchor_pk):
+    c.execute("""INSERT OR REPLACE INTO followups(account,thread_id,kind,state,anchor_pk,first_sent_ts,last_msg_ts,due_ts,
+                   created_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+              (account, thread_id, f.kind, f.state, anchor_pk, f.first_sent_ts, f.last_msg_ts, f.due_ts, f.created_at,
+               f.resolved_at))
+
+
 def followup_record_sent(c, account, thread_id, anchor_pk, now_ts, when):
-    """Seed a sent-no-reply followup when a reply is sent. INSERT OR IGNORE so a manual
-    dismiss or an existing row on the thread is never clobbered by a follow-up send."""
-    c.execute("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,anchor_pk,
-                   first_sent_ts,last_msg_ts,created_at) VALUES(?,?,'sent','pending',?,?,?,?)""",
-              (account, thread_id, anchor_pk, now_ts, now_ts, when))
+    """Seed a sent-no-reply follow-up when a reply is sent, unless domain.followups.on_reply_sent says the thread has one."""
+    seed = followups.on_reply_sent(_followup(c, account, thread_id), now_ts, when)
+    if seed:
+        _put_followup(c, account, thread_id, seed, anchor_pk)
 
 
 # How each condition of domain.followups's rules reads in SQL. A statement is built from the domain's names, so a condition
@@ -195,21 +209,16 @@ def resolve_followups(c, account):
 
 # ----- Reply Later: a user-pinned stack of threads to answer (kind='replylater') -----
 def set_replylater(c, account, thread_id, anchor_pk, when):
-    """Pin a thread to the Reply-Later stack. Supersedes any auto-nudge already on the thread
-    (an explicit 'I'll reply' beats an aging guess), and re-activates a prior dismissal."""
-    c.execute("""INSERT INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,created_at)
-                   VALUES(?,?,'replylater','due',?,
-                          (SELECT MAX(ts) FROM messages WHERE account=? AND thread_id=? AND draft=0),?)
-                 ON CONFLICT(account,thread_id) DO UPDATE SET
-                   kind='replylater', state='due', anchor_pk=excluded.anchor_pk,
-                   last_msg_ts=excluded.last_msg_ts, created_at=excluded.created_at, resolved_at=NULL""",
-              (account, thread_id, anchor_pk, account, thread_id, when))
+    """Pin a thread to the Reply-Later stack, whatever domain.followups.pinned makes of a follow-up already on it."""
+    last_ts = c.execute("SELECT MAX(ts) FROM messages WHERE account=? AND thread_id=? AND draft=0",
+                        (account, thread_id)).fetchone()[0]
+    _put_followup(c, account, thread_id, followups.pinned(_followup(c, account, thread_id), last_ts, when), anchor_pk)
 
 
 def clear_replylater(c, account, thread_id):
-    """Done / un-pin: drop the reply-later row entirely."""
-    c.execute("DELETE FROM followups WHERE account=? AND thread_id=? AND kind='replylater'",
-              (account, thread_id))
+    """Done / un-pin: the row goes, if domain.followups.unpinning_ends says it is a pin."""
+    if followups.unpinning_ends(_followup(c, account, thread_id)):
+        c.execute("DELETE FROM followups WHERE account=? AND thread_id=?", (account, thread_id))
 
 
 def list_replylater(c, account):
@@ -234,9 +243,11 @@ def replylater_count(c, account):
 
 
 def dismiss_followup(c, account, thread_id, when):
-    """User-dismissed: keep the row as 'dismissed' so detection won't immediately re-add it."""
-    c.execute("UPDATE followups SET state='dismissed', resolved_at=? WHERE account=? AND thread_id=?",
-              (when, account, thread_id))
+    """A person dismissed it: its row stays, as domain.followups.dismissed says."""
+    f = followups.dismissed(_followup(c, account, thread_id), when)
+    if f:
+        c.execute("UPDATE followups SET state=?, resolved_at=? WHERE account=? AND thread_id=?",
+                  (f.state, f.resolved_at, account, thread_id))
 
 
 def list_waiting(c, account):
