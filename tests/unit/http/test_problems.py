@@ -1,5 +1,5 @@
-"""What a use case raises when it can't do what was asked, through each front door: the status it already means, and the
-{ok: false, error} both clients read. Anything else raised is still the fixed 500, with only its class in the log."""
+"""What a use case raises when it can't do what was asked, the status it already means, and the
+{ok: false, error} the app reads. Anything else raised is still the fixed 500, with only its class in the log."""
 import json
 import logging
 

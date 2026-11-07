@@ -1,5 +1,5 @@
-"""An ASGI app on uvicorn, on a random loopback port, serving from a background thread: the new
-front door's server the way the tests run it."""
+"""An ASGI app on uvicorn, on a random loopback port, serving from a background thread: the app's
+server the way the tests run it."""
 import socket
 import threading
 import time

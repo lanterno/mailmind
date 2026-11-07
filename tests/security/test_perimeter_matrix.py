@@ -1,4 +1,4 @@
-"""The perimeter matrix: every route the app has, through each front door, against each way a request can be wrong. The walk
+"""The perimeter matrix: every route the app has, against each way a request can be wrong. The walk
 reads the route table, so a route added tomorrow is in it. test_perimeter.py pins each check on its own, and
 test_http_post_guards.py a few routes end to end.
 

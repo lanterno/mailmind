@@ -1,5 +1,5 @@
-"""The language model's contract, through each transport the app runs: the Anthropic SDK (the new
-front door) and the urllib client (the old one, with nothing installed). Each test runs once per
+"""The language model's contract, through each transport the app runs: the Anthropic SDK (what
+serving talks through) and the urllib client (the command line's). Each test runs once per
 transport against the fake Claude API (fakes/anthropic_api.py), through summarize's call_claude and
 call_claude_json or the Assistant's gateway: what a request carries, how replies, refusals and
 errors come back, when calls are retried, where the key comes from, and that with no key AI is off

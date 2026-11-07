@@ -1,8 +1,4 @@
-"""The React app, on the same world the current page's smoke tests use.
-
-Every test here serves the build the `built` fixture made. Both front doors serve it, so each test runs twice, as app
-tests do.
-"""
+"""The app, on the fictional world. Every test here serves the build the `built` fixture made."""
 import re
 
 import pytest

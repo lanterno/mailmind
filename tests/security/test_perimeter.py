@@ -1,4 +1,4 @@
-"""mailmind.platform.perimeter: the checks both front doors run before any route. The app tests
+"""mailmind.platform.perimeter: the checks run before any route. The app tests
 (test_http_get, test_http_post_guards, test_http_events) pin the answers end to end; these pin
 each check on its own."""
 import email.message

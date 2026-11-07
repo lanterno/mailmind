@@ -1,5 +1,5 @@
 """Every answer carries the perimeter's headers (mailmind.platform.perimeter.answer_headers),
-from either front door, whoever writes it: a route, the perimeter's own refusal, or http.server
+whoever writes it: a route, the perimeter's own refusal, or http.server
 answering a method no route takes. The golden files pin the values route by route."""
 from mailmind.platform import perimeter
 

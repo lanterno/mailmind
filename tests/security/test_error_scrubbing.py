@@ -1,6 +1,6 @@
 """A failure says what went wrong in words of its own, and never what the exception said: an IMAP server's refusal, an SMTP
 reply or an API error can hold a login, a path or a key, and a mail server is someone else's to word. Here each is forced
-to carry a secret, through each front door, and no answer may hold it.
+to carry a secret, and no answer may hold it.
 
 test_hardening.py has one read and test_http_bridge.py the bridge's own 500. What the log may hold is logging's to say.
 """

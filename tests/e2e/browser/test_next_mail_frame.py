@@ -2,7 +2,7 @@
 the page around it still does to it. tests/security/test_mail_frame.py holds what the route answers.
 
 Some of these serve the mail unsanitized, since the sandbox and the policy are the walls and the sanitizer only stands behind
-them, so what would get past them has to reach them. Both front doors serve the frame, so each test runs twice.
+them, so what would get past them has to reach them.
 """
 import re
 

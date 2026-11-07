@@ -1,4 +1,4 @@
-"""The React app's composer, on the world the current page's own composer tests use, with what they ask of it.
+"""The app's composer, on the fictional world.
 
 The rules these lean on are also pinned without a browser in web/src/features/compose/machine.test.ts.
 """

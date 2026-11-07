@@ -101,7 +101,7 @@ def test_idles_dispatcher_publishes_one_change_for_a_burst(unwired, monkeypatch)
                          ids=["read-only", "nosync", "nosync-true", "full"])
 def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_path, unwired, monkeypatch,
                                                                      capsys):
-    """What both front doors run before they serve. Read-only, only snooze wake starts, since it
+    """What runs before the app serves. Read-only, only snooze wake starts, since it
     needs no mail server: the outbox and the offline queue wait, and nothing syncs."""
     from mailmind.bootstrap.mailbox import realtime
     from mailmind.bootstrap.mailbox import store

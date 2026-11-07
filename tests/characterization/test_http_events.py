@@ -10,7 +10,7 @@ listener is noticed (and its thread ends) within the test.
 import socket
 import time
 
-# Headers about the connection, not the stream: each front door frames it its own way.
+# Headers about the connection, not the stream.
 CONNECTION_HEADERS = {"connection", "keep-alive", "transfer-encoding", "date", "server"}
 
 import pytest
