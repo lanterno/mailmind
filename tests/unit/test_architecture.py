@@ -97,6 +97,24 @@ def test_the_assistants_and_composes_use_cases_hold_no_sql():
     assert found == set()
 
 
+def test_the_mailboxs_use_cases_hold_no_sql():
+    """What they ask of a table goes through StoredMail, to the adapter. It asks what the test above asks, so the two can
+    become one, but reads no docstring: a Mailbox's may well speak of IMAP's SELECT."""
+    runs = re.compile(r"\.execute(many|script)?\(")
+    statement = re.compile(r"\b(SELECT|INSERT INTO|DELETE FROM|BEGIN IMMEDIATE)\b|\bUPDATE \w+ SET\b")
+    found = set()
+    for path in sorted((PACKAGE / "mailbox" / "application").glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        prose = {ast.get_docstring(n, clean=False) for n in ast.walk(tree)
+                 if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef))}
+        literals = (n.value for n in ast.walk(tree)
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value not in prose)
+        if runs.search(text) or "sqlite3" in set(imports(path)) or any(statement.search(s) for s in literals):
+            found.add(rel(path))
+    assert found == set()
+
+
 def writers():
     out = {}
     pattern = re.compile(r"\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)")
