@@ -46,7 +46,7 @@ the cases pytest collects for each (a test through `app` counts once per front d
 uv run pytest tests/unit/curation/test_classifier.py        # classifier behaviour (35)
 uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks (68)
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
-uv run pytest tests/unit/curation/test_expire.py            # expiry rules (19)
+uv run pytest tests/unit/curation/test_expire.py            # expiry rules (23)
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient, through each reader (122)
 uv run pytest tests/contract/test_ics_reader_contract.py    # a reader of invites, through each: never raises, plain data, bounded (315)
 uv run pytest tests/contract/test_ics_differential.py       # the two readers compared over a corpus, each difference listed with why (526)
@@ -240,7 +240,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `python3 server.py [port]` and `python -m mailmind serve [port]` put the port in the settings.
 - `mailmind.bootstrap.wiring.wire()` subscribes the app, on `mailmind.platform.bus`, to
   what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
-  `InboxChanged`.
+  `InboxChanged`, and what Attention's use cases say happened, which refreshes the stats and tells the tabs.
   It also hands each account event (below) to `realtime.reconcile`. `Restored` (a
   queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
   `wiring.start()` is the startup both doors share: the profile check, the schema, `wire`,
@@ -407,7 +407,14 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
   It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
-  matcher for the classifier, the Screener and expiry), `expiry`, `live`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
+  matcher, `domain_covers`, for the classifier, the Screener and expiry; what a token is, who is left to decide on and what a keep
+  rule covers), `cleanup_plan` (`CleanupPlan`: who it blocks, how far its sweep goes, reading one past the cap to know it was hit,
+  and what its moves came to), `sweep_plan` (how an inbox falls, how a stored row is judged and what an AI sweep may take),
+  `expiry`, `live` (a message as a sweep reads it), `noise` (the score, its bar, the order and what a request may ask) and
+  `unsubscribe` (`Attempt`, what each way out comes to and what is latched; what a mailto may send and what a preview shows). What goes
+  to the server, in what order, stays in the use cases: audit before a move, block before sweep before unsubscribe. A rule change's
+  `reclassify` stays a direct call, since its count is in the answer, it runs after the sweep, and when it fails an Undo of a block
+  says so, none of which a handler after the commit could do. `adapters` holds `rules_file`,
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
@@ -416,12 +423,19 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   from the handler (`H.CSRF`). A sweep's
   `move_verified` is `mailbox.application.bulk_moves`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
-  wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
-  `snoozes`, `muted` and `followups`. `application` holds `ports.py` and the use cases
-  `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
-  `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention (`attention.muting.mute(body)`,
-  `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
-  what a change makes stale through the Mailbox (`mailbox.undo`, `mailbox.stats`).
+  wake time from a preset or a date within its window, what a request names and what Undo gives back), `mute` (a repeat does nothing,
+  and what Undo gives back), `events` and `followups`: how long a thread may wait, and what a send, a pin, a dismissal and an un-pin
+  make of a follow-up. `followups` also states what the every-minute round asks. `RECEIVED_NUDGE`, `COMES_DUE`, `EXPIRES` and `MET` each
+  name their conditions, a predicate for each, and answer for one `Thread`. The round asks that of every thread inside one write, so it
+  runs in SQL: `adapters.sqlite` says each condition as a fragment and builds its statement from the domain's names, and a name it
+  doesn't know stops it loading. `tests/unit/attention/test_followups_in_sql.py` holds the two to the same answers, over named cases
+  and random threads (`MAILMIND_FOLLOWUP_RUNS` asks for more). A new condition goes in both. A dismissal stays through every round.
+  `adapters.sqlite` holds the SQL of `snoozes`, `muted` and `followups`, and reads a follow-up, asks the domain and writes what it says.
+  `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job. They publish
+  what happened once it has committed (`SnoozeSet`, `ThreadMuted`, `FollowUpsChanged` and the like), and `wiring.wire` does what that
+  makes stale and tells the tabs. `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention
+  (`attention.muting.mute(body)`, `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and
+  undo through the Mailbox (`mailbox.undo`).
   `mailmind.kernel.attention` is a different module, what a verdict asks of you, which the modules that need both import as `verdict`.
   It is standard library only.
 - `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `invite` (what a reader
@@ -1042,7 +1056,7 @@ holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 `curation.adapters.rules_file` (`bootstrap.curation.rules`, the file's one reader) writes it whole (a temp file,
-owner-only, renamed over it). A read parses it again only when it changed; one that won't parse leaves the last
+owner-only, renamed over it), and a change reads, changes and saves as one step, within this process. A read parses it again only when it changed; one that won't parse leaves the last
 rules read well, so a bad edit never stops a sync, and the next save moves it to `backups/` first. The classifier
 reads through `rules.sets()`.
 
