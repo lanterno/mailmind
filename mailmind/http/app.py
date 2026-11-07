@@ -5,7 +5,7 @@ from anyio import to_thread
 from fastapi import FastAPI
 
 from mailmind.http.middleware import Perimeter
-from mailmind.http.shared import send_whole
+from mailmind.http import shared
 
 # Requests a router's handlers may have running at once. Each holds a thread, for as long as an IMAP server or the Claude API
 # takes to answer, so the 40 AnyIO starts with could all be waiting.
@@ -21,12 +21,14 @@ async def _enough_threads(_app):
 
 async def _no_route(scope, _receive, send):
     """What no route matches, on a path or an absolute-form request line alike: GET and POST are all the app answers, so any other
-    method is one it doesn't implement. It reads no body, which the perimeter has judged already and nothing here wants."""
+    method is one it doesn't implement. It reads no body, which the perimeter has judged already and nothing here wants. A GET or
+    a POST of the API still says someone is here, as any that gets past the perimeter does."""
     plain = [(b"content-type", b"text/plain")]
     if scope["method"] in ("GET", "POST"):
-        await send_whole(send, 404, plain, b"not found")
+        shared.touched(scope["path"])
+        await shared.send_whole(send, 404, plain, b"not found")
     else:
-        await send_whole(send, 501, plain, b"not implemented")
+        await shared.send_whole(send, 501, plain, b"not implemented")
 
 
 def create_app(*, token, body_cap, routers=()):
