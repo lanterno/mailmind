@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from imapclient import IMAPClient
 
-from mailmind.mailbox.adapters.imap_names import escaped, gmail_labels, sendable, unescaped
+from mailmind.mailbox.adapters.imap_names import escaped, gmail_labels, imap_quote, sendable, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder
@@ -84,7 +84,9 @@ class ImapClientSession:
     def by_message_id(self, message_id):
         if not message_id:
             return None
-        found = sorted(self._c.search(["HEADER", "Message-ID", sendable(message_id)]))
+        # A sender wrote this. In a list IMAPClient would quote it only for a space, so a bracket or a {5} would go as
+        # syntax; a string goes as it is, quoted here as the imaplib adapter does.
+        found = sorted(self._c.search(f"HEADER Message-ID {imap_quote(message_id)}"))
         return int(found[-1]) if found else None
 
     def flags(self, uids):
