@@ -57,8 +57,8 @@ def current(environ: Mapping[str, str] | None = None) -> Profile:
 
 
 def check(environ: Mapping[str, str] | None = None) -> Profile:
-    """current(), but a MAILMIND_PROFILE that names no profile raises ProfileError. Each front
-    door calls it before it serves."""
+    """current(), but a MAILMIND_PROFILE that names no profile raises ProfileError. The app's
+    start calls it before it serves."""
     env = os.environ if environ is None else environ
     if _named(env) is None:
         names = ", ".join(p.value for p in Profile)

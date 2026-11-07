@@ -7,7 +7,7 @@ py := "uv run python"
 _default:
     @just --list --unsorted
 
-# Install everything the checks and the React app use: the Python packages, node_modules, Chromium, osv-scanner
+# Install everything the checks and the app use: the Python packages, node_modules, Chromium, osv-scanner
 setup: _web-deps
     uv sync
     uv run playwright install chromium
