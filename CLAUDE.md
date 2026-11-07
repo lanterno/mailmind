@@ -15,9 +15,8 @@ just test-full                    # every test, plus the browser tests in Chromi
 just test-dovecot                 # the MailSession contract against Dovecot in Docker
 just demo [port]                  # the whole app on fictional mail and fake servers: nothing of yours is read or changed
 just dev                          # read-only: writes nothing to a mail server, no background sync
-just run [port]                   # the real thing (default http://127.0.0.1:8721)
-just run-old [port]               # the same through the old front door, which needs nothing installed
-just run-next [port]              # build the React app, then run; it's at /next
+just run [port]                   # build the app, then the real thing (default http://127.0.0.1:8721); the old page is at /legacy
+just run-old [port]               # the same through the old front door, which needs nothing installed (and with nothing built, shows the old page)
 just setup                        # install the Python packages, node_modules and Chromium
 ```
 
@@ -113,7 +112,7 @@ fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
-`tests/e2e/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own:
+`tests/e2e/browser/` drives the page in Chromium (Playwright) on the `app` fixture, and `test_next_*.py` the React app, built once for the session into a folder of its own. Any other test sees nothing built, whatever this machine has (`_no_build`), so `/` is the old page there:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.
@@ -179,13 +178,13 @@ brace balance, and rejects an inline `<script>` or raw control bytes (see Conven
   the app on old files. A new top-level script joins `CLASSIC` in `web/vite.config.js`. `/assets/` serves only `.css`,
   `.js` and `.woff2`. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
   restart changes. A tab that loaded another offers a reload (`onHello`). `web/src` holds strict TypeScript: the pure modules and the API client (`lib/api/client.ts`, typed by `lib/api/types.gen.ts`).
-  `web/next.html` and `web/src/main.tsx` are the React app at `/next` (React 19 with the React Compiler, TanStack Query, React Aria Components), beside the page and on its
-  stylesheet. Unlike the page it exists only as built: without `just build-web`, `/next` answers 404 and says so, and `/` is untouched. Where you are lives in the URL
+  `web/next.html` and `web/src/main.tsx` are the React app, at `/` (React 19 with the React Compiler, TanStack Query, React Aria Components), on the page's
+  stylesheet. Unlike the page it exists only as built, and `just run` builds it first. With nothing built `/` is the old page, which is always at `/legacy`, and a place in the app (`static._is_place`, as `app/route.ts` writes one) answers 404 and says so. `/next`, where it lived, redirects, to its own places only. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
-  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/next/brief/needs`, `tidy`, `topic/<label>`),
+  `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
-  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_next_parity.py` holds what an audit against the page found, ROADMAP says what is left, and the top bar links to `/` until it takes the page's place. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
+  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_next_parity.py` holds what an audit against the page found, ROADMAP says what is left, and the top bar links to `/legacy` until the old page retires. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. Unlike the page's,
   its search box acts on Enter, and its pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
@@ -905,7 +904,7 @@ Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
 an answer didn't set itself, and so does the middleware. The page also carries
 `Content-Security-Policy` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
-only, framed by no one. The React app at `/next` carries `perimeter.next_page_policy`, the same with nothing in it for mail: no
+only, framed by no one. The React app carries `perimeter.next_page_policy`, the same with nothing in it for mail: no
 `https:` images and no `data:` fonts. The browser tests fail on any violation.
 
 A failed GET or POST answers a fixed message and logs its path and the error's class. Every TLS connection, IMAP

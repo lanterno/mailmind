@@ -1,9 +1,9 @@
 # MailMind — Roadmap
 
 Only outstanding work is listed, re-verified against the tree on 2026-11-07: shipped behaviour is
-described in the README and in the code itself, not here. An item speaks of the page (`web/index.html`
-and `web/assets/legacy/app.js`, what `/` serves) unless it says otherwise, and names the React app at
-`/next` where that already differs.
+described in the README and in the code itself, not here. An item speaks of the old page (`web/index.html`
+and `web/assets/legacy/app.js`, at `/legacy`) unless it says otherwise, and names the React app, at
+`/`, where that already differs.
 
 Items cite functions and symbols rather than line numbers, which drift. Value and effort are
 relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
@@ -311,13 +311,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   inlined phrasings ("Nothing here." / "No matches." / "No messages in this folder."); (3) a stated rule for toast-vs-persistent — **persistent iff the event happened while
   the user was not looking** — then apply it, since snooze-wake toasts today while new mail gets a
   sticky pill.
-- **Flip `/` to the React app, and retire the old door** · high value · effort L — The owner's call.
-  `/next` exists only as built (without `just build-web` it answers 404), its top bar links back to
-  `/`, and `/` is still the page, the one thing `python3 server.py`, the kill switch, can serve with
-  nothing installed. The old door going also lets the routers stop being standard-library tables.
-  An audit against the page closed 41 gaps on the fictional world, and a week on real accounts covers what it couldn't drive.
-  Left: the week, which the owner chose to do first on 2026-11-07, and then the flip itself (`BASE` in `app/route.ts`, the
-  "Current app" link, and `webroot` still serving the page to a door with no fresh build).
+- **Retire the old page and the old door** · high value · effort L — `/` has been the React app since 2026-11-07, the owner's
+  call, made without the week on real accounts. `/legacy` and `python3 server.py`, the kill switch, are what's left of the page:
+  `web/index.html`, `web/assets/legacy/app.js` and `pure.js`, `bootstrap/old_door.py`, and each app test's run through `door=old`.
+  The old door going also lets the routers stop being standard-library tables.
 
 ## Open decisions
 
@@ -338,8 +335,6 @@ implementation.
 
 ## Next up
 
-1. **The owner's week on `/next`** (high) — `just run-next`, rebuilt after each pull, on real accounts, which covers what the
-   audit couldn't drive. A gate for each account, IMAPClient and the pool are all written and tested, and each waits on days of
-   real use too, so the same week can soak them, one at a time. Then the flip, then each becomes the default.
-2. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
-   gap on the page, unless flipping `/` to the React app, whose list already is one, comes first.
+1. **Retire the old page and the old door** (high), above.
+2. **Soak the three defaults** (high) — a gate for each account, IMAPClient and the pool are all written and tested, and each waits
+   on days of real use, one at a time, before it becomes the default.

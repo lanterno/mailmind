@@ -12,9 +12,10 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **Next to nothing to install.** Python, and four packages (FastAPI, uvicorn, the
-  Anthropic SDK and IMAPClient) that [uv](https://docs.astral.sh/uv/) fetches on first run.
-  `python3 server.py` still runs the app on Python alone, with nothing installed and no build.
+- **Next to nothing to install.** Python, [Node](https://nodejs.org) to build the app, and four
+  packages (FastAPI, uvicorn, the Anthropic SDK and IMAPClient) that
+  [uv](https://docs.astral.sh/uv/) fetches on first run. `python3 server.py` still runs on Python
+  alone, with nothing installed and no build, on the old page until something is built.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
   Anthropic through the Claude API.
@@ -171,7 +172,7 @@ and the Claude API.
   auto-label lanes — Feed, Paper trail, Notifications, Action needed, Finance —
   which are just saved queries over the existing classifier buckets.
 - **One "All inboxes" view** merges every connected account's INBOX by date with
-  per-row account chips. The page shows each account's newest 40. The React app at `/next` reads
+  per-row account chips. The old page shows each account's newest 40. The app reads
   them as one list that pages back through all of it, and an account still on its first scan holds
   up no one there. The switcher at the top of the rail shows each account as a colored dot
   (stacked for All inboxes) and says in words when one can't connect.
@@ -493,9 +494,9 @@ automatically.
 - **A Claude API key**, for summaries and the other AI features, as
   `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
   AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
-- **Optional:** [`just`](https://just.systems), which wraps the commands below, and
-  [Node](https://nodejs.org), which `just demo`, `just run-next` and the frontend checks need. The
-  page itself needs no build.
+- **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
+  builds it first.
+- **Optional:** [`just`](https://just.systems), which wraps the commands below.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
@@ -522,8 +523,8 @@ python3 -m mailmind sync all 90   # last 90 days (use a big number like 3650 for
 python3 -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
-uv run python -m mailmind serve   # http://127.0.0.1:8721   (custom port: ... serve 9000)
-#    or, with nothing installed:   python3 server.py [port]
+just run                          # builds the app, then http://127.0.0.1:8721   (custom port: just run 9000)
+#    or, with nothing installed:   python3 server.py [port]   (the old page, with nothing built)
 ```
 
 ## Configuring accounts
@@ -595,9 +596,9 @@ slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one s
 read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
 queues until a full run, and it syncs nothing in the background. `just dev` does that.
 
-Both serve the page at `/`. A React rewrite of it sits at `/next`, and its top bar links back. It
-exists only once built (`just run-next` builds it, and needs Node; unbuilt, `/next` answers 404), and
-it isn't the default yet.
+Both serve the app at `/`. It exists once built (`just build-web`, which needs Node and which `just
+run` does first). With nothing built the old page stands in, and that page stays at `/legacy` until
+it retires. A link from when the app lived at `/next` still comes to the same place.
 
 **CLI curation** (`python3 -m mailmind`, or `just`) — works across every account:
 
