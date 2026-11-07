@@ -2,7 +2,8 @@
 
 The file holds the keep and block lists and each sender's shelf life. It's read again only when it
 changed; one that won't parse leaves the last rules read well, so a bad edit never stops a sync, and the
-next save moves it to backups/ first. A save writes the whole file or nothing.
+next save moves it to backups/ first. A save writes the whole file or nothing, and a change reads, changes and
+saves as one step, so two at once don't lose either. That holds within this process.
 
 `python -m mailmind rules` lists and changes them.
 """
@@ -23,6 +24,7 @@ log = get_logger("rules")
 __all__ = ["EXPIRE", "KEYS", "add", "load", "remove", "save", "set_expiry", "sets"]
 
 _lock = threading.Lock()
+_changing = threading.Lock()   # one change at a time: each reads the whole file and writes the whole file back
 _good = {}     # path -> (stamp, rules, sets): the last rules read well from that file
 _bad = {}      # path -> the stamp of the copy that couldn't be read, so it's said once
 
@@ -124,25 +126,28 @@ def add(token, verdict):
     """verdict in {'keep','block'}. Routes a sender/domain into the right list
     and removes it from the opposite verdict to avoid contradictions."""
     token = rulebook.token_of(token)
-    rules = load()
-    placed = rulebook.add(rules, token, verdict)
-    save(rules)
+    with _changing:
+        rules = load()
+        placed = rulebook.add(rules, token, verdict)
+        save(rules)
     return token, placed
 
 
 def remove(token):
     """Drop a keep/block entry. Leaves any expiry rule alone."""
     token = rulebook.token_of(token)
-    rules = load()
-    rulebook.remove(rules, token)
-    save(rules)
+    with _changing:
+        rules = load()
+        rulebook.remove(rules, token)
+        save(rules)
 
 
 def set_expiry(token, hours):
     """Expire INBOX mail from `token` (sender or domain) after `hours`; 0 clears."""
     token = rulebook.token_of(token)
     hours = int(hours)
-    rules = load()
-    rulebook.set_expiry(rules, token, hours)
-    save(rules)
+    with _changing:
+        rules = load()
+        rulebook.set_expiry(rules, token, hours)
+        save(rules)
     return token, hours
