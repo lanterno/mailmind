@@ -7,6 +7,7 @@ from mailmind.attention.application.ports import AttentionBook, Messages, Undo
 from mailmind.attention.domain import snooze
 from mailmind.attention.domain.events import SnoozeLifted, SnoozeSet, SnoozeWoke
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import Pk
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
@@ -37,7 +38,7 @@ class Snoozing:
                 self._messages.index(c, pk)
         return True, d.get("account"), None
 
-    def _pks(self, c: object, body: dict[str, Any]) -> list[int]:
+    def _pks(self, c: object, body: dict[str, Any]) -> list[Pk]:
         thread = snooze.named_thread(body)
         return self._book.thread_pks(c, *thread) if thread else snooze.named_pks(body)
 

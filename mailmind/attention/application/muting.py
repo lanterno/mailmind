@@ -7,6 +7,7 @@ from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import mute
 from mailmind.attention.domain.events import ThreadMuted, ThreadUnmuted
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import AccountId, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import bus
@@ -51,7 +52,7 @@ class Muting:
         bus.publish(ThreadUnmuted(acct, tid))
         return {"ok": True, "thread_id": tid}
 
-    def _thread_now(self, c: object, d: dict[str, Any]) -> list[str]:
+    def _thread_now(self, c: object, d: dict[str, Any]) -> list[ThreadRef]:
         """A merge moves a mute to the thread that took this one in, and an undo entry doesn't hear of it, so ask a
         message the thread held. One that has since been filed elsewhere can't say."""
         member = d.get("member")
@@ -76,7 +77,7 @@ class Muting:
             self._messages.flags_queued()
         return True, d.get("account"), None
 
-    def on_ingest(self, c: object, account: str) -> None:
+    def on_ingest(self, c: object, account: str) -> None:      # the Mailbox's port says `str`
         """After threading assigns thread_ids, mark unseen members of any muted thread read, here and on the
         server, so freshly-arrived replies in a muted thread stay silent. In the caller's transaction."""
-        self._mark_read(c, self._book.unread_in_muted_threads(c, account), now_iso())
+        self._mark_read(c, self._book.unread_in_muted_threads(c, AccountId(account)), now_iso())

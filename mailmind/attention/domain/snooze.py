@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from mailmind.kernel.ids import AccountId, Pk, ThreadRef
 from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
@@ -60,19 +61,19 @@ def marks_unread_on_waking(seen: object) -> bool:
     return bool(seen)
 
 
-def named_thread(body: Mapping[str, Any]) -> tuple[str, str] | None:
+def named_thread(body: Mapping[str, Any]) -> tuple[AccountId, ThreadRef] | None:
     """(account, thread id), if a request names a whole thread: that goes before any pks it also names."""
     if body.get("thread_id") and body.get("account"):
         return body["account"], body["thread_id"]
     return None
 
 
-def named_pks(body: Mapping[str, Any]) -> list[int]:
+def named_pks(body: Mapping[str, Any]) -> list[Pk]:
     """The messages a request names by pk, up to BULK_CAP."""
     if isinstance(body.get("pks"), list):
-        return [required_int(x) for x in body["pks"]][:BULK_CAP]
+        return [Pk(required_int(x)) for x in body["pks"]][:BULK_CAP]
     if body.get("pk") is not None:
-        return [required_int(body["pk"])]
+        return [Pk(required_int(body["pk"]))]
     return []
 
 
@@ -88,7 +89,7 @@ def undo_entry(pks: Sequence[int], rows: Sequence[Row | None]) -> dict[str, Any]
 class Restoration:
     """One message an Undo gives back: found by `where`, its key and folder, or by `pk` in an entry from before those. It
     goes back to waking at `until`, or to not being snoozed."""
-    pk: int
+    pk: Pk
     where: Sequence[Any] | None
     until: int | None
 
