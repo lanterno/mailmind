@@ -49,7 +49,7 @@
  },
  {
   "body": {
-   "error": "addrs must be a list",
+   "error": "bad request",
    "ok": false
   },
   "headers": {
