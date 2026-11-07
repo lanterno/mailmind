@@ -20,7 +20,7 @@ from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
 from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
-from mailmind.mailbox.adapters.imap_names import imap_quote
+from mailmind.mailbox.adapters.imap_names import BadValue, imap_quote
 from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
 from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.bodies import Bodies
@@ -123,6 +123,8 @@ def open_session(acct, timeout=60) -> MailSession:
             username=acct["email"], password=lambda: config.resolve_credential(acct),
             guard=lambda imap: txguard.guard_calls(imap, "send", "IMAP command"))
     except (tls_pin.TLSPinMismatch, imaplib.IMAP4.abort):
+        raise
+    except BadValue:                     # no server was asked: it would say no every time
         raise
     except imaplib.IMAP4.error as e:     # a login NO/BAD is the connection's fault, not a command's
         raise accounts.LoginUnreachable(str(e)) from e

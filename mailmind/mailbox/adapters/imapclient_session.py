@@ -44,7 +44,7 @@ def connect(host, port, *, starttls, ssl_context, timeout, check_tls, username, 
         if starttls:
             client.starttls(ssl_context)
         check_tls(client._imap)
-        client.login(username, password() if callable(password) else password)
+        client.login(sendable(username), sendable(password() if callable(password) else password))
     except BaseException:
         try:
             client.shutdown()

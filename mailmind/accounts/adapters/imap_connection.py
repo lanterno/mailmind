@@ -16,6 +16,7 @@ class LoginUnreachable(OSError):
 
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
+_UNSENDABLE = re.compile(r"[\r\n\x00]")
 
 
 def is_loopback(host):
@@ -110,8 +111,12 @@ class Connector:
         except tls_pin.TLSPinMismatch:
             M.shutdown()
             raise
+        password = self._directory.resolve_credential(acct)
+        if _UNSENDABLE.search(acct["email"] or "") or _UNSENDABLE.search(password or ""):
+            M.shutdown()
+            raise imaplib.IMAP4.error("a login holding a line break or NUL")   # it would end LOGIN's line and start another
         try:
-            _, said = M.login(acct["email"], self._directory.resolve_credential(acct))
+            _, said = M.login(acct["email"], password)
         except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one
             raise LoginUnreachable(str(e)) from e
         _learn_capabilities(M, said)
