@@ -1,6 +1,9 @@
 """`python -m mailmind`: every command the justfile names exists, and each does its work."""
+import os
 import pathlib
 import re
+import subprocess
+import sys
 
 import pytest
 
@@ -16,6 +19,22 @@ def justfile_commands():
     text = (ROOT / "justfile").read_text(encoding="utf-8")
     found = re.findall(r"^\s+.*?\{\{py\}\} -m mailmind\s+(.*)$", text, flags=re.M)
     return [re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: SAMPLE[m.group(1)], line).split() for line in found]
+
+
+def _with_nothing_installed(home, *args):
+    """This Python without its site-packages, as a machine that has only Python runs it."""
+    return subprocess.run([sys.executable, "-S", "-E", *args], cwd=ROOT, env={**os.environ, "MAILMIND_HOME": str(home)}, capture_output=True, text=True)
+
+
+def test_every_command_loads_with_nothing_installed(tmp_path):
+    """`bootstrap.calendar` loads icalendar and `bootstrap.front` the rest, so neither may reach the top of what a command imports."""
+    done = _with_nothing_installed(tmp_path, "-c", "import mailmind.__main__; from mailmind.bootstrap import assistant, cli, wiring")
+    assert done.returncode == 0, done.stderr
+
+
+def test_serve_says_what_it_needs_with_nothing_installed(tmp_path):
+    done = _with_nothing_installed(tmp_path, "-m", "mailmind", "serve")
+    assert done.returncode == 1 and "serve needs the runtime packages" in done.stderr, done.stderr
 
 
 def test_the_justfile_names_commands():
