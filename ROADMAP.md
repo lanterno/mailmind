@@ -186,15 +186,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## The API, now that one client and one door read it
 
-- **FastAPI routers with `http/schemas/`** · high value · effort L — Every route still runs in
-  `mailmind.http.handler.H`, a `BaseHTTPRequestHandler`: `HandlerBridge`, the FastAPI router's fallback, hands it
-  each request without a socket, on a daemon thread of its own. The routers in `mailmind/http/routers/` are plain
-  `Routes` tables with no schemas, because the old door ran them too, and nothing holds them to that now. Move them to
-  FastAPI routes a context at a time, each with its request and answer models in a new `mailmind/http/schemas/`, so that
-  what `H._body`, `_TEXT_FIELDS` and `Request.int_arg` check by hand comes from the model, and a bad `limit` stops being a
-  500. `Perimeter` still goes first. The event stream and the export, which write their own answers (`ANSWERED`), come last.
-  Then `H` and `HandlerBridge` go, and `web/src/lib/api/types.gen.ts` comes from the schemas rather than from the JSON the
-  suite saw (`just gen-api`, `tests/gen_api_types.py`).
+- **The last routes onto FastAPI** · high value · effort M — `static`, `events` and `export` still run in
+  `mailmind.http.handler.H`, which `HandlerBridge`, the FastAPI router's fallback, hands each request on a daemon thread of its own.
+  They write their own answers (`ANSWERED`). Once they have moved, `H`, `HandlerBridge` and `mailmind.http.routing` go, and
+  `web/src/lib/api/types.gen.ts` comes from the schemas rather than from the JSON the suite saw (`just gen-api`,
+  `tests/gen_api_types.py`).
 - **`/api/v2`, with `pk` out of the API** · high value · effort L — A `pk` isn't stable, since reconcile can renumber rows,
   and durable state keys on a message's `key`. The API still speaks in pks: a list row carries one beside `key`, the write
   routes take one, `/api/message/<pk>/...` names one, and `Opened` in `web/src/app/route.ts` puts one in the URL (`?m=<pk>`,

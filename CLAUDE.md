@@ -479,7 +479,7 @@ The app lives in `mailmind/`.
 
 Two tables run side by side until the last file moves, and a request goes to the first that names it. **A route on a router** is
 FastAPI's: `mailmind/http/routers/<context>.py` gives `router(context)`, which `mailmind.bootstrap.web.ROUTERS` hands the app, and
-`mailmind/http/schemas/<context>.py` its models. `attention` and `calendar` have moved. **A route on the handler** is every other:
+`mailmind/http/schemas/<context>.py` its models. Every context's routes have moved. **A route on the handler** is every other, `static`, `events` and `export`:
 what no router matches falls through to `app.router.default`, the bridge, and `mailmind.http.handler.H`, one
 `BaseHTTPRequestHandler` subclass whose `do_GET` and `do_POST` run the perimeter and the catches every route shares, then ask
 `mailmind.http.routing.Routes`. Its routes take a `Request` and return an object, `(object, code)`, or `ANSWERED` when they wrote
@@ -533,8 +533,8 @@ RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
 that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
 each route's own worded 500.
 
-Consequence: to find a route, grep the literal path. On the handler, a path that matches by shape (`@r.matching`, a message's body or
-attachment, `/api/accounts/<action>`) is asked only when no literal path answers.
+Consequence: to find a route, grep the literal path. On the handler, a path that matches by shape (`@r.matching`, a place in the app,
+`/next` and `/assets/`) is asked only when no literal path answers.
 
 ### Schema migrations
 
