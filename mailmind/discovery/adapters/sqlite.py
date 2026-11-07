@@ -21,7 +21,7 @@ class StoredMail:
             return "0=1", []                # a bare 0 in an ORDER BY would name a column
         return "(m.account, m.folder) IN (VALUES " + ",".join("(?,?)" for _ in pairs) + ")", [x for p in pairs for x in p]
 
-    def search(self, spec, account, sort, limit, offset):
+    def search(self, spec, account, limit, offset):
         """What the query finds, up to one more than `limit`, or None for one the index rejects. A message is one
         result however many folders hold it: its copy in the Inbox, else any but the one in All Mail, among the
         copies the query found."""
@@ -44,7 +44,7 @@ class StoredMail:
                            JOIN messages m ON m.pk=h.pk
                            LEFT JOIN assessments s ON s.message_key=m.message_key
                            WHERE 1=1{where_sql})
-                           WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
+                           WHERE nth=1 ORDER BY score ASC, ts DESC
                            LIMIT ? OFFSET ?""")
                     return c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
                 # newest first stops early, which sorting every copy wouldn't
