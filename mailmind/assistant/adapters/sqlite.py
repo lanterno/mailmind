@@ -108,7 +108,8 @@ def draft_ahead_touch(c, account, ref_key, now):
 def reply_worthy(c, pk):
     """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
     opened mail; gates KICKS only, never serving."""
-    r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
+    r = c.execute("SELECT 1 FROM messages m JOIN assessments s ON s.message_key=m.message_key "
+                  f"WHERE m.pk=? AND {verdict.reply_worthy_sql()}", (pk,)).fetchone()
     return bool(r)
 
 
@@ -149,14 +150,16 @@ def draft_ahead_gc(c, now, orphans=True):
 
 
 def needs_summary(c, limit=200, newer_than=None):
-    """Non-junk messages without a summary yet, newest first: one copy of each, since save_summary
-    gives what the AI says of it to them all. A message a batch holds isn't one of them. With
-    `newer_than`, only what came after that moment: while a batch is out the rest of the backlog
-    waits for the next, or it would go at full price."""
+    """Non-junk messages without a summary yet, newest first: one copy of each, since what the AI says
+    of it is kept under its key. A message a batch holds isn't one of them, nor a row with no key, which
+    has nowhere to keep an answer until the next start gives it one (repair_keys). With `newer_than`,
+    only what came after that moment: while a batch is out the rest of the backlog waits for the next,
+    or it would go at full price."""
     return c.execute(
         """SELECT m.* FROM messages m
-           LEFT JOIN summaries s ON s.message_pk = m.pk
-           WHERE m.is_junk = 0 AND s.message_pk IS NULL AND m.pending_removal IS NULL
+           LEFT JOIN assessments s ON s.message_key = m.message_key
+           WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
+             AND m.message_key IS NOT NULL
              AND COALESCE(m.message_key, 0) NOT IN (SELECT message_key FROM ai_batch_items)
              AND COALESCE(m.ts, 0) > ?
            GROUP BY COALESCE(m.message_key, -m.pk)
