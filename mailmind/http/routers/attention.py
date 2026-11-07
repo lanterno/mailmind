@@ -1,32 +1,44 @@
 """What the page asks of Attention: snooze, mute, follow-ups and reply later."""
-from mailmind.http.routing import Routes
+from mailmind.http import route
+from mailmind.http.schemas.attention import (
+    MuteBody,
+    NamesAThread,
+    NamesThreadOrMessages,
+    OnThread,
+    RepliedLater,
+    ReplyLaterBody,
+    SnoozeBody,
+    Snoozed,
+    Unsnoozed,
+)
+from mailmind.http.schemas.common import answers
 
 
-def routes(attention):
-    r = Routes()
+def router(attention):
+    r = route.router()
 
-    @r.post("/api/snooze")
-    def snooze(req):
-        return attention.snoozing.snooze(req.body)
+    @r.post("/api/snooze", responses=answers(Snoozed))
+    def snooze(body: SnoozeBody):
+        return attention.snoozing.snooze(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/unsnooze")
-    def unsnooze(req):
-        return attention.snoozing.unsnooze(req.body)
+    @r.post("/api/unsnooze", responses=answers(Unsnoozed))
+    def unsnooze(body: NamesThreadOrMessages):
+        return attention.snoozing.unsnooze(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/mute")
-    def mute(req):
-        return attention.muting.mute(req.body)
+    @r.post("/api/mute", responses=answers(OnThread))
+    def mute(body: MuteBody):
+        return attention.muting.mute(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/unmute")
-    def unmute(req):
-        return attention.muting.unmute(req.body)
+    @r.post("/api/unmute", responses=answers(OnThread))
+    def unmute(body: NamesAThread):
+        return attention.muting.unmute(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/followups/dismiss")
-    def dismiss_followup(req):
-        return attention.followups.dismiss(req.body)
+    @r.post("/api/followups/dismiss", responses=answers(OnThread))
+    def dismiss_followup(body: NamesAThread):
+        return attention.followups.dismiss(body.model_dump(exclude_unset=True))
 
-    @r.post("/api/replylater")
-    def reply_later(req):
-        return attention.followups.reply_later(req.body)
+    @r.post("/api/replylater", responses=answers(RepliedLater))
+    def reply_later(body: ReplyLaterBody):
+        return attention.followups.reply_later(body.model_dump(exclude_unset=True))
 
     return r

@@ -1,4 +1,4 @@
-"""The routes, over the contexts, on the one handler the app serves."""
+"""The routes, over the contexts, on the routers and the one handler the app serves."""
 from mailmind.bootstrap import accounts, assistant, attention, background, calendar, compose, curation, discovery, mailbox
 from mailmind.http import handler, static
 from mailmind.http.handler import H
@@ -16,10 +16,11 @@ from mailmind.http.shared import AI_OVER_HEADER, post_body_cap
 
 __all__ = ["AI_OVER_HEADER", "H", "ROUTERS", "post_body_cap"]
 
-ROUTERS = []        # what has moved to FastAPI; the handler's table below holds the rest until each file has
+# What has moved to FastAPI. The handler's table below holds the rest until each file has.
+ROUTERS = [attention_routes.router(attention)]
 
 handler.bind(Routes(static.routes(), events.routes(), export.routes(), debug.routes(mailbox, compose, background, assistant),
-                    mailbox_routes.routes(mailbox), attention_routes.routes(attention), curation_routes.routes(curation),
+                    mailbox_routes.routes(mailbox), curation_routes.routes(curation),
                     discovery_routes.routes(discovery), calendar_routes.routes(calendar), compose_routes.routes(compose),
                     assistant_routes.routes(assistant, mailbox), accounts_routes.routes(accounts, mailbox)),
              lambda: assistant.governor().saw_someone())
