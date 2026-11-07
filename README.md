@@ -12,10 +12,9 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **Next to nothing to install.** Python, [Node](https://nodejs.org) to build the app, and four
-  packages (FastAPI, uvicorn, the Anthropic SDK and IMAPClient) that
-  [uv](https://docs.astral.sh/uv/) fetches on first run. `python3 server.py` still runs on Python
-  alone, with nothing installed and no build, on the old page until something is built.
+- **Little to install.** Python, [Node](https://nodejs.org) to build the app, and six packages
+  (FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events) that
+  [uv](https://docs.astral.sh/uv/) fetches on first run.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail Claude works on, sent to
   Anthropic through the Claude API.
@@ -43,9 +42,8 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │
    mailmind/assistant/         summarize + score importance 1–5 with Claude
         │
-   mailmind/http/  +  web/ (the page)   the app on http://127.0.0.1:8721, served by
+   mailmind/http/  +  web/ (the React app)   the app on http://127.0.0.1:8721, served by
                                        `python -m mailmind serve` (FastAPI on uvicorn)
-                                       or `python3 server.py` (the standard library)
 ```
 
 Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP IDLE),
@@ -109,7 +107,7 @@ and the Claude API.
   list immediately behind a shimmer skeleton, and escalates to an honest "first open
   of an older message can take a minute" hint if the server is slow.
 - **Reading stays instant during triage.** Opening a message quietly warms the next
-  one or two bodies — and every member of an open thread — into the local cache.
+  two bodies into the local cache.
 - **Skimming no longer burns unread.** A message is marked read only after it stays
   open ~1.2 seconds, so fast `j`/`k` scanning leaves the list intact.
 - **Newsletters render in their real design.** Inline styles and `<style>` blocks
@@ -130,9 +128,8 @@ and the Claude API.
   and attendees, with `＋ Add to calendar` for your OS — and **Accept / Maybe /
   Decline** mails a standards-compliant iMIP reply to the organizer through the
   outbox, so it lands inside the Undo-Send window like any other message.
-  `python -m mailmind serve` reads an invite through `icalendar` and `recurring-ical-events`:
-  every recurrence rule down to a day, RDATE, and each event of an invite. `python3 server.py`,
-  with nothing installed, reads the common rules and an invite's first event.
+  An invite is read through `icalendar` and `recurring-ical-events`: every recurrence rule down
+  to a day, RDATE, and each event of an invite.
 - **An email attached to an email stays one file.** Its chip shows its real size, the download
   is the whole message as an `.eml`, and a forward carries it intact. Its text and its files
   aren't taken for the outer message's.
@@ -145,7 +142,7 @@ and the Claude API.
 
 - **One-key triage with real undo.** `e` archives *everywhere* (it never trashes),
   destructive verbs live on `#`/Delete/Backspace, and `z` — or a floating Undo
-  button — reverses archive, delete, junk, move, snooze and mute, server-side. A reversal the
+  button — reverses archive, delete, junk, snooze and mute, server-side. A reversal the
   server refuses is never reported as done, and when a group comes back only in part, what
   couldn't be restored stays for the next `z`. Undo survives a restart, and reaches back 50 actions or 24 hours.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
@@ -154,7 +151,8 @@ and the Claude API.
   or a bulk selection — Archive and Delete take every message of it in that folder (your
   replies in Sent stay put), and one Undo brings them all back.
 - **Bulk triage on demand.** Mark rows with `x` or the checkbox on each avatar, then archive,
-  delete, read, unread, star, junk, snooze or mute the whole set as **one** undo group.
+  delete, read, unread, star, junk, snooze or mute the whole set. Archive, delete, junk, snooze
+  and mute go as **one** undo group; read, unread and star aren't on the undo stack.
 - **Snooze, mute, reply-later and Waiting.** A numbered snooze preset popover (plus a
   native date-time picker for custom times) with its own Snoozed folder; a reply-later
   stack; thread mute that silences future replies at ingest and drops the thread out of
@@ -172,9 +170,8 @@ and the Claude API.
   auto-label lanes — Feed, Paper trail, Notifications, Action needed, Finance —
   which are just saved queries over the existing classifier buckets.
 - **One "All inboxes" view** merges every connected account's INBOX by date with
-  per-row account chips. The old page shows each account's newest 40. The app reads
-  them as one list that pages back through all of it, and an account still on its first scan holds
-  up no one there. The switcher at the top of the rail shows each account as a colored dot
+  per-row account chips, as one list that pages back through all of it, and an account still on
+  its first scan holds up no one. The switcher at the top of the rail shows each account as a colored dot
   (stacked for All inboxes) and says in words when one can't connect.
 - **Document Hub.** Every real attachment across every account in one searchable
   overlay — type facets, live filename/sender/subject search that reaches every file, a
@@ -192,9 +189,9 @@ and the Claude API.
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
   server checks hourly; `python3 -m mailmind expire --dry` previews. Expiry is independent of
   keep/block, so a kept sender can still age out.
-- **Lists that heal.** Rows collapse and fade as you triage, folder lists and search
-  results paginate with **Load 200 more**, capped counts read honestly as `N+`, and
-  switching accounts renders the folder rail from cache instead of blanking on a
+- **Lists that heal.** A row leaves the list the moment you file it, a folder pages with
+  **Load 200 more** and a search with **Load more results**, capped counts read honestly as
+  `N+`, and switching accounts renders the folder rail from cache instead of blanking on a
   live IMAP `LIST`.
 
 ### Search
@@ -220,20 +217,20 @@ Everything here runs through Claude and returns **schema-validated** structured
 output, so malformed-response errors don't reach the UI. Nothing is ever sent
 automatically.
 
-- **The Claude API.** With an API key set, MailMind calls the Messages API through the
-  official Anthropic SDK, or a standard-library client when `python3 server.py` runs with
-  nothing installed (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
+- **The Claude API.** With an API key set, the server calls the Messages API through the
+  official Anthropic SDK, and the command line through a client of its own on Python alone
+  (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
   runs at low effort, everything else at medium). Without a key, AI is off and
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   The key goes in `mailmind.config.json` as `"anthropic_api_key"` (inline, or
   `{"op": …}` / `{"env": …}` like an account password), and that wins over
   `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
-  accident. The server's startup line names the model and where the key came from,
-  and so does the sync menu, in red with the reason ("the API key was rejected",
+  accident. The server's startup line names the model and where the key came from.
+  The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now") when the last call failed. With no key, the brief says
-  AI is off calmly and the composer drops Draft and Rewrite; both
-  places say that message text goes to Anthropic only when it is summarized, briefed or
+  AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
+  menu with AI on, say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at Anthropic's list prices. The sync menu shows what today cost so far against the
@@ -254,11 +251,12 @@ automatically.
   TL;DR with key points.
 - **A synthesized daily brief** in prose, with topic chips that list the messages
   behind each topic — computed once a day and cached across restarts.
-- **"Since you last looked."** The `▾ N new` pill is augmented with a two-to-three
-  sentence summary of what actually arrived; the plain count is always the floor.
+- **"Since you last looked."** The `▾ N new` pill, which names mail that landed outside the
+  list on screen, is augmented with a two-to-three sentence summary of what actually arrived;
+  the plain count is always the floor.
 - **Weekly Review** — an AI retrospective of the last 7 days: sent/received stats, who
   is still waiting on you, who you're waiting on, and three concrete things to start
-  next week with. Every item is clickable into the thread.
+  next week with. Each message it names opens in its thread.
 - **Draft.** One click writes an editable reply into the composer from the whole
   thread. For mail the AI rates important or action-needed, a background pre-drafter can
   have it ready *before* you press Reply — the Reply button reads **Draft ready** — and
@@ -291,8 +289,9 @@ automatically.
 
 - **A durable outbox.** Queued mail survives a restart, goes out the moment its Undo
   window ends, retries with backoff (but not a refusal for good, such as an unknown recipient or a
-  wrong password, which it gives up on at once), and surfaces failures at once with a Retry button
-  that reopens the composer intact and starts the tries afresh. Each account's mail
+  wrong password, which it gives up on at once), and surfaces failures at once on the outbox
+  button, with a Retry that starts the tries afresh. A send that never reached the outbox keeps
+  your words behind Edit on its float. Each account's mail
   goes out in a lane of its own, so one account's unreachable server holds up no other's. Where
   the server doesn't file sent mail itself, a Sent copy that fails is tried again with the same
   backoff, never sending the message twice or filing it twice, and the outbox says so if it
@@ -326,7 +325,8 @@ automatically.
   neither is anyone while the database is too young to tell.
 - **Recipient autocomplete** drawn entirely from your own mail history, ranked by how
   often and how recently you've corresponded, fully keyboard-driven.
-- **Per-account signatures** with a global default — auto-inserted into new composes
+- **Per-account signatures**, set in Settings, with a global default (`"signature_default"` in
+  `mailmind.config.json`) — auto-inserted into new composes
   and live-swapped when you change the From account, without clobbering your edits.
 - **Drafts that don't litter.** A compose is only "dirty" once you actually edit it,
   autosave runs every 8 seconds, and a signature-only body is never saved to your Drafts
@@ -366,9 +366,9 @@ automatically.
 
 ### Sync, reliability & performance
 
-- **Live updates without a refresh.** An SSE stream pushes new mail, snooze wake-ups,
-  mutes and ready AI drafts into the open list behind a sticky `N new` pill that never
-  yanks the view mid-triage — with polling as an automatic fallback. An undo in another
+- **Live updates without a refresh.** An SSE stream tells the app of new mail, snooze wake-ups,
+  mutes and ready AI drafts. The open list refreshes in place, mail that landed outside it shows
+  as a sticky `N new` pill, and timers take over while the stream is down. An undo in another
   tab and a move queued offline that lands, or won't, refresh the list too. A tab that drops off (a
   sleeping laptop, a restart) hears what it missed when it reconnects, or fetches afresh
   when the server can no longer replay it.
@@ -383,7 +383,7 @@ automatically.
 - **A meeting nudge.** Ten minutes before a timed event from your invites, a sunlit pill
   beside the sync status reads "Studio sync in 8 min"; it opens the invite or dismisses,
   and turns into one desktop notification when the tab is in the background.
-- **Triage survives an outage.** Archive, trash, junk, move, read marks and stars queue
+- **Triage survives an outage.** Archive, trash, junk, read marks and stars queue
   durably with an optimistic local update (and an undo for the moves), then re-apply exactly
   once when IMAP returns. The
   message leaves the list at once but MailMind keeps it until the move lands, so a move the
@@ -396,7 +396,7 @@ automatically.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder. A star
-  or a read mark the server refuses is taken back on the page too, instead of showing until the
+  or a read mark the server refuses is taken back on screen too, instead of showing until the
   next sync.
 - **Flags follow other clients.** Each sync reads the read, star and answered marks again, so mail
   you read on your phone shows read here too: whatever changed, however old, where the server can say,
@@ -460,8 +460,8 @@ automatically.
 
 ### Keyboard, theming & accessibility
 
-- **Full keyboard control** — `j`/`k`/`n`/`p` to move, `o` to open, `↵` for focus reading,
-  `[` to show or hide folder names, `e`/`d`/`b`/`s`/`u`/`x` to triage, `h` snooze, `w` mute,
+- **Full keyboard control** — `j`/`k` to move and open, `n`/`p` for the next or previous unread,
+  `↵` for focus reading, `[` to show or hide folder names, `e`/`d`/`b`/`s`/`u`/`x` to triage, `h` snooze, `w` mute,
   `l` reply-later, `v` save a view, `z` undo,
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
@@ -477,8 +477,8 @@ automatically.
   alike on every platform and take their color from the theme. The wind mark is the
   only symbol for the AI.
 - **On a phone:** single-pane list-to-reader swap, an off-canvas folder drawer, swipe
-  left to archive / right to snooze to tomorrow 8am with a live badge, and a Back gesture that unwinds reader → list → modal instead of leaving
-  the app.
+  left to archive / right to snooze to tomorrow 8am with a live badge, and a Back gesture that
+  closes what's on top, then the message, instead of leaving the app.
 - **Accessibility is wired in** — modal focus traps with focus restore and the rest of
   the page inert, accessible names on every mail frame, an aria-live region announcing
   new mail and AI results, WCAG AA contrast for secondary text in every theme, a
@@ -488,15 +488,16 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
-- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the app's four
-  packages, FastAPI, uvicorn, the Anthropic SDK and IMAPClient, from `pyproject.toml` on first run.
-  Without it, `python3 server.py` runs the same app on the standard library alone.
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the server's six
+  packages, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events,
+  from `pyproject.toml` on first run.
+- **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
+  builds it first.
 - **A Claude API key**, for summaries and the other AI features, as
   `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
   AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
-- **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
-  builds it first.
-- **Optional:** [`just`](https://just.systems), which wraps the commands below.
+- **Optional:** [`just`](https://just.systems), which wraps the commands below. Without it, build
+  the app with `cd web && npm ci && npx vite build`, then run `uv run python -m mailmind serve`.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
   CLI — only if you want to keep passwords in 1Password instead of inline.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
@@ -524,7 +525,6 @@ python3 -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
 just run                          # builds the app, then http://127.0.0.1:8721   (custom port: just run 9000)
-#    or, with nothing installed:   python3 server.py [port]   (the old page, with nothing built)
 ```
 
 ## Configuring accounts
@@ -566,7 +566,7 @@ in US dollars: `15` unless you set another positive number.
 
 An account may also say `"imap_adapter": "imapclient"`. `python -m mailmind serve` then reaches
 it through the IMAPClient library instead of Python's own imaplib: the new IMAP code, tried on
-real mail before it becomes the default. `python3 server.py` ignores the key, removing it goes
+real mail before it becomes the default. The command line stays on imaplib, removing the key goes
 back, and the startup line `[imap] …` says how many accounts asked.
 
 **Per-type notes**
@@ -589,16 +589,14 @@ back, and the startup line `[imap] …` says how many accounts asked.
 
 ## Two ways to use it
 
-**Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`), or
-`python3 server.py [port]` (`just run-old`) with nothing installed. Auto-syncs every 5 minutes
-and at once when IDLE hears new mail, and triages what arrived on a schedule of its own, so a
-slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` either one serves
+**Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`). Auto-syncs
+every 5 minutes and at once when IDLE hears new mail, and triages what arrived on a schedule of
+its own, so a slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` it serves
 read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
 queues until a full run, and it syncs nothing in the background. `just dev` does that.
 
-Both serve the app at `/`. It exists once built (`just build-web`, which needs Node and which `just
-run` does first). With nothing built the old page stands in, and that page stays at `/legacy` until
-it retires. A link from when the app lived at `/next` still comes to the same place.
+The app, at `/`, exists once built (`just build-web`, which needs Node and which `just run` does
+first). With nothing built, the server says so.
 
 **CLI curation** (`python3 -m mailmind`, or `just`) — works across every account:
 
@@ -625,7 +623,7 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 
 | Variable | Effect |
 |---|---|
-| `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. Both front doors and every `python3 -m mailmind` command read it. |
+| `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `python3 -m mailmind` command read it. |
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
@@ -643,7 +641,7 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
 
-The server's port is the first argument to `serve` or to `server.py` (default `8721`).
+The server's port is the first argument to `serve` (default `8721`).
 
 `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default**, so a plain
 run connects fresh for every operation and syncs INBOX only. `just run-fast` sets
@@ -681,21 +679,19 @@ uv run pytest tests/contract/test_ics_reader_contract.py    # reading an invite,
 uv run pytest tests/contract/test_ics_differential.py       # the two readers compared, each difference listed with why
 uv run pytest tests/unit/discovery/test_contacts_known.py   # "new" recipients lookup: matching, drafts, thin history, CSRF
 uv run pytest tests/unit/compose/test_send_after.py         # send-later times: passed or far-off ones are refused
-uv run pytest tests/unit/compose/test_send_guard.py         # send-time checks: attachment words, subject, reply-all (needs node)
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopened drafts: text and quote, files, Bcc, threading, refusals
-uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's side of reopening a draft (needs node)
-uv run pytest tests/security/test_hardening.py              # security and data-loss fixes: TLS, other sites, folder names, filing (needs node)
+uv run pytest tests/security/test_hardening.py              # security and data-loss fixes: TLS, other sites, folder names, filing
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds
 ```
 
 These need [uv](https://docs.astral.sh/uv/). With [`just`](https://just.systems) installed too, `just test` runs all of them
-together with the rest of the pytest suite in `tests/`. That suite drives the app, through each front door, against fake IMAP,
+together with the rest of the pytest suite in `tests/`. That suite drives the app against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff, the import rules between the package's layers, and pyright), byte-compile, the
-frontend checks (the page's syntax, and the TypeScript's types, lint and tests, which need Node) and a look for known
+frontend checks (the TypeScript's types, lint and tests, which need Node) and a look for known
 vulnerabilities in what the lockfiles pin.
 `just test-full` also runs the browser tests (`just test-browser` runs only those), which click
-through the page and the React app in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
+through the app in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
 real Dovecot server in Docker. `just setup` installs all of it, and `just` on its own lists every recipe. uv installs those dev
 tools from `pyproject.toml` on first use, as it does the app's own packages.
 
@@ -704,9 +700,8 @@ tools from `pyproject.toml` on first use, as it does the app's own packages.
 This is a personal-data app. **Never commit** `mailmind.config.json`,
 `mailmind_rules.json` (it holds your personal keep/block entries), `mailmind.db`,
 the audit `*.jsonl` files, or screenshots of real mail — the `.gitignore` covers
-them; don't `git add -f` around it. PRs welcome. `python3 server.py` has to keep running with nothing
-installed, so nothing it imports may import a third-party package, and a package the new front door
-needs is declared in `pyproject.toml`.
+them; don't `git add -f` around it. PRs welcome. A package the server needs is declared in
+`pyproject.toml`, and one the app needs in `web/package.json`.
 
 ## License
 
