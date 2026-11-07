@@ -166,6 +166,7 @@ export function App() {
   const { source, opened, accounts, aliases, all, rows, tab, list, folder, inInbox, searching, title } = m;
   const prefs = readPrefs.useValue();
   const asked = asking.useValue();
+  const focused = readFocus.useValue();
 
   // /next on its own opens the first account's Inbox.
   const firstAccount = accounts[0];
@@ -177,6 +178,7 @@ export function App() {
   const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
+  useEffect(() => { if (focused) closeRailDrawer(); }, [focused]);
   useEffect(() => clearMarks(), [source]);
   const sourceKind = source?.kind, where = sourceWhere(source);
   useEffect(() => {

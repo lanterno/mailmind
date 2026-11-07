@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ask, doing, runDo, stopAsking } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
+import { setReadFocus } from "../features/mailbox/Reader";
 import type { Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
 import { SoonPill, StatusPill } from "../features/status/Status";
@@ -19,6 +20,7 @@ const railWide = createStore(stored("mm_rail") === "wide");
 const railOpen = createStore(false);
 
 export function toggleRail() {
+  setReadFocus(false);   // asking for the folders means leaving focus reading
   if (docked.matches) {
     const wide = !railWide.get();
     railWide.set(wide);
