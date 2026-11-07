@@ -378,3 +378,18 @@ def test_the_slash_key_opens_the_folded_search_on_a_phone_and_an_empty_one_folds
     page.locator("#search").blur()
     expect(body).not_to_have_class(re.compile("search-open"))
     clean(page)
+
+
+def test_a_folder_on_a_desktop_opens_on_its_first_message_and_closing_it_stays_closed(page, world):
+    opened(page)
+    expect(page.locator("#reader .rd-subj")).to_have_count(0)    # the Inbox opens on the brief
+    page.locator('#folderrail [data-folder="Archive"]').click()
+    first = page.locator("#rows .row[data-pk]").first
+    expect(first).to_have_class(re.compile(r"\bsel\b"))
+    expect(page.locator("#reader .rd-subj")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(first).not_to_have_class(re.compile(r"\bsel\b"))
+    expect(page.locator("#reader")).to_have_text("No message selected.")
+    page.wait_for_timeout(100)
+    expect(first).not_to_have_class(re.compile(r"\bsel\b"))
+    clean(page)
