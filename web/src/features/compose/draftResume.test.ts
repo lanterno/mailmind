@@ -40,8 +40,8 @@ describe("resumeOpts", () => {
 
 it("sends the resume fields on every save and send", () => {
   expect([resumeFields(null), resumeFields(undefined)]).toEqual([{}, {}]);
-  expect(resumeFields({ in_reply_to: "<x@example.test>", references: null, tail_text: "q" }))
-    .toEqual({ resume: { in_reply_to: "<x@example.test>", references: "", tail_text: "q" } });
+  const held = { in_reply_to: "<x@example.test>", references: null, tail_text: "q", extra: 1 };   // what else it holds stays here
+  expect(resumeFields(held)).toEqual({ resume: { in_reply_to: "<x@example.test>", references: "", tail_text: "q" } });
 });
 
 it("hides the AI draft only when the quote is in the box", () => {
