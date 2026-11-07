@@ -1,17 +1,5 @@
-"""The background sync of each account, and reconcile: what brings the database up to what the servers hold, one job at
-a time, with what each account's last try came to.
-
-Incremental sync only ADDS new mail; it never notices messages removed on the
-server (deleted/moved in webmail, other clients, server-side filters), so their
-rows linger as ghosts and the message list shows phantoms. A dedicated low-rate
-loop prunes them — ONE account per tick (round-robin) so each hold of the IMAP gate is a
-single account, taken NON-blocking so a live user op is never stalled (mirrors the
-body-backfill loop), on its own timer so the work never piggybacks a user-triggered
-(IDLE) sync. reconcile_account is a SAFE pure-prune (never prunes on IMAP error,
-UIDVALIDITY change, or an OK-but-empty SEARCH against a non-empty store).
-"""
-import json
-import os
+"""The background sync of each account, and the body backfill: what brings the database up to what the servers hold, one
+job at a time, with what each account's last try came to."""
 import threading
 import time
 from collections.abc import Callable, Collection, Mapping
@@ -20,43 +8,31 @@ from typing import Any
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Attention, Result, StoredMail
-from mailmind.mailbox.application.stats import LiveStats
+from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.domain import sync_errors
-from mailmind.platform import settings, sse
+from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
 log = get_logger("sync")
-reconcile_log = get_logger("reconcile")
 warm_log = get_logger("warm")
-
-
-def _reconcile_secs() -> int:
-    try:
-        return int(os.environ.get("MAILMIND_RECONCILE_SECS", "1800"))  # full-cycle target; 0 disables
-    except ValueError:
-        reconcile_log.warning("bad MAILMIND_RECONCILE_SECS — using 1800")
-        return 1800
 
 
 class Syncing:
     BACKFILL_RETRY = 6 * 3600     # a body the server didn't give is asked for again after this long
     BACKFILL_UNREACHABLE = 60     # the round after one whose server couldn't be reached
-    _RECONCILE_INTERVAL = _reconcile_secs()
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
-                 stats: LiveStats, attention: Attention, kick: Callable[[str], object]):
+                 attention: Attention, kick: Callable[[str], object]):
         self._uow = uow
         self._store = store
         self._accounts = accounts
         self._ingest = ingest
         self._warm = warm
         self._folders = folders
-        self._stats = stats
         self._attention = attention
         self._kick = kick
         self._sync: dict[str, Any] = {"running": False, "last": None, "result": "idle"}
@@ -192,74 +168,6 @@ class Syncing:
             warm_log.warning("tick error", exc_info=e)
 
 
-    def _reconcile_folders(self, acct: Account, dry_run: bool = False, force: bool = False,
-                           priority: int = gates.Priority.INTERACTIVE, wait: bool = True) -> AccountPruned:
-        """Reconcile each folder a sync has stored for `acct`, each as a job of its own on the
-        account's gate, so a long run never holds it across folders. Returns one result for the
-        account: the counts added up, the first folder's error, and how many folders it reached. With
-        wait=False it stops at the first folder whose gate is busy (gates.Busy if that's the first)."""
-        out: AccountPruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0, "pruned": 0,
-                              "error": None, "folders": 0}
-        for folder in self._ingest.reconciled_folders(acct["email"]):
-            try:
-                res = gates.run(acct["email"], lambda f=folder: self._ingest.reconcile_account(
-                    acct, force=force, dry_run=dry_run, folder=f), priority=priority, wait=wait)
-            except gates.Busy:
-                if not out["folders"]:
-                    raise
-                break                                     # a user op came: the rest wait for next time
-            out["folders"] += 1
-            out["live"] += res["live"]
-            out["stored"] += res["stored"]
-            out["ghosts"] += res["ghosts"]
-            out["pruned"] += res["pruned"]
-            out["error"] = out["error"] or res["error"]
-        return out
-
-
-    def _auto_reconcile_one(self, acct: Account) -> None:
-        """Prune one account's ghosts, folder by folder, yielding to any live user op: its IMAP gate
-        is taken without waiting (skip this tick if a user op holds it — caught next cycle), then
-        publish so open lists drop the pruned phantoms."""
-        try:
-            res = self._reconcile_folders(acct, priority=gates.Priority.MAINTENANCE, wait=False)
-        except gates.Busy:
-            return                                        # user op live — yield, retry next cycle
-        if not res["pruned"]:
-            return
-        with open(settings.current().reconcile_audit, "a") as f:
-            f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
-                                "account": res["account"], "pruned": res["pruned"],
-                                "live": res["live"]}) + "\n")
-        self._stats.invalidate()
-        self._folders.invalidate(acct["email"])                # folder badge counts changed
-        try:
-            sse.publish("reconcile", {"account": acct["email"], "pruned": res["pruned"]})
-        except Exception:
-            pass
-        reconcile_log.info("auto: %(account)s pruned %(count)s ghost row(s)", {"account": acct["email"], "count": res["pruned"]})
-
-
-    def reconcile_rounds(self) -> Callable[[], int]:
-        """A ghost pruner's round function, with its own place in the round-robin: each round prunes
-        one account and returns the seconds until the next, so the full cycle spans about
-        MAILMIND_RECONCILE_SECS and each hold of the IMAP gate covers a single account."""
-        rr = 0
-
-        def reconcile_round() -> int:
-            nonlocal rr
-            accts = self._accounts.accounts()
-            n = len(accts) or 1
-            if accts:
-                try:
-                    self._auto_reconcile_one(accts[rr % len(accts)])
-                except Exception as e:
-                    reconcile_log.warning("loop error", exc_info=e)
-                rr += 1
-            return max(30, self._RECONCILE_INTERVAL // n)       # spread the full cycle across accounts
-        return reconcile_round
-
-
     def backfill_round(self) -> int:
         """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
         apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
@@ -296,23 +204,3 @@ class Syncing:
             for pk in missed:
                 self._backfill_missed[pk] = now + self.BACKFILL_RETRY
         return wait
-
-
-    def do_reconcile(self, account: str | None, dry_run: bool, force: bool = False) -> dict[str, Any]:
-        """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
-        force prunes even where the server's SEARCH came back empty against stored mail."""
-        self._accounts.preload_creds()
-        accts = [self._accounts.get(account)] if account and account != "all" else self._accounts.accounts()
-        results = [self._reconcile_folders(a, dry_run=dry_run, force=force) for a in accts]
-        if not dry_run:
-            stamp = now_iso()
-            with open(settings.current().reconcile_audit, "a") as f:
-                for r in results:
-                    if r["pruned"]:
-                        f.write(json.dumps({"kind": "reconcile", "ts": stamp,
-                                            "account": r["account"], "pruned": r["pruned"],
-                                            "live": r["live"]}) + "\n")
-            self._stats.invalidate()
-        return {"ok": True, "dry_run": dry_run, "results": results,
-                "total_ghosts": sum(r["ghosts"] for r in results),
-                "total_pruned": sum(r["pruned"] for r in results), "generated": now_iso()}

@@ -67,9 +67,9 @@ def schedule(jobs):
     if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
         jobs.add("draft-ahead", assistant.drafting.rounds(), every=assistant.drafting.DRAFT_TICK_INTERVAL,
                  first=assistant.drafting.DRAFT_TICK_STARTUP_DELAY)                           # top-K reply pre-gen (AI-polite)
-    if mailbox.syncing._RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
-        jobs.add("reconcile", mailbox.syncing.reconcile_rounds(), every=max(30, mailbox.syncing._RECONCILE_INTERVAL),
-                 first=min(120, mailbox.syncing._RECONCILE_INTERVAL))
+    if mailbox.reconciler._RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round
+        jobs.add("reconcile", mailbox.reconciler.reconcile_rounds(), every=max(30, mailbox.reconciler._RECONCILE_INTERVAL),
+                 first=min(120, mailbox.reconciler._RECONCILE_INTERVAL))
     if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
         jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left

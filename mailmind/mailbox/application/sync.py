@@ -1,5 +1,5 @@
 """Mail into SQLite, whole or incrementally by UID watermark: fetch the headers, classify, pull the body text of what
-isn't junk. What a sync finds gone (reconcile_account), and a body read on demand, are here too."""
+isn't junk. A body read on demand is here too."""
 import email
 import imaplib
 from collections.abc import Iterable, Sequence
@@ -13,8 +13,8 @@ from mailmind.content.mime import Parsed, dec
 from mailmind.content.text import body_text_of, text_body
 from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.pool import Pool
-from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Pruned,
-                                                Stored, StoredMail)
+from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
+                                                StoredMail)
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
@@ -395,65 +395,6 @@ class Ingest:
         self._store.set_recipients_text(c, pk, self._store.recipients_of(parsed))
         self._store.set_recipients(c, pk, mime.recipient_addrs(BytesHeaderParser().parsebytes(raw)))
         self._store.fts_set_body(c, pk, body_text_of(parsed))   # full body + recipients now searchable
-
-
-    def reconciled_folders(self, email: str) -> list[str]:
-        """The folders reconcile looks at for an account: each one a sync has stored (it has a
-        sync_state row), INBOX first."""
-        with self._uow.read() as c:
-            folders = self._store.synced_folders(c, email)
-        return folders or ["INBOX"]
-
-
-    def reconcile_account(self, acct: Account, force: bool = False, dry_run: bool = False, folder: str = "INBOX") -> Pruned:
-        """Prune `folder`'s rows whose UID is no longer live, and stamp survivors verified.
-        Pure prune — preserves summaries of survivors and never lowers the watermark.
-        SAFETY: never deletes on an IMAP error, and treats an OK-but-empty SEARCH
-        against a non-empty stored set as 'unknown' (prunes nothing) unless force.
-        Only rows stored before the SEARCH may go: the 300 s sync passes no IMAP gate, so
-        it can store mail while this runs, and that mail is missing from the SEARCH's answer.
-        dry_run computes the ghost count without changing anything."""
-        from datetime import datetime as _dt
-        res: Pruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
-                       "pruned": 0, "error": None}
-        with self._uow.read() as c:
-            stored_uids = self._store.stored_uids(c, acct["email"], folder)
-        res["stored"] = len(stored_uids)
-        try:
-            s = self._open_session(acct, timeout=15)   # background/maintenance path: a hung account must
-            try:                                          # not pin the IMAP gate for the interactive 60s
-                uidv = s.select(folder).uidvalidity
-                live = set(s.uids("ALL"))                 # a refused SEARCH raises: nothing is pruned
-            finally:
-                try:
-                    s.logout()                            # ALWAYS close the socket (no leak on select/SEARCH error)
-                except Exception:
-                    pass
-        except Exception as e:
-            log.warning("reconcile: an account failed", exc_info=e)
-            res["error"] = type(e).__name__      # what a server said stays out of the answer
-            return res  # never prune on error
-        # UIDVALIDITY guard: if the server renumbered UIDs (mailbox recreation / Bridge
-        # re-index), `live` is in a DIFFERENT uid space than the stored uids — comparing
-        # them would prune the ENTIRE real INBOX as "ghosts". Never prune here; sync_folder
-        # detects the change and does the reset + full re-sync on its own pass.
-        with self._uow.read() as c:
-            stored_uidv = self._store.get_uidvalidity(c, acct["email"], folder)
-        if uidv and stored_uidv and uidv != stored_uidv:
-            res["error"] = f"UIDVALIDITY changed ({stored_uidv}->{uidv}) — prune skipped"
-            return res
-        res["live"] = len(live)
-        res["ghosts"] = sum(1 for u in stored_uids if u not in live)
-        if not live and res["stored"] > 0 and not force:
-            res["error"] = "empty SEARCH against non-empty store — skipped (use force)"
-            return res
-        if dry_run:
-            return res
-        when = _dt.now(timezone.utc).isoformat()
-        with self._uow.write() as c:
-            pruned, _ = self._store.reconcile(c, acct["email"], folder, live, when, among=set(stored_uids))
-        res["pruned"] = pruned
-        return res
 
 
     def sync_new(self, acct: Account, folder: str = "INBOX") -> Stored:

@@ -32,6 +32,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.queries import Queries
 from mailmind.mailbox.application.realtime import Realtime
+from mailmind.mailbox.application.reconcile import Reconciler
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.reversal import Reversals
 from mailmind.mailbox.application.server_ops import ServerOps
@@ -306,7 +307,8 @@ def _kick(job):
     background._kick(job)
 
 
-syncing = Syncing(_uow, store, _directory, ingest, warm, folders, stats, _attention, _kick)
+syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
+reconciler = Reconciler(_uow, store, _directory, _open, folders, stats)
 
 
 def _ai_status():

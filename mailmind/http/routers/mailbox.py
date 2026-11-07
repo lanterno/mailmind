@@ -134,8 +134,8 @@ def routes(mailbox):
 
     @r.post("/api/reconcile")
     def reconcile(req):
-        return mailbox.syncing.do_reconcile(req.body.get("account", "all"), bool(req.body.get("dry_run", False)),
-                                            force=req.body.get("force") is True)
+        return mailbox.reconciler.do_reconcile(req.body.get("account", "all"), bool(req.body.get("dry_run", False)),
+                                               force=req.body.get("force") is True)
 
     @r.post("/api/sync-retry-account")
     def sync_retry(req):
