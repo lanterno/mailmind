@@ -2,6 +2,8 @@
 thread summaries, replies drafted ahead and message batches. Each function takes its caller's connection."""
 from datetime import datetime, timedelta, timezone
 
+from mailmind.kernel import attention as verdict
+
 
 # ----------------------------------------------------------- thread summaries (AI)
 def get_thread_summary(c, account, thread_id, scope="thread"):
@@ -101,6 +103,13 @@ def draft_ahead_fail(c, account, ref_key, now):
 def draft_ahead_touch(c, account, ref_key, now):
     c.execute("UPDATE draft_ahead SET last_hit_ts=? WHERE account=? AND ref_key=?",
               (now, account, ref_key))
+
+
+def reply_worthy(c, pk):
+    """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
+    opened mail; gates KICKS only, never serving."""
+    r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
+    return bool(r)
 
 
 def draft_ahead_gc(c, now, orphans=True):

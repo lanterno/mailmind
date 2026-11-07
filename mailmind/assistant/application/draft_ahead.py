@@ -195,12 +195,6 @@ class DraftAhead:
                       "ORDER BY ts DESC, pk DESC LIMIT 1", (account, thread_id)).fetchone()
         return r["pk"] if r else None
 
-    def _reply_worthy(self, c: Connection, pk: int) -> bool:
-        """The kick gate: the background tick's bar too. Needed because the reader surface arms on any
-        opened mail; gates KICKS only, never serving."""
-        r = c.execute(f"SELECT 1 FROM summaries WHERE message_pk=? AND {verdict.reply_worthy_sql('')}", (pk,)).fetchone()
-        return bool(r)
-
     def get(self, qs: Mapping[str, Sequence[str]], kick_ok: bool = False) -> Result:
         """GET /api/ai/draft-ahead?pk=[&peek=1] → cached draft (ready) / kicks generation
         (generating) / none. peek=1 is strictly read-only (reports inflight, never kicks).
@@ -243,7 +237,7 @@ class DraftAhead:
                 return {"ok": True, "status": "none"}, 200
             if da and da["fail_ts"] and (now - da["fail_ts"]) < self.DRAFT_FAIL_TTL:
                 return {"ok": True, "status": "none"}, 200   # recently failed → back off (client falls to on-demand)
-            if not self._reply_worthy(c, pk):
+            if not self._answers.reply_worthy(c, pk):
                 return {"ok": True, "status": "none"}, 200
             threading.Thread(target=self._gen_draft_ahead, args=(acct, pk), daemon=True).start()
             return {"ok": True, "status": "generating"}, 200
