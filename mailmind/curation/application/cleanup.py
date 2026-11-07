@@ -8,14 +8,13 @@ from typing import Any
 
 from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBookRepository, SenderMail
 from mailmind.curation.application.unsubscribe import Unsubscribing
-from mailmind.curation.domain import noise, rulebook, unsubscribe
+from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.platform.perimeter import tokens
 
 BUCKETS = ("newsletters/marketing", "automated-notifications")
 MIN_COUNT = 3
 LIMIT = 40
-SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
 
 type Query = Mapping[str, Sequence[str]]      # a query string as the routes parse it
 
@@ -84,41 +83,43 @@ class Cleanup:
     def sender(self, qs: Query) -> dict[str, Any]:
         """Mandatory-preview detail for ONE sender: authoritative unsubscribe method + the exact INBOX
         messages a sweep would move + a confirm_token that the execute route requires."""
-        addr = ((qs.get("addr") or [""])[0]).strip().lower()
-        if not addr or "@" not in addr:
+        addr = cleanup_plan.sender_named((qs.get("addr") or [""])[0])
+        if addr is None:
             return {"ok": False, "error": "bad address"}
         n, unseen = self._mail.counts(addr)
         if not n:
             return {"ok": False, "error": "no such sender"}
-        targets = self._mail.sweep_targets(addr, SWEEP_CAP + 1)
+        targets, capped = cleanup_plan.within_cap(self._mail.sweep_targets(addr, cleanup_plan.to_read()))
         info, accts = self._unsub.resolve(addr)
-        capped = len(targets) > SWEEP_CAP
         affected = [{"pk": t["pk"], "account": t["account"], "folder": t["folder"],
-                     "subject": t["subject"], "seen": t["seen"]} for t in targets[:SWEEP_CAP]]
+                     "subject": t["subject"], "seen": t["seen"]} for t in targets]
         unsub: dict[str, str | None] = {"method": info["method"]}
         if info["method"] == "one-click" or info["method"] == "http-page":
             unsub["https_host"] = urllib.parse.urlparse(info["https_uri"] or "").hostname
         if info["method"] == "mailto":
             unsub["mailto_to"] = info.get("mailto_to")
         return {"ok": True, "from_addr": addr, "count": n, "unseen": unseen,
-                "accounts": accts, "domain": addr.rpartition("@")[2],
+                "accounts": accts, "domain": rulebook.domain_of(addr),
                 "unsub": unsub, "sweep_count": len(affected), "sweep_capped": capped,
-                "reversible": {"block": True, "sweep": True, "unsubscribe": False},
+                "reversible": cleanup_plan.REVERSIBLE,
                 "confirm_token": tokens.mint(self._secret(), unsubscribe.TOKEN_PURPOSE, unsubscribe.preview_said(addr, info), time.time())}
+
+    def _trash(self, pk: int, grp: str) -> Mapping[str, Any]:
+        try:
+            return self._filing.trash(pk, grp)   # one message at a time, as a click on it would
+        except Exception:
+            return {}
 
     def execute(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Commit for ONE sender. ALWAYS-FIRST + reversible: a block rule + verified INBOX sweep to
         Trash (undo_push under one undo_group → a single `z` reverses both). THEN best-effort the chosen
         unsubscribe (irreversible; idempotent via unsub_log). Requires CSRF + strict-origin (route level)
         + a confirm_token echoed from the preview before ANY outbound request fires."""
-        from_addr = (body.get("from_addr") or "").strip().lower()
-        if not from_addr or "@" not in from_addr:
+        plan = cleanup_plan.plan_from(body)
+        if plan is None:
             return {"ok": False, "error": "bad address"}, 400
-        scope = "domain" if body.get("block_scope") == "domain" else "sender"
-        do_unsub = bool(body.get("do_unsubscribe"))
-        token = str(body.get("confirm_token") or "")
+        from_addr, do_unsub, token, block_token = plan.from_addr, plan.do_unsubscribe, plan.confirm_token, plan.block_token
         grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
-        block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
         # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
         # the row it moved, and the sender's newest issue is most often one the sweep takes.
         unsub = self._unsub.resolve(from_addr) if do_unsub and tokens.in_date(token, time.time(), unsubscribe.TOKEN_LIFE) else None
@@ -129,19 +130,8 @@ class Cleanup:
         self._filing.undo_push({"kind": "unblock", "token": block_token, "label": "Cleaned up " + from_addr}, grp)
 
         # 2) SWEEP INBOX copies to Trash (reversible) — each move pushes a 'move' undo under the same group
-        targets = self._mail.sweep_targets(from_addr, SWEEP_CAP + 1)
-        swept = fail = queued = 0
-        for t in targets[:SWEEP_CAP]:
-            try:
-                res = self._filing.trash(t["pk"], grp)   # one message at a time, as a click on it would
-            except Exception:
-                res = {}
-            if res.get("status") == "queued":
-                queued += 1
-            elif res.get("ok"):
-                swept += 1
-            else:
-                fail += 1
+        targets, capped = cleanup_plan.within_cap(self._mail.sweep_targets(from_addr, cleanup_plan.to_read()))
+        swept = cleanup_plan.tally(self._trash(t["pk"], grp) for t in targets)
         self._filing.reclassify(block_token)         # what stays, in other folders, reads as blocked too
         self._filing.stats_changed()
 
@@ -155,9 +145,9 @@ class Cleanup:
         elif do_unsub and not token_ok:
             status = "no_token"                          # outbound refused; block+sweep still stand
 
-        self._audit.cleaned_up(from_addr, block_token, swept + queued, status)
+        self._audit.cleaned_up(from_addr, block_token, swept.swept, status)
         return {"ok": True, "status": status, "method": method, "blocked_token": block_token,
-                "block_scope": scope, "swept": swept + queued, "sweep_failed": fail, "sweep_queued": queued,
-                "sweep_capped": len(targets) > SWEEP_CAP, "browser_url": browser_url,
+                "block_scope": plan.scope, "swept": swept.swept, "sweep_failed": swept.failed, "sweep_queued": swept.queued,
+                "sweep_capped": capped, "browser_url": browser_url,
                 "http_status": http_status, "undo_group": grp,
-                "reversible": {"block": True, "sweep": True, "unsubscribe": False}}, 200
+                "reversible": cleanup_plan.REVERSIBLE}, 200

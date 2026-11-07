@@ -21,7 +21,7 @@ import pytest
 import gate
 from fixtures import world as w
 from mailmind.platform.workers import gates
-from mailmind.curation.application import cleanup
+from mailmind.curation.domain import cleanup_plan
 from mailmind.bootstrap import curation
 from mailmind.bootstrap import attention
 from mailmind.bootstrap.compose import book
@@ -399,10 +399,10 @@ def test_hwf_the_cleanup_preview_says_when_the_sweep_is_capped(app, world, monke
     for n, day in ((216, "14"), (217, "21")):
         world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID=f"<issue-{n}@loom.example.test>",
                                                 Date=f"Wed, {day} Oct 2026 07:00:00 +0000"))
-    monkeypatch.setattr(cleanup, "SWEEP_CAP", 3)
+    monkeypatch.setattr(cleanup_plan, "SWEEP_CAP", 3)
     r = app.get(f"/api/cleanup/sender?addr={LOOM}").json
     assert (r["sweep_count"], r["sweep_capped"]) == (3, False)
-    monkeypatch.setattr(cleanup, "SWEEP_CAP", 2)
+    monkeypatch.setattr(cleanup_plan, "SWEEP_CAP", 2)
     r = app.get(f"/api/cleanup/sender?addr={LOOM}").json
     assert (r["sweep_count"], r["sweep_capped"]) == (2, True)
 
