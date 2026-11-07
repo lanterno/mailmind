@@ -28,7 +28,7 @@ tick_log = get_logger("draft")
 _WARM = object()                                      # what warm() finds: a fresh draft is stored
 
 
-class DraftAhead:
+class PreparedReplies:
     DRAFT_DB_TTL = 24 * 3600         # servable age; fp is the correctness gate, this is temporal-drift hygiene
     DRAFT_FAIL_TTL = 60              # GET-route re-kick suppression (interactive dwell recovers fast)
     DRAFT_FAIL_BASE = 300            # tick backoff after the 1st failure: 5 min…
