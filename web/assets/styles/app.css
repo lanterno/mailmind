@@ -164,14 +164,11 @@
   .tools .tbtn.icon{width:34px;height:34px;padding:0;justify-content:center;border-radius:10px;color:var(--soft);
     background:color-mix(in srgb,var(--panel) 62%,transparent);backdrop-filter:blur(8px)}
   .tools .tbtn.icon:hover{background:var(--panel);color:var(--ink)}
-  .tbtn:disabled{opacity:.55;cursor:default}
   #composeBtn{min-height:34px;padding:0 12px;border-radius:10px;background:var(--primary);color:var(--on-primary);font-size:13.5px;font-weight:700;
     box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 8px 18px -10px var(--primary)}
   #composeBtn:hover{background:var(--primary-hi)}
   #composeBtn .tb-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;margin-left:2px;padding:0 4px;
     border:1px solid color-mix(in srgb,var(--on-primary) 35%,transparent);border-bottom-width:2px;border-radius:5px;font:700 10.5px/1 var(--font-mono)}
-  #themeBtn .tm-sun,#themeBtn .tm-dusk,#themeBtn .tm-moon{display:none}
-  body.theme-light:not(.theme-dusk) #themeBtn .tm-sun,body.theme-dusk #themeBtn .tm-dusk,body:not(.theme-light) #themeBtn .tm-moon{display:block}
   .search-tog,.search-x{display:none}
   /* <=760: the full row doesn't fit — search folds into an icon that opens it across the bar (body.search-open),
      help leaves (no keyboard), Compose and the status pill keep only their glyphs */
@@ -199,8 +196,6 @@
   .seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:var(--sh-1)}
   .mono-dot{position:relative;width:30px;height:30px;flex:none;border-radius:50%;border:2px solid var(--panel);background:var(--sel);
     display:grid;place-items:center;font-size:12.5px;font-weight:600;color:var(--soft);user-select:none}
-  .mono-dot .led{position:absolute;bottom:-2px;right:-2px;width:8px;height:8px;border-radius:50%;border:2px solid var(--panel);background:var(--mute)}
-  .mono-dot.ok .led{background:var(--ok)} .mono-dot.error .led{background:var(--err)} .mono-dot.syncing .led{background:var(--syncing)}
 
   /* ---------- split ---------- */
   .split{display:grid;grid-template-columns:minmax(330px,38%) 1fr;height:calc(100vh - var(--top))}
@@ -227,12 +222,8 @@
   .acct-menu{position:fixed;z-index:95;width:290px;max-width:calc(100vw - 20px);max-height:min(70vh,560px);overflow-y:auto;
     background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);box-shadow:var(--sh-3);padding:6px;
     display:flex;flex-direction:column;gap:1px}
-  .acct-menu button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:none;border-radius:var(--r-sm);
-    background:none;color:var(--soft);font:inherit;text-align:left;cursor:pointer}
-  .acct-menu button:hover,.acct-menu button:focus-visible,.acct-menu button[aria-checked="true"]{background:var(--sel)}
   /* where you are: heads the list */
   .client-ctx{font-size:13px;color:var(--soft);line-height:1.4}
-  .client-ctx:empty{display:none}
   .client-ctx b{color:var(--ink);font-weight:700}
   body .folderrail{display:flex;flex-direction:column;gap:1px;overflow-y:auto;padding:10px 8px}
   .frow{display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:10px;cursor:pointer;
@@ -244,9 +235,9 @@
   .ico.fill{fill:currentColor}
   .frow .ic2{width:15px;text-align:center;flex:none;opacity:.8}
   .frow .unread{font-size:12px;font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums}
-  .frow .vdel,.vrow>.vdel{flex:none;background:none;border:none;color:var(--faint);font:inherit;font-size:14px;line-height:1;cursor:pointer;opacity:0;padding:0 2px}
-  .frow:hover .vdel,.vrow:hover>.vdel,.vrow>.vdel:focus-visible{opacity:1}
-  .frow .vdel:hover,.vrow>.vdel:hover{color:var(--err)}
+  .vrow>.vdel{flex:none;background:none;border:none;color:var(--faint);font:inherit;font-size:14px;line-height:1;cursor:pointer;opacity:0;padding:0 2px}
+  .vrow:hover>.vdel,.vrow>.vdel:focus-visible{opacity:1}
+  .vrow>.vdel:hover{color:var(--err)}
   .vrow{position:relative}                 /* a link and a button side by side: a link can't hold a button */
   .vrow>.vdel{position:absolute;right:9px;top:50%;transform:translateY(-50%)}
   .frail-acct{font-size:11.5px;font-weight:500;color:var(--faint);padding:14px 11px 4px}
@@ -277,7 +268,6 @@
   .cab:hover{background:var(--panel-hi);color:var(--ink)}
   .cab.on{background:var(--sel);color:var(--primary-ink)}
   .rd-more{display:none}
-  .snooze-menu .mi-ic{display:inline-block;width:22px;text-align:center}
   .cab-del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
   .cab-draft{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent);transition:background var(--t-fast),color var(--t-fast)}   /* a pre-drafted reply waiting */
   .cab-draft:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 18%,transparent)}
@@ -318,7 +308,6 @@
   .lh1:has(>.lh-title:empty){display:none}
   /* the Inbox's three tabs; their counts stand in for the count line */
   .lh-tabs{display:flex;gap:2px;margin:2px -7px -8px}
-  .listhead:has(>.client-ctx:empty)>.lh-tabs:not([hidden])~.lh-row{display:none}
   .lh-tab{position:relative;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 9px;border:0;background:none;color:var(--mute);
     font:700 13.5px/1 var(--font-ui);cursor:pointer}
   .lh-tab:hover,.lh-tab[aria-selected="true"]{color:var(--ink)}
@@ -326,7 +315,6 @@
   .lh-tab .n{font-variant-numeric:tabular-nums;color:var(--mute)}
   .lh-tab .n.sun{color:var(--gold)}
   .nores .linkbtn{background:none;border:none;padding:0;color:var(--primary-ink);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
-  .listhead select{background:none;border:none;color:var(--mute);font:inherit;font-size:11.5px;cursor:pointer}
 
   /* rows: the importance SPINE — a 3px heat-ramp tick down the left edge,
      full-height + amber when selected. Read the inbox by color temperature. */
@@ -338,12 +326,10 @@
   .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
   .r1{display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--mute)}
   .r1 .from{color:var(--soft);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .r1 .acct{color:var(--faint);font-size:11px;flex:none}
   .r1 .when{margin-left:auto;color:var(--faint);font-size:11px;flex:none;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   .r2sub{margin-top:3px;font-size:13.5px;line-height:1.4;color:var(--ink);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .r2sub .sj{font-weight:500;color:var(--ink)}
-  .r2sub .sn{color:var(--mute);font-weight:400}
 
   /* ---------- reader ---------- */
   .reader{overflow-y:auto;padding:32px 40px 80px;max-width:860px}
@@ -402,7 +388,6 @@
   .set-sig:focus{outline:none;border-color:var(--focus)}
 
   .nores{padding:50px 20px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.9}
-  .nores b{color:var(--soft)}
 
   /* ---------- curate drawer ---------- */
   .drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);z-index:40;background:var(--panel);
@@ -410,7 +395,6 @@
     overflow-y:auto;padding:22px 20px 40px}
   .drawer.open{transform:none}
   .drawer h3{font-family:var(--font-display);font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--ink);margin:20px 0 9px;display:flex;align-items:center;gap:8px}
-  .drawer h3:first-child{margin-top:0}
   .drawer .x{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--mute);font-size:18px;cursor:pointer}
   .drawer .x:hover{color:var(--ink)}
   .acctmod{padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}
@@ -528,7 +512,6 @@
   .seg button:focus-visible,.cmp-qtoggle:focus-visible{outline-offset:-2px}
 
   /* alias overflow clamps */
-  .r1 .acct{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .acctmod .top2 span:not(.led):not(.cnt){max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tbtn.icon{padding:8px 10px;font-size:14px}
 
@@ -619,7 +602,7 @@
     body:not(.rail-wide) .frow{position:relative;justify-content:center;min-height:40px;padding:0}
     body:not(.rail-wide) .frow .ic2{width:auto;font-size:16px;opacity:1}
     body:not(.rail-wide) .frow .fn{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-    body:not(.rail-wide) .frow .vdel,body:not(.rail-wide) .vrow>.vdel{display:none}
+    body:not(.rail-wide) .vrow>.vdel{display:none}
     body:not(.rail-wide) .frow .unread{position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
       display:grid;place-items:center;font-size:10px;color:var(--soft);background:var(--bg3);box-shadow:0 0 0 2px var(--panel)}
     body:not(.rail-wide) .frail-acct{height:1px;padding:0;margin:8px 8px;overflow:hidden;font-size:0;background:var(--line)}
@@ -699,7 +682,7 @@
   .bf-card .bf-aioff .m{font-size:13px;color:var(--mute)}
   .bf-card .bf-aioff .pv{display:flex;gap:7px;align-items:flex-start}
   .bf-card .bf-aioff .pv .ico{width:14px;height:14px;flex:none;margin-top:2px}
-  .bf-aioff code,.sm-ai code{font-family:var(--font-mono);font-size:.9em;background:var(--sel);padding:1px 5px;border-radius:4px}
+  .bf-aioff code{font-family:var(--font-mono);font-size:.9em;background:var(--sel);padding:1px 5px;border-radius:4px}
   .sm-ai{display:flex;gap:7px;align-items:flex-start}
   .sm-ai .ico{width:14px;height:14px;flex:none;margin-top:1px}
   .status-menu .sm-ai.err{color:var(--err)}
@@ -852,9 +835,6 @@
   .rgrp{padding:14px 10px 6px;font-size:12px;font-weight:700;color:var(--mute)}
   .rgrp:first-child{padding-top:8px}
   .racts{display:none}
-  .racts button{width:30px;height:30px;display:grid;place-items:center;border:none;background:none;border-radius:var(--r-sm);
-    color:var(--mute);font-size:14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
-  .racts button:hover{background:var(--panel-hi);color:var(--ink)}
   .racts .del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
   @media (hover:hover) and (min-width:821px){
     .row.cmsg:hover .racts{display:flex;position:absolute;right:6px;top:6px;gap:1px;padding:2px 2px 2px 10px;border-radius:var(--r-sm);background:var(--hover)}
@@ -903,12 +883,8 @@
   }
   /* ===== touch devices (incl. hybrid touch+hover tablets): reveal hover-only affordances ===== */
   @media (hover:none),(pointer:coarse){
-    .fr-arch{opacity:1} .frow .vdel,.vrow>.vdel{opacity:1}
+    .fr-arch{opacity:1} .vrow>.vdel{opacity:1}
   }
-  /* ===== row "heal": collapse + fade on removal (archive/trash/junk/mute/snooze/screen-out/feed) ===== */
-  @keyframes rowHeal{from{opacity:1}60%{opacity:0}to{opacity:0;transform:translateX(16px)}}
-  .heal-out{overflow:hidden;pointer-events:none;animation:rowHeal .16s ease forwards;
-    transition:max-height .22s ease,padding .22s ease,margin .22s ease,border-width .18s ease}
   /* ---------- compose / reply / forward ---------- */
   .cmp-box{width:min(720px,96vw);max-height:90vh;display:flex;flex-direction:column}
   .cmp-body{display:flex;flex-direction:column;gap:11px;padding:16px 22px}
@@ -961,11 +937,6 @@
   .cmp-att .sz{color:var(--faint);font-size:11px;font-family:var(--font-mono)}
   .cmp-att button{background:none;border:none;color:var(--mute);cursor:pointer;font-size:13px}
   .cmp-att button:hover{color:var(--err)}
-  .sendpill{font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:var(--r-pill);display:none}
-  .sendpill.show{display:inline-flex;align-items:center;gap:6px}
-  .sendpill.sending{background:color-mix(in srgb,var(--syncing) 14%,transparent);color:var(--syncing)}
-  .sendpill.sent{background:color-mix(in srgb,var(--keep) 14%,transparent);color:var(--ok)}
-  .sendpill.failed{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
   /* send-time check: sun gold = needs you, never --err (that stays the bad-address chip) */
   .cmp-guard{flex:none;max-height:40vh;overflow:auto;margin:0 22px 12px;padding:10px 14px;border-radius:var(--r-sm);
     background:var(--gold-wash);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold);
