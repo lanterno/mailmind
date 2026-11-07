@@ -10,7 +10,7 @@ import { inDaySections, type Row } from "./rows";
 
 const rowId = (pk: number) => `row-${pk}`;
 
-function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze }: {
+function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onFocusRead }: {
   row: Row;
   whole: boolean;
   selected: boolean;
@@ -19,6 +19,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   onOpen: () => void;
   onFile: (kind: Filing) => void;
   onSnooze: (anchor: Element) => void;
+  onFocusRead: () => void;
 }) {
   const needs = Boolean(row.action);
   const what = whole ? " conversation" : "";
@@ -29,7 +30,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   };
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the listbox, which names this through aria-activedescendant, and the app's keys act on it
-    <div id={rowId(row.pk)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-pk={row.pk} data-tid={row.threadId || undefined} onClick={onOpen}>
+    <div id={rowId(row.pk)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-pk={row.pk} data-tid={row.threadId || undefined} onClick={onOpen} onDoubleClick={(e) => { if (!(e.target as Element).closest(".cbx,.racts")) onFocusRead(); }}>
       <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span>
         <span className={isMarked ? "cbx on" : "cbx"} aria-hidden="true" title="Select (x)" onClick={(e) => { e.stopPropagation(); toggleMark(row.pk); }}>{isMarked ? "✓" : ""}</span>
       </div>
@@ -61,7 +62,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   );
 }
 
-export function MessageList({ above, rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, empty, footer }: {
+export function MessageList({ above, rows, openPk, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, onFocusRead, empty, footer }: {
   above?: React.ReactNode;
   rows: Row[];
   openPk: number | null;
@@ -73,6 +74,7 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
   onOpen: (r: Row) => void;
   onFile: (r: Row, kind: Filing) => void;
   onSnooze: (r: Row, anchor: Element) => void;
+  onFocusRead: () => void;
   empty: React.ReactNode;
   footer: React.ReactNode;
 }) {
@@ -92,7 +94,7 @@ export function MessageList({ above, rows, openPk, marks, label, folder, isWhole
     const here = sections && row.ts !== null ? dayGroup(row.ts, new Date(now)) : "";
     if (here && here !== section) items.push(<div key={`g-${here}`} className="rgrp" role="presentation">{here}</div>);
     if (here) section = here;
-    items.push(<RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} />);
+    items.push(<RowItem key={row.pk} row={row} whole={isWhole(row)} selected={row.pk === openPk} isMarked={marks.has(row.pk)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} onFocusRead={onFocusRead} />);
   }
   return (
     <div id="rows">

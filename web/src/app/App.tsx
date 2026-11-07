@@ -308,6 +308,7 @@ export function App() {
             onOpen={m.open}
             onFile={m.file}
             onSnooze={(r, anchor) => snoozeAsk.set({ target: r.count > 1 && r.threadId ? { account: r.account, thread_id: r.threadId } : { pk: r.pk }, rows: [r.pk], anchor, canUnsnooze: false })}
+            onFocusRead={() => setReadFocus(true)}
             empty={empty}
             footer={footer}
           />}
