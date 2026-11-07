@@ -16,6 +16,7 @@ from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import classifier
 from mailmind.mailbox.application import bulk_moves
 from mailmind.platform import sse
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
 __all__ = ["AUDIT", "BLOCKED", "EXPIRE", "JUNK_BUCKETS", "KEYS", "MKT", "NOTIF", "PERSONAL", "PROTECTED", "RECEIPT",
@@ -23,6 +24,7 @@ __all__ = ["AUDIT", "BLOCKED", "EXPIRE", "JUNK_BUCKETS", "KEYS", "MKT", "NOTIF",
            "expiry_hours", "is_junk", "looks_human", "rules", "safe_http", "screener", "select_expired", "sqlite",
            "sweeps"]
 
+log = get_logger("unsub")
 UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's gate to read one message's headers
 
 def _csrf():
@@ -109,7 +111,7 @@ class _ListHeaders:
         try:
             got = gates.run(r["account"], read, priority=gates.Priority.INTERACTIVE, deadline=UNSUB_READ_WAIT)
         except Exception as e:                              # a preview still works: it offers no unsubscribe
-            print(f"[unsub] header read {type(e).__name__}", flush=True)
+            log.warning("header read failed", exc_info=e)
             return None
         return got[0].raw if got else None
 

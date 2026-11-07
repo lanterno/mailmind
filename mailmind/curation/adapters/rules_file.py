@@ -16,6 +16,9 @@ from datetime import datetime, timezone
 from mailmind.curation.domain import rulebook
 from mailmind.curation.domain.rulebook import EXPIRE, KEYS
 from mailmind.platform import settings
+from mailmind.platform.logging import get_logger
+
+log = get_logger("rules")
 
 __all__ = ["EXPIRE", "KEYS", "add", "load", "remove", "save", "set_expiry", "sets"]
 
@@ -56,9 +59,9 @@ def _read():
         except (OSError, ValueError, TypeError, AttributeError) as e:
             if _bad.get(path) != stamp:
                 _bad[path] = stamp
-                print(f"[rules] {os.path.basename(path)} can't be read ({type(e).__name__}); "
-                      f"{'keeping the rules last read' if good else 'no rules apply'} until it can",
-                      flush=True)
+                log.warning("%(what)s can't be read; %(why)s until it can",
+                            {"what": os.path.basename(path), "why": "keeping the rules last read" if good else "no rules apply"},
+                            exc_info=e)
             return (good[1], good[2]) if good else (rulebook.empty(), rulebook.no_sets())
         sets = rulebook.as_sets(out)
         _good[path] = (stamp, out, sets)
@@ -92,7 +95,7 @@ def _set_aside(path):
     aside = os.path.join(keep, f"mailmind_rules-unreadable-{stamp}.json")
     os.replace(path, aside)
     os.chmod(aside, 0o600)
-    print(f"[rules] the unreadable rules file is kept as backups/{os.path.basename(aside)}", flush=True)
+    log.warning("the unreadable rules file is kept as backups/%(what)s", {"what": os.path.basename(aside)})
 
 
 def save(rules):

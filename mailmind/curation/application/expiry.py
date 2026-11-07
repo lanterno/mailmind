@@ -11,8 +11,10 @@ from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailbo
 from mailmind.curation.domain.expiry import arrival_ts, select_expired
 from mailmind.curation.domain.live import Aged
 from mailmind.curation.domain.rulebook import EXPIRE
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
+log = get_logger("expire")
 EXP_FIELDS = ("FROM", "SUBJECT", "MESSAGE-ID", "DATE")
 
 
@@ -79,12 +81,12 @@ class Expiry:
         except gates.Busy:
             return                                        # user op live — yield, retry next cycle
         if res.get("error"):
-            print(f"[expire] {acct['email']}: {res['error']}", flush=True)
+            log.warning("%(account)s: %(why)s", {"account": acct["email"], "why": res["error"].partition(":")[0]})
             return
         if not res.get("moved"):
             return
         self._filing.folders_changed(acct["email"], res["moved"])
-        print(f"[expire] {acct['email']}: moved {res['moved']} expired message(s) to Trash", flush=True)
+        log.info("%(account)s: moved %(count)s expired message(s) to Trash", {"account": acct["email"], "count": res["moved"]})
 
     def round(self) -> None:
         """One pass of the expiry rules over every account, when there are any rules."""
@@ -93,4 +95,4 @@ class Expiry:
                 try:
                     self.auto_one(a)
                 except Exception as e:
-                    print(f"[expire] loop error: {type(e).__name__}: {e}", flush=True)
+                    log.warning("loop error", exc_info=e)
