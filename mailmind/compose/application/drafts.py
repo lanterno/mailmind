@@ -11,7 +11,7 @@ from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.content.headers import header_chips, header_text
 from mailmind.kernel.errors import Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
-from mailmind.kernel.parsed import as_int
+from mailmind.kernel.parsed import as_int, required_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
@@ -75,7 +75,7 @@ class Drafts:
         the server's copy follows (decision D5). An autosave leaves that to the push job, at most every minute; any other
         save tries now, for a moment."""
         if body.get("delete") and body.get("draft_id"):
-            return self._discard(int(body["draft_id"]))
+            return self._discard(required_int(body["draft_id"]))
         try:
             spec, in_reply_to_pk, acct = self._composing.spec(body)
             if draft.is_empty(spec):
@@ -97,7 +97,7 @@ class Drafts:
                 in_reply_to_pk: int | None) -> tuple[int, int]:
         """Write the save to the journal, in one transaction with the draft's row. Returns the row's id and its version.
         A save that may not go in raises, with nothing written."""
-        did = int(body["draft_id"]) if body.get("draft_id") else None
+        did = required_int(body["draft_id"]) if body.get("draft_id") else None
         key = draft.composer_key(body)
         base = body.get("base_version")
         now, stamp = _now(), now_iso()
@@ -348,9 +348,8 @@ class Drafts:
 
     def _resume_saved(self, draft_id: Any) -> dict[str, Any]:
         """Open a draft by its journal, for one that may not be on the server yet."""
-        try:
-            did = int(draft_id)
-        except (TypeError, ValueError):
+        did = as_int(draft_id)
+        if did is None:
             raise Refused("Missing draft.")
         with self._uow.read() as c:
             d, j = self._book.draft_get(c, did), self._book.journal_get(c, did)

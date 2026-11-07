@@ -79,6 +79,6 @@ class Composing:
     def _reopened_original(self, body: Mapping[str, Any], acct: Account, in_reply_to: str) -> Row | None:
         """By Message-ID: a pk may have been renumbered. Past that From changed, so it is another account's, and only the
         request's pk can name it."""
-        named = body.get("in_reply_to_pk")
+        named = as_int(body.get("in_reply_to_pk")) if isinstance(body.get("in_reply_to_pk"), int) else None
         return (self._mail.by_msgid(acct["email"], in_reply_to)
-                or composition.named_original(self._mail.message(named) if isinstance(named, int) else None, in_reply_to))
+                or composition.named_original(self._mail.message(named) if named is not None else None, in_reply_to))

@@ -11,6 +11,7 @@ from mailmind.compose.domain import draft, schedule
 from mailmind.compose.domain.builder import build_message
 from mailmind.compose.domain.outbox_item import SendMeta
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.parsed import required_int
 from mailmind.platform.db.uow import UnitOfWork
 
 
@@ -26,7 +27,7 @@ class Sending:
             built = build_message(spec)       # validates addresses/headers; raises ValueError
         except ValueError as e:               # our own words: they hold nothing secret
             raise Refused(str(e)) from e
-        draft_id = body.get("draft_id")
+        draft_id = required_int(body["draft_id"]) if body.get("draft_id") else None
         key = draft.composer_key(body)
         if not draft_id and key:              # a first save whose answer the composer never heard
             with self._uow.read() as c:

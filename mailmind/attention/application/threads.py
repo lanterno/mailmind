@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from mailmind.attention.application.ports import Accounts, Messages
+from mailmind.kernel.parsed import required_int
 
 
 class Threads:
@@ -15,7 +16,7 @@ class Threads:
         acct = body.get("account")
         tid = body.get("thread_id")
         if body.get("pk") is not None and not (acct and tid):
-            row = self._messages.get(c, int(body["pk"]))
+            row = self._messages.get(c, required_int(body["pk"]))
             if not row:
                 return None, None
             acct = acct or row["account"]

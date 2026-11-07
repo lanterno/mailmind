@@ -98,11 +98,11 @@ def routes(mailbox):
 
     @r.post("/api/pending/retry")
     def pending_retry(req):
-        return mailbox.filing.do_pending_retry(int(req.body.get("id")))
+        return mailbox.filing.do_pending_retry(required_int(req.body.get("id")))
 
     @r.post("/api/pending/discard")
     def pending_discard(req):
-        return mailbox.filing.do_pending_discard(int(req.body.get("id")))
+        return mailbox.filing.do_pending_discard(required_int(req.body.get("id")))
 
     @r.post("/api/trash")
     def trash(req):

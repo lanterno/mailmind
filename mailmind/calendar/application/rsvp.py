@@ -8,6 +8,7 @@ from mailmind.calendar.application.ports import Messages, StoredInvites, SystemS
 from mailmind.calendar.domain import rsvp
 from mailmind.calendar.domain.invite import Party
 from mailmind.kernel.errors import NotFound, Refused, Unreachable
+from mailmind.kernel.parsed import as_int
 from mailmind.platform.logging import get_logger
 
 log = get_logger("rsvp")
@@ -21,9 +22,8 @@ class Rsvp:
         self._send = send
 
     def respond(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        try:
-            pk = int(body.get("pk", ""))
-        except (TypeError, ValueError):
+        pk = as_int(body.get("pk"))
+        if pk is None:
             raise Refused("missing message")
         decision = (body.get("decision") or "").strip().lower()
         if decision not in rsvp.PARTSTAT:

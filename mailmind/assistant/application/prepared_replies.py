@@ -18,7 +18,7 @@ from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.domain import fingerprint, prepared_reply
 from mailmind.kernel.errors import NotFound, Refused
-from mailmind.kernel.parsed import as_int
+from mailmind.kernel.parsed import as_int, required_int
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -227,7 +227,7 @@ class PreparedReplies:
         """Draft an editable reply to a thread/message via claude."""
         account = body.get("account")
         thread_id = body.get("thread_id")
-        pk = body.get("pk")
+        pk = None if body.get("pk") is None else required_int(body["pk"])
         tone = str(body.get("tone") or "balanced")[:16]
         instruction = str(body.get("instruction") or "")[:400]
         default_shape = prepared_reply.default_shaped(instruction, tone)
@@ -236,7 +236,7 @@ class PreparedReplies:
         key: tuple[str, str] | None = None
         if pk is not None:
             with self._uow.read() as c:
-                row = self._mail.get_message(c, int(pk))
+                row = self._mail.get_message(c, pk)
                 if not row:
                     raise NotFound("not found")
                 key = prepared_reply.key_of(row)

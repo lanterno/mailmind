@@ -1,6 +1,7 @@
 """What the page asks of Compose: a send, a draft and the outbox."""
 from mailmind.http.routing import Routes
 from mailmind.kernel.errors import NotFound, Problem, Refused
+from mailmind.kernel.parsed import required_int
 from mailmind.platform.logging import get_logger
 
 log = get_logger("send")
@@ -28,18 +29,18 @@ def routes(compose):
 
     @r.post("/api/outbox/retry")
     def outbox_retry(req):
-        answer = compose.outbox.retry(int(req.body.get("id")))
+        answer = compose.outbox.retry(required_int(req.body.get("id")))
         if not answer["ok"]:
             raise NotFound()
         return answer
 
     @r.post("/api/outbox/cancel")
     def outbox_cancel(req):
-        return {"ok": compose.outbox.cancel(int(req.body.get("id")))}
+        return {"ok": compose.outbox.cancel(required_int(req.body.get("id")))}
 
     @r.post("/api/outbox/sendnow")
     def outbox_send_now(req):
-        if not compose.outbox.send_now(int(req.body.get("id"))):
+        if not compose.outbox.send_now(required_int(req.body.get("id"))):
             raise NotFound()
         return {"ok": True}
 

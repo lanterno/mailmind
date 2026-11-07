@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
 BULK_CAP = 500      # the most one request may snooze: the one bulk array the API takes, capped here and not only at plan time
@@ -69,9 +70,9 @@ def named_thread(body: Mapping[str, Any]) -> tuple[str, str] | None:
 def named_pks(body: Mapping[str, Any]) -> list[int]:
     """The messages a request names by pk, up to BULK_CAP."""
     if isinstance(body.get("pks"), list):
-        return [int(x) for x in body["pks"]][:BULK_CAP]
+        return [required_int(x) for x in body["pks"]][:BULK_CAP]
     if body.get("pk") is not None:
-        return [int(body["pk"])]
+        return [required_int(body["pk"])]
     return []
 
 
