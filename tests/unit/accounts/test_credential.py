@@ -96,3 +96,25 @@ def test_a_request_naming_no_style_keeps_what_is_there(asked):
 def test_a_request_may_not_blank_a_credential(asked, why):
     with pytest.raises(ValueError, match=why):
         credential_from(asked)
+
+
+@pytest.mark.parametrize("asked, why", [
+    ("hunter2", "a credential names its style"),
+    ({"style": "plain", "value": 123}, "password required"),
+    ({"style": "plain", "value": {"op": "op://V/I/F"}}, "password required"),
+    ({"style": "op", "ref": 123}, "1Password reference required"),
+    ({"style": "op", "ref": []}, "1Password reference required"),
+    ({"style": "op", "ref": ["op://V/I/A", 123]}, "1Password reference required"),
+    ({"style": "op", "ref": ["op://V/I/A", " "]}, "1Password reference required"),
+    ({"style": "env", "var": 123}, "environment variable name required"),
+], ids=repr)
+def test_a_request_may_only_write_what_a_login_could_read(asked, why):
+    with pytest.raises(ValueError, match=why) as no:
+        credential_from(asked)
+    assert "hunter2" not in str(no.value)
+
+
+def test_what_the_file_holds_is_read_as_it_stands_however_odd():
+    """Refusing is for a write. An entry that says something no request could still reads, and nothing raises."""
+    assert CredentialRef.parse({"plain": 123}).style == "plain"
+    assert CredentialRef.parse({"op": ["op://V/I/A", 123]}).masked()["set"] is True
