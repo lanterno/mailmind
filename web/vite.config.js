@@ -16,12 +16,12 @@ function classicScripts() {
     generateBundle(_options, bundle) {
       const pages = Object.values(bundle).filter((f) => f.type === "asset" && f.fileName.endsWith(".html"));
       for (const name of CLASSIC) {
-        const url = `/assets/legacy/${name}.js`;
+        const url = `/assets/${name}.js`;
         if (!pages.some((p) => String(p.source).includes(url))) continue;
         const ref = this.emitFile({
           type: "asset",
           name: `${name}.js`,
-          source: readFileSync(resolve(import.meta.dirname, `assets/legacy/${name}.js`)),
+          source: readFileSync(resolve(import.meta.dirname, `assets/${name}.js`)),
         });
         for (const page of pages) page.source = String(page.source).replace(url, `/${this.getFileName(ref)}`);
       }
@@ -37,7 +37,7 @@ export default defineConfig({
     emptyOutDir: true,
     assetsInlineLimit: 0,
     cssMinify: false,
-    rollupOptions: { input: { next: resolve(import.meta.dirname, "next.html") } },
+    rollupOptions: { input: { index: resolve(import.meta.dirname, "index.html") } },
   },
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), classicScripts()],
   test: { include: ["src/**/*.test.{ts,tsx}"] },

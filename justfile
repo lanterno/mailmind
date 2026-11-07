@@ -72,7 +72,7 @@ compile:
 check-frontend:
     #!/usr/bin/env python3
     import glob, re, subprocess, sys
-    html, theme, styles = "web/next.html", "web/assets/legacy/theme.js", glob.glob("web/assets/styles/*.css")
+    html, theme, styles = "web/index.html", "web/assets/theme.js", glob.glob("web/assets/styles/*.css")
     code = glob.glob("web/src/**/*.ts", recursive=True) + glob.glob("web/src/**/*.tsx", recursive=True)
     for path in (html, theme, *styles, *code):
         raw = open(path, "rb").read()
