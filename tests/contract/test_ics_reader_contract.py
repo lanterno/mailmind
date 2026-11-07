@@ -85,7 +85,8 @@ GARBAGE = {
 
 
 @pytest.mark.parametrize("text", GARBAGE.values(), ids=GARBAGE.keys())
-def test_no_broken_text_makes_a_reader_raise(ics, text):
+def test_no_broken_text_makes_a_reader_raise(ics, text, monkeypatch):
+    monkeypatch.setattr(icalendar_acl, "_READ_SECONDS", 30.0)      # the budget has tests of its own: a busy machine mustn't decide this
     found, card = ics.events(text), ics.parse(text)
     assert isinstance(found, list)
     assert (card is None) == (not found)
