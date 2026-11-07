@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from app_client import CSRF
 from mailmind.platform import sse, webroot
 
 SCRIPT = "/assets/legacy/app.js"
@@ -57,7 +58,7 @@ def test_a_file_outside_the_folder_through_a_link_isnt_served(tmp_path, monkeypa
 def test_the_page_names_its_own_build_and_this_runs_token_and_isnt_stored(app):
     r = app.get("/")
     text = r.body.decode()
-    assert f'<meta name="mailmind-build" content="{webroot.build()}">' in text
+    assert f'<meta name="mailmind-build" content="{webroot.edition(CSRF)}">' in text
     assert "__CSRF_TOKEN__" not in text and "__BUILD__" not in text
     assert r.headers["cache-control"] == "no-store"
     assert "googleapis" not in text and "<script>" not in text
@@ -126,6 +127,13 @@ def test_an_edit_of_a_file_is_served_at_once(two_roots):
     assert webroot.asset("/assets/a.js").body == b"source()"
     (source / "assets" / "a.js").write_text("source(two)")
     assert webroot.asset("/assets/a.js").body == b"source(two)"
+
+
+def test_a_restart_or_new_files_change_what_a_tab_compares_and_the_token_itself_never_shows():
+    first = webroot.edition("token-of-one-run")
+    assert webroot.edition("token-of-one-run") == first
+    assert webroot.edition("token-of-the-next-run") != first
+    assert first.startswith(webroot.build() + "-") and "token" not in first
 
 
 def test_the_builds_frame_has_no_id():

@@ -16,6 +16,7 @@ CONNECTION_HEADERS = {"connection", "keep-alive", "transfer-encoding", "date", "
 
 import pytest
 
+from app_client import CSRF
 from fixtures import world as w
 
 
@@ -281,4 +282,4 @@ def test_every_stream_names_the_build_being_served(app, quick):
     subscribers(quick, 1)
     quick.publish("outbox", {})
     tab.event()
-    assert tab.hello == f'event: hello\ndata: {{"build": "{webroot.build()}"}}'
+    assert tab.hello == f'event: hello\ndata: {{"build": "{webroot.edition(CSRF)}"}}'
