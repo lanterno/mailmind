@@ -25,8 +25,6 @@ CUTOFF_DAYS = 90
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
 _FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
-_FLAG_ROW = ("SELECT pk, uid, message_id, pending_removal, " + ", ".join(_FLAG_COLS)
-             + " FROM messages WHERE account=? AND folder=? ")
 
 
 class Ingest:
@@ -55,13 +53,11 @@ class Ingest:
     def _flag_rows(self, c: Connection, email: str, folder: str, uids: Sequence[int] | None) -> list[Row]:
         """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
         if uids is None:
-            return c.execute(_FLAG_ROW + "AND pending_removal IS NULL ORDER BY uid DESC LIMIT ?",
-                             (email, folder, self.FLAG_REFRESH)).fetchall()
+            return self._store.flag_rows_newest(c, email, folder, self.FLAG_REFRESH)
         rows: list[Row] = []
         for start in range(0, len(uids), self.FLAG_BATCH):
             part = uids[start:start + self.FLAG_BATCH]
-            rows += c.execute(_FLAG_ROW + "AND uid IN (" + ",".join("?" * len(part)) + ")",
-                              [email, folder, *part]).fetchall()
+            rows += self._store.flag_rows_of(c, email, folder, part)
         return rows
 
 
@@ -94,9 +90,7 @@ class Ingest:
                 log.warning("SEARCH MODSEQ refused %(account)s: reading the newest instead", {"account": email})
         c = self._store.conn()
         try:
-            waiting = {r["message_id"] for r in c.execute(
-                "SELECT message_id FROM mail_commands WHERE account=? AND kind='flag' AND applied=0 "
-                "AND state IN ('queued', 'running') AND message_id != ''", (email,))}
+            waiting = self._store.flag_changes_waiting(c, email)
             rows = self._flag_rows(c, email, folder, uids)    # before the flags are read: see above
         finally:
             c.close()
@@ -116,10 +110,7 @@ class Ingest:
         c = self._store.conn()
         try:
             for r, new in moved:                         # each only if it still holds what was read
-                changed += c.execute(
-                    "UPDATE messages SET " + ", ".join(f"{k}=?" for k in _FLAG_COLS) + " WHERE pk=? AND "
-                    + " AND ".join(f"{k} IS ?" for k in _FLAG_COLS),
-                    [*(new[k] for k in _FLAG_COLS), r["pk"], *(r[k] for k in _FLAG_COLS)]).rowcount
+                changed += self._store.set_flags_if_still(c, r["pk"], new, r)
             if modseq and not held and (uids is not None or not ask):
                 self._store.set_modseq(c, email, folder, modseq)
             c.commit()

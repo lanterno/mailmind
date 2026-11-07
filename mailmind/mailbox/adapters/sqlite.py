@@ -126,6 +126,13 @@ def command_open_counts(c):
         "AND state IN ('queued', 'running', 'error') GROUP BY state")}
 
 
+def flag_changes_waiting(c, account):
+    """The Message-IDs with a flag change still on its way to the account's server."""
+    return {r["message_id"] for r in c.execute(
+        "SELECT message_id FROM mail_commands WHERE account=? AND kind='flag' AND applied=0 "
+        "AND state IN ('queued', 'running') AND message_id != ''", (account,))}
+
+
 def command_forget_finished(c, now_ts, days=30):
     """A queue row finished `days` ago goes: nothing resubmits or undoes it after that. A row still
     open, or in `error` waiting for a person, stays."""
@@ -346,7 +353,9 @@ def fts_set_body(c, pk, body_text):
     _index.index_message(c, pk)
 
 
-_FLAG_COLS = {"seen", "flagged", "answered", "draft", "deleted"}
+_FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
+_FLAG_ROW = ("SELECT pk, uid, message_id, pending_removal, " + ", ".join(_FLAG_COLS)
+             + " FROM messages WHERE account=? AND folder=? ")
 
 
 def set_local_flags(c, pk, **flags):
@@ -356,6 +365,27 @@ def set_local_flags(c, pk, **flags):
         return
     sets = ", ".join(f"{k}=?" for k in cols)
     c.execute(f"UPDATE messages SET {sets} WHERE pk=?", [*cols.values(), pk])
+
+
+def flag_rows_newest(c, account, folder, limit):
+    """The newest stored rows of the folder, none on its way out, to compare with the server's flags."""
+    return c.execute(_FLAG_ROW + "AND pending_removal IS NULL ORDER BY uid DESC LIMIT ?",
+                     (account, folder, limit)).fetchall()
+
+
+def flag_rows_of(c, account, folder, uids):
+    """The stored rows of these UIDs, to compare with the server's flags."""
+    return c.execute(_FLAG_ROW + "AND uid IN (" + ",".join("?" * len(uids)) + ")",
+                     [account, folder, *uids]).fetchall()
+
+
+def set_flags_if_still(c, pk, new, was):
+    """Give the row the flags `new`, only if it still holds those of `was`, the row as it was read: a click may have
+    landed since. Returns how many rows changed."""
+    return c.execute(
+        "UPDATE messages SET " + ", ".join(f"{k}=?" for k in _FLAG_COLS) + " WHERE pk=? AND "
+        + " AND ".join(f"{k} IS ?" for k in _FLAG_COLS),
+        [*(new[k] for k in _FLAG_COLS), pk, *(was[k] for k in _FLAG_COLS)]).rowcount
 
 
 def upsert_message(c, m):
