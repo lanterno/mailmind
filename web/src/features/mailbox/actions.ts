@@ -3,7 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { post } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types.gen";
-import { go, type Route } from "../../app/route";
+import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import type { ListData } from "./data";
@@ -71,6 +71,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   fail: (reason: string) => string;
 }) {
   hide(rows);
+  const was = parseRoute(location.pathname, location.search);
   if (after) go(after, { replace: true });
   inFlight++;
   try {
@@ -84,6 +85,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
     if (label) offerUndo(label);
   } catch (e) {
     toast(fail(e instanceof Error ? e.message : ""));
+    if (after && location.pathname + location.search === pathOf(after)) go(was, { replace: true });   // it stayed, so back to it
   } finally {
     unhide(rows);
     if (--inFlight === 0) readAgain(qc);
