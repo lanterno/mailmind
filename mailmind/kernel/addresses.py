@@ -40,7 +40,10 @@ def validate_pair(name: str | None, addr: str | None) -> tuple[str, str]:
     local, _, domain = addr.rpartition("@")
     if not local or _ADDR_BAD.search(local) or _ADDR_BAD.search(domain):
         raise ValueError(f"not a valid address: {addr!r}")
-    return clean(name), f"{local}@{idna_domain(domain)}"
+    ascii_domain = idna_domain(domain)
+    if "@" in ascii_domain or _ADDR_BAD.search(ascii_domain):     # IDNA turns a fullwidth comma or @ into the real one
+        raise ValueError(f"not a valid address: {addr!r}")
+    return clean(name), f"{local}@{ascii_domain}"
 
 
 def parse_addr_list(raw: str | list[str] | None) -> list[tuple[str, str]]:
