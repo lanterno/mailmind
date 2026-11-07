@@ -1,50 +1,52 @@
 """What an export would hold, and a snapshot of the database as a download."""
 import os
-import shutil
 import tempfile
 
-from mailmind.http.routing import ANSWERED, Routes
+from starlette.responses import StreamingResponse
+
+from mailmind.http import route
+from mailmind.http.schemas.common import NotJson, answers
+from mailmind.http.schemas.export import ExportPlan
 from mailmind.platform.db import export
-from mailmind.platform.logging import get_logger
 
-log = get_logger("export")
-
-
-def _snapshot(h):
-    """Stream a consistent SQLite snapshot (checkpoint + .backup) as a download, chunked so a
-    large DB never buffers in memory. Read-only: cannot touch the live DB. Temp file removed after."""
-    tmp = tempfile.mkdtemp(prefix="mm-export-")
-    try:
-        path = export.export_db(tmp)
-        size = os.path.getsize(path)
-        h.send_response(200)
-        h.send_header("Content-Type", "application/octet-stream")
-        h.send_header("Content-Length", str(size))
-        h.send_header("Content-Disposition",
-                         "attachment; filename=" + os.path.basename(path))
-        h.end_headers()
-        with open(path, "rb") as f:
-            while True:
-                chunk = f.read(262144)
-                if not chunk:
-                    break
-                h.wfile.write(chunk)
-    except Exception as e:
-        log.error("db error", exc_info=e)
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+CHUNK = 262144
 
 
-def routes():
-    r = Routes()
+class _Download(StreamingResponse):
+    """A file in chunks, so a large database never sits in memory: each read on a thread, and none held while a client is slow.
+    Its folder goes with the response, however that ends."""
 
-    @r.get("/api/export/plan")
-    def plan(req):
+    def __init__(self, folder, path):
+        self._folder = folder
+        self._file = open(path, "rb")
+        super().__init__(iter(lambda: self._file.read(CHUNK), b""),
+                         headers={"Content-Type": "application/octet-stream", "Content-Length": str(os.path.getsize(path)),
+                                  "Content-Disposition": "attachment; filename=" + os.path.basename(path)})
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._file.close()
+            self._folder.cleanup()      # here on the loop, since a cancelled task can't wait for a thread: it is one unlink
+
+
+def router():
+    r = route.router()
+
+    @r.get("/api/export/plan", responses=answers(ExportPlan))
+    def plan():
         return export.plan()
 
-    @r.get("/api/export")
-    def snapshot(req):
-        _snapshot(req.handler)
-        return ANSWERED
+    @r.get("/api/export", responses=answers(NotJson))
+    def snapshot():
+        """A consistent SQLite snapshot (checkpoint + .backup), read-only: it can't touch the live database. Its folder holds a
+        copy of the mail, and one no response came to own still goes when the process does (`TemporaryDirectory`)."""
+        folder = tempfile.TemporaryDirectory(prefix="mm-export-", ignore_cleanup_errors=True)
+        try:
+            return _Download(folder, export.export_db(folder.name))
+        except Exception:
+            folder.cleanup()
+            raise
 
     return r

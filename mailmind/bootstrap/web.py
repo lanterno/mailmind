@@ -26,8 +26,8 @@ ROUTERS = [attention_routes.router(attention),
            assistant_routes.router(assistant, mailbox),
            compose_routes.router(compose),
            discovery_routes.router(discovery),
-           events.router()]
+           events.router(),
+           export.router()]
 
-handler.bind(Routes(static.routes(),
-                    export.routes()),
+handler.bind(Routes(static.routes()),
              lambda: assistant.governor().saw_someone())
