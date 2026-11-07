@@ -5,6 +5,7 @@ test_http_post_guards.py a few routes end to end.
 Every route is swapped for one that only says it ran. So the walk can knock on all of them, the event stream and a send
 included, with nothing happening, and an honest request reaching each shows the refusals are the perimeter's own.
 """
+import app_client
 import pytest
 
 from mailmind.bootstrap import front, web
@@ -79,6 +80,7 @@ SHAPED_PATHS = {(method, path) for (method, _), path in SHAPED.items()}
 def table(app, monkeypatch):
     spy = Table(web.H.routes)
     monkeypatch.setattr(web.H, "routes", spy)
+    monkeypatch.setattr(app_client, "RECORD_API", None)     # what these answer isn't what the routes answer
     return spy
 
 
