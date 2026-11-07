@@ -9,7 +9,7 @@ An answer's model is never a gate, and a handler passes no `response_model`, whi
 it for OpenAPI, and only under test is each JSON answer held to it (tests/schema_contract.py), which is what says the models are
 true. A route's answer that varies by branch is a union of models, `ok: false` with a 200 included.
 """
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, StrictBool
 
@@ -72,7 +72,7 @@ class Failure(Answer):
 _FAILS = (400, 402, 403, 404, 409, 413, 422, 423, 500, 502)
 
 
-def answers(ok, more=None):
+def answers(ok, more=None) -> dict[int | str, dict[str, Any]]:
     """`responses=` for a route: `ok` at 200 and `Failure` at each status a failure answers, with `more` as {status: model} for
     the rest, or where a route says more than `Failure` does."""
     return {200: {"model": ok}, **{code: {"model": Failure} for code in _FAILS},
