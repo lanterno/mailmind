@@ -68,6 +68,37 @@ class StoredMail:
         finally:
             c.close()
 
+    def for_asking(self, match, accounts, limit):
+        """What a question to Ask reads, or None for one the index rejects: what `match` finds, best first, or with
+        nothing to match the newest mail. `accounts` is the one mailbox asked about, or a list of every enabled one,
+        and an empty list matches nothing."""
+        if isinstance(accounts, str):
+            acct_clause, acct_params = "m.account = ?", [accounts]
+        elif accounts:
+            acct_clause, acct_params = "m.account IN (%s)" % ",".join("?" * len(accounts)), accounts
+        else:
+            acct_clause, acct_params = "1=0", []
+        cols = ("m.pk, m.message_key, m.account, m.from_name, m.from_addr, m.subject, m.snippet, "
+                "m.body_text, m.date_iso, s.summary AS ai_summary")
+        if match:
+            sql = (f"SELECT {cols}, {fts.BM25} AS score "
+                   "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
+                   "LEFT JOIN summaries s ON s.message_pk=m.pk "
+                   f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
+                   "ORDER BY score ASC, m.ts DESC LIMIT ?")
+            args = [match, *acct_params, limit]
+        else:                                                 # no content terms → recent mail
+            sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
+                   f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
+            args = [*acct_params, limit]
+        c = _conn()
+        try:
+            return c.execute(sql, args).fetchall()
+        except sqlite3.OperationalError:
+            return None
+        finally:
+            c.close()
+
     def reach(self, spec, cap, apart):
         """-> (count, rows, matched), or None on a bad query. Mirrors `search`'s FROM and JOINs exactly."""
         match, where, params = fts.to_sql(spec)

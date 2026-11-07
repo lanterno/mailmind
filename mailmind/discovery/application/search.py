@@ -6,6 +6,7 @@ from mailmind.discovery.application.ports import AccountNames, SearchIndex
 from mailmind.discovery.domain import guard
 from mailmind.discovery.domain.query import QuerySpec
 from mailmind.kernel import attention
+from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
 
 
@@ -42,6 +43,10 @@ class Search:
         } for r in rows]
         return {"ok": True, "query": q, "scope": scope, "items": items,
                 "offset": offset, "has_more": has_more, "generated": now_iso()}
+
+    def for_asking(self, match: str, accounts: str | list[str], limit: int) -> list[Row] | None:
+        """What a question to Ask reads, or None on a bad query. Read-only; see the index."""
+        return self._index.for_asking(match, accounts, limit)
 
     def reach(self, spec: QuerySpec, cap: int, apart: set[str],
               sample_size: int) -> tuple[int | None, list[tuple[int, str]], list[dict[str, str]], int]:

@@ -37,7 +37,6 @@ from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
-from mailmind.discovery.adapters.fts import BM25
 from typing import Any
 
 __all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
@@ -158,6 +157,10 @@ class _Mail:
         from mailmind.bootstrap.mailbox import store
         return store.get_message(c, pk)
 
+    def for_asking(self, match, accounts, limit):
+        from mailmind.bootstrap import discovery
+        return discovery.search.for_asking(match, accounts, limit)
+
 
 class _Search:
     """What a bulk command asks of Discovery."""
@@ -185,7 +188,7 @@ briefs = Briefs(calls, answers, _connect, _mail)
 reviews = Reviews(calls, answers, _connect, _mail)
 replies = ReplyDrafts(calls, threads, _connect)
 rewriter = Rewriter(calls)
-asker = Asker(calls, _connect, _mail, BM25)
+asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _connect, _mail)
 drafting = DraftAhead(calls, lambda: gateway(), answers, _connect, _mail, replies, _looks_human)
 bulk = BulkCommands(calls, _Search())

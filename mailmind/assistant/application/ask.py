@@ -13,11 +13,10 @@ Read-only: only SELECTs, no IMAP fetch (never blocks), no mutation, no SMTP. Sha
 """
 from datetime import datetime, timezone
 import re
-import sqlite3
 from typing import Any
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Connect, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Mail, NotSent, Result
 from mailmind.kernel.parsed import is_list
 from mailmind.kernel.row import Row
 
@@ -56,11 +55,9 @@ _PROMPT = (
 
 
 class Asker:
-    def __init__(self, calls: Calls, connect: Connect, mail: Mail, bm25: str):
+    def __init__(self, calls: Calls, mail: Mail):
         self._calls = calls
-        self._connect = connect
         self._mail = mail
-        self._bm25 = bm25
 
     def _terms(self, question: str) -> list[str]:
         """Content terms of an NL question: trailing punctuation + stopwords dropped, FTS-quoted.
@@ -77,45 +74,24 @@ class Asker:
         implicit operator is AND, which is far too strict for a question). '' → no usable terms."""
         return " OR ".join(self._terms(question))
 
-    def _scope(self, account: str | None) -> tuple[str, list[str]]:
-        """(clause, params) confining retrieval to the validated mailbox(es). 'all'/empty →
-        every enabled account (bound as IN params, never widened by anything in the question)."""
+    def _scope(self, account: str | None) -> str | list[str]:
+        """What confines retrieval to the validated mailbox(es): the one asked about. 'all'/empty →
+        every enabled account (never widened by anything in the question), and none matches nothing."""
         if account and account != "all":
-            return "m.account = ?", [account]
-        emails = [a["email"] for a in self._mail.accounts()]
-        if not emails:
-            return "1=0", []                                  # no accounts → match nothing
-        return "m.account IN (%s)" % ",".join("?" * len(emails)), emails
+            return account
+        return [a["email"] for a in self._mail.accounts()]
 
     def ask(self, account: str | None, question: str | None) -> Result:
         question = (question or "").strip()[:MAX_QUESTION]
         if not question:
             return {"ok": False, "error": "question required"}, 400
 
-        match = self._fts_match(question)
-        acct_clause, acct_params = self._scope(account)
-        cols = ("m.pk, m.message_key, m.account, m.from_name, m.from_addr, m.subject, m.snippet, "
-                "m.body_text, m.date_iso, s.summary AS ai_summary")
-        if match:
-            sql = (f"SELECT {cols}, {self._bm25} AS score "
-                   "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
-                   "LEFT JOIN summaries s ON s.message_pk=m.pk "
-                   f"WHERE msg_fts MATCH ? AND {acct_clause} AND m.pending_removal IS NULL "
-                   "ORDER BY score ASC, m.ts DESC LIMIT ?")
-            args: list[str | int] = [match, *acct_params, CAND_LIMIT]
-        else:                                                 # no content terms → recent mail
-            sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
-                   f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
-            args = [*acct_params, CAND_LIMIT]
-        c = self._connect()
-        try:                                                  # finally-close: release the conn on ANY error, not just OperationalError
-            once: set[int] = set()                            # a message counts once, however many folders hold it
-            rows = [r for r in c.execute(sql, args).fetchall()
-                    if not ((r["message_key"] or -r["pk"]) in once or once.add(r["message_key"] or -r["pk"]))]
-        except sqlite3.OperationalError:
+        found = self._mail.for_asking(self._fts_match(question), self._scope(account), CAND_LIMIT)
+        if found is None:
             return {"ok": False, "error": "bad query"}, 400
-        finally:
-            c.close()
+        once: set[int] = set()                                # a message counts once, however many folders hold it
+        rows = [r for r in found
+                if not ((r["message_key"] or -r["pk"]) in once or once.add(r["message_key"] or -r["pk"]))]
 
         if not rows:
             return {"ok": True, "account": account, "question": question,
