@@ -314,7 +314,8 @@ def test_each_request_gets_an_id_of_its_own_that_stays_on_its_thread(home):
 
 def test_each_request_through_either_door_carries_an_id_of_its_own(app, monkeypatch):
     logs.setup()
-    monkeypatch.setattr(mailbox.pool, "stats", lambda: log.warning("in a GET") or {})
+    stats = mailbox.pool.stats()
+    monkeypatch.setattr(mailbox.pool, "stats", lambda: log.warning("in a GET") or stats)
     monkeypatch.setattr(mailbox.filing, "do_pending_retry", lambda id_: log.warning("in a POST") or {"ok": True})
     assert app.get("/api/debug/pool").status == 200
     assert app.get("/api/debug/pool").status == 200
