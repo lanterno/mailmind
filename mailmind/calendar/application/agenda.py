@@ -37,7 +37,7 @@ class Agenda:
         for r, inv in found:
             if agenda.dead(inv) or (inv.get("recurrence_id") and inv.get("uid") in gone):
                 continue
-            if inv.get("rrule") and not inv.get("recurrence_id"):
+            if agenda.repeats(inv) and not inv.get("recurrence_id"):
                 inv: Invite = {**inv, "exdates": inv["exdates"] + moved.get(inv.get("uid"), [])}
             occ = self._reader.next_occurrence(inv, now)
             if occ is None and inv.get("rrule"):                     # a rule the reader can't expand: its first date

@@ -1,7 +1,7 @@
 """An invite as a reader of its text gives it, which agenda and rsvp read and the reader's card shows. A reader finds an
 event's `Fields`; what they come to, the card's words included, is the same whichever reader found them."""
-from datetime import datetime, timedelta, timezone
-from typing import TypedDict
+from datetime import date, datetime, timedelta, timezone
+from typing import NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 _FREQ = {"DAILY": "day", "WEEKLY": "week", "MONTHLY": "month", "YEARLY": "year"}
@@ -32,6 +32,7 @@ class Invite(TypedDict):
     exdates: list[str]
     recurrence_id: str
     tzid: str
+    rdates: NotRequired[list[str]]          # only where a reader of RDATE found some
 
 
 class Fields(TypedDict, total=False):
@@ -48,7 +49,8 @@ class Fields(TypedDict, total=False):
     tzid: str
     organizer: Party
     attendees: list[Party]
-    exdates: list[datetime]
+    exdates: list[datetime | date]          # a date strikes that whole day from a timed series
+    rdates: list[datetime]
     recurrence_id: datetime | None
 
 
@@ -182,7 +184,7 @@ def until_bound(kv: dict[str, str], start: datetime) -> datetime | None:
 def invite_of(e: Fields, method: str) -> Invite:
     start, end, all_day = e.get("start"), e.get("end"), bool(e.get("all_day"))
     recurrence_id = e.get("recurrence_id")
-    return {
+    inv: Invite = {
         "summary": e.get("summary", "(no title)"),
         "location": e.get("location", ""),
         "description": e.get("description", "")[:1500],
@@ -201,3 +203,6 @@ def invite_of(e: Fields, method: str) -> Invite:
         "recurrence_id": (recurrence_id.isoformat() if recurrence_id else ""),
         "tzid": e.get("tzid", ""),
     }
+    if e.get("rdates"):
+        inv["rdates"] = [d.isoformat() for d in e.get("rdates", [])]
+    return inv

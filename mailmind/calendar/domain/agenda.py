@@ -1,4 +1,4 @@
-"""Today & next: which invites make the list, and when. What a message says about an event, as ics_reader parsed it:
+"""Today & next: which invites make the list, and when. What a message says about an event, as a reader parsed it:
 an update replaces the original, a cancellation removes it, and a message about one occurrence of a series
 (RECURRENCE-ID) moves or cancels just that one."""
 from collections.abc import Iterable
@@ -15,6 +15,10 @@ def event_key(inv: Invite) -> tuple[str | tuple[str, str], str]:
 
 def dead(inv: Invite) -> bool:
     return inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED"
+
+
+def repeats(inv: Invite) -> bool:
+    return bool(inv.get("rrule") or inv.get("rdates"))
 
 
 def changed_occurrences(invites: Iterable[Invite]) -> tuple[dict[str, list[str]], set[str]]:

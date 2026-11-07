@@ -1,7 +1,7 @@
 """Calendar's wiring: the one place that binds its ports, to its own adapters and, until those contexts move, to the
 legacy modules behind them. The legacy modules reach Calendar through here.
 """
-from mailmind.calendar.adapters import ics_reader as ics
+from mailmind.calendar.adapters import ics_reader
 from mailmind.calendar.adapters.sqlite import StoredInvites
 from mailmind.calendar.application.agenda import Agenda
 from mailmind.calendar.application.invites import Invites
@@ -13,6 +13,46 @@ from mailmind.compose.api import Built, MessageSpec, build_message, reference_ch
 from mailmind.bootstrap import accounts
 
 __all__ = ["agenda", "ics", "invites", "rsvp"]
+
+KINDS = ("stdlib", "icalendar")
+_kind = "stdlib"
+_reader = ics_reader
+
+
+def use(kind):
+    """Read invites through `kind` from now on: `ics_reader`, or the library one, which only the new door asks for. The
+    old door runs with nothing installed, so it's imported here and only now (missing: fail now, not on the first invite)."""
+    global _kind, _reader
+    if kind not in KINDS:
+        raise ValueError(f"no reader of invites {kind!r}")
+    if kind == "icalendar":
+        from mailmind.calendar.adapters import icalendar_acl
+        _reader = icalendar_acl
+    else:
+        _reader = ics_reader
+    _kind = kind
+
+
+def reset():
+    """`ics_reader`: how a process starts."""
+    use("stdlib")
+
+
+def kind():
+    return _kind
+
+
+class _Reader:
+    """The IcsReader this process reads invites through."""
+    def parse(self, text):
+        return _reader.parse(text)
+
+    def events(self, text):
+        return _reader.events(text)
+
+    def next_occurrence(self, inv, after):
+        return _reader.next_occurrence(inv, after)
+
 
 class _Folders:
     def role_by_name(self, folder):
@@ -51,6 +91,7 @@ class _Send:
 
 
 _stored = StoredInvites(_Folders())
+ics = _Reader()
 invites = Invites(_stored, ics)
 agenda = Agenda(_stored, ics)
 rsvp = Rsvp(invites, _stored, _Messages(), _Send())
