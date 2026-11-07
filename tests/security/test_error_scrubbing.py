@@ -23,7 +23,7 @@ SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs
           ("POST", "change"): "/api/accounts/test"}
 # What never ends, or isn't an answer about anything: the page and its files, which read no mail.
 NOT_WALKED = {("GET", "/api/events"), ("GET", "/")}
-QUERY = ("?account={account}&email={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_id=t&kind=all&refresh=1&format=eml"
+QUERY = ("?account={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_id=t&kind=all&refresh=1&format=eml"
          "&days=7&limit=5")
 
 

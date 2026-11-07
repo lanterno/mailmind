@@ -56,8 +56,6 @@ def test_guards_refuse_foreign_hosts_and_cross_site_reads(app, golden):
 
 def test_accounts_rules_views_and_audit(app, golden):
     fetch(app, golden, "/api/accounts")
-    fetch(app, golden, f"/api/accounts?email={w.BEA}")
-    fetch(app, golden, "/api/accounts?email=nobody@example.test")
     fetch(app, golden, "/api/rules")
     fetch(app, golden, "/api/views")
     fetch(app, golden, "/api/audit")

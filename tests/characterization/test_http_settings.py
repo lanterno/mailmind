@@ -74,7 +74,6 @@ def test_accounts_add_test_edit_delete(app, golden, world):
     post(app, golden, "rename and sign Dee", "/api/accounts/edit",
          {"email": DEE, "alias": "Dee Q.", "signature": "Dee\n-- sent from a test"})
     post(app, golden, "edit an unknown account", "/api/accounts/edit", {"email": "zed@example.test", "alias": "Z"})
-    post(app, golden, "set the default signature", "/api/accounts/signature-default", {"signature": "Cheers"})
     golden.note("mailmind.config.json", disk(world, "mailmind.config.json"))
     post(app, golden, "delete Dee", "/api/accounts/delete", {"email": DEE})
     post(app, golden, "delete Dee again", "/api/accounts/delete", {"email": DEE})

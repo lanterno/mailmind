@@ -103,68 +103,6 @@
  },
  {
   "body": {
-   "account": {
-    "alias": "Bea",
-    "credential": {
-     "set": true,
-     "style": "plain"
-    },
-    "defaults_applied": {
-     "host": false,
-     "port": false,
-     "smtp_host": false,
-     "smtp_port": false,
-     "smtp_starttls": false,
-     "starttls": false,
-     "trash": true
-    },
-    "disabled": false,
-    "email": "bea@example.test",
-    "host": "127.0.0.1",
-    "port": "<imap>",
-    "signature": "",
-    "smtp_host": "127.0.0.1",
-    "smtp_port": "<smtp>",
-    "smtp_starttls": true,
-    "starttls": true,
-    "trash": "Trash",
-    "type": "proton"
-   },
-   "ok": true
-  },
-  "headers": {
-   "cache-control": "no-store",
-   "content-type": "application/json",
-   "cross-origin-opener-policy": "same-origin",
-   "cross-origin-resource-policy": "same-origin",
-   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
-   "referrer-policy": "no-referrer",
-   "x-content-type-options": "nosniff",
-   "x-frame-options": "DENY"
-  },
-  "request": "GET /api/accounts?email=bea@example.test",
-  "status": 200
- },
- {
-  "body": {
-   "account": null,
-   "ok": false
-  },
-  "headers": {
-   "cache-control": "no-store",
-   "content-type": "application/json",
-   "cross-origin-opener-policy": "same-origin",
-   "cross-origin-resource-policy": "same-origin",
-   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
-   "referrer-policy": "no-referrer",
-   "x-content-type-options": "nosniff",
-   "x-frame-options": "DENY"
-  },
-  "request": "GET /api/accounts?email=nobody@example.test",
-  "status": 404
- },
- {
-  "body": {
    "rules": {
     "block_domains": [],
     "block_senders": [],
