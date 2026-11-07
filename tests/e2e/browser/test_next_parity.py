@@ -540,7 +540,7 @@ def test_a_view_that_wont_go_says_so_in_the_pages_words(page, app, world):
     view = page.locator("#folderrail [data-view]", has_text="Lunch")
     expect(view).to_be_visible()
     page.route("**/api/views", lambda route: route.abort() if route.request.method == "POST" else route.fallback())
-    view.locator(".vdel").dispatch_event("click")               # at this width the rail folds it away, as the page's does
+    page.locator("#folderrail .vrow", has_text="Lunch").locator(".vdel").dispatch_event("click")   # at this width the rail folds it away, as the page's does
     expect(page.locator("#toast")).to_have_text("Couldn\u2019t remove view")
     assert all("ERR_FAILED" in p for p in page.problems), page.problems
     page.problems.clear()
@@ -681,4 +681,48 @@ def test_a_custom_send_time_already_gone_says_pick_a_future_one(page, world):
     page.locator("#slWhen").fill("2026-01-01T09:00")
     expect(page.locator("#toast")).to_have_text("Pick a future time")
     expect(page.locator("#slWhen")).to_be_visible()             # still choosing
+    clean(page)
+
+
+def test_a_hidden_tab_still_reads_what_its_meeting_reminder_needs(page):
+    page.pw.add_init_script(AWAY)
+    opened(page)
+    page.evaluate("window.away = true")
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/upcoming" in r.url else None)
+    page.clock.run_for(61_000)
+    until(page, lambda: asked, "an invite that came while the tab was hidden would never remind anyone")
+    clean(page)
+
+
+def test_marked_search_results_mute_their_threads(page, world):
+    opened(page)
+    box = page.get_by_role("textbox", name="search")
+    box.fill("from:lin")
+    box.press("Enter")
+    one = page.locator("#rows .row[data-pk]").first
+    expect(one).to_be_visible()
+    one.hover()
+    one.locator(".cbx").click()
+    page.locator(".bulkbar .bb").filter(has_text="Mute").click()
+    expect(page.locator("#toast")).to_have_text("Muted 1 thread")
+    clean(page)
+
+
+def test_a_saved_view_can_be_removed_from_the_keyboard(page):
+    page.pw.on("dialog", lambda d: d.accept("Lunch"))           # it asks what to call the view
+    opened(page)
+    box = page.get_by_role("textbox", name="search")
+    box.fill("from:lin")
+    box.press("Enter")
+    page.locator("#clientCtx .ctx-save").click()
+    saved = page.locator("#folderrail .vrow")                   # what a person saved, and only that, can go
+    expect(saved).to_have_count(1)
+    box.blur()
+    page.keyboard.press("[")                                    # a narrow rail shows only icons, and no way to remove a view
+    remove = page.get_by_role("button", name="Remove view")
+    remove.focus()
+    expect(remove).to_be_focused()
+    page.keyboard.press("Enter")
+    expect(saved).to_have_count(0)
     clean(page)

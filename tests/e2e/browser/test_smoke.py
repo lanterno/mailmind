@@ -383,6 +383,18 @@ def test_a_changed_certificate_is_shown_in_settings_and_trusted_from_there(page,
     clean(page)
 
 
+def test_marked_search_results_mute_their_threads(page, world):
+    opened(page)
+    page.get_by_role("textbox", name="search").fill("from:lin")
+    one = page.locator("#rows .row[data-pk]").first
+    expect(one).to_be_visible()
+    one.hover()
+    one.locator(".cbx").click()
+    page.locator("#bulkbar .bb").filter(has_text="Mute").click()
+    expect(page.locator("#toast")).to_have_text("Muted 1 thread")
+    clean(page)
+
+
 def test_search_finds_one_senders_mail(page, world):
     opened(page)
     page.keyboard.press("/")

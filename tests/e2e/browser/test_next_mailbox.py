@@ -435,7 +435,7 @@ def test_a_search_saves_as_a_view_in_the_rail_and_the_view_runs_it(page, world):
     expect(box).to_have_value("from:lin")
     page.keyboard.press("[")      # a narrow rail shows only icons, and no way to remove a view
     view.hover()
-    view.locator(".vdel").click()
+    page.locator("#folderrail .vrow", has_text="From Lin").locator(".vdel").click()
     expect(view).to_have_count(0)
     clean(page)
 
