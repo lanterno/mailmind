@@ -53,6 +53,7 @@ uv run pytest tests/unit/compose/test_send_guard.py         # the composer's sen
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (147)
 uv run pytest tests/unit/compose/test_draft_resume_ui.py    # the composer's reopen helpers, run in node (25)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (138)
+uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (58)
 ```
 
 `test_send_guard.py` and `test_draft_resume_ui.py` slice their block (`/* send-guard:pure:start */` … and
@@ -307,8 +308,8 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   `python3 server.py` uses it.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
-  `text` (what a list shows and what search indexes), `headers` and `quote` (the part of a reply you typed, and the
-  quote after it). A `domain` package may import it.
+  `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
+  quote after it) and `frame` (a body as the document its frame loads). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
   holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
@@ -779,7 +780,8 @@ Every answer, a refusal included, carries `perimeter.answer_headers`: nosniff,
 Permissions-Policy, and under `/api/` `Cache-Control: no-store`. `H.end_headers` adds each one
 an answer didn't set itself, and so does the middleware. The page also carries
 `Content-Security-Policy` from `perimeter.page_policy`: script files from this server and nothing else, connections to this server
-only, framed by no one. The browser tests fail on any violation.
+only, framed by no one. The React app at `/next` carries `perimeter.next_page_policy`, the same with nothing in it for mail: no
+`https:` images and no `data:` fonts. The browser tests fail on any violation.
 
 A failed GET or POST answers a fixed message and logs its path and the error's class. Every TLS connection, IMAP
 and SMTP alike, STARTTLS or implicit, takes `accounts.tls_context(host)`: verified everywhere but
@@ -809,6 +811,15 @@ attaches it to every request, GETs included.
 Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.sanitize` is
 defense in depth — **the iframe sandbox is the actual boundary**, so a sanitizer miss
 alone cannot execute script. Preserve that ordering when touching either.
+
+The page's frame is a srcdoc, which inherits the page's policy. The React app's loads `GET /api/message/<pk>/body.html?key=<key>&images=0|1`
+(`Bodies.as_document`), the same sanitized HTML as `/body` or the plain text escaped, under `perimeter.mail_frame_headers`: a policy
+of its own, with a `sandbox` that holds even if the frame's attribute goes (a `<meta>` can't do that), and the one answer this origin
+may frame. The pk names the copy, since one key spans a message's copies, and a sender who reuses a Message-ID shares another's. The
+key must be that row's, so a renumbered pk never shows another message under the bar the page drew. A failure answers as a
+document too, or the frame would show a browser's error page. The document holds no style: `MailFrame` gives it its look
+(`mailDoc.lookOf`) as soon as it is parsed, folds a plain mail's quote and takes its link clicks through `contentDocument`, so a
+reading setting fetches nothing. Load images is a new frame on `images=1`, since moving a loaded frame would add a history entry.
 
 ### AI calls
 

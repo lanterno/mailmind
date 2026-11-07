@@ -11,8 +11,8 @@ Every request reaches 127.0.0.1, so the danger is another page in the browser:
   (`refuse_cross_site`);
 - another site's POST, which can't carry the page's CSRF token or its Origin (`refuse_mutation`).
 The API answers only the page's own requests, which browsers mark Sec-Fetch-Site: same-origin.
-Every answer, a refusal included, carries the headers `answer_headers` names, and the page the
-policy `page_policy` writes.
+Every answer, a refusal included, carries the headers `answer_headers` names, each page the policy
+`page_policy` or `next_page_policy` writes, and a mail body's document the ones `mail_frame_headers` names.
 
 Callers import this package and ask it by these names; which module holds each is its own affair.
 """
