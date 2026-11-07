@@ -14,7 +14,8 @@ counts what was there before the migrations too, and fails only on what they add
 A table a migration retires on purpose (`migrations.RETIRED`) is no loss, and the report says so. Nor
 is a change in the count of one it builds afresh (`migrations.REBUILT`); the full-text check says whether
 that one holds every message. Nor is the growth of a table a migration carries something over to
-(`migrations.FILLED`), though its shrinking would be. The index's own tables (`msg_fts_data` and the like) aren't listed.
+(`migrations.FILLED`), though its shrinking would be. Nor are exactly the rows a migration takes on purpose
+(`migrations.TRIMMED`), counted before it runs, and one row more is. The index's own tables (`msg_fts_data` and the like) aren't listed.
 """
 import collections
 import os
@@ -39,6 +40,7 @@ def check_upgrade(path, say=print):
         copy = os.path.join(folder, "upgrade-copy.db")
         _copy_read_only(path, copy)
         before, v_before, keys_before = _counts(copy), _version(copy), _key_problems(copy)
+        to_go = _rows_to_go(copy, v_before, before)
         migrate.init(copy)
         after, v_after = _counts(copy), _version(copy)
         checks = _checks(copy, keys_before)
@@ -52,9 +54,10 @@ def check_upgrade(path, say=print):
         retired = a is None and migrations.RETIRED.get(table, 0) > v_before
         rebuilt = migrations.REBUILT.get(table, 0) > v_before
         filled = b is not None and a is not None and a > b and migrations.FILLED.get(table, 0) > v_before
+        trimmed = b is not None and a is not None and a != b and a == b - to_go.get(table, 0)
         note = ("" if a == b else "  new" if b is None else "  retired" if retired
-                else "  rebuilt" if rebuilt else "  carried over" if filled else "  CHANGED")
-        if b is not None and a != b and not retired and not rebuilt and not filled:
+                else "  rebuilt" if rebuilt else "  carried over" if filled else "  trimmed" if trimmed else "  CHANGED")
+        if b is not None and a != b and not retired and not rebuilt and not filled and not trimmed:
             changed.append(table)
         say(f"  {table:<{width}}  {_n(b):>10}  {_n(a):>10}{note}")
     say("")
@@ -93,6 +96,12 @@ def _counts(path):
                                                "AND name NOT LIKE 'sqlite_%' AND name NOT GLOB 'msg_fts_*' "
                                                "ORDER BY name")]
     return {t: _query(path, f'SELECT count(*) FROM "{t}"')[0][0] for t in tables}
+
+
+def _rows_to_go(path, version, tables):
+    """What the migrations still to run take from a table on purpose, by table."""
+    return {table: _query(path, count)[0][0] for table, (by, count) in migrations.TRIMMED.items()
+            if version < by and table in tables}
 
 
 def _key_problems(path):

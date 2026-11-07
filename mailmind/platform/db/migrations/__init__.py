@@ -17,7 +17,7 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
-__all__ = ["BASE_SCHEMA", "BASE_UNTIL", "FILLED", "LEGACY_COLS", "MIGRATIONS", "REBUILT", "RETIRED", "add_column"]
+__all__ = ["BASE_SCHEMA", "BASE_UNTIL", "FILLED", "LEGACY_COLS", "MIGRATIONS", "REBUILT", "RETIRED", "TRIMMED", "add_column"]
 
 add_column = _addcol
 
@@ -54,3 +54,6 @@ BASE_UNTIL = _FROZEN[-1][0]     # a database at this version or later has all th
 RETIRED = {"notes": 18, "briefing_cache": 37, "read_mutations": 39, "summaries": 45}     # a table a migration ended, and that migration's version
 REBUILT = {"msg_fts": 38}                         # one a migration built afresh, so its count may change
 FILLED = {"assessments": 45, "snoozes": 45, "message_identity": 45}     # one a migration may add rows to, carrying over what it ends
+# One a migration takes rows from on purpose: that migration's version, and how to count what it will take, asked beforehand.
+TRIMMED = {"attachments": (28, "SELECT count(*) FROM attachments WHERE message_pk IN "
+                               "(SELECT message_pk FROM attachments WHERE lower(content_type) LIKE 'message/%')")}
