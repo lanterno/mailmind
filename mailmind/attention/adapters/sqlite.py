@@ -36,8 +36,8 @@ def clear_snooze(c, pk):
 
 
 def due_snoozes(c, now_ts):
-    """The rows to wake. A snooze come due with no copy left in its folder ends here: the message
-    was filed, and bringing it back later isn't waking it."""
+    """The rows to wake, by domain.snooze.is_due. A snooze come due with no copy left in its folder ends here: the
+    message was filed, and bringing it back later isn't waking it."""
     c.execute("""DELETE FROM snoozes WHERE until<=? AND NOT EXISTS
                  (SELECT 1 FROM messages m WHERE m.message_key=snoozes.message_key AND m.folder=snoozes.folder)""",
               (now_ts,))

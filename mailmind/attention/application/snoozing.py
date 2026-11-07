@@ -5,6 +5,7 @@ from typing import Any
 
 from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
 from mailmind.attention.domain import snooze
+from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -22,30 +23,22 @@ class Snoozing:
         self._screen = screen
 
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
-        """Undo of a snooze: each message as it was. An entry from before `where` names the row by pk alone."""
-        where: list[Any] = d.get("where") or []
+        """Undo of a snooze: each message as it was."""
         with self._uow.write() as c:
-            for i, pk in enumerate(d["pks"]):
-                pu = d["prev_until"][i] if i < len(d.get("prev_until", [])) else None
-                if i < len(where):
-                    pk = self._messages.copy_in_folder(c, *where[i]) if where[i] else None
-                    if pk is None:
-                        continue
-                if pu:
-                    self._book.set_snooze(c, pk, pu)
+            for r in snooze.restorations(d):
+                pk = self._messages.copy_in_folder(c, *r.where) if r.where else r.pk
+                if pk is None:
+                    continue
+                if r.until is not None:
+                    self._book.set_snooze(c, pk, r.until)
                 else:
                     self._book.clear_snooze(c, pk)
                 self._messages.index(c, pk)
         return True, d.get("account"), None
 
     def _pks(self, c: object, body: dict[str, Any]) -> list[int]:
-        if body.get("thread_id") and body.get("account"):
-            return self._book.thread_pks(c, body["account"], body["thread_id"])
-        if isinstance(body.get("pks"), list):
-            return [int(x) for x in body["pks"]][:snooze.BULK_CAP]
-        if body.get("pk") is not None:
-            return [int(body["pk"])]
-        return []
+        thread = snooze.named_thread(body)
+        return self._book.thread_pks(c, *thread) if thread else snooze.named_pks(body)
 
     def snooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
@@ -54,16 +47,12 @@ class Snoozing:
             return {"ok": False, "error": "bad snooze time"}, 400
         with self._uow.write() as c:
             pks = self._pks(c, body)
-            prev: list[int | None] = []
-            where: list[list[str] | None] = []
+            before: list[Row | None] = []
             for pk in pks:
-                r = self._messages.get(c, pk)
-                prev.append(r["snooze_until"] if r else None)
-                where.append([r["message_key"], r["folder"]] if r else None)   # pk isn't stable: the stack outlives it
+                before.append(self._messages.get(c, pk))
                 self._book.set_snooze(c, pk, until)
         if pks:
-            self._undo.push({"kind": "snooze", "pks": pks, "where": where, "prev_until": prev, "label": "Snoozed"},
-                            body.get("undo_group"))
+            self._undo.push(snooze.undo_entry(pks, before), body.get("undo_group"))
         self._screen.stats_changed()
         return {"ok": True, "count": len(pks), "until": until}, 200
 
@@ -86,7 +75,7 @@ class Snoozing:
             due = self._book.due_snoozes(c, now)
             for r in due:
                 self._book.clear_snooze(c, r["pk"])
-                if r["seen"]:
+                if snooze.marks_unread_on_waking(r["seen"]):
                     marked = self._messages.queue_flags(c, r, {"seen": False}, f"wake:{r['pk']}:{now}", now_iso()) or marked
         if marked:
             self._screen.flags_queued()
