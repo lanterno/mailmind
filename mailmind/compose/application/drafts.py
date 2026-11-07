@@ -24,8 +24,11 @@ from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
+log = get_logger("draft")
+resume_log = get_logger("resume")
 _LIVE_TIMEOUT = 10
 PUSH_WAIT = 2.5              # how long a save someone asked for waits for the account's gate, before the job has it
 PUSH_TICK = 10               # the push job looks at least this often
@@ -213,7 +216,7 @@ class Drafts:
         except gates.Busy:
             return False
         except Exception as e:
-            print(f"[draft] push failed: {self._screen.quiet_error(e)}", flush=True)
+            log.warning("push failed: %(why)s", {"why": self._screen.quiet_error(e)})
             c = self._book.connect()
             try:
                 now_waiting = self._book.journal_get(c, did)
@@ -274,7 +277,7 @@ class Drafts:
                                                  prev["uidvalidity"]):
                     gone.append((prev["account"], prev["folder"], prev["uid"]))
             except Exception as e:
-                print(f"[draft] old copy not removed: {self._screen.quiet_error(e)}", flush=True)
+                log.warning("old copy not removed: %(why)s", {"why": self._screen.quiet_error(e)})
         # the row moves with the copy, under the same gate: Edit re-checks it under the gate
         c = self._book.connect()
         try:
@@ -414,7 +417,7 @@ class Drafts:
                 try:                                         # full: only a full scan brings back older UIDs
                     self._mail.sync_whole(acct, row["folder"])
                 except Exception as e:
-                    print(f"[resume] drafts resync failed: {self._screen.quiet_error(e)}", flush=True)
+                    resume_log.warning("drafts resync failed: %(why)s", {"why": self._screen.quiet_error(e)})
                 return {"ok": False, "error": "This draft changed since the list loaded. "
                                               "Open it again from the refreshed list."}, 409
             self._mail.fetch_body(pk)
@@ -422,10 +425,10 @@ class Drafts:
         try:
             changed = gates.run(acct["email"], reread_then_fetch, priority=gates.Priority.INTERACTIVE)
         except self._mail.unreachable() as e:
-            print(f"[resume] fetch failed: {self._screen.quiet_error(e)}", flush=True)
+            resume_log.warning("fetch failed: %(why)s", {"why": self._screen.quiet_error(e)})
             return unreachable, 502
         except Exception as e:                               # fetched, but its bytes don't parse: retrying won't help
-            print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+            resume_log.warning("draft unreadable", exc_info=e)
             return unreadable, 422
         if changed:
             return changed
@@ -497,14 +500,14 @@ class Drafts:
             msg = email.message_from_bytes(raw, policy=email.policy.default)
             parsed = mime.parse(raw)
         except Exception as e:
-            print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+            resume_log.warning("draft unreadable", exc_info=e)
             return unreadable, 422
         try:
             files, inline = resume_files(msg, parsed, elsewhere)
         except Refused as h:
             return {"ok": False, "error": h.msg}, h.code
         except Exception as e:
-            print(f"[resume] draft unreadable: {type(e).__name__}", flush=True)
+            resume_log.warning("draft unreadable", exc_info=e)
             return unreadable, 422
         split = resume_split(parsed["text"], {"own_text": record["own_text"], "tail_text": record["tail_text"]}, exact)
         if split is None:

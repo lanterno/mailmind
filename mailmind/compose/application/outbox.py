@@ -29,8 +29,11 @@ from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
 from mailmind.compose.domain.outbox_item import SendMeta
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform import bus, profile
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
+
+log = get_logger("outbox")
 
 
 def _now() -> int:
@@ -107,7 +110,7 @@ class Outbox:
             return gates.run(acct["email"], lambda: self._copies.in_sent(acct, row["message_id"]),
                              priority=gates.Priority.INTERACTIVE, deadline=self.LOOK_IN_SENT_WAIT)
         except Exception as e:
-            print(f"[outbox] couldn't look in Sent for #{oid}: {type(e).__name__}", flush=True)
+            log.warning("couldn't look in Sent for #%(id)s", {"id": oid}, exc_info=e)
             return False
 
     def list_recent(self, limit: int = 50) -> dict[str, Any]:
@@ -159,7 +162,7 @@ class Outbox:
                 self._commit(lambda c: self._book.outbox_set(c, oid, sent_appended=1))
             except Exception as e:
                 owed = f"sent copy failed: {type(e).__name__}"
-                print(f"[outbox] Sent-copy failed for #{oid}: {self._transport.sanitize_error(e)}", flush=True)
+                log.warning("Sent-copy failed for #%(id)s: %(why)s", {"id": oid, "why": self._transport.sanitize_error(e)})
         replied_to = row["in_reply_to_pk"] or row["orig_message_id"]
         if replied_to and not row["answered_set"]:
             try:
@@ -169,7 +172,7 @@ class Outbox:
                 self._commit(lambda c: self._book.outbox_set(c, oid, answered_set=1))
             except Exception as e:
                 owed = owed or f"marking the original answered failed: {type(e).__name__}"
-                print(f"[outbox] \\Answered failed for #{oid}: {type(e).__name__}", flush=True)
+                log.warning("\\Answered failed for #%(id)s", {"id": oid}, exc_info=e)
         # sent-no-reply: seed a follow-up on the replied-to thread (replies only — a brand-new compose
         # has no local thread_id until its Sent copy syncs). Best-effort, done-once, never fails the send.
         if replied_to and not row["followup_recorded"]:
@@ -183,7 +186,7 @@ class Outbox:
                 c.commit(); c.close()
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
-                print(f"[outbox] followup record failed for #{oid}: {type(e).__name__}", flush=True)
+                log.warning("followup record failed for #%(id)s", {"id": oid}, exc_info=e)
         # the draft this message was composed from is superseded once it's truly sent
         if row["draft_id"] and not row["draft_deleted"]:
             try:
@@ -209,7 +212,7 @@ class Outbox:
                 self._commit(lambda c: self._book.outbox_set(c, oid, draft_deleted=1))
             except Exception as e:
                 owed = owed or f"removing the draft's copy failed: {type(e).__name__}"
-                print(f"[outbox] draft cleanup failed for #{oid}: {type(e).__name__}", flush=True)
+                log.warning("draft cleanup failed for #%(id)s", {"id": oid}, exc_info=e)
         return owed
 
     def draft_copy_is_ours(self, d: Row) -> bool:
@@ -246,7 +249,7 @@ class Outbox:
                               before_dot=lambda: self._commit(lambda c: self._book.outbox_set(c, oid, wire_begun=1)))
             except Unanswered:            # it may have gone out: a person decides, never a retry
                 self._commit(lambda c: self.QUEUE.give_up(c, row, outbox_item.UNSURE))
-                print(f"[outbox] send #{oid} went unanswered; not sending it again", flush=True)
+                log.warning("send #%(id)s went unanswered; not sending it again", {"id": oid})
                 bus.publish(Failed(oid, row["account"], True))
                 return
             except Exception as e:
@@ -259,8 +262,8 @@ class Outbox:
                         return True, 0
                     return self.QUEUE.retry_later(c, row, err, _now())
                 terminal, delay = self._commit(failed)
-                print(f"[outbox] send #{oid} failed ({err}); "
-                      f"{'giving up' if terminal else f'retry in {delay}s'}", flush=True)
+                log.warning("send #%(id)s failed (%(why)s); %(what)s",
+                            {"id": oid, "why": err, "what": "giving up" if terminal else f"retry in {delay}s"})
                 bus.publish(Failed(oid, row["account"], terminal))
                 return
             self._commit(lambda c: self.QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
@@ -273,14 +276,14 @@ class Outbox:
                 # its tries count from the delivery, not on from the send's
                 tried = {"id": oid, "attempts": row["attempts"] if row["delivered"] else 0}
                 terminal, delay = self._commit(lambda c: self.QUEUE.retry_later(c, tried, owed, _now()))
-                print(f"[outbox] sent #{oid}; what it still owes "
-                      f"{'gives up' if terminal else f'is tried again in {delay}s'}", flush=True)
+                log.warning("sent #%(id)s; what it still owes %(what)s",
+                            {"id": oid, "what": "gives up" if terminal else f"is tried again in {delay}s"})
             else:
                 self._commit(lambda c: self.QUEUE.finish(c, oid, datetime.now(timezone.utc).isoformat()))
-                print(f"[outbox] sent #{oid}", flush=True)
+                log.info("sent #%(id)s", {"id": oid})
             bus.publish(Sent(oid, row["account"]))
         except Exception as e:
-            print(f"[outbox] post-send bookkeeping for #{oid} deferred: {type(e).__name__}", flush=True)
+            log.warning("post-send bookkeeping for #%(id)s deferred", {"id": oid}, exc_info=e)
 
     def drain(self) -> None:
         if not profile.writes_allowed():     # read-only: sends wait here for a full run (D4)

@@ -14,7 +14,10 @@ from mailmind.content import sanitize
 from mailmind.content.mime import Parsed
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel.parsed import as_int, is_object
+from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
+
+log = get_logger("compose")
 
 
 def composer_key(body: Mapping[str, Any]) -> str | None:
@@ -83,7 +86,7 @@ class Composing:
                 parsed: Parsed | dict[str, Any] = gates.run(orow["account"], lambda: self._mail.fetch_body(opk),
                                                             priority=gates.Priority.INTERACTIVE) or {}
             except Exception as e:
-                print(f"[compose] original fetch failed for pk {opk}: {self._screen.quiet_error(e)}", flush=True)
+                log.warning("original fetch failed for pk %(id)s: %(why)s", {"id": opk, "why": self._screen.quiet_error(e)})
                 raise Refused(502, "could not load the original message")
             orig: Original = {"from_name": orow["from_name"], "from_addr": orow["from_addr"],
                     "subject": orow["subject"], "date": parsed.get("date"),

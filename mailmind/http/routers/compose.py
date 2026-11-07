@@ -1,5 +1,9 @@
 """What the page asks of Compose: a send, a draft and the outbox."""
 from mailmind.http.routing import Routes
+from mailmind.platform.logging import get_logger
+
+log = get_logger("send")
+resume_log = get_logger("resume")
 
 
 def routes(compose):
@@ -16,7 +20,7 @@ def routes(compose):
         except ValueError as ve:           # our own validation messages are secret-free
             return {"ok": False, "error": str(ve)}, 400
         except Exception as ex:            # never leak a raw exception on the send route
-            print(f"[send] error: {type(ex).__name__}: {ex}", flush=True)
+            log.error("error", exc_info=ex)
             return {"ok": False, "error": "send failed"}, 500
 
     @r.post("/api/outbox/retry")
@@ -45,7 +49,7 @@ def routes(compose):
         try:
             return compose.drafts.resume(req.body)
         except Exception as ex:
-            print(f"[resume] error: {type(ex).__name__}", flush=True)
+            resume_log.error("error", exc_info=ex)
             return {"ok": False, "error": "Couldn’t open this draft."}, 500
 
     return r
