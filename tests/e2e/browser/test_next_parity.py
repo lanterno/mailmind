@@ -225,3 +225,19 @@ def test_the_rail_keeps_the_pages_order_and_all_inboxes_is_one_inbox(page, world
     expect(page.locator("#folderrail .frow.on .fn")).to_have_text("Inbox")
     expect(page.locator("#folderrail")).not_to_contain_text("newest first")
     clean(page)
+
+
+def test_a_saved_view_doesnt_offer_to_be_saved_again(page, world):
+    opened(page)
+    asked = []
+    page.pw.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
+    page.locator('#folderrail [data-view]:not([data-view^="__lane_"])').first.click()
+    expect(page.locator("#clientCtx")).to_be_visible()
+    expect(page.locator("#clientCtx .ctx-save")).to_have_count(0)
+    page.keyboard.press("v")
+    page.wait_for_timeout(100)
+    assert asked == []
+    page.locator("#search").fill("is:unread from:lin")
+    page.keyboard.press("Enter")
+    expect(page.locator("#clientCtx .ctx-save")).to_be_visible()
+    clean(page)
