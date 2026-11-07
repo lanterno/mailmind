@@ -21,7 +21,7 @@ from mailmind.kernel.row import Connection, Row
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
-from mailmind.mailbox.domain import command
+from mailmind.mailbox.domain import command, destination
 from mailmind.mailbox.domain.events import Applied, Restored
 from mailmind.platform import bus, profile, undo
 from mailmind.platform.db.uow import UnitOfWork
@@ -98,6 +98,16 @@ class MailCommands:
         return self.QUEUE.claim(c, id_)
 
 
+    def _known_destination(self, kind: str, email: str, named: str | None) -> destination.Destination:
+        """Where a move goes, as far as that is known with no server: kept for an Undo before it lands."""
+        try:
+            acct = self._accounts.get(email)
+            return destination.known_without_server(kind, named=named, trash=self._accounts.trash_folder(acct),
+                                                    archive_is_label_removal=self._accounts.profile(acct).archive_is_label_removal)
+        except KeyError:                             # the account is gone, which a try finds out
+            return destination.Destination(named)
+
+
     def accept_move(self, kind: str, pk: int, dest: str | None, mutation_id: object,
                     push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
         """Accept a move of message `pk` in a transaction of its own: see accept_move_within."""
@@ -115,26 +125,20 @@ class MailCommands:
         if not row or row["pending_removal"] is not None:
             return None
         email, mid = row["account"], (row["message_id"] or "").strip()
-        try:
-            acct = self._accounts.get(email)
-            by_label = self._accounts.profile(acct).archive_is_label_removal
-            if kind == "trash":                      # known with no server: kept for an Undo before it lands
-                dest = self._accounts.trash_folder(acct)
-        except KeyError:                             # the account is gone, which a try finds out
-            by_label = False
+        where = self._known_destination(kind, email, dest)
         params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
                   "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
         id_, created = self._store.command_insert(c, {
             "account": email, "idempotency_key": f"{kind}:{email}:{mid or pk}:{_request_id(mutation_id)}", "kind": kind,
-            "message_id": mid, "src_folder": row["folder"], "dest": dest, "params": json.dumps(params),
+            "message_id": mid, "src_folder": row["folder"], "dest": where.folder, "params": json.dumps(params),
             "next_attempt_at": 0, "created_at": now_iso()})
         if not created or id_ is None:               # a resubmit of the same request
             return command.Accepted(id_, email, False, False)
         self._store.mark_pending_removal(c, pk, id_)
         undoable = bool(mid) and push_undo is not None
         if mid and push_undo is not None:
-            push_undo(c, {"kind": "gmail_archive" if (kind == "archive" and by_label) else "move", "command": id_,
-                          "account": email, "src_folder": row["folder"], "dest_folder": dest or "",
+            push_undo(c, {"kind": "gmail_archive" if where.drop_inbox_label else "move", "command": id_,
+                          "account": email, "src_folder": row["folder"], "dest_folder": where.folder or "",
                           "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
                           "subject": row["subject"], "thread_id": row["thread_id"]})
         claimed = self._claim(c, id_)

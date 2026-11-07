@@ -159,11 +159,12 @@ class ServerOps:
                     if k in _FLAG:
                         (s.add_flags if v else s.remove_flags)([uid], [_FLAG[k]])
                 return command.ServerAnswer()
+            trash = self._accounts.trash_folder(acct)
             where = destination.resolve(kind, named=row["dest"], archive_is_label_removal=server.archive_is_label_removal,
-                                        trash=self._accounts.trash_folder(acct), junk_fallback=server.junk_fallback,
+                                        trash=trash, junk_fallback=server.junk_fallback,
                                         find=lambda *roles: mail_session.find_role(s, *roles))
             strategy = move_strategy.choose(kind, where, capabilities=s.capabilities, marks_trash_read=server.marks_trash_read,
-                                            trash=self._accounts.trash_folder(acct))
+                                            trash=trash)
             if strategy.way is Way.LABELS:
                 s.remove_labels([uid], ["\\Inbox"])
                 return command.ServerAnswer()

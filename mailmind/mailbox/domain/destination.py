@@ -30,3 +30,14 @@ def resolve(kind: str, *, named: str | None, archive_is_label_removal: bool, tra
     if kind == "archive":
         return Destination(find("archive", "all"))
     return Destination()
+
+
+def _no_server(*_roles: str) -> str | None:
+    return None
+
+
+def known_without_server(kind: str, *, named: str | None, archive_is_label_removal: bool, trash: str | None) -> Destination:
+    """As much of `resolve` as holds with no server to ask, as a command is accepted and its Undo written. A folder only
+    the server can name is left for a try to find, so no folder here doesn't yet mean nowhere to go."""
+    return resolve(kind, named=named, archive_is_label_removal=archive_is_label_removal, trash=trash, junk_fallback=None,
+                   find=_no_server)
