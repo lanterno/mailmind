@@ -187,11 +187,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   connects with `timeout=15`, capping the exposure, but it still opens its own session while holding
   the IMAP gate instead of using `Pool.borrow` the way the three read call sites do. `borrow` would
   have to take that timeout.
-- **Send marked rows to `/api/bulk/file`** · medium value · effort S — `Filing.file_many` accepts up
-  to `BULK_MAX` rows in one transaction and leaves the rest to the worker past `FILE_WAIT`, and
-  `tests/unit/mailbox/test_file_many.py` holds it to that, but no client calls it yet: `cbulk` and
-  the React app's `actions.bulk` still post a row at a time, so a big selection waits on each row
-  and a crash can leave part of it unfiled.
 - **Soak IMAPClient on real accounts, then make it the default** · high value · effort S — Waits on
   the owner. The new door reaches an account through IMAPClient when its config asks (`"imap_adapter":
   "imapclient"`; the startup line counts them). Both adapters pass the contract against the fake
@@ -332,8 +327,7 @@ implementation.
 
 - **At-rest encryption for `mailmind.db`** — the DB now holds full bodies and attachments, which
   materially raises its value. Current posture is gitignored, with no encryption anywhere in the
-  tree; the config, rules, views, log and backups are owner-only, and the database file takes
-  whatever the umask gives it. SQLCipher was postponed on 2026-11-03, and `python3 server.py` couldn't
+  tree; the database, config, rules, views, log and backups are owner-only. SQLCipher was postponed on 2026-11-03, and `python3 server.py` couldn't
   use it while it runs with nothing installed. The question is whether that posture stays acceptable
   for a single-user localhost machine or becomes opt-in encryption.
 - **How aggressively to prefetch folders** — on-demand sync bounds disk and first-sync cost, but

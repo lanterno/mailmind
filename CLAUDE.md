@@ -477,7 +477,8 @@ attachment, `/api/accounts/<action>`) is asked only when no literal path answers
 
 The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()` call into it.
 
-- `database.connect` opens every connection: WAL, `synchronous=FULL` with `fullfsync` (a commit
+- `database.connect` opens every connection, and makes a new file its owner's alone (`init` takes back one from before, with its
+  log): WAL, `synchronous=FULL` with `fullfsync` (a commit
   survives a power cut, because `delivered` and `applied` are exactly-once gates),
   `busy_timeout` 60 s, `foreign_keys=ON`, which the cascades depend on, and `temp_store=MEMORY`, so what a
   big sort holds of the mail never lands in a temp file.
@@ -712,8 +713,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   caller holding a write uses), under one undo group, so a crash can't leave half of them marked. Each
   is then tried on its own once that commits: a refusal gives back only its own message, and a try
   that raises counts as queued, with the rest still tried.
-- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; the React app sends more as more requests
-  under one undo group, and the page still sends one a row): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
+- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; each client sends more as more requests
+  under one undo group): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
   own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
   (`commands.leave_to_worker`), and every row has left the lists by then.
 - Every account's Inbox is one list and one query (`/api/inboxes`, `queries.all_inboxes`), read from what is stored: an account
