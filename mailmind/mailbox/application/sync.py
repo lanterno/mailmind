@@ -431,8 +431,7 @@ class Ingest:
         sync_state row), INBOX first."""
         c = self._store.conn()
         try:
-            folders = [r["folder"] for r in c.execute(
-                "SELECT folder FROM sync_state WHERE account=? ORDER BY folder <> 'INBOX', folder", (email,))]
+            folders = self._store.synced_folders(c, email)
         finally:
             c.close()
         return folders or ["INBOX"]
@@ -450,8 +449,7 @@ class Ingest:
         res: Pruned = {"account": acct["email"], "live": 0, "stored": 0, "ghosts": 0,
                        "pruned": 0, "error": None}
         c = self._store.conn()
-        stored_uids = [r["uid"] for r in c.execute(
-            "SELECT uid FROM messages WHERE account=? AND folder=?", (acct["email"], folder))]
+        stored_uids = self._store.stored_uids(c, acct["email"], folder)
         c.close()
         res["stored"] = len(stored_uids)
         try:

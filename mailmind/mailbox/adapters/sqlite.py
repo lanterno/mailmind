@@ -514,6 +514,17 @@ def mark_verified(c, account, folder, live_uids, when):
                   [when, account, folder, *live])
 
 
+def synced_folders(c, account):
+    """Each folder a sync has stored (it has a sync_state row), INBOX first."""
+    return [r["folder"] for r in c.execute(
+        "SELECT folder FROM sync_state WHERE account=? ORDER BY folder <> 'INBOX', folder", (account,))]
+
+
+def stored_uids(c, account, folder):
+    return [r["uid"] for r in c.execute(
+        "SELECT uid FROM messages WHERE account=? AND folder=?", (account, folder))]
+
+
 def reconcile(c, account, folder, live_uids, when, among=None):
     """Prune INBOX rows whose UID is no longer live; stamp survivors verified.
     Returns (pruned, kept). Caller MUST guarantee live_uids came from a real,
