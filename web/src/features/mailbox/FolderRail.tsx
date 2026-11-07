@@ -100,7 +100,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
       void qc.invalidateQueries({ queryKey: ["views"] });
       toast("View removed");
     } catch {
-      toast("Couldn’t remove the view");
+      toast("Couldn’t remove view");
     }
   };
   return (
