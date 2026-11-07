@@ -45,6 +45,15 @@ export function useRealtime() {
       toast(`${n} snoozed message${n > 1 ? "s" : ""} back`);
     });
     es.addEventListener("resync", () => again("digest"));
+    // With the stream down nothing says what changed, so the counts and the tray are read on a timer until it reconnects.
+    let up = false;
+    es.onopen = () => { up = true; };
+    es.onerror = () => { up = false; };
+    const whileDown = (run: () => void, ms: number) => setInterval(() => { if (!up && !document.hidden) run(); }, ms);
+    const timers = [
+      whileDown(() => again("digest"), 45_000),
+      whileDown(() => { again("outbox"); again("pending"); }, 20_000),
+    ];
     es.addEventListener("sync-done", () => {
       again("digest");
       again("folders");
@@ -61,6 +70,7 @@ export function useRealtime() {
     });
     return () => {
       clearTimeout(digestSoon);
+      timers.forEach(clearInterval);
       es.close();
     };
   }, [qc]);
