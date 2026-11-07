@@ -6,6 +6,7 @@ from mailmind.bootstrap.mailbox import store
 from mailmind.mailbox.application.reversal import Reversals
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.domain.roles import Folder
+from mailmind.platform.db.uow import UnitOfWork
 
 ADA = "ada@example.test"
 ALL_MAIL = "[Google Mail]/Alle Nachrichten"
@@ -47,8 +48,9 @@ class _Ingest:
 
 
 def _undo(session):
-    server = ServerOps(store, _Accounts(), lambda acct: session, lambda value: value)
-    return Reversals(store, _Accounts(), server, None, _Ingest()).gmail_archive(ENTRY)
+    uow = UnitOfWork()
+    server = ServerOps(uow, store, _Accounts(), lambda acct: session, lambda value: value)
+    return Reversals(uow, store, _Accounts(), server, None, _Ingest()).gmail_archive(ENTRY)
 
 
 def test_the_label_goes_back_through_the_folder_playing_all_mail(data_dir):
