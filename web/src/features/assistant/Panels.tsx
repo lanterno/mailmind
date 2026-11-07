@@ -111,7 +111,7 @@ function YourWeek({ m }: { m: Mailbox }) {
   else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>;
   else if (error instanceof ApiError && error.overLimit) body = <div className="rv-err">Today’s AI limit is reached, so your review isn’t written. <button className="ai-rerun" onClick={again}>Write it</button></div>;
   else if (error) body = <div className="rv-err">Couldn’t build your review. <button className="ai-rerun" onClick={again}>Retry</button></div>;
-  else if (review && !review.ok) body = <div className="rv-err">Review unavailable <button className="ai-rerun" onClick={again}>Retry</button></div>;
+  else if (review && !review.ok) body = <div className="rv-err">{(review as { error?: string }).error || "Review unavailable"} <button className="ai-rerun" onClick={again}>Retry</button></div>;
   else if (review) body = <ReviewBody d={review} m={m} again={again} />;
   return (
     <>
