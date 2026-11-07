@@ -96,3 +96,23 @@ def test_asking_for_the_folders_leaves_focus_reading_and_focus_reading_closes_th
     expect(body).to_have_class(re.compile("read-focus"))
     expect(body).not_to_have_class(re.compile("rail-open"))
     clean(page)
+
+
+def test_changing_from_swaps_the_signature_and_leaves_one_you_edited(page, world):
+    from mailmind.bootstrap.accounts import config
+    config.update_account(w.ADA, {"signature": "Ada at Quilt"})
+    config.update_account(w.BEA, {"signature": "Bea at Quilt"})
+    opened(page)
+    page.keyboard.press("c")
+    text = page.get_by_role("textbox", name="message body")
+    expect(text).to_have_value("\n\n-- \nAda at Quilt")
+    text.focus()
+    page.pw.evaluate("document.querySelector('#cmpBody').setSelectionRange(0, 0)")
+    page.keyboard.type("Hello")
+    page.locator("#cmpFrom").select_option(w.BEA)
+    expect(text).to_have_value("Hello\n\n-- \nBea at Quilt")
+    until(page, lambda: page.pw.evaluate("document.querySelector('#cmpBody').selectionStart") == 5, "you go on writing where you were")
+    text.fill("Hello\n\n-- \nBea, edited")
+    page.locator("#cmpFrom").select_option(w.ADA)
+    expect(text).to_have_value("Hello\n\n-- \nBea, edited")    # yours now: it stays
+    clean(page)

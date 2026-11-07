@@ -80,6 +80,23 @@ describe("opening", () => {
     expect(m.open({ draftId: 3 })!.body).toBe("");
   });
 
+  it("swaps the signature as From changes, and leaves one you edited", () => {
+    const selected: number[][] = [];
+    const { m } = setup({ signature: (e) => (e === "bea@example.test" ? "Bea" : e === "cy@example.test" ? "" : "Ada"), selection: () => [5, 99], select: (a, b) => void selected.push([a, b]) });
+    const c = m.open()!;
+    m.edit("body", `Hello${c.sigBlock}`);
+    m.setFrom("bea@example.test");
+    expect(c.body).toBe("Hello\n\n-- \nBea");
+    expect(selected.at(-1)).toEqual([5, 5]);
+    m.setFrom("cy@example.test");
+    expect(c.body).toBe("Hello");
+    m.setFrom("bea@example.test");
+    expect(c.body).toBe("Hello\n\n-- \nBea");
+    m.edit("body", "Hello\n\n-- \nBea, edited");
+    m.setFrom("ada@example.test");
+    expect(c.body).toBe("Hello\n\n-- \nBea, edited");
+  });
+
   it("tracks the signature a reopened text ends with, and none it doesn't", () => {
     const { m } = setup({ signature: () => "Ada" });
     expect(m.open({ body: "hi\n\n-- \nAda" })!.sigBlock).toBe("\n\n-- \nAda");
