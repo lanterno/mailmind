@@ -44,7 +44,7 @@ def row(did):
 
 
 def waiting(did):
-    c = book.connect()
+    c = store.conn()
     try:
         return book.journal_get(c, did)
     finally:
@@ -343,10 +343,14 @@ def test_a_held_draft_refuses_a_save_and_isnt_pushed(app, world):
     assert tray(app) == []                                 # the outbox's row says it
 
 
+def test_discarding_a_draft_with_no_row_answers_as_gone(data_dir):
+    assert drafts.save({"delete": True, "draft_id": 12345}) == ({"ok": True, "deleted": True}, 200)
+
+
 def test_a_send_about_to_go_keeps_its_draft_from_being_pushed(app, world):
     did = save(app, autosave=True)["draft_id"]
     assert app.post("/api/send", new(draft_id=did)).json["ok"]
-    c = book.connect()
+    c = store.conn()
     book.journal_failed(c, did, 0, 0)                      # as good as due
     c.commit()
     c.close()
