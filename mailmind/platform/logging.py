@@ -48,7 +48,8 @@ BACKUPS = 3
 _MAX_TEXT = 300                         # of a message or a value
 
 # The names whose values a line may show: the app's own words, ids and counts, never a person's.
-ALLOWED = frozenset({"adapters", "engine", "event", "handler", "id", "job", "method", "path", "port", "what", "why"})
+ALLOWED = frozenset({"adapters", "count", "engine", "event", "handler", "id", "job", "method", "path", "port", "what",
+                     "why"})
 
 _ADDRESS = re.compile(r"""[^\s<>"'(),;:\[\]]*(?:@|%40)[^\s<>"'(),;:\[\]]+""", re.IGNORECASE)
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
