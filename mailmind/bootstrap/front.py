@@ -14,7 +14,7 @@ from mailmind.bootstrap import assistant, calendar, wiring, mailbox, web
 from mailmind.http import serving
 from mailmind.http.app import create_app
 from mailmind.http.bridge import HandlerBridge
-from mailmind.platform import settings
+from mailmind.platform import settings, webroot
 from mailmind.platform.logging import get_logger
 
 
@@ -41,4 +41,6 @@ def serve(port=None):
     wiring.start()
     port = settings.current().port
     get_logger().info("MailMind → http://127.0.0.1:%(port)s  (serving now)", {"port": port})
+    if not webroot.is_built():
+        get_logger().warning("The app isn't built, so it answers 404. Run: just build-web")
     serving.Server(serving.config(app, port=port), before_shutdown).run()

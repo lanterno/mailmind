@@ -1,13 +1,17 @@
-"""The React app, the old page at /legacy, and their files, each page with this run's token in it."""
+"""The app's page, with this run's token in it, and its files."""
 from urllib.parse import urlsplit
 
 from mailmind.http.routing import ANSWERED, Routes
 from mailmind.platform import perimeter, webroot
 
 
-def _page(h, html, policy):
+def _page(h):
+    """The app, or how to make one: only a build holds it."""
+    html = webroot.page(h.CSRF)
+    if html is None:
+        return h._send(404, b"The app isn't built. Run: just build-web\n", "text/plain; charset=utf-8")
     h._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
-            [("Content-Security-Policy", policy),
+            [("Content-Security-Policy", perimeter.page_policy()),
              ("Cache-Control", "no-store")])     # it holds this run's token
 
 
@@ -16,7 +20,7 @@ def _asset(h, path):
     found = webroot.asset(path)
     if found is None:
         return h._send(404, b"not found", "text/plain")
-    headers = [("ETag", found.etag), ("Cache-Control", found.cache), ("Vary", "Accept-Encoding")]
+    headers = [("ETag", found.etag), ("Cache-Control", webroot.FOREVER), ("Vary", "Accept-Encoding")]
     if h.headers.get("If-None-Match") == found.etag:
         h.send_response(304)
         for k, v in headers:
@@ -30,12 +34,8 @@ def _asset(h, path):
 
 
 def _is_place(path):
-    """A place in the React app, as `app/route.ts` writes one."""
+    """A place in the app, as `app/route.ts` writes one."""
     return path in ("/all", "/search") or path.startswith(("/m/", "/brief/"))
-
-
-def _old_page(h):
-    _page(h, webroot.page(h.CSRF), perimeter.page_policy())
 
 
 def routes():
@@ -43,26 +43,12 @@ def routes():
 
     @r.get("/")
     def home(req):
-        """The React app. With nothing built the old page stands in, so `python3 server.py` still needs no build."""
-        built = webroot.next_page(req.handler.CSRF)
-        if built is None:
-            _old_page(req.handler)
-        else:
-            _page(req.handler, built, perimeter.next_page_policy())
-        return ANSWERED
-
-    @r.get("/legacy")
-    def legacy(req):
-        _old_page(req.handler)
+        _page(req.handler)
         return ANSWERED
 
     @r.matching("GET", _is_place)
     def place(req):
-        built = webroot.next_page(req.handler.CSRF)
-        if built is None:
-            req.handler._send(404, b"The app isn't built. Run: just build-web\n", "text/plain; charset=utf-8")
-        else:
-            _page(req.handler, built, perimeter.next_page_policy())
+        _page(req.handler)
         return ANSWERED
 
     @r.matching("GET", lambda path: path == "/next" or path.startswith("/next/"))
