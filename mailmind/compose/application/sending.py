@@ -4,10 +4,10 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from mailmind.compose.application.composing import Composing, composer_key
+from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Book
-from mailmind.compose.domain import schedule
+from mailmind.compose.domain import draft, schedule
 from mailmind.compose.domain.builder import build_message
 from mailmind.compose.domain.errors import Refused
 from mailmind.compose.domain.outbox_item import SendMeta
@@ -29,7 +29,7 @@ class Sending:
         except ValueError as e:
             return {"ok": False, "error": str(e)}, 400
         draft_id = body.get("draft_id")
-        key = composer_key(body)
+        key = draft.composer_key(body)
         if not draft_id and key:              # a first save whose answer the composer never heard
             with self._uow.read() as c:
                 found = self._book.draft_by_key(c, key)

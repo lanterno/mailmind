@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mailmind.compose.application.ports import Accounts, Account, Book, Copies, Effects, Messages, Screen, Transport
-from mailmind.compose.domain import outbox_item
+from mailmind.compose.domain import draft, outbox_item
 from mailmind.compose.domain.builder import Built
 from mailmind.compose.domain.errors import Unanswered
 from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
@@ -206,17 +206,10 @@ class Outbox:
         return pk if outbox_item.still_the_original(row, self._mail.message(pk)) else None
 
     def draft_copy_is_ours(self, d: Row) -> bool:
-        """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
-        MailMind saved (the row holds its hash, and a save that never synced has no `messages` row to
-        be flagged), one the server flags \\Draft, or one in a folder named Drafts. Received mail
-        filed under "Contract drafts" stays, and a `drafts` row may well point at it: until now Edit
-        was offered in any folder whose name held "draft"."""
-        if not d["uid"]:                         # a save still only in the journal: nothing to remove
-            return False
-        if d["raw_sha"] or self._screen.names_drafts(d["folder"]):
-            return True
-        with self._uow.read() as c:
-            return self._book.flagged_draft(c, d["account"], d["folder"], d["uid"])
+        def flagged() -> bool:
+            with self._uow.read() as c:
+                return self._book.flagged_draft(c, d["account"], d["folder"], d["uid"])
+        return draft.copy_is_ours(d, self._screen.names_drafts, flagged)
 
     def send_one(self, oid: int) -> None:
         row = self._commit(lambda c: self.QUEUE.claim(c, oid))

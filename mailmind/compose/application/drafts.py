@@ -1,5 +1,4 @@
 """A draft: saving it on the server, removing it, and opening it back into the composer from its own bytes."""
-import base64
 import email
 import email.policy
 import enum
@@ -9,10 +8,10 @@ import time
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from mailmind.compose.application.composing import Composing, composer_key
+from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
-from mailmind.compose.domain import limits
+from mailmind.compose.domain import draft, limits
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
 from mailmind.compose.domain.draft_journal import PUSH_EVERY, due_after_failing, due_after_typing
 from mailmind.compose.domain.errors import Refused
@@ -34,8 +33,6 @@ _LIVE_TIMEOUT = 10
 PUSH_WAIT = 2.5              # how long a save someone asked for waits for the account's gate, before the job has it
 PUSH_TICK = 10               # the push job looks at least this often
 WAITING_AFTER = 30           # the tray names a save this overdue
-HELD = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it."
-DISCARDED = "You discarded this draft. It leaves the server as soon as the server can be reached."
 
 
 class _Gate(enum.Enum):
@@ -51,8 +48,7 @@ def _now() -> int:
 
 
 def _scope_of(row: Row, waiting: Row) -> str:
-    """An old copy in another account (From changed) is removed there too: the job spans both."""
-    return waiting["account"] if row["account"] == waiting["account"] or not row["uid"] else gates.EVERY_ACCOUNT
+    return gates.EVERY_ACCOUNT if draft.spans_accounts(row, waiting) else waiting["account"]
 
 
 class Drafts:
@@ -62,8 +58,7 @@ class Drafts:
         self._accounts, self._mail, self._copies, self._screen = accounts, mail, copies, screen
 
     def is_draft(self, row: Row) -> bool:
-        """A message is a draft if the server flags it \\Draft, or it sits in the account's Drafts."""
-        return bool(row["draft"]) or self._screen.plays_drafts(row["account"], row["folder"])
+        return draft.is_draft(row, self._screen.plays_drafts)
 
     def _ours_to_remove(self, d: Row) -> bool:
         """The outbox's draft_copy_is_ours, and a copy in a Drafts folder only the last LIST can name."""
@@ -81,11 +76,8 @@ class Drafts:
         now = now_iso()
         uidvalidity = self._mail.uidvalidity(row["account"], row["folder"])
         with self._uow.write() as c:
-            did = self._book.draft_upsert(c, {"id": None, "account": row["account"], "folder": row["folder"],
-                                         "uid": row["uid"], "message_id": row["message_id"],
-                                         "uidvalidity": uidvalidity,
-                                         "in_reply_to_pk": None, "mode": "new",
-                                         "subject": row["subject"], "created_at": now, "updated_at": now})
+            did = self._book.draft_upsert(c, draft.tracked(row["account"], row["message_id"], row["subject"], "new", now,
+                                                           folder=row["folder"], uid=row["uid"], uidvalidity=uidvalidity))
         return {"draft_id": did, "draft_mode": "new", "is_draft": True}
 
     def save(self, body: Mapping[str, Any]) -> Answer:
@@ -96,9 +88,7 @@ class Drafts:
             return self._discard(int(body["draft_id"]))
         try:
             spec, in_reply_to_pk, acct = self._composing.spec(body)
-            # nothing to save? avoid littering the Drafts folder with an empty message
-            if not (spec["subject"].strip() or (spec["text"] or "").strip()
-                    or spec["to"] or spec["cc"] or spec["bcc"] or spec["attachments"]):
+            if draft.is_empty(spec):
                 return {"ok": True, "draft_id": body.get("draft_id"), "empty": True}, 200
             built = build_message(spec, draft=True)
         except Refused as h:
@@ -115,12 +105,7 @@ class Drafts:
             if uid is not False:
                 answer.update(pushed=True, uid=uid)
         if body.get("resume") is None and spec["tail"]["text"]:
-            # From here on the composer names the quote, the threading and the files itself, as a
-            # reopened draft's does, so its saves and its send no longer need the original's row.
-            answer["resume"] = {"in_reply_to": spec["in_reply_to"] or "", "references": " ".join(spec["references"] or []),
-                                "tail_text": lf(spec["tail"]["text"])}
-            answer["files"] = [{"filename": a["filename"], "content_type": a["content_type"], "size": len(a["data"]),
-                                "b64": base64.b64encode(a["data"]).decode("ascii")} for a in spec["forwarded"]]
+            answer.update(draft.handed_over(spec))
         return answer, 200
 
     def _accept(self, body: Mapping[str, Any], spec: Composed, built: Built, acct: Account,
@@ -128,7 +113,7 @@ class Drafts:
         """Write the save to the journal, in one transaction with the draft's row. Returns (the row's id, its version,
         None), or (None, None, the answer) for a save that may not go in."""
         did = int(body["draft_id"]) if body.get("draft_id") else None
-        key = composer_key(body)
+        key = draft.composer_key(body)
         base = body.get("base_version")
         now, stamp = _now(), now_iso()
         bcc = [addr_chip(n, a) for n, a in addresses.parse_addr_list(spec["bcc"])]   # validated by build
@@ -138,18 +123,16 @@ class Drafts:
             if waiting is not None and waiting["discard"]:   # as good as gone: this save is a draft of its own
                 prev = waiting = None
             if prev and self._book.outbox_holds_draft(c, prev["id"]):
-                return None, None, ({"ok": False, "error": HELD}, 423)
-            if prev and base is not None and base != prev["version"] and (key is None or prev["saved_by"] != key):
+                return None, None, ({"ok": False, "error": draft.HELD}, 423)
+            if prev and draft.is_stale(prev, base, key):
                 return None, None, ({"ok": False, "conflict": True, "version": prev["version"],
-                                     "error": "This draft changed in another window."}, 409)
-            version = prev["version"] + 1 if prev else 1
+                                     "error": draft.CHANGED_ELSEWHERE}, 409)
+            version = draft.next_version(prev)
             if prev:
                 new_id = prev["id"]
             else:
-                new_id = self._book.draft_upsert(c, {
-                    "id": None, "account": acct["email"], "folder": None, "uid": None, "message_id": built["message_id"],
-                    "uidvalidity": None, "in_reply_to_pk": in_reply_to_pk, "mode": body.get("mode", "new"),
-                    "subject": spec["subject"], "created_at": stamp, "updated_at": stamp})
+                new_id = self._book.draft_upsert(c, draft.tracked(acct["email"], built["message_id"], spec["subject"],
+                                                                  body.get("mode", "new"), stamp, in_reply_to_pk=in_reply_to_pk))
                 if key:
                     self._book.draft_set_key(c, new_id, key)
             self._book.draft_note_save(c, new_id, body.get("mode", "new"), in_reply_to_pk, spec["subject"], version, key, stamp)
@@ -173,8 +156,8 @@ class Drafts:
                 return {"ok": True, "deleted": True}, 200
             waiting = self._book.journal_get(c, did)
             if row["uid"] or (waiting is not None and waiting["tried"]):
-                self._book.journal_discard(c, did, row["version"] + 1, row["account"], _now())
-                self._book.draft_note_discard(c, did, row["version"] + 1, now_iso())
+                self._book.journal_discard(c, did, draft.next_version(row), row["account"], _now())
+                self._book.draft_note_discard(c, did, draft.next_version(row), now_iso())
                 there = True
             else:
                 self._book.draft_delete(c, did)
@@ -229,23 +212,13 @@ class Drafts:
         if not going:                                # a newer save or a discard came first: the next try takes that
             return False
         acct = self._accounts.get(j["account"])
-        same = prev["account"] == j["account"]       # From changed → prev's UID is another mailbox's
         folder, uid, uidv, replaced = self._copies.append_to_drafts(
-            acct, j["raw"],
-            prev_uid=(prev["uid"] if same else None),
-            prev_uidvalidity=(prev["uidvalidity"] if same else None),
-            prev_msgid=(prev["message_id"] if same else None),
-            prev_folder=(prev["folder"] if same else None),
-            message_id=j["message_id"], tried=j["tried"])
+            acct, j["raw"], **draft.replaced_in_place(prev, j), message_id=j["message_id"], tried=j["tried"])
         self._screen.touched(j["account"], folder)   # its list shows the new copy on its next open
         gone = [(j["account"], folder, replaced)] if replaced else []   # and no longer the copies it replaced
-        # The old copy is in another mailbox (From changed) or another folder (a draft reopened
-        # from elsewhere): drop it there, and only now that the new copy is saved, so a save that
-        # fails never leaves no copy at all. Best-effort; a UID we can't vouch for stays, and so
-        # does a message that isn't a draft at all.
-        if (prev["uid"] and prev["uidvalidity"] is not None
-                and (not same or (prev["folder"] and prev["folder"] != folder))
-                and self._ours_to_remove(prev)):
+        # Only now that the new copy is saved, so a save that fails never leaves no copy at all. Best-effort; a message
+        # that isn't a draft at all stays.
+        if draft.left_elsewhere(prev, j, folder) and self._ours_to_remove(prev):
             try:
                 if self._copies.delete_draft_uid(self._accounts.get(prev["account"]), prev["folder"], prev["uid"],
                                                  prev["uidvalidity"]):
@@ -354,9 +327,9 @@ class Drafts:
             queued = before is not None and self._book.outbox_holds_draft(c, before["id"])
             asked = self._book.journal_get(c, before["id"]) if before is not None else None
         if queued:                                           # reopened and sent again, it would go out twice
-            return {"ok": False, "error": HELD}, 423
+            return {"ok": False, "error": draft.HELD}, 423
         if asked is not None and asked["discard"]:
-            return {"ok": False, "error": DISCARDED}, 409
+            return {"ok": False, "error": draft.DISCARDED}, 409
         live = self._live(acct, row["folder"], row["uid"])  # unreachable (None) → the local copy
 
         def reread_then_fetch() -> Answer | None:
@@ -421,11 +394,11 @@ class Drafts:
             d, j = self._book.draft_get(c, did), self._book.journal_get(c, did)
             queued = d is not None and self._book.outbox_holds_draft(c, did)
         if queued:
-            return {"ok": False, "error": HELD}, 423
+            return {"ok": False, "error": draft.HELD}, 423
         if d is None or j is None:
             return {"ok": False, "error": "That draft has reached the server. Open it from Drafts."}, 409
         if j["discard"]:
-            return {"ok": False, "error": DISCARDED}, 409
+            return {"ok": False, "error": draft.DISCARDED}, 409
         return self._opened(j["raw"], d, j, True, j["account"], d["subject"], None)
 
     def _keep_apart(self, d: Row, j: Row) -> None:
@@ -433,10 +406,7 @@ class Drafts:
         save goes on as a draft of its own, with no copy of the other's to replace."""
         with self._uow.write() as c:
             now = now_iso()
-            new_id = self._book.draft_upsert(c, {
-                "id": None, "account": j["account"], "folder": None, "uid": None, "message_id": j["message_id"],
-                "uidvalidity": None, "in_reply_to_pk": None, "mode": d["mode"], "subject": d["subject"],
-                "created_at": now, "updated_at": now})
+            new_id = self._book.draft_upsert(c, draft.tracked(j["account"], j["message_id"], d["subject"], d["mode"], now))
             self._book.draft_note_save(c, new_id, d["mode"], None, d["subject"], d["version"], None, now)
             self._book.journal_move(c, d["id"], new_id)
 

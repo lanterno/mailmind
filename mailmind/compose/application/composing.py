@@ -21,11 +21,6 @@ from mailmind.platform.workers import gates
 log = get_logger("compose")
 
 
-def composer_key(body: Mapping[str, Any]) -> str | None:
-    """The composer's idempotency key, as a save or a send gives it."""
-    return str(body.get("idempotency_key") or "").strip()[:200] or None
-
-
 class Composing:
     def __init__(self, uow: UnitOfWork, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
         self._uow, self._book, self._accounts, self._mail, self._screen = uow, book, accounts, mail, screen
