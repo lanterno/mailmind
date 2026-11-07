@@ -148,3 +148,15 @@ def test_a_saved_view_named_by_anything_but_text(app, verb, field, junk):
     r = app.post("/api/views", {"verb": verb, "name": "Lunch", "q": "lunch", field: junk})
     assert (r.status, r.json) == (400, BAD_REQUEST)
     assert app.get("/api/views").json == before
+
+
+@pytest.mark.parametrize("path", ["/api/folders", "/api/stats"])
+def test_asking_after_an_account_there_is_no_such_of(app, path):
+    r = app.get(f"{path}?account=nobody@example.test")
+    assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
+
+
+@pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
+def test_acting_on_an_account_there_is_no_such_of(app, path):
+    r = app.post(path, {"account": "nobody@example.test", "dry_run": True})
+    assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
