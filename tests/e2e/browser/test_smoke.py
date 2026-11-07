@@ -185,6 +185,24 @@ def test_archive_from_the_list_then_undo(page, world):
     clean(page)
 
 
+def test_marked_rows_file_as_one_request_and_one_undo_brings_them_all_back(page, world):
+    opened(page)
+    names = (RECEIPT, "ada-inbox-03-newsletter.eml")
+    for name in names:
+        one = row(page, world, name)
+        one.hover()
+        one.locator(".cbx").click()
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url.split("/api/")[1]) if "/api/" in r.url and r.method == "POST" else None)
+    page.locator("#bulkbar .bb").filter(has_text="Archive").click()
+    expect(page.locator("#toast")).to_have_text("Archived 2")
+    until(page, lambda: all(box_of(world, n) == "Archive" for n in names), "both archived on the server")
+    assert [a for a in asked if a.startswith(("bulk", "archive", "thread"))] == ["bulk/file"]
+    page.keyboard.press("z")
+    until(page, lambda: all(box_of(world, n) == "INBOX" for n in names), "one Undo didn't reverse both")
+    clean(page)
+
+
 def test_read_only_says_so_and_what_it_files_waits(page, world, monkeypatch):
     monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
