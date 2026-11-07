@@ -315,6 +315,11 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `/next` exists only as built (without `just build-web` it answers 404), its top bar links back to
   `/`, and `/` is still the page, the one thing `python3 server.py`, the kill switch, can serve with
   nothing installed. The old door going also lets the routers stop being standard-library tables.
+  An audit against the page closed 41 gaps on the fictional world, and a week on real accounts covers what it couldn't drive.
+  Left: the flip itself (`BASE` in `app/route.ts`, the "Current app" link, and `webroot` still serving the page to a door with
+  no fresh build), and three differences on Esc to accept or undo: in the search box the page only blurs where the React app
+  clears the search, with a search and a message open the page leaves the search where the React app closes the message, and
+  on a desktop only the React app's closes a message.
 - **Drop what is written only for a rollback** · low value · effort S — `summaries`,
   `messages.snoozed_until`, `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk`
   and `followups.anchor_pk` are still written, for going back to an older commit. Dropping them is a
