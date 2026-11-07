@@ -9,6 +9,9 @@ from mailmind.accounts.domain.account import Entry
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
 
 
+PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick word of a bad host
+
+
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
                  probe: ConnectionProbe, quiet_error: Callable[[BaseException], str],
@@ -27,14 +30,13 @@ class Connections:
         server banner."""
         t0 = time.time()
         try:
-            # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host;
-            # a short timeout also gives the user fast feedback on a bad host.
+            # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host
             if body.get("draft"):
                 acct = throwaway_account(body["draft"])
-                self._probe.draft(acct, timeout=15)
+                self._probe.draft(acct, timeout=PROBE_TIMEOUT)
             else:
                 acct = self._get(body["email"])
-                self._probe.saved(acct, timeout=15)
+                self._probe.saved(acct, timeout=PROBE_TIMEOUT)
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:
