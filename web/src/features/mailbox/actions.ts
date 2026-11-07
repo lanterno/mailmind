@@ -248,9 +248,10 @@ export async function setStar(qc: QueryClient, row: Pick<Row, "pk" | "flagged">)
   try {
     const r = await post("/api/flag", { pk: row.pk, flag: "flagged", on });
     if (!r.ok) throw new Error("refused");
+    toast(on ? "Starred" : "Unstarred");
   } catch {
     patchRow(qc, row.pk, { flagged: !on });
-    toast("Couldn’t change the star");
+    toast("Couldn’t star");
   }
 }
 
@@ -279,5 +280,5 @@ export function armDwell(qc: QueryClient, pk: number) {
 
 export async function markUnread(qc: QueryClient, pk: number) {
   cancelDwell();
-  toast((await markSeen(qc, pk, false)) ? "Marked unread" : "Couldn’t mark unread");
+  toast((await markSeen(qc, pk, false)) ? "Marked unread" : "Couldn’t update");
 }
