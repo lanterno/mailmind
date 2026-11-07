@@ -1,9 +1,12 @@
-"""What a bulk command may do: its verbs, how far one may reach, and the plan a preview freezes.
+"""What a bulk command may do: its verbs, how far one may reach, what is taken from a model's plan, and the plan a preview
+freezes.
 
 Nothing here touches mail. `application.plans` holds the plans open, `application.bulk` makes them, and the mail's own
-contexts carry them out.
+contexts carry them out. Whether a filter narrows, and whether what it reaches is most of the mailbox, are Discovery's word.
 """
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 TTL = 600            # seconds a preview stays good for
 KEPT = 16            # plans held at a time, the newest
@@ -11,6 +14,8 @@ VERBS = frozenset({"archive", "trash", "junk", "read", "unread", "star", "snooze
 CAP = 500            # hard ceiling on how many messages one command may touch
 TRASH_CAP = 200      # trash and junk are extra-dangerous, so a lower ceiling
 SAMPLE = 8           # how many a preview shows
+COMMAND_MAX = 512    # how much of a command is read
+FILTER_MAX = 400     # how much of the filter a model wrote is read
 APART = frozenset({"sent", "drafts", "trash", "junk"})      # a command reaches these only if its filter names a folder
 ALREADY = {"archive": frozenset({"archive", "all"}), "trash": frozenset({"trash"}), "junk": frozenset({"junk"})}     # a verb's own home
 
@@ -22,6 +27,26 @@ class ActionPlan:
     preset: str | None
     messages: tuple[tuple[int, str], ...]         # (message key, folder)
     expires: float
+
+
+def command_of(text: object) -> str:
+    return str(text or "").strip()[:COMMAND_MAX]
+
+
+def filter_told(said: Mapping[str, Any]) -> str:
+    return str(said.get("filter") or "").strip()[:FILTER_MAX]
+
+
+def verb_told(said: Mapping[str, Any]) -> str | None:
+    """The verb a model's plan acts with, or None when the plan isn't a clean act on the allowlist, which degrades to a
+    search: it acts on nothing."""
+    verb = said.get("verb")
+    return verb if said.get("intent") == "act" and verb in VERBS else None
+
+
+def preset_told(said: Mapping[str, Any], verb: str) -> str:
+    """What a snooze waits for: only a snooze has one to name, and one that names none waits until tomorrow."""
+    return (said.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
 
 
 def cap_of(verb: str) -> int:

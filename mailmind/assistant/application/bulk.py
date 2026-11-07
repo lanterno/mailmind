@@ -71,7 +71,7 @@ class BulkCommands:
         """Plan an NL bulk command → a validated, capped PREVIEW with the id of the plan it froze. READ-ONLY:
         generates no mutation. Degrades to {intent:'search'} whenever it isn't a clean, allowlisted,
         safely-scoped action. Returns (result, code)."""
-        cmd = str(body.get("cmd") or "").strip()[:512]
+        cmd = action_plan.command_of(body.get("cmd"))
         if not cmd:
             return {"ok": False, "error": "empty command"}, 400
         today = datetime.now().astimezone().date().isoformat()
@@ -82,10 +82,9 @@ class BulkCommands:
             raise
         except Exception:
             return {"ok": False, "error": "planner unavailable", "retry": True}, 502
-        filt = str(plan.get("filter") or "").strip()[:400]
-        verb = plan.get("verb")
-        # degrade: anything that isn't a clean, allowlisted ACT → just show a search (act on nothing)
-        if plan.get("intent") != "act" or verb not in action_plan.VERBS:
+        filt = action_plan.filter_told(plan)
+        verb = action_plan.verb_told(plan)
+        if verb is None:                                   # degrade: just show a search (act on nothing)
             return {"ok": True, "intent": "search", "filter": filt}, 200
         # RE-PARSE the model's filter through the real grammar — its output is never trusted raw
         spec = self._search.parse(filt)
@@ -100,7 +99,7 @@ class BulkCommands:
             return {"ok": True, "intent": "search", "filter": filt, "empty": True}, 200
         if self._search.sweeps_whole_mailbox(matched):  # blast-radius backstop: refuse what's still most of the mailbox
             return {"ok": True, "intent": "search", "filter": filt}, 200
-        preset = (plan.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
+        preset = action_plan.preset_told(plan, verb)
         frozen = self._DO_PLANS.open(verb, preset, messages)
         return {"ok": True, "intent": "act", "verb": verb, "filter": filt,
                 "snooze_preset": preset,
