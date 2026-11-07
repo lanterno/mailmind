@@ -1,7 +1,7 @@
 """Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. The
 tray's Retry and Discard of what is waiting are here too."""
 import secrets
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from mailmind.kernel.parsed import as_int
@@ -47,13 +47,22 @@ class Filing:
         return {"ok": True, "msg": "queued", "status": outcome, "undoable": undoable}
 
 
+    def _pushing(self, undo_group: str | None) -> Callable[[Connection, dict[str, Any]], None]:
+        """What keeps a move's reversal under `undo_group`, in the transaction that accepts the move."""
+        def push(c: Connection, entry: dict[str, Any]) -> None:
+            self._undo.push_within(c, entry, undo_group)
+        return push
+
+
     def _file(self, kind: str, pk: int, dest: str | None, undo_group: str | None, mutation_id: object,
               undo: bool = True) -> dict[str, Any]:
         """A move, through the command path: what the person hears of it."""
-        def push(c: Connection, entry: dict[str, Any]) -> None:
-            self._undo.push_within(c, entry, undo_group)
+        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, self._pushing(undo_group) if undo else None)
+        return self._submit_move(kind, accepted)
 
-        accepted = self._commands.accept_move(kind, pk, dest, mutation_id, push if undo else None)
+
+    def _submit_move(self, kind: str, accepted: command.Accepted | None) -> dict[str, Any]:
+        """A move accepted and committed: a try at it, and what the person hears of it."""
         if accepted is None:
             return dict(_NOT_FOUND)
         if not accepted.created:
@@ -173,14 +182,19 @@ class Filing:
     def do_thread_file(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
         """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
         anchor's folder, which is what a conversation row stands for. Members are resolved here, never
-        sent by the client (pk isn't stable, and a list row only knows its newest message). Each one
-        goes through the per-message op, so the gate, the command path and undo descriptors are
-        unchanged; one undo group spans them all, so a single Undo restores the conversation. A
-        message without a thread_id is a conversation of one, never the folder's unthreaded pool."""
+        sent by the client (pk isn't stable, and a list row only knows its newest message). A message
+        without a thread_id is a conversation of one, never the folder's unthreaded pool.
+
+        One transaction accepts them all under one undo group, so they leave the lists together, a single
+        Undo restores the conversation, and a crash midway leaves all of it as it was. Then each one is tried
+        as filing one message is, on the gate with no transaction open, and each answers for itself: one the
+        server refuses goes back to its folder alone, and the rest stay filed."""
         pk = as_int(body.get("pk"))
         if pk is None:
             return {"ok": False, "msg": "bad pk"}
-        with self._uow.read() as c:
+        kind = "archive" if path == "/api/thread/archive" else "trash"
+        push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
+        with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             row = self._store.get_message(c, pk)
             if not row:
                 pks = []
@@ -188,14 +202,18 @@ class Filing:
                 pks = self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
             else:
                 pks = [pk]
-        if not pks:
+            accepted = [(p, self._commands.accept_move_within(c, kind, p, None, body.get("mutation_id"), push)) for p in pks]
+        if not accepted:
             return {"ok": False, "msg": "not found"}
-        group = body.get("undo_group") or "thread:" + secrets.token_hex(6)
         filed: list[int] = []
         queued, undoable, msg = 0, False, ""
-        for p in pks:
-            one = {"pk": p, "undo_group": group, "mutation_id": body.get("mutation_id")}
-            res = self.do_write("/api/archive", one) if path == "/api/thread/archive" else self.do_trash(one)
+        for p, one in accepted:
+            try:
+                res = self._submit_move(kind, one)
+            except Exception as e:                   # it's back in the queue; the rest are claimed, and wait on this loop
+                do_log.warning("%(what)s failed", {"what": kind}, exc_info=e)
+                self.flags_queued()
+                res = {"ok": True, "status": command.QUEUED, "undoable": bool(one and one.undoable)}
             if res.get("ok"):
                 filed.append(p)
                 queued += res.get("status") == "queued"
@@ -203,7 +221,7 @@ class Filing:
             else:
                 msg = res.get("msg") or msg
         return {"ok": bool(filed), "msg": msg if not filed else ("queued" if queued else "filed"),
-                "pks": filed, "count": len(filed), "failed": len(pks) - len(filed),
+                "pks": filed, "count": len(filed), "failed": len(accepted) - len(filed),
                 "queued": queued, "undoable": undoable}
 
 

@@ -100,37 +100,45 @@ class MailCommands:
 
     def accept_move(self, kind: str, pk: int, dest: str | None, mutation_id: object,
                     push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
-        """Accept a move of message `pk`: an Accepted, or None when there is no such message, or it is on its way out
-        already. `push_undo(c, entry)`, in the same transaction, keeps what reverses it; without one, nothing will."""
+        """Accept a move of message `pk` in a transaction of its own: see accept_move_within."""
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
-            row = self._store.get_message(c, pk)
-            if not row or row["pending_removal"] is not None:
-                return None
-            email, mid = row["account"], (row["message_id"] or "").strip()
-            try:
-                acct = self._accounts.get(email)
-                by_label = self._accounts.profile(acct).archive_is_label_removal
-                if kind == "trash":                  # known with no server: kept for an Undo before it lands
-                    dest = self._accounts.trash_folder(acct)
-            except KeyError:                         # the account is gone, which a try finds out
-                by_label = False
-            params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
-                      "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
-            id_, created = self._store.command_insert(c, {
-                "account": email, "idempotency_key": f"{kind}:{email}:{mid or pk}:{_request_id(mutation_id)}", "kind": kind,
-                "message_id": mid, "src_folder": row["folder"], "dest": dest, "params": json.dumps(params),
-                "next_attempt_at": 0, "created_at": now_iso()})
-            if not created or id_ is None:           # a resubmit of the same request
-                return command.Accepted(id_, email, False, False)
-            self._store.mark_pending_removal(c, pk, id_)
-            undoable = bool(mid) and push_undo is not None
-            if mid and push_undo is not None:
-                push_undo(c, {"kind": "gmail_archive" if (kind == "archive" and by_label) else "move", "command": id_,
-                              "account": email, "src_folder": row["folder"], "dest_folder": dest or "",
-                              "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
-                              "subject": row["subject"], "thread_id": row["thread_id"]})
-            claimed = self._claim(c, id_)
-            return command.Accepted(id_, email, True, undoable, claimed)
+            return self.accept_move_within(c, kind, pk, dest, mutation_id, push_undo)
+
+
+    def accept_move_within(self, c: Connection, kind: str, pk: int, dest: str | None, mutation_id: object,
+                           push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
+        """Accept a move of message `pk` in the caller's write block, which commits it with whatever else it accepts: an
+        Accepted, or None when there is no such message, or it is on its way out already. `push_undo(c, entry)`, on the
+        same connection, keeps what reverses it; without one, nothing will. Submit only once the block has committed:
+        until then no other connection can see the command, and a try would find it cancelled."""
+        row = self._store.get_message(c, pk)
+        if not row or row["pending_removal"] is not None:
+            return None
+        email, mid = row["account"], (row["message_id"] or "").strip()
+        try:
+            acct = self._accounts.get(email)
+            by_label = self._accounts.profile(acct).archive_is_label_removal
+            if kind == "trash":                      # known with no server: kept for an Undo before it lands
+                dest = self._accounts.trash_folder(acct)
+        except KeyError:                             # the account is gone, which a try finds out
+            by_label = False
+        params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
+                  "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
+        id_, created = self._store.command_insert(c, {
+            "account": email, "idempotency_key": f"{kind}:{email}:{mid or pk}:{_request_id(mutation_id)}", "kind": kind,
+            "message_id": mid, "src_folder": row["folder"], "dest": dest, "params": json.dumps(params),
+            "next_attempt_at": 0, "created_at": now_iso()})
+        if not created or id_ is None:               # a resubmit of the same request
+            return command.Accepted(id_, email, False, False)
+        self._store.mark_pending_removal(c, pk, id_)
+        undoable = bool(mid) and push_undo is not None
+        if mid and push_undo is not None:
+            push_undo(c, {"kind": "gmail_archive" if (kind == "archive" and by_label) else "move", "command": id_,
+                          "account": email, "src_folder": row["folder"], "dest_folder": dest or "",
+                          "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
+                          "subject": row["subject"], "thread_id": row["thread_id"]})
+        claimed = self._claim(c, id_)
+        return command.Accepted(id_, email, True, undoable, claimed)
 
 
     def accept_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> command.Accepted | None:
