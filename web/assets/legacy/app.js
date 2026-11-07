@@ -229,7 +229,7 @@ function _syncScrim(){ const on=$("#drawer").classList.contains("open")||setting
   ||($("#composeModal")&&$("#composeModal").classList.contains("show"))||document.body.classList.contains("rail-open");
   $("#scrim").classList.toggle("on",on); }
 function openDrawer(o){ $("#drawer").classList.toggle("open",o); _syncScrim(); if(o){loadFloodSenders();loadStats();loadRules();loadAudit();} }
-async function refreshStats(){ if(!$("#drawer").classList.contains("open"))return;   // drawer closed → skip the live 8-account scan; it reloads on openDrawer + the 120s poll
+async function refreshStats(){ if(!$("#drawer").classList.contains("open"))return;   // drawer closed → skip the live scan of every account; it reloads on openDrawer + the 120s poll
   try{ await loadStats(); }catch(e){} }
 async function loadStats(){
   let d; try{ d=await api("/api/stats"); }catch(e){ return; }
