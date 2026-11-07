@@ -26,7 +26,7 @@ def decode(items: object) -> list[Attachment]:
     out: list[Attachment] = []
     total = 0
     for a in items:
-        if not is_object(a):
+        if not is_object(a) or not isinstance(a.get("filename"), str | None):
             raise ValueError("bad attachment")
         try:
             data = base64.b64decode(a.get("b64") or "", validate=True)

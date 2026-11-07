@@ -33,6 +33,10 @@ _UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api
              "/api/debug/health"}     # asking how the app is doing changes nothing, this included
 
 
+# What a route reads as text under these names, wherever it reads them: anything else here is a malformed request.
+_TEXT_FIELDS = ("account", "email", "thread_id", "from_addr", "token", "decision", "mode", "subject", "text", "undo_group",
+                "idempotency_key")
+
 AI_OVER_HEADER = "X-MailMind-AI-Over-Limit"   # "allow": the user said this request may go over
 
 
@@ -114,14 +118,16 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _body(self):
-        """The request's JSON object, {} for no body, or None for a body that isn't a JSON object
-        (an array, a string, not JSON at all), which the route answers 400 once the guards pass."""
+        """The request's JSON object, {} for no body, or None for a body that isn't a JSON object (an array, a string, not
+        JSON at all) or that holds anything but text in a text field, which the route answers 400 once the guards pass."""
         length = int(self.headers.get("Content-Length", 0) or 0)
         try:
             b = json.loads(self.rfile.read(length) or b"{}") if length else {}
         except Exception:
             return None
-        return b if isinstance(b, dict) else None
+        if not isinstance(b, dict) or any(not isinstance(b.get(name), str | None) for name in _TEXT_FIELDS):
+            return None
+        return b
 
     def _ui_touch(self, path):
         """Someone is here, for the cost governor's presence gate on drafting ahead. _UI_QUIET routes
