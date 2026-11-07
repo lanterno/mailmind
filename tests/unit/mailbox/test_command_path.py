@@ -2,6 +2,7 @@
 transaction. What the routes answered before it came is pinned elsewhere; this is what it adds. Through each door, on the
 fake IMAP server."""
 import dataclasses
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -367,3 +368,27 @@ def test_a_message_says_which_account_it_is_in(world):
     assert server_ops.account_of(world.pk(LUNCH)) == w.ADA
     assert server_ops.account_of(10 ** 9) is None
     assert server_ops.account_of(None) is None
+
+
+def test_undo_of_a_queued_archive_whose_mail_left_on_its_own_stays_out_of_the_way(app, world, monkeypatch):
+    """Nothing names where an archive that hasn't gone yet would have put it, so an entry like this could only ever fail,
+    on top of everything beneath it, until it expired."""
+    from mailmind.bootstrap import mailbox
+    from mailmind.bootstrap.mailbox import server_ops, store
+    until = int((datetime.now(timezone.utc) + timedelta(hours=6)).timestamp())
+    assert app.post("/api/snooze", {"pk": world.pk(LUNCH), "until": until}).json["ok"]
+    pk = world.pk(RECEIPT)
+    with monkeypatch.context() as m:
+        m.setattr(server_ops, "apply", dies_before)
+        with pytest.raises(Crash):
+            mailbox.filing.do_write("/api/archive", {"pk": pk})
+    restart()
+    assert not undo_stack()[-1].get("dest_folder")
+    world.server.mailbox(*world.placed[RECEIPT][:2]).messages.pop(world.uid(RECEIPT))
+    c = store.conn()
+    c.execute("DELETE FROM messages WHERE pk=?", (pk,))
+    c.commit()
+    c.close()
+    assert app.post("/api/undo", {}).json["ok"]
+    assert app.post("/api/undo", {}).json["ok"]               # the snooze beneath it
+    assert undo_stack() == []
