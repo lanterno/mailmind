@@ -103,7 +103,7 @@ def start(spawn=_daemon):
         spawn(commands.worker_loop)
         jobs.start(spawn)
         realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
-    get_logger("ai").info("%(engine)s", {"engine": assistant.calls.describe_engine()})
+    get_logger("ai").info("%(engine)s", {"engine": assistant.status.describe_engine()})
     get_logger("imap").info("%(adapters)s", {"adapters": mailbox.describe()})
 
 

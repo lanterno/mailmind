@@ -48,7 +48,6 @@ TRIAGE_SCHEMA = {
     },
     "required": ["summary", "importance", "category"],
 }
-_last = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for status()
 
 
 class Triage:

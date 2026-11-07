@@ -35,13 +35,14 @@ from mailmind.assistant.application.prepared_replies import PreparedReplies
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
+from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.application.triage import Triage
 from mailmind.assistant.domain import limits
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "threads", "transport", "triage", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "triage", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = "ANTHROPIC_API_KEY"
@@ -133,7 +134,9 @@ def transport() -> str:
 
 
 _uow = UnitOfWork()
-calls = Calls(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status())
+status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: triage.batch_status(),
+                lambda: calls.model_label())
+calls = Calls(lambda: gateway(), status)
 
 
 class _Mail:

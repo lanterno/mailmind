@@ -339,7 +339,7 @@ reconciler = Reconciler(_uow, store, _directory, _open, folders, stats)
 
 def _ai_status():
     from mailmind.bootstrap import assistant
-    return assistant.calls.status()
+    return assistant.status.report()
 
 
 digest = Digest(_uow, store, _directory, syncing, _ai_status)
