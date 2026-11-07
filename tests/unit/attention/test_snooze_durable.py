@@ -214,6 +214,33 @@ def test_two_copies_waking_together_each_get_the_mark(app, world):
     assert copy(world, CI)["seen"] == 0 and copy(world, CI, "Archive")["seen"] == 0
 
 
+# -- what an older commit wrote -----------------------------------------------------------------------------
+
+def test_a_start_brings_in_a_snooze_only_the_column_holds(world):
+    from mailmind.bootstrap.mailbox import store
+    row = world.row(RECEIPT)
+    c = store.conn()
+    c.execute("UPDATE messages SET snoozed_until=4102444800 WHERE pk=?", (row["pk"],))
+    c.commit()
+    c.close()
+    store.init()
+    c = store.conn()
+    try:
+        assert [tuple(r) for r in c.execute("SELECT message_key, folder, until FROM snoozes")] == [
+            (row["message_key"], "INBOX", 4102444800)]
+    finally:
+        c.close()
+
+
+def test_a_start_doesnt_bring_back_a_snooze_that_ended(app, world):
+    from mailmind.bootstrap.mailbox import store
+    subject = world.row(RECEIPT)["subject"]
+    snooze(app, world)
+    assert app.post("/api/unsnooze", {"pk": world.pk(RECEIPT)}).json["ok"]
+    store.init()
+    assert subject in listed(app)
+
+
 # -- two copies in one folder ------------------------------------------------------------------------------
 
 def second_copy(world, name=RECEIPT):

@@ -218,6 +218,41 @@ def test_a_start_gives_a_key_to_a_row_an_older_commit_wrote(world):
         {"summary": "Said by the old one"}]
 
 
+def test_a_start_brings_in_what_an_older_commit_said_of_a_row_that_had_a_key(world):
+    from mailmind.bootstrap.mailbox import store
+    row = world.row(LUNCH)
+    execute("INSERT INTO summaries(message_pk, summary, importance) VALUES (?, 'Said by the old one', 3)", row["pk"])
+    assert q("SELECT 1 FROM assessments WHERE message_key=?", row["message_key"]) == []
+    store.init()
+    assert q("SELECT summary FROM assessments WHERE message_key=?", row["message_key"]) == [
+        {"summary": "Said by the old one"}]
+
+
+def test_a_start_leaves_what_the_ai_said_under_the_key_as_it_is(world):
+    from mailmind.bootstrap import assistant
+    from mailmind.bootstrap.mailbox import store
+    row = world.row(LUNCH)
+    c = store.conn()
+    assistant.answers.save_summary(c, row["pk"], "Said under the key", 3, "info", "", "m", "2026-11-02")
+    c.commit()
+    c.close()
+    execute("UPDATE summaries SET summary='Said by the old one' WHERE message_pk=?", row["pk"])
+    store.init()
+    assert q("SELECT summary FROM assessments WHERE message_key=?", row["message_key"]) == [{"summary": "Said under the key"}]
+
+
+def test_a_key_a_row_comes_back_to_at_a_start_is_no_longer_gone(world):
+    from mailmind.bootstrap.mailbox import store
+    row = world.row(LUNCH)
+    execute("UPDATE messages SET message_key=NULL WHERE pk=?", row["pk"])
+    execute("UPDATE message_identity SET gone_at=1 WHERE key=?", row["message_key"])
+    store.init()
+    assert q("SELECT gone_at FROM message_identity WHERE key=?", row["message_key"]) == [{"gone_at": None}]
+    c = store.conn()
+    assert store.forget_gone_messages(c, 4102444800) == 0
+    c.close()
+
+
 def test_migration_30_gives_the_keys_and_keeps_what_the_ai_said(tmp_path):
     path = str(tmp_path / "old.db")
     migrate.init(path, migrations.MIGRATIONS[:29])
