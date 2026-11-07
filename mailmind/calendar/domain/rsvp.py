@@ -33,6 +33,11 @@ def _ics_esc(v: str | None) -> str:
     return (v or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
+def _cn(name: str | None) -> str:
+    """A name as a parameter, in quotes: one in the name would end them, and RFC 6868's `^'` says it instead."""
+    return ';CN="%s"' % _ics_esc(name).replace('"', "^'") if name else ""
+
+
 def _fold(line: str) -> str:
     """RFC5545 content line folding: lines SHOULD be <=75 octets; continuation = CRLF + SPACE.
     Folds on UTF-8 byte boundaries so a multibyte char is never split."""
@@ -91,9 +96,7 @@ def build_reply(invite: Invite, attendee_email: str, attendee_name: str | None, 
             lines.append("DTEND:" + de)
     org_email, org_name = org.get("email"), org.get("name")
     if org_email:
-        cn = (';CN="%s"' % _ics_esc(org_name)) if org_name else ""
-        lines.append(_fold("ORGANIZER%s:mailto:%s" % (cn, org_email)))
-    acn = (';CN="%s"' % _ics_esc(attendee_name)) if attendee_name else ""
-    lines.append(_fold("ATTENDEE%s;PARTSTAT=%s:mailto:%s" % (acn, partstat, attendee_email)))
+        lines.append(_fold("ORGANIZER%s:mailto:%s" % (_cn(org_name), org_email)))
+    lines.append(_fold("ATTENDEE%s;PARTSTAT=%s:mailto:%s" % (_cn(attendee_name), partstat, attendee_email)))
     lines += ["END:VEVENT", "END:VCALENDAR"]
     return "\r\n".join(lines) + "\r\n"
