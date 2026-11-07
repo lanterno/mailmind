@@ -149,3 +149,9 @@ def test_what_the_file_already_held_reads_as_it_stands(directory, held):
     directory.save({"accounts": [{**ADA, **held}]})
     assert [a["email"] for a in directory.accounts()] == ["ada@example.test"]
     assert directory.masked_rows()[0]["email"] == "ada@example.test"
+
+
+def test_an_entry_the_file_gives_no_address_is_not_used_and_stops_nothing_else(directory):
+    directory.save({"accounts": [{"type": "imap", "host": "imap.example.test", "credential": {"plain": "hunter2"}}, dict(ADA)]})
+    assert [a["email"] for a in directory.accounts()] == ["ada@example.test"]
+    assert [r["email"] for r in directory.masked_rows()] == [None, "ada@example.test"]
