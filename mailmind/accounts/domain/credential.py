@@ -11,7 +11,7 @@ An entry naming two gets the first of plain, env, proton_bridge, op. Having the 
 mailmind.accounts.adapters.secrets's; this only says where it is.
 """
 from dataclasses import dataclass, field
-from typing import Any, Literal, Required, TypedDict
+from typing import Any, Literal, Required, TypedDict, TypeIs
 
 from mailmind.kernel.parsed import is_list, is_object
 
@@ -69,27 +69,33 @@ class CredentialRef:
         return {"style": self.style, "set": bool(self.named)}
 
 
-def credential_from(p: dict[str, Any] | None) -> dict[str, Any] | None:
+def _text(held: object) -> TypeIs[str]:
+    return isinstance(held, str) and bool(held.strip())
+
+
+def credential_from(p: object) -> dict[str, Any] | None:
     """Build a stored credential dict from a request payload {style,value|ref|var}.
     Returns None to mean 'keep existing'. Raises ValueError on invalid input."""
     if not p:
         return None
+    if not is_object(p):
+        raise ValueError("a credential names its style")
     style = p.get("style")
     if style == "plain":
         v = p.get("value")
-        if not v:  # never blank out / store an empty password
+        if not (v and isinstance(v, str)):  # never blank out / store an empty password
             raise ValueError("password required")
         return {"plain": v}
     if style == "op":
         ref = p.get("ref")
-        if not ref or (isinstance(ref, str) and not ref.strip()):
+        if not (_text(ref) or (is_list(ref) and ref and all(_text(one) for one in ref))):
             raise ValueError("1Password reference required")
         return {"op": ref}
     if style == "env":
-        var = (p.get("var") or "").strip()
-        if not var:
+        var = p.get("var")
+        if not _text(var):
             raise ValueError("environment variable name required")
-        return {"env": var}
+        return {"env": var.strip()}
     if style == "proton_bridge":
         return {"proton_bridge": True}
     return None  # style unchanged / not provided -> keep existing
