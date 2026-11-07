@@ -1,5 +1,6 @@
 """What the page asks of Calendar: Today & next, and an answer to an invite."""
 from mailmind.http.routing import Routes
+from mailmind.kernel.errors import Problem
 from mailmind.platform.logging import get_logger
 
 log = get_logger("rsvp")
@@ -16,6 +17,8 @@ def routes(calendar):
     def rsvp(req):
         try:
             return calendar.rsvp.respond(req.body)
+        except Problem:
+            raise
         except Exception as ex:            # never leak a raw exception on a send route
             log.error("error", exc_info=ex)
             return {"ok": False, "error": "RSVP failed"}, 500

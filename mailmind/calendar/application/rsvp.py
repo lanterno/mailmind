@@ -7,6 +7,7 @@ from mailmind.calendar.application.invites import Invites
 from mailmind.calendar.application.ports import Messages, StoredInvites, SystemSend
 from mailmind.calendar.domain import rsvp
 from mailmind.calendar.domain.invite import Party
+from mailmind.kernel.errors import NotFound, Refused, Unreachable
 from mailmind.platform.logging import get_logger
 
 log = get_logger("rsvp")
@@ -19,33 +20,32 @@ class Rsvp:
         self._messages = messages
         self._send = send
 
-    def respond(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
-        """(result, code)."""
+    def respond(self, body: Mapping[str, Any]) -> dict[str, Any]:
         try:
             pk = int(body.get("pk", ""))
         except (TypeError, ValueError):
-            return {"ok": False, "error": "missing message"}, 400
+            raise Refused("missing message")
         decision = (body.get("decision") or "").strip().lower()
         if decision not in rsvp.PARTSTAT:
-            return {"ok": False, "error": "bad decision"}, 400
+            raise Refused("bad decision")
         row = self._messages.message(pk)
         if not row:
-            return {"ok": False, "error": "not found"}, 404
+            raise NotFound("not found")
         try:
             acct = self._messages.account(row["account"])
         except KeyError:
-            return {"ok": False, "error": "unknown account"}, 400
+            raise Refused("unknown account")
         try:
             parsed = self._messages.fetched(row["account"], pk)
         except Exception as e:
             log.warning("fetch failed for pk %(id)s: %(why)s", {"id": pk, "why": self._messages.quiet_error(e)})
-            return {"ok": False, "error": "could not load the invite"}, 502
+            raise Unreachable("could not load the invite")
         invite, _part = self._invites.of(pk, parsed)
         if not invite:
-            return {"ok": False, "error": "no invite on this message"}, 400
+            raise Refused("no invite on this message")
         organizer = ((invite.get("organizer") or Party()).get("email") or "").strip()
         if not organizer or "@" not in organizer:
-            return {"ok": False, "error": "this invite has no organizer to reply to"}, 400
+            raise Refused("this invite has no organizer to reply to")
         me_email = acct["email"]
         me_name = rsvp.name_for(invite, me_email, acct.get("alias") or me_email)
         partstat = rsvp.PARTSTAT[decision]
@@ -65,8 +65,8 @@ class Rsvp:
         }
         try:
             built = self._send.build(spec, row)
-        except ValueError as e:
-            return {"ok": False, "error": str(e)}, 400
+        except ValueError as e:               # our own words: they hold nothing secret
+            raise Refused(str(e)) from e
         prefix = rsvp.key_prefix(row["account"], invite.get("uid") or pk)
         meta: dict[str, Any] = {
             "account": acct["email"],
@@ -76,4 +76,4 @@ class Rsvp:
         }
         oid, created = self._send.enqueue(built, meta)
         return {"ok": True, "outbox_id": oid, "queued": created, "decision": decision,
-                "organizer": organizer, "summary": summary}, 200
+                "organizer": organizer, "summary": summary}
