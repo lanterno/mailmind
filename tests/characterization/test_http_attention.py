@@ -78,7 +78,7 @@ def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     from mailmind.bootstrap import assistant
     lunch = world.row(LUNCH)
     c = store.conn()
-    attention.book.followup_record_sent(c, w.ADA, lunch["thread_id"], lunch["pk"], int(time.time()), "2026-11-01T00:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, lunch["thread_id"], int(time.time()), "2026-11-01T00:00:00+00:00")
     c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (lunch["thread_id"],))
     c.commit()
     c.close()

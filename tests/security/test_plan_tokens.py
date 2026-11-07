@@ -111,7 +111,9 @@ def test_a_snooze_wakes_when_its_preview_said_whatever_its_confirm_names(app, wo
     plan = preview(app, ai, "snooze", snooze_preset="next_week")
     assert app.post("/api/ai/do-confirm", {"plan": plan["plan"], "preset": "tomorrow"}).json["count"] == plan["count"]
     c = store.conn()
-    woken = {r["snoozed_until"] for r in c.execute("SELECT snoozed_until FROM messages WHERE folder='INBOX' AND from_addr='lin@example.test'")}
+    woken = {r["until"] for r in c.execute("""SELECT z.until FROM messages m
+                                              LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder
+                                              WHERE m.folder='INBOX' AND m.from_addr='lin@example.test'""")}
     c.close()
     assert woken == {int(datetime(2026, 11, 9, 8, tzinfo=timezone.utc).timestamp())}
 

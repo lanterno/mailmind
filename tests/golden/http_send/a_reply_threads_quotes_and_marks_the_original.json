@@ -94,7 +94,6 @@
   "value": [
    {
     "account": "ada@example.test",
-    "anchor_pk": 2,
     "kind": "sent",
     "state": "pending"
    }

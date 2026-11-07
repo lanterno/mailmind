@@ -428,7 +428,7 @@ def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
     [d] = rows("SELECT pk FROM messages WHERE account=? AND folder='Drafts' AND uid=?", w.ADA, saved["uid"])
     c = store.conn()
     oid, _ = book.outbox_insert(c, {"account": w.ADA, "idempotency_key": "k-held", "message_id": "<held@example.test>",
-                                     "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Held",
+                                     "envelope": "[]", "recipients": "{}", "subject": "Held",
                                      "raw": b"x", "next_attempt_at": 0, "draft_id": saved["draft_id"],
                                      "created_at": "2026-11-02T12:00:00+00:00"})
     c.execute("UPDATE outbox SET state='sending' WHERE id=?", (oid,))
@@ -466,7 +466,7 @@ def test_hwf_a_met_sent_follow_up_becomes_a_reply_nudge_in_the_same_tick(app, wo
     [m] = rows("SELECT thread_id, ts FROM messages WHERE pk=?", pk)
     summary(pk, 5, "action-needed")
     c = store.conn()
-    attention.book.followup_record_sent(c, w.ADA, m["thread_id"], pk, m["ts"] - 86400, "2026-10-27T09:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, m["thread_id"], m["ts"] - 86400, "2026-10-27T09:00:00+00:00")
     c.commit()
     c.close()
     attention.followups.tick()                                  # Lin answered: the sent one resolves first

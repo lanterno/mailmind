@@ -112,7 +112,7 @@ def test_the_upgrade_reads_what_is_already_queued(data_dir):
 
     def queued(key, due, attempts=0, state="queued"):
         oid, _ = book.outbox_insert(c, {"account": w.ADA, "idempotency_key": key, "message_id": f"<{key}@example.test>",
-                                        "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": key,
+                                        "envelope": "[]", "recipients": "{}", "subject": key,
                                         "raw": b"x", "next_attempt_at": due, "draft_id": None,
                                         "created_at": "2026-11-02T12:00:00+00:00"})
         c.execute("UPDATE outbox SET attempts=?, state=? WHERE id=?", (attempts, state, oid))

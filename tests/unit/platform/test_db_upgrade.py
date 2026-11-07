@@ -6,8 +6,8 @@ raw mail in `bodies`, so the migrations that read the mail have something to rea
 
 An upgrade keeps every row and every value. The exceptions are the columns a migration derives on
 purpose: m5 computes the thread ids, m6 and m10 read the body text and the recipients out of the
-stored mail, and m22 rewrites thread summaries' fingerprints. Those must come out right instead. The database base is today's schema, so m1's
-rebuild of a pre-folder sync_state is not exercised here.
+stored mail, and m22 rewrites thread summaries' fingerprints. Those must come out right instead. A column a migration ends
+goes with it. The database base is today's schema, so m1's rebuild of a pre-folder sync_state is not exercised here.
 """
 import sqlite3
 
@@ -24,6 +24,9 @@ ACCOUNT = "ada@example.test"
 DERIVED = {("messages", "thread_id"): 5, ("messages", "body_text"): 6, ("messages", "recipients"): 10,
            ("thread_summaries", "fingerprint"): 22, ("messages", "message_key"): 30}
 DROPPED = migrations.RETIRED            # m18 retired the private notes, and m37 briefing_cache
+# (table, column): the version whose migration ended it. An upgrade from below that one leaves it out.
+ENDED = {("messages", "snoozed_until"): 45, ("outbox", "in_reply_to_pk"): 45, ("drafts", "in_reply_to_pk"): 45,
+         ("draft_ahead", "src_pk"): 45, ("followups", "anchor_pk"): 45}
 
 
 def mail(n, to, text, **headers):
@@ -39,7 +42,7 @@ TO = ["Cy <cy@example.test>", "Bea <bea@example.test>", "Cy <cy@example.test>"]
 REPLY = {"in_reply_to": "<m1@example.test>", "refs": "<m1@example.test>"}
 # Where a made-up value won't do. Each message holds what the app would have read from its mail.
 MESSAGES = [{"pk": i + 1, "account": ACCOUNT, "folder": "INBOX", "uid": i + 1, "message_id": f"<m{i + 1}@example.test>",
-             "in_reply_to": None, "refs": None, "gmail_thread": None, "thread_id": None,
+             "in_reply_to": None, "refs": None, "gmail_thread": None, "thread_id": None, "snoozed_until": None,
              "subject": ["Quilt pattern for the fair", "Re: Quilt pattern for the fair", "Allotment rota"][i],
              "body_text": TEXTS[i], "recipients": TO[i], **(REPLY if i == 1 else {})} for i in range(ROWS)]
 BODIES = [{"message_pk": i + 1, "raw": mail(i + 1, TO[i], TEXTS[i], **({"In_Reply_To": "<m1@example.test>"}
@@ -127,11 +130,14 @@ def test_an_upgrade_keeps_every_row_and_every_value(tmp_path, version):
     assert query(path, "PRAGMA user_version") == [(NEWEST,)]
     gone = {t for t, v in DROPPED.items() if t in before and version < v}
     assert set(shape(path)) >= set(before) - gone and not gone & set(shape(path))
-    after = contents(path, {t: list(rows[1]) if rows else [] for t, rows in before.items() if t not in gone})
+    ended = {k for k, v in ENDED.items() if version < v}
+    assert not {(t, x) for t, columns in shape(path).items() for x in columns} & set(ENDED)
+    after = contents(path, {t: [x for x in rows[1] if (t, x) not in ended] if rows else []
+                            for t, rows in before.items() if t not in gone})
     derived = {k for k, v in DERIVED.items() if version < v}
 
     def kept(t, rows):
-        return {pk: {k: v for k, v in row.items() if (t, k) not in derived} for pk, row in rows.items()}
+        return {pk: {k: v for k, v in row.items() if (t, k) not in derived | ended} for pk, row in rows.items()}
     for t in after:
         assert len(before[t]) == ROWS, t
         assert kept(t, after[t]) == kept(t, before[t]), t

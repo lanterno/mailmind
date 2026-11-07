@@ -73,7 +73,7 @@ def put_draft(account, ref_key, created, hit=None, c=None):
     own = c is None
     c = store.conn() if own else c
     try:
-        answers.draft_ahead_put(c, account, ref_key, "fp", "An old draft.", "balanced", "claude-opus-5-5", 1,
+        answers.draft_ahead_put(c, account, ref_key, "fp", "An old draft.", "balanced", "claude-opus-5-5",
                               "<gone@example.test>", "dwell", created)
         if hit is not None:
             answers.draft_ahead_touch(c, account, ref_key, hit)
@@ -148,8 +148,8 @@ def test_hwf_triage_retries_a_failed_call_but_stores_an_unusable_reply_once(worl
         return None
     ai.responder = reply
     assistant.assessments.summarize_pending(limit=100, workers=1)
-    assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(QUILT)) == [{"model": "parse-error"}]
-    assert q("SELECT model FROM summaries WHERE message_pk=?", world.pk(CLIENT)) == []
+    assert q("SELECT model FROM assessments WHERE message_key=?", world.row(QUILT)["message_key"]) == [{"model": "parse-error"}]
+    assert q("SELECT model FROM assessments WHERE message_key=?", world.row(CLIENT)["message_key"]) == []
     ai.requests.clear()
     assistant.assessments.summarize_pending(limit=100, workers=1)
     assert [r.prompt.count("Subject: Contract draft v2") for r in ai.requests] == [1]
@@ -613,9 +613,9 @@ def test_hwf_snooze_caps_a_bulk_pk_list_server_side(app, world):
 
 def test_hwf_the_review_names_a_waiting_thread_by_its_thread_not_its_old_pk(app, world, ai):
     now = int(time.time())
-    execute("INSERT INTO followups(account, thread_id, kind, state, anchor_pk, first_sent_ts, last_msg_ts, "
-            "due_ts, created_at) VALUES(?,?,?,?,?,?,?,?,?)", w.CY, world.row(VENUE_END)["thread_id"],
-            "sent", "due", 999999, now - 3 * 86400, now - 3 * 86400, now - 86400, "2026-10-30T12:00:00+00:00")
+    execute("INSERT INTO followups(account, thread_id, kind, state, first_sent_ts, last_msg_ts, "
+            "due_ts, created_at) VALUES(?,?,?,?,?,?,?,?)", w.CY, world.row(VENUE_END)["thread_id"],
+            "sent", "due", now - 3 * 86400, now - 3 * 86400, now - 86400, "2026-10-30T12:00:00+00:00")
     r = app.post("/api/review", {}).json
     assert [x["subject"] for x in r["waiting"]] == ["Re: Guild meetup venue"]
 

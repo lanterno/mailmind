@@ -83,7 +83,7 @@ def test_a_round_says_so_only_when_what_is_due_changes(app, world, heard):
     attention.followups.tick()
     assert heard == []
     c = store.conn()
-    attention.book.followup_record_sent(c, w.ADA, world.row(CI)["thread_id"], None, int(time.time()), "2026-11-01T00:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, world.row(CI)["thread_id"], int(time.time()), "2026-11-01T00:00:00+00:00")
     c.commit()
     c.close()
     attention.followups.tick()                  # it waits out its grace

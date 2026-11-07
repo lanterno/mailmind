@@ -1,5 +1,4 @@
-"""What the AI said of a message is read under its key, in every list: `assessments`. `summaries`, a row for each copy, is
-only written, for a rollback to an older commit, until it is dropped: so each reader here answers the same without it."""
+"""What the AI said of a message is read under its key, in every list: `assessments`."""
 import pytest
 
 from fixtures import world as w
@@ -49,13 +48,10 @@ def c(world):
 def test_each_list_reads_what_was_said_under_the_key(c, reader):
     before = READERS[reader](c)
     assert any(verdict_in(r) for r in before)
-    c.execute("DELETE FROM summaries")
-    c.commit()
-    assert READERS[reader](c) == before
 
 
 @pytest.mark.parametrize("reader", READERS)
-def test_no_list_reads_what_a_rows_old_summary_says(c, reader):
+def test_no_list_says_anything_once_nothing_is_said_under_the_key(c, reader):
     c.execute("DELETE FROM assessments")
     c.commit()
     assert not any(verdict_in(r) for r in READERS[reader](c))
@@ -64,22 +60,17 @@ def test_no_list_reads_what_a_rows_old_summary_says(c, reader):
 def test_the_kick_gate_reads_it_under_the_key_too(c, world):
     assert assistant.answers.reply_worthy(c, world.pk(LUNCH))
     assert not assistant.answers.reply_worthy(c, world.pk(CI))
-    c.execute("DELETE FROM summaries")
-    assert assistant.answers.reply_worthy(c, world.pk(LUNCH))
 
 
 def test_a_waiting_thread_is_found_by_what_was_said_under_the_key(c, world):
     lunch = world.row(LUNCH)
     c.execute("UPDATE messages SET seen=1, answered=0, draft=0, thread_id='T', ts=? WHERE pk=?", (1_800_000_000, lunch["pk"]))
-    c.execute("DELETE FROM summaries")
     attention.book.followup_detect_received(c, 1_800_000_000 + 5 * 86400, 3, 14)
     assert [r["thread_id"] for r in c.execute("SELECT thread_id FROM followups WHERE kind='received'")] == ["T"]
 
 
-def test_a_copy_with_no_row_of_its_own_needs_no_second_call(c, world):
-    """A message assessed before keys, with a second copy never summarized: migration 30 kept only the one row."""
+def test_a_second_copy_needs_no_second_call(c, world):
     second = copy_in(c, world, "Archive")
-    c.execute("DELETE FROM summaries WHERE message_pk=?", (second,))
     assert second not in {r["pk"] for r in assistant.answers.needs_summary(c)}
     [got] = [r for r in store.folder_rows(c, w.ADA, "Archive", 50, 0) if r["pk"] == second]
     assert got["summary"] == SAID[0]
@@ -105,7 +96,7 @@ def test_the_stats_count_copies_as_they_did(c, world):
 
 
 def test_a_row_with_no_key_waits_for_the_next_start_rather_than_paying_each_round(c, world):
-    """It could only be stored in `summaries`, which nothing reads, so it would be asked about for ever."""
+    """It has nowhere to keep an answer, so it would be asked about for ever."""
     pk = world.pk(CI)
     c.execute("UPDATE messages SET message_key=NULL WHERE pk=?", (pk,))
     assert pk not in {r["pk"] for r in assistant.answers.needs_summary(c)}

@@ -881,7 +881,7 @@ def old_row(folder, uid, name="<filed@example.test>", email=w.ADA):
     c = store.conn()
     try:
         did = book.draft_upsert(c, {"id": None, "account": email, "folder": folder, "uid": uid, "message_id": name,
-                                     "uidvalidity": store.get_uidvalidity(c, email, folder), "in_reply_to_pk": None,
+                                     "uidvalidity": store.get_uidvalidity(c, email, folder),
                                      "mode": "new", "subject": "Filed", "created_at": "2026-10-01T09:00:00",
                                      "updated_at": "2026-10-01T09:00:00"})
         c.commit()

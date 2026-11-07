@@ -111,7 +111,7 @@ def test_a_nudge_both_ways(db, wanted, thread_id, messages):
     detect(db)
     want, got = followups.nudge_for(t, NOW), row(db)
     assert (want is not None) is wanted
-    assert (got["anchor_pk"], got["last_msg_ts"]) == (want.pk, want.ts) if wanted else got is None
+    assert got["last_msg_ts"] == want.ts if wanted else got is None
 
 
 def test_a_nudge_is_due_from_when_it_is_found(db):
@@ -224,7 +224,7 @@ def test_a_round_leaves_a_dismissal_where_it_is(db, kind):
     book.expire_followups(db, NOW, followups.EXPIRE_DAYS)
     book.followup_promote_due(db, NOW, followups.GRACE_DAYS)
     detect(db)
-    book.followup_record_sent(db, ADA, "T", None, NOW, "now")
+    book.followup_record_sent(db, ADA, "T", NOW, "now")
     got = row(db)
     assert (got["kind"], got["state"], got["first_sent_ts"]) == (kind, DISMISSED, NOW - LIFE - 1)
 
@@ -253,7 +253,7 @@ def test_a_nudge_on_any_thread(db, thread, tracked):
     if want is None:
         assert (got is None) == (tracked is None)
     else:
-        assert (got["kind"], got["state"], got["anchor_pk"], got["last_msg_ts"], got["due_ts"]) == (RECEIVED, DUE, want.pk, want.ts, NOW)
+        assert (got["kind"], got["state"], got["last_msg_ts"], got["due_ts"]) == (RECEIVED, DUE, want.ts, NOW)
 
 
 @CASES
@@ -282,32 +282,32 @@ def columns(c):
 
 def test_a_reply_writes_what_the_domain_says(db):
     stored(db, "T", [])
-    attention.book.followup_record_sent(db, ADA, "T", 7, NOW, "now")
-    assert columns(db) == {"kind": SENT, "state": PENDING, "anchor_pk": 7, "first_sent_ts": NOW, "last_msg_ts": NOW,
+    attention.book.followup_record_sent(db, ADA, "T", NOW, "now")
+    assert columns(db) == {"kind": SENT, "state": PENDING, "first_sent_ts": NOW, "last_msg_ts": NOW,
                            "due_ts": None, "created_at": "now", "resolved_at": None}
 
 
 def test_a_pin_writes_what_the_domain_says_dated_by_the_newest_that_isnt_a_draft(db):
     stored(db, "T", [Mail(0, ts=NOW - DAY), Mail(0, ts=NOW, mine=True, draft=True)])
-    attention.book.set_replylater(db, ADA, "T", 7, "now")
-    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "anchor_pk": 7, "first_sent_ts": None, "last_msg_ts": NOW - DAY,
+    attention.book.set_replylater(db, ADA, "T", "now")
+    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "first_sent_ts": None, "last_msg_ts": NOW - DAY,
                            "due_ts": None, "created_at": "now", "resolved_at": None}
 
 
 def test_a_pin_over_a_dismissal_writes_what_the_domain_says(db):
     stored(db, "T", [Mail(0, ts=NOW - DAY)])
-    attention.book.followup_record_sent(db, ADA, "T", 7, NOW - 2 * DAY, "then")
+    attention.book.followup_record_sent(db, ADA, "T", NOW - 2 * DAY, "then")
     attention.book.dismiss_followup(db, ADA, "T", "once")
-    attention.book.set_replylater(db, ADA, "T", 9, "now")
-    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "anchor_pk": 9, "first_sent_ts": NOW - 2 * DAY,
+    attention.book.set_replylater(db, ADA, "T", "now")
+    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "first_sent_ts": NOW - 2 * DAY,
                            "last_msg_ts": NOW - DAY, "due_ts": None, "created_at": "now", "resolved_at": None}
 
 
 def test_a_dismissal_leaves_the_rest_of_the_row(db):
     stored(db, "T", [])
-    attention.book.followup_record_sent(db, ADA, "T", 7, NOW, "then")
+    attention.book.followup_record_sent(db, ADA, "T", NOW, "then")
     attention.book.dismiss_followup(db, ADA, "T", "now")
-    assert columns(db) == {"kind": SENT, "state": DISMISSED, "anchor_pk": 7, "first_sent_ts": NOW, "last_msg_ts": NOW,
+    assert columns(db) == {"kind": SENT, "state": DISMISSED, "first_sent_ts": NOW, "last_msg_ts": NOW,
                            "due_ts": None, "created_at": "then", "resolved_at": "now"}
 
 
@@ -319,9 +319,9 @@ def test_dismissing_a_thread_with_none_writes_nothing(db):
 
 def test_un_pinning_takes_a_pin_and_leaves_a_nudge(db):
     stored(db, "T", [])
-    attention.book.set_replylater(db, ADA, "T", None, "now")
+    attention.book.set_replylater(db, ADA, "T", "now")
     attention.book.clear_replylater(db, ADA, "T")
     assert row(db) is None
-    attention.book.followup_record_sent(db, ADA, "T", None, NOW, "now")
+    attention.book.followup_record_sent(db, ADA, "T", NOW, "now")
     attention.book.clear_replylater(db, ADA, "T")
     assert row(db)["kind"] == SENT

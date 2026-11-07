@@ -53,7 +53,7 @@ def _outbox(envelope, delivered):
     c = store.conn()
     oid, _ = book.outbox_insert(c, {
         "account": ACCT, "idempotency_key": f"k{uid}", "message_id": f"<o{uid}@example.test>",
-        "in_reply_to_pk": None, "envelope": json.dumps(envelope),
+        "envelope": json.dumps(envelope),
         "recipients": json.dumps({"to": envelope, "cc": [], "bcc": []}), "subject": "Plans",
         "raw": b"x", "next_attempt_at": 0, "draft_id": None, "created_at": "2026-10-01T09:00:00"})
     if delivered:

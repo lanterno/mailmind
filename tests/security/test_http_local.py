@@ -66,7 +66,8 @@ def test_snooze_list_wake_and_undo(app, golden, world):
     app.clock.move_to(datetime(2026, 11, 2, 18, 0, 1, tzinfo=timezone.utc))
     attention.snoozing.wake_due()
     golden.note("after 18:00 the receipt wakes unread", rows(
-        "SELECT subject, seen, snoozed_until FROM messages WHERE pk=?", receipt))
+        """SELECT m.subject, m.seen, z.until AS snoozed_until FROM messages m
+           LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder WHERE m.pk=?""", receipt))
     listing(app, golden, "Ada's Snoozed after the wake", w.ADA, "__snoozed__")
 
 
@@ -87,13 +88,13 @@ def test_snooze_refusals_and_targets(app, golden, world):
         ("a pk that isn't a number", {"pk": "x", "preset": "tomorrow"}),
     ):
         post(app, golden, f"snooze: {label}", "/api/snooze", body)
-    golden.note("snoozed rows", rows("SELECT account, subject, snoozed_until FROM messages "
-                                     "WHERE snoozed_until IS NOT NULL ORDER BY pk"))
+    golden.note("snoozed rows", rows("""SELECT m.account, m.subject, z.until AS snoozed_until FROM snoozes z
+                                        JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder ORDER BY m.pk"""))
     post(app, golden, "unsnooze the lunch thread", "/api/unsnooze",
          {"account": w.ADA, "thread_id": world.row("ada-inbox-01-lunch.eml")["thread_id"]})
     post(app, golden, "unsnooze nothing", "/api/unsnooze", {})
-    golden.note("snoozed rows after", rows("SELECT account, subject FROM messages "
-                                           "WHERE snoozed_until IS NOT NULL ORDER BY pk"))
+    golden.note("snoozed rows after", rows("""SELECT m.account, m.subject FROM snoozes z
+                                              JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder ORDER BY m.pk"""))
 
 
 # ── mute ─────────────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ def test_waiting_follow_ups_and_dismissal(app, golden, world, ai):
 def test_reply_later_pins_and_unpins(app, golden, world):
     client = world.row("bea-inbox-01-client.eml")
     post(app, golden, "reply later to Ivo", "/api/replylater", {"pk": client["pk"]})
-    golden.note("follow-ups", rows("SELECT account, thread_id, kind, state, anchor_pk FROM followups"))
+    golden.note("follow-ups", rows("SELECT account, thread_id, kind, state FROM followups"))
     listing(app, golden, "Bea's Reply Later", w.BEA, "__replylater__")
     post(app, golden, "un-pin it", "/api/replylater",
          {"account": w.BEA, "thread_id": client["thread_id"], "on": False})

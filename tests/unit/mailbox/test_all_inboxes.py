@@ -126,9 +126,9 @@ def test_a_later_page_starts_no_scan(app, world):
     assert len(world.server.commands) == asked
 
 
-def follow_up(account, pk, thread, kind, due):
-    execute("INSERT INTO followups(account, thread_id, kind, state, anchor_pk, first_sent_ts, due_ts) VALUES (?,?,?,?,?,?,?)",
-            account, thread, kind, "due", pk, due, due)
+def follow_up(account, thread, kind, due):
+    execute("INSERT INTO followups(account, thread_id, kind, state, first_sent_ts, due_ts) VALUES (?,?,?,?,?,?)",
+            account, thread, kind, "due", due, due)
 
 
 def waiting_threads(app):
@@ -142,22 +142,22 @@ def waiting_threads(app):
 def test_who_you_wait_on_is_one_list_longest_wait_first(app):
     threads = waiting_threads(app)
     for i in threads:
-        follow_up(i["account"], i["pk"], i["thread_id"], "sent", 1)
+        follow_up(i["account"], i["thread_id"], "sent", 1)
     got = app.get("/api/waiting-on-others").json
     assert [(i["pk"], i["account"], i["kind"]) for i in got["items"]] == [(i["pk"], i["account"], "sent") for i in threads]
 
 
 def test_a_thread_waiting_on_you_or_pinned_isnt_someone_you_wait_on(app):
     threads = waiting_threads(app)
-    follow_up(threads[0]["account"], threads[0]["pk"], threads[0]["thread_id"], "received", 1)
-    follow_up(threads[1]["account"], threads[1]["pk"], threads[1]["thread_id"], "replylater", 1)
+    follow_up(threads[0]["account"], threads[0]["thread_id"], "received", 1)
+    follow_up(threads[1]["account"], threads[1]["thread_id"], "replylater", 1)
     assert app.get("/api/waiting-on-others").json["items"] == []
 
 
 def test_who_you_wait_on_leaves_out_a_disabled_account_and_keeps_to_its_limit(app):
     threads = waiting_threads(app)
     for i in threads:
-        follow_up(i["account"], i["pk"], i["thread_id"], "sent", 1)
+        follow_up(i["account"], i["thread_id"], "sent", 1)
     assert len(app.get("/api/waiting-on-others?limit=2").json["items"]) == 2
     disable(w.BEA)
     assert w.BEA not in {i["account"] for i in app.get("/api/waiting-on-others").json["items"]}

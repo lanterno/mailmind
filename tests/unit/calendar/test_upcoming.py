@@ -391,8 +391,8 @@ def test_an_inline_only_invite_is_recorded_once_and_listed(data_dir):
 def test_waiting_names_who_a_sent_thread_waits_on(data_dir):
     pk = _msg(thread_id="w1", to="Lio Park <lio@example.test>, Aoi <aoi@example.test>")
     c = store.conn()
-    c.execute("INSERT INTO followups(account, thread_id, kind, state, anchor_pk, first_sent_ts, due_ts) "
-              "VALUES (?,?,?,?,?,?,?)", (ACCT, "w1", "sent", "due", pk, int(NOW.timestamp()), int(NOW.timestamp())))
+    c.execute("INSERT INTO followups(account, thread_id, kind, state, first_sent_ts, due_ts) "
+              "VALUES (?,?,?,?,?,?)", (ACCT, "w1", "sent", "due", int(NOW.timestamp()), int(NOW.timestamp())))
     c.commit()
     c.close()
     items = mailbox.queries.waiting_in(ACCT, 0, 10)["items"]

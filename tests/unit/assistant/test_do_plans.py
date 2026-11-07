@@ -321,11 +321,13 @@ def test_it_snoozes_until_the_preset_and_undo_brings_them_back(app, world, ai):
     assert plan["snooze_preset"] == "next_week"
     r = confirm(app, plan).json
     assert (r["count"], r["undoable"]) == (plan["count"], True)
-    assert all(x["snoozed_until"] for x in q("SELECT snoozed_until FROM messages WHERE folder='INBOX' "
-                                             "AND from_addr='lin@example.test'"))
+    def wakes():
+        return [x["until"] for x in q("""SELECT z.until FROM messages m
+                                         LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder
+                                         WHERE m.folder='INBOX' AND m.from_addr='lin@example.test'""")]
+    assert wakes() and all(wakes())
     assert app.post("/api/undo", {}).json["ok"] is True
-    assert not any(x["snoozed_until"] for x in q("SELECT snoozed_until FROM messages WHERE folder='INBOX' "
-                                                 "AND from_addr='lin@example.test'"))
+    assert wakes() and not any(wakes())
 
 
 def test_a_snooze_plan_with_nothing_left_snoozes_nothing(app, world, ai):

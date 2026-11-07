@@ -31,7 +31,9 @@ def copy(world, name=RECEIPT, folder="INBOX"):
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        return c.execute("SELECT pk, seen, snoozed_until FROM messages WHERE account=? AND folder=? AND message_id=?",
+        return c.execute("""SELECT m.pk, m.seen, z.until AS snooze_until FROM messages m
+                            LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder
+                            WHERE m.account=? AND m.folder=? AND m.message_id=?""",
                          (w.ADA, folder, w.message_id(name))).fetchone()
     finally:
         c.close()
@@ -49,7 +51,7 @@ def test_a_snoozed_message_stays_hidden_through_a_resync_of_its_folder(app, worl
     before = copy(world)
     renumber(world)
     after = copy(world)
-    assert after["pk"] != before["pk"] and after["snoozed_until"] == before["snoozed_until"]
+    assert after["pk"] != before["pk"] and after["snooze_until"] == before["snooze_until"]
     assert subject not in listed(app)
     assert subject in listed(app, "__snoozed__")
 
@@ -79,7 +81,7 @@ def test_it_wakes_on_time_on_the_row_it_has_now(app, world):
     renumber(world)
     app.clock.shift(timedelta(hours=7))
     attention.snoozing.wake_due()
-    assert copy(world)["snoozed_until"] is None
+    assert copy(world)["snooze_until"] is None
     assert subject in listed(app)
 
 
@@ -88,9 +90,9 @@ def test_undo_of_a_snooze_finds_the_row_it_has_now(app, world):
     snooze(app, world)
     renumber(world)
     assert app.post("/api/undo", {}).json["ok"]
-    assert copy(world)["snoozed_until"] is None and subject in listed(app)
+    assert copy(world)["snooze_until"] is None and subject in listed(app)
     renumber(world)
-    assert copy(world)["snoozed_until"] is None                # nor does the resync bring it back
+    assert copy(world)["snooze_until"] is None                # nor does the resync bring it back
 
 
 def test_undo_from_a_stack_written_before_the_rows_were_named(app, world):
@@ -103,14 +105,14 @@ def test_undo_from_a_stack_written_before_the_rows_were_named(app, world):
     c.commit()
     c.close()
     assert app.post("/api/undo", {}).json["ok"]
-    assert copy(world)["snoozed_until"] is None
+    assert copy(world)["snooze_until"] is None
 
 
 def test_unsnoozing_ends_it_for_good(app, world):
     snooze(app, world)
     assert app.post("/api/unsnooze", {"pk": world.pk(RECEIPT)}).json["ok"]
     renumber(world)
-    assert copy(world)["snoozed_until"] is None
+    assert copy(world)["snooze_until"] is None
 
 
 def test_a_snoozed_message_filed_elsewhere_isnt_hidden_there(app, world):
@@ -119,7 +121,7 @@ def test_a_snoozed_message_filed_elsewhere_isnt_hidden_there(app, world):
     snooze(app, world)
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     ingest.sync_folder(acct(), "Archive")
-    assert copy(world, folder="Archive")["snoozed_until"] is None
+    assert copy(world, folder="Archive")["snooze_until"] is None
     assert subject in listed(app, "Archive")
 
 
@@ -130,7 +132,7 @@ def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, worl
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     ingest.sync_new(acct())
-    assert copy(world)["snoozed_until"] is not None and subject not in listed(app)
+    assert copy(world)["snooze_until"] is not None and subject not in listed(app)
 
 
 def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, world):
@@ -146,7 +148,7 @@ def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, wo
     assert left == 0
     assert app.post("/api/undo", {}).json["ok"]
     ingest.sync_new(acct())
-    assert copy(world)["snoozed_until"] is None
+    assert copy(world)["snooze_until"] is None
 
 
 def test_a_forgotten_message_takes_its_snooze_with_it(world):
@@ -234,33 +236,6 @@ def test_two_copies_waking_together_each_get_the_mark(app, world):
     assert copy(world, CI)["seen"] == 0 and copy(world, CI, "Archive")["seen"] == 0
 
 
-# -- what an older commit wrote -----------------------------------------------------------------------------
-
-def test_a_start_brings_in_a_snooze_only_the_column_holds(world):
-    from mailmind.bootstrap.mailbox import store
-    row = world.row(RECEIPT)
-    c = store.conn()
-    c.execute("UPDATE messages SET snoozed_until=4102444800 WHERE pk=?", (row["pk"],))
-    c.commit()
-    c.close()
-    store.init()
-    c = store.conn()
-    try:
-        assert [tuple(r) for r in c.execute("SELECT message_key, folder, until FROM snoozes")] == [
-            (row["message_key"], "INBOX", 4102444800)]
-    finally:
-        c.close()
-
-
-def test_a_start_doesnt_bring_back_a_snooze_that_ended(app, world):
-    from mailmind.bootstrap.mailbox import store
-    subject = world.row(RECEIPT)["subject"]
-    snooze(app, world)
-    assert app.post("/api/unsnooze", {"pk": world.pk(RECEIPT)}).json["ok"]
-    store.init()
-    assert subject in listed(app)
-
-
 # -- two copies in one folder ------------------------------------------------------------------------------
 
 def second_copy(world, name=RECEIPT):
@@ -278,18 +253,18 @@ def second_copy(world, name=RECEIPT):
         c.close()
 
 
-def test_a_snooze_and_its_end_reach_the_column_of_every_copy_in_the_folder(world):
+def test_a_snooze_and_its_end_reach_every_copy_in_the_folder(world):
     from mailmind.bootstrap.mailbox import store
     one, other = world.pk(RECEIPT), second_copy(world)
     c = store.conn()
     try:
-        def columns():
-            return [c.execute("SELECT snoozed_until FROM messages WHERE pk=?", (pk,)).fetchone()[0] for pk in (one, other)]
+        def wakes():
+            return [store.get_message(c, pk)["snooze_until"] for pk in (one, other)]
         attention.book.set_snooze(c, one, 4102444800)
-        assert columns() == [4102444800, 4102444800]
+        assert wakes() == [4102444800, 4102444800]
         assert c.execute("SELECT until FROM snoozes").fetchall()[0][0] == 4102444800
         attention.book.clear_snooze(c, other)
-        assert columns() == [None, None]
+        assert wakes() == [None, None]
         assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
     finally:
         c.rollback()

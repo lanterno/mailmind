@@ -41,7 +41,8 @@ def copies(key):
 
 
 def said(pk):
-    return [r["summary"] for r in q("SELECT summary FROM summaries WHERE message_pk=?", pk)]
+    return [r["summary"] for r in q("SELECT a.summary FROM messages m JOIN assessments a ON a.message_key=m.message_key "
+                                    "WHERE m.pk=?", pk)]
 
 
 # -- what a key is ------------------------------------------------------------------------------------
@@ -127,7 +128,7 @@ def test_two_copies_waiting_to_be_assessed_cost_one_call(app, world, ai):
     world.deliver(w.ADA, "Archive", raw)
     assert assess() == 1
     assert len(ai.requests) == asked + 1
-    told = [r["summary"] for r in q("SELECT s.summary FROM summaries s JOIN messages m ON m.pk=s.message_pk "
+    told = [r["summary"] for r in q("SELECT a.summary FROM messages m JOIN assessments a ON a.message_key=m.message_key "
                                     "WHERE m.message_id='<twice@example.test>'")]
     assert len(told) == 2 and told[0] == told[1]
 
@@ -211,34 +212,8 @@ def test_a_start_gives_a_key_to_a_row_an_older_commit_wrote(world):
     from mailmind.bootstrap.mailbox import store
     row = world.row(LUNCH)
     execute("UPDATE messages SET message_key=NULL WHERE pk=?", row["pk"])
-    execute("INSERT INTO summaries(message_pk, summary, importance) VALUES (?, 'Said by the old one', 3)", row["pk"])
     store.init()
     assert world.row(LUNCH)["message_key"] == row["message_key"]
-    assert q("SELECT summary FROM assessments WHERE message_key=?", row["message_key"]) == [
-        {"summary": "Said by the old one"}]
-
-
-def test_a_start_brings_in_what_an_older_commit_said_of_a_row_that_had_a_key(world):
-    from mailmind.bootstrap.mailbox import store
-    row = world.row(LUNCH)
-    execute("INSERT INTO summaries(message_pk, summary, importance) VALUES (?, 'Said by the old one', 3)", row["pk"])
-    assert q("SELECT 1 FROM assessments WHERE message_key=?", row["message_key"]) == []
-    store.init()
-    assert q("SELECT summary FROM assessments WHERE message_key=?", row["message_key"]) == [
-        {"summary": "Said by the old one"}]
-
-
-def test_a_start_leaves_what_the_ai_said_under_the_key_as_it_is(world):
-    from mailmind.bootstrap import assistant
-    from mailmind.bootstrap.mailbox import store
-    row = world.row(LUNCH)
-    c = store.conn()
-    assistant.answers.save_summary(c, row["pk"], "Said under the key", 3, "info", "", "m", "2026-11-02")
-    c.commit()
-    c.close()
-    execute("UPDATE summaries SET summary='Said by the old one' WHERE message_pk=?", row["pk"])
-    store.init()
-    assert q("SELECT summary FROM assessments WHERE message_key=?", row["message_key"]) == [{"summary": "Said under the key"}]
 
 
 def test_a_key_a_row_comes_back_to_at_a_start_is_no_longer_gone(world):
@@ -277,15 +252,15 @@ def test_migration_30_gives_the_keys_and_keeps_what_the_ai_said(tmp_path):
 
 def test_migration_30_can_run_again(tmp_path):
     path = str(tmp_path / "old.db")
-    migrate.init(path)
+    migrate.init(path, migrations.MIGRATIONS[:30])
     c = sqlite3.connect(path)
     c.execute("PRAGMA user_version=29")
     c.commit()
     c.close()
-    migrate.init(path)
+    migrate.init(path, migrations.MIGRATIONS[:30])
     c = sqlite3.connect(path)
     try:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == migrations.MIGRATIONS[-1][0]
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 30
     finally:
         c.close()
 

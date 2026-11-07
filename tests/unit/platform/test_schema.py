@@ -105,19 +105,24 @@ def test_init_again_keeps_the_schema_and_the_data(fresh_db):
 
 
 def test_every_migration_can_run_twice(fresh_db):
+    """Each at its place in the history, on what those before it left. A start only ever runs a migration on a database
+    older than it, and one may read what a later one ended (m30 `summaries`, m44 `outbox.in_reply_to_pk`), so none is
+    asked to run over the newest schema."""
     from mailmind.bootstrap.mailbox import store
-    from mailmind.platform.db import migrations
+    from mailmind.platform.db import migrate, migrations
     path = fresh_db()
-    store.init()
-    before = dump(path)
+    migrate.init(path, [])
     c = store.conn()
     try:
-        for _, fn in migrations.MIGRATIONS:
+        for version_, fn in migrations.MIGRATIONS:
             fn(c)
             c.commit()
+            once = dump(path)
+            fn(c)
+            c.commit()
+            assert dump(path) == once, f"migration {version_}"
     finally:
         c.close()
-    assert dump(path) == before
 
 
 @pytest.mark.parametrize("last", [19, 20], ids=["a-script", "column-adds"])

@@ -27,6 +27,15 @@ def until(page, check, what):
     assert check(), what
 
 
+def snoozed_until(row):
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        return store.get_message(c, row["pk"])["snooze_until"]
+    finally:
+        c.close()
+
+
 def inbox(page):
     page.goto(f"/next/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
@@ -177,7 +186,7 @@ def test_swiping_right_snoozes_to_tomorrow(page, world):
     pk = world.pk(RECEIPT)
     page.pw.evaluate(SWIPE, [sel, 140])
     expect(page.locator(sel)).to_have_count(0)
-    until(page, lambda: world.row(RECEIPT)["snoozed_until"], "it is snoozed")
+    until(page, lambda: snoozed_until(world.row(RECEIPT)), "it is snoozed")
     assert world.pk(RECEIPT) == pk
     clean(page)
 

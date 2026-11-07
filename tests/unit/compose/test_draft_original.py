@@ -1,5 +1,4 @@
-"""A saved reply names its original in its own bytes, by In-Reply-To. What `drafts.in_reply_to_pk` says is kept for a
-rollback and nothing goes by it, so it may name another message by now and nobody hears of that."""
+"""A saved reply names its original in its own bytes, by In-Reply-To."""
 from datetime import timedelta
 
 from fixtures import world as w
@@ -26,38 +25,23 @@ def row(did):
         c.close()
 
 
-def names(did, pk):
-    c = store.conn()
-    try:
-        c.execute("UPDATE drafts SET in_reply_to_pk=? WHERE id=?", (pk, did))
-        c.commit()
-    finally:
-        c.close()
-
-
 def in_the_list(app):
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"] if i["subject"] == SUBJECT]
     return item["pk"]
 
 
-def test_a_save_still_writes_the_pk_of_its_original(app, world):
-    assert row(save(app, world)["draft_id"])["in_reply_to_pk"] == world.pk(LUNCH)
-
-
-def test_a_reopened_reply_names_its_original_whatever_the_row_says(app, world):
-    r = save(app, world)
+def test_a_reopened_reply_names_its_original(app, world):
+    save(app, world)
     pk = in_the_list(app)
-    names(r["draft_id"], world.pk(OTHER))
     opened = app.post("/api/draft/resume", {"pk": pk}).json
     assert opened["orig_pk"] == world.pk(LUNCH)
     assert "lin@example.test" in opened["participants"]
     assert world.row(OTHER)["from_addr"] not in opened["participants"]
 
 
-def test_a_reopened_reply_answers_its_original_whatever_the_row_says(app, world):
+def test_a_reopened_reply_answers_its_original(app, world):
     r = save(app, world)
     pk = in_the_list(app)
-    names(r["draft_id"], world.pk(OTHER))
     opened = app.post("/api/draft/resume", {"pk": pk}).json
     sent = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": opened["orig_pk"], "draft_id": r["draft_id"],
                                   "to": opened["to"], "subject": SUBJECT, "text": opened["text"], "idempotency_key": "cmp-1",
@@ -79,16 +63,14 @@ def test_a_discard_leaves_what_the_row_says_of_the_composition(app, world):
     assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"] is True
     after = row(did)
     assert after["version"] == before["version"] + 1
-    assert {k: after[k] for k in ("mode", "in_reply_to_pk", "subject", "saved_by")} == {
-        k: before[k] for k in ("mode", "in_reply_to_pk", "subject", "saved_by")}
+    assert {k: after[k] for k in ("mode", "subject", "saved_by")} == {k: before[k] for k in ("mode", "subject", "saved_by")}
 
 
-def test_a_save_kept_apart_carries_no_pk_over_and_finds_its_original_by_its_bytes(app, world):
+def test_a_save_kept_apart_finds_its_original_by_its_bytes(app, world):
     r = save(app, world)
     pk = in_the_list(app)
     did = r["draft_id"]
     save(app, world, autosave=True, draft_id=did, text="Mine, not pushed yet.", resume=r["resume"])
-    names(did, world.pk(OTHER))
     with world.server.lock:
         raw = world.server.mailbox(w.ADA, "Drafts").messages.pop(row(did)["uid"]).raw
     world.server.deliver(w.ADA, "Drafts", raw.replace(b"See you.", b"From another app."), flags=["\\Draft"])
@@ -99,6 +81,6 @@ def test_a_save_kept_apart_carries_no_pk_over_and_finds_its_original_by_its_byte
         [apart] = [dict(x) for x in c.execute("SELECT * FROM drafts WHERE id<>?", (did,)).fetchall()]
     finally:
         c.close()
-    assert (apart["mode"], apart["subject"], apart["in_reply_to_pk"]) == ("reply", SUBJECT, None)
+    assert (apart["mode"], apart["subject"]) == ("reply", SUBJECT)
     opened = app.post("/api/draft/resume", {"draft_id": apart["id"]}).json
     assert "Mine, not pushed yet." in opened["text"] and opened["orig_pk"] == world.pk(LUNCH)

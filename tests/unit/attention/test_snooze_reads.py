@@ -1,5 +1,4 @@
-"""Whether a message is snoozed is read from `snoozes`, by its key and folder, in every list. `messages.snoozed_until` is
-only written, for a rollback to an older commit, until it is dropped: so each reader here answers the same without it."""
+"""Whether a message is snoozed is read from `snoozes`, by its key and folder, in every list."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -64,32 +63,26 @@ def copy_in(c, world, folder, uid=9000):
 
 
 @pytest.mark.parametrize("reader", LISTS)
-def test_a_list_leaves_snoozed_mail_out_by_snoozes_alone(c, world, reader):
+def test_a_list_leaves_snoozed_mail_out_by_snoozes(c, world, reader):
     pk = world.pk(LUNCH)
     assert pk in pks(LISTS[reader](c))
     set_snooze(c, pk)
     assert pk not in pks(LISTS[reader](c))
-    c.execute("UPDATE messages SET snoozed_until=NULL")
-    c.commit()
-    assert pk not in pks(LISTS[reader](c))
     c.execute("DELETE FROM snoozes")
-    c.execute("UPDATE messages SET snoozed_until=? WHERE pk=?", (UNTIL, pk))
     c.commit()
     assert pk in pks(LISTS[reader](c))
 
 
 @pytest.mark.parametrize("reader", COUNTS)
-def test_a_count_leaves_snoozed_mail_out_by_snoozes_alone(c, world, reader):
+def test_a_count_leaves_snoozed_mail_out_by_snoozes(c, world, reader):
     before = COUNTS[reader](c)
     set_snooze(c, world.pk(RECEIPT))                    # alone in its thread
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     assert COUNTS[reader](c) < before
 
 
 def test_the_snoozed_view_lists_it_with_the_time_snoozes_holds(c, world):
     pk = world.pk(LUNCH)
     set_snooze(c, pk)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     [row] = store.snoozed_rows(c, w.ADA, 50, 0)
     assert (row["pk"], row["snoozed_until"], row["importance"]) == (pk, UNTIL, SAID[1])
     assert store.snoozed_count(c, w.ADA) == 1
@@ -109,7 +102,6 @@ def test_the_snoozed_view_goes_soonest_first_and_leaves_out_what_is_going(c, wor
 def test_search_asks_snoozes_about_snoozed_mail(c, world):
     pk = world.pk(LUNCH)
     set_snooze(c, pk)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     c.commit()
     assert pks(search("lunch")) == pks(search("lunch -is:snoozed")) and pk not in pks(search("lunch"))
     assert pks(search("is:snoozed")) == {pk} and pks(search("lunch is:snoozed")) == {pk}
@@ -118,7 +110,6 @@ def test_search_asks_snoozes_about_snoozed_mail(c, world):
 def test_a_bulk_commands_reach_asks_snoozes_too(c, world):
     pk = world.pk(LUNCH)
     set_snooze(c, pk)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     c.commit()
     count, found, _ = discovery._mail.reach(QuerySpec.parse("is:snoozed"), 50, {"trash"})
     assert count == 1 and [r["message_key"] for r in found] == [world.row(LUNCH)["message_key"]]
@@ -133,7 +124,6 @@ def test_a_sweep_leaves_a_snoozed_message_alone_by_snoozes(c, world):
     junk = curation._mail.ai_junk_ids
     assert r["message_id"] in junk(w.ADA)
     set_snooze(c, r["pk"])
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     c.commit()
     assert r["message_id"] not in junk(w.ADA)
 
@@ -142,7 +132,6 @@ def test_a_waiting_thread_isnt_nudged_while_snoozed_by_snoozes(c, world):
     pk = world.pk(LUNCH)
     c.execute("UPDATE messages SET seen=1, answered=0, draft=0, thread_id='T', ts=? WHERE pk=?", (1_800_000_000, pk))
     set_snooze(c, pk)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     attention.book.followup_detect_received(c, 1_800_000_000 + 5 * 86400, 3, 14)
     assert c.execute("SELECT COUNT(*) FROM followups WHERE kind='received'").fetchone()[0] == 0
 
@@ -151,7 +140,6 @@ def test_a_message_read_alone_says_when_it_wakes(c, world):
     pk = world.pk(LUNCH)
     assert store.get_message(c, pk)["snooze_until"] is None
     set_snooze(c, pk)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     assert store.get_message(c, pk)["snooze_until"] == UNTIL
 
 
@@ -159,14 +147,12 @@ def test_drafting_ahead_passes_over_a_snoozed_message_by_snoozes(c, world):
     row = world.row(LUNCH)
     assert assistant.drafting._draft_eligible(store.get_message(c, row["pk"]))
     set_snooze(c, row["pk"])
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     assert not assistant.drafting._draft_eligible(store.get_message(c, row["pk"]))
 
 
 def test_due_goes_by_snoozes(c, world):
     pk = world.pk(LUNCH)
     set_snooze(c, pk, 1_000)
-    c.execute("UPDATE messages SET snoozed_until=NULL")
     assert pks(attention.book.due_snoozes(c, 999)) == set()
     assert pks(attention.book.due_snoozes(c, 1_000)) == {pk}
 

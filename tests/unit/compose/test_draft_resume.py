@@ -7,6 +7,7 @@ import hashlib
 import imaplib
 import itertools
 import json
+import os
 from email import message_from_bytes, policy
 from email.message import EmailMessage
 
@@ -24,7 +25,7 @@ from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
 from mailmind.kernel import addresses
 from mailmind.platform import settings
-from mailmind.platform.db import migrations
+from mailmind.platform.db import migrate, migrations
 from mailmind.platform.workers import gates
 
 ACCT = "ada@example.test"
@@ -404,7 +405,7 @@ def test_received_mail_a_row_points_at_is_never_removed(calls):
     c = store.conn()
     did = book.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
                                  "message_id": "<stmt@bank.example.test>", "uidvalidity": 912,
-                                 "in_reply_to_pk": None, "mode": "new", "subject": "Your statement",
+                                 "mode": "new", "subject": "Your statement",
                                  "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
     c.commit()
     c.close()
@@ -515,12 +516,13 @@ def test_migration_20_is_idempotent(home):
 
 
 def test_v19_database_gains_the_columns(home):
+    db = settings.current().db
+    os.remove(db)
+    migrate.init(db, migrations.MIGRATIONS[:19])
     c = store.conn()
-    for col in SIDECAR:
-        c.execute(f"ALTER TABLE drafts DROP COLUMN {col}")
+    assert not SIDECAR & {r[1] for r in c.execute("PRAGMA table_info(drafts)")}
     c.execute("INSERT INTO drafts (account, folder, uid, mode, subject) VALUES (?,?,?,?,?)",
               (ACCT, "Drafts", 3, "reply", "Re: Plans"))
-    c.execute("PRAGMA user_version=19")
     c.commit()
     c.close()
     store.init()
@@ -1033,7 +1035,7 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened(calls):
     pk, res = _saved_and_synced(calls, text="Send this tomorrow.")
     c = store.conn()
     oid, _ = book.outbox_insert(c, {"account": ACCT, "idempotency_key": "k-later", "message_id": "<later@example.test>",
-                                     "in_reply_to_pk": None, "envelope": "[]", "recipients": "{}", "subject": "Plans",
+                                     "envelope": "[]", "recipients": "{}", "subject": "Plans",
                                      "raw": b"x", "next_attempt_at": 4_000_000_000, "draft_id": res["draft_id"],
                                      "created_at": "2026-11-01T10:00:00"})
     c.commit()

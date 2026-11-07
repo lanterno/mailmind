@@ -310,7 +310,7 @@ def test_snooze_hides_the_message_until_it_is_due(page, world):
     expect(receipt).to_have_count(0)
     c = store.conn()
     try:
-        wakes = c.execute("SELECT snoozed_until FROM messages WHERE pk=?", (world.pk(RECEIPT),)).fetchone()[0]
+        wakes = store.get_message(c, world.pk(RECEIPT))["snooze_until"]
     finally:
         c.close()
     assert wakes is not None

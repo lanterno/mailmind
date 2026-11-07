@@ -158,7 +158,7 @@ def test_hwf_migration_18_drops_the_retired_notes_table(data_dir, monkeypatch):
 
 # -- the search index and the text it holds -----------------------------------
 
-def test_hwf_every_delete_path_drops_the_search_row_summary_and_body(db):
+def test_hwf_every_delete_path_drops_the_search_row_and_body(db):
     from mailmind.bootstrap.mailbox import store
     one, two, three = (put(db, f"<d{i}@example.test>", subject="Heron notes") for i in range(3))
     for pk in (one, two, three):
@@ -172,7 +172,7 @@ def test_hwf_every_delete_path_drops_the_search_row_summary_and_body(db):
     store.reset_folder(db, A, "INBOX")
     assert hits(db, '"heron"') == []
     assert [db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-            for t in ("msg_fts", "summaries", "bodies", "messages")] == [0, 0, 0, 0]
+            for t in ("msg_fts", "bodies", "messages")] == [0, 0, 0]
 
 
 def test_hwf_search_index_helpers_tolerate_a_database_without_the_index(db):
@@ -278,7 +278,7 @@ def test_hwf_badges_count_only_threads_that_still_have_mail(db):
     for t in ("T1", "GONE1"):
         attention.book.mute_thread(db, A, t, "now")
     for t in ("T2", "GONE2"):
-        attention.book.set_replylater(db, A, t, None, "now")
+        attention.book.set_replylater(db, A, t, "now")
     db.executemany("INSERT INTO followups(account, thread_id, kind, state, due_ts) VALUES (?,?,?,?,?)",
                    [(A, "T3", "sent", "due", 1), (A, "GONE3", "received", "due", 2)])
     assert (attention.book.muted_count(db, A), len(attention.book.list_muted(db, A))) == (1, 1)
@@ -293,7 +293,7 @@ def test_hwf_a_listed_thread_shows_its_latest_message_the_higher_pk_on_a_tie(db)
     put(db, "<4@example.test>", thread_id="U", ts=300)
     waiting = put(db, "<5@example.test>", thread_id="U", ts=300)
     attention.book.mute_thread(db, A, "T", "now")
-    attention.book.set_replylater(db, A, "T", None, "now")
+    attention.book.set_replylater(db, A, "T", "now")
     db.execute("INSERT INTO followups(account, thread_id, kind, state, due_ts) VALUES (?,?,?,?,?)",
                (A, "U", "sent", "due", 1))
     assert [(r["pk"], r["thread_count"]) for r in attention.book.list_muted(db, A)] == [(latest, 3)]
@@ -303,18 +303,18 @@ def test_hwf_a_listed_thread_shows_its_latest_message_the_higher_pk_on_a_tie(db)
 
 def test_hwf_a_dismissed_reply_later_thread_leaves_the_stack(db):
     put(db, "<a@example.test>", thread_id="T")
-    attention.book.set_replylater(db, A, "T", None, "now")
+    attention.book.set_replylater(db, A, "T", "now")
     attention.book.dismiss_followup(db, A, "T", "now")          # what POST /api/followups/dismiss does
     assert [r["thread_id"] for r in attention.book.list_replylater(db, A)] == []
     assert attention.book.replylater_count(db, A) == 0           # nor counted on the rail
-    attention.book.set_replylater(db, A, "T", None, "later")     # pinned again, it's back
+    attention.book.set_replylater(db, A, "T", "later")     # pinned again, it's back
     assert ([r["thread_id"] for r in attention.book.list_replylater(db, A)], attention.book.replylater_count(db, A)) == (["T"], 1)
 
 
 def test_hwf_a_draft_of_a_reply_is_no_reply_to_reply_later(db):
     put(db, "<a@example.test>", thread_id="T", ts=100)
     put(db, "<b@example.test>", thread_id="T", ts=200, from_addr=A, draft=1)
-    attention.book.set_replylater(db, A, "T", None, "now")
+    attention.book.set_replylater(db, A, "T", "now")
     attention.book.resolve_followups(db, A)
     assert attention.book.replylater_count(db, A) == 1
     put(db, "<c@example.test>", thread_id="T", ts=300, from_addr=A, folder="Sent")
@@ -331,10 +331,9 @@ def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
     def nudged():
         attention.book.followup_detect_received(db, NOW_TS, 3, 14)
         attention.book.resolve_followups(db, A)
-        return [(r["anchor_pk"], r["last_msg_ts"])
-                for r in db.execute("SELECT anchor_pk, last_msg_ts FROM followups WHERE kind='received'")]
+        return [r["last_msg_ts"] for r in db.execute("SELECT last_msg_ts FROM followups WHERE kind='received'")]
 
-    assert nudged() == [(asked, NOW_TS - 5 * day)]     # dated by the mail, not by the draft
+    assert nudged() == [NOW_TS - 5 * day]              # dated by the mail, not by the draft
     put(db, "<c@example.test>", thread_id="T", ts=NOW_TS - 1, from_addr=A, folder="Sent")
     assert nudged() == []
 
@@ -342,7 +341,7 @@ def test_hwf_a_draft_of_a_reply_leaves_a_thread_waiting_on_you(db):
 # -- the draft-ahead cache's hygiene ------------------------------------------
 
 def _ahead(c, ref, created, body="Sounds good."):
-    answers.draft_ahead_put(c, A, ref, "fp", body, "warm", "m", None, None, "dwell", created)
+    answers.draft_ahead_put(c, A, ref, "fp", body, "warm", "m", None, "dwell", created)
 
 
 def _ahead_keys(c):
@@ -414,7 +413,7 @@ class _LosesTheRace:
 
 
 def test_hwf_an_outbox_insert_that_loses_a_race_returns_the_winners_row(db):
-    row = {"account": A, "idempotency_key": "send:k1", "message_id": "<o@example.test>", "in_reply_to_pk": None,
+    row = {"account": A, "idempotency_key": "send:k1", "message_id": "<o@example.test>",
            "envelope": "[]", "recipients": "{}", "subject": "s", "raw": b"x", "next_attempt_at": 0,
            "draft_id": None, "created_at": "now"}
     oid, created = book.outbox_insert(db, row)
@@ -454,7 +453,7 @@ def test_hwf_a_thread_that_joins_a_gmail_thread_takes_its_state_along(db):
     old = put(db, "<p@example.test>")
     recompute(db)
     was = tid(db, old)
-    attention.book.set_replylater(db, A, was, None, "now")
+    attention.book.set_replylater(db, A, was, "now")
     db.execute("INSERT INTO thread_summaries(account, thread_id, scope, fingerprint, tldr) VALUES(?,?,?,?,?)",
                (A, was, "thread", "fp", "Lunch on Friday."))
     _ahead(db, "t:" + was, NOW_TS - 60)
@@ -976,7 +975,7 @@ def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
     c = store.conn()
     fold = '<details class="mm-quote"><summary>··· quoted text</summary>'
     did = book.draft_upsert(c, {"id": None, "account": A, "folder": "Drafts", "uid": 7, "message_id": "<d@example.test>",
-                                 "uidvalidity": 1, "in_reply_to_pk": None, "mode": "reply", "subject": "Re: Lunch",
+                                 "uidvalidity": 1, "mode": "reply", "subject": "Re: Lunch",
                                  "created_at": "2026-10-01T09:00:00", "updated_at": "2026-10-01T09:00:00"})
     book.draft_set_resume(c, did, "Great", "\n\nOn Sunday:\n> lunch?\n",
                            f"<div>On Sunday:</div><blockquote>{fold}<blockquote>lunch?</blockquote></details></blockquote>",

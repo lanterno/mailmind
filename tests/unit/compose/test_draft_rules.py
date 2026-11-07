@@ -164,11 +164,11 @@ def test_a_message_with_no_original_hands_over_empty_threading():
 # -- a new row ------------------------------------------------------------------
 
 def test_a_new_rows_copy_is_nowhere_yet_and_both_stamps_are_now():
-    assert draft.tracked("ada@example.test", "<n@example.test>", "Plans", "reply", "then", in_reply_to_pk=4) == {
+    assert draft.tracked("ada@example.test", "<n@example.test>", "Plans", "reply", "then") == {
         "id": None, "account": "ada@example.test", "folder": None, "uid": None, "message_id": "<n@example.test>", "uidvalidity": None,
-        "in_reply_to_pk": 4, "mode": "reply", "subject": "Plans", "created_at": "then", "updated_at": "then"}
+        "mode": "reply", "subject": "Plans", "created_at": "then", "updated_at": "then"}
 
 
 def test_another_apps_draft_says_where_its_copy_is():
     row = draft.tracked("ada@example.test", "<n@example.test>", "Plans", "new", "then", folder="Drafts", uid=9, uidvalidity=7)
-    assert (row["folder"], row["uid"], row["uidvalidity"], row["in_reply_to_pk"]) == ("Drafts", 9, 7, None)
+    assert (row["folder"], row["uid"], row["uidvalidity"]) == ("Drafts", 9, 7)

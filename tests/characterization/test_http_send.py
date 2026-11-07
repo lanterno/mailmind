@@ -113,7 +113,7 @@ def test_a_reply_threads_quotes_and_marks_the_original(send):
                                             "text": "Great, see you then.", "idempotency_key": "k-reply"})
     send.drain("sent")
     send.golden.note("the original", send.world.where("ada-inbox-02-lunch-confirm.eml"))
-    send.golden.note("follow-ups", rows("SELECT account, kind, state, anchor_pk FROM followups"))
+    send.golden.note("follow-ups", rows("SELECT account, kind, state FROM followups"))
 
 
 def test_reply_all_from_gmail_files_no_sent_copy_of_its_own(send):

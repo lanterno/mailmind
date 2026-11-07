@@ -229,9 +229,8 @@ def test_answers_reach_every_copy_and_the_key(backlog, ai):
     sent = len(_sent(ai))
     ai.end_batch(results={str(key): fa.succeeded({"summary": "Said once.", "importance": 9, "category": "info", "action": ""})})
     assert assistant.assessments.batch_collect() == sent
-    got = _sql("SELECT s.summary, s.importance FROM summaries s JOIN messages m ON m.pk=s.message_pk WHERE m.message_key=?", key)
+    got = _sql("SELECT a.summary, a.importance FROM messages m JOIN assessments a ON a.message_key=m.message_key WHERE m.message_key=?", key)
     assert [tuple(r) for r in got] == [("Said once.", 5), ("Said once.", 5)]    # importance clamped, as ever
-    assert _sql("SELECT summary FROM assessments WHERE message_key=?", key)[0][0] == "Said once."
 
 
 def test_an_answer_for_a_message_whose_copies_went_is_kept_under_its_key(backlog, ai):
@@ -261,7 +260,7 @@ def test_a_reply_with_nothing_usable_stores_the_fallback(backlog, ai):
     key = _sent(ai)[0]
     ai.end_batch(results={str(key): fa.succeeded("not json at all")})
     assistant.assessments.batch_collect()
-    row = _sql("SELECT s.model FROM summaries s JOIN messages m ON m.pk=s.message_pk WHERE m.message_key=?", key)[0]
+    row = _sql("SELECT model FROM assessments WHERE message_key=?", key)[0]
     assert row["model"] == "parse-error"
 
 

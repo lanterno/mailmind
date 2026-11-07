@@ -1,5 +1,5 @@
 """A reply drafted ahead is kept under its thread, or its Message-ID for a message with no thread, and checked against a
-fingerprint of what those hold. `draft_ahead.src_pk` says which row it was made from, for a rollback, and nothing goes by it."""
+fingerprint of what those hold."""
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import accounts
@@ -42,24 +42,16 @@ def banked(app, ai, pk):
     assert app.post("/api/ai/draft-reply", {"pk": pk}).status == 200
 
 
-def test_a_draft_still_writes_the_pk_it_was_made_from(app, world, ai):
-    pk = world.pk(LUNCH)
-    banked(app, ai, pk)
-    assert [r["src_pk"] for r in query("SELECT src_pk FROM draft_ahead")] == [pk]
-
-
-def test_a_draft_is_served_for_its_thread_whatever_its_row_names(app, world, ai):
+def test_a_draft_is_served_for_its_thread_alone(app, world, ai):
     lunch, quilt = world.pk(LUNCH), world.pk(QUILT)
     banked(app, ai, lunch)
-    execute("UPDATE draft_ahead SET src_pk=?", quilt)
     assert (peek(app, lunch), peek(app, quilt)) == ("ready", "none")
 
 
-def test_a_lone_message_is_served_its_draft_whatever_its_row_names(app, world, ai):
+def test_a_lone_message_is_served_its_draft_alone(app, world, ai):
     lunch, quilt = world.pk(LUNCH), world.pk(QUILT)
     execute("UPDATE messages SET thread_id=NULL WHERE pk=?", quilt)
     banked(app, ai, quilt)
-    execute("UPDATE draft_ahead SET src_pk=?", lunch)
     assert (peek(app, quilt), peek(app, lunch)) == ("ready", "none")
 
 

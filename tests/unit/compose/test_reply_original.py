@@ -1,6 +1,6 @@
 """What a delivered reply does to its original, \\Answered and a follow-up, goes by what outlasts a row: the Message-ID and
-the account the outbox row keeps (`orig_*`), or for a message with no Message-ID its key (`original_key`). The pk the row
-also keeps may be another message's by then, and nothing reads it."""
+the account the outbox row keeps (`orig_*`), or for a message with no Message-ID its key (`original_key`). The pk a request
+named may be another message's by then."""
 from datetime import timedelta
 
 import pytest
@@ -62,7 +62,7 @@ def answered_on_server(world, name):
 
 
 def followups():
-    return query("SELECT thread_id, kind, anchor_pk FROM followups ORDER BY thread_id")
+    return query("SELECT thread_id, kind FROM followups ORDER BY thread_id")
 
 
 def held_for_a_reply(app, world):
@@ -92,7 +92,6 @@ def test_a_follow_up_goes_on_the_replied_thread_when_the_pk_has_gone_to_another_
     assert original["thread_id"] != bystander["thread_id"]
     goes_out(app)
     assert [f["thread_id"] for f in followups()] == [original["thread_id"]]
-    assert followups()[0]["anchor_pk"] is None             # no row of its own left to name
 
 
 def test_a_renumbered_original_is_answered_and_followed_up_on_the_row_it_has_now(app, world):
@@ -104,7 +103,7 @@ def test_a_renumbered_original_is_answered_and_followed_up_on_the_row_it_has_now
     assert now["pk"] != original["pk"]
     goes_out(app)
     assert answered_on_server(world, LUNCH) and world.row(LUNCH)["answered"] == 1
-    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent", "anchor_pk": now["pk"]}]
+    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent"}]
 
 
 def test_the_row_names_its_original_by_what_outlasts_a_row(app, world):
@@ -119,7 +118,7 @@ def test_a_mail_that_was_not_renumbered_is_answered_and_followed_up_as_ever(app,
     reply(app, original["pk"])
     goes_out(app)
     assert answered_on_server(world, LUNCH) and world.row(LUNCH)["answered"] == 1
-    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent", "anchor_pk": original["pk"]}]
+    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent"}]
 
 
 # -- a message with no Message-ID to go by ----------------------------------------------------
@@ -144,7 +143,7 @@ def test_a_reply_to_a_message_with_no_message_id_goes_by_its_key(app, world):
     assert queued["orig_account"] == w.ADA and not queued["orig_message_id"] and queued["original_key"]
     goes_out(app)
     assert "\\Answered" in flags_of(world, uid)
-    assert followups() == [{"thread_id": row["thread_id"], "kind": "sent", "anchor_pk": row["pk"]}]
+    assert followups() == [{"thread_id": row["thread_id"], "kind": "sent"}]
 
 
 def test_a_message_with_no_message_id_is_still_found_after_a_renumber(app, world):
@@ -181,11 +180,15 @@ def test_a_pk_that_has_gone_to_another_accounts_message_was_not_the_one_replied_
 
 # -- a send already queued as migration 44 runs -----------------------------------------------------
 
-def upgraded():
-    """What migration 44 makes of the queue as it stands."""
+def upgraded(oid, pk):
+    """What migration 44 makes of the queue as it stands, with send `oid` naming `pk` in the column it read, which
+    migration 45 ended."""
     c = store.conn()
     try:
+        c.execute("ALTER TABLE outbox ADD COLUMN in_reply_to_pk INTEGER")
+        c.execute("UPDATE outbox SET in_reply_to_pk=? WHERE id=?", (pk, oid))
         m0044_outbox_original_key.migrate(c)
+        c.execute("ALTER TABLE outbox DROP COLUMN in_reply_to_pk")
         c.commit()
     finally:
         c.close()
@@ -195,13 +198,13 @@ def test_a_row_queued_before_migration_27_is_read_by_its_pk_as_it_upgrades(app, 
     original = world.row(LUNCH)
     oid = reply(app, original["pk"])
     execute("UPDATE outbox SET orig_account=NULL, orig_message_id=NULL, orig_thread_id=NULL, original_key=NULL WHERE id=?", oid)
-    upgraded()
+    upgraded(oid, original["pk"])
     [row] = query("SELECT orig_account, orig_message_id, orig_thread_id, original_key FROM outbox WHERE id=?", oid)
     assert row == {"orig_account": w.ADA, "orig_message_id": original["message_id"], "orig_thread_id": original["thread_id"],
                    "original_key": original["message_key"]}
     goes_out(app)
     assert answered_on_server(world, LUNCH) and world.row(LUNCH)["answered"] == 1
-    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent", "anchor_pk": original["pk"]}]
+    assert followups() == [{"thread_id": original["thread_id"], "kind": "sent"}]
 
 
 def test_a_reply_to_a_message_with_no_message_id_takes_its_key_as_it_upgrades(app, world):
@@ -209,7 +212,7 @@ def test_a_reply_to_a_message_with_no_message_id_takes_its_key_as_it_upgrades(ap
     oid = reply(app, row["pk"])
     [was] = query("SELECT original_key FROM outbox WHERE id=?", oid)
     execute("UPDATE outbox SET original_key=NULL WHERE id=?", oid)
-    upgraded()
+    upgraded(oid, row["pk"])
     assert query("SELECT original_key FROM outbox WHERE id=?", oid) == [was]
     goes_out(app)
     assert "\\Answered" in flags_of(world, uid)
@@ -228,7 +231,7 @@ def test_a_pk_that_has_gone_to_another_message_gives_no_key_as_it_upgrades(app, 
         [found] = query("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.BEA, theirs)
         other = found["pk"]
     another_message_takes(row["pk"], other)
-    upgraded()
+    upgraded(oid, row["pk"])
     assert query("SELECT original_key FROM outbox WHERE id=?", oid) == [{"original_key": None}]
     goes_out(app)
     assert "\\Answered" not in flags_of(world, uid)
@@ -239,6 +242,6 @@ def test_a_send_that_has_gone_is_left_as_it_was_by_the_upgrade(app, world):
     oid = reply(app, original["pk"])
     goes_out(app)
     execute("UPDATE outbox SET orig_account=NULL, orig_message_id=NULL, orig_thread_id=NULL, original_key=NULL WHERE id=?", oid)
-    upgraded()
+    upgraded(oid, original["pk"])
     assert query("SELECT state, orig_account, original_key FROM outbox WHERE id=?", oid) == [
         {"state": "sent", "orig_account": None, "original_key": None}]

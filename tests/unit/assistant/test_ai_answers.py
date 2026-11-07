@@ -77,10 +77,10 @@ def review_now(app):
     return app.get(f"/api/review?account={w.ADA}").json
 
 
-def waiting_on(pk, thread_id):
+def waiting_on(thread_id):
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
-    attention.book.followup_record_sent(c, w.ADA, thread_id, pk, int(time.time()), "2026-11-01T00:00:00+00:00")
+    attention.book.followup_record_sent(c, w.ADA, thread_id, int(time.time()), "2026-11-01T00:00:00+00:00")
     c.execute("UPDATE followups SET state='due' WHERE thread_id=?", (thread_id,))
     c.commit()
     c.close()
@@ -160,7 +160,7 @@ def test_a_stored_review_opens_the_message_it_named_after_a_renumber(app, world,
 
 def test_a_stored_reviews_waiting_list_follows_a_renumber_too(app, world, ai):
     lunch = world.row(LUNCH)
-    waiting_on(lunch["pk"], lunch["thread_id"])
+    waiting_on(lunch["thread_id"])
     first = review_of(ai, app)
     old = [i["pk"] for i in first["waiting"] if i["thread_id"] == lunch["thread_id"]]
     renumber_inbox(world)
@@ -180,7 +180,7 @@ def test_a_stored_review_leaves_out_a_message_that_has_gone(app, world, ai):
 
 
 def test_a_waiting_item_that_named_no_message_stays(app, world, ai):
-    waiting_on(world.pk(LUNCH), "rf:no-such-thread")
+    waiting_on("rf:no-such-thread")
     review_of(ai, app)
     [item] = [i for i in review_now(app)["waiting"] if i["thread_id"] == "rf:no-such-thread"]
     assert item["pk"] is None and item["key"] is None

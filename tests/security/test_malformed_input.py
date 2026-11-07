@@ -3,6 +3,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import web
+from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import as_int, required_int
 
@@ -87,7 +88,11 @@ def test_any_of_many_named_by_what_cant_be_a_number(app, world, junk):
     for path in ("/api/snooze", "/api/unsnooze"):
         r = app.post(path, {"pks": [pk, junk], "preset": "tomorrow"})
         assert (r.status, r.json) == (400, BAD_REQUEST)
-    assert not world.row("ada-inbox-02-lunch-confirm.eml")["snoozed_until"]
+    c = store.conn()
+    try:
+        assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
+    finally:
+        c.close()
 
 
 @pytest.mark.parametrize("path", ["/api/draft", "/api/send"])

@@ -23,7 +23,6 @@
   "value": [
    {
     "account": "bea@example.test",
-    "anchor_pk": 18,
     "kind": "replylater",
     "state": "due",
     "thread_id": "rf:bea@example.test:1f7815dd634a2ba6"
