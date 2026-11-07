@@ -9,6 +9,13 @@ reinstalled or reset), the account's pins are forgotten and the next connection 
 """
 import hashlib
 
+LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
+
+
+def is_loopback(host: str | None) -> bool:
+    """On this machine, the only place a certificate's checks may be skipped: nowhere else does a pin stand in for them."""
+    return (host or "").strip().lower() in LOOPBACK
+
 
 class TLSPinMismatch(ConnectionError):
     """The server presented a certificate other than the one pinned for it. Nothing was sent."""

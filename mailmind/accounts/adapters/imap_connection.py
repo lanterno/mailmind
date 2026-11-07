@@ -15,19 +15,14 @@ class LoginUnreachable(OSError):
     outage is QUEUED + retried rather than silently applied locally only."""
 
 
-LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
 _UNSENDABLE = re.compile(r"[\r\n\x00]")
-
-
-def is_loopback(host):
-    return (host or "").strip().lower() in LOOPBACK
 
 
 def tls_context(host):
     """Verified TLS, except on loopback, where Proton Bridge serves a self-signed certificate.
     Any host off this machine is verified, so a forged certificate can't capture the password."""
     ctx = ssl.create_default_context()
-    if is_loopback(host):
+    if tls_pin.is_loopback(host):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE      # check_pin stands in for the verification
     return ctx
@@ -89,7 +84,7 @@ class Connector:
         at this endpoint, and refuse any other after it (mailmind.accounts.domain.tls_pin). `conn` is
         the IMAP or SMTP connection, its TLS socket `conn.sock`. Raises TLSPinMismatch, a
         ConnectionError, before a credential is sent. Elsewhere it does nothing."""
-        if not is_loopback(host):
+        if not tls_pin.is_loopback(host):
             return
         seen = tls_pin.fingerprint(conn.sock.getpeercert(binary_form=True))
         where = tls_pin.endpoint(host, port)

@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from urllib.parse import quote
 from typing import Any, Self
 
-_LOOPBACK = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
+from mailmind.accounts.domain.tls_pin import is_loopback
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ def resolve(acct: Mapping[str, Any], capabilities: Iterable[object] | None = Non
         p = _GMAIL
     elif kind == "proton":
         p = ProviderProfile("proton", marks_trash_read=True, **_BRIDGE)
-    elif (acct.get("host") or "").strip().lower() in _LOOPBACK and acct.get("starttls"):
+    elif is_loopback(acct.get("host")) and acct.get("starttls"):
         p = ProviderProfile(kind, **_BRIDGE)
     else:
         p = ProviderProfile(kind)
