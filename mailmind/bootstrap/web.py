@@ -17,10 +17,17 @@ from mailmind.http.shared import AI_OVER_HEADER, post_body_cap
 __all__ = ["AI_OVER_HEADER", "H", "ROUTERS", "post_body_cap"]
 
 # What has moved to FastAPI. The handler's table below holds the rest until each file has.
-ROUTERS = [attention_routes.router(attention), calendar_routes.router(calendar), mailbox_routes.router(mailbox)]
+ROUTERS = [attention_routes.router(attention),
+           calendar_routes.router(calendar),
+           mailbox_routes.router(mailbox),
+           accounts_routes.router(accounts, mailbox)]
 
-handler.bind(Routes(static.routes(), events.routes(), export.routes(), debug.routes(mailbox, compose, background, assistant),
+handler.bind(Routes(static.routes(),
+                    events.routes(),
+                    export.routes(),
+                    debug.routes(mailbox, compose, background, assistant),
                     curation_routes.routes(curation),
-                    discovery_routes.routes(discovery), compose_routes.routes(compose),
-                    assistant_routes.routes(assistant, mailbox), accounts_routes.routes(accounts, mailbox)),
+                    discovery_routes.routes(discovery),
+                    compose_routes.routes(compose),
+                    assistant_routes.routes(assistant, mailbox)),
              lambda: assistant.governor().saw_someone())
