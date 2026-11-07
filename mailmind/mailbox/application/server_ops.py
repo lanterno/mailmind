@@ -12,7 +12,8 @@ from mailmind.kernel.row import Row
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, StoredMail
 from mailmind.mailbox.application.session import MailSession
-from mailmind.mailbox.domain import command, destination
+from mailmind.mailbox.domain import command, destination, move_strategy
+from mailmind.mailbox.domain.move_strategy import Way
 from mailmind.platform import profile
 
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
@@ -162,16 +163,18 @@ class ServerOps:
             where = destination.resolve(kind, named=row["dest"], archive_is_label_removal=server.archive_is_label_removal,
                                         trash=self._accounts.trash_folder(acct), junk_fallback=server.junk_fallback,
                                         find=lambda *roles: mail_session.find_role(s, *roles))
-            if where.drop_inbox_label:
+            strategy = move_strategy.choose(kind, where, capabilities=s.capabilities, marks_trash_read=server.marks_trash_read)
+            if strategy.way is Way.LABELS:
                 s.remove_labels([uid], ["\\Inbox"])
                 return command.ServerAnswer()
             if not where.folder:
                 return command.ServerAnswer(won_t=command.NO_FOLDER)
-            unseen = (kind == "trash" and server.marks_trash_read
-                      and not _seen_on_server(s, uid, bool(params.get("seen", True))))
+            unseen = strategy.read_seen_first and not _seen_on_server(s, uid, bool(params.get("seen", True)))
             if not first_try and self._already_in(s, where.folder, mid, src):
                 s.add_flags([uid], ["\\Deleted"])    # an earlier try's COPY landed, then its connection
                 s.expunge([uid])                     # dropped: only the original is left to remove
+            elif strategy.way is Way.COPY:
+                mail_session.move_by_copy(s, [uid], where.folder)
             else:
                 s.move([uid], where.folder)
             return command.ServerAnswer(dest=where.folder, unseen=unseen)

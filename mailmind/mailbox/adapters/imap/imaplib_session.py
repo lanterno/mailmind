@@ -13,6 +13,7 @@ from mailmind.mailbox.adapters.imap import imap_list
 from mailmind.mailbox.adapters.imap.imap_names import gmail_labels, imap_quote, mailbox_arg
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
+from mailmind.mailbox.domain import move_strategy
 
 _CHANGES = ("EXISTS", "RECENT", "EXPUNGE")
 _FLAGS = re.compile(rb"FLAGS \(([^)]*)\)")
@@ -151,7 +152,7 @@ class ImaplibSession:
         _ok("COPY", *self._M.uid("COPY", _uid_set(uids), mailbox_arg(dest)))
 
     def move(self, uids, dest):
-        if "MOVE" in self.capabilities:
+        if move_strategy.offers_move(self.capabilities):
             try:
                 _ok("MOVE", *self._M.uid("MOVE", _uid_set(uids), mailbox_arg(dest)))
                 return

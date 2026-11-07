@@ -18,6 +18,7 @@ from imapclient import IMAPClient
 from mailmind.mailbox.adapters.imap.imap_names import escaped, gmail_labels, imap_quote, sendable, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
+from mailmind.mailbox.domain import move_strategy
 from mailmind.mailbox.domain.roles import Folder
 from collections.abc import Callable
 
@@ -148,7 +149,7 @@ class ImapClientSession:
         self._c.copy([int(u) for u in uids], unescaped(dest))
 
     def move(self, uids, dest):
-        if "MOVE" in self.capabilities:
+        if move_strategy.offers_move(self.capabilities):
             try:
                 self._c.move([int(u) for u in uids], unescaped(dest))
                 return
