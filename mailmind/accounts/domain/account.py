@@ -82,8 +82,8 @@ def smtp_endpoint(entry: Mapping[str, Any]) -> Endpoint:
 
 def normalized(a: Entry) -> Entry | None:
     """An account's entry in the file as the rest of the app reads it, its type's defaults filled in.
-    None for one that can't be used: disabled, or a generic IMAP account with no host."""
-    if a.get("disabled"):
+    None for one that can't be used: disabled, one with no address, or a generic IMAP account with no host."""
+    if a.get("disabled") or not a.get("email"):
         return None
     imap, smtp, d = imap_endpoint(a), smtp_endpoint(a), _defaults(a)
     if not imap.host:
