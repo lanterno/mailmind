@@ -40,8 +40,9 @@ def due_after_typing(now: int, pushed_at: int | None) -> int:
 
 
 def due_after_failing(now: int, attempts: int) -> int:
-    """A push that failed goes again later and later. The bytes wait here, so nothing is ever given up."""
-    return now + min(BACKOFF_MOST, BACKOFF_FIRST * 2 ** min(attempts, 10))
+    """A push that failed for the `attempts`-th time goes again later and later, from BACKOFF_FIRST. The bytes wait here, so
+    nothing is ever given up."""
+    return now + min(BACKOFF_MOST, BACKOFF_FIRST * 2 ** min(attempts - 1, 10))
 
 
 def after_save(autosave: bool, now: int, waiting: Row | None, pushed_at: int | None) -> tuple[int, int]:
