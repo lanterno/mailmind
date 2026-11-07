@@ -222,7 +222,7 @@ def test_hwf_a_body_fetch_the_server_refuses_is_logged_and_the_row_kept(world, c
         return [str(i).upper() for i in items] == ["BODY.PEEK[]"]
     world.server.fail("UID FETCH", user=w.ADA, when=body_fetch)
     uid = world.deliver(w.ADA, "INBOX", late())
-    assert f"[ingest] body fetch {w.ADA} uid {uid}: NO" in capsys.readouterr().out
+    assert f"[ingest] body fetch <withheld> uid {uid}: NO" in capsys.readouterr().out
     assert stored()[uid] == "<late-1@example.test>"
 
 
