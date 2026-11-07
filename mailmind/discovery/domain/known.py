@@ -2,8 +2,10 @@
 you sent them, a delivered outbox envelope (Bcc included), or a keep_senders rule."""
 import dataclasses
 import json
-from collections.abc import Callable, Container
+from collections.abc import Callable, Container, Iterable
 
+from mailmind.kernel import addresses
+from mailmind.kernel.parsed import is_list
 from mailmind.kernel.row import Row
 
 MIN_HISTORY = 50     # fewer non-junk messages than this → too little history to call anyone new
@@ -19,6 +21,81 @@ class Facts:
     copies: list[Row]                   # rows of mail to one of them: addr, account, folder, is_junk, sender
     envelopes: list[str | None]         # what the outbox delivered, as JSON lists
     thin: bool                          # too little history to call anyone new
+
+
+@dataclasses.dataclass(frozen=True)
+class Asked:
+    """Addresses asked after, as they can be looked for."""
+    keys: list[str]                     # each one's own key in the answer
+    bad: list[str]                      # what no mail could go to
+    want: dict[str, set[str]]           # each form to look for, and the keys it answers
+
+
+def normal(raw: object) -> str | None:
+    """The address mail to `raw` would actually go to, by compose's own parser, so a display
+    name holding someone else's address can't stand in for it. None unless exactly one."""
+    try:
+        pairs = addresses.parse_addr_list([str(raw or "")[:320]])
+    except ValueError:
+        return None
+    if len(pairs) != 1:
+        return None
+    a = pairs[0][1].lower()
+    return a if len(a) <= 254 else None
+
+
+def forms(a: str) -> set[str]:
+    """a plus its IDNA twin: the outbox envelope stores punycode domains, received mail may not."""
+    local, dom = a.split("@")
+    out = {a}
+    try:
+        out.add(f"{local}@{addresses.idna_domain(dom).lower()}")
+    except ValueError:
+        pass
+    if "xn--" in dom:
+        try:
+            out.add(f"{local}@{dom.encode('ascii').decode('idna').lower()}")
+        except UnicodeError:
+            pass
+    return out
+
+
+def asked(addrs: object) -> Asked:
+    """What a request asks after. Raises ValueError for one that isn't a list of what a message could hold."""
+    if not is_list(addrs):
+        raise ValueError("addrs must be a list")
+    if len(addrs) > addresses.MAX_RECIPIENTS:
+        raise ValueError("too many addresses")
+    keys: list[str] = []
+    bad: list[str] = []
+    want: dict[str, set[str]] = {}
+    for raw in addrs:
+        key = str(raw or "").strip().lower()[:320]
+        a = normal(raw)
+        if a is None:
+            bad.append(key[:200])
+            continue
+        keys.append(key)
+        for f in forms(a):
+            want.setdefault(f, set()).add(key)
+    return Asked(keys, bad, want)
+
+
+def own_addresses(emails: Iterable[str], aliases: Iterable[str], holding: Iterable[str]) -> set[str]:
+    """Your addresses, as the dashboard's state.myAddrs sees them: the accounts' and those that hold mail here."""
+    return {e.lower() for group in (emails, aliases, holding) for e in group}
+
+
+def verdicts(question: Asked, own: Container[str], hit: Container[str]) -> dict[str, dict[str, bool]]:
+    """The answer for each address asked after, by any of its forms. Your own counts as known, and says it's yours."""
+    items = {k: {"known": False, "self": False} for k in question.keys}
+    for form, keys in question.want.items():
+        for k in keys:
+            if form in own:
+                items[k]["self"] = items[k]["known"] = True
+            elif form in hit:
+                items[k]["known"] = True
+    return items
 
 
 def vouched(facts: Facts, wanted: set[str], own: Container[str], role_by_name: Callable[[str], str]) -> set[str]:
