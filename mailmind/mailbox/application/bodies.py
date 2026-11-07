@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from mailmind.content import mime, sanitize
+from mailmind.content.mime import Parsed
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.platform.workers import gates
@@ -44,6 +45,16 @@ class Bodies:
             return f'src={m.group(1)}data:{ctype};base64,{b64}{m.group(1)}'
         return _CID_IMG.sub(sub, safe_html)
 
+    def _safe_html(self, pk: int, parsed: Parsed, load_images: bool) -> tuple[str | None, dict[str, int]]:
+        """A parsed message's HTML as its frame may show it, None if it has none, and what was left out."""
+        html = parsed.get("html")
+        if html and len(html) > 2_000_000:        # hard body cap before sanitize (DoS)
+            html = html[:2_000_000]
+        safe_html, info = (sanitize.sanitize(html, load_images=load_images)
+                           if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
+        if safe_html and "cid:" in safe_html:
+            safe_html = self._resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
+        return safe_html, info
 
     def message_body(self, pk: int, load_images: bool, prefetch: bool = False) -> dict[str, Any]:
         c = self._store.conn()
@@ -65,17 +76,11 @@ class Bodies:
         parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
         if parsed is None:
             return {"ok": False, "error": "not found"}
-        html, text = parsed.get("html"), parsed.get("text")
-        if html and len(html) > 2_000_000:        # hard body cap before sanitize (DoS)
-            html = html[:2_000_000]
-        safe_html, info = (sanitize.sanitize(html, load_images=load_images)
-                           if html else (None, {"blocked_images": 0, "blocked_css_urls": 0}))
-        if safe_html and "cid:" in safe_html:
-            safe_html = self._resolve_cids(pk, safe_html)   # embed inline images as data: (raster only)
+        safe_html, info = self._safe_html(pk, parsed, load_images)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
-            "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": text,
-            "has_html": bool(html), "attachments": parsed["attachments"],
+            "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": parsed.get("text"),
+            "has_html": bool(parsed.get("html")), "attachments": parsed["attachments"],
             "invite": invite, "invite_part": invite_part,
             "blocked_images": info.get("blocked_images", 0),
             "blocked_css_urls": info.get("blocked_css_urls", 0),
