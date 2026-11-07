@@ -25,6 +25,7 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import mailbox
+from mailmind.platform import perimeter
 
 pytestmark = pytest.mark.browser
 
@@ -139,6 +140,36 @@ def test_a_script_block_the_page_didnt_ship_doesnt_run_either(page, world):
     until(page, lambda: page.problems, "the policy said nothing")
     assert page.evaluate("() => document.body.dataset.injected") is None
     page.problems.clear()
+
+
+def test_a_mail_frame_stays_a_srcdoc_under_the_pages_policy(page, world):
+    """The React app's frame loads a URL. This page's doesn't, and its policy still lets asked-for images in."""
+    tracker = "https://tracker.example.test/open.png"
+    uid = world.deliver(w.ADA, "INBOX", (
+        "From: Mallory <mallory@evil.example.test>\r\nTo: Ada Park <ada@example.test>\r\nSubject: Tracked\r\n"
+        "Date: Sun, 01 Nov 2026 09:00:00 +0000\r\nMessage-ID: <tracked@evil.example.test>\r\nMIME-Version: 1.0\r\n"
+        f'Content-Type: text/html; charset=utf-8\r\n\r\n<p>Hello</p><img src="{tracker}" alt="tracker">').encode())
+    documents = []
+    page.pw.on("request", lambda r: documents.append(r.url) if "/body.html" in r.url else None)
+    answer = page.goto("/")
+    assert answer.header_value("content-security-policy") == perimeter.page_policy()
+    assert "https:" in answer.header_value("content-security-policy")
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    c = mailbox.store.conn()
+    pk = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", (w.ADA, uid)).fetchone()["pk"]
+    c.close()
+    page.locator(f'#rows .row[data-pk="{pk}"]').click()
+    frame = page.locator("iframe.rd-iframe")
+    expect(frame).to_be_visible()
+    assert frame.get_attribute("src") is None
+    assert "default-src 'none'" in frame.get_attribute("srcdoc") and tracker not in frame.get_attribute("srcdoc")
+    clean(page)
+    page.get_by_role("button", name="Load images").click()
+    until(page, lambda: page.blocked == [tracker], "the image was never asked for")
+    assert tracker in frame.get_attribute("srcdoc")
+    assert documents == []
+    page.blocked.clear()
+    clean(page)
 
 
 def test_archive_from_the_list_then_undo(page, world):

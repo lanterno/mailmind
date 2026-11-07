@@ -11,6 +11,7 @@ from playwright.sync_api import expect
 
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
+from mailmind.platform import perimeter
 
 pytestmark = [pytest.mark.browser, pytest.mark.usefixtures("serve_the_build")]
 
@@ -367,6 +368,25 @@ def test_a_message_gone_by_the_time_its_frame_asks_says_so_in_the_frame(page, wo
     until(page, lambda: "isn’t here any more" in frame.evaluate("f => f.contentDocument?.body?.textContent ?? ''"), "it says nothing")
     assert [p for p in page.problems if "404" not in p] == []      # the browser notes the status, and nothing else went wrong
     page.problems.clear()
+    clean(page)
+
+
+def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, world):
+    answer = page.goto("/next")
+    assert answer.header_value("content-security-policy") == perimeter.next_page_policy()
+    page.evaluate("""url => {
+        const i = document.createElement("img");
+        i.src = url;
+        document.body.append(i);
+    }""", TRACKER)
+    until(page, lambda: any("img-src" in p for p in page.problems), "the policy said nothing")
+    assert page.blocked == []
+    page.problems.clear()
+    pk, _ = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
+    reading(page, pk)
+    page.get_by_role("button", name="Load images").click()
+    until(page, lambda: page.blocked == [TRACKER], "the frame's own policy didn't let it through")
+    page.blocked.clear()
     clean(page)
 
 
