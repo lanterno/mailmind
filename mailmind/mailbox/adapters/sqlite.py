@@ -362,11 +362,11 @@ def get_body(c, pk):
     return r["raw"] if r else None
 
 
-def bodies_to_fetch(c, skip):
-    """The newest messages with no body text, none on its way out, but for the pks in `skip`."""
-    return c.execute("SELECT pk, account FROM messages WHERE body_text IS NULL "
+def bodies_to_fetch(c, account, skip, limit):
+    """An account's newest `limit` messages with no body text, none on its way out, but for the pks in `skip`."""
+    return c.execute("SELECT pk, account FROM messages WHERE account=? AND body_text IS NULL "
                      "AND pending_removal IS NULL AND pk NOT IN (SELECT value FROM json_each(?)) "
-                     "ORDER BY ts DESC LIMIT 12", (json.dumps(list(skip)),)).fetchall()
+                     "ORDER BY ts DESC LIMIT ?", (account, json.dumps(list(skip)), limit)).fetchall()
 
 
 def still_without_body(c, pks):

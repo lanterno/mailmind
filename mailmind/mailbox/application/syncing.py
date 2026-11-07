@@ -11,7 +11,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
-from mailmind.mailbox.domain import sync_errors
+from mailmind.mailbox.domain import body_backfill, sync_errors
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -22,9 +22,6 @@ warm_log = get_logger("warm")
 
 
 class Syncing:
-    BACKFILL_RETRY = 6 * 3600     # a body the server didn't give is asked for again after this long
-    BACKFILL_UNREACHABLE = 60     # the round after one whose server couldn't be reached
-
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, ingest: Ingest, warm: Warming, folders: Folders,
                  attention: Attention, kick: Callable[[str], object]):
         self._uow = uow
@@ -39,7 +36,8 @@ class Syncing:
         self._status: dict[str, dict[str, str]] = {}   # email -> {"health": ok|syncing|error, "msg": str}
         self._sync_lock = threading.Lock()
         self._sync_asked: list[frozenset[str] | None] = []   # syncs asked for while one ran: each its accounts, or None for all
-        self._backfill_missed: dict[int, float] = {}         # pk -> when backfill may ask for its body again
+        self._backfill_missed: dict[int, body_backfill.SetAside] = {}   # pk -> when backfill may ask for its body again
+        self._backfill_resting: dict[str, float] = {}        # email -> when backfill may ask anything of that account again
 
     @property
     def status(self) -> dict[str, dict[str, str]]:
@@ -169,38 +167,47 @@ class Syncing:
 
 
     def backfill_round(self) -> int:
-        """Fetch the bodies of up to 12 messages that have none, newest first, a second and a half
-        apart, yielding at once to a live user op. Returns the seconds until the next round: 8 while
-        there is a backlog, ten minutes once caught up (new mail lands body-less).
-
-        A body the server didn't give (deleted elsewhere and not yet pruned here, or refused) waits
-        self.BACKFILL_RETRY before it is asked for again, so the next round reaches older mail. A server
-        that can't be reached ends the round, and the next comes in self.BACKFILL_UNREACHABLE."""
+        """Fetch the bodies of up to a dozen messages that have none, each account in turn, a second and a half apart,
+        yielding at once to a live user op. Returns the seconds until the next round. What each failure costs, and whom,
+        is domain.body_backfill's to say: none of it holds another message or another account back."""
         now = time.time()
-        for pk in [pk for pk, at in self._backfill_missed.items() if at <= now]:
-            del self._backfill_missed[pk]
+        for account in [a for a, until in self._backfill_resting.items() if until <= now]:
+            del self._backfill_resting[account]
+        emails = [a["email"] for a in self._accounts.accounts() if a["email"] not in self._backfill_resting]
         with self._uow.read() as c:
-            rows = self._store.bodies_to_fetch(c, self._backfill_missed)
-        if not rows:
-            return 600
+            left = set(self._store.still_without_body(c, list(self._backfill_missed)))
+            for pk in set(self._backfill_missed) - left:   # opened meanwhile, or gone
+                del self._backfill_missed[pk]
+            skip = body_backfill.still_waiting(self._backfill_missed, now)
+            waiting = {e: self._store.bodies_to_fetch(c, e, skip, body_backfill.ROUND) for e in emails}
         tried: list[int] = []
-        wait = 8                             # drain a backlog briskly
-        for r in rows:
+        over: set[str] = set()               # the accounts whose turn this round has ended
+        for r in body_backfill.in_turn(list(waiting.values())):
+            pk, account = r["pk"], r["account"]
+            if account in over:
+                continue
             try:
-                gates.run(r["account"], lambda: self._ingest.fetch_body(r["pk"]),
-                          priority=gates.Priority.MAINTENANCE, wait=False)
+                gates.run(account, lambda: self._ingest.fetch_body(pk), priority=gates.Priority.MAINTENANCE, wait=False)
             except gates.Busy:
-                break                        # a user op is live — yield and retry next cycle
+                over.add(account)            # a user op is live — yield and retry next cycle
+                continue
             except UNREACHABLE:
-                wait = self.BACKFILL_UNREACHABLE  # the server's down: ask nothing more of it this round
-                break
+                lost_at = time.time()
+                self._backfill_missed[pk] = body_backfill.connection_lost(self._backfill_missed.get(pk), lost_at)
+                self._backfill_resting[account] = lost_at + body_backfill.UNREACHABLE_REST
+                over.add(account)
+                continue
             except Exception:
                 pass
-            tried.append(r["pk"])
+            tried.append(pk)
             time.sleep(1.5)                  # gentle pacing between IMAP fetches
         if tried:
             with self._uow.read() as c:
-                missed = self._store.still_without_body(c, tried)
-            for pk in missed:
-                self._backfill_missed[pk] = now + self.BACKFILL_RETRY
-        return wait
+                missed = set(self._store.still_without_body(c, tried))
+            for pk in tried:
+                if pk in missed:
+                    self._backfill_missed[pk] = body_backfill.not_given(now)
+                else:
+                    self._backfill_missed.pop(pk, None)
+        return body_backfill.next_round(going=any(rows and e not in self._backfill_resting for e, rows in waiting.items()),
+                                        resting=bool(self._backfill_resting))
