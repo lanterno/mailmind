@@ -4,12 +4,9 @@ import sqlite3
 
 from mailmind.discovery.adapters import fts
 from mailmind.discovery.domain import known
-from mailmind.platform import settings
-from mailmind.platform.db import database
+from mailmind.platform.db.uow import UnitOfWork
 
-
-def _conn():
-    return database.connect(settings.current().db)
+_uow = UnitOfWork()
 
 
 class StoredMail:
@@ -34,39 +31,37 @@ class StoredMail:
             where = where + ["m.account = ?"]
             params = params + [account]
         where_sql = (" AND " + " AND ".join(where)) if where else ""
-        c = _conn()
-        try:
-            in_all, in_all_args = self._in_folders_playing(c, {"all"})
-            columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
-                         m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action"""
-            if match is not None:               # every hit is scored anyway. bm25 can only be read where MATCH runs
-                sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
-                            ROW_NUMBER() OVER (PARTITION BY COALESCE(m.message_key, -m.pk)
-                                               ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth
-                       FROM (SELECT rowid AS pk, {fts.BM25} AS score FROM msg_fts WHERE msg_fts MATCH ?) h
-                       JOIN messages m ON m.pk=h.pk
-                       LEFT JOIN summaries s ON s.message_pk=m.pk
-                       WHERE 1=1{where_sql})
-                       WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
-                       LIMIT ? OFFSET ?""")
-                return c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
-            # newest first stops early, which sorting every copy wouldn't
-            sql = (f"""SELECT {columns} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
-                   WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
-            rows, seen = [], set()
-            for r in c.execute(sql, [*params, *in_all_args]):
-                key = r["message_key"] or -r["pk"]
-                if key not in seen:
-                    seen.add(key)
-                    if len(seen) > offset:
-                        rows.append(r)
-                    if len(rows) > limit:
-                        break
-            return rows
-        except sqlite3.OperationalError:
-            return None
-        finally:
-            c.close()
+        with _uow.read() as c:
+            try:
+                in_all, in_all_args = self._in_folders_playing(c, {"all"})
+                columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
+                             m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,s.importance,s.category,s.action"""
+                if match is not None:               # every hit is scored anyway. bm25 can only be read where MATCH runs
+                    sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
+                                ROW_NUMBER() OVER (PARTITION BY COALESCE(m.message_key, -m.pk)
+                                                   ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth
+                           FROM (SELECT rowid AS pk, {fts.BM25} AS score FROM msg_fts WHERE msg_fts MATCH ?) h
+                           JOIN messages m ON m.pk=h.pk
+                           LEFT JOIN summaries s ON s.message_pk=m.pk
+                           WHERE 1=1{where_sql})
+                           WHERE nth=1 ORDER BY {'ts DESC' if sort=='date' else 'score ASC, ts DESC'}
+                           LIMIT ? OFFSET ?""")
+                    return c.execute(sql, [*in_all_args, match, *params, limit + 1, offset]).fetchall()
+                # newest first stops early, which sorting every copy wouldn't
+                sql = (f"""SELECT {columns} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk
+                       WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
+                rows, seen = [], set()
+                for r in c.execute(sql, [*params, *in_all_args]):
+                    key = r["message_key"] or -r["pk"]
+                    if key not in seen:
+                        seen.add(key)
+                        if len(seen) > offset:
+                            rows.append(r)
+                        if len(rows) > limit:
+                            break
+                return rows
+            except sqlite3.OperationalError:
+                return None
 
     def for_asking(self, match, accounts, limit):
         """What a question to Ask reads, or None for one the index rejects: what `match` finds, best first, or with
@@ -91,21 +86,18 @@ class StoredMail:
             sql = (f"SELECT {cols} FROM messages m LEFT JOIN summaries s ON s.message_pk=m.pk "
                    f"WHERE {acct_clause} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?")
             args = [*acct_params, limit]
-        c = _conn()
-        try:
-            return c.execute(sql, args).fetchall()
-        except sqlite3.OperationalError:
-            return None
-        finally:
-            c.close()
+        with _uow.read() as c:
+            try:
+                return c.execute(sql, args).fetchall()
+            except sqlite3.OperationalError:
+                return None
 
     def reach(self, spec, cap, apart):
         """-> (count, rows, matched), or None on a bad query. Mirrors `search`'s FROM and JOINs exactly."""
         match, where, params = fts.to_sql(spec)
         where = fts.visible(where)
         where_sql = (" AND " + " AND ".join(where)) if where else ""
-        c = _conn()
-        try:
+        with _uow.read() as c:
             if match is not None:
                 base = ("FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
                         "LEFT JOIN summaries s ON s.message_pk=m.pk "
@@ -128,24 +120,19 @@ class StoredMail:
                     [*in_all_args, *bargs, *apart_args, cap]).fetchall()
             except sqlite3.OperationalError:
                 return None
-        finally:
-            c.close()
         return count, rows, matched
 
     def total(self):
-        c = _conn()
-        try:
-            return c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-        except sqlite3.OperationalError:
-            return 0
-        finally:
-            c.close()
+        with _uow.read() as c:
+            try:
+                return c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+            except sqlite3.OperationalError:
+                return 0
 
     def attachments(self, accounts):
         accounts = list(accounts)
         ph = ",".join("?" for _ in accounts)
-        c = _conn()
-        try:
+        with _uow.read() as c:
             return c.execute(
                 "SELECT a.message_pk pk, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
                 "       m.account, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, m.folder "
@@ -153,12 +140,9 @@ class StoredMail:
                 "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
                 f"  AND m.account IN ({ph}) "
                 "ORDER BY m.ts DESC, a.id", accounts).fetchall()   # one order, or a page could repeat or skip a file
-        finally:
-            c.close()
 
     def senders_like(self, q):
-        c = _conn()
-        try:
+        with _uow.read() as c:
             base = ("SELECT from_addr AS addr, MAX(from_name) AS name, COUNT(*) AS n, MAX(ts) AS last "
                     "FROM messages WHERE from_addr IS NOT NULL AND from_addr != '' ")
             params = []
@@ -167,12 +151,9 @@ class StoredMail:
                 params += [f"%{q}%", f"%{q}%"]
             base += "GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8"
             return c.execute(base, params).fetchall()
-        finally:
-            c.close()
 
     def card(self, a):
-        c = _conn()
-        try:
+        with _uow.read() as c:
             agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
                             "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
                             "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
@@ -182,13 +163,10 @@ class StoredMail:
             recent = c.execute(
                 "SELECT pk, account, subject, thread_id, ts, date_iso, seen FROM messages "
                 "WHERE lower(from_addr)=? ORDER BY ts DESC LIMIT 6", (a,)).fetchall()
-        finally:
-            c.close()
         return agg, accts, recent
 
     def known_facts(self, forms, min_history):
-        c = _conn()
-        try:
+        with _uow.read() as c:
             holding = [r[0] for r in c.execute("SELECT DISTINCT account FROM messages") if r[0]]
             senders, synced, draft_folders, copies, envelopes = [], [], set(), [], []
             if forms:
@@ -205,6 +183,4 @@ class StoredMail:
                 envelopes = [r[0] for r in c.execute("SELECT envelope FROM outbox WHERE delivered=1")]
             thin = c.execute("SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE is_junk=0 LIMIT ?)",
                              (min_history,)).fetchone()[0] < min_history
-        finally:
-            c.close()
         return known.Facts(holding, senders, synced, draft_folders, copies, envelopes, thin)
