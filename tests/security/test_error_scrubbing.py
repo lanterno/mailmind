@@ -18,11 +18,11 @@ from mailmind.platform import profile, webroot
 
 SECRET = "hunter2-secret-token"
 SEEN = "ada-inbox-05-receipt.eml"
-SHAPED = {("GET", "next_app"): "/next/brief", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
+SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
           ("GET", "attachment"): "/api/message/{pk}/attachment/1", ("GET", "body"): "/api/message/{pk}/body",
           ("POST", "change"): "/api/accounts/test"}
 # What never ends, or isn't an answer about anything: the page and its files, which read no mail.
-NOT_WALKED = {("GET", "/api/events"), ("GET", "/")}
+NOT_WALKED = {("GET", "/api/events"), ("GET", "/"), ("GET", "/legacy")}
 QUERY = ("?account={account}&email={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_id=t&kind=all&refresh=1&format=eml"
          "&days=7&limit=5")
 

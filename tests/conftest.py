@@ -116,6 +116,14 @@ def _imap_adapters():
 
 
 @pytest.fixture(autouse=True)
+def _no_build(monkeypatch):
+    """Nothing built, whatever this machine has built, so `/` answers the same everywhere. A test that wants a build
+    sets `webroot.DIST` itself (`serve_the_build`, `with_next`)."""
+    from mailmind.platform import webroot
+    monkeypatch.setattr(webroot, "DIST", os.path.join(webroot.REPO, "mailmind", "http", "no-build-in-a-test"))
+
+
+@pytest.fixture(autouse=True)
 def _ics_reader():
     """The hand-rolled reader of invites, as a process starts: a new door an earlier test built asked for the library's."""
     calendar.reset()

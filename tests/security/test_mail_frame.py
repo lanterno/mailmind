@@ -85,9 +85,9 @@ def test_only_this_origin_may_ask_for_it(app, world, site, error):
 
 def test_each_page_answers_under_a_policy_of_its_own(app, monkeypatch):
     monkeypatch.setattr(webroot, "next_page", lambda token: "<!doctype html>")
-    assert app.get("/").headers["content-security-policy"] == perimeter.page_policy()
-    assert app.get("/next").headers["content-security-policy"] == perimeter.next_page_policy()
-    assert app.get("/next/m/ada%40example.test/INBOX").headers["content-security-policy"] == perimeter.next_page_policy()
+    assert app.get("/legacy").headers["content-security-policy"] == perimeter.page_policy()
+    assert app.get("/").headers["content-security-policy"] == perimeter.next_page_policy()
+    assert app.get("/m/ada%40example.test/INBOX").headers["content-security-policy"] == perimeter.next_page_policy()
 
 
 def test_no_other_answer_may_be_framed(app, world):

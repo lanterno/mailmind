@@ -6,7 +6,7 @@ import time
 import pytest
 
 from app_client import CSRF
-from mailmind.platform import sse, webroot
+from mailmind.platform import perimeter, sse, webroot
 
 SCRIPT = "/assets/legacy/app.js"
 
@@ -141,8 +141,8 @@ def test_the_builds_frame_has_no_id():
     assert frame == 'event: hello\ndata: {"build": "abc123"}\n\n' and "id:" not in frame
 
 
-def test_next_says_how_to_build_it_when_nothing_has(app):
-    r = app.get("/next")
+def test_a_place_in_the_app_says_how_to_build_it_when_nothing_has(app):
+    r = app.get("/all")
     assert r.status == 404 and b"just build-web" in r.body
 
 
@@ -155,16 +155,40 @@ def with_next(tmp_path, monkeypatch):
     monkeypatch.setattr(webroot, "DIST", str(dist))
 
 
-@pytest.mark.parametrize("path", ["/next", "/next/", "/next/m/ada%40example.test/INBOX", "/next/search?q=x"])
-def test_next_and_every_path_under_it_is_the_app_holding_this_runs_token(app, with_next, path):
+@pytest.mark.parametrize("path", ["/", "/?m=3", "/all", "/search", "/search?q=x", "/m/ada%40example.test/INBOX", "/brief/needs",
+                                  "/brief/topic/Trips%20%26%20travel"])
+def test_home_and_every_place_in_it_is_the_app_holding_this_runs_token(app, with_next, path):
     r = app.get(path)
-    assert r.status == 200 and r.headers["cache-control"] == "no-store"
+    assert r.status == 200 and r.headers["cache-control"] == "no-store" and b'<div id="root">' in r.body
     assert "__CSRF_TOKEN__" not in r.body.decode() and "__BUILD__" not in r.body.decode()
-    assert "content-security-policy" in r.headers
+    assert r.headers["content-security-policy"] == perimeter.next_page_policy()
 
 
-def test_a_path_that_only_starts_like_next_isnt_it(app, with_next):
-    assert app.get("/nextdoor").status == 404
+@pytest.mark.parametrize("path", ["/nextdoor", "/alley", "/searching", "/mail", "/m", "/brief", "/legacy/x"])
+def test_a_path_that_only_starts_like_a_place_isnt_one(app, with_next, path):
+    assert app.get(path).status == 404
+
+
+@pytest.mark.parametrize("path, where", [
+    ("/next", "/"), ("/next/", "/"), ("/next?m=3", "/?m=3"), ("/next/all", "/all"), ("/next/search?q=x&lane=feed", "/search?q=x&lane=feed"),
+    ("/next/m/ada%40example.test/INBOX?m=3", "/m/ada%40example.test/INBOX?m=3"), ("/next/brief/needs", "/brief/needs"),
+])
+def test_a_link_from_when_the_app_was_at_next_comes_to_the_same_place(app, with_next, path, where):
+    r = app.get(path)
+    assert r.status == 302 and r.headers["location"] == where
+
+
+@pytest.mark.parametrize("path", ["/next//elsewhere.example", "/next///elsewhere.example", "/next/\\elsewhere.example",
+                                  "/next/https://elsewhere.example", "/next/nope", "/next/../elsewhere.example"])
+def test_that_redirect_goes_nowhere_but_the_app(app, path):
+    r = app.get(path)
+    assert r.status == 302 and r.headers["location"] == "/"
+
+
+def test_the_old_page_stays_at_legacy_under_its_own_policy(app, with_next):
+    r = app.get("/legacy")
+    assert r.status == 200 and b'<div id="root">' not in r.body and b'<meta name="csrf"' in r.body
+    assert r.headers["content-security-policy"] == perimeter.page_policy()
 
 
 def test_an_app_file_comes_from_the_build_though_the_page_comes_from_source(app, with_next):
@@ -175,5 +199,7 @@ def test_an_app_file_comes_from_the_build_though_the_page_comes_from_source(app,
     assert app.get(SCRIPT).status == 200
 
 
-def test_the_page_never_needs_next(app):
-    assert app.get("/").status == 200
+def test_with_nothing_built_the_old_page_stands_in_at_home(app):
+    r = app.get("/")
+    assert r.status == 200 and r.headers["content-security-policy"] == perimeter.page_policy()
+    assert app.get("/legacy").body == r.body

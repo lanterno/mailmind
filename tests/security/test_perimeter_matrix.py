@@ -12,7 +12,7 @@ from mailmind.bootstrap import front, web
 from mailmind.platform import webroot
 
 # A route that matches by shape names no path, so each has one here. A new one fails test_every_shape_has_a_path_here.
-SHAPED = {("GET", "next_app"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
+SHAPED = {("GET", "place"): "/brief/needs", ("GET", "moved"): "/next/brief/needs", ("GET", "asset"): f"{webroot.PREFIX}styles/fonts.css",
           ("GET", "attachment"): "/api/message/1/attachment/1", ("GET", "body"): "/api/message/1/body", ("GET", "body_document"): "/api/message/1/body.html",
           ("POST", "change"): "/api/accounts/test"}
 BAD_HOST = "bad host/origin"
@@ -165,7 +165,7 @@ def test_no_other_method_reaches_a_route(app, table):
 ODD_PATHS = ("/%61pi/digest", "/api%2Fdigest", "//api/digest", "///api/digest", "/./api/digest", "/api/../api/digest", "/x/../api/digest",
              "/api//digest", "/API/digest", "/api/digest/", "/api/digest%00", "/api/digest;x", "/\\api/digest",
              "http://127.0.0.1/api/digest", "/api/message/1/body/../../../digest", "/%2e/api/digest", "/next/../api/digest",
-             "/assets/../api/digest")
+             "/m/../api/digest", "/brief/../api/digest", "/assets/../api/digest")
 
 
 @pytest.mark.parametrize("method", ["GET", "POST"])
