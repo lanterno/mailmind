@@ -173,3 +173,10 @@ def test_with_single_keys_off_help_still_opens(page, world):
     page.keyboard.press("?")
     expect(page.locator(".legsearch")).to_contain_text("from:")
     clean(page)
+
+
+def test_help_names_every_search_operator_the_page_does(page, world):
+    opened(page)
+    page.keyboard.press("?")
+    expect(page.locator(".legsearch")).to_contain_text("-exclude")
+    clean(page)
