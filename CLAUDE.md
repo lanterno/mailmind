@@ -170,7 +170,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
-  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_next_parity.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
+  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_details.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
   search box acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
@@ -212,7 +212,7 @@ with none, the whole list comes when a body is stored.
 
 The app is one view, a real folder-and-account client whose Inbox opens on today's brief
 (`features/assistant/Brief.tsx`, built from the `/api/digest` items and the stored `/api/briefing` narrative; its
-side column from `/api/upcoming` and `/api/waiting-on-others`). `body.mode-client` is a CSS specificity hook, not a mode.
+side column from `/api/upcoming` and `/api/waiting-on-others`).
 
 ### The `mailmind` package
 
