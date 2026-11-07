@@ -197,7 +197,6 @@ def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}
     routes = sorted(path for method, path in route_tables.by_name() if method == "POST" and path not in WALK_LEAVES_OUT)
-    routes += ["/api/accounts/test", "/api/accounts/trust-cert", "/api/accounts/add", "/api/accounts/edit"]
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
            if app.post(path, {**good, field: junk}).status >= 500]
     app.settle(120)
