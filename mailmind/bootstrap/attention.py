@@ -20,6 +20,9 @@ class _Messages:
         from mailmind.bootstrap.mailbox import store
         return store.queue_flags(c, row, flags, mutation_id, when)
 
+    def flags_queued(self):
+        mailbox.filing.flags_queued()
+
     def copy_in_folder(self, c, key, folder):
         from mailmind.bootstrap.mailbox import store
         return store.copy_in_folder(c, key, folder)
@@ -44,18 +47,9 @@ class _Undo:
         mailbox.undo.push(entry, group)
 
 
-class _Screen:
-    """With no server running, nothing is on a screen and no queue's worker is waiting."""
-    def stats_changed(self):
-        mailbox.stats.invalidate()
-
-    def flags_queued(self):
-        mailbox.filing.flags_queued()
-
-
 _threads = Threads(_Messages(), _Accounts())
 _uow = UnitOfWork()
-snoozing = Snoozing(_uow, book, _Messages(), _Undo(), _Screen())
-muting = Muting(_uow, book, _Messages(), _threads, _Undo(), _Screen())
-followups = FollowUps(_uow, book, _threads, _Accounts(), _Screen())
+snoozing = Snoozing(_uow, book, _Messages(), _Undo())
+muting = Muting(_uow, book, _Messages(), _threads, _Undo())
+followups = FollowUps(_uow, book, _threads, _Accounts())
 clocked = Clocked(snoozing, followups)

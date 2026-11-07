@@ -2,23 +2,23 @@
 from collections.abc import Iterable
 from typing import Any
 
-from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
+from mailmind.attention.application.ports import AttentionBook, Messages, Undo
 from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import mute
+from mailmind.attention.domain.events import ThreadMuted, ThreadUnmuted
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
-from mailmind.platform import sse
+from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
 
 
 class Muting:
-    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, threads: Threads, undo: Undo, screen: Screen):
+    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, threads: Threads, undo: Undo):
         self._uow = uow
         self._book = book
         self._messages = messages
         self._threads = threads
         self._undo = undo
-        self._screen = screen
 
     def _mark_read(self, c: object, rows: Iterable[Row], when: str) -> None:
         for r in rows:
@@ -37,10 +37,9 @@ class Muting:
             self._mark_read(c, todo.mark_read, now_iso())
             self._book.mute_thread(c, acct, tid, now_iso())
         self._undo.push(todo.undo, body.get("undo_group"))
-        self._screen.stats_changed()
-        sse.publish("mute", {"account": acct})
+        bus.publish(ThreadMuted(acct, tid))
         if todo.mark_read:
-            self._screen.flags_queued()
+            self._messages.flags_queued()
         return {"ok": True, "thread_id": tid}, 200
 
     def unmute(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -50,8 +49,7 @@ class Muting:
             if not acct or not tid:
                 return {"ok": False, "error": "bad mute target"}, 400
             self._book.unmute_thread(c, acct, tid)
-        self._screen.stats_changed()
-        sse.publish("mute", {"account": acct})
+        bus.publish(ThreadUnmuted(acct, tid))
         return {"ok": True, "thread_id": tid}, 200
 
     def _thread_now(self, c: object, d: dict[str, Any]) -> list[str]:
@@ -76,7 +74,7 @@ class Muting:
                 if r:
                     marked = self._messages.queue_flags(c, r, {"seen": False}, f"unmute:{pk}:{when}", when) or marked
         if marked:
-            self._screen.flags_queued()
+            self._messages.flags_queued()
         return True, d.get("account"), None
 
     def on_ingest(self, c: object, account: str) -> None:

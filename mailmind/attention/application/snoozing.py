@@ -3,11 +3,12 @@ import time
 from datetime import datetime
 from typing import Any
 
-from mailmind.attention.application.ports import AttentionBook, Messages, Screen, Undo
+from mailmind.attention.application.ports import AttentionBook, Messages, Undo
 from mailmind.attention.domain import snooze
+from mailmind.attention.domain.events import SnoozeLifted, SnoozeSet, SnoozeWoke
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
-from mailmind.platform import sse
+from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -15,12 +16,11 @@ log = get_logger("snooze")
 
 
 class Snoozing:
-    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, undo: Undo, screen: Screen):
+    def __init__(self, uow: UnitOfWork, book: AttentionBook, messages: Messages, undo: Undo):
         self._uow = uow
         self._book = book
         self._messages = messages
         self._undo = undo
-        self._screen = screen
 
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
         """Undo of a snooze: each message as it was."""
@@ -53,7 +53,7 @@ class Snoozing:
                 self._book.set_snooze(c, pk, until)
         if pks:
             self._undo.push(snooze.undo_entry(pks, before), body.get("undo_group"))
-        self._screen.stats_changed()
+        bus.publish(SnoozeSet(len(pks)))
         return {"ok": True, "count": len(pks), "until": until}, 200
 
     def unsnooze(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -62,7 +62,7 @@ class Snoozing:
             pks = self._pks(c, body)
             for pk in pks:
                 self._book.clear_snooze(c, pk)
-        self._screen.stats_changed()
+        bus.publish(SnoozeLifted(len(pks)))
         return {"ok": True, "count": len(pks)}, 200
 
     def wake_due(self) -> None:
@@ -78,8 +78,7 @@ class Snoozing:
                 if snooze.marks_unread_on_waking(r["seen"]):
                     marked = self._messages.queue_flags(c, r, {"seen": False}, f"wake:{r['pk']}:{now}", now_iso()) or marked
         if marked:
-            self._screen.flags_queued()
+            self._messages.flags_queued()
         if due:
-            self._screen.stats_changed()
-            sse.publish("snooze-wake", {"count": len(due), "accounts": sorted(set(r["account"] for r in due))})
+            bus.publish(SnoozeWoke(len(due), tuple(sorted({r["account"] for r in due}))))
             log.info("woke %d message(s)", len(due))

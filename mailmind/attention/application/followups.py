@@ -2,12 +2,13 @@
 import time
 from typing import Any
 
-from mailmind.attention.application.ports import Accounts, AttentionBook, Screen
+from mailmind.attention.application.ports import Accounts, AttentionBook
 from mailmind.attention.application.snoozing import Snoozing
 from mailmind.attention.application.threads import Threads
 from mailmind.attention.domain import followups
+from mailmind.attention.domain.events import FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged
 from mailmind.kernel.when import now_iso
-from mailmind.platform import sse
+from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -16,12 +17,11 @@ followup_log = get_logger("followup")
 
 
 class FollowUps:
-    def __init__(self, uow: UnitOfWork, book: AttentionBook, threads: Threads, accounts: Accounts, screen: Screen):
+    def __init__(self, uow: UnitOfWork, book: AttentionBook, threads: Threads, accounts: Accounts):
         self._uow = uow
         self._book = book
         self._threads = threads
         self._accounts = accounts
-        self._screen = screen
 
     def tick(self) -> None:
         """Resolve met commitments, expire stale ones, then promote/detect Waiting threads. Pure-local SQL (no IMAP),
@@ -36,8 +36,7 @@ class FollowUps:
             self._book.followup_detect_received(c, now, followups.GRACE_DAYS, followups.EXPIRE_DAYS)
             after = self._book.due_followup_keys(c)
         if after != before:                               # set comparison catches swaps, not just count deltas
-            self._screen.stats_changed()
-            sse.publish("followup", {"count": len(after)})
+            bus.publish(FollowUpsChanged(len(after)))
 
     def dismiss(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         """(result, code)."""
@@ -46,8 +45,7 @@ class FollowUps:
             if not acct or not tid:
                 return {"ok": False, "error": "bad target"}, 400
             self._book.dismiss_followup(c, acct, tid, now_iso())
-        self._screen.stats_changed()
-        sse.publish("followup", {"account": acct})
+        bus.publish(FollowUpDismissed(acct, tid))
         return {"ok": True, "thread_id": tid}, 200
 
     def reply_later(self, body: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -63,7 +61,7 @@ class FollowUps:
                 self._book.set_replylater(c, acct, tid, anchor, now_iso())
             else:
                 self._book.clear_replylater(c, acct, tid)
-        sse.publish("followup", {"account": acct})
+        bus.publish(ReplyLaterChanged(acct, tid))
         return {"ok": True, "thread_id": tid, "on": bool(on)}, 200
 
 
