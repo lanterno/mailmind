@@ -10,7 +10,7 @@ work identically if `just` isn't installed. `just run`, `just lint` and `just te
 the dev tools on first use.
 
 ```bash
-just verify                       # lint + compile + all tests + frontend check — run before committing
+just verify                       # lint + compile + all tests + frontend check + audit — run before committing
 just test-full                    # every test, plus the browser tests in Chromium (Playwright)
 just test-dovecot                 # the MailSession contract against Dovecot in Docker
 just dev                          # read-only: writes nothing to a mail server, no background sync
@@ -147,6 +147,9 @@ line with a reason. Three rules are our own:
 - `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
 
 Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7.
+
+`just audit` (part of `just verify`) looks up what `uv.lock` and `web/package-lock.json` pin: `pip-audit` for the first, `osv-scanner` for both.
+A finding fails it. With no network it says so and passes. `web/osv-scanner.toml` holds what it may pass over, each with its reason and a date it lapses on.
 
 `just check-frontend` parses each script in `web/assets/legacy/` with `node --check`, checks CSS
 brace balance, and rejects an inline `<script>` or raw control bytes (see Conventions).
