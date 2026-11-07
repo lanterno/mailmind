@@ -163,7 +163,8 @@ class ServerOps:
             where = destination.resolve(kind, named=row["dest"], archive_is_label_removal=server.archive_is_label_removal,
                                         trash=self._accounts.trash_folder(acct), junk_fallback=server.junk_fallback,
                                         find=lambda *roles: mail_session.find_role(s, *roles))
-            strategy = move_strategy.choose(kind, where, capabilities=s.capabilities, marks_trash_read=server.marks_trash_read)
+            strategy = move_strategy.choose(kind, where, capabilities=s.capabilities, marks_trash_read=server.marks_trash_read,
+                                            trash=self._accounts.trash_folder(acct))
             if strategy.way is Way.LABELS:
                 s.remove_labels([uid], ["\\Inbox"])
                 return command.ServerAnswer()

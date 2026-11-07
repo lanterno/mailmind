@@ -10,9 +10,8 @@ There are three ways:
 
 Proton Bridge breaks on a bulk EXPUNGE. No way here sends one, on any server, so Bridge takes the same ways as any server
 offering the same, and its profile's bulk_expunge_unsafe isn't asked. Bridge also marks a message read as it moves to
-Trash, so a trash there reads \\Seen first, which is how an Undo knows to take the mark off.
-
-It goes by the verb and not by a folder's role: a plain move to a folder that happens to be Trash is a move.
+Trash, so a move there reads \\Seen first, which is how an Undo knows to take the mark off: the verb's, or a plain move
+to the account's Trash folder.
 """
 from collections.abc import Collection
 from dataclasses import dataclass
@@ -38,9 +37,11 @@ def offers_move(capabilities: Collection[str]) -> bool:
     return "MOVE" in capabilities
 
 
-def choose(kind: str, where: Destination, *, capabilities: Collection[str], marks_trash_read: bool) -> MoveStrategy:
-    """Which way a `kind` of filing takes to `where`. Whether there is a folder to go to is `where`'s to say."""
+def choose(kind: str, where: Destination, *, capabilities: Collection[str], marks_trash_read: bool,
+           trash: str | None = None) -> MoveStrategy:
+    """Which way a `kind` of filing takes to `where`. Whether there is a folder to go to is `where`'s to say. `trash` is
+    the account's Trash folder, where a server may set the read mark whichever verb sent the message."""
     if where.drop_inbox_label:
         return MoveStrategy(Way.LABELS)
     return MoveStrategy(Way.MOVE if offers_move(capabilities) else Way.COPY,
-                        read_seen_first=kind == "trash" and marks_trash_read)
+                        read_seen_first=marks_trash_read and (kind == "trash" or where.folder == trash))
