@@ -348,3 +348,14 @@ def test_the_palette_says_what_the_pages_does(page, world):
     page.keyboard.press("Enter")
     expect(page.locator(".read-menu")).to_be_visible()
     clean(page)
+
+
+def test_the_palette_reaches_every_accounts_folders(page, world):
+    opened(page)
+    page.keyboard.press("ControlOrMeta+k")
+    page.locator("#pq").fill("Cy / All mail")
+    expect(page.locator(".pi.sel")).to_contain_text("Cy / All mail")
+    page.keyboard.press("Enter")
+    expect(page.locator("#listTitle")).to_have_text("All mail")
+    expect(page.locator("#acctSw")).to_contain_text("Cy")
+    clean(page)
