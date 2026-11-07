@@ -119,7 +119,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
       const at = e.target as Element | null;
       if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="alertdialog"]')) return;
       if (at?.closest?.('[role="separator"]') && e.key.startsWith("Arrow")) return;
-      if (stored("mm_nokeys") === "1" && e.key !== "Escape") return;
+      if (stored("mm_nokeys") === "1" && e.key !== "Escape" && e.key !== "?") return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (chord.current !== null) {
         clearTimeout(chord.current);
