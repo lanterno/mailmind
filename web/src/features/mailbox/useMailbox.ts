@@ -39,7 +39,7 @@ export function useMailbox() {
   const aliases = digest.data?.aliases ?? {};
   const grouped = grouping.useValue();
   const tab = inboxTab.useValue();
-  const list = useMessages(source, grouped, accounts);
+  const list = useMessages(source, grouped);
   const hidden = actions.filing.useValue();
   const marks = actions.marked.useValue();
 

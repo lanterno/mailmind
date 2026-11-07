@@ -7,7 +7,7 @@ import { store, stored } from "../../lib/store";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
-const PAGE = 200, ALL_INBOXES_EACH = 40;
+const PAGE = 200;
 const q = encodeURIComponent;
 
 export interface ListPage { rows: Row[]; hasMore: boolean; total: number; syncing: boolean; syncFailed: boolean; catchingUp: boolean; error?: string }
@@ -35,15 +35,19 @@ async function searchPage(query: string, account: string, offset: number): Promi
   return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
 }
 
-// One page of each account's Inbox, newest first. An account that can't answer leaves the rest in place.
-async function allInboxesPage(accounts: string[], grouped: boolean): Promise<ListPage> {
+// Every account's Inbox, newest first, from what is stored: an account that's away leaves the rest in place, and the sync
+// pill and the account alert speak for it.
+async function allInboxesPage(grouped: boolean, offset: number): Promise<ListPage> {
   const group = grouped ? "&group=thread" : "";
-  const pages = await Promise.all(accounts.map((a) =>
-    get(`/api/messages?account=${q(a)}&folder=INBOX&limit=${ALL_INBOXES_EACH}${group}`)
-      .then((d) => d.items.map((it) => fromFolder(it, a, "INBOX")))
-      .catch(() => [] as Row[])));
-  const rows = pages.flat().sort((x, y) => (y.ts ?? 0) - (x.ts ?? 0));
-  return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
+  const d = await get(`/api/inboxes?limit=${PAGE}&offset=${offset}${group}`);
+  return {
+    rows: d.items.map((it) => fromFolder(it, it.account, "INBOX")),
+    hasMore: d.has_more,
+    total: d.total,
+    syncing: Boolean(d.syncing),
+    syncFailed: false,
+    catchingUp: false,
+  };
 }
 
 // What the digest answers, as a list. Nothing here asks the AI: a topic comes from the brief as it is stored.
@@ -58,16 +62,16 @@ async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Prom
   return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
 }
 
-export function useMessages(source: ListSource | null, grouped: boolean, accounts: string[]) {
+export function useMessages(source: ListSource | null, grouped: boolean) {
   return useInfiniteQuery({
     queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : false],
-    enabled: Boolean(source) && (source?.kind !== "allInboxes" || accounts.length > 0) && !(source?.kind === "folder" && source.folder === "__screener__"),
+    enabled: Boolean(source) && !(source?.kind === "folder" && source.folder === "__screener__"),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
       if (source?.kind === "search") return searchPage(source.q, source.account, pageParam);
       if (source?.kind === "digest") return digestPage(source);
-      return allInboxesPage(accounts, grouped);
+      return allInboxesPage(grouped, pageParam);
     },
     getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((n, p) => n + p.rows.length, 0) : undefined),
   });

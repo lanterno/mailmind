@@ -70,7 +70,7 @@ function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean
 }
 
 function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
-  const { data } = useSide(m.accounts);
+  const { data } = useSide();
   const now = new Date(minute.useValue());
   const upcoming = data?.upcoming.slice(0, 4) ?? [], waiting = data?.waiting ?? [];
   if (!upcoming.length && !waiting.length) return null;

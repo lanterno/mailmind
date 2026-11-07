@@ -48,19 +48,16 @@ export function useBrief(ai: boolean | undefined) {
   };
 }
 
-export function useSide(accounts: string[]) {
+export function useSide() {
   return useQuery({
-    queryKey: ["briefSide", accounts.join()],
+    queryKey: ["briefSide"],
     staleTime: 60_000,
     queryFn: async () => {
-      const [up, ...waits] = await Promise.all([
+      const [up, waiting] = await Promise.all([
         get("/api/upcoming").catch(() => null),
-        ...accounts.map((a) => get(`/api/messages?account=${encodeURIComponent(a)}&folder=__waiting__&limit=40`).catch(() => null)),
+        get("/api/waiting-on-others").catch(() => null),
       ]);
-      const waiting = waits
-        .flatMap((w, i) => (w?.items ?? []).filter((x) => x.kind === "sent").map((x) => ({ ...x, account: accounts[i]! })))
-        .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));   // longest wait first
-      return { upcoming: up?.items ?? [], waiting };
+      return { upcoming: up?.items ?? [], waiting: waiting?.items ?? [] };
     },
   });
 }
