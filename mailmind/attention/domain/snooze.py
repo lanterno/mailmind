@@ -38,7 +38,7 @@ def wake_time(body: Mapping[str, Any], now: datetime) -> int | None:
     if until is not None:
         try:
             u = int(until)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):      # the last for a number too large to be one, which JSON may send
             try:
                 u = int(datetime.fromisoformat(str(until)).astimezone().timestamp())
             except Exception:
