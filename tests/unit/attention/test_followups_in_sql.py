@@ -272,3 +272,56 @@ def test_a_commitment_met_on_any_thread(db, thread, f):
     t = stored(db, thread_id or "T", messages, muted, f)
     attention.book.resolve_followups(db, ADA)
     assert (row(db) is None) == followups.met(f, t)
+
+
+# ── what a person or a send writes ───────────────────────────────────────────
+def columns(c):
+    r = row(c)
+    return {k: r[k] for k in r.keys() if k not in ("account", "thread_id")}
+
+
+def test_a_reply_writes_what_the_domain_says(db):
+    stored(db, "T", [])
+    attention.book.followup_record_sent(db, ADA, "T", 7, NOW, "now")
+    assert columns(db) == {"kind": SENT, "state": PENDING, "anchor_pk": 7, "first_sent_ts": NOW, "last_msg_ts": NOW,
+                           "due_ts": None, "created_at": "now", "resolved_at": None}
+
+
+def test_a_pin_writes_what_the_domain_says_dated_by_the_newest_that_isnt_a_draft(db):
+    stored(db, "T", [Mail(0, ts=NOW - DAY), Mail(0, ts=NOW, mine=True, draft=True)])
+    attention.book.set_replylater(db, ADA, "T", 7, "now")
+    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "anchor_pk": 7, "first_sent_ts": None, "last_msg_ts": NOW - DAY,
+                           "due_ts": None, "created_at": "now", "resolved_at": None}
+
+
+def test_a_pin_over_a_dismissal_writes_what_the_domain_says(db):
+    stored(db, "T", [Mail(0, ts=NOW - DAY)])
+    attention.book.followup_record_sent(db, ADA, "T", 7, NOW - 2 * DAY, "then")
+    attention.book.dismiss_followup(db, ADA, "T", "once")
+    attention.book.set_replylater(db, ADA, "T", 9, "now")
+    assert columns(db) == {"kind": REPLY_LATER, "state": DUE, "anchor_pk": 9, "first_sent_ts": NOW - 2 * DAY,
+                           "last_msg_ts": NOW - DAY, "due_ts": None, "created_at": "now", "resolved_at": None}
+
+
+def test_a_dismissal_leaves_the_rest_of_the_row(db):
+    stored(db, "T", [])
+    attention.book.followup_record_sent(db, ADA, "T", 7, NOW, "then")
+    attention.book.dismiss_followup(db, ADA, "T", "now")
+    assert columns(db) == {"kind": SENT, "state": DISMISSED, "anchor_pk": 7, "first_sent_ts": NOW, "last_msg_ts": NOW,
+                           "due_ts": None, "created_at": "then", "resolved_at": "now"}
+
+
+def test_dismissing_a_thread_with_none_writes_nothing(db):
+    stored(db, "T", [])
+    attention.book.dismiss_followup(db, ADA, "T", "now")
+    assert row(db) is None
+
+
+def test_un_pinning_takes_a_pin_and_leaves_a_nudge(db):
+    stored(db, "T", [])
+    attention.book.set_replylater(db, ADA, "T", None, "now")
+    attention.book.clear_replylater(db, ADA, "T")
+    assert row(db) is None
+    attention.book.followup_record_sent(db, ADA, "T", None, NOW, "now")
+    attention.book.clear_replylater(db, ADA, "T")
+    assert row(db)["kind"] == SENT

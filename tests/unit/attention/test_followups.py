@@ -6,7 +6,8 @@ import pytest
 
 from mailmind.attention.domain.followups import (COMES_DUE, DISMISSED, DUE, EXPIRE_DAYS, GRACE_DAYS, MET, PENDING,
                                                  RECEIVED, RECEIVED_NUDGE, REPLY_LATER, SENT, FollowUp, Mail, Thread,
-                                                 comes_due, expired, met, nudge_for)
+                                                 comes_due, dismissed, expired, met, nudge_for, on_reply_sent, pinned,
+                                                 unpinning_ends)
 
 NOW = 1_800_000_000
 DAY = 86400
@@ -217,3 +218,66 @@ def test_my_reply_doesnt_meet_a_sent_one():
 
 def test_every_way_of_meeting_one_is_asked():
     assert list(MET) == ["muted", "they_answered", "i_replied"]
+
+
+# ── what a person or a send does to one ──────────────────────────────────────
+def on_thread(kind, state):
+    return FollowUp(kind, state, first_sent_ts=NOW - DAY, last_msg_ts=NOW - DAY, due_ts=NOW - 1, created_at="then", resolved_at="once")
+
+
+def test_a_reply_starts_a_sent_one_on_a_thread_with_none():
+    assert on_reply_sent(None, NOW, "now") == FollowUp(SENT, PENDING, first_sent_ts=NOW, last_msg_ts=NOW, created_at="now")
+
+
+@pytest.mark.parametrize("kind", [SENT, RECEIVED, REPLY_LATER])
+@pytest.mark.parametrize("state", [PENDING, DUE, DISMISSED])
+def test_a_thread_has_one_so_a_reply_leaves_what_is_there(kind, state):
+    assert on_reply_sent(on_thread(kind, state), NOW, "now") is None
+
+
+def test_a_pin_on_a_thread_with_none_is_due_at_once():
+    assert pinned(None, NOW - DAY, "now") == FollowUp(REPLY_LATER, DUE, last_msg_ts=NOW - DAY, created_at="now")
+
+
+@pytest.mark.parametrize("kind", [SENT, RECEIVED])
+def test_a_pin_supersedes_a_nudge(kind):
+    f = pinned(on_thread(kind, DUE), NOW, "now")
+    assert (f.kind, f.state, f.last_msg_ts, f.created_at) == (REPLY_LATER, DUE, NOW, "now")
+
+
+@pytest.mark.parametrize("kind", [SENT, RECEIVED, REPLY_LATER])
+def test_a_pin_re_activates_a_dismissal_and_nothing_else_does(kind):
+    was = on_thread(kind, DISMISSED)
+    f = pinned(was, NOW, "now")
+    assert (f.kind, f.state, f.resolved_at) == (REPLY_LATER, DUE, None)
+    assert on_reply_sent(was, NOW, "now") is None and not met(was, Thread("T", muted=True)) and not comes_due(was, Thread("T"), NOW)
+
+
+def test_a_pin_keeps_when_a_send_went_out_and_came_due():
+    f = pinned(on_thread(SENT, DUE), NOW, "now")
+    assert (f.first_sent_ts, f.due_ts) == (NOW - DAY, NOW - 1)
+
+
+def test_a_thread_with_no_mail_left_pins_with_no_time():
+    assert pinned(None, None, "now").last_msg_ts is None
+
+
+@pytest.mark.parametrize("kind", [SENT, RECEIVED, REPLY_LATER])
+@pytest.mark.parametrize("state", [PENDING, DUE, DISMISSED])
+def test_dismissing_keeps_the_row_whatever_it_was(kind, state):
+    f = dismissed(on_thread(kind, state), "now")
+    assert (f.kind, f.state, f.resolved_at, f.first_sent_ts) == (kind, DISMISSED, "now", NOW - DAY)
+
+
+def test_dismissing_nothing_writes_nothing():
+    assert dismissed(None, "now") is None
+
+
+@pytest.mark.parametrize("state", [PENDING, DUE, DISMISSED])
+def test_un_pinning_ends_a_pin_whatever_its_state(state):
+    assert unpinning_ends(on_thread(REPLY_LATER, state))
+
+
+@pytest.mark.parametrize("current", [None, on_thread(SENT, DUE), on_thread(RECEIVED, DUE), on_thread(RECEIVED, DISMISSED)])
+def test_un_pinning_leaves_anything_else(current):
+    assert not unpinning_ends(current)
