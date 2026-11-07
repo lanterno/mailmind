@@ -471,3 +471,16 @@ def test_search_scope_narrows_to_this_account_and_is_remembered(page, world, ai)
         page.keyboard.press("Enter")
     assert asked.value.post_data_json["account"] == w.ADA
     clean(page)
+
+def test_closing_a_bulk_action_takes_the_command_out_of_the_search_box(page, world, ai):
+    opened(page)
+    box = page.get_by_role("textbox", name="Search")
+    page.keyboard.press("/")
+    box.fill("!")
+    box.press("Enter")
+    expect(page.locator(".do-intro")).to_contain_text("before anything happens")
+    page.get_by_role("button", name="Close").click()
+    expect(page.locator(".do-intro")).to_have_count(0)
+    expect(box).to_have_value("")
+    clean(page)
+
