@@ -1,6 +1,7 @@
-"""Attention's tables: `snoozes` and `messages.snoozed_until`, `muted` and `followups`. Each function takes its caller's
-connection and leaves the commit to it."""
+"""Attention's tables: `snoozes`, `muted` and `followups`, and `messages.snoozed_until`, which only a rollback would read.
+Each function takes its caller's connection and leaves the commit to it."""
 from mailmind.kernel import attention
+from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.kernel.when import now_iso
 
 
@@ -39,8 +40,8 @@ def due_snoozes(c, now_ts):
     c.execute("""DELETE FROM snoozes WHERE until<=? AND NOT EXISTS
                  (SELECT 1 FROM messages m WHERE m.message_key=snoozes.message_key AND m.folder=snoozes.folder)""",
               (now_ts,))
-    return c.execute("SELECT * FROM messages WHERE snoozed_until IS NOT NULL AND snoozed_until<=?",
-                     (now_ts,)).fetchall()
+    return c.execute("SELECT m.* FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder "
+                     "WHERE z.until<=?", (now_ts,)).fetchall()
 
 
 # ----------------------------------------------------------- mute (silence a thread)
@@ -142,7 +143,7 @@ def followup_detect_received(c, now_ts, days, max_age_days):
           AND m.ts <= ? AND m.ts >= ?
           AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
                       AND m2.draft=0 ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
-          AND m.snoozed_until IS NULL
+          AND """ + not_snoozed_sql() + """
           AND EXISTS (SELECT 1 FROM messages mi JOIN assessments s ON s.message_key=mi.message_key
                 WHERE mi.account=m.account AND mi.thread_id=m.thread_id
                   AND """ + attention.reply_worthy_sql() + """)
