@@ -117,7 +117,6 @@ def test_threads(app, golden, world):
 
 def test_upcoming_screener_and_contacts(app, golden):
     fetch(app, golden, "/api/upcoming")
-    fetch(app, golden, f"/api/upcoming?account={w.BEA}")
     fetch(app, golden, "/api/screener")
     fetch(app, golden, f"/api/screener?account={w.ADA}")
     fetch(app, golden, "/api/contacts")

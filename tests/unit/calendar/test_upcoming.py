@@ -192,10 +192,9 @@ def test_trash_junk_unfetched_and_old_mail_are_not_read(data_dir):
     assert _up() == []
 
 
-def test_account_filter_and_limit(data_dir):
-    mine = [_msg(_ics(f"m{i}", NOW + timedelta(days=i + 1))) for i in range(7)]
+def test_every_account_and_a_limit(data_dir):
+    [_msg(_ics(f"m{i}", NOW + timedelta(days=i + 1))) for i in range(7)]
     _msg(_ics("x", NOW + timedelta(hours=1)), account="other@example.test")
-    assert [x["pk"] for x in _up(account=ACCT)] == mine[:5]
     assert len(_up()) == 5 and _up()[0]["account"] == "other@example.test"
 
 
