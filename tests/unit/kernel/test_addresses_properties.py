@@ -2,6 +2,7 @@
 accepted reads back as itself, and the only thing any of it raises is ValueError."""
 import email.utils
 
+import pytest
 from hypothesis import assume, given, strategies as st
 
 from mailmind.kernel import addresses
@@ -100,3 +101,15 @@ def test_a_list_keeps_its_order_and_each_address_once_whatever_its_case(specs):
     out = [spec for _, spec in addresses.parse_addr_list(doubled)]
     assert [s.lower() for s in out] == list(dict.fromkeys(s.lower() for s in once))
     assert email.utils.getaddresses([", ".join(out)]) == [("", s) for s in out]
+
+
+# IDNA's normalization runs after the check for what an address may not hold, and it turns the fullwidth or small form
+# of a separator into the separator itself: one chip the person sees, and a header or an envelope that reads otherwise.
+@pytest.mark.xfail(strict=True, reason="validate_pair looks for separators in the domain before IDNA makes them")
+@pytest.mark.parametrize("typed", [
+    "bo@example\uff0cother.test", "bo@example\uff20other.test", "bo@exa\uff1cmple.test", "bo@exa\uff1emple.test",
+    "bo@exa\uff1bmple.test", "bo@exa\uff1ample.test", "bo@exa\uff08mple.test", "bo@exa\uff3bmple.test",
+    "bo@exa\uff3cmple.test", "bo@exa\uff02mple.test", "bo@exa\ufe50mple.test", "bo@exa\ufe6bmple.test"])
+def test_a_separator_that_only_idna_makes_is_refused_too(typed):
+    with pytest.raises(ValueError):
+        addresses.parse_addr_list(typed)
