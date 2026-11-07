@@ -8,7 +8,8 @@ import { guardFrames } from "./features/mailbox/MailFrame";
 
 guardFrames();
 
-const queries = new QueryClient({ defaultOptions: { queries: { retry: 1 } } });
+// The server is on this machine, so a browser that says it's offline can still reach it: nothing waits for the network.
+const queries = new QueryClient({ defaultOptions: { queries: { retry: 1, networkMode: "always" }, mutations: { networkMode: "always" } } });
 bindComposer(queries);
 
 createRoot(document.getElementById("root")!).render(
