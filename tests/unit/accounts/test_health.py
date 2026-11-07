@@ -1,4 +1,5 @@
 """mailmind.accounts.domain.health: what kind of trouble an error names, from its class alone, and how an account stands."""
+import imaplib
 import socket
 import ssl
 
@@ -7,6 +8,7 @@ import pytest
 from fixtures import world as w
 from mailmind.accounts.adapters.imap_connection import LoginUnreachable
 from mailmind.accounts.domain import health, tls_pin
+from mailmind.mailbox.adapters.imap.imap_names import BadMailbox
 
 
 def store_write():
@@ -36,6 +38,16 @@ class ImapTrouble(Exception):
     (ValueError(), "UNKNOWN"),
 ], ids=lambda v: v if isinstance(v, str) else type(v).__name__)
 def test_an_error_kind_comes_from_the_class(error, kind):
+    assert health.error_kind(error) == kind
+
+
+@pytest.mark.parametrize("error, kind", [
+    (imaplib.IMAP4.error("NO"), "IMAP"),
+    (imaplib.IMAP4.abort("socket error"), "NETWORK"),
+    (BadMailbox("a bare quote"), "IMAP"),
+    (BrokenPipeError(), "NETWORK"),
+], ids=lambda v: v if isinstance(v, str) else type(v).__qualname__)
+def test_imaplibs_own_errors_and_a_subclass_count_by_what_they_are(error, kind):
     assert health.error_kind(error) == kind
 
 
