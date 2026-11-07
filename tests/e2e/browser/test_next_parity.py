@@ -49,3 +49,17 @@ def test_read_only_says_what_it_files_waits_for(page, world, monkeypatch):
     page.keyboard.press("e")
     expect(page.locator("#toast")).to_have_text("Archived · waits for a full run")
     clean(page)
+
+
+def test_a_rows_snooze_button_asks_when_and_snoozes_that_row(page, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.hover()
+    receipt.locator('[data-racts="snooze"]').click()
+    menu = page.get_by_role("dialog", name="Snooze until")
+    expect(menu).to_be_visible()
+    expect(receipt).not_to_have_class(re.compile(r"\bsel\b"))   # asking about a row doesn't open it
+    menu.get_by_role("button", name=re.compile("Tomorrow")).click()
+    expect(receipt).to_have_count(0)
+    expect(page.locator("#toast")).to_have_text("Snoozed")
+    clean(page)
