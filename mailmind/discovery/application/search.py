@@ -3,9 +3,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from mailmind.discovery.application.ports import AccountNames, SearchIndex
-from mailmind.discovery.domain import guard
+from mailmind.discovery.domain import guard, search
 from mailmind.discovery.domain.query import QuerySpec
-from mailmind.kernel import attention
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
 
@@ -17,32 +16,14 @@ class Search:
 
     def answer(self, qs: Mapping[str, list[str]]) -> dict[str, Any]:
         """Local FTS5 + operator search across synced mail."""
-        q = (qs.get("q", [""])[0] or "").strip()
-        if not q:
-            return {"ok": True, "query": "", "items": [], "total": 0, "has_more": False}
-        scope = qs.get("scope", ["account"])[0]
-        account = qs.get("account", [None])[0]
-        sort = qs.get("sort", ["rank"])[0]
-        limit = max(1, min(200, int(qs.get("limit", ["80"])[0])))
-        offset = max(0, int(qs.get("offset", ["0"])[0]))
-        amap = self._accounts.aliases()
-        rows = self._index.search(QuerySpec.parse(q), None if scope == "all" else account, sort, limit, offset)
+        want = search.asked(qs)
+        if want is None:
+            return search.nothing_asked()
+        aliases = self._accounts.aliases()
+        rows = self._index.search(want.spec, want.account, want.sort, want.limit, want.offset)
         if rows is None:
-            return {"ok": False, "error": "bad query"}
-        has_more = len(rows) > limit
-        rows = rows[:limit]
-        items = [{
-            "pk": r["pk"], "key": r["message_key"], "account": r["account"], "folder": r["folder"],
-            "alias": amap.get(r["account"]),
-            "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
-            "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-            "date": (r["date_iso"] or "")[:10],
-            "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-            "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-            "importance": r["importance"], **attention.answers(r["importance"], r["category"], r["action"]),
-        } for r in rows]
-        return {"ok": True, "query": q, "scope": scope, "items": items,
-                "offset": offset, "has_more": has_more, "generated": now_iso()}
+            return search.bad_query()
+        return search.page(rows, want, aliases, rel_time, now_iso())
 
     def for_asking(self, match: str, accounts: str | list[str], limit: int) -> list[Row] | None:
         """What a question to Ask reads, or None on a bad query. Read-only; see the index."""
@@ -60,10 +41,7 @@ class Search:
         if found is None:
             return None, [], [], 0
         count, rows, matched = found
-        messages = [(r["message_key"], r["folder"]) for r in rows]
-        sample = [{"from": (r["from_name"] or r["from_addr"] or ""),
-                   "subject": r["subject"] or "(no subject)",
-                   "when": rel_time(r["date_iso"])} for r in rows[:sample_size]]
+        messages, sample = search.reached(rows, sample_size, rel_time)
         return count, messages, sample, matched
 
     def sweeps_whole_mailbox(self, matched: int) -> bool:

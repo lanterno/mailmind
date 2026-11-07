@@ -3,7 +3,7 @@ which folder plays which role comes through `folders`."""
 import sqlite3
 
 from mailmind.discovery.adapters import fts
-from mailmind.discovery.domain import known
+from mailmind.discovery.domain import known, search
 from mailmind.platform.db.uow import UnitOfWork
 
 _uow = UnitOfWork()
@@ -50,16 +50,7 @@ class StoredMail:
                 # newest first stops early, which sorting every copy wouldn't
                 sql = (f"""SELECT {columns} FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
                        WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
-                rows, seen = [], set()
-                for r in c.execute(sql, [*params, *in_all_args]):
-                    key = r["message_key"] or -r["pk"]
-                    if key not in seen:
-                        seen.add(key)
-                        if len(seen) > offset:
-                            rows.append(r)
-                        if len(rows) > limit:
-                            break
-                return rows
+                return search.first_copies(c.execute(sql, [*params, *in_all_args]), limit, offset)
             except sqlite3.OperationalError:
                 return None
 
