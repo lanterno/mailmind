@@ -6,6 +6,7 @@ import smtplib
 import socket
 import ssl
 
+from mailmind.compose.domain import outbox_item
 from mailmind.compose.domain.errors import Unanswered
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
@@ -79,14 +80,12 @@ class SmtpTransport:
                 pass
 
     def permanent(self, e):
-        """Whether the server refused for good: a 5xx reply, or every recipient refused with one. Sent
-        again it gets the same answer, and a refused login sent again counts toward a lockout. A 4xx
-        reply, a dropped connection or a timeout may pass."""
+        """Whether the server refused for good, as its answer's codes say. A dropped connection or a timeout had no answer,
+        and may pass."""
         if isinstance(e, smtplib.SMTPRecipientsRefused):
-            codes = [v[0] for v in (e.recipients or {}).values() if isinstance(v, tuple) and v]
-            return bool(codes) and all(isinstance(k, int) and 500 <= k < 600 for k in codes)
+            return outbox_item.refused_for_good(v[0] for v in (e.recipients or {}).values() if isinstance(v, tuple) and v)
         if isinstance(e, smtplib.SMTPResponseException):
-            return isinstance(e.smtp_code, int) and 500 <= e.smtp_code < 600
+            return outbox_item.refused_for_good([e.smtp_code])
         return False
 
     def sanitize_error(self, e):

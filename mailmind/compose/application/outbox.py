@@ -42,11 +42,11 @@ def _now() -> int:
 
 
 class Outbox:
-    MAX_ATTEMPTS = 5
-    _BACKOFF_BASE = 20      # secs; doubles per attempt
-    _BACKOFF_CAP = 900
+    MAX_ATTEMPTS = outbox_item.MAX_ATTEMPTS
+    _BACKOFF_BASE = outbox_item.BACKOFF_BASE
+    _BACKOFF_CAP = outbox_item.BACKOFF_CAP
     _POLL = 30             # worker wakes at least this often to catch due retries
-    SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
+    SEND_DELAY = outbox_item.SEND_DELAY
     LOOK_IN_SENT_WAIT = 5  # how long a Retry waits for the account's gate, to look in Sent first
 
     def __init__(self, uow: UnitOfWork, book: Book, transport: Transport, copies: Copies, accounts: Accounts, mail: Messages,
@@ -86,7 +86,7 @@ class Outbox:
         def again(c: Connection) -> bool:
             ok = self.QUEUE.requeue(c, oid)
             if ok:
-                self._book.outbox_set(c, oid, wire_begun=0, wait_kind="grace")
+                self._book.outbox_set(c, oid, **outbox_item.RETRIED)
                 if went_out:
                     self.QUEUE.mark_gate(c, oid)
             return ok
@@ -99,7 +99,7 @@ class Outbox:
         """Is an unsure send in Sent? False whenever that can't be told, and they were told it might go twice."""
         with self._uow.read() as c:
             row = self._book.outbox_get(c, oid)
-        if row is None or row["state"] != "error" or not row["wire_begun"] or row["delivered"]:
+        if row is None or not outbox_item.is_unsure(row):
             return False
         try:
             acct = self._accounts.get(row["account"])
@@ -137,11 +137,11 @@ class Outbox:
         flag is set: what failed is returned (scrubbed), for send_one to try again, and the next
         pass does only what's still owed."""
         owed = None
-        if self._accounts.saves_sent(acct) and not row["sent_appended"]:
-            self._commit(lambda c: self._book.outbox_set(c, oid, sent_appended=1))   # Gmail auto-saves
-        elif not row["sent_appended"]:
-            # delivered before this run (a retry, or a crash's recovery): the last APPEND may have landed
-            mid = row["message_id"] if row["delivered"] else None
+        owes = outbox_item.owed(row, self._accounts.saves_sent(acct))
+        if owes.sent_filed_for_us:
+            self._commit(lambda c: self._book.outbox_set(c, oid, sent_appended=1))
+        elif owes.sent_copy:
+            mid = outbox_item.sent_copy_to_look_for(row)
             try:
                 gates.run(acct["email"], lambda: self._copies.append_to_sent(acct, row["raw"], message_id=mid),
                           priority=gates.Priority.AFTER_USER)
@@ -149,8 +149,7 @@ class Outbox:
             except Exception as e:
                 owed = f"sent copy failed: {type(e).__name__}"
                 log.warning("Sent-copy failed for #%(id)s: %(why)s", {"id": oid, "why": self._transport.sanitize_error(e)})
-        replied_to = row["orig_message_id"] or outbox_item.pk_of_original(row)
-        if replied_to and not row["answered_set"]:
+        if owes.answered:
             try:
                 pk = self._original_pk(row)
                 gates.run(row["orig_account"] or self._effects.account_of(pk) or gates.EVERY_ACCOUNT,
@@ -160,12 +159,10 @@ class Outbox:
             except Exception as e:
                 owed = owed or f"marking the original answered failed: {type(e).__name__}"
                 log.warning("\\Answered failed for #%(id)s", {"id": oid}, exc_info=e)
-        # sent-no-reply: seed a follow-up on the replied-to thread (replies only — a brand-new compose
-        # has no local thread_id until its Sent copy syncs). Best-effort, done-once, never fails the send.
-        if replied_to and not row["followup_recorded"]:
+        if owes.followup:                        # best-effort: it never fails the send, and nothing is asked again for it
             try:
                 orig = self._mail.original(self._original_pk(row), row["orig_account"], row["orig_message_id"])
-                tid = (orig["thread_id"] if orig else None) or row["orig_thread_id"]
+                tid = outbox_item.thread_of_reply(row, orig)
                 if tid:
                     with self._uow.write() as c:
                         self._effects.followup_sent(c, row["account"], tid, orig["pk"] if orig else None,
@@ -173,8 +170,7 @@ class Outbox:
                 self._commit(lambda c: self._book.outbox_set(c, oid, followup_recorded=1))
             except Exception as e:
                 log.warning("followup record failed for #%(id)s", {"id": oid}, exc_info=e)
-        # the draft this message was composed from is superseded once it's truly sent
-        if row["draft_id"] and not row["draft_deleted"]:
+        if owes.draft:
             try:
                 with self._uow.read() as c:
                     dr = self._book.draft_get(c, row["draft_id"])
@@ -202,14 +198,12 @@ class Outbox:
         return owed
 
     def _original_pk(self, row: Row) -> int | None:
-        """What pk_of_original gives, if it can still be the original. A row that names its account was queued as a reply
-        to a message with no Message-ID, so a row in another account, or one with a Message-ID, isn't that message. One
-        queued before migration 27 names nothing to check its pk against, and goes by it as it always has."""
+        """What pk_of_original gives, if it can still be the original. One queued before migration 27 names nothing to check
+        its pk against, and goes by it as it always has."""
         pk = outbox_item.pk_of_original(row)
         if pk is None or not row["orig_account"]:
             return pk
-        named = self._mail.message(pk)
-        return pk if named and named["account"] == row["orig_account"] and not named["message_id"] else None
+        return pk if outbox_item.still_the_original(row, self._mail.message(pk)) else None
 
     def draft_copy_is_ours(self, d: Row) -> bool:
         """May this `drafts` row's copy be removed from the server? A removal has no Undo, so only one
@@ -240,23 +234,22 @@ class Outbox:
             try:
                 self._transport.send(acct, row["raw"], json.loads(row["envelope"]),  # lock-free: SMTP != IMAP ops
                               before_dot=lambda: self._commit(lambda c: self._book.outbox_set(c, oid, wire_begun=1)))
-            except Unanswered:            # it may have gone out: a person decides, never a retry
-                self._commit(lambda c: self.QUEUE.give_up(c, row, outbox_item.UNSURE))
-                log.warning("send #%(id)s went unanswered; not sending it again", {"id": oid})
-                bus.publish(Failed(oid, row["account"], True))
-                return
             except Exception as e:
-                err, permanent = self._transport.sanitize_error(e), self._transport.permanent(e)
+                tried = outbox_item.failed_try(unanswered=isinstance(e, Unanswered), permanent=self._transport.permanent(e),
+                                               error=self._transport.sanitize_error(e))
 
-                def failed(c: Connection) -> tuple[bool, int]:   # the server answered, or it never had the whole message
-                    self._book.outbox_set(c, oid, wire_begun=0, wait_kind="backoff")
-                    if permanent:                  # a 5xx: the same answer again, so no retry
-                        self.QUEUE.give_up(c, row, err)
+                def failed(c: Connection) -> tuple[bool, int]:
+                    self._book.outbox_set(c, oid, **tried.marks)
+                    if tried.give_up:
+                        self.QUEUE.give_up(c, row, tried.error)
                         return True, 0
-                    return self.QUEUE.retry_later(c, row, err, _now())
+                    return self.QUEUE.retry_later(c, row, tried.error, _now())
                 terminal, delay = self._commit(failed)
-                log.warning("send #%(id)s failed (%(why)s); %(what)s",
-                            {"id": oid, "why": err, "what": "giving up" if terminal else f"retry in {delay}s"})
+                if tried.unsure:
+                    log.warning("send #%(id)s went unanswered; not sending it again", {"id": oid})
+                else:
+                    log.warning("send #%(id)s failed (%(why)s); %(what)s",
+                                {"id": oid, "why": tried.error, "what": "giving up" if terminal else f"retry in {delay}s"})
                 bus.publish(Failed(oid, row["account"], terminal))
                 return
             self._commit(lambda c: self.QUEUE.mark_gate(c, oid))  # delivered=1, committed BEFORE side effects
@@ -266,8 +259,7 @@ class Outbox:
         try:
             owed = self._side_effects(oid, row, acct)
             if owed:
-                # its tries count from the delivery, not on from the send's
-                tried = {"id": oid, "attempts": row["attempts"] if row["delivered"] else 0}
+                tried = {"id": oid, "attempts": outbox_item.attempts_since_delivery(row)}
                 terminal, delay = self._commit(lambda c: self.QUEUE.retry_later(c, tried, owed, _now()))
                 log.warning("sent #%(id)s; what it still owes %(what)s",
                             {"id": oid, "what": "gives up" if terminal else f"is tried again in {delay}s"})
