@@ -143,7 +143,7 @@ def followup_detect_received(c, now_ts, days, max_age_days):
           AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
                       AND m2.draft=0 ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
           AND m.snoozed_until IS NULL
-          AND EXISTS (SELECT 1 FROM messages mi JOIN summaries s ON s.message_pk=mi.pk
+          AND EXISTS (SELECT 1 FROM messages mi JOIN assessments s ON s.message_key=mi.message_key
                 WHERE mi.account=m.account AND mi.thread_id=m.thread_id
                   AND """ + attention.reply_worthy_sql() + """)
           AND NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account AND mo.draft=0
