@@ -1,7 +1,6 @@
 """`python -m mailmind <command>`, run from the repo root. WHO is an account's address or `all`.
 
-  serve [port]                 serve the app on http://127.0.0.1:<port> (default 8721) through the
-                               new front door
+  serve [port]                 serve the app on http://127.0.0.1:<port> (default 8721)
   check                        whether each account's credential resolves: ok or fail, never a secret
   accounts [materialize [WHO]] the connected accounts; `materialize` writes stored secrets into the
                                config file, making it self-contained
@@ -150,7 +149,7 @@ def main(argv=None):
             from mailmind.bootstrap import front
         except ModuleNotFoundError as e:
             sys.exit(f"serve needs the runtime packages, and {e.name} isn't installed. Run it as "
-                     f"`uv run python -m mailmind serve`, or use the old front door, `python3 server.py`.")
+                     f"`uv run python -m mailmind serve`.")
         try:
             front.serve(args.port)
         except KeyboardInterrupt:

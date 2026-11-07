@@ -1,7 +1,6 @@
 # MailMind — common commands. `just` with no argument lists everything.
 # Everything runs through uv, which installs the runtime packages and dev tools on first use, and
-# through `python -m mailmind`, which says what each command does. `run-old` is the one exception:
-# the old front door, `python3 server.py`, needs nothing installed, and it's the kill switch.
+# through `python -m mailmind`, which says what each command does.
 
 py := "uv run python"
 
@@ -36,10 +35,6 @@ dev port="": build-web
 run-fast port="": build-web
     MAILMIND_POOL=1 MAILMIND_WARM_FOLDERS=1 {{py}} -m mailmind serve {{port}}
 
-# Run through the old front door, `python3 server.py`, which needs nothing installed
-run-old port="":
-    python3 server.py {{port}}
-
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
@@ -69,9 +64,9 @@ lint:
     uv run lint-imports --no-cache --no-logo
     uv run pyright
 
-# Byte-compile every module, and the mailmind package, without running them
+# Byte-compile the mailmind package without running it
 compile:
-    {{py}} -m py_compile *.py && {{py}} -m compileall -q mailmind && echo "compile ok"
+    {{py}} -m compileall -q mailmind && echo "compile ok"
 
 # Syntax-check the page's scripts (needs node), balance its CSS, and reject an inline script or raw control bytes
 check-frontend:
