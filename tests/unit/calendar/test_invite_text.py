@@ -241,7 +241,6 @@ def test_when_a_one_off_happens(lines, start, end, when, minutes):
     assert (occ[1] - occ[0]).total_seconds() / 60 == minutes
 
 
-@pytest.mark.xfail(strict=True, reason="read_time tries %H%M%S first, and strptime reads 1030 as 10:03:00, so %H%M is never reached")
 def test_a_time_with_no_seconds_is_read_as_hours_and_minutes():
     assert ics.parse(cal("DTSTART:20261105T1000", "DTEND:20261105T1030"))["end_iso"] == "2026-11-05T10:30:00"
 
