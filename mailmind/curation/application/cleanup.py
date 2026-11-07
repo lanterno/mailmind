@@ -10,6 +10,7 @@ from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBo
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import noise, rulebook, unsubscribe
 from mailmind.kernel.when import now_iso, rel_time
+from mailmind.platform.perimeter import tokens
 
 BUCKETS = ("newsletters/marketing", "automated-notifications")
 MIN_COUNT = 3
@@ -105,7 +106,7 @@ class Cleanup:
                 "accounts": accts, "domain": addr.rpartition("@")[2],
                 "unsub": unsub, "sweep_count": len(affected), "sweep_capped": capped,
                 "reversible": {"block": True, "sweep": True, "unsubscribe": False},
-                "confirm_token": unsubscribe.confirm_token(self._secret(), addr, info, time.time())}
+                "confirm_token": tokens.mint(self._secret(), unsubscribe.TOKEN_PURPOSE, unsubscribe.preview_said(addr, info), time.time())}
 
     def execute(self, body: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
         """Commit for ONE sender. ALWAYS-FIRST + reversible: a block rule + verified INBOX sweep to
@@ -122,8 +123,8 @@ class Cleanup:
         block_token = from_addr if scope == "sender" else from_addr.rpartition("@")[2]
         # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes
         # the row it moved, and the sender's newest issue is most often one the sweep takes.
-        unsub = self._unsub.resolve(from_addr) if do_unsub and unsubscribe.token_in_date(token, time.time()) else None
-        token_ok = unsub is not None and unsubscribe.token_names(self._secret(), token, from_addr, unsub[0])
+        unsub = self._unsub.resolve(from_addr) if do_unsub and tokens.in_date(token, time.time(), unsubscribe.TOKEN_LIFE) else None
+        token_ok = unsub is not None and tokens.names(self._secret(), token, unsubscribe.TOKEN_PURPOSE, unsubscribe.preview_said(from_addr, unsub[0]))
 
         # 1) BLOCK (reversible) — rule + an unblock descriptor coalesced into the undo group
         self._rules.add(block_token, "block")
