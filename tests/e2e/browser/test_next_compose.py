@@ -567,6 +567,33 @@ def test_a_digit_picks_a_later_time(page, world):
 
 # ── the tray ────────────────────────────────────────────────────────────
 
+def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_again(page, app, world):
+    from mailmind.bootstrap.compose import outbox
+    world.smtp.drop_after_data()
+    opened(page)
+    compose(page, LIN, "Thread colours", "Which blue did you mean?")
+    let_undo_pass(page)
+    due(app)
+    assert len(world.smtp.messages) == 1
+    button = page.locator("#outboxBtn")
+    expect(button).to_be_visible()
+    button.click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("May have gone out")
+    expect(fly).to_contain_text("unsure")
+    app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP + 1))
+    outbox.drain()
+    assert len(world.smtp.messages) == 1
+    fly.get_by_role("button", name="Send again").click()
+    until(page, lambda: app.get("/api/outbox").json["items"][0]["state"] == "queued", "queued again")
+    outbox.drain()
+    assert len(world.smtp.messages) == 2
+    page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
+    expect(fly).to_be_hidden()
+    expect(button).to_be_hidden()
+    clean(page)
+
+
 def give_up_on_a_send(page, app, world):
     from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
@@ -595,6 +622,9 @@ def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
     outbox.drain()
     [sent] = world.smtp.messages
     assert b"Subject: Thread colours" in sent.data
+    page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
+    expect(fly).to_be_hidden()
+    expect(button).to_be_hidden()                         # a sent message leaves the outbox
     clean(page)
 
 
@@ -627,6 +657,37 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     until(page, lambda: app.get("/api/pending").json["items"] == [], "the change went")
     expect(receipt).to_have_count(1)
     assert world.where(RECEIPT)["server"][0][1] == "INBOX"
+    clean(page)
+
+
+def test_retry_in_the_tray_sends_the_change_again(page, world):
+    from mailmind.bootstrap.mailbox import commands
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    world.server.drop("SELECT", user=w.ADA, times=None)
+    page.keyboard.press("e")
+    expect(receipt).to_have_count(0)
+    button = page.locator("#outboxBtn")
+    expect(button).to_be_visible()                        # the click's own try found no server, so the worker has it
+    world.server.clear_faults()
+    world.server.fail("UID MOVE", user=w.ADA, times=1)
+    world.server.fail("UID COPY", user=w.ADA, times=1)
+    commands.drain()
+    button.click()
+    fly = page.locator("#outboxFly")
+    expect(fly).to_contain_text("stuck")
+    expect(receipt).to_have_count(1)                      # the refusal gave it back
+    assert world.where(RECEIPT)["server"][0][1] == "INBOX"
+    fly.get_by_role("button", name="Retry").click()
+    expect(fly).to_contain_text("waiting")
+    expect(receipt).to_have_count(0)
+    commands.drain()
+    until(page, lambda: world.where(RECEIPT)["server"][0][1] == "Archive", "archived on the server")
+    page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
+    expect(fly).to_be_hidden()
+    expect(button).to_be_hidden()
     clean(page)
 
 
