@@ -1,8 +1,11 @@
-"""The dependency rules the import graph can't hold: what's asked of the standard library, the Assistant's ports, and who
-writes which table. import-linter's contracts in pyproject.toml hold the rest."""
+"""The dependency rules the import graph can't hold: what's asked of the standard library, the Assistant's ports, who
+writes which table, and who still reads a stored pk. import-linter's contracts in pyproject.toml hold the rest."""
 import ast
 import pathlib
 import re
+from collections import Counter
+
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "mailmind"
@@ -30,6 +33,22 @@ CROSSINGS = {
     ("messages", "attention"),      # a snooze writes messages.snoozed_until
     ("msg_fts", "platform"),        # the upgrade check asks the index to check itself, on a copy
 }
+
+# The columns that name a message by pk, which can come to name another (outbox.in_reply_to_pk, drafts.in_reply_to_pk,
+# draft_ahead.src_pk, followups.anchor_pk). They are still written, for a rollback, and everything goes by what outlasts
+# a row instead: `orig_*`, a draft's own In-Reply-To, the thread or the Message-ID.
+PK_COLUMNS = ("in_reply_to_pk", "src_pk", "anchor_pk")
+
+# Where one is still read, and how many times. It may only shrink.
+PK_READS = {
+    # outbox_item.pk_of_original: outbox.in_reply_to_pk, for a row with no Message-ID to go by. One queued before
+    # migration 27 has no `orig_*` at all, and a reply to a message with no Message-ID has nothing else to name it by,
+    # since the outbox keeps no message key. Outbox._original_pk checks the second against the account it names.
+    "compose/domain/outbox_item.py": 1,
+}
+
+# What holds `in_reply_to_pk` as a request said it, a moment old and no stored column: the page's composer sends it.
+PK_REQUESTS = {"body", "meta"}
 
 # What a domain may never ask the standard library for: it holds no I/O.
 IO = {"sqlite3", "smtplib", "imaplib", "socket", "ssl", "http", "subprocess", "urllib.request"}
@@ -131,3 +150,76 @@ def test_only_the_owner_writes_a_table():
     assert set(written) <= set(owner), "a table with no owner here"
     crossings = {(table, place) for table, places in written.items() for place in places if place != owner[table]}
     assert crossings == CROSSINGS
+
+
+def pk_columns_sql_reads(literal):
+    """The columns of PK_COLUMNS a string of SQL reads: those still named once what it writes is taken out, which is the
+    column list of an INSERT, a named parameter, `excluded.` and the targets of a SET."""
+    sql = re.sub(r"\bINTO\s+\w+\s*\([^)]*\)", "INTO", literal, flags=re.I)
+    sql = re.sub(r":\w+|\bexcluded\.\w+", "", sql, flags=re.I)
+    sql = re.sub(r"\bSET\b.*?(?=\bWHERE\b|\Z)", lambda m: re.sub(r"\b\w+\s*=", "=", m.group()), sql, flags=re.I | re.S)
+    return re.findall(r"\b(?:" + "|".join(PK_COLUMNS) + r")\b", sql)
+
+
+def pk_column_is_read_by_name(node):
+    """Is this `row["src_pk"]` or `row.get("src_pk")`, on a stored row? A `SELECT *` brings the column along, and this is
+    how anyone would then read it."""
+    if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load):
+        holder, key = node.value, node.slice
+    elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get" and node.args:
+        holder, key = node.func.value, node.args[0]
+    else:
+        return False
+    return (isinstance(key, ast.Constant) and key.value in PK_COLUMNS
+            and not (isinstance(holder, ast.Name) and holder.id in PK_REQUESTS))
+
+
+def test_a_stored_pk_is_read_only_where_nothing_else_names_the_message():
+    found = Counter()
+    for path in modules():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        prose = {ast.get_docstring(n, clean=False) for n in ast.walk(tree)
+                 if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))}
+        for node in ast.walk(tree):
+            found[rel(path)] += pk_column_is_read_by_name(node)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value not in prose | set(PK_COLUMNS):
+                found[rel(path)] += len(pk_columns_sql_reads(node.value))
+    assert +found == PK_READS
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT in_reply_to_pk FROM outbox WHERE id=?",
+    "SELECT o.in_reply_to_pk, o.id FROM outbox o",
+    "SELECT 1 FROM followups WHERE anchor_pk=?",
+    "UPDATE drafts SET subject=? WHERE in_reply_to_pk=?",
+    "UPDATE draft_ahead SET fp=src_pk WHERE account=?",
+    "INSERT INTO followups(account, anchor_pk) SELECT account, anchor_pk FROM followups",
+    "SELECT m.* FROM messages m JOIN followups f ON f.anchor_pk=m.pk",
+])
+def test_reading_a_stored_pk_in_sql_is_seen(sql):
+    assert pk_columns_sql_reads(sql)
+
+
+@pytest.mark.parametrize("sql", [
+    "INSERT INTO outbox(account,in_reply_to_pk) VALUES(:account,:in_reply_to_pk)",
+    "INSERT OR IGNORE INTO followups(account,anchor_pk,due_ts) SELECT m.account, m.pk, ? FROM messages m WHERE m.pk=?",
+    "UPDATE drafts SET mode=?, in_reply_to_pk=?, subject=? WHERE id=?",
+    "UPDATE drafts SET in_reply_to_pk=:in_reply_to_pk, mode=:mode WHERE id=:id",
+    "INSERT INTO draft_ahead(account,src_pk) VALUES(?,?) ON CONFLICT(account) DO UPDATE SET src_pk=excluded.src_pk, fp=excluded.fp",
+    "SELECT pk FROM messages WHERE account=? AND thread_anchor_pk=?",
+])
+def test_writing_a_stored_pk_in_sql_is_no_read(sql):
+    assert not pk_columns_sql_reads(sql)
+
+
+@pytest.mark.parametrize("code, read", [
+    ('row["in_reply_to_pk"]', True),
+    ('row.get("src_pk")', True),
+    ('self._book.row["anchor_pk"]', True),
+    ('body["in_reply_to_pk"]', False),
+    ('meta.get("in_reply_to_pk")', False),
+    ('row["message_id"]', False),
+    ('{"in_reply_to_pk": None}', False),
+])
+def test_reading_a_stored_pk_by_name_is_seen(code, read):
+    assert any(pk_column_is_read_by_name(n) for n in ast.walk(ast.parse(code))) is read
