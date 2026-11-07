@@ -282,7 +282,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
   the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
-  doesn't count as someone here. The contexts still `print` for now. It is standard library only.
+  doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check` and `materialize`), which a test holds. It is standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
   of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
   change has committed; one that raises is logged by class name and the rest still hear. Nothing
@@ -383,7 +383,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
   It is standard library only.
 - `mailmind.curation` is the fifth: what stays in your inbox. `domain` holds `classifier`, `rulebook` (one domain
-  matcher for the classifier, the Screener and expiry), `expiry`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
+  matcher for the classifier, the Screener and expiry), `expiry`, `live`, `noise` and `unsubscribe`; `adapters` holds `rules_file`,
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
@@ -394,7 +394,7 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
   wake time from a preset or a date) and `followups` (how long a thread may wait). `adapters.sqlite` holds the SQL of
   `snoozes`, `muted` and `followups`, and `transaction()`, whose connection the application passes back to each call.
-  `application` holds `ports.py`, `tabs` (the event stream, named until the platform types `sse.publish`) and the use cases
+  `application` holds `ports.py` and the use cases
   `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job.
   `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention (`attention.muting.mute(body)`,
   `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and undo and
