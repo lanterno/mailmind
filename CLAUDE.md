@@ -319,13 +319,15 @@ The app lives in `mailmind/`. `server.py`, at the repo root, is only the old fro
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one.
 - `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see AI calls).
-  `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes),
-  `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
-  `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `draft_ahead` (`DraftAhead`) and
-  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, and
+  `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes), `status` (`Status`, how AI stands, and each call's outcome),
+  `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `context` (`ContextAssembler`, what the model reads of a conversation: the first message and the
+  last 19, trimmed and within the caps, with a missing body asked of the `Mail` port at interactive priority), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
+  `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `prepared_replies` (`PreparedReplies`, drafting ahead) and
+  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, `prepared_reply`
+  (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served), and
   `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
-  contexts and the tests reach the Assistant (`assistant.calls`, `.assessments`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
+  contexts and the tests reach the Assistant (`assistant.calls`, `.status`, `.assessments`, `.context`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
 - `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`).
   `application.ports` holds `AccountRepository`, `SecretResolver` and `ConnectionProbe`. `adapters.config_file` is the first, which `application.directory.Directory` reads and writes `mailmind.config.json`
@@ -916,8 +918,8 @@ failing; keep that property. A call that was never sent raises a `NotSent`: `AIO
 (`except NotSent: raise`) ahead of its own `except Exception`, and so does a route's own
 catch for `OverLimit` and `AIOff`, so `H.do_GET` and `H.do_POST` can answer
 them: `OverLimit` as a 402 (below), `AIOff` as a 409 with `ai_off: true`, which the page shows as
-"AI is off" rather than an error to retry. `call_claude` and `call_claude_json` are wrapped by `_noted`,
-which records each call's outcome for `assistant.calls.status()` (not an `AIOff`: no call was made) — served on `/api/digest` as
+"AI is off" rather than an error to retry. `call_claude` and `call_claude_json` go through `Status.noting`,
+which records each call's outcome for `assistant.status.report()` (not an `AIOff`: no call was made) — served on `/api/digest` as
 `ai`, and the source of the brief's "AI is off" card and the sync menu's AI line. A new
 entry point that bypasses them won't show up there.
 
@@ -933,7 +935,7 @@ pass it on, `other` when the caller names none. With AI off nothing is counted. 
 that fails is logged by class name and never fails the call.
 
 What the ledger holds is read back in three places:
-- `assistant.calls.status()` carries `spent_today_micros`, which the sync menu's AI line shows.
+- `assistant.status.report()` carries `spent_today_micros`, which the sync menu's AI line shows.
 - `/api/debug/ai?days=N` (30 by default) lists each day by feature.
 - `python3 -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
 
@@ -958,7 +960,7 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
   changes, which a new key, base URL or transport does. Interactive calls still go.
 
 Background work asks `gateway().held_back(feature)` before a batch, and a call that was held
-back anyway raises `Deferred(reason)`. Nothing is counted for it, and `_noted` doesn't record it
+back anyway raises `Deferred(reason)`. Nothing is counted for it, and `Status.noting` doesn't record it
 as a failure. Nothing in the governor is durable: a restart closes the breaker, and the limit
 holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`, and the
 tests start each one afresh with `forget()`.
