@@ -44,7 +44,7 @@ def _connect(app):
 
 
 def _session(M):
-    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
     return ImaplibSession(M)
 
 
@@ -110,7 +110,7 @@ def test_uid_search_all_by_range_and_by_message_id(srv, app):
 
 
 def test_fetching_header_fields_returns_only_those_fields_folded_lines_kept(srv, app):
-    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
     folded = "References: <a@example.test>\r\n <b@example.test>\r\nX-Other: hidden\r\n"
     uid = srv.deliver(ADA, "INBOX", _mail(1, extra=folded), flags=["\\Seen"])
     M = _connect(app)
@@ -300,7 +300,7 @@ def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
 
 def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
     from mailmind.bootstrap import accounts
-    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
     with FakeIMAPServer(kind="gmail") as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))

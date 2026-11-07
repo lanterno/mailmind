@@ -209,7 +209,7 @@ def message(n, *, mid=None):
 
 def seed(dovecot, user, folder, *raws, flags=(), when=None):
     """Append each message to `folder` through the test's own connection. Returns their UIDs."""
-    from mailmind.mailbox.adapters.imap_names import mailbox_arg
+    from mailmind.mailbox.adapters.imap.imap_names import mailbox_arg
     stamp = imaplib.Time2Internaldate(when or datetime.now(timezone.utc))
     uids = []
     with own(dovecot, user) as M:
@@ -222,7 +222,7 @@ def seed(dovecot, user, folder, *raws, flags=(), when=None):
 
 def on_server(dovecot, user, folder):
     """{uid: (subject, flags)} for what `folder` holds now."""
-    from mailmind.mailbox.adapters.imap_names import mailbox_arg
+    from mailmind.mailbox.adapters.imap.imap_names import mailbox_arg
     with own(dovecot, user) as M:
         assert M.select(mailbox_arg(folder), readonly=True)[0] == "OK"
         found = M.uid("SEARCH", None, "ALL")[1][0].split()
@@ -269,7 +269,7 @@ def test_each_role_is_the_folder_dovecot_marks_for_it(session):
 
 
 def test_odd_folder_names_come_back_as_list_gave_them_and_work_as_given(dovecot, user, session):
-    from mailmind.mailbox.adapters.imap_names import mailbox_arg
+    from mailmind.mailbox.adapters.imap.imap_names import mailbox_arg
     listed = ("Caf&AOk-", 'Say \\"hi\\"', "Back\\\\slash")
     with own(dovecot, user) as M:
         for name in listed:
@@ -311,7 +311,7 @@ def test_a_folder_selected_read_only_keeps_its_flags(dovecot, user, session):
 
 
 def test_uids_changed_since_names_only_what_changed(dovecot, user, session):
-    from mailmind.mailbox.adapters.imap_names import mailbox_arg
+    from mailmind.mailbox.adapters.imap.imap_names import mailbox_arg
     _, second = seed(dovecot, user, "INBOX", message(1), message(2))
     assert session.enable_condstore() is True
     mark = session.select("INBOX").highest_modseq

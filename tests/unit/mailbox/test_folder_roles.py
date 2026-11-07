@@ -1,12 +1,12 @@
 """Which folder plays which part (mailmind.mailbox.domain.roles), and how an imaplib LIST answer
-reads (mailmind.mailbox.adapters.imap_list): SPECIAL-USE first, then whole names, never a part of
+reads (mailmind.mailbox.adapters.imap.imap_list): SPECIAL-USE first, then whole names, never a part of
 one; a shallower path before a deeper one; and the rail and the moves through the app."""
 import imaplib
 
 import pytest
 
 from fixtures import world as w
-from mailmind.mailbox.adapters import imap_list
+from mailmind.mailbox.adapters.imap import imap_list
 from mailmind.mailbox.domain import roles
 from mailmind.mailbox.domain.roles import Folder
 from mailmind.bootstrap import mailbox
@@ -111,7 +111,7 @@ class _Refusing:
 
 
 def test_a_refused_list_raises_and_find_role_falls_back():
-    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
     from mailmind.mailbox.application.session import find_role
     with pytest.raises(imaplib.IMAP4.error, match="LIST refused"):
         imap_list.list_folders(_Refusing())

@@ -1,7 +1,7 @@
 """Which MailSession adapter (mailmind.mailbox.application.session) the mail goes through, and how
 a session opens.
 
-Every account's mail goes through imaplib (mailbox.adapters.imaplib_session) over accounts.connect,
+Every account's mail goes through imaplib (mailbox.adapters.imap.imaplib_session) over accounts.connect,
 unless it asks for IMAPClient ("imap_adapter": "imapclient" in its config) and the process offers
 it. Only the new door's build offers it, loading it then, so the old door never imports it and
 an account's ask changes nothing there. That ask is how IMAPClient soaks on real accounts before
@@ -20,8 +20,8 @@ from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
 from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
-from mailmind.mailbox.adapters.imap_names import BadValue, imap_quote
-from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+from mailmind.mailbox.adapters.imap.imap_names import BadValue, imap_quote
+from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
 from mailmind.accounts.domain import provider
 from mailmind.mailbox.application.bodies import Bodies
 from mailmind.mailbox.application.digest import Digest
@@ -69,7 +69,7 @@ def offer(kind):
     if kind not in KINDS:
         raise ValueError(f"no mail session adapter {kind!r}")
     if kind == "imapclient":
-        from mailmind.mailbox.adapters import imapclient_session  # noqa: F401  (missing: fail now, not mid-sync)
+        from mailmind.mailbox.adapters.imap import imapclient_session  # noqa: F401  (missing: fail now, not mid-sync)
     _offered.add(kind)
 
 
@@ -113,7 +113,7 @@ def open_session(acct, timeout=60) -> MailSession:
     """A logged-in MailSession for the account `acct` (a config.accounts() entry)."""
     if kind_for(acct) == "imaplib":
         return ImaplibSession(accounts.connect(acct, timeout=timeout))
-    from mailmind.mailbox.adapters import imapclient_session
+    from mailmind.mailbox.adapters.imap import imapclient_session
     txguard.refuse_network("an IMAP connection")
     host, port = acct["host"], acct["port"]
     try:

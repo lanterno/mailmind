@@ -21,7 +21,7 @@ from mailmind.bootstrap import accounts, assistant, background, curation, mailbo
 from mailmind.bootstrap.accounts import config
 from mailmind.bootstrap.compose import transport
 from mailmind.bootstrap.mailbox import commands, ingest, server_ops, store
-from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
 from mailmind.mailbox.domain.command import ServerAnswer
 from mailmind.platform import settings
 from mailmind.platform.workers import gates

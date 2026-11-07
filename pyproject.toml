@@ -196,8 +196,8 @@ name = "only the IMAPClient adapter reaches IMAPClient"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.content", "mailmind.kernel", "mailmind.assistant",
                   "mailmind.accounts", "mailmind.attention", "mailmind.calendar", "mailmind.compose", "mailmind.curation", "mailmind.discovery", "mailmind.mailbox.application", "mailmind.mailbox.domain",
-                  "mailmind.mailbox.adapters.imap_list", "mailmind.mailbox.adapters.imap_names",
-                  "mailmind.mailbox.adapters.imaplib_session"]
+                  "mailmind.mailbox.adapters.imap.imap_list", "mailmind.mailbox.adapters.imap.imap_names",
+                  "mailmind.mailbox.adapters.imap.imaplib_session"]
 forbidden_modules = ["imapclient"]
 
 [[tool.importlinter.contracts]]

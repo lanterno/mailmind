@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from imapclient import IMAPClient
 
-from mailmind.mailbox.adapters.imap_names import escaped, gmail_labels, imap_quote, sendable, unescaped
+from mailmind.mailbox.adapters.imap.imap_names import escaped, gmail_labels, imap_quote, sendable, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain.roles import Folder

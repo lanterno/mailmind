@@ -9,8 +9,8 @@ import socket
 import time
 from datetime import datetime, timezone
 
-from mailmind.mailbox.adapters import imap_list
-from mailmind.mailbox.adapters.imap_names import gmail_labels, imap_quote, mailbox_arg
+from mailmind.mailbox.adapters.imap import imap_list
+from mailmind.mailbox.adapters.imap.imap_names import gmail_labels, imap_quote, mailbox_arg
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 

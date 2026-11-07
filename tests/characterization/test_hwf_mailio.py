@@ -378,7 +378,7 @@ def test_hwf_a_refused_flag_read_leaves_the_mark_so_the_next_sync_asks_again(wor
 def test_hwf_a_click_while_the_flags_are_read_keeps_its_own_when_the_server_said_what_changed(world, monkeypatch):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
-    from mailmind.mailbox.adapters.imaplib_session import ImaplibSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
     name = "ada-inbox-02-lunch-confirm.eml"
     elsewhere(world, name)                            # flagged elsewhere; here it's marked read meanwhile
     real, clicked = ImaplibSession.flags, []

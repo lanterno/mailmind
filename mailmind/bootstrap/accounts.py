@@ -5,7 +5,7 @@ from mailmind.accounts.adapters.imap_connection import LoginUnreachable, ReadOnl
 from mailmind.accounts.application.connections import Connections
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.domain import conn_error, provider
-from mailmind.mailbox.adapters.imap_names import BadMailbox, imap_quote, mailbox_arg
+from mailmind.mailbox.adapters.imap.imap_names import BadMailbox, imap_quote, mailbox_arg
 
 __all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connections", "quiet_error", "connect", "get",
            "imap_quote", "is_loopback", "mailbox_arg", "preload_creds", "tls_context", "trash_folder"]
