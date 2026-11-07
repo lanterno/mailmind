@@ -21,7 +21,13 @@ class SecretResolver(Protocol):
 class ConnectionProbe(Protocol):
     """A throwaway login to the account's server, and straight out again, which is the test: it shares no IMAP state,
     selects no folder, uses no kept connection and goes outside every queue and gate. It raises what a login raises."""
-    def __call__(self, acct: Entry, timeout: int) -> None: ...
+    def saved(self, acct: Entry, timeout: int) -> None:
+        """Someone asked, so it goes though a refused login is being held back, and what the server says counts."""
+        ...
+
+    def draft(self, acct: Entry, timeout: int) -> None:
+        """What the server says of what was typed says nothing of any account saved."""
+        ...
 
 
 class SyncRecord(Protocol):

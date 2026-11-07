@@ -8,13 +8,15 @@ an account's ask changes nothing there. That ask is how IMAPClient soaks on real
 it becomes the default. use(kind) makes `kind` every account's, as the contract tests do.
 
 Either way a session opens the same way: no transaction open across it, the account's TLS
-context, the loopback certificate pin before LOGIN, a refused login as accounts.LoginUnreachable,
-every command checked by txguard, and in a read-only process a ReadOnlySession.
+context, the loopback certificate pin before LOGIN, a refused login as accounts.LoginUnreachable and
+CredentialsRejected on the bus, every command checked by txguard, and in a read-only process a
+ReadOnlySession.
 """
 from collections import Counter
 import imaplib
 
-from mailmind.accounts.domain import tls_pin
+from mailmind.accounts.domain import login_hold, tls_pin
+from mailmind.accounts.domain.events import CredentialsRejected
 from mailmind.assistant.adapters import sqlite as assistant_store
 from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
@@ -40,7 +42,7 @@ from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.syncing import Syncing
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import MailSession, ReadOnlySession
-from mailmind.platform import profile
+from mailmind.platform import bus, profile
 from mailmind.platform.db import txguard
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.undo import Undo
@@ -112,7 +114,27 @@ def describe():
 
 
 def open_session(acct, timeout=60) -> MailSession:
-    """A logged-in MailSession for the account `acct` (a config.accounts() entry)."""
+    """A logged-in MailSession for the account `acct` (a config.accounts() entry). A login its server refused waits out
+    its hold (accounts.logins): nothing is sent, and it raises as the refusal did, so each caller does as it did then."""
+    if accounts.logins.held(acct):
+        raise accounts.LoginUnreachable("a login its server refused is held back")
+    return try_login(acct, timeout)
+
+
+def try_login(acct, timeout=60) -> MailSession:
+    """open_session whatever the hold says, for someone who asked. What the server answers counts as any login's does."""
+    try:
+        session = session_for(acct, timeout)
+    except accounts.LoginUnreachable as e:
+        if e.refused:
+            bus.publish(CredentialsRejected(acct["email"], login_hold.login_id(acct)))
+        raise
+    accounts.logins.accepted(acct["email"])
+    return session
+
+
+def session_for(acct, timeout=60) -> MailSession:
+    """A session for `acct`, saved or not, as a draft is tried: nothing is asked of a hold, or told of how it went."""
     if kind_for(acct) == "imaplib":
         return ImaplibSession(accounts.connect(acct, timeout=timeout))
     from mailmind.mailbox.adapters.imap import imapclient_session
@@ -129,7 +151,7 @@ def open_session(acct, timeout=60) -> MailSession:
     except BadValue:                     # no server was asked: it would say no every time
         raise
     except imaplib.IMAP4.error as e:     # a login NO/BAD is the connection's fault, not a command's
-        raise accounts.LoginUnreachable(str(e)) from e
+        raise accounts.login_failed(e) from e
     return session if profile.writes_allowed() else ReadOnlySession(session)
 
 
@@ -176,6 +198,9 @@ class _Accounts:
 
     def error_kind(self, e):
         return accounts.error_kind(e)
+
+    def try_login_again(self, email):
+        accounts.logins.forget(email)
 
     def preload_creds(self):
         return accounts.preload_creds()

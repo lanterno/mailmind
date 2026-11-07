@@ -27,13 +27,14 @@ class Connections:
         server banner."""
         t0 = time.time()
         try:
-            if body.get("draft"):
-                acct = throwaway_account(body["draft"])
-            else:
-                acct = self._get(body["email"])
             # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host;
             # a short timeout also gives the user fast feedback on a bad host.
-            self._probe(acct, timeout=15)
+            if body.get("draft"):
+                acct = throwaway_account(body["draft"])
+                self._probe.draft(acct, timeout=15)
+            else:
+                acct = self._get(body["email"])
+                self._probe.saved(acct, timeout=15)
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:

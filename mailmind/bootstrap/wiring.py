@@ -6,7 +6,7 @@ Each front door calls `start()` before it serves, and the tests' app fixture cal
 import threading
 
 from mailmind.accounts.domain import events as account_events
-from mailmind.bootstrap import background, compose, mailbox
+from mailmind.bootstrap import accounts, background, compose, mailbox
 from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
 from mailmind.platform.logging import get_logger, setup as setup_logging
@@ -51,9 +51,10 @@ def wire():
     """Subscribe the app to what the workers publish on mailmind.platform.bus: a send
     that went out or an attempt that failed, a queued move applied and one that won't be refresh the
     stats and tell the open tabs, and IDLE's
-    news syncs those accounts. An account added, changed or removed brings IDLE's workers in line
-    (realtime.reconcile, which does nothing until IDLE starts). Wiring again replaces the last
-    wiring. Starts nothing."""
+    news syncs those accounts. A login its server refused is held back, which stops every worker
+    and IDLE sending it, until the account changes (accounts.logins). An account added, changed or
+    removed brings IDLE's workers in line (realtime.reconcile, which does nothing until IDLE
+    starts). Wiring again replaces the last wiring. Starts nothing."""
     unwire()
     _wired.extend([bus.subscribe(Sent, _after_send),
                    bus.subscribe(Failed, _after_send),
@@ -61,7 +62,10 @@ def wire():
                    bus.subscribe(Applied, mailbox.filing.settled),
                    bus.subscribe(Restored, mailbox.filing.settled),
                    bus.subscribe(InboxChanged, _after_idle),
-                   bus.subscribe(FlagsChanged, _after_flags_changed)])
+                   bus.subscribe(FlagsChanged, _after_flags_changed),
+                   bus.subscribe(account_events.CredentialsRejected, accounts.logins.rejected)])
+    _wired.extend(bus.subscribe(topic, accounts.logins.changed) for topic in     # ahead of what starts a new worker
+                  (account_events.AccountChanged, account_events.AccountRemoved))
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
                   (account_events.AccountAdded, account_events.AccountChanged, account_events.AccountRemoved))
 

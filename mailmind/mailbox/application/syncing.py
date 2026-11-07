@@ -92,6 +92,7 @@ class Syncing:
             return {"ok": False, "error": "unknown account"}, 400
         with self._uow.write() as c:
             self._store.clear_sync_error(c, acct)
+        self._accounts.try_login_again(acct)
         threading.Thread(target=lambda: self.sync_guarded({acct}), daemon=True).start()
         return {"ok": True, "account": acct}, 200
 

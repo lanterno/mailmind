@@ -4,7 +4,7 @@ import imaplib
 import re
 import ssl
 
-from mailmind.accounts.domain import tls_pin
+from mailmind.accounts.domain import login_hold, tls_pin
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
@@ -12,7 +12,26 @@ from mailmind.platform.db import txguard
 class LoginUnreachable(OSError):
     """A connect-time login failure (expired/revoked credentials, Bridge restart). Subclasses
     OSError so it's a member of commands.UNREACHABLE — a mutation during an auth
-    outage is QUEUED + retried rather than silently applied locally only."""
+    outage is QUEUED + retried rather than silently applied locally only. `refused` says the
+    server itself said no, which a connection lost during LOGIN or a held-back login isn't."""
+
+    def __init__(self, *args, refused=False):
+        super().__init__(*args)
+        self.refused = refused
+
+
+def _connection_lost(e):
+    """IMAPClient makes every IMAP4.error during LOGIN its own LoginError, a lost connection's IMAP4.abort included."""
+    while e is not None:
+        if isinstance(e, imaplib.IMAP4.abort):
+            return True
+        e = e.__cause__ or e.__context__
+    return False
+
+
+def login_failed(e):
+    """What an IMAP4.error during LOGIN comes to, through either adapter."""
+    return LoginUnreachable(str(e), refused=not _connection_lost(e) and login_hold.refuses(str(e)))
 
 
 _UNSENDABLE = re.compile(r"[\r\n\x00]")
@@ -113,6 +132,6 @@ class Connector:
         try:
             _, said = M.login(acct["email"], password)
         except imaplib.IMAP4.error as e:   # login NO/BAD = a connection-level fault, not a per-command one
-            raise LoginUnreachable(str(e)) from e
+            raise login_failed(e) from e
         _learn_capabilities(M, said)
         return M if profile.writes_allowed() else ReadOnlyIMAP(M)
