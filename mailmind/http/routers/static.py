@@ -4,7 +4,6 @@ from fastapi import Request
 from starlette.responses import Response
 
 from mailmind.http import route
-from mailmind.http.handler import H
 from mailmind.http.schemas.common import NotJson, answers
 from mailmind.platform import perimeter, webroot
 
@@ -26,7 +25,7 @@ def router():
     @r.get("/brief/{place:path}", responses=_NOT_JSON)
     def page():
         """The app, or how to make one: only a build holds it."""
-        html = webroot.page(H.CSRF)
+        html = webroot.page(perimeter.CSRF)
         if html is None:
             return Response(b"The app isn't built. Run: just build-web\n", 404, headers={"Content-Type": "text/plain; charset=utf-8"})
         return Response(html.encode("utf-8"), headers={"Content-Type": "text/html; charset=utf-8",

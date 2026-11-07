@@ -15,7 +15,7 @@ from mailmind.curation.application.sweep import Sweeps
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import classifier
 from mailmind.mailbox.application import bulk_moves
-from mailmind.platform import sse
+from mailmind.platform import perimeter, sse
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
@@ -29,8 +29,7 @@ UNSUB_READ_WAIT = 5        # seconds a preview waits its turn on the account's g
 
 def _csrf():
     """This run's secret, the page's token."""
-    from mailmind.http.handler import H
-    return H.CSRF
+    return perimeter.CSRF
 
 
 def classify(from_addr, subject="", from_name="", has_list_unsub=False):

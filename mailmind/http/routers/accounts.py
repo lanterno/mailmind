@@ -1,5 +1,5 @@
 """What the settings page asks of Accounts: the list, masked, and a change to it. Each action names its path, so one that isn't
-an action goes on to the handler's `not found`, as it always answered."""
+an action is no route, and the app's `not found`, as it always answered."""
 from mailmind.http import route
 from mailmind.http.schemas.accounts import (
     AccountBody,

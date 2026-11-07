@@ -9,9 +9,8 @@ from fastapi import Request
 from starlette.responses import StreamingResponse
 
 from mailmind.http import route
-from mailmind.http.handler import H
 from mailmind.http.schemas.common import Failure, NotJson, answers
-from mailmind.platform import sse, webroot
+from mailmind.platform import perimeter, sse, webroot
 
 
 class _Stream(StreamingResponse):
@@ -49,6 +48,6 @@ def router():
 
     @r.get("/api/events", responses=answers(NotJson, {503: Failure}))
     def events(request: Request):
-        return _Stream(request.headers.get("Last-Event-ID"), webroot.edition(H.CSRF))
+        return _Stream(request.headers.get("Last-Event-ID"), webroot.edition(perimeter.CSRF))
 
     return r

@@ -7,7 +7,6 @@ from fastapi import Query, Request
 
 from mailmind.assistant.api import NotSent
 from mailmind.http import route
-from mailmind.http.handler import H
 from mailmind.http.schemas.assistant import (
     Answered,
     AskBody,
@@ -81,7 +80,7 @@ def router(assistant, mailbox):
 
     @r.get("/api/ai/draft-ahead", responses=answers(DraftAheadStatus | DraftAheadReady))    # serve/peek; the KICK needs the CSRF token
     def draft_ahead(request: Request, args: Annotated[DraftAheadArgs, Query()]):
-        return assistant.drafting.get(args.as_query(), kick_ok=perimeter.token_matches(request.headers, H.CSRF))
+        return assistant.drafting.get(args.as_query(), kick_ok=perimeter.token_matches(request.headers, perimeter.CSRF))
 
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
     @_scrubbed("error", "summary failed")

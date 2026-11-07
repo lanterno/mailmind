@@ -42,7 +42,7 @@ class NoBody(RequestBody):
 
 
 class QueryArgs(BaseModel):
-    """A GET's query string, as `Annotated[Model, Query()]`. `Route` hands it to FastAPI as the handler read it, each name's first
+    """A GET's query string, as `Annotated[Model, Query()]`. `Route` hands it to FastAPI as `parse_qs` reads it, each name's first
     value, and a blank one is none, so an optional field takes its default."""
     model_config = ConfigDict(extra="ignore")
 

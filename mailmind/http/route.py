@@ -1,8 +1,8 @@
-"""A route on a router: FastAPI's `APIRoute`, answering as the handler answers.
+"""A route on a router: FastAPI's `APIRoute`, with what every route goes through.
 
-`Route` does what `H.do_GET` and `H.do_POST` do around a route, so a handler on a router holds none of it: the request id for the
-log, the leave to go over the AI limit, who counts as someone here, and what a failure answers (`shared.failure_answer`). A body is
-read as the handler read it, an answer is written as the handler wrote it, and a value a schema refuses is the `bad request` 400.
+`Route` does that around a handler, so the handler holds none of it: the request id for the log, the leave to go over the AI limit,
+who counts as someone here, and what a failure answers (`shared.failure_answer`). It reads a query string and a body its own way
+(`handle`), writes an answer in `json.dumps`' bytes, and answers a value a schema refuses with the `bad request` 400.
 
     r = router()
 
@@ -48,7 +48,7 @@ def router():
 
 
 def json_answer(obj, code=200):
-    """An answer in the bytes the handler's `_json` writes: Starlette's JSONResponse writes others, and refuses NaN."""
+    """An answer in `json.dumps`' bytes: Starlette's JSONResponse writes others, and refuses NaN."""
     return Response(json.dumps(obj).encode(), code, media_type="application/json")
 
 
@@ -59,7 +59,7 @@ def _rendered(answer):
 
 
 def _first_of_each(query_string):
-    """The query string as the handler read it (`parse_qs`): a name's first value, and a blank one is no value at all.
+    """The query string as `parse_qs` reads it: a name's first value, and a blank one is no value at all.
     FastAPI would take the last, and hand a number the blank."""
     given = parse_qs(query_string.decode("latin-1"))
     return urlencode({name: values[0] for name, values in given.items()}).encode()
@@ -113,7 +113,7 @@ class Route(APIRoute):
         return (Match.NONE, {}) if match == Match.PARTIAL else (match, child)
 
     async def handle(self, scope, receive, send):
-        """What FastAPI is to read: the query string, and a POST's body, as the handler read them. A body counts only if its
+        """What FastAPI is to read: the query string as `_first_of_each` gives it, and a POST's body. A body counts only if its
         length was declared (no length, as a chunked one has, is {}), whatever its Content-Type says, which FastAPI would
         hold to JSON. The perimeter has judged a declared length, so a body that runs over its cap never said how long it was."""
         scope[_AS_SENT] = scope.get("query_string", b"")

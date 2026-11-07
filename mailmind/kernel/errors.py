@@ -3,7 +3,7 @@
 `said` is written for that person, in words of the app's own: never an exception's text, or what a server said. It may be
 empty, for an answer the page words itself. `more` is what else the answer says, flags and ids a client acts on.
 
-The kernel knows nothing of HTTP. `mailmind.http.handler` says which status each answers with, and how.
+The kernel knows nothing of HTTP. `mailmind.http.shared` says which status each answers with, and how.
 
 Four others keep paths of their own. `AIOff` and `OverLimit` are `NotSent`s, which the AI's callers let through by that name,
 and an `OverLimit` carries what the page needs to ask. `ReadOnlyError` names what was refused, for the log, and is a member of

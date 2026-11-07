@@ -10,7 +10,7 @@ import dataclasses
 from mailmind.bootstrap import assistant, wiring, mailbox, web
 from mailmind.http import serving
 from mailmind.http.app import create_app
-from mailmind.platform import settings, webroot
+from mailmind.platform import perimeter, settings, webroot
 from mailmind.platform.logging import get_logger
 
 
@@ -22,7 +22,7 @@ def build():
 
     def body_cap(method, path):
         return web.post_body_cap(path) if method == "POST" else 0
-    return create_app(routers=web.ROUTERS, token=lambda: web.H.CSRF, body_cap=body_cap)
+    return create_app(routers=web.ROUTERS, token=lambda: perimeter.CSRF, body_cap=body_cap)
 
 
 def serve(port=None):

@@ -1,7 +1,5 @@
-"""What every request goes through, whichever answers it: the handler, or a route on a router (mailmind.http.route).
-
-What a failure answers, who counts as someone here, how far a body may run. There is one copy of each, here, for as long as both
-run side by side. It imports nothing of FastAPI, and knows neither path.
+"""What a request to a route goes through (mailmind.http.route): what a failure answers, who counts as someone here, how far a
+body may run. It imports nothing of FastAPI.
 """
 from mailmind.assistant.api import AIOff, OverLimit
 from mailmind.compose.api import MAX_SEND_POST
@@ -100,7 +98,7 @@ class ClientGone(Exception):
 
 async def read_body(scope, receive, cap):
     """A request's body off the ASGI server, up to `cap` bytes: b"" when it won't be read (a declared length over the cap, or
-    that isn't one, or no length and a cap of nothing), or None when it runs past the cap without declaring a length."""
+    that isn't one), or None when it runs past the cap without declaring a length."""
     declared = header_of(scope, b"content-length")
     if declared is not None:
         try:
@@ -108,8 +106,6 @@ async def read_body(scope, receive, cap):
                 return b""
         except ValueError:
             return b""                      # the perimeter answers a malformed length
-    elif cap == 0:
-        return b""
     chunks, size = [], 0
     while True:
         message = await receive()
