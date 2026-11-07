@@ -316,14 +316,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `/`, and `/` is still the page, the one thing `python3 server.py`, the kill switch, can serve with
   nothing installed. The old door going also lets the routers stop being standard-library tables.
   An audit against the page closed 41 gaps on the fictional world, and a week on real accounts covers what it couldn't drive.
-  Left: the flip itself (`BASE` in `app/route.ts`, the "Current app" link, and `webroot` still serving the page to a door with
-  no fresh build), and three differences on Esc to accept or undo: in the search box the page only blurs where the React app
-  clears the search, with a search and a message open the page leaves the search where the React app closes the message, and
-  on a desktop only the React app's closes a message.
+  Left: the week, which the owner chose to do first on 2026-11-07, and then the flip itself (`BASE` in `app/route.ts`, the
+  "Current app" link, and `webroot` still serving the page to a door with no fresh build).
 - **Drop what is written only for a rollback** · low value · effort S — `summaries`,
   `messages.snoozed_until`, `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk`
-  and `followups.anchor_pk` are still written, for going back to an older commit. Dropping them is a
-  destructive migration, so it waits on the owner's dry run of `python3 -m mailmind db check-upgrade`.
+  and `followups.anchor_pk` are still written, for going back to an older commit, and nothing reads them. The owner agreed to
+  drop them on 2026-11-07. It is a destructive migration, so it lands only after their dry run of
+  `python3 -m mailmind db check-upgrade` passes.
 
 ## Open decisions
 
@@ -344,8 +343,8 @@ implementation.
 
 ## Next up
 
-1. **The owner's soak** (high) — a gate for each account, IMAPClient and the pool are all
-   written and tested, and each waits on days of real use on real accounts, which nothing in the tree
-   can stand in for.
+1. **The owner's week on `/next`** (high) — `just run-next`, rebuilt after each pull, on real accounts, which covers what the
+   audit couldn't drive. A gate for each account, IMAPClient and the pool are all written and tested, and each waits on days of
+   real use too, so the same week can soak them, one at a time. Then the flip, then each becomes the default.
 2. **Real listbox semantics for the message list** (high / M) — the biggest remaining accessibility
    gap on the page, unless flipping `/` to the React app, whose list already is one, comes first.

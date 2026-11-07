@@ -811,7 +811,7 @@ wins when the two disagree. A front door refuses to start on a profile name it d
 - A reply or forward names its original by pk until its first save, whose answer carries `resume`
   (threading, the quote) and a forward's `files`; the composer then works from those, as a reopened
   draft does, and needs no row. The outbox row keeps the original's account, Message-ID and thread
-  (`orig_*`, migration 27), so `\Answered` (`server_ops.mark_answered`) and the follow-up land after an
+  (`orig_*`, migration 27) and its key (`original_key`), so `\Answered` (`server_ops.mark_answered`) and the follow-up land after an
   archive deleted the row.
 - A copy that leaves the server takes its `messages` row with it, in the step that records the save,
   discard or send, and `reconcile` names the folder so a list of it on screen loads again (its
@@ -834,9 +834,8 @@ wins when the two disagree. A front door refuses to start on a profile name it d
   moved stored thread summaries onto it. A stored brief and a stored review name their messages by
   key and folder (below), and a read gives the pks they have now (`store.pk_now`).
   `outbox.in_reply_to_pk`, `drafts.in_reply_to_pk`, `draft_ahead.src_pk` and `followups.anchor_pk` are still written, for a
-  rollback, and go unread: a send goes by `orig_*`, a draft by its own In-Reply-To, the other two by thread or Message-ID.
-  `tests/unit/test_architecture.py` holds that, and names the one read left (`outbox_item.pk_of_original`): a send with no
-  Message-ID to go by, queued before migration 27 or replying to a message that has none.
+  rollback, and go unread: a send goes by `orig_*`, and with no Message-ID to go by by `original_key` (migration 44), a draft by its own
+  In-Reply-To, the other two by thread or Message-ID. `tests/unit/test_architecture.py` holds that.
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
