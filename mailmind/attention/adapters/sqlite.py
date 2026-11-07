@@ -1,5 +1,6 @@
 """Attention's tables: `snoozes`, `muted` and `followups`, and `messages.snoozed_until`, which only a rollback would read.
 Each function takes its caller's connection and leaves the commit to it."""
+from mailmind.attention.domain import followups
 from mailmind.kernel import attention
 from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.kernel.when import now_iso
@@ -118,58 +119,78 @@ def followup_record_sent(c, account, thread_id, anchor_pk, now_ts, when):
               (account, thread_id, anchor_pk, now_ts, now_ts, when))
 
 
-def followup_promote_due(c, now_ts, days):
-    """Pending sent-no-reply rows past the grace window with no inbound reply since become due."""
-    cutoff = now_ts - days * 86400
-    c.execute("""UPDATE followups SET state='due', due_ts=? WHERE kind='sent' AND state='pending'
-                 AND first_sent_ts <= ?
-                 AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
+# How each condition of domain.followups's rules reads in SQL. A statement is built from the domain's names, so a condition
+# the domain adds or drops is one this file has to say or goes unasked.
+_MUTED = "EXISTS (SELECT 1 FROM muted mu WHERE mu.account=followups.account AND mu.thread_id=followups.thread_id)"
+
+_COMES_DUE = {
+    "sent_and_pending": "kind='sent' AND state='pending'",
+    "past_the_grace": "first_sent_ts <= :cutoff",
+    "no_answer_since": """NOT EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
                        AND m.thread_id=followups.thread_id AND m.ts > followups.first_sent_ts
-                       AND lower(m.from_addr) <> lower(followups.account))
-                 AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=followups.account
-                       AND mu.thread_id=followups.thread_id)""", (now_ts, cutoff))
+                       AND lower(m.from_addr) <> lower(followups.account))""",
+    "not_muted": "NOT " + _MUTED,
+}
+_PROMOTE = ("UPDATE followups SET state='due', due_ts=:now WHERE "
+            + " AND ".join(_COMES_DUE[name] for name in followups.COMES_DUE))
+
+_RECEIVED_NUDGE = {
+    "in_a_thread": "m.thread_id IS NOT NULL AND m.thread_id != ''",
+    "read": "m.seen=1",
+    "unanswered": "m.answered=0",
+    "not_junk": "m.is_junk=0",
+    "past_the_grace": "m.ts <= :cutoff",
+    "within_its_lifetime": "m.ts >= :floor",
+    "the_threads_newest": """m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
+                      AND m2.draft=0 ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)""",
+    "not_snoozed": not_snoozed_sql(),
+    "worth_a_reply": """EXISTS (SELECT 1 FROM messages mi JOIN assessments s ON s.message_key=mi.message_key
+                WHERE mi.account=m.account AND mi.thread_id=m.thread_id
+                  AND """ + attention.reply_worthy_sql() + ")",
+    "nothing_from_me": """NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account AND mo.draft=0
+                AND mo.thread_id=m.thread_id AND lower(mo.from_addr)=lower(m.account))""",
+    "not_muted": "NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)",
+    "no_follow_up_yet": "NOT EXISTS (SELECT 1 FROM followups f WHERE f.account=m.account AND f.thread_id=m.thread_id)",
+}
+_DETECT = ("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,due_ts,created_at)
+        SELECT m.account, m.thread_id, 'received', 'due', m.pk, m.ts, :now, :when
+        FROM messages m
+        WHERE """ + " AND ".join(_RECEIVED_NUDGE[name] for name in followups.RECEIVED_NUDGE))
+
+_MET = {
+    "muted": _MUTED,
+    "they_answered": """(followups.kind='sent' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
+              AND m.thread_id=followups.thread_id AND m.ts > IFNULL(followups.first_sent_ts,0)
+              AND lower(m.from_addr) <> lower(followups.account)))""",
+    "i_replied": """(followups.kind IN ('received','replylater') AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
+              AND m.thread_id=followups.thread_id AND (m.answered=1 OR
+                  (lower(m.from_addr)=lower(followups.account) AND m.draft=0))))""",
+}
+_RESOLVE = ("DELETE FROM followups WHERE account=? AND state IN ('pending','due') AND ("
+            + " OR ".join(_MET[name] for name in followups.MET) + ")")
+
+_EXPIRES = {
+    "received": "kind='received'",
+    "live": "state IN ('pending','due')",
+    "past_its_lifetime": "last_msg_ts IS NOT NULL AND last_msg_ts < :floor",
+}
+_EXPIRE = "DELETE FROM followups WHERE " + " AND ".join(_EXPIRES[name] for name in followups.EXPIRES)
+
+
+def followup_promote_due(c, now_ts, days):
+    """Sent-no-reply rows that domain.followups.COMES_DUE says have waited long enough become due."""
+    c.execute(_PROMOTE, {"now": now_ts, "cutoff": followups.days_before(now_ts, days)})
 
 
 def followup_detect_received(c, now_ts, days, max_age_days):
-    """Inbound, seen, unanswered, important threads aging past the window with no reply from
-    me, not muted/snoozed/already-tracked, within the max-age floor: a nudge expire_followups ended
-    must not come straight back, and a first run mustn't flood."""
-    cutoff = now_ts - days * 86400
-    floor = now_ts - max_age_days * 86400
-    c.execute("""INSERT OR IGNORE INTO followups(account,thread_id,kind,state,anchor_pk,last_msg_ts,due_ts,created_at)
-        SELECT m.account, m.thread_id, 'received', 'due', m.pk, m.ts, ?, ?
-        FROM messages m
-        WHERE m.thread_id IS NOT NULL AND m.thread_id != '' AND m.seen=1 AND m.answered=0 AND m.is_junk=0
-          AND m.ts <= ? AND m.ts >= ?
-          AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
-                      AND m2.draft=0 ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
-          AND """ + not_snoozed_sql() + """
-          AND EXISTS (SELECT 1 FROM messages mi JOIN assessments s ON s.message_key=mi.message_key
-                WHERE mi.account=m.account AND mi.thread_id=m.thread_id
-                  AND """ + attention.reply_worthy_sql() + """)
-          AND NOT EXISTS (SELECT 1 FROM messages mo WHERE mo.account=m.account AND mo.draft=0
-                AND mo.thread_id=m.thread_id AND lower(mo.from_addr)=lower(m.account))
-          AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)
-          AND NOT EXISTS (SELECT 1 FROM followups f WHERE f.account=m.account AND f.thread_id=m.thread_id)
-        """, (now_ts, now_iso(), cutoff, floor))
+    """Threads domain.followups.RECEIVED_NUDGE says want a nudge, within `days` and `max_age_days` of now, get one."""
+    c.execute(_DETECT, {"now": now_ts, "when": now_iso(), "cutoff": followups.days_before(now_ts, days),
+                        "floor": followups.days_before(now_ts, max_age_days)})
 
 
 def resolve_followups(c, account):
-    """Auto-resolve (delete) active followups whose commitment is met: muted, or — by kind —
-    an inbound reply arrived (sent) / I replied or it's marked answered (received). A draft of a
-    reply is not a reply."""
-    c.execute("""DELETE FROM followups WHERE account=? AND state IN ('pending','due') AND (
-        EXISTS (SELECT 1 FROM muted mu WHERE mu.account=followups.account AND mu.thread_id=followups.thread_id)
-        OR (followups.kind='sent' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
-              AND m.thread_id=followups.thread_id AND m.ts > IFNULL(followups.first_sent_ts,0)
-              AND lower(m.from_addr) <> lower(followups.account)))
-        OR (followups.kind='received' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
-              AND m.thread_id=followups.thread_id AND (m.answered=1 OR
-                  (lower(m.from_addr)=lower(followups.account) AND m.draft=0))))
-        OR (followups.kind='replylater' AND EXISTS (SELECT 1 FROM messages m WHERE m.account=followups.account
-              AND m.thread_id=followups.thread_id AND (m.answered=1 OR
-                  (lower(m.from_addr)=lower(followups.account) AND m.draft=0))))
-    )""", (account,))
+    """Delete the account's live follow-ups whose commitment domain.followups.MET says is met."""
+    c.execute(_RESOLVE, (account,))
 
 
 # ----- Reply Later: a user-pinned stack of threads to answer (kind='replylater') -----
@@ -279,10 +300,8 @@ def replylater_due(c, accounts):
 
 
 def expire_followups(c, now_ts, days):
-    """Bounded lifetime for 'received' nudges: a reply made from ANOTHER client can't be seen
-    locally until Sent syncs, so cap how long an unresolved received nudge can nag."""
-    c.execute("DELETE FROM followups WHERE kind='received' AND state IN ('pending','due') "
-              "AND last_msg_ts IS NOT NULL AND last_msg_ts < ?", (now_ts - days * 86400,))
+    """Delete the `received` nudges domain.followups.EXPIRES says have nagged long enough."""
+    c.execute(_EXPIRE, {"floor": followups.days_before(now_ts, days)})
 
 
 def due_followup_keys(c):
