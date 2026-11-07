@@ -199,6 +199,18 @@ def test_any_other_method_isnt_implemented(served, method, path):
     assert headers["x-frame-options"] == "DENY"
 
 
+def test_a_get_or_a_post_of_the_api_no_route_takes_says_someone_is_here(served, monkeypatch):
+    seen = []
+    monkeypatch.setattr(shared, "_someone_here", lambda: seen.append(1))
+    raw(served, "GET", "/api/no-such-route")
+    raw(served, "POST", "/api/no-such-route", b"{}")
+    assert seen == [1, 1]
+    raw(served, "GET", "/no-such-page")                                                   # no part of the API
+    raw(served, "PUT", "/api/no-such-route")                                              # no method the app has
+    raw(served, "POST", "/api/no-such-route", b"{}", {"X-CSRF-Token": "wrong"})           # no further than the perimeter
+    assert seen == [1, 1]
+
+
 @pytest.mark.parametrize("path", ["/api/toy-work", "/"])
 @pytest.mark.parametrize("site", ["same-origin", "none"])
 def test_an_absolute_form_request_line_names_no_route(served, monkeypatch, path, site):
