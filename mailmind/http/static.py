@@ -3,9 +3,9 @@ from mailmind.http.routing import ANSWERED, Routes
 from mailmind.platform import perimeter, webroot
 
 
-def _page(h, html):
+def _page(h, html, policy):
     h._send(200, html.encode("utf-8"), "text/html; charset=utf-8",
-            [("Content-Security-Policy", perimeter.page_policy()),
+            [("Content-Security-Policy", policy),
              ("Cache-Control", "no-store")])     # it holds this run's token
 
 
@@ -32,7 +32,7 @@ def routes():
 
     @r.get("/")
     def page(req):
-        _page(req.handler, webroot.page(req.handler.CSRF))
+        _page(req.handler, webroot.page(req.handler.CSRF), perimeter.page_policy())
         return ANSWERED
 
     @r.matching("GET", lambda path: path == "/next" or path.startswith("/next/"))
@@ -41,7 +41,7 @@ def routes():
         if built is None:
             req.handler._send(404, b"The new app isn't built. Run: just build-web\n", "text/plain; charset=utf-8")
         else:
-            _page(req.handler, built)
+            _page(req.handler, built, perimeter.next_page_policy())
         return ANSWERED
 
     @r.matching("GET", lambda path: path.startswith(webroot.PREFIX))
