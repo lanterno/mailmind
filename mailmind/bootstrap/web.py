@@ -9,6 +9,7 @@ from mailmind.http.routers import curation as curation_routes
 from mailmind.http.routers import debug, events, export, static
 from mailmind.http.routers import discovery as discovery_routes
 from mailmind.http.routers import mailbox as mailbox_routes
+from mailmind.http.routers import preferences as preferences_routes
 from mailmind.http.shared import AI_OVER_HEADER, post_body_cap, tell_of_someone
 
 __all__ = ["AI_OVER_HEADER", "ROUTERS", "post_body_cap"]
@@ -17,6 +18,7 @@ ROUTERS = [attention_routes.router(attention, mailbox),
            calendar_routes.router(calendar, mailbox),
            mailbox_routes.router(mailbox),
            accounts_routes.router(accounts, mailbox),
+           preferences_routes.router(accounts, assistant),
            debug.router(mailbox, compose, background, assistant),
            curation_routes.router(curation, mailbox),
            assistant_routes.router(assistant, mailbox),

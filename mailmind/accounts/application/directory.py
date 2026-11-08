@@ -8,7 +8,9 @@ Accounts live in `mailmind.config.json` (NOT git-tracked). Copy
     "credential": { ... one of the styles below ... } }
 
 An optional top-level "anthropic_api_key" holds the Claude API key, in any of the same styles
-(proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment.
+(proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment. An optional top-level
+"preferences" block holds what the Settings page sets (mailmind.accounts.domain.preferences);
+with none, each preference is its default.
 
 Credential styles (so this works for anyone, with or without 1Password): plain, op, env and
 proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
@@ -25,7 +27,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from mailmind.accounts.application.ports import AccountRepository, SecretResolver
-from mailmind.accounts.domain import account, events
+from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.accounts.domain.credential import CredentialRef, credential_from
 from mailmind.kernel.parsed import is_object
@@ -123,6 +125,34 @@ class Directory:
                 self.save(raw)
         bus.publish(events.AccountChanged(entry["email"]))
         return True
+
+    def preferences(self) -> dict[str, Any]:
+        """Every preference as it stands. Reading one writes nothing, so a file with no block keeps none."""
+        return preferences.read(self._raw())
+
+    def preference(self, name: str) -> Any:
+        """What the file says of one preference, or None where it says nothing that preference can be."""
+        return preferences.said(self._raw(), name)
+
+    def set_preferences(self, asked: Mapping[str, Any]) -> dict[str, Any]:
+        """Keep what `asked` changes, and leave every other key in the file as it was. A value none can be, refused whole
+        (`Refused`), writes nothing. The answer is each preference as it stands now."""
+        return self._change_preferences(lambda raw: preferences.changes(asked))
+
+    def import_preferences(self, held: Mapping[str, Any]) -> dict[str, Any]:
+        """What a browser held under its old keys, once, for what the file doesn't say yet. When there is nothing to take, nothing
+        is written. The answer is each preference as it stands now."""
+        return self._change_preferences(lambda raw: preferences.importable(held, raw))
+
+    def _change_preferences(self, wanted_of: Callable[[Entry], Mapping[str, Any]]) -> dict[str, Any]:
+        with self._write_lock:
+            raw = self._raw()
+            wanted = wanted_of(raw)
+            if wanted:
+                raw.setdefault("accounts", [])
+                preferences.apply(raw, wanted)
+                self.save(raw)
+            return preferences.read(raw)
 
     def masked_rows(self) -> list[MaskedRow]:
         return [account.masked_row(e) for e in self._raw().get("accounts", [])]
