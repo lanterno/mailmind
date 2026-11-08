@@ -521,6 +521,74 @@ describe("an address one typo from someone you write to", () => {
   });
 });
 
+describe("a reply its Reply-To sends elsewhere", () => {
+  const away = "desk@elsewhere.example.test", bo = "bo@example.test", copy = { key: 5, folder: "INBOX", uid: 2 };
+  const mail = { get: vi.fn(async () => ({ account: FROM, subject: "Plans", from_addr: bo, reply_to: `Plans Desk <${away}>`, to: FROM, text: "" })) };
+  const verdict = (known: boolean) => (b: Json) => ({ ok: true, thin: false, items: Object.fromEntries(b.addrs.map((a: string) => [a, { known, self: false }])) });
+
+  it("goes to a stranger only after the check, and the fix turns it back to the sender", async () => {
+    const { m, answer, posted, focused } = setup(mail);
+    answer("/api/contacts/known", verdict(false));
+    await m.reply(copy);
+    await vi.advanceTimersByTimeAsync(200);
+    m.edit("body", "ok");
+    m.send();
+    const g = m.view.get()!.guard!;
+    expect(g.keys).toEqual(["redirect"]);
+    expect(g.lines[0]!.text).toBe(`Replies go to ${away}, not to the sender, ${bo}.`);
+    expect(posted("/api/send")).toEqual([]);
+    m.guardFix(g.lines[0]!.fix!.kind, undefined, g.lines[0]!.fix!.swap);
+    expect(m.view.get()!.to.map((x) => x.v)).toEqual([bo]);
+    expect(focused.at(-1)).toBe("send");
+    m.send();
+    await flush();
+    expect(posted("/api/send")[0].to).toEqual([bo]);
+  });
+
+  it("doesn't hold a reply to someone known, and doesn't ask again once waved through", async () => {
+    const known = setup(mail);
+    known.answer("/api/contacts/known", verdict(true));
+    await known.m.reply(copy);
+    await vi.advanceTimersByTimeAsync(200);
+    known.m.edit("body", "ok");
+    known.m.send();
+    await flush();
+    expect(known.posted("/api/send").length).toBe(1);
+
+    const { m, answer, posted, tick } = setup(mail);
+    answer("/api/contacts/known", verdict(false));
+    await m.reply(copy);
+    await vi.advanceTimersByTimeAsync(200);
+    m.edit("body", "ok");
+    m.send();
+    tick(800);
+    m.confirmGuard();
+    await flush();
+    expect(posted("/api/send").length).toBe(1);
+    const f = m.float.get();
+    if (f?.kind !== "countdown") throw new Error("no countdown");
+    answer("/api/contacts/known", verdict(false));
+    f.undo();
+    await flush();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(m.view.get()!.redirect).toEqual({ to: away, sender: bo });
+    m.send();
+    await flush();
+    expect(posted("/api/send").length).toBe(2);
+  });
+
+  it("is checked on a reply reopened from Drafts too", async () => {
+    const { m, answer, posted } = setup();
+    answer("/api/draft/resume", () => ({ ok: true, mode: "reply", account: FROM, subject: "Re: Plans", to: [away], cc: [], bcc: [], text: "ok", tail_text: "", in_reply_to: "<x@y>", references: "", original_key: 5, participants: [bo], files: [], reply_to: `Plans Desk <${away}>`, original_from: bo }));
+    answer("/api/contacts/known", verdict(false));
+    await m.editDraft(copy);
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    expect(m.view.get()!.guard!.keys).toEqual(["redirect"]);
+    expect(posted("/api/send")).toEqual([]);
+  });
+});
+
 describe("sending", () => {
   const person = "bea@example.test";
   const ready = (m: ReturnType<typeof setup>["m"]) => {

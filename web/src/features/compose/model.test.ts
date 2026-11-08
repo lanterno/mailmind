@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -55,6 +55,26 @@ describe("near misses", () => {
 });
 
 describe("replying", () => {
+  it("knows when a Reply-To sends it somewhere other than the sender", () => {
+    expect(redirectOf("Desk <Desk@elsewhere.example.test>", "Bo@example.test")).toEqual({ to: "desk@elsewhere.example.test", sender: "bo@example.test" });
+    expect(redirectOf("bo@example.test", "BO@example.test")).toBeNull();
+    expect(redirectOf("", "bo@example.test")).toBeNull();
+    expect(redirectOf("desk@elsewhere.example.test", null)).toBeNull();
+    expect(replySeed({ account: "a", from_addr: "bo@example.test", reply_to: "desk@elsewhere.example.test" }, false, new Set()).redirect)
+      .toEqual({ to: "desk@elsewhere.example.test", sender: "bo@example.test" });
+    expect(replySeed({ account: "a", from_addr: "bo@example.test" }, false, new Set()).redirect).toBeNull();
+  });
+
+  it("calls a Reply-To a stranger until someone says otherwise", () => {
+    const away = "desk@elsewhere.example.test";
+    const composing = (over: Partial<Composer>) => ({ mode: "reply", to: [chip(away)], cc: [], bcc: [], attachments: [], reading: new Map(), participants: new Set<string>(), people: new Map(), ack: {}, redirect: { to: away, sender: "bo@example.test" }, ...over }) as unknown as Composer;
+    const stranger = (c: Composer) => guardSnapshot(c, 0, 1, new Set()).redirect?.stranger;
+    expect(stranger(composing({}))).toBe(true);
+    expect(stranger(composing({ people: new Map([[away, { known: false, self: false }]]) }))).toBe(true);
+    expect(stranger(composing({ people: new Map([[away, { known: true, self: false }]]) }))).toBe(false);
+    expect(stranger(composing({ participants: new Set([away]) }))).toBe(false);
+  });
+
   it("leaves your tags out of a reply-all as it does your address", () => {
     const seed = replySeed({ account: "ada@example.test", from_addr: "bo@example.test", to: "ada+news@example.test, cy@example.test", cc: "ada@example.test" }, true, new Set(["ada@example.test"]));
     expect(seed.cc).toEqual(["cy@example.test"]);

@@ -175,6 +175,54 @@ describe("an address one typo from someone you write to", () => {
   });
 });
 
+describe("a reply its Reply-To sends elsewhere", () => {
+  const away = "desk@elsewhere.example.test", bo = "bo@example.test";
+  const redirect = { to: away, sender: bo, stranger: true };
+  const onIt = (o: Partial<GuardSnapshot> = {}) => guardCheck(S({ ...reply, to: [away], redirect, ...o }));
+
+  it("holds the send when it goes to a stranger", () => {
+    const w = onIt();
+    expect(w).toEqual([{ key: "redirect", block: "confirm", to: away, sender: bo }]);
+    expect(guardBlocks(w)).toBe(true);
+  });
+
+  it("is a soft line for someone known, and once waved through", () => {
+    expect(onIt({ redirect: { ...redirect, stranger: false } })).toEqual([{ key: "redirect", block: "soft", to: away, sender: bo }]);
+    expect(guardBlocks(onIt({ redirect: { ...redirect, stranger: false } }))).toBe(false);
+    const w = onIt({ ack: { subject: false, attach: false, fanout: 0, redirect: true } });
+    expect([keys(w), guardBlocks(w)]).toEqual([["redirect"], false]);
+  });
+
+  it("says nothing once the address has left the To", () => {
+    expect(keys(onIt({ to: [bo] }))).toEqual([]);
+    expect(keys(onIt({ to: ["other@example.test"] }))).toEqual([]);
+  });
+
+  it("says nothing when the sender is on the message too", () => {
+    expect(keys(onIt({ to: [away, bo] }))).toEqual([]);
+    expect(keys(onIt({ cc: [bo] }))).toEqual([]);
+  });
+
+  it("says nothing for a reply that goes to you or came from you", () => {
+    expect(keys(onIt({ mine: [away] }))).toEqual([]);
+    expect(keys(onIt({ mine: ["desk@elsewhere.example.test"], redirect: { ...redirect, to: "desk+tag@elsewhere.example.test" }, to: ["desk+tag@elsewhere.example.test"] }))).toEqual([]);
+    expect(keys(onIt({ mine: [bo] }))).toEqual([]);
+  });
+
+  it("names its address in place of the new-to-you line, and leaves the others there", () => {
+    const w = onIt({ fresh: [away, "new@example.test"] });
+    expect(w.map((x) => x.key)).toEqual(["redirect", "new"]);
+    expect(w.find((x) => x.key === "new")).toMatchObject({ addrs: ["new@example.test"] });
+  });
+
+  it("says so in words, and offers the sender", () => {
+    expect(guardLine({ key: "redirect", to: away, sender: bo })).toEqual({
+      text: "Replies go to desk@elsewhere.example.test, not to the sender, bo@example.test.",
+      fix: { kind: "sender", label: "Reply to the sender instead", swap: { from: away, to: bo } },
+    });
+  });
+});
+
 it("never stops a send for someone new alone", () => {
   const w = guardCheck(S({ fresh: ["new@example.test"] }));
   expect([keys(w), guardBlocks(w)]).toEqual([["new"], false]);
