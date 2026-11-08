@@ -56,6 +56,13 @@ FOLDERS = {
 ALL_MAIL = "[Gmail]/All Mail"
 OUTSIDE_ALL_MAIL = ("\\Trash", "\\Junk")       # Gmail's Trash and Spam
 SYSTEM_FLAGS = ("\\Seen", "\\Answered", "\\Flagged", "\\Deleted", "\\Draft")
+_LABEL_ATOM = re.compile(r"[A-Za-z0-9/._-]+")
+
+
+def _as_label(label):
+    if _LABEL_ATOM.fullmatch(label):
+        return label
+    return '"' + label.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 UIDVALIDITY_BASE = 1_700_000_001
 GM_ID_BASE = 1_800_000_000_000_000_001
@@ -1092,7 +1099,8 @@ class FakeIMAPServer:
         return uid
 
     def _labels_of(self, acct, msg):
-        labels = set(msg.labels)
+        """The message's labels as X-GM-LABELS says them: an atom where one will do, else a quoted string, as Gmail does."""
+        labels = {_as_label(lb) for lb in msg.labels}
         if any(m.gm_msgid == msg.gm_msgid for m in acct.mailboxes["INBOX"].messages.values()):
             labels.add('"\\\\Inbox"')
         return labels

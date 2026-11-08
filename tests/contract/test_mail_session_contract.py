@@ -228,6 +228,37 @@ def test_gmails_thread_id_comes_only_when_asked_for(world, kind):
         u: str(m.gm_thrid) for u, m in box(world, "INBOX", w.CY).messages.items()}
 
 
+def test_gmails_labels_come_only_when_asked_for_as_a_person_reads_them(world, kind):
+    name = "cy-inbox-03-unrelated.eml"
+    s = open_session(w.CY)
+    try:
+        s.select("INBOX")
+        uid = uid_of(world, name)
+        msg = box(world, "INBOX", w.CY).messages[uid]
+        msg.labels |= {"Work/Clients", "Two words", 'Say "hi"', "back\\slash", "R&AOk-union", "A&-B"}
+        since = len(world.server.commands)
+        plain, labelled = s.headers([uid], ["SUBJECT"]), s.headers([uid], ["SUBJECT"], gmail_labels=True)
+        lines = sent(world, since, user=w.CY)
+    finally:
+        s.logout()
+    assert ["X-GM-LABELS" in line for line in lines] == [False, True]
+    assert plain[0].gmail_labels is None
+    assert labelled[0].gmail_labels == {"Work/Clients", "Two words", 'Say "hi"', "back\\slash", "Réunion", "A&B", "\\Inbox"}
+
+
+def test_a_message_with_no_labels_says_so(world, kind):
+    name = "cy-inbox-03-unrelated.eml"
+    box(world, "INBOX", w.CY).messages.pop(uid_of(world, name))           # archived: in All Mail, with nothing on it
+    s = open_session(w.CY)
+    try:
+        s.select("[Gmail]/All Mail")
+        uid = s.by_message_id(w.message_id(name))
+        got = s.headers([uid], ["SUBJECT"], gmail_labels=True)[0].gmail_labels
+    finally:
+        s.logout()
+    assert got == frozenset()
+
+
 def test_headers_go_a_batch_at_a_time_and_none_asks_nothing(world, session, monkeypatch):
     from mailmind.mailbox.application import session as port
     monkeypatch.setattr(port, "HEADER_BATCH", 2)
