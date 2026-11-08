@@ -53,7 +53,7 @@ uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved 
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (159)
-uv run pytest tests/unit/http/test_problems.py              # what each of kernel.errors answers (28)
+uv run pytest tests/unit/http/test_problems.py              # the problem document each of kernel.errors answers (32)
 uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (181)
 uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (116)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
@@ -512,11 +512,12 @@ def snooze(body: SnoozeBody):
 - A request's model (`schemas.common.RequestBody`, or `QueryArgs` as `Annotated[Model, Query()]`, whose `as_query()` is for a use
   case that takes the query whole) names every field its use case reads, typed in `common`'s words: `str | None`, `Number`
   (`kernel.parsed`'s reading, nothing past 2^53) and `Flag`. It stays optional unless going without already answers `bad request`,
-  so a use case keeps its own words for what is left out. What the model refuses answers `{"ok": false, "error": "bad request"}`
-  with 400, GET included.
+  so a use case keeps its own words for what is left out. What the model refuses answers the `bad request` problem
+  (`/problems/refused`) with 400, GET included.
 - An answer's model (`schemas.common.Answer`) is documentation: `responses=answers(Ok, {409: MoreSaid})`, never `response_model`,
-  which would filter and refuse. `Ok` may be a union, for `ok: false` with a 200. `answers` gives each failure status `Failure`; a
-  route whose `Problem` says more names a subclass of `Failure`.
+  which would filter and refuse. `Ok` may be a union of what a route answers when it can, and is never a refusal. `answers` gives
+  each failure status `Failure`, the problem document, which `tests/openapi_doc.py` gives as `application/problem+json`; a route
+  whose `Problem` says more names a subclass of `Failure`.
 - Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route must fit its model,
   with no field it doesn't name, and a use case reading a name its model doesn't declare fails the test. So the suite is what says
   a model is true, and a golden that changes is a question, not an update. The page's types come from the models
@@ -525,18 +526,26 @@ def snooze(body: SnoozeBody):
   malformed-input walk) reads the routers, so a new route needs no edit there, and a stand-in for a handler is `route.work`.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and
-`shared.failure_answer` answers it as `{"ok": false, "error": ..., ...}` by `shared.STATUS`: `NotFound` 404, `Conflict` and `Busy`
-409, `Locked` 423, `Refused` 400, `Unreachable` 502 (a retry can help), `Unreadable` 422. `gates.Busy` is the kernel's. A use case
-returns only the answer it has, a dict, and a route with a catch of its own lets `Problem` through ahead of it (`except Problem:
-raise`). Unexpected exceptions still answer the fixed 500, with the class logged. `AIOff`, `OverLimit`, `ReadOnlyError` and
-`TxAcrossNetworkError` keep the paths the sections below give them.
-On a POST, any `TypeError` or `ValueError` is still the 400. On a GET it isn't.
+`shared.failure_answer` answers it as a problem document (RFC 9457), `application/problem+json`, by `shared.KINDS`: `NotFound` 404,
+`Conflict` and `Busy` 409, `Locked` 423, `Refused` 400, `Unreachable` 502 (a retry can help), `Unreadable` 422. Its `type` is
+`/problems/<kind>` (`not-found`, `conflict`, `busy`, ...), its `title` the kind's, its `status` the answer's, and its `detail` what the
+person is told, left out where the page words it. What else it says (`Problem.more`: `busy`, `conflict`, `empty`, `retry` and the
+like) goes beside those four and never stands in for one. `gates.Busy` is the kernel's. A use case returns only the answer it has, a
+dict, and a route with a catch of its own lets `Problem` through ahead of it (`except Problem: raise`). Unexpected exceptions still
+answer the fixed 500, `about:blank` and `request failed`, with the class logged. `AIOff` (`/problems/ai-off`, 409), `OverLimit`
+(`/problems/over-limit`, 402), `ReadOnlyError` (`/problems/read-only`, 409) and `TxAcrossNetworkError` keep the paths the sections
+below give them. On a POST, any `TypeError` or `ValueError` is still the 400. On a GET it isn't.
 
-RFC 9457 and ending `ok: false` with a 200 are still to do. Filing's
-`{"ok": false, "msg": ...}`, `Undo.undo_last`, `Screener.rule`, `SavedViews.post`, `search.bad_query`, `Cleanup.sender`,
-`Bodies.message_body`, `Queries.thread_json` and `Connections.test` and `change` still answer a refusal that way. The literals
-that mean none of the seven stay too: 410 for a plan expired, 413, 503 for too many listeners, 504 for a summary still going, and
-each route's own worded 500.
+No refusal answers a 200: `ok` is only ever `true`, on what a route did. A result stays a 200, though it may say not all went: a
+login that didn't work (`connect: false`), a group Undo that reversed some (`failed`), a move the worker has (`queued`, `waiting`),
+marked rows some of which stayed (`rows_failed`) and a prefetch that gave way (`prefetched: false`). What means none of the kinds is
+`about:blank`, titled by its status, through `route.problem(status, detail, **more)`: 410 for a plan expired, 413, 503 for too many
+listeners, 504 for a summary still going, and each route's own worded 500. The perimeter's 403s and 413s answer the same
+(`shared.problem`), and so does a path of the API no route takes (`app._no_route`: 404, or 501 for a method the app has none
+of). What isn't the API answers as it did, in text: the page's 404 when nothing is built, an asset's 404 and `_no_route`'s 404
+and 501 elsewhere. A mail body's frame (`body.html`) answers a failure as a document, as before. The page reads a failure as an
+`ApiError` (`web/src/lib/api/client.ts`): its `detail`, `type`, flags and the `problem` itself, and `refusalOf` says whether it is
+the server's no, a 4xx.
 
 Consequence: to find a route, grep the literal path.
 
@@ -734,7 +743,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   both queues' drains wait for a full run. What nothing queues (a sweep) answers 409 through
   `shared.failure_answer`. A new write path either queues or calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
-  `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer `ok: false`
+  `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer a 409 (`Conflict`)
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
   `EXPUNGE`: `MailSession.expunge(uids)` removes the UIDs named and no others, and
   `move_by_copy` flags each original only after its COPY succeeded.
@@ -772,7 +781,8 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   (`Undo.UNDO_MAX`, an action alone counts as one) or 24 hours of them (`undo.KEEP_FOR`), whichever comes first, and an entry leaves it, committed, before
   any server is asked to reverse it. It knows nothing of what an entry means: `mailmind.bootstrap.mailbox` hands it a reverser for each kind, the Mailbox's in `application.reversal` (`Reversals`). Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
-  the answer counts `reversed` and `failed`. A reversal reports a server NO as `(False, why)`
+  the answer counts `reversed` and `failed`. When none went back it raises `Conflict`, and with nothing to undo `NotFound`
+  (`empty`). A reversal reports a server NO as `(False, why)`
   (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
   life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart.
 - A bulk command's confirm carries out a plan (`mailmind.assistant.application.plans`,
