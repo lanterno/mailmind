@@ -7,12 +7,12 @@ The Bridge password comes from the first of: the environment variable MAILMIND_P
 1Password's op://Private/<MAILMIND_PROTON_OP_ITEM>/password, when that variable names an item;
 the file ~/.config/mailmind/proton_bridge_pass. It is cached once found.
 """
-import os
 import pathlib
 import subprocess
 import time
 
 from mailmind.accounts.domain.credential import CredentialRef
+from mailmind.platform import environment
 
 BRIDGE_FILE = pathlib.Path.home() / ".config" / "mailmind" / "proton_bridge_pass"
 
@@ -48,7 +48,7 @@ def resolve(cred, *, who, strip=False):
     if ref.style == "plain":
         return ref.named
     if ref.style == "env":
-        v = os.environ.get(ref.named)
+        v = environment.credential(ref.named)
         if not v:
             raise RuntimeError(f"env var {ref.named} not set for {who}")
         return v
@@ -76,9 +76,9 @@ def evict(cred):
 def bridge_password():
     if "pw" in _bridge:
         return _bridge["pw"]
-    pw = os.environ.get("MAILMIND_PROTON_BRIDGE_PASS")
+    pw = environment.PROTON_BRIDGE_PASS.value()
     if not pw:
-        item = os.environ.get("MAILMIND_PROTON_OP_ITEM")
+        item = environment.PROTON_OP_ITEM.value()
         if item:
             r = subprocess.run(["op", "read", f"op://Private/{item}/password"],
                                capture_output=True, text=True)
@@ -88,8 +88,8 @@ def bridge_password():
         pw = BRIDGE_FILE.read_text().strip()
     if not pw:
         raise RuntimeError(
-            "Proton Bridge password not configured. Set MAILMIND_PROTON_BRIDGE_PASS, "
-            "or MAILMIND_PROTON_OP_ITEM (a 1Password item id), or write it to "
+            f"Proton Bridge password not configured. Set {environment.PROTON_BRIDGE_PASS.name}, "
+            f"or {environment.PROTON_OP_ITEM.name} (a 1Password item id), or write it to "
             f"{BRIDGE_FILE} (chmod 600).")
     _bridge["pw"] = pw
     return pw

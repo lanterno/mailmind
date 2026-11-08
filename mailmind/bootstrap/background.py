@@ -1,13 +1,11 @@
 """The background jobs: which run in which profile, how often, and who may ask for a round now."""
-import os
 import time
 
 from mailmind.bootstrap import assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
-from mailmind.platform import profile
+from mailmind.platform import environment, profile
 from mailmind.platform.db.uow import UnitOfWork
-from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import scheduler
 
 SYNC_INTERVAL = 300                       # seconds between automatic syncs
@@ -17,15 +15,7 @@ ASSESS_INTERVAL = 300                     # seconds between the assess job's rou
 # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
 # to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
 # NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
-def _expire_secs():
-    try:
-        return int(os.environ.get("MAILMIND_EXPIRE_SECS", "3600"))  # 0 disables
-    except ValueError:
-        get_logger("expire").warning("bad MAILMIND_EXPIRE_SECS — using 3600")
-        return 3600
-
-
-_EXPIRE_INTERVAL = _expire_secs()
+_EXPIRE_INTERVAL = environment.EXPIRE_SECS.value()        # 0 disables
 _uow = UnitOfWork()
 
 
@@ -64,7 +54,7 @@ def schedule(jobs):
     jobs.add("draft-push", compose.drafts.push_round, every=compose.PUSH_TICK, first=5)    # saves to their servers
     jobs.add("assess", assistant.assessments.round, every=ASSESS_INTERVAL, first=20)         # triage; a sync with new mail kicks it
     jobs.add("backfill", mailbox.syncing.backfill_round, every=600, first=45)              # old mail, full-text searchable
-    if not os.environ.get("MAILMIND_NO_DRAFT_TICK"):
+    if not environment.NO_DRAFT_TICK.on():
         jobs.add("draft-ahead", assistant.drafting.rounds(), every=assistant.drafting.DRAFT_TICK_INTERVAL,
                  first=assistant.drafting.DRAFT_TICK_STARTUP_DELAY)                           # top-K reply pre-gen (AI-polite)
     if mailbox.reconciler._RECONCILE_INTERVAL > 0:                                            # ghost prune, one account a round

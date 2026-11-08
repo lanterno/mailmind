@@ -6,7 +6,6 @@ piggybacks a user-triggered (IDLE) sync. reconcile_account is a SAFE pure-prune 
 change, or an OK-but-empty SEARCH against a non-empty store).
 """
 import json
-import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -17,7 +16,7 @@ from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, OpenSession, Pruned, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
-from mailmind.platform import settings, sse
+from mailmind.platform import environment, settings, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -25,16 +24,8 @@ from mailmind.platform.workers import gates
 reconcile_log = get_logger("reconcile")
 
 
-def _reconcile_secs() -> int:
-    try:
-        return int(os.environ.get("MAILMIND_RECONCILE_SECS", "1800"))  # full-cycle target; 0 disables
-    except ValueError:
-        reconcile_log.warning("bad MAILMIND_RECONCILE_SECS — using 1800")
-        return 1800
-
-
 class Reconciler:
-    _RECONCILE_INTERVAL = _reconcile_secs()
+    _RECONCILE_INTERVAL = environment.RECONCILE_SECS.value()    # full-cycle target; 0 disables
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, open_session: OpenSession, folders: Folders,
                  stats: LiveStats):

@@ -26,17 +26,13 @@ Enable:  MAILMIND_POOL=1            → all accounts
          MAILMIND_POOL=a@x.com,b@y → only those accounts (Phase-1: one Gmail)
 """
 import contextlib
-import os
 from collections.abc import Generator
 from typing import Any
 
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession
 from mailmind.mailbox.application.session import MailSession
+from mailmind.platform import environment
 from mailmind.platform.workers.account_worker import ConnectionPolicy, KeptConnections
-
-
-def _targets() -> str:
-    return os.environ.get("MAILMIND_POOL", "").strip()
 
 
 def _logout(M: MailSession) -> None:
@@ -61,12 +57,10 @@ class Pool(KeptConnections[MailSession]):
         self._open_session = open_session
 
     def _enabled(self, acct: Account) -> bool:
-        v = _targets()
-        if not v:
-            return False
-        if v.lower() in ("1", "all", "on", "true", "yes"):
+        which = environment.POOL.value()
+        if which.every:
             return not self._accounts.profile(acct).bridge   # "all" = every account EXCEPT the fragile Bridge
-        return acct["email"] in {x.strip() for x in v.split(",") if x.strip()}   # explicit list honored verbatim
+        return acct["email"] in which.listed                 # explicit list honored verbatim
 
 
     def _policy(self, acct: Account) -> ConnectionPolicy:
@@ -95,4 +89,5 @@ class Pool(KeptConnections[MailSession]):
 
     def stats(self) -> dict[str, Any]:
         live = self.slots()
-        return {"enabled": bool(_targets()), "target": _targets(), "counters": self.counters(), "slots": live}
+        target = environment.POOL.given()
+        return {"enabled": bool(target), "target": target, "counters": self.counters(), "slots": live}

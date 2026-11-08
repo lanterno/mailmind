@@ -1,6 +1,5 @@
 """Summarizing and scoring mail that isn't junk: a few calls in parallel for what's new, and a backlog as a batch at half
 price."""
-import os
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,6 +13,7 @@ from mailmind.assistant.domain.schema import object_in
 from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
 from mailmind.kernel.ids import MessageKey, Pk
 from mailmind.kernel.row import Connection, Row
+from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -116,7 +116,7 @@ class Assessments:
 
     def _send_batch(self, requests: list[tuple[str, str]], name: str) -> str:
         return self._calls.noting(lambda: self._gateway().submit_batch(
-            requests, None if os.environ.get("MAILMIND_NO_SCHEMA") else self.TRIAGE_SCHEMA,
+            requests, None if environment.NO_SCHEMA.on() else self.TRIAGE_SCHEMA,
             feature=self.BATCH_FEATURE, model=name, effort=self.TRIAGE_EFFORT))
 
     def batch_submit(self, at_least: int | None = None, keep: int | None = None, log: Log = lambda _: None) -> int:
@@ -260,7 +260,7 @@ class Assessments:
         why = self._gateway().held_back("triage", self._calls.MODEL)
         if why:
             return self.ASSESS_YIELD if why == "yielding" else None
-        if not os.environ.get("MAILMIND_NO_BATCHES"):
+        if not environment.NO_BATCHES.on():
             self.batch_submit(log=say)
         done = self.summarize_pending(limit=self.ASSESS_BATCH, workers=self.WORKERS)
         if done:

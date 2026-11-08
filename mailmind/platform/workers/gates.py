@@ -15,10 +15,10 @@ There are two kinds of gate, chosen by MAILMIND_WORKERS:
 A job that spans accounts, or touches no one account's server, passes EVERY_ACCOUNT.
 """
 import enum
-import os
 import threading
 from collections.abc import Callable
 
+from mailmind.platform import environment
 from mailmind.platform.workers import account_worker
 from mailmind.platform.workers.account_worker import EVERY_ACCOUNT, Busy
 
@@ -33,7 +33,7 @@ class Priority(enum.IntEnum):
 
 def per_account():
     """Whether each account has a gate of its own (MAILMIND_WORKERS=account)."""
-    return os.environ.get("MAILMIND_WORKERS", "").strip().lower() == "account"
+    return environment.WORKERS.value() == "account"
 
 
 # ── the one lock ───────────────────────────────────────────────────────────────────────────────

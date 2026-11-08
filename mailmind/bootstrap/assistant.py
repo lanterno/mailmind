@@ -13,7 +13,6 @@ Every call is counted in the usage ledger, the ai_usage table of the data direct
 and passes the cost governor first, whose daily limit is the config's "ai_daily_limit_usd" ($15
 unless it names another, domain.limits), read at each call.
 """
-import os
 import threading
 
 from mailmind.accounts.adapters import config_file, secrets
@@ -39,13 +38,14 @@ from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import limits
 from mailmind.bootstrap import accounts, attention, curation, discovery, mailbox
 from mailmind.discovery.api import QuerySpec
+from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
 __all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
-ENV = "ANTHROPIC_API_KEY"
+ENV = environment.ANTHROPIC_API_KEY.name
 
 
 def config_key() -> str | None:
@@ -66,7 +66,7 @@ def key() -> tuple[str, str]:
         return "", CONFIG
     if k is not None:
         return k, CONFIG
-    return os.environ.get(ENV, "").strip(), ENV
+    return (environment.ANTHROPIC_API_KEY.value() or "").strip(), ENV
 
 
 def _sdk(api_key, base_url, **kw):
@@ -88,7 +88,7 @@ class _Bound:
 
     def __call__(self):
         api_key = key()[0]
-        made_for = (self.transport, api_key, os.environ.get("ANTHROPIC_BASE_URL") or None)
+        made_for = (self.transport, api_key, environment.ANTHROPIC_BASE_URL.value())
         with self._lock:
             if self._made[0] != made_for:
                 transport, api_key, base_url = made_for

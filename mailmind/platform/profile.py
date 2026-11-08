@@ -8,14 +8,14 @@
   drafting. It reads IMAP only when someone asks, by opening mail or a folder or starting a sync.
 
 MAILMIND_PROFILE names the profile; unset or empty, it is `full`. MAILMIND_NOSYNC, the older
-switch, still selects read-only: any value but empty, 0, false, no or off turns it on, so a typo
-fails toward read-only. When the two disagree, read-only wins. This module is the only reader of
-both, and it reads them at every call, so a test can change them.
+switch, still selects read-only, and a value it doesn't take fails toward read-only. When the two
+disagree, read-only wins. Both are declared in mailmind.platform.environment, which reads them at
+every call, so a test can change them.
 """
 import enum
-import os
-from collections.abc import Mapping
 
+from mailmind.platform import environment
+from mailmind.platform.environment import Environ
 from mailmind.platform.settings import SettingsError
 
 
@@ -33,37 +33,21 @@ class ReadOnlyError(Exception):
     read-only. Its message names what was refused."""
 
 
-_OFF = ("", "0", "false", "no", "off")
-
-
-def _named(env: Mapping[str, str]) -> Profile | None:
-    """The profile MAILMIND_PROFILE names, `full` when it names none, None when it isn't a name."""
-    raw = env.get("MAILMIND_PROFILE", "").strip().lower()
-    if not raw:
-        return Profile.FULL
-    try:
-        return Profile(raw)
-    except ValueError:
-        return None
-
-
-def current(environ: Mapping[str, str] | None = None) -> Profile:
+def current(environ: Environ | None = None) -> Profile:
     """The process's profile, from the environment (os.environ unless given). A MAILMIND_PROFILE
     that names no profile counts as read-only here, so it fails safe; check() refuses it."""
-    env = os.environ if environ is None else environ
-    if env.get("MAILMIND_NOSYNC", "").strip().lower() not in _OFF:
+    if environment.NOSYNC.on(environ):
         return Profile.READ_ONLY
-    return _named(env) or Profile.READ_ONLY
+    return Profile(environment.PROFILE.value(environ))
 
 
-def check(environ: Mapping[str, str] | None = None) -> Profile:
+def check(environ: Environ | None = None) -> Profile:
     """current(), but a MAILMIND_PROFILE that names no profile raises ProfileError. The app's
     start calls it before it serves."""
-    env = os.environ if environ is None else environ
-    if _named(env) is None:
+    if environment.PROFILE.named(environ) is None:
         names = ", ".join(p.value for p in Profile)
-        raise ProfileError(f"MAILMIND_PROFILE must be one of {names}, not {env['MAILMIND_PROFILE']!r}")
-    return current(env)
+        raise ProfileError(f"{environment.PROFILE.name} must be one of {names}, not {environment.PROFILE.raw(environ)!r}")
+    return current(environ)
 
 
 def writes_allowed() -> bool:

@@ -6,14 +6,16 @@ legacy modules ask `current()` each time they open one of these files, never onc
 a replaced Settings reaches every module at once. That is how a test points the whole app at a
 temp directory.
 
-MAILMIND_HOME names the data directory. Unset, it is the repo root, where the data has always
-lived. Set, it must name an existing directory; it is never created here.
+MAILMIND_HOME (mailmind.platform.environment) names the data directory. Unset, it is the repo root,
+where the data has always lived. Set, it must name an existing directory; it is never created here.
 """
 import contextlib
 import os
 import threading
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+
+from mailmind.platform import environment
 
 # The repo root.
 SOURCE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,13 +63,12 @@ class Settings:
 def from_env(environ: Mapping[str, str] | None = None) -> Settings:
     """Settings from the environment (os.environ unless given). An empty MAILMIND_HOME counts as
     unset. A relative one is taken from the current directory, and a leading ~ is expanded."""
-    env = os.environ if environ is None else environ
-    raw = env.get("MAILMIND_HOME", "")
+    raw = environment.HOME.value(environ)
     if not raw:
         return Settings(home=SOURCE_DIR)
     home = os.path.abspath(os.path.expanduser(raw))
     if not os.path.isdir(home):
-        raise SettingsError(f"MAILMIND_HOME is not a directory: {home}")
+        raise SettingsError(f"{environment.HOME.name} is not a directory: {home}")
     return Settings(home=home)
 
 

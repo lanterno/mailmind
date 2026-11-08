@@ -3,7 +3,6 @@ gateway, each call's outcome noted for `status.Status`. With no API key AI is of
 is sent. The cost governor may hold a call back instead (HeldBack: OverLimit for one someone asked for at the daily limit,
 Deferred for background work).
 """
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -12,10 +11,11 @@ from mailmind.assistant.application.ports import Reply
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.schema import object_in
+from mailmind.platform import environment
 
 
 class Calls:
-    MODEL = os.environ.get("MAILMIND_MODEL")  # optional, e.g. claude-haiku-5-5
+    MODEL = environment.MODEL.value()  # optional, e.g. claude-haiku-5-5
 
     def __init__(self, gateway: Callable[[], Gateway], status: Status):
         self._gateway = gateway
@@ -45,7 +45,7 @@ class Calls:
     def reply_to(self, prompt: str, schema: dict[str, Any], effort: str | None = None, feature: str = "other") -> Reply:
         """The whole reply to what call_claude_json asks, for a caller that keeps which model served it and whether it
         was refused. It fails as that does."""
-        return self.noting(lambda: self._gateway().ask(prompt, None if os.environ.get("MAILMIND_NO_SCHEMA") else schema,
+        return self.noting(lambda: self._gateway().ask(prompt, None if environment.NO_SCHEMA.on() else schema,
                                                        feature=feature, model=self.MODEL, effort=effort))
 
     def call_claude_json(self, prompt: str, schema: dict[str, Any], effort: str | None = None,

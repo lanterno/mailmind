@@ -37,7 +37,7 @@ import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from mailmind.platform import settings
+from mailmind.platform import environment, settings
 
 ROOT = "mailmind"
 WITHHELD = "<withheld>"
@@ -204,7 +204,7 @@ def setup():
     """Open the log file in the data directory, on its first line (wiring.start), and
     read MAILMIND_LOG_LEVEL. Asked again it adds nothing, and under other Settings the file moves."""
     global _file
-    debug = os.environ.get("MAILMIND_LOG_LEVEL", "").strip().upper() == "DEBUG"
+    debug = environment.LOG_LEVEL.value() == "debug"
     _root.setLevel(logging.DEBUG if debug else logging.INFO)
     (_terminal.removeFilter if debug else _terminal.addFilter)(_redact)
     path = os.path.abspath(settings.current().log)

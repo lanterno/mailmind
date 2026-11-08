@@ -17,7 +17,6 @@ Politeness/safety:
 Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts (Bridge included only if explicitly listed)
          MAILMIND_WARM_FOLDERS=a@x,b@y      → only those accounts
 """
-import os
 import threading
 import time
 from collections.abc import Collection
@@ -25,6 +24,7 @@ from typing import Protocol
 
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, Stored
+from mailmind.platform import environment
 from mailmind.platform.logging import get_logger
 
 log = get_logger("warm")
@@ -43,12 +43,8 @@ class SyncFolder(Protocol):
 
 
 def _enabled(acct: Account) -> bool:
-    v = os.environ.get("MAILMIND_WARM_FOLDERS", "").strip()
-    if not v:
-        return False
-    if v.lower() in ("1", "all", "on", "true", "yes"):
-        return True
-    return acct["email"] in {x.strip() for x in v.split(",") if x.strip()}
+    which = environment.WARM_FOLDERS.value()
+    return which.every or acct["email"] in which.listed
 
 
 class Warming:
@@ -90,7 +86,7 @@ class Warming:
     def warm_tick(self, emails: Collection[str] | None = None) -> None:
         """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
         after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS enables the account."""
-        if not os.environ.get("MAILMIND_WARM_FOLDERS", "").strip():
+        if not environment.WARM_FOLDERS.given():
             return
         self._tick += 1
         for a in self._accounts.accounts():
