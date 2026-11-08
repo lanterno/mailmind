@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commitments, eventWhen, fromDigest, greeting, nameIn, needsNote, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";
 
-const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
+const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
 describe("greeting", () => {
   it.each([[3, "Working late"], [4, "Working late"], [5, "Good morning"], [11, "Good morning"], [12, "Good afternoon"], [17, "Good afternoon"], [18, "Good evening"], [23, "Good evening"]])(
@@ -26,15 +26,16 @@ describe("what the digest asks of you", () => {
     expect(needsNote(2)).toBe("2 need you");
   });
   it("drops a topic's mail the digest no longer holds, and keeps the group's order", () => {
-    const named = [3, 9, 1].map((key) => ({ key, folder: "INBOX" }));
+    const named = [3, 9, 1].map((key) => ({ key, folder: "INBOX", uid: key }));
     expect(topicItems(named, [item(1), item(3)]).map((x) => x.key)).toEqual([3, 1]);
   });
-  it("takes a topic's mail by its copy, not a copy of it in another folder", () => {
-    expect(topicItems([{ key: 3, folder: "Archive" }], [item(3)])).toEqual([]);
+  it("takes a topic's mail by its copy, not a copy of it in another folder or beside it", () => {
+    expect(topicItems([{ key: 3, folder: "Archive", uid: 3 }], [item(3)])).toEqual([]);
+    expect(topicItems([{ key: 3, folder: "INBOX", uid: 8 }], [item(3)])).toEqual([]);
   });
   it("makes a list row of an item, in no day section", () => {
     const row = fromDigest(item(7, { action: "  Reply ", from_name: "Lin", thread_id: "t1", ts: 100 }));
-    expect(row).toMatchObject({ id: "7:INBOX", key: 7, folder: "INBOX", action: "Reply", fromName: "Lin", threadId: "t1", ts: null, count: 1 });
+    expect(row).toMatchObject({ id: "7:7:INBOX", key: 7, folder: "INBOX", uid: 7, action: "Reply", fromName: "Lin", threadId: "t1", ts: null, count: 1 });
   });
 });
 

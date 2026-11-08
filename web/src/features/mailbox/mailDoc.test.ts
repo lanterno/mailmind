@@ -5,9 +5,9 @@ const theme: FrameTheme = { light: true, bg: "#111", panel: "#eee", ink: "#fff",
 const prefs: MailPrefs = { colors: "auto", font: "serif", lineHeight: 1.6, sizePx: 16 };
 
 describe("a body's URL", () => {
-  it("names the copy by its key and folder", () => expect(bodyUrl({ key: 7, folder: "INBOX" }, false)).toBe("/api/message/body.html?key=7&folder=INBOX&images=0"));
-  it("says when images are asked for", () => expect(bodyUrl({ key: 7, folder: "INBOX" }, true)).toBe("/api/message/body.html?key=7&folder=INBOX&images=1"));
-  it("takes a folder of any name", () => expect(bodyUrl({ key: 7, folder: "Lists/Yarn & Wool" }, false)).toBe("/api/message/body.html?key=7&folder=Lists%2FYarn%20%26%20Wool&images=0"));
+  it("names the copy by its key, folder and uid", () => expect(bodyUrl({ key: 7, folder: "INBOX", uid: 3 }, false)).toBe("/api/message/body.html?key=7&folder=INBOX&uid=3&images=0"));
+  it("says when images are asked for", () => expect(bodyUrl({ key: 7, folder: "INBOX", uid: 3 }, true)).toBe("/api/message/body.html?key=7&folder=INBOX&uid=3&images=1"));
+  it("takes a folder of any name", () => expect(bodyUrl({ key: 7, folder: "Lists/Yarn & Wool", uid: 3 }, false)).toBe("/api/message/body.html?key=7&folder=Lists%2FYarn%20%26%20Wool&uid=3&images=0"));
 });
 
 describe("a mail's look", () => {

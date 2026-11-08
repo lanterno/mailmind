@@ -621,13 +621,13 @@ describe("from the mail", () => {
   it("replies to the sender, and reply all copies the rest but you", async () => {
     const asked: string[] = [];
     const { m } = setup({ get: async (p: string) => { asked.push(p); return mail; } });
-    const c = (await m.reply({ key: 5, folder: "INBOX" }))!;
+    const c = (await m.reply({ key: 5, folder: "INBOX", uid: 2 }))!;
     expect(c.to.map((x) => x.v)).toEqual(["bea@example.test"]);
     expect(c.cc).toEqual([]);
     expect(c.subject).toBe("Re: Lunch");
     expect(c.origKey).toBe(5);
-    expect(asked).toEqual(["/api/message/body?key=5&folder=INBOX"]);
-    const d = (await m.reply({ key: 5, folder: "INBOX" }, true))!;
+    expect(asked).toEqual(["/api/message/body?key=5&folder=INBOX&uid=2"]);
+    const d = (await m.reply({ key: 5, folder: "INBOX", uid: 2 }, true))!;
     expect(d.cc.map((x) => x.v)).toEqual(["cy@example.test"]);
     expect(d.autoCc).toEqual(["cy@example.test"]);
   });
@@ -635,7 +635,7 @@ describe("from the mail", () => {
   it("refuses to reopen a draft while one is open, and says so", async () => {
     const { m, toasts, posted } = setup();
     m.open();
-    await m.editDraft({ key: 3, folder: "Drafts" });
+    await m.editDraft({ key: 3, folder: "Drafts", uid: 1 });
     expect(toasts).toEqual(["Close the message you’re writing first"]);
     expect(posted("/api/draft/resume")).toEqual([]);
   });
@@ -653,8 +653,8 @@ describe("from the mail", () => {
   it("reopens a draft with its text and files, and saves nothing until an edit", async () => {
     const { m, answer, posted } = setup();
     answer("/api/draft/resume", () => ({ ok: true, draft_id: 4, account: FROM, mode: "reply", subject: "Re: x", to: ["bea@example.test"], cc: [], bcc: ["cy@example.test"], text: "mine", tail_text: "\n\nquoted", in_reply_to: "<a@b>", references: "<a@b>", original_key: 2, participants: [], files: [{ filename: "f", content_type: "x", size: 1, b64: "" }], notes: { plain: true } }));
-    await m.editDraft({ key: 3, folder: "Drafts/Old & new" });
-    expect(posted("/api/draft/resume")).toEqual([{ key: 3, folder: "Drafts/Old & new" }]);
+    await m.editDraft({ key: 3, folder: "Drafts/Old & new", uid: 12 });
+    expect(posted("/api/draft/resume")).toEqual([{ key: 3, folder: "Drafts/Old & new", uid: 12 }]);
     const c = m.view.get()!;
     expect(c.origKey).toBe(2);
     expect(c.body).toBe("mine");
@@ -670,8 +670,8 @@ describe("from the mail", () => {
     const gone = vi.fn();
     const { m, answer } = setup({ draftGone: gone });
     answer("/api/draft/resume", () => { throw Object.assign(new Error("gone"), { status: 409 }); });
-    await m.editDraft({ key: 3, folder: "Drafts" });
-    expect(gone).toHaveBeenCalledWith({ key: 3, folder: "Drafts" });
+    await m.editDraft({ key: 3, folder: "Drafts", uid: 1 });
+    expect(gone).toHaveBeenCalledWith({ key: 3, folder: "Drafts", uid: 1 });
     expect(m.view.get()).toBeNull();
   });
 });
@@ -719,7 +719,7 @@ describe("the AI's words", () => {
     const { m, env } = setup({ get: async () => ({ ok: true, account: FROM, from_addr: "bea@example.test", subject: "x", text: "" }) });
     const gate = deferred<Json>();
     vi.mocked(env.post).mockImplementation(async (path: string) => (path === "/api/ai/draft-reply" ? gate.promise : { ok: true, items: {} }));
-    await m.quickReply({ key: 4, folder: "INBOX" }, "yes");
+    await m.quickReply({ key: 4, folder: "INBOX", uid: 1 }, "yes");
     expect(m.view.get()!.body).toBe("Yes, that works for me.");
     expect(m.view.get()!.dirty).toBe(false);
     m.edit("body", "Yes, but later.");
@@ -737,10 +737,12 @@ describe("the AI's words", () => {
 
   it("a stale draft ahead is never put in the box", async () => {
     const forget = vi.fn();
-    const { m, toasts, answer } = setup({ get: async (p: string) => (p.includes("draft-ahead") ? { ok: true, status: "none" } : { ok: true, account: FROM, from_addr: "bea@example.test", subject: "x" }) });
+    const asked: string[] = [];
+    const { m, toasts, answer } = setup({ get: async (p: string) => { asked.push(p); return p.includes("draft-ahead") ? { ok: true, status: "none" } : { ok: true, account: FROM, from_addr: "bea@example.test", subject: "x" }; } });
     answer("/api/ai/draft-reply", () => ({ ok: true, body: "fresh" }));
-    await m.openDraftAhead({ key: 4, folder: "INBOX" }, forget);
+    await m.openDraftAhead({ key: 4, folder: "INBOX", uid: 6 }, forget);
     await flush();
+    expect(asked).toEqual(["/api/message/body?key=4&folder=INBOX&uid=6", "/api/ai/draft-ahead?key=4&folder=INBOX&uid=6&peek=1"]);
     expect(forget).toHaveBeenCalled();
     expect(toasts[0]).toMatch(/moved on/);
     expect(m.view.get()!.body).toBe("fresh");

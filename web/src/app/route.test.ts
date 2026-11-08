@@ -4,9 +4,9 @@ import { parseRoute, pathOf, sourceKey, type Route } from "./route";
 const routes: Route[] = [
   { source: null, opened: null },
   { source: { kind: "folder", account: "ada@example.test", folder: "INBOX" }, opened: null },
-  { source: { kind: "folder", account: "ada@example.test", folder: "Lists/Yarn & Wool" }, opened: { kind: "message", key: 12, folder: "Lists/Yarn & Wool" } },
-  { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", account: "ada@example.test", key: 3, folder: "Sent Items" } },
-  { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX" } },
+  { source: { kind: "folder", account: "ada@example.test", folder: "Lists/Yarn & Wool" }, opened: { kind: "message", key: 12, folder: "Lists/Yarn & Wool", uid: 40 } },
+  { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", account: "ada@example.test", key: 3, folder: "Sent Items", uid: 7 } },
+  { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX", uid: 1 } },
   { source: { kind: "search", q: "from:lin is:unread & more", account: "ada@example.test" }, opened: null },
 ];
 
@@ -16,11 +16,17 @@ describe("the URL", () => {
     expect(parseRoute(u.pathname, u.search)).toEqual(route);
   });
   it("ignores an open that isn't a copy", () => {
-    expect(parseRoute("/all", "?key=abc&folder=INBOX").opened).toBeNull();
-    expect(parseRoute("/all", "?key=-2&folder=INBOX").opened).toBeNull();
-    expect(parseRoute("/all", "?key=1.5&folder=INBOX").opened).toBeNull();
-    expect(parseRoute("/all", "?key=9").opened).toBeNull();
-    expect(parseRoute("/all", "?key=9&folder=").opened).toBeNull();
+    expect(parseRoute("/all", "?key=abc&folder=INBOX&uid=1").opened).toBeNull();
+    expect(parseRoute("/all", "?key=-2&folder=INBOX&uid=1").opened).toBeNull();
+    expect(parseRoute("/all", "?key=1.5&folder=INBOX&uid=1").opened).toBeNull();
+    expect(parseRoute("/all", "?key=9&uid=1").opened).toBeNull();
+    expect(parseRoute("/all", "?key=9&folder=&uid=1").opened).toBeNull();
+  });
+  it("opens nothing without the copy's uid, or with one that isn't a whole number", () => {
+    expect(parseRoute("/all", "?key=9&folder=INBOX").opened).toBeNull();
+    for (const uid of ["", "0", "-1", "1.5", "x", " 1", "01", "99999999999999999999"])
+      expect(parseRoute("/all", `?key=9&folder=INBOX&uid=${encodeURIComponent(uid)}`).opened).toBeNull();
+    expect(parseRoute("/all", "?key=9&folder=INBOX&uid=4").opened).toEqual({ kind: "message", key: 9, folder: "INBOX", uid: 4 });
   });
   it("opens nothing from a link that named a row by its number", () => {
     expect(parseRoute("/all", "?m=12").opened).toBeNull();
