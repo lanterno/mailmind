@@ -14,7 +14,7 @@ Politeness/safety:
   • Runs INSIDE sync_guarded's single-flight, AFTER the INBOX sync, so it never delays new mail.
   • A 0.5s pause between folders; each folder opens its own fresh connection (never the pool).
 
-Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts (Bridge included only if explicitly listed)
+Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts, Proton Bridge included
          MAILMIND_WARM_FOLDERS=a@x,b@y      → only those accounts
 """
 import threading
