@@ -97,11 +97,13 @@ def _save(account=ACCT, draft_id=None, **kw):
     return res
 
 
-def _original(uid=7):
+def _original(uid=7, reply_to=None):
     """An INBOX message from Bo, its body (text, HTML and a PDF) stored as if already opened, so
     replying and forwarding never reach for IMAP. Returns its pk."""
     m = EmailMessage()
     m["From"], m["To"], m["Cc"] = "Bo Park <bo@example.test>", ACCT, "cy@example.test"
+    if reply_to:
+        m["Reply-To"] = reply_to
     m["Subject"], m["Date"] = "Plans", "Mon, 2 Feb 2026 09:00:00 +0000"
     m["Message-ID"], m["References"] = "<orig1@example.test>", "<root@example.test>"
     m.set_content("Shall we meet Saturday?\nThe map is attached.\n")
@@ -598,6 +600,20 @@ def test_reply_draft_reopens_with_quote_files_bcc_and_thread(calls):
     assert r["original_key"] == _key(opk) and r["participants"] == ["bo@example.test", ACCT, "cy@example.test"], r
     assert [(f["filename"], base64.b64decode(f["b64"])) for f in r["files"]] == [("notes.txt", b"bring water")], r["files"]
     assert r["notes"] == {"inline": 0, "bcc_dropped": 0, "plain": False}, r["notes"]
+
+
+def test_a_reopened_reply_says_where_its_original_asked_replies_to_go(calls):
+    opk = _original(reply_to="Plans Desk <desk@elsewhere.example.test>")
+    pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, to=["desk@elsewhere.example.test"], text="OK")
+    r, code = _resume(pk)
+    assert code == 200, (code, r)
+    assert (r["reply_to"], r["original_from"]) == ("Plans Desk <desk@elsewhere.example.test>", "bo@example.test"), r
+
+
+def test_a_reopened_draft_with_no_original_says_no_reply_to(calls):
+    pk, _ = _saved_and_synced(calls, text="Just a note")
+    r, code = _resume(pk)
+    assert code == 200 and (r["reply_to"], r["original_from"]) == ("", ""), r
 
 
 def test_forward_draft_reopens_with_its_files_as_chips(calls):

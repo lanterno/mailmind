@@ -14,9 +14,11 @@
     "plain": false
    },
    "ok": true,
+   "original_from": "",
    "original_key": null,
    "participants": [],
    "references": "",
+   "reply_to": "",
    "split": "whole",
    "subject": "Notes for the review",
    "tail_text": "",
@@ -61,12 +63,14 @@
     "plain": true
    },
    "ok": true,
+   "original_from": "ivo@harbor.example.test",
    "original_key": 18,
    "participants": [
     "ivo@harbor.example.test",
     "bea@example.test"
    ],
    "references": "<contract-v2@harbor.example.test>",
+   "reply_to": "",
    "split": "whole",
    "subject": "Re: Contract draft v2",
    "tail_text": "",
