@@ -167,13 +167,20 @@ class Folders:
         except KeyError:
             raise Refused("unknown account")
         out = self._folders_list_cached(account, acct)
+        return {"ok": True, "account": account, "folders": out, **self._view_counts(account)}
+
+
+    def _view_counts(self, accounts: str | list[str]) -> dict[str, int]:
+        """How many rows each view that isn't a folder holds, for one account or across a list of them."""
         with self._uow.read() as c:
-            snoozed = self._store.snoozed_count(c, account)
-            muted = self._attention.muted_count(c, account)
-            waiting = self._attention.waiting_count(c, account)
-            replylater = self._attention.replylater_count(c, account)
-        return {"ok": True, "account": account, "folders": out, "snoozed": snoozed,
-                "muted": muted, "waiting": waiting, "replylater": replylater}
+            return {"snoozed": self._store.snoozed_count(c, accounts), "muted": self._attention.muted_count(c, accounts),
+                    "waiting": self._attention.waiting_count(c, accounts),
+                    "replylater": self._attention.replylater_count(c, accounts)}
+
+
+    def across_accounts(self) -> dict[str, Any]:
+        """The views that aren't folders, counted over every account, for the rail on All inboxes. Pure-local."""
+        return {"ok": True, **self._view_counts([str(a["email"]) for a in self._accounts.accounts()])}
 
 
     def _folder_sync(self, account: AccountId, folder: FolderName, full: bool) -> threading.Event:

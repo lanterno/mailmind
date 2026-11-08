@@ -801,22 +801,29 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
                "AND mu.thread_id={t}.thread_id)")   # mirror the snoozed exclusion
 
 
-def snoozed_rows(c, account, limit, offset):
-    """Every snoozed message in the account, soonest wake first."""
+def _of_accounts(accounts):
+    """SQL and params for: `m` is of this one account, or of one of this list of them. An empty list matches nothing."""
+    named = [accounts] if isinstance(accounts, str) else list(accounts)
+    return f"m.account IN ({','.join('?' for _ in named)})", named
+
+
+def snoozed_rows(c, accounts, limit, offset):
+    """Every snoozed message in the account, or in each of a list of them, soonest wake first."""
+    among, named = _of_accounts(accounts)
     return c.execute(
-        """SELECT m.pk, m.message_key, m.uid, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
+        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   z.until AS snoozed_until, s.importance, s.category, s.action
            FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder
            LEFT JOIN assessments s ON s.message_key=m.message_key
-           WHERE m.account=? AND m.pending_removal IS NULL
-           ORDER BY z.until ASC, m.folder, m.ts, m.pk LIMIT ? OFFSET ?""", (account, limit, offset)).fetchall()
+           WHERE {among} AND m.pending_removal IS NULL
+           ORDER BY z.until ASC, m.folder, m.ts, m.pk LIMIT ? OFFSET ?""", (*named, limit, offset)).fetchall()
 
 
-def snoozed_count(c, account):
+def snoozed_count(c, accounts):
+    among, named = _of_accounts(accounts)
     return c.execute("SELECT COUNT(*) FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder "
-                     "WHERE m.account=? AND m.pending_removal IS NULL",
-                     (account,)).fetchone()[0]
+                     f"WHERE {among} AND m.pending_removal IS NULL", named).fetchone()[0]
 
 
 def _listed(where):

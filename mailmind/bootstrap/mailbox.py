@@ -248,33 +248,33 @@ class _Attention:
         from mailmind.bootstrap import attention
         return attention.book.resolve_followups(c, account)
 
-    def muted_count(self, c, account):
+    def muted_count(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.muted_count(c, account)
+        return attention.book.muted_count(c, accounts)
 
-    def waiting_count(self, c, account):
+    def waiting_count(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.waiting_count(c, account)
+        return attention.book.waiting_count(c, accounts)
 
-    def replylater_count(self, c, account):
+    def replylater_count(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.replylater_count(c, account)
+        return attention.book.replylater_count(c, accounts)
 
-    def list_muted(self, c, account):
+    def list_muted(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.list_muted(c, account)
+        return attention.book.list_muted(c, accounts)
 
-    def list_waiting(self, c, account):
+    def list_waiting(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.list_waiting(c, account)
+        return attention.book.list_waiting(c, accounts)
 
     def waiting_on_others(self, c, accounts, limit):
         from mailmind.bootstrap import attention
         return attention.book.waiting_on_others(c, accounts, limit)
 
-    def list_replylater(self, c, account):
+    def list_replylater(self, c, accounts):
         from mailmind.bootstrap import attention
-        return attention.book.list_replylater(c, account)
+        return attention.book.list_replylater(c, accounts)
 
     def wake_due(self):
         from mailmind.bootstrap import attention

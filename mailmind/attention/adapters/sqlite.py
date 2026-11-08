@@ -81,23 +81,31 @@ def unread_in_muted_threads(c, account):
                      (account, account)).fetchall()
 
 
-def list_muted(c, account):
+def _in_accounts(alias, accounts):
+    """SQL and params for: `alias`'s row is of this one account, or of one of this list of them. An empty list matches nothing."""
+    named = [accounts] if isinstance(accounts, str) else list(accounts)
+    return f"{alias}.account IN ({','.join('?' for _ in named)})", named
+
+
+def list_muted(c, accounts):
     """One representative (latest) row per muted thread, for the Muted virtual folder."""
+    among, named = _in_accounts("m", accounts)
     return c.execute(
         f"""SELECT m.*, {count_sql()} AS thread_count
            FROM messages m JOIN muted mu ON mu.account=m.account AND mu.thread_id=m.thread_id
-           WHERE m.account=? AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account
+           WHERE {among} AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account
                           AND m2.thread_id=m.thread_id ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
-           ORDER BY m.ts DESC""", (account,)).fetchall()
+           ORDER BY m.ts DESC""", named).fetchall()
 
 
-def muted_count(c, account):
+def muted_count(c, accounts):
     # count only muted threads that still have live messages, so the rail badge matches the
-    # Muted view (an orphaned muted row whose messages were pruned shows in neither).
+    # Muted view (an orphaned muted row whose messages were pruned shows in neither). A row of
+    # `muted` is one thread of one account: two accounts can hold the same thread id.
+    among, named = _in_accounts("mu", accounts)
     return c.execute(
-        "SELECT COUNT(DISTINCT mu.thread_id) FROM muted mu "
-        "JOIN messages m ON m.account=mu.account AND m.thread_id=mu.thread_id "
-        "WHERE mu.account=?", (account,)).fetchone()[0]
+        f"SELECT COUNT(*) FROM muted mu WHERE {among} "
+        "AND EXISTS(SELECT 1 FROM messages m WHERE m.account=mu.account AND m.thread_id=mu.thread_id)", named).fetchone()[0]
 
 
 # ----------------------------------------------------------- follow-up nudges
@@ -210,25 +218,27 @@ def clear_replylater(c, account, thread_id):
         c.execute("DELETE FROM followups WHERE account=? AND thread_id=?", (account, thread_id))
 
 
-def list_replylater(c, account):
+def list_replylater(c, accounts):
     """One representative (latest) message per reply-later thread, most-recently-pinned first (a stack).
     A dismissed one has left it, until it is pinned again."""
+    among, named = _in_accounts("f", accounts)
     return c.execute(
         f"""SELECT m.*, f.created_at AS f_created,
                   {count_sql()} AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
-           WHERE f.account=? AND f.kind='replylater' AND f.state='due'
+           WHERE {among} AND f.kind='replylater' AND f.state='due'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
                        ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
-           ORDER BY f.created_at DESC""", (account,)).fetchall()
+           ORDER BY f.created_at DESC""", named).fetchall()
 
 
-def replylater_count(c, account):
+def replylater_count(c, accounts):
     # match list_replylater's messages JOIN, so the badge can't exceed the list (a reply-later row
     # whose thread has no surviving message rows after reconcile is not shown, so don't count it)
-    return c.execute("SELECT COUNT(*) FROM followups f WHERE f.account=? AND f.kind='replylater' AND f.state='due' "
+    among, named = _in_accounts("f", accounts)
+    return c.execute(f"SELECT COUNT(*) FROM followups f WHERE {among} AND f.kind='replylater' AND f.state='due' "
                      "AND EXISTS(SELECT 1 FROM messages m WHERE m.account=f.account AND m.thread_id=f.thread_id)",
-                     (account,)).fetchone()[0]
+                     named).fetchone()[0]
 
 
 def dismiss_followup(c, account, thread_id, when):
@@ -239,16 +249,17 @@ def dismiss_followup(c, account, thread_id, when):
                   (f.state, f.resolved_at, account, thread_id))
 
 
-def list_waiting(c, account):
+def list_waiting(c, accounts):
     """One representative (latest) message per DUE followup thread, soonest-due first."""
+    among, named = _in_accounts("f", accounts)
     return c.execute(
         f"""SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
                   {count_sql()} AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
-           WHERE f.account=? AND f.state='due' AND f.kind!='replylater'
+           WHERE {among} AND f.state='due' AND f.kind!='replylater'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
                        ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
-           ORDER BY f.due_ts DESC""", (account,)).fetchall()
+           ORDER BY f.due_ts DESC""", named).fetchall()
 
 
 def waiting_on_others(c, accounts, limit):
@@ -263,11 +274,12 @@ def waiting_on_others(c, accounts, limit):
            ORDER BY m.ts, m.pk LIMIT ?""" % ",".join("?" for _ in accounts), (*accounts, limit)).fetchall()
 
 
-def waiting_count(c, account):
+def waiting_count(c, accounts):
+    # a row of `followups` is one thread of one account: two accounts can hold the same thread id
+    among, named = _in_accounts("f", accounts)
     return c.execute(
-        "SELECT COUNT(DISTINCT f.thread_id) FROM followups f "
-        "JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
-        "WHERE f.account=? AND f.state='due' AND f.kind!='replylater'", (account,)).fetchone()[0]
+        f"SELECT COUNT(*) FROM followups f WHERE {among} AND f.state='due' AND f.kind!='replylater' "
+        "AND EXISTS(SELECT 1 FROM messages m WHERE m.account=f.account AND m.thread_id=f.thread_id)", named).fetchone()[0]
 
 
 def _among(accounts):

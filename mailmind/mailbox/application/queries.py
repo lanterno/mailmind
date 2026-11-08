@@ -47,7 +47,7 @@ def _waiting_item(r: Row) -> dict[str, Any]:
         "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
         "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
         "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-        "ts": r["ts"], "count": r["thread_count"], "waiting": True,
+        "ts": r["ts"], "count": r["thread_count"], "waiting": True, "account": r["account"],
         "waiting_label": label, "kind": r["f_kind"],
         "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
     }
@@ -64,6 +64,10 @@ class Queries:
     def _emails(self) -> list[str]:
         return [str(a["email"]) for a in self._accounts.accounts()]
 
+    def _over(self, account: str | None) -> str | list[str]:
+        """What a view that isn't a folder reads: the account named, or with none named every account, as the Inboxes' list does."""
+        return account or self._emails()
+
     def pk_of_copy(self, key: int, folder: str, uid: int | None = None) -> int | None:
         """The row the page's copy, a message's key, a folder and the copy's uid there, is now, or None if that copy isn't
         there (`StoredMail.copy_pk`). A pk is not stable: the page never holds one, and asks this at each request."""
@@ -76,11 +80,12 @@ class Queries:
         with self._uow.read() as c:
             return self._store.message_pk(c, MessageKey(key), None if folder is None else FolderName(folder), uid)
 
-    def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
-        """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
+    def snoozed_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
+        """The 'Snoozed' virtual view: every snoozed message in the account, or in every account, soonest wake first."""
+        accounts = self._over(account)
         with self._uow.read() as c:
-            rows = self._store.snoozed_rows(c, account, limit, offset)
-            total = self._store.snoozed_count(c, account)
+            rows = self._store.snoozed_rows(c, accounts, limit, offset)
+            total = self._store.snoozed_count(c, accounts)
         items = [{
             "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
             "from_name": r["from_name"] or r["from_addr"],
@@ -88,17 +93,17 @@ class Queries:
             "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
             "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
             "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-            "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
+            "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"], "account": r["account"],
         } for r in rows]
         return {"ok": True, "account": account, "folder": "__snoozed__", "items": items, "snoozed": True,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def muted_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
+    def muted_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
         """The 'Muted' virtual view: one row per muted thread (its latest message), so the user
         can find + unmute. Pure-local read (no IMAP)."""
         with self._uow.read() as c:
-            all_rows = self._attention.list_muted(c, account)
+            all_rows = self._attention.list_muted(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
@@ -108,16 +113,16 @@ class Queries:
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
             "seen": True, "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
             "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-            "ts": r["ts"], "count": r["thread_count"], "muted": True,
+            "ts": r["ts"], "count": r["thread_count"], "muted": True, "account": r["account"],
         } for r in rows]
         return {"ok": True, "account": account, "folder": "__muted__", "items": items, "muted": True,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def waiting_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
+    def waiting_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
         """The 'Waiting' virtual view: one row per due follow-up thread (commitments). Pure-local."""
         with self._uow.read() as c:
-            all_rows = self._attention.list_waiting(c, account)
+            all_rows = self._attention.list_waiting(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [_waiting_item(r) for r in rows]
@@ -130,13 +135,13 @@ class Queries:
         emails = self._emails()
         with self._uow.read() as c:
             rows = self._attention.waiting_on_others(c, emails, limit)
-        return {"ok": True, "items": [{**_waiting_item(r), "account": r["account"]} for r in rows]}
+        return {"ok": True, "items": [_waiting_item(r) for r in rows]}
 
 
-    def replylater_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
+    def replylater_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
         """The 'Reply Later' virtual view: one row per pinned thread, newest pin first (a stack)."""
         with self._uow.read() as c:
-            all_rows = self._attention.list_replylater(c, account)
+            all_rows = self._attention.list_replylater(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
@@ -146,14 +151,15 @@ class Queries:
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
             "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
             "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-            "ts": r["ts"], "count": r["thread_count"], "replylater": True,
+            "ts": r["ts"], "count": r["thread_count"], "replylater": True, "account": r["account"],
             "waiting_label": "Reply later",
         } for r in rows]
         return {"ok": True, "account": account, "folder": "__replylater__", "items": items, "replylater": True,
                 "total": total, "offset": offset, "has_more": offset + len(items) < total}
 
 
-    def messages_in(self, account: AccountId, folder: FolderName, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
+    def messages_in(self, account: AccountId | None, folder: FolderName, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
+        """A list by folder. A view that isn't a folder reads every account when none is named; a real folder is one account's."""
         if folder == "__snoozed__":
             return self.snoozed_in(account, offset, limit)
         if folder == "__muted__":
@@ -162,6 +168,9 @@ class Queries:
             return self.waiting_in(account, offset, limit)
         if folder == "__replylater__":
             return self.replylater_in(account, offset, limit)
+        if account is None:
+            return {"ok": True, "account": None, "folder": folder, "items": [], "grouped": group, "total": 0, "offset": offset,
+                    "has_more": False}
         scan: dict[str, bool] = self._folders.on_open(account, folder) if offset == 0 else {}
         with self._uow.read() as c:
             if group:

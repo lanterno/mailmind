@@ -47,6 +47,7 @@ from mailmind.http.schemas.mailbox import (
     Thread,
     ThreadArgs,
     Undone,
+    ViewCounts,
     WaitingListing,
     WaitingOnOthers,
 )
@@ -82,6 +83,10 @@ def router(mailbox):
         if not args.account:
             raise Refused("account required", folders=[])
         return mailbox.folders.of_account(args.account)
+
+    @r.get("/api/folders/across", responses=answers(ViewCounts))
+    def folders_across():
+        return mailbox.folders.across_accounts()
 
     @r.get("/api/messages", responses=answers(FolderListing | SnoozedListing | MutedListing | WaitingListing | ReplyLaterListing))
     def messages(args: Annotated[FolderListArgs, Query()]):

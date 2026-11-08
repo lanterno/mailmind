@@ -14,7 +14,7 @@ class ListArgs(QueryArgs):
 
 
 class FolderListArgs(ListArgs):
-    account: str | None = None
+    account: str | None = None              # left out, a view that isn't a folder reads every account
     folder: str = "INBOX"
 
 
@@ -136,12 +136,14 @@ class FolderRow(_Listed, _Verdict):
 
 class SnoozedRow(_Listed, _Verdict):
     snoozed_until: int
+    account: str
 
 
 class _ThreadRow(_Listed):
     """One row a thread, its latest message."""
     ts: int | None
     count: int
+    account: str
 
 
 class MutedRow(_ThreadRow):
@@ -158,10 +160,6 @@ class WaitingRow(_ThreadRow):
     waiting_label: str
     kind: str
     to: str
-
-
-class WaitingOnOthersRow(WaitingRow):
-    account: str
 
 
 class ThreadMessage(MessageRow):
@@ -219,7 +217,7 @@ class InboxesListing(_Page):
 
 class WaitingOnOthers(Answer):
     ok: Literal[True]
-    items: list[WaitingOnOthersRow]
+    items: list[WaitingRow]
 
 
 class Thread(Answer):
@@ -238,14 +236,18 @@ class RailFolder(Answer):
     total: int
 
 
-class Folders(Answer):
+class ViewCounts(Answer):
+    """How many rows each view that isn't a folder holds."""
     ok: Literal[True]
-    account: str
-    folders: list[RailFolder]
     snoozed: int
     muted: int
     waiting: int
     replylater: int
+
+
+class Folders(ViewCounts):
+    account: str
+    folders: list[RailFolder]
 
 
 class FoldersRefused(Failure):
