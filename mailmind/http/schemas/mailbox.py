@@ -386,6 +386,7 @@ class AttachmentPart(Answer):
     size: int
     content_id: str | None
     is_inline: int
+    travels: bool                       # whether a forward takes it along
 
 
 class Party(Answer):

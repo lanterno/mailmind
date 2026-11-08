@@ -33,6 +33,7 @@ class Attachment(TypedDict):
     size: int
     content_id: str | None
     is_inline: int
+    travels: bool                # a forward takes it along, as `travels` says
 
 
 class Parsed(TypedDict):
@@ -171,6 +172,14 @@ def holds_no_parts(part: AnyMessage) -> bool:
     return part.get_content_maintype() == "multipart" and not part.is_multipart()
 
 
+def travels(part: AnyMessage) -> bool:
+    """Whether a forward takes this part along: a file someone attached, or an attached email. A picture the text shows by
+    its Content-ID stays with the text, and so does a named part marked inline."""
+    disp = (part.get_content_disposition() or "").lower()
+    return (disp == "attachment" or part.get_content_type() == "message/rfc822"
+            or bool(part.get_filename() and disp != "inline" and not _hdr(part, "Content-ID").strip("<>")))
+
+
 def _hdr(msg: AnyMessage, name: str) -> str:
     try:
         v = msg.get(name)
@@ -216,7 +225,7 @@ def parse(raw_bytes: bytes) -> Parsed:
                 "part_id": str(idx),
                 "filename": _decode_fn(filename) or ("message.eml" if ctype == "message/rfc822" else f"part-{idx}"),
                 "content_type": ctype, "size": len(payload),
-                "content_id": cid or None, "is_inline": int(disp == "inline" or bool(cid)),
+                "content_id": cid or None, "is_inline": int(disp == "inline" or bool(cid)), "travels": travels(part),
             })
             continue
         if cid:  # an inline image referenced by cid: — record it, don't inline the body
@@ -224,7 +233,7 @@ def parse(raw_bytes: bytes) -> Parsed:
             attachments.append({
                 "part_id": str(idx), "filename": _decode_fn(filename) or f"inline-{idx}",
                 "content_type": ctype, "size": len(payload),
-                "content_id": cid, "is_inline": 1,
+                "content_id": cid, "is_inline": 1, "travels": False,
             })
             continue
         if ctype == "text/plain" and text is None:
@@ -239,7 +248,7 @@ def parse(raw_bytes: bytes) -> Parsed:
                        or a["filename"].lower().endswith(".ics") for a in attachments):
         attachments.append({
             "part_id": str(cal[0]), "filename": "invite.ics", "content_type": "text/calendar",
-            "size": len(decoded(cal[1]) or b""), "content_id": None, "is_inline": 1,
+            "size": len(decoded(cal[1]) or b""), "content_id": None, "is_inline": 1, "travels": False,
         })
     return {
         "text": text, "html": html, "attachments": attachments,

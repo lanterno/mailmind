@@ -56,8 +56,8 @@ def take_along(have: list[Attachment], found: list[Attachment]) -> list[Attachme
 
 
 def extract(raw: bytes | None) -> list[Attachment]:
-    """Pull real attachment parts (filename+bytes) out of a stored RFC822 message,
-    for re-attaching on forward. Inline cid images are skipped."""
+    """Pull real attachment parts (filename+bytes) out of a stored RFC822 message, for re-attaching on forward: those
+    `mime.travels` names, up to the budget."""
     try:
         msg = email.message_from_bytes(raw or b"", policy=email.policy.default)
     except Exception:
@@ -65,17 +65,13 @@ def extract(raw: bytes | None) -> list[Attachment]:
     out: list[Attachment] = []
     total = 0
     for part in mime.walk(msg):
-        if part.get_content_maintype() == "multipart":
+        if part.get_content_maintype() == "multipart" or not mime.travels(part):
             continue
-        disp = (part.get_content_disposition() or "").lower()
-        fn = part.get_filename()
-        cid = (part.get("Content-ID") or "").strip()
-        attached_email = part.get_content_type() == "message/rfc822"
-        if disp == "attachment" or (fn and disp != "inline" and not cid) or attached_email:
-            data = mime.part_bytes(part)
-            total += len(data)
-            if total > limits.MAX_ATTACH_BYTES:
-                break
-            out.append({"filename": fn or ("message.eml" if attached_email else "attachment"),
-                        "content_type": part.get_content_type(), "data": data})
+        data = mime.part_bytes(part)
+        total += len(data)
+        if total > limits.MAX_ATTACH_BYTES:
+            break
+        ctype = part.get_content_type()
+        out.append({"filename": part.get_filename() or ("message.eml" if ctype == "message/rfc822" else "attachment"),
+                    "content_type": ctype, "data": data})
     return out
