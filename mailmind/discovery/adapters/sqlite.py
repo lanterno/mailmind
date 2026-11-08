@@ -171,11 +171,14 @@ class StoredMail:
                              f"WHERE instr(from_addr, '@') > 0 AND {domain} LIKE ? "
                              "GROUP BY domain ORDER BY n DESC, domain LIMIT 3", (f"%{q}%",)).fetchall()
 
+    # A message counts once however many folders hold a copy of it, as Gmail's All Mail does.
+    _TALLY = ("SELECT COUNT(DISTINCT message_key) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
+              "COUNT(DISTINCT CASE WHEN answered=1 THEN message_key END) replied "
+              "FROM messages WHERE lower(from_addr)=?")
+
     def card(self, a):
         with _uow.read() as c:
-            agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
-                            "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
-                            "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
+            agg = c.execute(self._TALLY, (a,)).fetchone()
             accts = [r[0] for r in c.execute(
                 "SELECT account, COUNT(*) k FROM messages WHERE lower(from_addr)=? GROUP BY account "
                 "ORDER BY k DESC", (a,)).fetchall()]
