@@ -717,6 +717,37 @@ def test_a_folder_still_on_its_first_read_says_so_then_fills_in_by_itself(page, 
     clean(page)
 
 
+def test_a_first_read_counts_what_it_has_read_beside_the_sentence_and_goes_when_it_is_done(page, world, monkeypatch):
+    from gate import held_elsewhere
+    from mailmind.bootstrap import mailbox
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+    opened(page)
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    stored = {"total": 100}
+
+    def digest(route):
+        answer = route.fetch(headers={**route.request.headers, "sec-fetch-site": "same-origin"}).json()
+        answer["stats"]["total"] = stored["total"]
+        route.fulfill(json=answer)
+    page.pw.route("**/api/digest", digest)
+    count, sentence = page.locator("#firstReadCount"), page.locator("#rows [role=status]")
+    with held_elsewhere(w.ADA):
+        with page.pw.expect_response("**/api/digest"):   # where it counts from
+            page.locator('#folderrail .frow[data-folder="Junk"]').click()
+        expect(sentence).to_have_text("Reading this folder for the first time…")
+        expect(count).to_have_count(0)
+        stored["total"] = 101
+        page.clock.run_for(3100)
+        expect(count).to_have_text("Read 1 message so far…")
+        stored["total"] = 1337
+        page.clock.run_for(3100)
+        expect(count).to_have_text("Read 1,237 messages so far…")
+        expect(sentence).to_have_text("Reading this folder for the first time…")   # a screen reader hears the sentence, not each number
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
+    expect(count).to_have_count(0)
+    clean(page)
+
+
 def test_a_folder_whose_first_read_fails_says_so_and_retry_reads_it(page, world):
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
