@@ -113,7 +113,7 @@ export type Opened = Exclude<GetAnswers["/api/message/body"], { prefetched: bool
 
 export const useBody = (copy: Copy | null) =>
   useQuery({
-    queryKey: ["body", copy?.key, copy?.folder],
+    queryKey: ["body", copy?.key, copy?.folder, copy?.uid],
     queryFn: () => get(`/api/message/body?${copyQuery(copy!)}`) as Promise<Opened>,
     enabled: copy !== null,
     staleTime: 60_000,
