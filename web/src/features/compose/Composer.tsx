@@ -12,8 +12,16 @@ import { Icon } from "../../lib/ui/Icon";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
 import { QuoteFrame } from "../mailbox";
 import { composing, draftTone, setDraftTone } from "./compose";
+import { cleanLinks } from "./linkClean";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";
+
+// A paste whose links carry tracking goes in without it, through the box's own edit so Undo still takes it back. Should the
+// browser not do that, the paste goes in as it came.
+function pasteClean(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+  const pasted = e.clipboardData.getData("text/plain"), clean = cleanLinks(pasted);
+  if (clean !== pasted && document.execCommand("insertText", false, clean)) e.preventDefault();
+}
 
 const TITLES: Record<ComposeMode, string> = { new: "New message", reply: "Reply", replyall: "Reply all", forward: "Forward" };
 // The server's rewrites, in the row's order and words.
@@ -376,7 +384,7 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
             {c.rwUndo && <button type="button" className="airw air-undo" id="cmpRwUndo" onClick={composing.rewriteUndo}>↩ Undo</button>}
           </div>
         )}
-        <textarea id="cmpBody" className="cmp-textarea" placeholder="Write your message…" aria-label="message body" value={c.body} onChange={(e) => composing.edit("body", e.target.value)} />
+        <textarea id="cmpBody" className="cmp-textarea" placeholder="Write your message…" aria-label="message body" value={c.body} onChange={(e) => composing.edit("body", e.target.value)} onPaste={pasteClean} />
         <Quote key={c.id} c={c} />
         <div className="cmp-attach" id="cmpAttach" aria-live="polite">
           {c.attachments.map((a, i) => (
