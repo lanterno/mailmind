@@ -91,7 +91,7 @@ def test_a_document_says_where_to_download_it_and_says_little_as_nothing():
     doc = page([row(pk=7, part_id="1.2 a", size=None, from_name=None, subject=None)])["docs"][0]
     assert doc == {"key": 7, "folder": "INBOX", "uid": 7, "part_id": "1.2 a", "filename": "plan.pdf", "kind": "pdf", "size": 0, "account": "ada@example.test",
                    "from": "lin@example.test", "subject": "(no subject)", "when": "when:then",
-                   "url": "/api/message/attachment?key=7&folder=INBOX&uid=7&part_id=1.2+a"}
+                   "url": "/api/message/attachment?key=7&folder=INBOX&uid=7&part_id=1.2+a", "preview": None}
 
 
 def test_a_sender_with_no_name_or_address_is_empty():
