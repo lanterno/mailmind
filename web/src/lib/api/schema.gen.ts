@@ -907,6 +907,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/message/attachment/preview.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attachment Preview */
+        get: operations["attachment_preview_api_message_attachment_preview_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/message/body": {
         parameters: {
             query?: never;
@@ -2592,11 +2609,15 @@ export interface components {
             folder: string;
             /** From */
             from: string;
+            /** Group */
+            group: string;
             /** Key */
             key: number;
             kind: components["schemas"]["DocumentKind"];
             /** Part Id */
             part_id: string;
+            /** Preview */
+            preview: string | null;
             /** Size */
             size: number;
             /** Subject */
@@ -2609,7 +2630,18 @@ export interface components {
             when: string;
         };
         /** @enum {string} */
+        DocumentGrouping: "sender" | "type";
+        /** @enum {string} */
         DocumentKind: "pdf" | "image" | "doc" | "sheet" | "slide" | "archive" | "text" | "other";
+        /** DocumentSection */
+        DocumentSection: {
+            /** Count */
+            count: number;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** Documents */
         Documents: {
             /** Docs */
@@ -2618,6 +2650,8 @@ export interface components {
             facets: {
                 [key: string]: number;
             };
+            /** Groups */
+            groups: components["schemas"]["DocumentSection"][];
             /** Matched */
             matched: number;
             /**
@@ -9650,6 +9684,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 kind?: string | null;
+                group?: components["schemas"]["DocumentGrouping"] | null;
                 limit?: string | null;
                 offset?: string | null;
             };
@@ -11346,6 +11381,119 @@ export interface operations {
                 folder: string;
                 uid?: number | null;
                 part_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    attachment_preview_api_message_attachment_preview_html_get: {
+        parameters: {
+            query?: {
+                key?: string;
+                folder?: string;
+                uid?: string;
+                part_id?: string;
             };
             header?: never;
             path?: never;
