@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Query, Request
 
 from mailmind.assistant.api import NotSent
-from mailmind.http import route
+from mailmind.http import named, route
 from mailmind.http.schemas.assistant import (
     Answered,
     AskBody,
@@ -80,18 +80,24 @@ def router(assistant, mailbox):
 
     @r.get("/api/ai/draft-ahead", responses=answers(DraftAheadStatus | DraftAheadReady))    # serve/peek; the KICK needs the CSRF token
     def draft_ahead(request: Request, args: Annotated[DraftAheadArgs, Query()]):
-        return assistant.drafting.get(args.as_query(), kick_ok=perimeter.token_matches(request.headers, perimeter.CSRF))
+        asked = args.as_query()
+        if args.key is not None:
+            pk = mailbox.queries.pk_of_message(args.key, args.folder)
+            if pk is None:                  # nothing of it left to draft a reply to
+                return {"ok": True, "status": "none"}
+            asked["pk"] = [str(pk)]
+        return assistant.drafting.get(asked, kick_ok=perimeter.token_matches(request.headers, perimeter.CSRF))
 
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
     @_scrubbed("error", "summary failed")
     def summarize(body: SummarizeBody):
-        summary = assistant.asking.summarize(body.model_dump(exclude_unset=True))
+        summary = assistant.asking.summarize(named.with_message(mailbox, body.model_dump(exclude_unset=True)))
         return route.problem(504, "still summarizing") if summary is None else summary
 
     @r.post("/api/ai/draft-reply", responses=answers(DraftedReply, _MAY_FAIL))
     @_scrubbed("draft error", "draft failed")
     def draft_reply(body: DraftReplyBody):
-        return assistant.drafting.reply(body.model_dump(exclude_unset=True))
+        return assistant.drafting.reply(named.with_message(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/ai/rewrite", responses=answers(Rewritten, _MAY_FAIL))
     @_scrubbed("rewrite error", "rewrite failed")

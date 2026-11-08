@@ -3,18 +3,18 @@ from typing import Literal
 
 from pydantic import Field
 
-from mailmind.http.schemas.common import Answer, Failure, Flag, Number, QueryArgs, RequestBody
+from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 
-class SummarizeBody(RequestBody):
-    """A message by pk, or a thread by its account and id."""
+class SummarizeBody(NamesAMessage):
+    """A message by its key, or a thread by its account and id."""
     pk: Number | None = None
     account: str | None = None
     thread_id: str | None = None
     force: Flag | None = None
 
 
-class DraftReplyBody(RequestBody):
+class DraftReplyBody(NamesAMessage):
     """What to reply to as a summary names it, and `account` says who replies, which may not be whose mail it is."""
     pk: Number | None = None
     account: str | None = None
@@ -55,6 +55,8 @@ class DeltaArgs(QueryArgs):
 
 class DraftAheadArgs(QueryArgs):
     pk: str | None = None                   # what won't read as a number is the use case's `bad pk`
+    key: Number | None = None               # a message, the one in `folder` where it has a copy there
+    folder: str | None = None
     peek: str | None = None
 
 
@@ -72,6 +74,7 @@ class BriefGroup(Answer):
     label: str
     count: int
     pks: list[int]
+    messages: list[Copy]                    # each as its copy is now
 
 
 class Brief(Answer):
@@ -222,6 +225,8 @@ class Rewritten(Answer):
 
 class AskSource(Answer):
     pk: int
+    key: int
+    folder: str
     sender: str | None = Field(alias="from")
     subject: str
     snippet: str

@@ -520,13 +520,6 @@ def copy_in_folder(c, message_key, folder):
     return r["pk"] if r else None
 
 
-def pk_now(c, key, folder):
-    """The pk a stored answer's message has now, or None if it has gone. Among its copies, the one in
-    the folder it was read from."""
-    row = copy_now(c, key, folder)
-    return row["pk"] if row else None
-
-
 def copy_now(c, key, folder):
     """The copy a stored answer's message has now, its pk and folder, or None if it has gone. Among its copies, the one in
     the folder it was read from."""

@@ -82,6 +82,7 @@ class PreparedReplies:
             tid = row["thread_id"] or None
             fp = self._draft_fp(c, acct, tid, pk)         # captured BEFORE the 10-40s generation: a mid-gen
             mid = row["message_id"]                       # thread change → fp mismatch on read → regen, never a stale serve
+            message_key = row["message_key"]
 
         def warm() -> object | None:                      # a draft for the thread as it is now
             with self._uow.read() as c:
@@ -100,7 +101,7 @@ class PreparedReplies:
                                                                   # no orphan sweeps — a reset_folder reingest may be mid-flight
                 ok = True
                 try:
-                    sse.publish("draft-ready", {"account": acct, "pk": int(pk)})
+                    sse.publish("draft-ready", {"account": acct, "pk": int(pk), "key": message_key})
                 except Exception:
                     pass
             except NotSent:

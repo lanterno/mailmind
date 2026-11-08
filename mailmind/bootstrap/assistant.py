@@ -144,8 +144,8 @@ class _Mail:
     def fetch_body(self, pk):
         return mailbox.ingest.fetch_body(pk)
 
-    def pk_now(self, c, key, folder):
-        return mailbox.store.pk_now(c, key, folder)
+    def copy_now(self, c, key, folder):
+        return mailbox.store.copy_now(c, key, folder)
 
     def accounts(self):
         return accounts.accounts()

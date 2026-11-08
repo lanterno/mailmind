@@ -85,14 +85,15 @@ class Reviews:
         return stats, needs, waiting
 
     def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-        """A stored list, as the page reads it: each with the pk its message has now. The pk it had says
-        nothing after a renumber. One whose message has gone is left out, and one that named no message
-        (a follow-up whose thread has no row) stays as it was."""
+        """A stored list, as the page reads it: each with the copy its message has now, its pk and folder. The pk it had
+        says nothing after a renumber. One whose message has gone is left out, and one that named no message (a follow-up
+        whose thread has no row) stays as it was."""
         now: list[dict[str, Any]] = []
         for item in items:
-            pk = self._mail.pk_now(c, item["key"], item["folder"]) if item["key"] else None
-            if pk is not None or not item["key"]:
-                now.append({**item, "pk": pk})
+            if not item["key"]:
+                now.append({**item, "pk": None})
+            elif (there := self._mail.copy_now(c, item["key"], item["folder"])) is not None:
+                now.append({**item, "pk": there["pk"], "folder": there["folder"]})
         return now
 
     def _result(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]],

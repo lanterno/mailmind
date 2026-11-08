@@ -128,7 +128,8 @@ class Asker:
 
         cited = citations.in_answer(obj.get("cited_pks"), set(by_pk))     # what was account-scoped AND shown to the model
         sources = [{
-            "pk": pk, "from": by_pk[pk]["from_name"] or by_pk[pk]["from_addr"],
+            "pk": pk, "key": by_pk[pk]["message_key"], "folder": by_pk[pk]["folder"],
+            "from": by_pk[pk]["from_name"] or by_pk[pk]["from_addr"],
             "subject": by_pk[pk]["subject"] or "(no subject)",
             "snippet": (by_pk[pk]["snippet"] or "")[:160],
             "account": by_pk[pk]["account"], "date": by_pk[pk]["date_iso"] or "",

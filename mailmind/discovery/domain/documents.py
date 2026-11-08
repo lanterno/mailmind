@@ -3,7 +3,7 @@ and key blobs are excluded as non-documents."""
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from mailmind.kernel.row import Row
 
@@ -92,9 +92,10 @@ def page(rows: Iterable[Row], want: Asked, when: Callable[[str | None], str]) ->
         matched += 1
         if matched <= want.offset or len(docs) >= want.limit:
             continue
-        docs.append({"pk": r["pk"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
+        docs.append({"pk": r["pk"], "key": r["message_key"], "folder": r["folder"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
                      "size": r["size"] or 0, "account": r["account"],
                      "from": r["from_name"] or r["from_addr"] or "", "subject": r["subject"] or "(no subject)",
                      "when": when(r["date_iso"]),
-                     "url": f"/api/message/{r['pk']}/attachment/{quote(str(r['part_id']))}"})
+                     "url": "/api/message/attachment?" + urlencode({"key": r["message_key"], "folder": r["folder"],
+                                                                     "part_id": r["part_id"]})})
     return {"ok": True, "total": sum(facets.values()), "matched": matched, "shown": len(docs), "facets": facets, "docs": docs}

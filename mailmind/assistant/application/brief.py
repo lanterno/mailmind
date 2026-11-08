@@ -5,7 +5,7 @@ caches it keyed on (sorted enabled-account set + local date) so the daily cost i
 and re-renders are instant. Single-flight + shares summarize_thread's 2-proc cap. The row
 text is fed as UNTRUSTED DATA; model-supplied pks are intersected with real pks (never trusted).
 """
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 import json
 from typing import Any, TypedDict
@@ -63,6 +63,14 @@ DELTA_SCHEMA = {
 }
 
 
+class GroupNow(TypedDict):
+    """A brief's group as the page reads it."""
+    label: str
+    count: int
+    pks: list[int]
+    messages: list[dict[str, Any]]
+
+
 class StoredGroup(TypedDict):
     """A group as a brief keeps it: each message as [its key, the folder it was read from]."""
     label: str
@@ -96,16 +104,18 @@ class Briefs:
         where = {r["pk"]: [r["message_key"], r["folder"]] for r in rows}
         return [{"label": g["label"], "messages": [where[p] for p in g["pks"]]} for g in groups]
 
-    def _groups_now(self, groups_json: str) -> list[Group]:
-        """A stored brief's groups, as the page reads them: by the pks their messages have now."""
+    def _groups_now(self, groups_json: str) -> list[GroupNow]:
+        """A stored brief's groups, as the page reads them: each message by its key and the folder its copy is in now, and
+        the pk that copy has. One whose message has gone is left out."""
         with self._uow.read() as c:
-            groups: list[Group] = []
+            groups: list[GroupNow] = []
             for g in json.loads(groups_json):
-                pks: list[int] = [p for p in (self._mail.pk_now(c, *m) for m in g["messages"]) if p is not None]
-                groups.append({"label": g["label"], "count": len(pks), "pks": pks})
+                there = [(key, now) for key, folder in g["messages"] if (now := self._mail.copy_now(c, key, folder)) is not None]
+                groups.append({"label": g["label"], "count": len(there), "pks": [now["pk"] for _, now in there],
+                               "messages": [{"key": key, "folder": now["folder"]} for key, now in there]})
         return groups
 
-    def _result(self, narrative: str, groups: list[Group], model: str, created_at: str, cached: bool,
+    def _result(self, narrative: str, groups: Sequence[Mapping[str, Any]], model: str, created_at: str, cached: bool,
                 stale: bool) -> dict[str, Any]:
         return {"ok": True, "narrative": narrative, "groups": groups, "model": model,
                 "generated": created_at, "cached": cached, "stale": stale}
@@ -222,7 +232,7 @@ class Briefs:
             created = self._now()
             with self._uow.write() as c:
                 self._answers.save_brief(c, accounts, day, fp, narrative, json.dumps(self._stored_groups(groups, rows)), model, created)
-            return self._result(narrative, groups, model, created, False, False)
+            return self._result(narrative, self._groups_now(json.dumps(self._stored_groups(groups, rows))), model, created, False, False)
 
         answer = self._FLIGHTS.run(("brief", accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
         if answer is None:

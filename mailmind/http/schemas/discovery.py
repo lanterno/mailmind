@@ -46,7 +46,7 @@ class KnownBody(RequestBody):
 
 class SearchHit(Answer):
     pk: int
-    key: int | None                         # a message with no key is a result of its own
+    key: int                                # every row has one: `store.init` gives one to a row an older commit wrote
     account: str
     folder: str
     alias: str | None
@@ -103,6 +103,8 @@ class Views(Answer):
 
 class Document(Answer):
     pk: int
+    key: int
+    folder: str
     part_id: str
     filename: str
     kind: str
@@ -136,6 +138,8 @@ class Suggestions(Answer):
 
 class RecentMail(Answer):
     pk: int
+    key: int
+    folder: str
     account: str
     subject: str
     thread_id: str | None

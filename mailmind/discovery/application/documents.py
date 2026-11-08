@@ -1,6 +1,6 @@
 """The Document Hub: one findable place for every real attachment (PDF/image/doc/…) across all accounts. Pure local SQL
 over the attachments table (metadata only: filename/type/size, no body/IMAP fetch). Downloads reuse the existing
-/api/message/<pk>/attachment/<part_id> route."""
+/api/message/attachment route, by the key and folder of the copy that holds the file."""
 from collections.abc import Mapping
 from typing import Any
 
