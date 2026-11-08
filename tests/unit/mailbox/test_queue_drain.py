@@ -82,7 +82,7 @@ def test_a_move_from_before_the_route_went_that_cant_land_goes_to_the_tray_and_g
     [r] = rows()
     assert (r["kind"], r["state"], r["applied"]) == ("move", "error", 0)
     assert boxes(world, name)[0] == [(w.BEA, "INBOX")]
-    assert world.copy(name) in [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/messages?account={w.BEA}&folder=INBOX").json["items"]]
+    assert world.copy(name) in [{"key": m["key"], "folder": m["folder"], "uid": m["uid"]} for m in app.get(f"/api/messages?account={w.BEA}&folder=INBOX").json["items"]]
 
 
 def test_a_queued_gmail_archive_drops_the_inbox_label(app, world):
@@ -200,7 +200,7 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
     pk, thread = world.pk(RECEIPT), world.row(RECEIPT)["thread_id"]
     queue(app, world)
     listed = app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]
-    assert world.copy(RECEIPT) not in [{"key": m["key"], "folder": m["folder"]} for m in listed]
+    assert world.copy(RECEIPT) not in [{"key": m["key"], "folder": m["folder"], "uid": m["uid"]} for m in listed]
     assert app.get("/api/search?scope=all&q=receipt+1042").json["items"] == []
     assert app.get(f"/api/thread?account={w.ADA}&thread_id={thread}").json["items"] == []
     [r] = rows()

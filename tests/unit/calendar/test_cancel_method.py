@@ -56,7 +56,7 @@ def stored(data_dir):
 
 
 def listed():
-    return [({"key": x["key"], "folder": x["folder"]}, x["start"]) for x in calendar.agenda.upcoming(now=NOW)["items"]]
+    return [({"key": x["key"], "folder": x["folder"], "uid": x["uid"]}, x["start"]) for x in calendar.agenda.upcoming(now=NOW)["items"]]
 
 
 def weekly():

@@ -40,7 +40,8 @@
      "messages": [
       {
        "folder": "INBOX",
-       "key": 18
+       "key": 18,
+       "uid": 1
       }
      ]
     }
@@ -124,7 +125,8 @@
      "messages": [
       {
        "folder": "INBOX",
-       "key": 18
+       "key": 18,
+       "uid": 1
       }
      ]
     }
@@ -158,7 +160,8 @@
      "messages": [
       {
        "folder": "INBOX",
-       "key": 18
+       "key": 18,
+       "uid": 1
       }
      ]
     }
@@ -196,7 +199,8 @@
      "messages": [
       {
        "folder": "INBOX",
-       "key": 1
+       "key": 1,
+       "uid": 1
       }
      ]
     }

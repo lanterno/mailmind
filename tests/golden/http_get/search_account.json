@@ -47,6 +47,7 @@
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -71,6 +72,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -95,6 +97,7 @@
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     }
    ],
@@ -166,6 +169,7 @@
      "snippet": "",
      "subject": "Quilt pattern ideas",
      "thread_id": "rf:ada@example.test:c5862e0831764395",
+     "uid": 1,
      "when": "1w ago"
     },
     {
@@ -190,6 +194,7 @@
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -214,6 +219,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -238,6 +244,7 @@
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     }
    ],
@@ -309,6 +316,7 @@
      "snippet": "",
      "subject": "Quilt pattern ideas",
      "thread_id": "rf:ada@example.test:c5862e0831764395",
+     "uid": 1,
      "when": "1w ago"
     },
     {
@@ -333,6 +341,7 @@
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -357,6 +366,7 @@
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+     "uid": 7,
      "when": "3d ago"
     },
     {
@@ -381,6 +391,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -405,6 +416,7 @@
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -429,6 +441,7 @@
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
+     "uid": 6,
      "when": "3d ago"
     },
     {
@@ -453,6 +466,7 @@
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -477,6 +491,7 @@
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
+     "uid": 4,
      "when": "4d ago"
     },
     {
@@ -501,6 +516,7 @@
      "snippet": "",
      "subject": "This week: five new patterns",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -525,6 +541,7 @@
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
+     "uid": 1,
      "when": "1w ago"
     },
     {
@@ -549,6 +566,7 @@
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
      "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
+     "uid": 5,
      "when": "4d ago"
     },
     {
@@ -573,6 +591,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -597,6 +616,7 @@
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -621,6 +641,7 @@
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
+     "uid": 8,
      "when": "2d ago"
     }
    ],
@@ -669,6 +690,7 @@
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+     "uid": 9,
      "when": "2d ago"
     }
    ],
@@ -740,6 +762,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -764,6 +787,7 @@
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -788,6 +812,7 @@
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -812,6 +837,7 @@
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -836,6 +862,7 @@
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
+     "uid": 8,
      "when": "2d ago"
     },
     {
@@ -860,6 +887,7 @@
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+     "uid": 7,
      "when": "3d ago"
     },
     {
@@ -884,6 +912,7 @@
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
+     "uid": 6,
      "when": "3d ago"
     },
     {
@@ -908,6 +937,7 @@
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
      "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
+     "uid": 5,
      "when": "4d ago"
     },
     {
@@ -932,6 +962,7 @@
      "snippet": "",
      "subject": "This week: five new patterns",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -956,6 +987,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     }
    ],
@@ -1004,6 +1036,7 @@
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+     "uid": 7,
      "when": "3d ago"
     }
    ],
@@ -1052,6 +1085,7 @@
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     }
    ],
@@ -1100,6 +1134,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -1124,6 +1159,7 @@
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
+     "uid": 4,
      "when": "4d ago"
     },
     {
@@ -1148,6 +1184,7 @@
      "snippet": "",
      "subject": "This week: five new patterns",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -1172,6 +1209,7 @@
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
+     "uid": 1,
      "when": "1w ago"
     }
    ],
@@ -1220,6 +1258,7 @@
      "snippet": "",
      "subject": "This week: five new patterns",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -1244,6 +1283,7 @@
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
+     "uid": 1,
      "when": "1w ago"
     }
    ],
@@ -1315,6 +1355,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     }
    ],
@@ -1386,6 +1427,7 @@
      "snippet": "",
      "subject": "Notes for the review",
      "thread_id": "rf:ada@example.test:a9a397439969c343",
+     "uid": 2,
      "when": "3h ago"
     }
    ],
@@ -1480,6 +1522,7 @@
      "snippet": "",
      "subject": "Notes for the review",
      "thread_id": "rf:ada@example.test:a9a397439969c343",
+     "uid": 2,
      "when": "3h ago"
     },
     {
@@ -1504,6 +1547,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -1528,6 +1572,7 @@
      "snippet": "It's done!",
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -1552,6 +1597,7 @@
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -1576,6 +1622,7 @@
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -1600,6 +1647,7 @@
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
+     "uid": 8,
      "when": "2d ago"
     }
    ],
@@ -1648,6 +1696,7 @@
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
+     "uid": 1,
      "when": "1w ago"
     },
     {
@@ -1672,6 +1721,7 @@
      "snippet": "",
      "subject": "Quilt pattern ideas",
      "thread_id": "rf:ada@example.test:c5862e0831764395",
+     "uid": 1,
      "when": "1w ago"
     }
    ],
@@ -1720,6 +1770,7 @@
      "snippet": "",
      "subject": "Notes for the review",
      "thread_id": "rf:ada@example.test:a9a397439969c343",
+     "uid": 2,
      "when": "3h ago"
     },
     {
@@ -1744,6 +1795,7 @@
      "snippet": "",
      "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -1768,6 +1820,7 @@
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -1792,6 +1845,7 @@
      "snippet": "Bonjour Ada, voici le planning de novembre pour l’atelier.",
      "subject": "Projet d’atelier — planning de novembre",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -1816,6 +1870,7 @@
      "snippet": "This message claims to be multipart but names no boundary.\nYour statement for October is ready.",
      "subject": "Monthly statement",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
+     "uid": 8,
      "when": "2d ago"
     },
     {
@@ -1840,6 +1895,7 @@
      "snippet": "Forwarding Lin's note, see attached.",
      "subject": "Fwd: Fabric samples",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
+     "uid": 7,
      "when": "3d ago"
     },
     {
@@ -1864,6 +1920,7 @@
      "snippet": "Let's walk through the new layouts.",
      "subject": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
+     "uid": 6,
      "when": "3d ago"
     },
     {
@@ -1888,6 +1945,7 @@
      "snippet": "Thanks for your order.\n\nOrder 1042\n1 x Linen thread, natural 4.50\nTotal 4.50\n\nPaid with card ending 0000.",
      "subject": "Your receipt for order 1042",
      "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
+     "uid": 5,
      "when": "4d ago"
     },
     {
@@ -1912,6 +1970,7 @@
      "snippet": "",
      "subject": "[quilt] Build #412 passed",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
+     "uid": 4,
      "when": "4d ago"
     },
     {
@@ -1936,6 +1995,7 @@
      "snippet": "",
      "subject": "This week: five new patterns",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -1960,6 +2020,7 @@
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -1984,6 +2045,7 @@
      "snippet": "",
      "subject": "20% off all yarn this weekend",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
+     "uid": 1,
      "when": "1w ago"
     }
    ],
@@ -2032,6 +2094,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -2056,6 +2119,7 @@
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     }
    ],
@@ -2127,6 +2191,7 @@
      "snippet": "Notre menu d’août arrive : crêpes, galettes et café filtre.",
      "subject": "Menu d’août — nouveautés ☕",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
+     "uid": 10,
      "when": "yesterday"
     }
    ],
@@ -2198,6 +2263,7 @@
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     }
    ],
@@ -2246,6 +2312,7 @@
      "snippet": "Parcel 77 will arrive today between 10:00 and 14:00.",
      "subject": "Your parcel is out for delivery",
      "thread_id": "gm:cy@example.test:1800000000000000004",
+     "uid": 3,
      "when": "4h ago"
     }
    ],

@@ -203,4 +203,4 @@ def test_undo_outlives_a_restart(world, tiny_build):
         r = post(port, "/api/undo", {})
         assert (r["ok"], r["label"], r["remaining"]) == (True, "Archived", 0)
         listed = json.loads(get(port, f"/api/messages?account={w.ADA}&limit=200")[1])["items"]
-        assert receipt in [{"key": it["key"], "folder": it["folder"]} for it in listed]
+        assert receipt in [{"key": it["key"], "folder": it["folder"], "uid": it["uid"]} for it in listed]

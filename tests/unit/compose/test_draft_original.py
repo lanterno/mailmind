@@ -26,9 +26,9 @@ def row(did):
 
 
 def in_the_list(app):
-    """The draft's copy as the list names it: by its key and folder."""
+    """The draft’s copy as the list names it: by its key, folder and uid."""
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"] if i["subject"] == SUBJECT]
-    return {"key": item["key"], "folder": item["folder"]}
+    return {"key": item["key"], "folder": item["folder"], "uid": item["uid"]}
 
 
 def test_a_reopened_reply_names_its_original(app, world):

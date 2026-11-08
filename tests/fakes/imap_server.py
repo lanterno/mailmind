@@ -927,14 +927,15 @@ class FakeIMAPServer:
             return [u for u, m in self.accounts[user].box(name).messages.items()
                     if (m.headers().get("Message-ID") or "").strip() == message_id]
 
-    def renumber(self, user, name, uidvalidity=None):
-        """A UIDVALIDITY change: new UIDVALIDITY, every message renumbered from 1, as a server
-        does when it rebuilds a mailbox (Bridge after a re-sync)."""
+    def renumber(self, user, name, uidvalidity=None, first=1):
+        """A UIDVALIDITY change: new UIDVALIDITY, every message renumbered from `first` (1 unless a
+        test wants uids none of them had), as a server does when it rebuilds a mailbox (Bridge after
+        a re-sync)."""
         with self.lock:
             box = self.accounts[user].box(name)
             msgs = list(box.messages.values())
             box.uidvalidity = uidvalidity or next(self._uidv)
-            box.messages, box.uidnext, box.former = {}, 1, {}
+            box.messages, box.uidnext, box.former = {}, first, {}
             for m in msgs:
                 box.add(m)
 

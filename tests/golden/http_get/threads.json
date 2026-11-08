@@ -16,6 +16,7 @@
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -30,6 +31,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -44,6 +46,7 @@
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
+     "uid": 2,
      "when": "6d ago"
     }
    ],
@@ -81,6 +84,7 @@
      "seen": true,
      "snippet": "Shall we book the library hall again?",
      "subject": "Guild meetup venue",
+     "uid": 1,
      "when": "5d ago"
     },
     {
@@ -95,6 +99,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Guild meetup venue",
+     "uid": 1,
      "when": "4d ago"
     },
     {
@@ -109,6 +114,7 @@
      "seen": false,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
+     "uid": 2,
      "when": "4d ago"
     }
    ],
@@ -146,6 +152,7 @@
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
+     "uid": 1,
      "when": "3d ago"
     },
     {
@@ -160,6 +167,7 @@
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
+     "uid": 1,
      "when": "16h ago"
     }
    ],

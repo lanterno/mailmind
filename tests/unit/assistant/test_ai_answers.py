@@ -57,7 +57,7 @@ def renumber_inbox(world, account=w.ADA):
 
 def named(items):
     """The copies a list names, as the page names one: by key and folder."""
-    return [{"key": i["key"], "folder": i["folder"]} for i in items]
+    return [{"key": i["key"], "folder": i["folder"], "uid": i["uid"]} for i in items]
 
 
 def rows_named(item, *columns):
@@ -147,7 +147,7 @@ def test_a_stored_brief_prefers_the_copy_in_the_folder_it_was_read_from(app, wor
     brief_of(ai, app, [anchor["pk"]])
     world.deliver(w.ADA, "Archive", w.raw(LUNCH))
     assert len(q("SELECT pk FROM messages WHERE message_key=?", anchor["message_key"])) == 2
-    assert brief_now(app)["groups"][0]["messages"] == [{"key": anchor["message_key"], "folder": "INBOX"}]
+    assert brief_now(app)["groups"][0]["messages"] == [{"key": anchor["message_key"], "folder": "INBOX", "uid": anchor["uid"]}]
 
 
 # -- the review ------------------------------------------------------------------------------------

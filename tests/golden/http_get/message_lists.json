@@ -29,6 +29,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "ts": 1793588400,
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -54,6 +55,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "ts": 1793557800,
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -79,6 +81,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
      "ts": 1793520000,
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -104,6 +107,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "ts": 1793436300,
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -129,6 +133,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "ts": 1793426400,
+     "uid": 8,
      "when": "2d ago"
     },
     {
@@ -154,6 +159,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "ts": 1793361600,
+     "uid": 7,
      "when": "3d ago"
     },
     {
@@ -179,6 +185,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "ts": 1793349000,
+     "uid": 6,
      "when": "3d ago"
     },
     {
@@ -204,6 +211,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
      "ts": 1793271900,
+     "uid": 5,
      "when": "4d ago"
     },
     {
@@ -229,6 +237,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "ts": 1793204460,
+     "uid": 4,
      "when": "4d ago"
     },
     {
@@ -254,6 +263,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "ts": 1793170800,
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -279,6 +289,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "ts": 1793097600,
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -304,6 +315,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "ts": 1793092440,
+     "uid": 1,
      "when": "6d ago"
     }
    ],
@@ -355,6 +367,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:49f75d579113fc94",
      "ts": 1793588400,
+     "uid": 12,
      "when": "9h ago"
     },
     {
@@ -381,6 +394,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
      "ts": 1793557800,
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -407,6 +421,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
      "ts": 1793520000,
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -433,6 +448,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "ts": 1793436300,
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -459,6 +475,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "ts": 1793426400,
+     "uid": 8,
      "when": "2d ago"
     },
     {
@@ -485,6 +502,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:46cc6a37490f7358",
      "ts": 1793361600,
+     "uid": 7,
      "when": "3d ago"
     },
     {
@@ -511,6 +529,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "ts": 1793349000,
+     "uid": 6,
      "when": "3d ago"
     },
     {
@@ -537,6 +556,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:d6830290e0dcf6f0",
      "ts": 1793271900,
+     "uid": 5,
      "when": "4d ago"
     },
     {
@@ -563,6 +583,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:20e13d75692f3245",
      "ts": 1793204460,
+     "uid": 4,
      "when": "4d ago"
     },
     {
@@ -589,6 +610,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:744c453dcb89c684",
      "ts": 1793170800,
+     "uid": 3,
      "when": "5d ago"
     },
     {
@@ -615,6 +637,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
      "ts": 1793097600,
+     "uid": 2,
      "when": "6d ago"
     }
    ],
@@ -665,6 +688,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:14318281301a68a3",
      "ts": 1793520000,
+     "uid": 10,
      "when": "yesterday"
     },
     {
@@ -690,6 +714,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
      "ts": 1793436300,
+     "uid": 9,
      "when": "2d ago"
     },
     {
@@ -715,6 +740,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:9652750ff02d44da",
      "ts": 1793426400,
+     "uid": 8,
      "when": "2d ago"
     }
    ],
@@ -765,6 +791,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:a9a397439969c343",
      "ts": 1793607600,
+     "uid": 2,
      "when": "3h ago"
     },
     {
@@ -790,6 +817,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:a9a397439969c343",
      "ts": 1793606400,
+     "uid": 1,
      "when": "4h ago"
     }
    ],
@@ -840,6 +868,7 @@
      "summary": "",
      "thread_id": "rf:ada@example.test:df70180a771a3af4",
      "ts": 1792738800,
+     "uid": 1,
      "when": "1w ago"
     }
    ],
@@ -890,6 +919,7 @@
      "summary": "",
      "thread_id": "rf:bea@example.test:b8304c2862f5ab91",
      "ts": 1792404000,
+     "uid": 1,
      "when": "2w ago"
     }
    ],
@@ -941,6 +971,7 @@
      "summary": "",
      "thread_id": "gm:cy@example.test:1800000000000000004",
      "ts": 1793605500,
+     "uid": 3,
      "when": "4h ago"
     },
     {
@@ -967,6 +998,7 @@
      "summary": "",
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "ts": 1793201400,
+     "uid": 2,
      "when": "4d ago"
     }
    ],
@@ -1017,6 +1049,7 @@
      "summary": "",
      "thread_id": "gm:cy@example.test:1800000000000000001",
      "ts": 1793192400,
+     "uid": 1,
      "when": "4d ago"
     }
    ],

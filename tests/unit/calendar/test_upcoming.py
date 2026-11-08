@@ -68,8 +68,8 @@ def _up(**kw):
 
 
 def _named(item):
-    """The copy a listed item names, as the page names one: its key and folder."""
-    return {"key": item["key"], "folder": item["folder"]}
+    """The copy a listed item names, as the page names one: its key, folder and uid."""
+    return {"key": item["key"], "folder": item["folder"], "uid": item["uid"]}
 
 
 def _copies(items):

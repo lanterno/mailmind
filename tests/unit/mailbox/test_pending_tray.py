@@ -12,7 +12,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 
 def inbox_copies(app):
-    return [{"key": i["key"], "folder": i["folder"]} for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]]
+    return [{"key": i["key"], "folder": i["folder"], "uid": i["uid"]} for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]]
 
 
 def tray(app):

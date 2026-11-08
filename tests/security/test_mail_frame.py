@@ -39,24 +39,31 @@ WITH_IMAGES = NO_IMAGES.replace("img-src data:", "img-src data: https:")
 
 def delivered(world, raw):
     """The pk and key of a message that just arrived in Ada's INBOX, with its body not yet read."""
+    return arrived(world, raw)[:2]
+
+
+def arrived(world, raw):
+    """The pk, key and uid of a message that just arrived in Ada's INBOX, with its body not yet read."""
     uid = world.deliver(w.ADA, "INBOX", raw)
     c = store.conn()
     r = c.execute("SELECT pk, message_key, body_fetched FROM messages WHERE account=? AND folder='INBOX' AND uid=?",
                   (w.ADA, uid)).fetchone()
     c.close()
     assert not r["body_fetched"]
-    return r["pk"], r["message_key"]
+    return r["pk"], r["message_key"], uid
 
 
-def document(app, key, folder="INBOX", images=None, **kw):
-    """The frame's document of the copy `key` and `folder` name."""
-    args = {"key": key, "folder": folder, **({"images": images} if images is not None else {})}
+def document(app, key, folder="INBOX", images=None, uid=None, **kw):
+    """The frame's document of the copy `key`, `folder` and `uid` name: without a uid, the only copy there."""
+    args = {"key": key, "folder": folder, **({"uid": uid} if uid is not None else {}),
+            **({"images": images} if images is not None else {})}
     return app.get(f"/api/message/body.html?{urllib.parse.urlencode(args)}", **kw)
 
 
-def opened(app, key, folder="INBOX"):
+def opened(app, key, folder="INBOX", uid=None):
     """What the reader reads of the same copy, as JSON."""
-    return app.get(f"/api/message/body?{urllib.parse.urlencode({'key': key, 'folder': folder})}")
+    args = {"key": key, "folder": folder, **({"uid": uid} if uid is not None else {})}
+    return app.get(f"/api/message/body?{urllib.parse.urlencode(args)}")
 
 
 def carries_a_frames_headers(r, policy=NO_IMAGES):
@@ -201,7 +208,7 @@ def test_a_renumber_leaves_the_frame_on_the_message_the_page_read(app, world):
     _, read = delivered(world, PLAIN)
     world.server.renumber(w.ADA, "INBOX")
     ingest.sync_new(accounts.get(w.ADA))
-    assert w.copy_of(theirs) != {"key": key, "folder": "INBOX"}        # the row the page saw is no longer this message's
+    assert (w.copy_of(theirs) or {}).get("key") != key                  # the row the page saw is no longer this message's
     assert b"Hello" in document(app, key).body
     mine = document(app, read)
     assert mine.status == 200 and b"&amp; more" in mine.body and b"Hello" not in mine.body
@@ -219,22 +226,50 @@ def test_the_key_of_another_accounts_message_shows_only_that_message(app, world)
     assert html.escape(first_line, quote=False) in r.body.decode()
 
 
-def test_two_copies_in_one_folder_under_one_key_show_the_one_the_reader_opens(app, world):
-    """A sender can reuse a Message-ID, so two rows in one folder can share a key, each with a body of its own. The key and
-    folder then name one: a listed one first, then the newer, and the frame and the reader take the same."""
-    first, key = delivered(world, HOSTILE)
-    second, same = delivered(world, HOSTILE.replace(b"Hello", b"Not what you read"))
+def test_two_copies_in_one_folder_under_one_key_each_show_their_own_body(app, world):
+    """A sender can reuse a Message-ID, so two rows in one folder can share a key, each with a body of its own. The uid says
+    which the page read, and the frame shows that one's body and the reader reads the same, whichever is newer or listed."""
+    first, key, first_uid = arrived(world, HOSTILE)
+    second, same, second_uid = arrived(world, HOSTILE.replace(b"Hello", b"Not what you read"))
     assert same == key and first != second
-    got = document(app, key).body.decode()
-    assert "Not what you read" in got and "Hello" not in got
-    assert opened(app, key).json["html"] in got
+    for uid, mine, theirs in ((first_uid, "Hello", "Not what you read"), (second_uid, "Not what you read", "Hello")):
+        got = document(app, key, uid=uid)
+        assert got.status == 200 and carries_a_frames_headers(got)
+        assert mine in got.body.decode() and theirs not in got.body.decode()
+        read = opened(app, key, uid=uid).json
+        assert read["uid"] == uid and read["html"] in got.body.decode()
     c = store.conn()
-    c.execute("UPDATE messages SET pending_removal=1 WHERE pk=?", (second,))     # on its way out, so not listed
+    c.execute("UPDATE messages SET pending_removal=1 WHERE pk=?", (first,))     # on its way out, so not listed
     c.commit()
     c.close()
-    got = document(app, key).body.decode()
-    assert "Hello" in got and "Not what you read" not in got
-    assert opened(app, key).json["html"] in got
+    assert "Hello" in document(app, key, uid=first_uid).body.decode()          # still the one named
+
+
+def test_two_copies_in_one_folder_and_no_uid_show_neither(app, world):
+    """Without a uid, a key and folder that two rows share name neither: the frame says the message isn't here, and the
+    reader is the 404, rather than a guess at one of them."""
+    _, key, _ = arrived(world, HOSTILE)
+    arrived(world, HOSTILE.replace(b"Hello", b"Not what you read"))
+    got = document(app, key)
+    assert names_no_copy(got) and b"Not what you read" not in got.body
+    assert opened(app, key).status == 404
+
+
+@pytest.mark.parametrize("uid", ["0", "x", "1.5", "-1", " 1", "99999999999999999999999"])
+def test_a_uid_that_names_no_copy_or_wont_read_shows_nothing(app, world, uid):
+    _, key = delivered(world, HOSTILE)
+    assert names_no_copy(document(app, key, uid=uid))
+
+
+def test_a_stale_uid_shows_nothing_though_its_message_is_the_only_copy_there(app, world):
+    """A new UIDVALIDITY gives the copy another uid: the frame the page kept shows nothing, never a guess."""
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest
+    _, key, uid = arrived(world, HOSTILE)
+    world.server.renumber(w.ADA, "INBOX", first=500)
+    ingest.sync_new(accounts.get(w.ADA))
+    assert names_no_copy(document(app, key, uid=uid))
+    assert b"Hello" in document(app, key).body                                  # the only copy, named without a uid
 
 
 def test_no_message_at_all_is_a_document_too(app):

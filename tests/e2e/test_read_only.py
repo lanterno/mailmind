@@ -126,7 +126,7 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
     assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"queued"}
     assert q("SELECT max(attempts) n FROM mail_commands") == [{"n": 0}]
     assert on_server(world, RECEIPT) == [(w.ADA, "INBOX")]
-    listed = [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]]
+    listed = [{"key": m["key"], "folder": m["folder"], "uid": m["uid"]} for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]]
     assert not [n for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM) if world.copy(n) in listed]
 
     read_only.end()

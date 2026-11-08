@@ -65,10 +65,10 @@ def test_the_review_names_what_needs_you_by_key_and_folder(app, world, ai):
     summarize_as(world, LUNCH)
     ai.queue(fa.answer({"narrative": "A steady week.", "next": ["Answer Lin"]}))
     needs = app.post("/api/review", {}).json["needs"]
-    assert world.copy(LUNCH) in [{"key": n["key"], "folder": n["folder"]} for n in needs]
+    assert world.copy(LUNCH) in [{"key": n["key"], "folder": n["folder"], "uid": n["uid"]} for n in needs]
 
 
 def test_asks_sources_name_their_messages_by_key_and_folder(app, world, ai):
     ai.responder = lambda request: fa.answer({"answer": "Thursday at 12:30.", "cited_pks": [world.pk(LUNCH)]})
     r = app.post("/api/ai/ask", {"question": "When is lunch with Lin?", "account": w.ADA}).json
-    assert [{"key": s["key"], "folder": s["folder"]} for s in r["sources"]] == [world.copy(LUNCH)]
+    assert [{"key": s["key"], "folder": s["folder"], "uid": s["uid"]} for s in r["sources"]] == [world.copy(LUNCH)]

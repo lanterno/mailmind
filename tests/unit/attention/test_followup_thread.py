@@ -21,7 +21,7 @@ def newest_of(thread_id):
 
 
 def listed(app, view):
-    return [{"key": i["key"], "folder": i["folder"]} for i in app.get(f"/api/messages?account={w.ADA}&folder={view}").json["items"]]
+    return [{"key": i["key"], "folder": i["folder"], "uid": i["uid"]} for i in app.get(f"/api/messages?account={w.ADA}&folder={view}").json["items"]]
 
 
 def nudge_on(thread_id):

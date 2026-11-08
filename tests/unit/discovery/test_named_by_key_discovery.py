@@ -18,4 +18,4 @@ def test_a_file_names_its_copy_and_its_link_fetches_it_from_there(app, world):
 
 def test_the_contact_card_names_recent_mail_by_its_copy(app, world):
     recent = app.get("/api/contact?addr=lin@example.test").json["recent"]
-    assert recent and world.copy("ada-inbox-02-lunch-confirm.eml") in [{"key": r["key"], "folder": r["folder"]} for r in recent]
+    assert recent and world.copy("ada-inbox-02-lunch-confirm.eml") in [{"key": r["key"], "folder": r["folder"], "uid": r["uid"]} for r in recent]

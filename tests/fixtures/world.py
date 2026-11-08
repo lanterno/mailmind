@@ -73,14 +73,15 @@ def message_id(name):
 
 
 def copy_of(pk):
-    """The copy the row `pk` is, as a request names one: its message's key and its folder. None for a pk with no row."""
+    """The copy the row `pk` is, as a request names one: its message's key, its folder and its uid there. None for a pk with
+    no row."""
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        r = c.execute("SELECT message_key, folder FROM messages WHERE pk=?", (pk,)).fetchone()
+        r = c.execute("SELECT message_key, folder, uid FROM messages WHERE pk=?", (pk,)).fetchone()
     finally:
         c.close()
-    return {"key": r["message_key"], "folder": r["folder"]} if r else None
+    return {"key": r["message_key"], "folder": r["folder"], "uid": r["uid"]} if r else None
 
 
 def variant(name, **headers):
@@ -202,8 +203,8 @@ class World:
         return r["key"] if r else None
 
     def copy(self, name):
-        """The message's copy where the corpus put it, as a request names one: its key and folder."""
-        return {"key": self.key(name), "folder": self.placed[name][1]}
+        """The message's copy where the corpus put it, as a request names one: its key, folder and uid there."""
+        return {"key": self.key(name), "folder": self.placed[name][1], "uid": self.placed[name][2]}
 
     def deliver(self, acct, folder, data, flags=()):
         """Put one more message on the server and run the app's own incremental sync of that

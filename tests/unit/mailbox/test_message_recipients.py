@@ -120,7 +120,7 @@ def test_mail_someone_else_sent_you_vouches_for_nobody_it_went_to(app, world):
 def test_a_search_reaches_the_end_of_a_long_list(app, world):
     world.deliver(w.ADA, "Sent", _mail(", ".join(LONG)), (w.SEEN,))
     pk = _pk("sent-long@example.test")
-    assert w.copy_of(pk) in [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/search?q=to:{LONG[-1]}").json["items"]]
+    assert w.copy_of(pk) in [{"key": m["key"], "folder": m["folder"], "uid": m["uid"]} for m in app.get(f"/api/search?q=to:{LONG[-1]}").json["items"]]
 
 
 def test_the_text_kept_for_search_is_bounded(app, world, monkeypatch):

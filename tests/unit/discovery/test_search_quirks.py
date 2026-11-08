@@ -29,7 +29,7 @@ def in_new_york(monkeypatch):
 
 def found(app, q, scope="all"):
     """What a search finds, each as the page names it: by its key and folder."""
-    return [{"key": i["key"], "folder": i["folder"]} for i in app.get(f"/api/search?scope={scope}&q={quote(q)}&limit=200").json["items"]]
+    return [{"key": i["key"], "folder": i["folder"], "uid": i["uid"]} for i in app.get(f"/api/search?scope={scope}&q={quote(q)}&limit=200").json["items"]]
 
 
 def bound(q):

@@ -23,7 +23,8 @@
    "subject": "Lunch on Thursday?",
    "text": "Hi Ada,\r\n\r\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\r\nLin\r\n",
    "thread_id": "rf:ada@example.test:f55e4e75612a3def",
-   "to": "Ada Park <ada@example.test>"
+   "to": "Ada Park <ada@example.test>",
+   "uid": 1
   },
   "headers": {
    "cache-control": "no-store",
@@ -97,7 +98,8 @@
    "subject": "Design review",
    "text": "Let's walk through the new layouts.\r\n",
    "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
-   "to": "Ada Park <ada@example.test>"
+   "to": "Ada Park <ada@example.test>",
+   "uid": 6
   },
   "headers": {
    "cache-control": "no-store",
@@ -145,7 +147,8 @@
    "subject": "Fwd: Fabric samples",
    "text": "Forwarding Lin's note, see attached.\r\n",
    "thread_id": "rf:ada@example.test:46cc6a37490f7358",
-   "to": "Ada Park <ada@example.test>"
+   "to": "Ada Park <ada@example.test>",
+   "uid": 7
   },
   "headers": {
    "cache-control": "no-store",
@@ -184,7 +187,8 @@
    "subject": "Projet d’atelier — planning de novembre",
    "text": "Bonjour Ada, voici le planning de novembre pour l’atelier.\r\n",
    "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
-   "to": "Ada Park <ada@example.test>"
+   "to": "Ada Park <ada@example.test>",
+   "uid": 9
   },
   "headers": {
    "cache-control": "no-store",
@@ -232,7 +236,8 @@
    "subject": "The finished quilt",
    "text": null,
    "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
-   "to": "Ada Park <ada@example.test>"
+   "to": "Ada Park <ada@example.test>",
+   "uid": 11
   },
   "headers": {
    "cache-control": "no-store",
@@ -283,7 +288,8 @@
    "subject": "Re: Contract draft v2",
    "text": "Hi Ivo, my comments are in the attached file. Two points stand out.\r\n",
    "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
-   "to": "Ivo Brandt <ivo@harbor.example.test>"
+   "to": "Ivo Brandt <ivo@harbor.example.test>",
+   "uid": 1
   },
   "headers": {
    "cache-control": "no-store",
@@ -322,7 +328,8 @@
    "subject": "Your parcel is out for delivery",
    "text": "Parcel 77 will arrive today between 10:00 and 14:00.\r\n",
    "thread_id": "gm:cy@example.test:1800000000000000004",
-   "to": "cy@example.test"
+   "to": "cy@example.test",
+   "uid": 3
   },
   "headers": {
    "cache-control": "no-store",

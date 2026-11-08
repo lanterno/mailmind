@@ -67,17 +67,19 @@ def delivered(world, raw):
 
 # ── what a request may say ───────────────────────────────────────────────────────────────────────────────────────────
 
-COPY = {"key": "KEY", "folder": "FOLDER"}                 # the receipt's copy, as `named` fills it in
+COPY = {"key": "KEY", "folder": "FOLDER", "uid": "UID"}   # the receipt's copy, as `named` fills it in
 
 
 def named(said, world):
-    """A request's body with the receipt's key and folder where it says KEY and FOLDER, and its row's pk where it says PK."""
+    """A request's body with the receipt's key, folder and uid where it says KEY, FOLDER and UID, and its row's pk where it
+    says PK."""
     if isinstance(said, dict):
         return {k: named(v, world) for k, v in said.items()}
     if isinstance(said, list | tuple):
         return type(said)(named(v, world) for v in said)
-    if said in ("KEY", "FOLDER", "PK"):
-        return {"KEY": world.key(RECEIPT), "FOLDER": world.copy(RECEIPT)["folder"], "PK": world.pk(RECEIPT)}[said]
+    if said in ("KEY", "FOLDER", "UID", "PK"):
+        return {"KEY": world.key(RECEIPT), "FOLDER": world.copy(RECEIPT)["folder"], "UID": world.uid(RECEIPT),
+                "PK": world.pk(RECEIPT)}[said]
     return said
 
 
@@ -176,7 +178,7 @@ def test_a_number_may_still_come_as_text(app, world):
 # ── what each use case is handed ─────────────────────────────────────────────────────────────────────────────────────
 
 FILED = {"ok": True, "msg": "ok", "undoable": False}
-MANY = {"ok": True, "msg": "filed", "filed": [{"key": 9, "folder": "INBOX"}], "count": 1, "failed": 0, "queued": 0, "undoable": True}
+MANY = {"ok": True, "msg": "filed", "filed": [{"key": 9, "folder": "INBOX", "uid": 4}], "count": 1, "failed": 0, "queued": 0, "undoable": True}
 EACH_SAYS = {**COPY, "undo_group": "g", "mutation_id": "m"}
 HANDED = {**EACH_SAYS, "pk": "PK"}                     # with the pk the copy has now, which is how a use case reads it
 
@@ -194,8 +196,10 @@ HANDED = {**EACH_SAYS, "pk": "PK"}                     # with the pk the copy ha
     ("do_thread_file", MANY, "/api/thread/archive", EACH_SAYS, ("/api/thread/archive", HANDED)),
     ("do_thread_file", MANY, "/api/thread/trash", EACH_SAYS, ("/api/thread/trash", HANDED)),
     ("file_many", {**MANY, "rows_failed": 0, "partial": False}, "/api/bulk/file",
-     {"verb": "archive", "rows": [{"key": 5, "folder": "INBOX", "whole": True}, {"key": 6, "folder": "Archive"}], "undo_group": "g", "mutation_id": "m"},
-     ({"verb": "archive", "rows": [{"key": 5, "folder": "INBOX", "whole": True}, {"key": 6, "folder": "Archive"}], "undo_group": "g", "mutation_id": "m"},)),
+     {"verb": "archive", "rows": [{"key": 5, "folder": "INBOX", "uid": 3, "whole": True}, {"key": 6, "folder": "Archive"}],
+      "undo_group": "g", "mutation_id": "m"},
+     ({"verb": "archive", "rows": [{"key": 5, "folder": "INBOX", "uid": 3, "whole": True}, {"key": 6, "folder": "Archive"}],
+       "undo_group": "g", "mutation_id": "m"},)),
     ("do_pending_retry", {"ok": True}, "/api/pending/retry", {"id": "7"}, (7,)),
     ("do_pending_discard", {"ok": True}, "/api/pending/discard", {"id": 7}, (7,)),
 ])

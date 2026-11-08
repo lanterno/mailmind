@@ -58,7 +58,7 @@ def test_a_reopened_draft_opens_by_key_and_folder_and_names_its_original_by_key(
                                     "idempotency_key": "cmp-1"}).json
     assert saved["ok"], saved
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"] if i["subject"] == SUBJECT]
-    opened = app.post("/api/draft/resume", {"key": item["key"], "folder": item["folder"]}).json
+    opened = app.post("/api/draft/resume", {"key": item["key"], "folder": item["folder"], "uid": item["uid"]}).json
     assert opened["original_key"] == world.key(LUNCH) and "See you." in opened["text"]
 
 

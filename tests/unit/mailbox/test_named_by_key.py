@@ -1,5 +1,8 @@
-"""The Mailbox's routes name a message by its key and a copy by its key and folder, which outlast a row's pk: a renumber, a move
-and its Undo give the rows new pks, and the same key and folder still name the same message (mailmind.http.named)."""
+"""The Mailbox's routes name a message by its key and a copy by its key, folder and uid, which outlast a row's pk: a renumber, a
+move and its Undo give the rows new pks, and the same key and folder still name the same message (mailmind.http.named). Two
+copies in one folder can share a key, and only the uid tells them apart."""
+from urllib.parse import urlencode
+
 import problems
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
@@ -44,7 +47,7 @@ def test_each_row_of_a_list_names_its_copy(app, world):
         items = app.get(path).json["items"]
         assert items and all(isinstance(it["key"], int) and it["folder"] == "INBOX" for it in items), path
     lunch = app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]
-    assert world.copy(LUNCH) in [{"key": it["key"], "folder": it["folder"]} for it in lunch]
+    assert world.copy(LUNCH) in [{"key": it["key"], "folder": it["folder"], "uid": it["uid"]} for it in lunch]
 
 
 def test_a_conversation_says_which_message_a_reply_answers(app, world):
@@ -104,6 +107,10 @@ def test_an_attachment_comes_from_the_copy_named(app, world):
     r = app.get("/api/message/attachment?key={key}&folder={folder}&part_id={part}".format(**world.copy(INVITE), part=part))
     assert r.status == 200 and b"BEGIN:VCALENDAR" in r.body
     assert app.get(f"/api/message/attachment?key={world.key(INVITE)}&folder=Archive&part_id={part}").status == 404
+    by_uid = app.get("/api/message/attachment?" + urlencode({**world.copy(INVITE), "part_id": part}))
+    assert by_uid.status == 200 and by_uid.body == r.body
+    elsewhere = app.get("/api/message/attachment?" + urlencode({**world.copy(INVITE), "uid": world.uid(INVITE) + 100, "part_id": part}))
+    assert elsewhere.status == 404
 
 
 # ── filing ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -156,19 +163,140 @@ def test_a_marked_row_names_a_copy_whole(app, world):
 
 # ── which copy ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def test_of_two_copies_in_one_folder_the_newer_is_the_one_named(app, world):
-    """Thunderbird saves a draft again under its Message-ID: both are in Drafts, and one key and folder name them."""
-    assert world.key(DRAFT_V1) == world.key(DRAFT_V2)
-    opened = app.get("/api/message/body?key={key}&folder={folder}".format(**world.copy(DRAFT_V1))).json
-    assert opened["subject"] == world.row(DRAFT_V2)["subject"]
+OTHER = "Not what you read"
 
 
-def test_a_copy_on_its_way_out_is_named_last(app, world):
-    """A move still queued takes its row off every list, and its key and folder name the copy that is listed, if any."""
+def a_second_copy(world, name=LUNCH):
+    """Someone who knows a message's Message-ID sends another under it: a second copy in its folder, under its key, with a
+    subject of its own. The newer, so a rule that took the newer would take it."""
+    uid = world.deliver(w.ADA, "INBOX", w.variant(name, Subject=OTHER))
+    return {"key": world.key(name), "folder": "INBOX", "uid": uid}
+
+
+def opened_subject(app, copy):
+    r = app.get("/api/message/body?" + urlencode(copy))
+    return r.json["subject"] if r.status == 200 else r.status
+
+
+def in_the_inbox(app, key):
+    return sorted(it["uid"] for it in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"] if it["key"] == key)
+
+
+def renumber_afresh(world, account=w.ADA):
+    """A new UIDVALIDITY under which no message in the Inbox has the uid it had, and synced."""
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest
+    world.server.renumber(account, "INBOX", first=500)
+    ingest.sync_new(accounts.get(account))
+
+
+def test_two_copies_in_one_folder_under_one_key_each_open_by_their_uid(app, world):
+    real, other = world.copy(LUNCH), a_second_copy(world)
+    assert real["key"] == other["key"] and real["uid"] != other["uid"]
+    assert in_the_inbox(app, real["key"]) == sorted([real["uid"], other["uid"]])     # each a row of its own
+    assert opened_subject(app, real) == world.row(LUNCH)["subject"]
+    assert opened_subject(app, other) == OTHER
+    opened = app.get("/api/message/body?" + urlencode(real)).json
+    assert (opened["key"], opened["folder"], opened["uid"]) == (real["key"], "INBOX", real["uid"])
+
+
+def test_filing_one_of_two_copies_files_the_one_named(app, world):
+    real, other = world.copy(LUNCH), a_second_copy(world)
+    r = app.post("/api/archive", real).json
+    assert r["ok"] is True
+    assert in_the_inbox(app, real["key"]) == [other["uid"]]
+    on_the_server = world.server.messages(w.ADA, "INBOX")
+    assert real["uid"] not in on_the_server and on_the_server[other["uid"]].headers()["Subject"] == OTHER
+
+
+def test_a_star_and_a_marked_row_go_to_the_one_of_two_copies_named(app, world):
+    real, other = world.copy(LUNCH), a_second_copy(world)
+    app.post("/api/flag", {**other, "flag": "flagged", "on": True})
+    flagged = {r["uid"]: r["flagged"] for r in q("SELECT uid, flagged FROM messages WHERE message_key=? AND folder='INBOX'", real["key"])}
+    assert flagged == {real["uid"]: 0, other["uid"]: 1}
+    r = app.post("/api/bulk/file", {"verb": "archive", "rows": [other]}).json
+    assert (r["count"], r["filed"]) == (1, [other])
+    assert in_the_inbox(app, real["key"]) == [real["uid"]]
+
+
+def test_without_a_uid_a_key_and_folder_name_neither_of_two_copies(app, world):
+    """Rather than a guess at one of them, which is what someone who sent the second would want."""
+    real = world.copy(LUNCH)
+    a_second_copy(world)
+    bare = {"key": real["key"], "folder": "INBOX"}
+    since = world.mark()
+    assert opened_subject(app, bare) == 404
+    for path in ("/api/archive", "/api/trash", "/api/seen", "/api/flag", "/api/thread/archive"):
+        r = app.post(path, {**bare, "seen": True, "flag": "flagged", "on": True})
+        assert (r.status, r.json) == (404, problems.not_found("not found")), path
+    r = app.post("/api/bulk/file", {"verb": "archive", "rows": [bare]})
+    assert r.status == 404
+    assert world.writes(since) == []
+
+
+def test_without_a_uid_the_only_copy_in_a_folder_is_the_one_named(app, world):
+    copy = world.copy(RECEIPT)
+    assert opened_subject(app, {"key": copy["key"], "folder": "INBOX"}) == world.row(RECEIPT)["subject"]
+
+
+def test_a_stale_uid_names_nothing_though_one_copy_is_left(app, world):
+    """A link kept across a new UIDVALIDITY: the copy it named has another uid now, and it opens nothing rather than the copy
+    a guess would take. The list's row, read again, names it."""
+    copy, subject = world.copy(RECEIPT), world.row(RECEIPT)["subject"]
+    renumber_afresh(world)
+    [now] = in_the_inbox(app, copy["key"])
+    assert now != copy["uid"]
+    since = world.mark()
+    assert opened_subject(app, copy) == 404
+    assert app.post("/api/archive", copy).status == 404
+    assert world.writes(since) == []
+    assert opened_subject(app, {**copy, "uid": now}) == subject
+
+
+def test_a_stale_uid_names_neither_of_two_copies(app, world):
+    real = world.copy(LUNCH)
+    a_second_copy(world)
+    renumber_afresh(world)
+    assert len(in_the_inbox(app, real["key"])) == 2 and real["uid"] not in in_the_inbox(app, real["key"])
+    since = world.mark()
+    assert opened_subject(app, real) == 404
+    assert app.post("/api/archive", real).status == 404
+    assert world.writes(since) == []
+
+
+def test_a_copy_on_its_way_out_is_named_by_its_uid(app, world):
+    """A move still queued takes its row off every list. Alone in its folder it is still the copy there; beside a new one,
+    each has its uid."""
     from mailmind.bootstrap import mailbox
     key = world.key(LUNCH)
     world.queued_move(LUNCH, "Archive")
     assert mailbox.queries.pk_of_copy(key, "INBOX") == world.pk(LUNCH)     # the only one there, on its way out
-    world.deliver(w.ADA, "INBOX", w.raw(LUNCH))
-    listed = q("SELECT pk FROM messages WHERE message_key=? AND pending_removal IS NULL", key)
-    assert [mailbox.queries.pk_of_copy(key, "INBOX")] == [r["pk"] for r in listed]
+    uid = world.deliver(w.ADA, "INBOX", w.raw(LUNCH))
+    [listed] = q("SELECT pk FROM messages WHERE message_key=? AND pending_removal IS NULL", key)
+    assert mailbox.queries.pk_of_copy(key, "INBOX") is None
+    assert mailbox.queries.pk_of_copy(key, "INBOX", uid) == listed["pk"]
+    assert mailbox.queries.pk_of_copy(key, "INBOX", world.uid(LUNCH)) == world.pk(LUNCH)
+
+
+def test_a_draft_reopens_from_the_one_of_two_copies_its_uid_names(app, world):
+    """Thunderbird saves a draft again under its Message-ID: each copy in Drafts reopens as itself, and with no uid neither."""
+    texts = {}
+    for name in (DRAFT_V1, DRAFT_V2):
+        r = app.post("/api/draft/resume", world.copy(name))
+        assert r.status == 200, r.body
+        texts[name] = r.json["text"]
+    assert texts[DRAFT_V1] != texts[DRAFT_V2]
+    bare = app.post("/api/draft/resume", {"key": world.key(DRAFT_V1), "folder": "Drafts"})
+    assert (bare.status, bare.json) == (404, problems.not_found("That draft is no longer in Drafts."))
+
+
+def test_a_route_for_the_message_takes_the_copy_its_uid_names(app, world):
+    """Thunderbird saves a draft again under its Message-ID: both are in Drafts under one key. A summary or a reply takes the
+    copy whose uid it was given, and with none, or one that names neither, the newer."""
+    from mailmind.bootstrap import mailbox
+    key = world.key(DRAFT_V1)
+    assert key == world.key(DRAFT_V2)
+    for name in (DRAFT_V1, DRAFT_V2):
+        assert mailbox.queries.pk_of_message(key, "Drafts", world.uid(name)) == world.pk(name)
+    assert mailbox.queries.pk_of_message(key, "Drafts") == world.pk(DRAFT_V2)
+    assert mailbox.queries.pk_of_message(key, "Drafts", 999_999) == world.pk(DRAFT_V2)

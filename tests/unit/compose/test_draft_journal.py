@@ -222,10 +222,10 @@ def test_a_composer_whose_answer_was_lost_is_not_its_own_conflict(app, world):
 # -- reopening --------------------------------------------------------------------------------
 
 def opened_from_the_list(app, r):
-    """The draft's copy as the list names it: by its key and folder."""
+    """The draft’s copy as the list names it: by its key, folder and uid."""
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"]
               if i["subject"] == "Swatch order"]
-    return {"key": item["key"], "folder": item["folder"]}
+    return {"key": item["key"], "folder": item["folder"], "uid": item["uid"]}
 
 
 def test_reopening_a_copy_prefers_the_newer_save(app, world):

@@ -11,7 +11,7 @@ def asked(**qs):
 
 
 def row(pk=1, **kw):
-    return {"pk": pk, "message_key": pk * 10, "account": "ada@example.test", "folder": "INBOX", "from_name": "Lin Ma",
+    return {"pk": pk, "message_key": pk * 10, "uid": pk, "account": "ada@example.test", "folder": "INBOX", "from_name": "Lin Ma",
             "from_addr": "lin@example.test", "subject": "Fabric", "date_iso": "2026-11-02T12:00:00+00:00", "snippet": "swatches",
             "seen": 1, "flagged": 0, "has_attach": 0, "is_junk": 0, "bucket": "PERSONAL", "thread_id": None, "importance": None, "category": None,
             "action": None, **kw}
@@ -110,7 +110,7 @@ ALIASES = {"ada@example.test": "Work"}
 
 def test_a_hit_reads_as_the_list_shows_it():
     assert search.hit(row(flagged=1, has_attach=1, is_junk=1, seen=0), ALIASES, when) == {
-        "key": 10, "account": "ada@example.test", "folder": "INBOX", "alias": "Work",
+        "key": 10, "account": "ada@example.test", "folder": "INBOX", "uid": 1, "alias": "Work",
         "from_name": "Lin Ma", "from_addr": "lin@example.test", "subject": "Fabric",
         "when": "when:2026-11-02T12:00:00+00:00", "date": "2026-11-02", "snippet": "swatches",
         "seen": False, "flagged": True, "has_attach": True, "is_junk": True, "bucket": "PERSONAL", "thread_id": None,

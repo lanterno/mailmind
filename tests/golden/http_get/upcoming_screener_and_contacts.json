@@ -14,7 +14,8 @@
      "recurrence": "",
      "start": "2026-11-03T14:00",
      "summary": "Design review",
-     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64"
+     "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
+     "uid": 6
     }
    ],
    "ok": true
@@ -223,6 +224,7 @@
      "seen": false,
      "subject": "The finished quilt",
      "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
+     "uid": 11,
      "when": "17h ago"
     },
     {
@@ -232,6 +234,7 @@
      "seen": false,
      "subject": "Re: Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 2,
      "when": "6d ago"
     },
     {
@@ -241,6 +244,7 @@
      "seen": true,
      "subject": "Lunch on Thursday?",
      "thread_id": "rf:ada@example.test:f55e4e75612a3def",
+     "uid": 1,
      "when": "6d ago"
     },
     {
@@ -250,6 +254,7 @@
      "seen": true,
      "subject": "Quilt pattern ideas",
      "thread_id": "rf:ada@example.test:c5862e0831764395",
+     "uid": 1,
      "when": "1w ago"
     }
    ],
