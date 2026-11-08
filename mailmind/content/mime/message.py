@@ -4,7 +4,8 @@ parse(raw_bytes) -> {
   "text": plain-text body or None,
   "html": HTML body or None (UNSANITIZED — caller must run content.sanitize),
   "attachments": [{part_id, filename, content_type, size, content_id, is_inline}],
-  "to","cc","reply_to","date": header strings,
+  "to","cc","date": header strings,
+  "reply_to": the address a reply goes to, bare, or "",
 }
 The body is chosen from multipart/alternative the way a client does (prefer html).
 cid: inline images are surfaced so the sanitizer/UI can resolve them later.
@@ -43,7 +44,7 @@ class Parsed(TypedDict):
     attachments: list[Attachment]
     to: str
     cc: str
-    reply_to: str
+    reply_to: str                # the bare address, read as `reply_to_of` does
     date: str
 
 
@@ -132,6 +133,13 @@ def recipient_addrs(msg: AnyMessage) -> list[str]:
     is decoded, so a display name can't pass for an address, and a malformed entry costs only itself."""
     values = [str(_unfold(v)) for field in ("To", "Cc") for v in msg.get_all(field) or []]
     return sorted({a.strip(".'").lower() for _, a in getaddresses(values, strict=False) if "@" in a})
+
+
+def reply_to_of(msg: AnyMessage) -> str:
+    """The address a reply goes to: the first of a message's Reply-To, bare, or "". Read before any encoded word is decoded, under
+    any policy, so a display name holding an address can't pass for the one that follows it. Case as the header wrote it."""
+    values = [str(_unfold(v)) for name, v in msg.raw_items() if name.lower() == "reply-to"]
+    return next((a.strip(".'") for _, a in getaddresses(values, strict=False) if "@" in a), "")
 
 
 def sender_of(msg: AnyMessage) -> tuple[str, str]:
@@ -296,7 +304,7 @@ def parse(raw_bytes: bytes) -> Parsed:
     return {
         "text": text, "html": html, "attachments": attachments,
         "to": _hdr(msg, "To"), "cc": _hdr(msg, "Cc"),
-        "reply_to": _hdr(msg, "Reply-To"), "date": _hdr(msg, "Date"),
+        "reply_to": reply_to_of(msg), "date": _hdr(msg, "Date"),
     }
 
 
