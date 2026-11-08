@@ -1335,6 +1335,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/screener/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Screener Suggest */
+        post: operations["screener_suggest_api_screener_suggest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -4801,6 +4818,38 @@ export interface components {
             ok: true;
             /** Total */
             total: number;
+        };
+        /** ScreenerSuggestBody */
+        ScreenerSuggestBody: {
+            /** Account */
+            account?: string | null;
+        };
+        /**
+         * ScreenerSuggestion
+         * @description What the AI would do about a sender, surely enough to say so. A person still clicks: nothing writes a rule from this.
+         */
+        ScreenerSuggestion: {
+            /** Confidence */
+            confidence: number;
+            /** From Addr */
+            from_addr: string;
+            verdict: components["schemas"]["Verdict"];
+            /** Why */
+            why: string;
+        };
+        /** ScreenerSuggestions */
+        ScreenerSuggestions: {
+            /** Account */
+            account: string | null;
+            /** Asked */
+            asked: number;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            /** Suggestions */
+            suggestions: components["schemas"]["ScreenerSuggestion"][];
         };
         /** SearchHit */
         SearchHit: {
@@ -14982,6 +15031,120 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    screener_suggest_api_screener_suggest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerSuggestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerSuggestions"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
