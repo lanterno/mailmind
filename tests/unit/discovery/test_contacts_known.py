@@ -220,6 +220,99 @@ def test_items_carry_only_known_and_self(home):
     assert all(set(v) == {"known", "self"} for v in res["items"].values()), res
 
 
+# ── a new address that reads as someone you've written to, mistyped ──────────────────────────────────────────────────────
+
+SLIPS = [
+    ("jon@example.test", "john@example.test"),              # a letter dropped
+    ("johhn@example.test", "john@example.test"),            # a letter doubled
+    ("joan@example.test", "john@example.test"),             # a letter changed
+    ("jonh@example.test", "john@example.test"),             # two neighbours swapped
+    ("john@exmaple.test", "john@example.test"),             # the same, in the domain
+    ("john@example.tes", "john@example.test"),
+    ("bo@exmaple.test", "bo@example.test"),                 # a short name is safe to read past when the domain slips
+]
+
+
+@pytest.mark.parametrize("typed,meant", SLIPS, ids=[t for t, _ in SLIPS])
+def test_a_new_address_one_slip_from_someone_you_write_to_says_who(home, typed, meant):
+    _msg(ACCT, meant, folder="Sent")
+    assert discovery.known.ask([typed])["items"][typed] == {"known": False, "self": False, "near": meant}
+
+
+NOT_SLIPS = [
+    ("two slips apart", "jhn@exampel.test", "john@example.test"),
+    ("two edits in the name", "johnny@example.test", "john@example.test"),
+    ("the name and the domain both", "jon@exmaple.test", "john@example.test"),
+    ("too short to tell apart", "ed@example.test", "ad@example.test"),
+    ("numbered siblings", "room4@example.test", "room3@example.test"),
+    ("another tag of the same mailbox", "john+a@example.test", "john+b@example.test"),
+    ("the mailbox a tag names", "john+a@example.test", "john@example.test"),
+]
+
+
+@pytest.mark.parametrize("typed,person", [c[1:] for c in NOT_SLIPS], ids=[c[0] for c in NOT_SLIPS])
+def test_what_is_no_slip(home, typed, person):
+    _msg(ACCT, person, folder="Sent")
+    assert "near" not in discovery.known.ask([typed])["items"][typed]
+
+
+def test_a_slip_of_someone_youve_only_heard_from_says_nothing(home):
+    _msg("john@example.test")                                # they wrote to you; you never wrote to them
+    _msg("mira@example.test", "kate@example.test")           # nor does someone else's mail to a third person count
+    res = discovery.known.ask(["jon@example.test", "kat@example.test"])
+    assert all("near" not in v for v in res["items"].values()), res
+
+
+def test_an_address_you_already_know_is_never_a_slip(home):
+    _msg(ACCT, "john@example.test", folder="Sent")
+    _msg("jon@example.test")                                 # one edit from John, but a real correspondent
+    assert discovery.known.ask(["jon@example.test"])["items"]["jon@example.test"] == {"known": True, "self": False}
+
+
+def test_your_own_address_is_no_one_to_be_a_slip_of(home):
+    _msg(ACCT, ACCT, folder="Sent")
+    assert "near" not in discovery.known.ask(["adam@example.test"])["items"]["adam@example.test"]
+
+
+def test_the_outbox_counts_as_writing_to_someone_but_only_once_delivered(home):
+    _outbox(["john@example.test"], delivered=True)
+    _outbox(["kate@example.test"], delivered=False)
+    res = discovery.known.ask(["jon@example.test", "kat@example.test"])
+    assert res["items"]["jon@example.test"]["near"] == "john@example.test", res
+    assert "near" not in res["items"]["kat@example.test"], res
+
+
+def test_drafts_and_spam_arent_writing_to_someone(home):
+    _msg(ACCT, "john@example.test", folder="Drafts")
+    _msg(ACCT, "kate@example.test", folder="Sent", is_junk=1)
+    res = discovery.known.ask(["jon@example.test", "kat@example.test"])
+    assert all("near" not in v for v in res["items"].values()), res
+
+
+def test_the_person_written_to_most_is_the_one_named(home):
+    _msg(ACCT, "joan@example.test", folder="Sent")
+    _msg(ACCT, "john@example.test", folder="Sent")
+    _msg(ACCT, "john@example.test", folder="Archive")
+    assert discovery.known.ask(["jon@example.test"])["items"]["jon@example.test"]["near"] == "john@example.test"
+
+
+def test_nothing_is_read_of_who_you_write_to_for_someone_known(home, monkeypatch):
+    from mailmind.bootstrap.discovery import _mail
+    _msg("lio@example.test")
+    calls = []
+    monkeypatch.setattr(_mail, "written_copies", lambda *a: calls.append(a) or [])
+    discovery.known.ask(["lio@example.test", ACCT])
+    assert calls == []
+    discovery.known.ask(["new@example.test"])
+    assert len(calls) == 1
+
+
+def test_route_answers_near(app):
+    _msg(ACCT, "john@example.test", folder="Sent")
+    r = app.post("/api/contacts/known", {"addrs": ["jon@example.test"]})
+    assert r.status == 200 and r.json["items"]["jon@example.test"]["near"] == "john@example.test", r.body
+
+
 def test_route_requires_csrf(app):
     _msg("lio@example.test")
     body = {"addrs": ["lio@example.test"]}
