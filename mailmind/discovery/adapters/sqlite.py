@@ -146,6 +146,14 @@ class StoredMail:
     def card(self, a):
         with _uow.read() as c:
             agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
+    def sender_domains_like(self, q):
+        """The domains people have written from, the commonest first: what's after the @, whatever the case."""
+        domain = "lower(substr(from_addr, instr(from_addr, '@') + 1))"
+        with _uow.read() as c:
+            return c.execute(f"SELECT {domain} AS domain, COUNT(*) AS n FROM messages "
+                             f"WHERE instr(from_addr, '@') > 0 AND {domain} LIKE ? "
+                             "GROUP BY domain ORDER BY n DESC, domain LIMIT 3", (f"%{q}%",)).fetchall()
+
                             "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
                             "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
             accts = [r[0] for r in c.execute(

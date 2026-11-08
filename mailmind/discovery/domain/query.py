@@ -50,6 +50,11 @@ BUCKET_ALIAS = {                                  # shorthand -> the real classi
     "spam": "spam/scam", "scam": "spam/scam", "blocked": "blocked",
     "personal": "personal/protected", "protected": "personal/protected", "other": "other/personal-ish",
 }
+# What the search box offers as you type (domain.suggest), in the order it offers them: the operators this parser reads, and
+# the is: and has: values worth a line. BUCKET_ALIAS has several words for most buckets, and one of each is enough to offer.
+OPERATORS = ("from", "to", "cc", "subject", "body", "is", "has", "in", "account", "before", "after", "bucket", "category")
+IS_OFFERED = ("unread", "read", "flagged", "answered", "junk", "snoozed", "newsletter", "receipt", "notification")
+HAS_OFFERED = ("attachment",)
 # is:<x> values that pick out part of the mailbox: a content lane or a minority flag. Not "read", which
 # is usually most mail, though its inverse "unread" is.
 _NARROW_IS = frozenset({"newsletter", "newsletters", "marketing", "receipt", "receipts", "transactional",

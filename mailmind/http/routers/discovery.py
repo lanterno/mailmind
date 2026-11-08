@@ -16,6 +16,8 @@ from mailmind.http.schemas.discovery import (
     NothingAsked,
     SearchArgs,
     SearchPage,
+    SearchSuggestions,
+    SuggestArgs,
     Suggestions,
     ViewChange,
     Views,
@@ -32,6 +34,10 @@ def router(discovery):
     @r.get("/api/search", responses=answers(SearchPage | NothingAsked))
     def search(args: Annotated[SearchArgs, Query()]):
         return discovery.search.answer(args.as_query())
+
+    @r.get("/api/suggest", responses=answers(SearchSuggestions))
+    def suggest(args: Annotated[SuggestArgs, Query()]):
+        return discovery.suggesting.answer(args.q)
 
     @r.get("/api/views", responses=answers(Views))
     def views():

@@ -8,12 +8,13 @@ from mailmind.discovery.api import QuerySpec
 from mailmind.discovery.application.contacts import Contacts, KnownContacts
 from mailmind.discovery.application.documents import DocumentHub
 from mailmind.discovery.application.search import Search
+from mailmind.discovery.application.suggest import Suggesting
 from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
 from mailmind.bootstrap import mailbox
 
-__all__ = ["BM25", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "views",
-           "visible"]
+__all__ = ["BM25", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "suggesting",
+           "views", "visible"]
 
 def build(q):
     """A query as a safe (FTS MATCH, SQL WHERE, params) triple."""
@@ -52,4 +53,5 @@ views = SavedViews(views_file)
 search = Search(_mail, _Accounts())
 documents = DocumentHub(_mail, _Accounts())
 contacts = Contacts(_mail)
+suggesting = Suggesting(_mail)
 known = KnownContacts(_mail, _Accounts(), _Folders(), _KeptSenders())
