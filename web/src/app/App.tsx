@@ -334,6 +334,8 @@ export function App() {
             accountChip={(r) => (source?.kind === "folder" ? null : aliases[r.account] || shortAddress(r.account))}
             onOpen={m.open}
             onFile={m.file}
+            onStar={m.starRow}
+            onSeen={m.seenRow}
             onSnooze={(r, anchor) => snoozeAsk.set({ target: r.count > 1 && r.threadId ? { account: r.account, thread_id: r.threadId } : copyOf(r), rows: [r.id], anchor, canUnsnooze: false })}
             onFocusRead={() => setReadFocus(true)}
             empty={empty}

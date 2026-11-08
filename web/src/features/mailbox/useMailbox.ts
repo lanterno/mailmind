@@ -227,6 +227,8 @@ export function useMailbox() {
     star: () => {
       if (openRow) void actions.setStar(qc, openRow);
     },
+    starRow: (r: Row) => void actions.starRow(qc, r, isWhole(r)),
+    seenRow: (r: Row) => void actions.seenRow(qc, r, isWhole(r), r.id === openId),
     unread: () => {
       if (openCopy !== null) void actions.markUnread(qc, openCopy);
     },

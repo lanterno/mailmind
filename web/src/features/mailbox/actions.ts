@@ -1,7 +1,7 @@
 // What you can do to a message from anywhere: the list, the reader, the keyboard. Filing hides the row at once and
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
-import { post, refusalOf } from "../../lib/api/client";
+import { get, post, refusalOf } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
@@ -272,16 +272,30 @@ export async function undo(qc: QueryClient) {
   readAgain(qc);
 }
 
-export async function setStar(qc: QueryClient, row: Pick<Row, "key" | "folder" | "uid" | "flagged">) {
-  const on = !row.flagged;
-  patchRow(qc, row, { flagged: on });
+// A mark shown on the row at once and then asked of the server, for each of `copies`. A no puts the row back.
+async function markRow(qc: QueryClient, row: Copy, shows: Partial<Row>, was: Partial<Row>, copies: () => Promise<Copy[]> | Copy[], send: (c: Copy) => Promise<unknown>, said: string, couldnt: string) {
+  patchRow(qc, row, shows);
   try {
-    await post("/api/flag", { ...copyOf(row), flag: "flagged", on });
-    toast(on ? "Starred" : "Unstarred");
+    for (const c of await copies()) await send(c);
+    void qc.invalidateQueries({ queryKey: ["folders"] });
+    toast(said);
   } catch {
-    patchRow(qc, row, { flagged: !on });
-    toast("Couldn’t star");
+    patchRow(qc, row, was);
+    toast(couldnt);
   }
+}
+
+export function setStar(qc: QueryClient, row: Copy & Pick<Row, "flagged">, copies: () => Promise<Copy[]> | Copy[] = () => [row]) {
+  const on = !row.flagged;
+  return markRow(qc, row, { flagged: on }, { flagged: !on }, copies, (c) => post("/api/flag", { ...copyOf(c), flag: "flagged", on }), on ? "Starred" : "Unstarred", "Couldn’t star");
+}
+
+// A conversation's row sums its members: it reads as read when none is unread, and as starred when any is. So marking it
+// read or unstarring it takes every member that makes it so; the other way round, the copy the row names does.
+const membersOf = async (row: Row) => (await get(`/api/thread?account=${encodeURIComponent(row.account)}&thread_id=${encodeURIComponent(row.threadId)}`)).items;
+
+export function starRow(qc: QueryClient, row: Row, whole: boolean) {
+  return setStar(qc, row, whole && row.flagged ? async () => (await membersOf(row)).filter((m) => m.flagged) : undefined);
 }
 
 // Opening a message marks it read after a moment on it, so running down a list with j leaves the rest unread.
@@ -309,4 +323,11 @@ export function armDwell(qc: QueryClient, copy: Copy) {
 export async function markUnread(qc: QueryClient, copy: Copy) {
   cancelDwell();
   toast((await markSeen(qc, copy, false)) ? "Marked unread" : "Couldn’t update");
+}
+
+// The row's own Mark read and Mark unread. On the open row the dwell mustn't then take it back.
+export function seenRow(qc: QueryClient, row: Row, whole: boolean, open: boolean) {
+  if (open) cancelDwell();
+  const seen = !row.seen;
+  return markRow(qc, row, { seen }, { seen: !seen }, whole && seen ? async () => (await membersOf(row)).filter((m) => !m.seen) : () => [row], (c) => post("/api/seen", { ...copyOf(c), seen }), seen ? "Marked read" : "Marked unread", "Couldn’t update");
 }

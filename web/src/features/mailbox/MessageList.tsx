@@ -1,6 +1,6 @@
 // The list: a real listbox. Focus stays on the box and aria-activedescendant says which row you're on, so j and k move a
 // screen reader's place too. A row's own actions are for the mouse: an option can't hold a control, and the keyboard has
-// e, d and h.
+// e, d, h, u and s.
 import { useEffect, useRef } from "react";
 import { minute } from "../../lib/clock";
 import { avatarHue, dayGroup, initialsOf } from "../../lib/text";
@@ -13,14 +13,14 @@ const rowId = (id: string) => `row-${encodeURIComponent(id)}`;
 
 // One of a row's own actions, for the pointer: an option can't hold a control, so these are hidden from assistive tech with
 // the rest of `.racts`, and the key in the title is the keyboard's way to the same thing.
-function Ract({ icon, title, danger, mark, onPress }: { icon: string; title: string; danger?: boolean; mark?: string; onPress: (el: Element) => void }) {
+function Ract({ icon, title, danger, filled, mark, onPress }: { icon: string; title: string; danger?: boolean; filled?: boolean; mark?: string; onPress: (el: Element) => void }) {
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the key in its title is the keyboard's
-    <span className={danger ? "ract del" : "ract"} data-racts={mark} title={title} onClick={(e) => { e.stopPropagation(); onPress(e.currentTarget); }}><Icon name={icon} /></span>
+    <span className={danger ? "ract del" : "ract"} data-racts={mark} title={title} onClick={(e) => { e.stopPropagation(); onPress(e.currentTarget); }}><Icon name={icon} className={filled ? "fill" : undefined} /></span>
   );
 }
 
-function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onFocusRead }: {
+function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead }: {
   row: Row;
   whole: boolean;
   selected: boolean;
@@ -29,6 +29,8 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   onOpen: () => void;
   onFile: (kind: Filing) => void;
   onSnooze: (anchor: Element) => void;
+  onStar: () => void;
+  onSeen: () => void;
   onFocusRead: () => void;
 }) {
   const needs = Boolean(row.action);
@@ -60,12 +62,14 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
         <Ract icon="archive" title={`Archive${what} (e)`} onPress={() => onFile("archive")} />
         <Ract icon="trash" title={`Delete${what} (d)`} danger onPress={() => onFile("trash")} />
         <Ract icon="clock" title="Snooze (h)" mark="snooze" onPress={onSnooze} />
+        <Ract icon={row.seen ? "mail" : "eye"} title={row.seen ? `Mark${what} unread (u)` : `Mark${what} read`} mark="seen" onPress={onSeen} />
+        <Ract icon="star" filled={row.flagged} title={`${row.flagged ? "Unstar" : "Star"}${what} (s)`} mark="star" onPress={onStar} />
       </div>
     </div>
   );
 }
 
-export function MessageList({ above, rows, openId, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, onFocusRead, empty, footer }: {
+export function MessageList({ above, rows, openId, marks, label, folder, isWhole, accountChip, onOpen, onFile, onSnooze, onStar, onSeen, onFocusRead, empty, footer }: {
   above?: React.ReactNode;
   rows: Row[];
   openId: string | null;
@@ -77,6 +81,8 @@ export function MessageList({ above, rows, openId, marks, label, folder, isWhole
   onOpen: (r: Row) => void;
   onFile: (r: Row, kind: Filing) => void;
   onSnooze: (r: Row, anchor: Element) => void;
+  onStar: (r: Row) => void;
+  onSeen: (r: Row) => void;
   onFocusRead: () => void;
   empty: React.ReactNode;
   footer: React.ReactNode;
@@ -97,7 +103,7 @@ export function MessageList({ above, rows, openId, marks, label, folder, isWhole
     const here = sections && row.ts !== null ? dayGroup(row.ts, new Date(now)) : "";
     if (here && here !== section) items.push(<div key={`g-${here}`} className="rgrp" role="presentation">{here}</div>);
     if (here) section = here;
-    items.push(<RowItem key={row.id} row={row} whole={isWhole(row)} selected={row.id === openId} isMarked={marks.has(row.id)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} onFocusRead={onFocusRead} />);
+    items.push(<RowItem key={row.id} row={row} whole={isWhole(row)} selected={row.id === openId} isMarked={marks.has(row.id)} showAccount={accountChip(row)} onOpen={() => onOpen(row)} onFile={(kind) => onFile(row, kind)} onSnooze={(anchor) => onSnooze(row, anchor)} onStar={() => onStar(row)} onSeen={() => onSeen(row)} onFocusRead={onFocusRead} />);
   }
   return (
     <div id="rows">
