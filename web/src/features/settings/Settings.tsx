@@ -1,8 +1,8 @@
 // Email connections: who MailMind reads, and how it reaches each. A password goes to the server once and never comes back;
 // what the page shows of a stored one is only how it is kept.
-import { useEffect, useState, useEffectEvent } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, Modal, ModalOverlay } from "react-aria-components";
+import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
@@ -12,6 +12,9 @@ import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { useDigest } from "../mailbox";
 import { syncNow } from "../status";
 import { settingsOpen } from "./open";
+import { PreferencesForm } from "./Preferences";
+import { Seg } from "./Seg";
+import { useStepBack } from "./useStepBack";
 import { useLayer } from "../../lib/backTrap";
 
 type Connection = NonNullable<GetAnswers["/api/accounts"]["accounts"]>[number];
@@ -38,14 +41,6 @@ async function testConnection(payload: unknown, say: (t: Tested) => void) {
 
 function TestResult({ t }: { t: Tested }) {
   return <span className={t ? `set-status ${t.kind}` : "set-status"} role="status">{t?.text}</span>;
-}
-
-function Seg<T extends string>({ value, options, label, onChange }: { value: T; options: [T, string][]; label: string; onChange: (v: T) => void }) {
-  return (
-    <div className="seg" role="group" aria-label={label}>
-      {options.map(([v, words]) => <button type="button" key={v} className={v === value ? "on" : ""} aria-pressed={v === value} onClick={() => onChange(v)}>{words}</button>)}
-    </div>
-  );
 }
 
 function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connection | null; signatureDefault: string; done: (added: boolean) => void; cancel: () => void }) {
@@ -288,21 +283,11 @@ function Connections() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
   const { data: digest } = useDigest();
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  // Esc steps back one thing at a time: out of a field, out of the form, and only then out of Settings.
-  const stepBack = useEffectEvent((e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
-    const at = e.target as HTMLElement;
-    if (at.closest?.("input,textarea,select")) at.blur();
-    else if (editing !== null) setEditing(null);
-    else return;
-    e.stopPropagation();
-    e.preventDefault();
+  useStepBack(() => {
+    if (editing === null) return false;
+    setEditing(null);
+    return true;
   });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => stepBack(e);
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, []);
   const rows = accounts.data?.accounts ?? [];
   const again = () => {
     void qc.invalidateQueries({ queryKey: ["accounts"] });
@@ -335,13 +320,6 @@ function Connections() {
   }
   return (
     <>
-      <div className="set-head">
-        <div>
-          <h3 id="setTitle">Email connections</h3>
-          <div className="set-sub">Stored locally in mailmind.config.json · never leaves this machine</div>
-        </div>
-        <button className="x" id="setClose" aria-label="Close" onClick={() => settingsOpen.set(false)}>✕</button>
-      </div>
       <div className="set-body" id="setList">{body}</div>
       <div className="set-foot">
         <span className="set-hint" id="setHint">{rows.length} connection{rows.length === 1 ? "" : "s"}</span>
@@ -351,13 +329,37 @@ function Connections() {
   );
 }
 
+type Section = "connections" | "preferences";
+const SECTION_TITLE: Record<Section, string> = { connections: "Email connections", preferences: "Preferences" };
+
+function Home() {
+  const [section, setSection] = useState<Section>("connections");
+  return (
+    <Tabs className="set-home" selectedKey={section} onSelectionChange={(k) => setSection(k as Section)}>
+      <div className="set-head">
+        <div>
+          <h3 id="setTitle">{SECTION_TITLE[section]}</h3>
+          <div className="set-sub">Stored locally in mailmind.config.json · never leaves this machine</div>
+        </div>
+        <button className="x" id="setClose" aria-label="Close" onClick={() => settingsOpen.set(false)}>✕</button>
+      </div>
+      <TabList className="set-tabs" aria-label="Settings">
+        <Tab id="connections" className="set-tab">Connections</Tab>
+        <Tab id="preferences" className="set-tab">Preferences</Tab>
+      </TabList>
+      <TabPanel id="connections" className="set-panel"><Connections /></TabPanel>
+      <TabPanel id="preferences" className="set-panel"><PreferencesForm /></TabPanel>
+    </Tabs>
+  );
+}
+
 export function Settings() {
   const open = settingsOpen.useValue();
   useLayer(open, () => settingsOpen.set(false));
   return (
     <ModalOverlay className="settings show" isOpen={open} isDismissable onOpenChange={settingsOpen.set}>
       <Modal className="modal-through">
-        <Dialog aria-labelledby="setTitle" className="set-box"><Connections /></Dialog>
+        <Dialog aria-labelledby="setTitle" className="set-box"><Home /></Dialog>
       </Modal>
     </ModalOverlay>
   );
