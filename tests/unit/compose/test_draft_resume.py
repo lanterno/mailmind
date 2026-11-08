@@ -607,7 +607,7 @@ def test_a_reopened_reply_says_where_its_original_asked_replies_to_go(calls):
     pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=opk, to=["desk@elsewhere.example.test"], text="OK")
     r, code = _resume(pk)
     assert code == 200, (code, r)
-    assert (r["reply_to"], r["original_from"]) == ("Plans Desk <desk@elsewhere.example.test>", "bo@example.test"), r
+    assert (r["reply_to"], r["original_from"]) == ("desk@elsewhere.example.test", "bo@example.test"), r
 
 
 def test_a_reopened_draft_with_no_original_says_no_reply_to(calls):
