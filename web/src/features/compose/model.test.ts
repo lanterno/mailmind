@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, isPicture, pictureMark, pictureParts, withoutMark, withPictures, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -170,3 +170,30 @@ describe("a reply's tone", () => {
     for (const said of ["", "nope", "toString", "constructor", null, undefined, 3]) expect(isDraftTone(said)).toBe(false);
   });
 });
+
+describe("a picture's mark", () => {
+  it("keeps a name from ending it early", () => {
+    expect(pictureMark("a]b[c\nd.png", "tok")).toBe("![a b c d.png](cid:tok)");
+  });
+
+  it("is taken out by its token and nobody else's", () => {
+    expect(withoutMark("a ![x](cid:one) b ![y](cid:two) ![z](cid:one)", "one")).toBe("a  b ![y](cid:two) ");
+  });
+
+  it("is a picture only of the kinds the server takes", () => {
+    expect(isPicture("image/png")).toBe(true);
+    expect(isPicture("IMAGE/JPEG")).toBe(true);
+    expect(isPicture("image/svg+xml")).toBe(false);
+  });
+
+  it("names to a preview only the pictures that have a mark", () => {
+    const a = { filename: "a", content_type: "image/png", size: 1, b64: "QQ==" };
+    expect(pictureParts([a, { ...a, cid: "tok" }, { ...a, content_type: "text/plain", cid: "doc" }])).toEqual([{ cid: "tok", content_type: "image/png" }]);
+  });
+
+  it("shows a preview's picture as the data this composer holds, and no other", () => {
+    const files = [{ filename: "a", content_type: "image/png", size: 1, b64: "QQ==", cid: "tok" }, { filename: "b", content_type: "text/plain", size: 1, b64: "Qg==" }];
+    expect(withPictures('<img src="cid:tok@mailmind"><img src="cid:other@mailmind">', files)).toBe('<img src="data:image/png;base64,QQ=="><img src="cid:other@mailmind">');
+  });
+});
+

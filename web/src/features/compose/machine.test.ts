@@ -955,7 +955,7 @@ describe("write and preview", () => {
     expect(m.view.get()!.previewing).toBe(true);
     expect(m.view.get()!.preview).toBeNull();
     await flush();
-    expect(posted("/api/compose/preview")).toEqual([{ text: "**hi**" }]);
+    expect(posted("/api/compose/preview")).toEqual([{ text: "**hi**", pictures: [] }]);
     expect(m.view.get()!.preview).toEqual({ html: "<p><strong>hi</strong></p>", formatted: true });
   });
 
@@ -1026,3 +1026,100 @@ describe("write and preview", () => {
     expect(m.view.get()).toBeNull();
   });
 });
+
+describe("a picture in the text", () => {
+  const png = (name = "chart.png") => new File(["x"], name, { type: "image/png" });
+
+  it("goes where the cursor is, as a mark naming a file that carries its token", async () => {
+    const selected: number[][] = [];
+    const { m, posted } = setup({ selection: () => [5, 5], select: (a, b) => void selected.push([a, b]) });
+    m.open({ to: ["bea@example.test"], subject: "s" });
+    m.edit("body", "Hello there");
+    m.addFiles([png()], true);
+    const c = m.view.get()!;
+    const cid = /\(cid:([A-Za-z0-9]+)\)/.exec(c.body)![1]!;
+    expect(c.body).toBe(`Hello![chart.png](cid:${cid}) there`);
+    expect(selected.at(-1)).toEqual([5 + `![chart.png](cid:${cid})`.length, 5 + `![chart.png](cid:${cid})`.length]);
+    await flush();
+    expect(m.view.get()!.attachments).toEqual([{ filename: "chart.png", content_type: "image/png", size: 1, b64: "AAAA", cid }]);
+    m.send();
+    await flush();
+    expect(posted("/api/send")[0].attachments).toEqual([{ filename: "chart.png", content_type: "image/png", b64: "AAAA", cid }]);
+  });
+
+  it("marks each of several pictures in turn", async () => {
+    const { m } = setup();
+    m.open();
+    m.addFiles([png("a.png"), png("b.png")], true);
+    const c = m.view.get()!;
+    expect(c.body).toMatch(/^!\[a\.png\]\(cid:\w+\)!\[b\.png\]\(cid:\w+\)$/);
+  });
+
+  it("leaves an attachment that isn't a picture as an attachment", async () => {
+    const { m } = setup();
+    m.open();
+    m.addFiles([new File(["x"], "a.pdf", { type: "application/pdf" })], true);
+    await flush();
+    const c = m.view.get()!;
+    expect(c.body).toBe("");
+    expect(c.attachments[0]!.cid).toBeUndefined();
+  });
+
+  it("leaves a file attached the ordinary way out of the text", async () => {
+    const { m } = setup();
+    m.open();
+    m.addFiles([png()]);
+    await flush();
+    expect(m.view.get()!.body).toBe("");
+    expect(m.view.get()!.attachments[0]!.cid).toBeUndefined();
+  });
+
+  it("takes the mark away when the file can't be read", async () => {
+    const { m, toasts } = setup({ readFile: async () => { throw new Error("no"); } });
+    m.open();
+    m.addFiles([png()], true);
+    await flush();
+    expect(m.view.get()!.body).toBe("");
+    expect(toasts.at(-1)).toMatch(/Couldn.t add chart\.png/);
+  });
+
+  it("takes the mark away with the file", async () => {
+    const { m } = setup();
+    m.open();
+    m.edit("body", "before  after");
+    m.addFiles([png()], true);
+    await flush();
+    m.edit("body", `before ${m.view.get()!.body.replace("before  after", "").trim()} after`);
+    m.removeAttachment(0);
+    expect(m.view.get()!.body).toBe("before  after");
+  });
+
+  it("goes back to writing when one is added during a preview", async () => {
+    const { m } = setup();
+    m.open();
+    await m.preview();
+    m.addFiles([png()], true);
+    expect(m.view.get()!.previewing).toBe(false);
+  });
+
+  it("tells the preview of its pictures and shows each as the data it holds", async () => {
+    const { m, posted, answer } = setup();
+    m.open();
+    m.addFiles([png()], true);
+    await flush();
+    const cid = m.view.get()!.attachments[0]!.cid!;
+    answer("/api/compose/preview", () => ({ ok: true, html: `<p><img src="cid:${cid}@mailmind" alt="a"/></p>`, formatted: true }));
+    await m.preview();
+    expect(posted("/api/compose/preview")[0].pictures).toEqual([{ cid, content_type: "image/png" }]);
+    expect(m.view.get()!.preview!.html).toBe('<p><img src="data:image/png;base64,AAAA" alt="a"/></p>');
+  });
+
+  it("names a picture of a reopened draft again when it goes out", async () => {
+    const { m, posted } = setup();
+    m.open({ draftId: 3, body: "![a](cid:tok)", to: ["bea@example.test"], subject: "s", attachments: [{ filename: "a.png", content_type: "image/png", size: 1, b64: "AAAA", cid: "tok" }] });
+    m.send();
+    await flush();
+    expect(posted("/api/send")[0].attachments[0].cid).toBe("tok");
+  });
+});
+

@@ -2,6 +2,7 @@
 
 The rules these lean on are also pinned without a browser in web/src/features/compose/machine.test.ts.
 """
+import base64
 import email
 import email.policy
 import re
@@ -975,6 +976,61 @@ def test_preview_says_so_when_it_goes_as_plain_text(page, app, world):
     mode(page, "Preview").click()
     expect(page.locator("#cmpPreview")).to_contain_text("plain text")
     expect(page.locator("#cmpPreview iframe")).to_have_attribute("srcdoc", re.compile("Just words"))
+    clean(page)
+
+
+PNG_1PX = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+
+
+def picture_file(name="chart.png", mime="image/png"):
+    return {"name": name, "mimeType": mime, "buffer": PNG_1PX}
+
+
+def test_a_picture_goes_into_the_text_shows_in_the_preview_and_goes_out_inline(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric picture", "Here it is")
+    body(page).press("End")
+    page.locator("#cmpPicture").set_input_files(picture_file())
+    expect(body(page)).to_have_value(re.compile(r"^Here it is!\[chart\.png\]\(cid:\w+\)$"))
+    expect(page.locator(".cmp-att")).to_contain_text("chart.png")
+    expect(page.locator(".cmp-att")).to_contain_text("in the text")
+    mode(page, "Preview").click()
+    frame = page.locator("#cmpPreview iframe")
+    expect(frame).to_have_attribute("srcdoc", re.compile("data:image/png;base64,iVBOR"))
+    assert page.problems == [] and page.blocked == []    # the frame's policy lets a picture's data in, and nothing else
+    send_button(page).click()
+    let_undo_pass(page)
+    due(app)
+    [sent] = world.smtp.messages
+    m = email.message_from_bytes(sent.data, policy=email.policy.default)
+    assert m.get_content_type() == "multipart/alternative"
+    related = m.get_payload(1)
+    assert related.get_content_type() == "multipart/related"
+    html, img = related.iter_parts()
+    assert img.get_content() == PNG_1PX and img.get_content_disposition() == "inline"
+    assert f'src="cid:{img["Content-ID"][1:-1]}"' in html.get_content()
+    assert m.get_body(preferencelist=("plain",)).get_content().strip() == "Here it is[chart.png]"
+    clean(page)
+
+
+def test_a_chip_taken_off_takes_its_picture_out_of_the_text(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric picture", "")
+    page.locator("#cmpPicture").set_input_files(picture_file())
+    expect(body(page)).to_have_value(re.compile("cid:"))
+    page.get_by_role("button", name="Remove chart.png").click()
+    expect(body(page)).to_have_value("")
+    expect(page.locator(".cmp-att")).to_have_count(0)
+    clean(page)
+
+
+def test_a_picture_pasted_goes_into_the_text(page, app, world):
+    opened(page)
+    writing(page, LIN, "Paste", "")
+    page.evaluate("""() => { const el = document.querySelector("#cmpBody"), data = new DataTransfer();
+      data.items.add(new File([new Uint8Array([137, 80])], "pasted.png", { type: "image/png" }));
+      el.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data })); }""")
+    expect(body(page)).to_have_value(re.compile("pasted.png"))
     clean(page)
 
 
