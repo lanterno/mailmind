@@ -191,6 +191,8 @@ and the Claude API.
   account, in sections by sender or by type, with images previewed in a sandboxed frame — type facets, live filename/sender/subject search that reaches every file, a
   "show more" past the first page, direct download and click-through to the source email,
   with the same file synced to two accounts merged.
+- **Gmail labels are read at sync,** so `label:` finds mail under every label it carries and each label has its lane in the
+  rail. Mail already stored picks them up when a scan next fetches it.
 - **Move to any folder.** `m` moves the open message, a conversation or marked rows to a folder you find
   by typing, with Undo.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
@@ -222,7 +224,7 @@ and the Claude API.
   between sessions. A polite background worker backfills bodies for mail ingested
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
   any the server won't give — so search covers the whole mailbox, not just recent mail.
-- **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:`,
+- **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:` `label:`,
   `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
   `before:`/`after:`, `"phrases"` and `-exclusion`. `to:`/`cc:` hit real indexed
@@ -304,6 +306,8 @@ automatically.
 - **Tidy.** One strip offers to file every low-importance info/other message to
   Archive, with a Review mode to inspect them first and one undo to reverse the batch.
   User-triggered, never silent.
+- **Find dates.** On your click, Claude finds the meetings and dated tasks a message proposes, and you confirm or edit
+  each. An event saves as an `.ics` file for your calendar and invites nobody; a task joins your list beside Commitments.
 - **Commitments.** Every AI-extracted next-step across the inbox as one checkable
   agenda, each row with inline done / later / open and a click into the message.
 

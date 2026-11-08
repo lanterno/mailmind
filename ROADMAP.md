@@ -9,15 +9,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## AI that acts, not just describes
 
-- **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
-  into a calendar entry or a dated task. Two distinct halves, and the seam matters:
-  - *The .ics half is cheap.* `calendar.domain.rsvp` already has `_fold`, `_ics_esc`, `_ics_dt` and emits
-    `BEGIN:VEVENT` inside `build_reply` — what is missing is a `METHOD:PUBLISH` emitter for a **new**
-    event, and a date parser over prose. The only "Add to calendar" affordance today, on `Invite` in
-    `Reader.tsx`, just downloads an .ics that already arrived as an attachment.
-  - *The durable-task half needs a new table*, and per the original design constraint it must key on
-    `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
-  The AI `action` string in `Commitments` (`features/assistant/Panels.tsx`) is read-only and parses no dates.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
   "auto-triage the ambiguous residual": `ScreenerPane` already is a learning Imbox that writes
   `mailmind_rules.json` one sender at a time, so do not rebuild it. What is missing is a
@@ -57,10 +48,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   under a single undo group, and a per-sender AI rationale ("you have never opened one of these 47 in
   6 months") — `Cleanup.senders` is pure SQL `noise_score` today, with no claude call and no
   rationale field.
-- **Gmail multi-label views** · low value · effort M — Carried over from the original phase plan and
-  never built. `X-GM-LABELS` is used for **writes** only (archive drops `\Inbox`; the relabel path
-  adds one), but labels are never FETCHed and there is no `labels` / `message_labels` junction, so a
-  Gmail message cannot be seen under all the labels it actually carries.
 ## Speed and the connection layer
 
 - **Make a gate for each account the default** · high value · effort S — `MAILMIND_WORKERS=account`

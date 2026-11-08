@@ -219,6 +219,9 @@ attached email as one part of its message, as a reader does; what it holds isn't
 `mime.recipient_addrs` reads To and Cc as bare addresses before any encoded word is decoded, so a name
 can't pass for one.
 
+`message_labels` (migration 47) holds a Gmail copy's labels, read as a sync fetches it and going with the copy; `label:` searches it. Mail stored before has none until a
+scan fetches it again.
+
 `messages.recipients` is the decoded To and Cc as text, for search. `message_recipients` (migration 35,
 `store.set_recipients`) holds each address of each copy, written at ingest and again when a body is stored,
 and goes with the copy. It is what `discovery.known` asks. Mail stored before it was read from the text,
@@ -322,7 +325,7 @@ The app lives in `mailmind/`.
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
   quote after it) and `frame` (a body as the document its frame loads). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `draft_tone` and `send_window` (a set and a limit two contexts share), `conversation` (a list's badge), `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `draft_tone` and `send_window` (a set and a limit two contexts share), `proposed` (what someone proposes for a calendar or a to-do list, read with care), `conversation` (a list's badge), `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one, and `parsed` also
@@ -339,7 +342,7 @@ The app lives in `mailmind/`.
   `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `context` (`ContextAssembler`, what the model reads of a conversation: the first message and the
   last 19, trimmed and within the caps, with a missing body asked of the `Mail` port at interactive priority), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
   `reply_draft` (`ReplyDrafts`), `rewrite` (`Rewriter`), `ask` (`Asker`), `asking` (`Asking`, what a request asks of those), `prepared_replies` (`PreparedReplies`, drafting ahead) and
-  `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, `prompts` (the book of what the model is told, below), `prepared_reply`
+  `extract` (`Extractor`, what a message proposes for a calendar or a to-do list, on a person's click) and `bulk` (`BulkCommands`, a command in words, planned and frozen; `Filing.carry_out` runs its confirm). `domain` holds what it knows about the models and the features, `prompts` (the book of what the model is told, below), `prepared_reply`
   (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served),
   `brief`, `review` and `digest` (what is taken from a model's answer, within its caps, and what stands in when it won't do), `citations` (only the ids the model was shown)
   and `action_plan` (what is taken from a plan, and how far a verb may reach), and
@@ -384,8 +387,8 @@ The app lives in `mailmind/`.
   there is no `archive`. `application.session.MailSession` is the port for one logged-in
   connection: its capabilities (what the server says after login), `enable_condstore` (before any
   select, or the folder says no `highest_modseq`), what changed since a modseq, folders, status, select, UID
-  search, a message by Message-ID, headers (in batches of `HEADER_BATCH`, with Gmail's thread id
-  and the arrival date when asked), flags, a body, flag and Gmail label changes, copy, move, a UID
+  search, a message by Message-ID, headers (in batches of `HEADER_BATCH`, with Gmail's thread id,
+  its labels and the arrival date when asked), flags, a body, flag and Gmail label changes, copy, move, a UID
   expunge of the UIDs named, append (the new UID when the server says it), NOOP, and IDLE with
   `interrupt()` from another thread. Names are as LIST gave them, and the errors are imaplib's
   classes through either adapter: a refusal raises `IMAP4.error`, a lost connection
@@ -447,8 +450,8 @@ The app lives in `mailmind/`.
   runs in SQL: `adapters.sqlite` says each condition as a fragment and builds its statement from the domain's names, and a name it
   doesn't know stops it loading. `tests/unit/attention/test_followups_in_sql.py` holds the two to the same answers, over named cases
   and random threads (`MAILMIND_FOLLOWUP_RUNS` asks for more). A new condition goes in both. A dismissal stays through every round.
-  `adapters.sqlite` holds the SQL of `snoozes`, `muted` and `followups`, and reads a follow-up, asks the domain and writes what it says.
-  `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps` and `Clocked`, the every-minute job. They publish
+  `adapters.sqlite` holds the SQL of `snoozes`, `muted`, `tasks` and `followups`, and reads a follow-up, asks the domain and writes what it says.
+  `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps`, `Tasks` (what a person confirmed from their mail, migration 46, by message key and never by pk) and `Clocked`, the every-minute job. They publish
   what happened once it has committed (`SnoozeSet`, `ThreadMuted`, `FollowUpsChanged` and the like), and `wiring.wire` does what that
   makes stale and tells the tabs. `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention
   (`attention.muting.mute(body)`, `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and
@@ -457,10 +460,10 @@ The app lives in `mailmind/`.
   It is standard library only.
 - `mailmind.calendar` is the sixth: invites, recurring series, Today & next and RSVP replies. `domain` holds `invite` (what the reader
   finds in an event, `Fields`, and what that comes to, `Invite`, the card's words included), `agenda`
-  (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) and `rsvp` (an iMIP
+  (which event a message speaks for, and what a cancellation or a moved occurrence does to its series) `publish` (a new event as a `METHOD:PUBLISH` file, which invites nobody) and `rsvp` (an iMIP
   REPLY and its idempotency key); `adapters` holds `icalendar_acl`, the reader of an invite's text behind the `IcsReader` port (`parse`, the event a
   card shows, `events`, every event the text holds, and `next_occurrence`), and `sqlite` (reads stored bodies and the outbox's keys, and
-  writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites` and `Rsvp`. `mailmind.bootstrap.calendar`
+  writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites`, `Publishing` and `Rsvp`. `mailmind.bootstrap.calendar`
   binds them, and it's how the routers reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
   RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
   `icalendar_acl` is the only module that imports `icalendar` and `recurring_ical_events`, and nothing of either leaves it. So Calendar is
@@ -1075,7 +1078,7 @@ asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanen
 `failed`. Each row holds the calls, their tokens and `cost_micros`. `domain.pricing` computes the
 cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
 dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
-`feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`,
+`feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`, `extract`,
 `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
 that fails is logged by class name and never fails the call.
