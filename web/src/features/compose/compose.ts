@@ -5,10 +5,10 @@ import { LIMITS } from "../../lib/api/limits.gen";
 import type { DraftTone, GetAnswers } from "../../lib/api/types";
 import { go, parseRoute } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
-import { createStore, store, stored } from "../../lib/store";
+import { pref } from "../../lib/prefs";
+import { createStore } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";
 import { createComposing, type Focus } from "./machine";
-import { isDraftTone } from "./model";
 import { mineSet } from "./sendGuard";
 
 let qc: QueryClient | undefined;
@@ -22,12 +22,8 @@ export function myAddresses(d = digest()): Set<string> {
   return mineSet([...(d?.send_accounts ?? []), ...(d?.accounts ?? [])]);
 }
 
-const savedTone = stored("mm_draft_tone");
-export const draftTone = createStore<DraftTone>(isDraftTone(savedTone) ? savedTone : "balanced");
-export function setDraftTone(tone: DraftTone) {
-  draftTone.set(tone);
-  store("mm_draft_tone", tone);
-}
+export const draftTone = pref("draft_tone");
+export const setDraftTone = (tone: DraftTone) => draftTone.set(tone);
 
 const fieldInput = (field: string) => document.querySelector<HTMLInputElement>(`#cmp${field[0]!.toUpperCase()}${field.slice(1)} .ci`);
 const bodyBox = () => document.querySelector<HTMLTextAreaElement>("#cmpBody");

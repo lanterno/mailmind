@@ -1,7 +1,7 @@
 // A value outside React that components read and any code sets: toasts, the undo float, what is being filed.
 import { useSyncExternalStore } from "react";
 
-export interface Store<T> { get(): T; set(value: T): void; useValue(): T }
+export interface Store<T> { get(): T; set(value: T): void; subscribe(listener: () => void): () => void; useValue(): T }
 
 export function createStore<T>(initial: T): Store<T> {
   let value = initial;
@@ -13,6 +13,7 @@ export function createStore<T>(initial: T): Store<T> {
   const get = () => value;
   return {
     get,
+    subscribe,
     set(next) {
       if (Object.is(next, value)) return;
       value = next;

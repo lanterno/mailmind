@@ -6,6 +6,7 @@ import "./app/app.css";
 import { bindComposer } from "./features/compose/compose";
 import { refusalOf } from "./lib/api/client";
 import { guardFrames } from "./features/mailbox/MailFrame";
+import { loadPrefs } from "./lib/prefs";
 
 guardFrames();
 
@@ -15,6 +16,7 @@ const queries = new QueryClient({
   defaultOptions: { queries: { retry: (failures, e) => failures < 1 && !refusalOf(e), networkMode: "always" }, mutations: { networkMode: "always" } },
 });
 bindComposer(queries);
+void loadPrefs();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

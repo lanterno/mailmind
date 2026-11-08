@@ -32,7 +32,7 @@ import { badAccounts } from "../features/status/model";
 import { AccountAlert } from "../features/status/Status";
 import { ConfirmDialog } from "../lib/confirm";
 import { OverLimitDialog } from "../lib/overLimit";
-import { stored } from "../lib/store";
+import { singleKeys } from "../lib/prefs";
 import { shortAddress } from "../lib/text";
 import { Float, toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
@@ -138,7 +138,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
       }
       if (at?.closest?.('input,textarea,select,[contenteditable="true"],[role="menu"],[role="dialog"],[role="alertdialog"]')) return;
       if (at?.closest?.('[role="separator"]') && e.key.startsWith("Arrow")) return;
-      if (stored("mm_nokeys") === "1" && e.key !== "Escape" && e.key !== "?") return;
+      if (!singleKeys.get() && e.key !== "Escape" && e.key !== "?") return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (chord.current !== null) {
         clearTimeout(chord.current);

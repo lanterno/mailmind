@@ -2,9 +2,9 @@
 // refetches in place, so the row you are on and what you were reading stay put.
 import { useInfiniteQuery, useQuery, type InfiniteData, useQueries } from "@tanstack/react-query";
 import { get, refusalOf } from "../../lib/api/client";
-import type { AnyOf, GetAnswers } from "../../lib/api/types";
+import type { AnyOf, GetAnswers, SearchScope } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
-import { createStore, store, stored } from "../../lib/store";
+import { pref } from "../../lib/prefs";
 import { copyId, copyQuery, type Copy } from "../../lib/copy";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
@@ -37,12 +37,9 @@ async function folderPage(account: string, folder: string, grouped: boolean, off
 }
 
 // Search all your accounts or the one you're on, kept across reloads. With no account in mind, all of them.
-export type SearchScope = "all" | "account";
-export const searchScope = createStore<SearchScope>(stored("mm_searchscope") === "account" ? "account" : "all");
-export function setSearchScope(s: SearchScope) {
-  searchScope.set(s);
-  store("mm_searchscope", s);
-}
+export type { SearchScope };
+export const searchScope = pref("search_scope");
+export const setSearchScope = (s: SearchScope) => searchScope.set(s);
 
 // A query the index can't read is refused in words of its own, which the list shows where its results would be.
 async function searchPage(query: string, account: string, offset: number, scope: SearchScope): Promise<ListPage> {
@@ -151,9 +148,5 @@ export const useThread = (account: string | undefined, threadId: string | undefi
     queryFn: () => get(`/api/thread?account=${q(account!)}&thread_id=${q(threadId!)}`),
     enabled: Boolean(account && threadId),
   });
-
-// Conversations on or off, kept under the key the current page uses.
-export const groupedPref = () => stored("mm_threadview") !== "0";
-export const saveGroupedPref = (on: boolean) => store("mm_threadview", on ? "1" : "0");
 
 export const useViews = () => useQuery({ queryKey: ["views"], queryFn: () => get("/api/views") });

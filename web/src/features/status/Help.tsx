@@ -1,7 +1,7 @@
 // What the keys do, and the one setting WCAG 2.1.4 asks for: single keys off.
-import { useState } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { createStore, store, stored } from "../../lib/store";
+import { singleKeys } from "../../lib/prefs";
+import { createStore } from "../../lib/store";
 import { setTheme, theme, THEME_LABEL, type ThemeName } from "../../lib/theme";
 import { Icon } from "../../lib/ui/Icon";
 import { useLayer } from "../../lib/backTrap";
@@ -26,7 +26,7 @@ function Row({ keys, children }: { keys: string[]; children: React.ReactNode }) 
 }
 
 function Keys({ legend }: { legend: () => Legend }) {
-  const [noKeys, setNoKeys] = useState(() => stored("mm_nokeys") === "1");
+  const singleKeysOn = singleKeys.useValue();
   const current = theme.useValue();
   const { commands, go } = legend();
   const groups = [...new Set(commands.map((c) => c.group))];
@@ -61,11 +61,8 @@ function Keys({ legend }: { legend: () => Legend }) {
         <input
           type="checkbox"
           id="legNoKeys"
-          checked={noKeys}
-          onChange={(e) => {
-            setNoKeys(e.target.checked);
-            store("mm_nokeys", e.target.checked ? "1" : "0");
-          }}
+          checked={!singleKeysOn}
+          onChange={(e) => singleKeys.set(!e.target.checked)}
         /> Disable single-key shortcuts (use ⌘/Ctrl chords only)
       </label>
     </>

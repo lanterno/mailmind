@@ -1,39 +1,44 @@
 // Reading settings (Aa). Width is the reading measure; face and size typeset plain-text mail only, since rich mail keeps
-// the sender's own type. System stacks, since a mail frame's policy can't load the app's fonts. Kept under the keys the
-// current page uses.
-import { createStore, store, stored } from "../../lib/store";
+// the sender's own type. System stacks, since a mail frame's policy can't load the app's fonts. Kept with the rest of the
+// preferences (lib/prefs.ts).
+import { useSyncExternalStore } from "react";
+import type { ReadFont, ReadSize, ReadWidth } from "../../lib/api/types";
+import { prefs, setPrefs, type Prefs } from "../../lib/prefs";
 
-export const WIDTHS = { narrow: 640, medium: 760, wide: 920 } as const;
-export const SIZES = { s: 15, m: 16.5, l: 18, xl: 20 } as const;
-export const FONTS = {
+export const WIDTHS: Record<ReadWidth, number> = { narrow: 640, medium: 760, wide: 920 };
+export const SIZES: Record<ReadSize, number> = { s: 15, m: 16.5, l: 18, xl: 20 };
+export const FONTS: Record<ReadFont, string> = {
   sans: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
   serif: '"Iowan Old Style",Charter,"Source Serif 4",Georgia,serif',
   mono: 'ui-monospace,"SF Mono",Menlo,Consolas,monospace',
-} as const;
+};
 
-export interface ReadPrefs { width: keyof typeof WIDTHS; size: keyof typeof SIZES; font: keyof typeof FONTS; colors: "auto" | "dark" | "original" }
+export interface ReadPrefs { width: ReadWidth; size: ReadSize; font: ReadFont; colors: Prefs["mail_colors"] }
 
-const pick = <T extends object>(from: T, key: unknown, fallback: keyof T): keyof T =>
-  typeof key === "string" && key in from ? (key as keyof T) : fallback;
+const pick = <K extends string>(from: Record<K, unknown>, key: unknown, fallback: K): K =>
+  typeof key === "string" && Object.hasOwn(from, key) ? (key as K) : fallback;
 
-export function parsePrefs(saved: string | null, colors: string | null): ReadPrefs {
-  let p: Record<string, unknown> = {};
-  try {
-    p = (JSON.parse(saved ?? "{}") as Record<string, unknown> | null) ?? {};
-  } catch { /* a bad value is no setting */ }
+// What the store holds, but for an old key a browser still holds until the server has answered: a value it doesn't know is no setting.
+export function fromPrefs(p: Prefs): ReadPrefs {
   return {
-    width: pick(WIDTHS, p["width"], "medium"),
-    size: pick(SIZES, p["size"], "m"),
-    font: pick(FONTS, p["font"], "sans"),
-    colors: colors === "dark" || colors === "original" ? colors : "auto",
+    width: pick(WIDTHS, p.read_width, "medium"),
+    size: pick(SIZES, p.read_size, "m"),
+    font: pick(FONTS, p.read_font, "sans"),
+    colors: p.mail_colors === "dark" || p.mail_colors === "original" ? p.mail_colors : "auto",
   };
 }
 
-export const readPrefs = createStore<ReadPrefs>(parsePrefs(stored("mm_read"), stored("mm_mailtheme")));
+let made: { of: Prefs; value: ReadPrefs } | undefined;
+const current = (): ReadPrefs => {
+  const of = prefs.get();
+  if (made?.of !== of) made = { of, value: fromPrefs(of) };
+  return made.value;
+};
+
+export const readPrefs = { get: current, useValue: () => useSyncExternalStore(prefs.subscribe, current) };
+
+const NAMED: { [K in keyof ReadPrefs]: "read_width" | "read_size" | "read_font" | "mail_colors" } = { width: "read_width", size: "read_size", font: "read_font", colors: "mail_colors" };
 
 export function setReadPref<K extends keyof ReadPrefs>(key: K, value: ReadPrefs[K]) {
-  const next = { ...readPrefs.get(), [key]: value };
-  readPrefs.set(next);
-  if (key === "colors") store("mm_mailtheme", value === "auto" ? null : String(value));
-  else store("mm_read", JSON.stringify({ width: next.width, size: next.size, font: next.font }));
+  setPrefs({ [NAMED[key]]: value });
 }

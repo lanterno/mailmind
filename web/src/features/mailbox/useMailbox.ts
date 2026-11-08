@@ -4,11 +4,12 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
+import { pref } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { copyId, copyOf, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
 import { settingsOpen } from "../settings";
 import * as actions from "./actions";
-import { groupedPref, saveGroupedPref, useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews, warmBody } from "./data";
+import { useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews, warmBody } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";
 
 function initialTab(): InboxTab {
@@ -18,17 +19,14 @@ function initialTab(): InboxTab {
 const DIGEST_TITLE = { needs: "Needs you", tidy: "Safe to file" };
 const LANE_TITLE = { feed: "Feed", papertrail: "Paper Trail" };
 const inboxTab = createStore<InboxTab>(initialTab());
-const grouping = createStore(groupedPref());
+const grouping = pref("conversations");
 
 export function setInboxTab(tab: InboxTab) {
   inboxTab.set(tab);
   store("mm_inbox_tab", tab);
 }
 
-export function setGrouping(on: boolean) {
-  saveGroupedPref(on);
-  grouping.set(on);
-}
+export const setGrouping = (on: boolean) => grouping.set(on);
 
 export function useMailbox() {
   const qc = useQueryClient();

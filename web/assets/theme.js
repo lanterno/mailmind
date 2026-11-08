@@ -1,1 +1,1 @@
-try{const t=localStorage.getItem("mm_theme");if(t!=="dark")document.body.classList.add("theme-light");if(t==="dusk")document.body.classList.add("theme-dusk");}catch(e){document.body.classList.add("theme-light");}
+try{const p=JSON.parse(localStorage.getItem("mm_prefs")||"{}"),o=localStorage.getItem("mm_theme"),t=p.theme||(o==="dark"?"night":o==="dusk"?"dusk":"day"),c=document.body.classList;if(t!=="night")c.add("theme-light");if(t==="dusk")c.add("theme-dusk");}catch(e){document.body.classList.add("theme-light");}
