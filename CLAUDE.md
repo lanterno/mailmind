@@ -185,8 +185,8 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   and filing, and `app/commands.ts` the one list of commands that the keys, the palette (⌘K) and the keyboard help all read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections and the Preferences tab, which reads and writes `/api/preferences` (`accounts.domain.preferences`, a `"preferences"` block in `mailmind.config.json`; the page's `lib/prefs.ts` holds them and brings in once what a browser kept under its old keys).
-  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_details.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
-  search box acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
+  `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer, a sender's cleanup and the filters, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_details.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
+  search box is a combobox that acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
   `mailmind_rules.json`, `mailmind_views.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
@@ -419,7 +419,7 @@ The app lives in `mailmind/`.
   case hands in `rel_time` or `now_iso`'s value. `adapters` holds `fts` (`to_sql` turns a parsed query into a MATCH and bound SQL, and
   `index_message` and `forget_message` keep the index up to date), `sqlite` (`StoredMail`, which reads `messages` and the
   rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
-  `SavedViews`, `DocumentHub`, `Contacts` and `KnownContacts`. `mailmind.bootstrap.discovery` binds them, and it's how
+  `SavedViews`, `DocumentHub`, `Contacts`, `KnownContacts`, `Suggesting` (what the search box offers as you type) and `Conditions` (whether a query can be judged of mail as it arrives, and whether a message fits it). `mailmind.bootstrap.discovery` binds them, and it's how
   the routers and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
   A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
   It is standard library only.
@@ -434,7 +434,7 @@ The app lives in `mailmind/`.
   says so, none of which a handler after the commit could do. `adapters` holds `rules_file`,
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
-  `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps` and `Expiry`. `mailmind.bootstrap.curation`
+  `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps`, `Expiry` and `Filters` (a search that stars or marks read new Inbox mail). `mailmind.bootstrap.curation`
   binds them, and it's how the routers and the command line reach Curation (`curation.cleanup.execute(body)`,
   `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token comes
   from the perimeter (`perimeter.CSRF`). A sweep's
@@ -1156,6 +1156,9 @@ message's headers and the rule book's lists, and `bootstrap.curation.classify` c
 holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
+The file also holds a person's filters (`curation.domain.filters`): a search that stars or marks read. `Ingest` runs them only on
+mail never seen before, on an incremental sync of the Inbox, and the server hears through the command path. A filter takes the search's
+grammar and its index (`discovery.Conditions`), and refuses what mail arriving can't answer yet (`body:`, `has:attachment`, `category:`, dates).
 `curation.adapters.rules_file` (`bootstrap.curation.rules`, the file's one reader) writes it whole (a temp file,
 owner-only, renamed over it), and a change reads, changes and saves as one step, under a file lock (`.rules.lock`), so the command line and the server can't lose each other's. A read parses it again only when it changed; one that won't parse leaves the last
 rules read well, so a bad edit never stops a sync, and the next save moves it to `backups/` first. The classifier

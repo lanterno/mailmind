@@ -207,6 +207,12 @@ and the Claude API.
 
 ### Search
 
+- **Search suggests as you type** — senders, domains and operators — and can be held to one
+  conversation.
+- **Ask in plain words.** A search that reads as a sentence is translated on Enter, under a chip that
+  gives you the literal search back.
+- **Filters.** Any search can become a filter that stars or marks read new Inbox mail as it arrives,
+  and Curate lists them to edit or remove. A filter never moves mail.
 - **Full-text search across every account by default**, with the scope persisted
   between sessions. A polite background worker backfills bodies for mail ingested
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
@@ -692,7 +698,7 @@ in `mailmind.config.json`; a variable that is set decides over the file.
 In the repo folder, or in the directory `MAILMIND_HOME` names:
 
 - `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
-- `mailmind_rules.json` — your learned keep/block lists and expiry rules. It's written whole or
+- `mailmind_rules.json` — your learned keep/block lists, expiry rules and filters. It's written whole or
   not at all, readable by you only. A hand edit that breaks it leaves the rules last read in
   force, and the next save keeps the broken copy in `backups/`.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.

@@ -66,32 +66,10 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Search, rules and organization
 
-- **Search-as-you-type suggestions and clickable scoping** · high value · effort M — Roughly a
-  quarter done: the contact card gives a working "more from this sender". Missing is any suggestion
-  endpoint (no route answers `/api/suggest`), a debounced popover under `#search` in `TopBar` completing
-  senders/domains from the same source `/api/contacts` indexes plus operator names from `QuerySpec`'s
-  fixed grammar, and a "this conversation only" scope beside `ScopeToggle`, which offers all accounts or
-  this one. `Entries` in `Palette.tsx` and `ChipField` in `Composer.tsx` are the working precedents for the dropdown.
-- **Incoming rules engine, and create-filter-from-search** · high value · effort L — `curation.domain.rulebook` is a
-  one-dimensional verdict list, not an engine: `KEYS = (keep_senders, block_senders, keep_domains,
-  block_domains)` and `add(rules, token, verdict)`. There is no condition language, no action verb, no
-  rules table, and no ingest-time evaluation beyond `classifier.is_junk`. Where v1 hooks in:
-  **evaluate in `Ingest._process` immediately after `isj = 1 if self._curation.is_junk(b) else 0`, and express
-  conditions by reusing `QuerySpec`'s existing operator grammar** rather than inventing a
-  second one — that keeps "create filter from search" a serialization step instead of a translation
-  layer. Ship the local-action subset (auto-star / auto-read / auto-label) well before any IMAP
-  MOVE, and re-scope first: "+ Save view", the Screener and `/api/cleanup/execute` already cover the
-  "this sender floods me" case filters usually serve.
 - **Document Hub v2** · high value · effort M — Three follow-ons in value order: an inline PDF/image
   preview so you needn't download to check (a row's `doc-body` in `Hub` only opens the source email; no preview modal
   exists), group-by-sender/type sections in place of the flat row list, and a persistent rail lane so
   the Hub is a place rather than a ⌘K command.
-- **Prose search without the `!` prefix** · medium value · effort S — The hard part is built and
-  proven: `BulkCommands.plan` calls the model with `DO_PLAN_SCHEMA`, re-parses the returned filter through
-  `QuerySpec.parse` (the AI never touches SQL), and `runDo` drops the translated operators into the
-  real, editable search box. Missing is the search-shaped front door — bare prose with no prefix
-  still goes to `/api/search` as literal FTS — plus a labelled, dismissible "translated" chip so you
-  can get the literal search back. `TopBar`'s `onKeyDown` is where the prefixes are read.
 - **Cross-account virtual folders** · medium value · effort M — `Queries.snoozed_in`, `muted_in`,
   `waiting_in` and `replylater_in` each read one account, and `Folders.of_account(account)` counts
   per account, so there is no all-accounts Snoozed to match all inboxes: `virtual` in `FolderRail`
