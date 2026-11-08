@@ -56,7 +56,7 @@ def first_copies(rows: Iterable[Row], limit: int, offset: int) -> list[Row]:
 def hit(r: Row, aliases: Mapping[str, str | None], when: Callable[[str | None], str]) -> dict[str, Any]:
     """A result as the list shows it. What the AI's verdict asks of you is the kernel's to say."""
     return {
-        "key": r["message_key"], "account": r["account"], "folder": r["folder"],
+        "key": r["message_key"], "account": r["account"], "folder": r["folder"], "uid": r["uid"],
         "alias": aliases.get(r["account"]),
         "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
         "subject": r["subject"] or NO_SUBJECT, "when": when(r["date_iso"]),

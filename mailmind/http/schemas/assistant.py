@@ -52,8 +52,9 @@ class DeltaArgs(QueryArgs):
 
 
 class DraftAheadArgs(QueryArgs):
-    key: Number                             # a message, the one in `folder` where it has a copy there
+    key: Number                             # a message, the one at `uid` in `folder` where it has a copy there
     folder: str | None = None
+    uid: Number | None = None
     peek: str | None = None
 
 
@@ -134,9 +135,10 @@ class ReviewStats(Answer):
 
 
 class ReviewNeeded(Answer):
-    """A message that still needs you, by its key and the folder its copy is in now."""
+    """A message that still needs you, by its key and the folder and uid of its copy now."""
     key: int | None
     folder: str
+    uid: int | None
     account: str
     thread_id: str | None
     who: str
@@ -149,6 +151,7 @@ class ReviewAwaited(Answer):
     """A thread you're waiting on. One whose thread has no row names no message."""
     key: int | None
     folder: str | None
+    uid: int | None
     account: str
     thread_id: str
     subject: str
@@ -220,6 +223,7 @@ class Rewritten(Answer):
 class AskSource(Answer):
     key: int
     folder: str
+    uid: int
     sender: str | None = Field(alias="from")
     subject: str
     snippet: str

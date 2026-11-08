@@ -48,6 +48,7 @@ class SearchHit(Answer):
     key: int                                # every row has one: `store.init` gives one to a row an older commit wrote
     account: str
     folder: str
+    uid: int
     alias: str | None
     from_name: str | None
     from_addr: str | None
@@ -103,6 +104,7 @@ class Views(Answer):
 class Document(Answer):
     key: int
     folder: str
+    uid: int
     part_id: str
     filename: str
     kind: str
@@ -137,6 +139,7 @@ class Suggestions(Answer):
 class RecentMail(Answer):
     key: int
     folder: str
+    uid: int
     account: str
     subject: str
     thread_id: str | None

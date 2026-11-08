@@ -283,7 +283,7 @@ def awaited_threads(c, accounts, n):
     message on the STABLE (account,thread_id) key."""
     fac, fap = _among(accounts)
     return c.execute(
-        "SELECT f.account, f.thread_id, m.pk, m.message_key, m.folder, f.first_sent_ts, m.subject, m.recipients "
+        "SELECT f.account, f.thread_id, m.pk, m.message_key, m.uid, m.folder, f.first_sent_ts, m.subject, m.recipients "
         "FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id "
         "  AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id "
         "            ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) "

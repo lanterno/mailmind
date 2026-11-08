@@ -34,7 +34,7 @@ class StoredMail:
         with _uow.read() as c:
             try:
                 in_all, in_all_args = self._in_folders_playing(c, {"all"})
-                columns = """m.pk,m.message_key,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
+                columns = """m.pk,m.message_key,m.uid,m.account,m.folder,m.from_addr,m.from_name,m.subject,m.date_iso,m.ts,
                              m.snippet,m.seen,m.flagged,m.has_attach,m.is_junk,m.bucket,m.thread_id,s.importance,s.category,s.action"""
                 if match is not None:               # every hit is scored anyway. bm25 can only be read where MATCH runs
                     sql = (f"""SELECT * FROM (SELECT {columns}, h.score,
@@ -64,7 +64,7 @@ class StoredMail:
             acct_clause, acct_params = "m.account IN (%s)" % ",".join("?" * len(accounts)), accounts
         else:
             acct_clause, acct_params = "1=0", []
-        cols = ("m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.snippet, "
+        cols = ("m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.snippet, "
                 "m.body_text, m.date_iso, s.summary AS ai_summary")
         if match:
             sql = (f"SELECT {cols}, {fts.BM25} AS score "
@@ -105,7 +105,7 @@ class StoredMail:
                 count = c.execute(f"SELECT COUNT(DISTINCT m.message_key) {base} AND NOT {not_apart}",
                                   [*bargs, *apart_args]).fetchone()[0]
                 rows = c.execute(
-                    "SELECT * FROM (SELECT m.message_key, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, "
+                    "SELECT * FROM (SELECT m.message_key, m.uid, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, "
                     f"ROW_NUMBER() OVER (PARTITION BY m.message_key ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth "
                     f"{base} AND NOT {not_apart}) WHERE nth=1 ORDER BY ts DESC LIMIT ?",
                     [*in_all_args, *bargs, *apart_args, cap]).fetchall()
@@ -125,7 +125,7 @@ class StoredMail:
         ph = ",".join("?" for _ in accounts)
         with _uow.read() as c:
             return c.execute(
-                "SELECT a.message_pk pk, m.message_key, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
+                "SELECT a.message_pk pk, m.message_key, m.uid, a.part_id, a.filename, a.content_type, a.size, m.message_id, "
                 "       m.account, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, m.folder "
                 "FROM attachments a JOIN messages m ON m.pk=a.message_pk "
                 "WHERE a.is_inline=0 AND a.filename IS NOT NULL AND a.filename!='' AND m.pending_removal IS NULL "
@@ -152,7 +152,7 @@ class StoredMail:
                 "SELECT account, COUNT(*) k FROM messages WHERE lower(from_addr)=? GROUP BY account "
                 "ORDER BY k DESC", (a,)).fetchall()]
             recent = c.execute(
-                "SELECT pk, message_key, folder, account, subject, thread_id, ts, date_iso, seen FROM messages "
+                "SELECT pk, message_key, uid, folder, account, subject, thread_id, ts, date_iso, seen FROM messages "
                 "WHERE lower(from_addr)=? ORDER BY ts DESC LIMIT 6", (a,)).fetchall()
         return agg, accts, recent
 

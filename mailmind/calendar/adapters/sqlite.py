@@ -20,7 +20,7 @@ class StoredInvites:
         play those roles and any part that can't be read. One body at a time: they can be large."""
         with _uow.read() as c:
             rows = c.execute(
-                """SELECT m.pk, m.message_key, m.account, m.folder, m.thread_id, a.part_id
+                """SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.thread_id, a.part_id
                    FROM attachments a JOIN messages m ON m.pk=a.message_pk
                    WHERE m.body_fetched=1 AND m.ts>=? AND m.pending_removal IS NULL
                      AND (lower(a.content_type) LIKE '%calendar%' OR lower(a.filename) LIKE '%.ics')

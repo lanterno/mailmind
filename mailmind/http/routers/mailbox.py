@@ -128,16 +128,17 @@ def router(mailbox):
 
     @r.get("/api/message/attachment", responses=answers(NotJson))
     def copy_attachment(args: Annotated[PartArgs, Query()]):
-        return _part(named.copy_pk(mailbox, args.key, args.folder), args.part_id)
+        return _part(named.copy_pk(mailbox, args.key, args.folder, args.uid), args.part_id)
 
     @r.get("/api/message/body", responses=answers(MessageOpened | Prefetched))
     def copy_body(args: Annotated[CopyBodyArgs, Query()]):
-        return mailbox.bodies.message_body(named.copy_pk(mailbox, args.key, args.folder), prefetch=(args.prefetch == "1"))
+        return mailbox.bodies.message_body(named.copy_pk(mailbox, args.key, args.folder, args.uid),
+                                           prefetch=(args.prefetch == "1"))
 
     @r.get("/api/message/body.html", responses=answers(NotJson))
     def copy_document(args: Annotated[CopyDocumentArgs, Query()]):
         load_images = args.images == "1"
-        return _document(mailbox.bodies.copy_document(args.key, args.folder, load_images), load_images)
+        return _document(mailbox.bodies.copy_document(args.key, args.folder, args.uid, load_images), load_images)
 
     @r.post("/api/pending/retry", responses=answers(Done))
     def pending_retry(body: NamesAPending):

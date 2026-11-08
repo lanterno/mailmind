@@ -205,7 +205,7 @@ class Filing:
 
 
     def file_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Archive, trash or junk the marked rows as one: `rows` is [{key, folder, whole}], a copy each, `whole` for a row that
+        """Archive, trash or junk the marked rows as one: `rows` is [{key, folder, uid, whole}], a copy each, `whole` for a row that
         stands for its conversation in its folder, which junk never does. As with a conversation, one transaction accepts them
         all under one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed,
         a copy that is no longer there among them, and is `partial` if some were. When no row was, it raises what the first
@@ -213,7 +213,7 @@ class Filing:
         verb, rows = body.get("verb"), body.get("rows")
         if verb not in ("archive", "trash", "junk") or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
-        wanted: list[tuple[tuple[MessageKey, FolderName], bool]] = []
+        wanted: list[tuple[tuple[MessageKey, FolderName, int | None], bool]] = []
         for one in rows:
             if not is_object(one):
                 raise Refused()
@@ -237,14 +237,14 @@ class Filing:
 
 
     @staticmethod
-    def _row_named(one: Mapping[str, Any]) -> tuple[MessageKey, FolderName]:
-        """The copy a marked row names, by its key and folder."""
-        key, folder = as_int(one.get("key")), one.get("folder")
-        if key is None or not isinstance(folder, str):
+    def _row_named(one: Mapping[str, Any]) -> tuple[MessageKey, FolderName, int | None]:
+        """The copy a marked row names, by its key and folder, and its uid there where the row says it."""
+        key, folder, uid = as_int(one.get("key")), one.get("folder"), one.get("uid")
+        if key is None or not isinstance(folder, str) or (uid is not None and as_int(uid) is None):
             raise Refused()
-        return MessageKey(key), FolderName(folder)
+        return MessageKey(key), FolderName(folder), None if uid is None else as_int(uid)
 
-    def _row_members(self, c: Connection, named: tuple[MessageKey, FolderName], whole: bool) -> list[int]:
+    def _row_members(self, c: Connection, named: tuple[MessageKey, FolderName, int | None], whole: bool) -> list[int]:
         """The messages a marked row stands for, none if its copy has gone."""
         pk = self._store.copy_pk(c, *named)
         if pk is None:
@@ -291,15 +291,15 @@ class Filing:
 
     def _heard(self, accepted: Sequence[tuple[int, command.Accepted | None]],
                results: Mapping[int, Mapping[str, Any] | Problem],
-               names: Mapping[int, tuple[MessageKey, FolderName]]) -> dict[str, Any]:
+               names: Mapping[int, tuple[MessageKey, FolderName, int]]) -> dict[str, Any]:
         """What the person hears of many moves: one the server refused went back alone, and the rest stay filed, named by
-        their key and folder as they were. With none filed, what the first raised, or NotFound when there was none to file."""
+        their key, folder and uid as they were. With none filed, what the first raised, or NotFound when there was none to file."""
         filed = {p: said for p, _ in accepted if not isinstance(said := results[p], Problem)}
         if not filed:
             raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(_GONE))
         queued = sum(said.get("status") == "queued" for said in filed.values())
         return {"ok": True, "msg": "queued" if queued else "filed",
-                "filed": [{"key": names[p][0], "folder": names[p][1]} for p in filed if p in names],
+                "filed": [{"key": names[p][0], "folder": names[p][1], "uid": names[p][2]} for p in filed if p in names],
                 "count": len(filed), "failed": len(accepted) - len(filed),
                 "queued": queued, "undoable": any(said.get("undoable") for said in filed.values())}
 

@@ -55,7 +55,7 @@ class Agenda:
                 continue
             org = inv.get("organizer") or Party()
             items.append({
-                "key": r["message_key"], "folder": r["folder"], "account": r["account"], "thread_id": r["thread_id"],
+                "key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "account": r["account"], "thread_id": r["thread_id"],
                 "summary": inv["summary"], "location": inv.get("location", ""),
                 "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes"),
                 "all_day": inv["all_day"], "organizer": org.get("name") or org.get("email") or "",

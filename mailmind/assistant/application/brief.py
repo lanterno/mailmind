@@ -111,7 +111,7 @@ class Briefs:
             for g in json.loads(groups_json):
                 there = [(key, now) for key, folder in g["messages"] if (now := self._mail.copy_now(c, key, folder)) is not None]
                 groups.append({"label": g["label"], "count": len(there),
-                               "messages": [{"key": key, "folder": now["folder"]} for key, now in there]})
+                               "messages": [{"key": key, "folder": now["folder"], "uid": now["uid"]} for key, now in there]})
         return groups
 
     def _result(self, narrative: str, groups: Sequence[Mapping[str, Any]], model: str, created_at: str, cached: bool,

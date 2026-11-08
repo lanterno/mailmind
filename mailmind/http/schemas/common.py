@@ -43,16 +43,19 @@ class NoBody(RequestBody):
 
 
 class NamesAMessage(RequestBody):
-    """A message by its key, and the copy the page has of it by that key and its folder (`mailmind.http.named`). A route that
-    acts on the message takes that copy where there is one, else another."""
+    """A message by its key, and the copy the page has of it by that key, its folder and its uid there (`mailmind.http.named`).
+    A route that acts on the message takes that copy where there is one, else another."""
     key: Number | None = None
     folder: str | None = None
+    uid: Number | None = None
 
 
 class ACopy(RequestBody):
-    """A copy of a message, one of many a request names: its key and the folder it is in."""
+    """A copy of a message, one of many a request names: its key, the folder it is in and its uid there. Without a uid it is
+    the only copy of that key in that folder, or none."""
     key: Number
     folder: str
+    uid: Number | None = None
 
 
 class QueryArgs(BaseModel):
@@ -71,9 +74,10 @@ class Answer(BaseModel):
 
 
 class Copy(Answer):
-    """What names a copy of a message on the wire: the message's key, and the folder the copy is in."""
+    """What names a copy of a message on the wire: the message's key, the folder the copy is in and its uid there."""
     key: int
     folder: str
+    uid: int
 
 
 class NotJson(Answer):

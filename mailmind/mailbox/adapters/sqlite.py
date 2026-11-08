@@ -521,35 +521,41 @@ def copy_in_folder(c, message_key, folder):
 
 
 def copy_now(c, key, folder):
-    """The copy a stored answer's message has now, its pk and folder, or None if it has gone. Among its copies, the one in
-    the folder it was read from."""
-    return c.execute("SELECT pk, folder FROM messages WHERE message_key=? AND pending_removal IS NULL "
+    """The copy a stored answer's message has now, its pk, folder and uid, or None if it has gone. Among its copies, the one
+    in the folder it was read from."""
+    return c.execute("SELECT pk, folder, uid FROM messages WHERE message_key=? AND pending_removal IS NULL "
                      "ORDER BY folder=? DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
 
 
-def copy_pk(c, key, folder):
-    """The pk the copy of a message in `folder` has now, or None if it has none there. Of two copies in one folder (a client
-    that saves a draft again under its Message-ID), one listed goes first, then the newer."""
-    row = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? "
-                    "ORDER BY pending_removal IS NULL DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
-    return row["pk"] if row else None
+def copy_pk(c, key, folder, uid=None):
+    """The pk the copy of a message in `folder` has now, or None. A uid says which: the row of that key in that folder at
+    that uid, and none if it isn't there, since two rows in one folder can share a key (a sender who reuses a Message-ID,
+    or a list's copy beside the one sent straight). Without one, the only copy there, and none where there are two, rather
+    than a guess."""
+    if uid is not None:
+        row = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? AND uid=?", (key, folder, uid)).fetchone()
+        return row["pk"] if row else None
+    rows = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? LIMIT 2", (key, folder)).fetchall()
+    return rows[0]["pk"] if len(rows) == 1 else None
 
 
-def message_pk(c, key, folder=None):
-    """The pk of a copy of the message now, or None if it has none: its copy in `folder` if there is one, else another,
-    one listed first, then the newer."""
+def message_pk(c, key, folder=None, uid=None):
+    """The pk of a copy of the message now, or None if it has none: the copy at `uid` in `folder` where that is one of
+    its copies, else its copy in `folder` if there is one, else another, one listed first, then the newer."""
+    if uid is not None and folder is not None and (pk := copy_pk(c, key, folder, uid)) is not None:
+        return pk
     row = c.execute("SELECT pk FROM messages WHERE message_key=? "
                     "ORDER BY folder IS ? DESC, pending_removal IS NULL DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
     return row["pk"] if row else None
 
 
 def names_of(c, pks):
-    """{pk: (key, folder)} for each of `pks` that has a row: what names those copies on the wire."""
+    """{pk: (key, folder, uid)} for each of `pks` that has a row: what names those copies on the wire."""
     out = {}
     for pk in pks:
-        row = c.execute("SELECT message_key, folder FROM messages WHERE pk=?", (pk,)).fetchone()
+        row = c.execute("SELECT message_key, folder, uid FROM messages WHERE pk=?", (pk,)).fetchone()
         if row:
-            out[pk] = (row["message_key"], row["folder"])
+            out[pk] = (row["message_key"], row["folder"], row["uid"])
     return out
 
 
@@ -629,7 +635,7 @@ def _among(accounts, col):
 
 def brief_rows(c, accounts, n):
     """What a brief is made from: the mail the AI said is worth a glance, most important first."""
-    sql = ("SELECT m.pk, m.message_key, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
+    sql = ("SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
            f"WHERE m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance>=2 "
@@ -690,7 +696,7 @@ def needs_you_rows(c, accounts, n):
     set; joins assessments so we get importance/action, excludes junk/snoozed/muted/answered)."""
     ac, ap = _among(accounts, "m.account")
     return c.execute(
-        "SELECT m.pk, m.message_key, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
+        "SELECT m.pk, m.message_key, m.uid, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, "
         "       s.importance, s.action, s.category "
         "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
         f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.answered=0 "
@@ -791,7 +797,7 @@ _MUTED_EXCL = ("AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account={t}.acco
 def snoozed_rows(c, account, limit, offset):
     """Every snoozed message in the account, soonest wake first."""
     return c.execute(
-        """SELECT m.pk, m.message_key, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
+        """SELECT m.pk, m.message_key, m.uid, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id,
                   z.until AS snoozed_until, s.importance, s.category, s.action
            FROM snoozes z CROSS JOIN messages m ON m.message_key=z.message_key AND m.folder=z.folder
@@ -829,7 +835,7 @@ def _conversation_rows(c, where, params, partition, limit, offset):
 
 def _message_rows(c, where, params, limit, offset):
     return c.execute(
-        f"""SELECT m.pk, m.message_key, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
+        f"""SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                   s.summary, s.action, s.category
            FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
@@ -900,7 +906,7 @@ def stored_folder_counts(c, account):
 def thread_rows(c, account, thread_id):
     """A conversation's messages in the account, oldest first, every copy of each."""
     return c.execute(
-        """SELECT pk, message_key, folder, from_addr, from_name, subject, date_iso, ts, snippet,
+        """SELECT pk, message_key, uid, folder, from_addr, from_name, subject, date_iso, ts, snippet,
                   seen, flagged, answered, has_attach, is_junk, message_id
            FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL
            ORDER BY ts ASC, pk ASC""",

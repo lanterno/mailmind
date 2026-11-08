@@ -58,7 +58,7 @@ class Reviews:
             by_bucket[r["bucket"] or "other"] = r["n"]
 
         needs_rows = self._mail.needs_you_rows(c, accounts_set, TOP_OPEN)
-        needs: list[Needed] = [{"key": r["message_key"], "folder": r["folder"],
+        needs: list[Needed] = [{"key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
                                 "account": r["account"], "thread_id": r["thread_id"],
                                 "who": r["from_name"] or r["from_addr"] or "someone",
                                 "subject": r["subject"] or "(no subject)",
@@ -66,7 +66,7 @@ class Reviews:
 
         waiting_rows = self._mail.awaited_threads(c, accounts_set, TOP_OPEN)
         waiting: list[Awaited] = [{"account": r["account"], "thread_id": r["thread_id"],
-                                   "key": r["message_key"], "folder": r["folder"],
+                                   "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
                                    "subject": r["subject"] or "(no subject)",
                                    "to": (r["recipients"] or "").split(",")[0].strip() if r["recipients"] else "",
                                    "sent_ts": r["first_sent_ts"]} for r in waiting_rows]
@@ -85,16 +85,16 @@ class Reviews:
         return stats, needs, waiting
 
     def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-        """A stored list, as the page reads it: each with the folder its message's copy is in now. One whose message has gone
-        is left out, and one that named no message (a follow-up whose thread has no row) stays as it was. A list stored
+        """A stored list, as the page reads it: each with the folder and uid of its message's copy now. One whose message has
+        gone is left out, and one that named no message (a follow-up whose thread has no row) stays as it was. A list stored
         before named each by its pk too, which says nothing after a renumber, and that goes."""
         now: list[dict[str, Any]] = []
         for item in items:
             kept = {name: value for name, value in item.items() if name != "pk"}
             if not item["key"]:
-                now.append(kept)
+                now.append({"uid": None, **kept})
             elif (there := self._mail.copy_now(c, item["key"], item["folder"])) is not None:
-                now.append({**kept, "folder": there["folder"]})
+                now.append({**kept, "folder": there["folder"], "uid": there["uid"]})
         return now
 
     def _result(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]],

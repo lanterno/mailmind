@@ -20,6 +20,7 @@ class Needed(TypedDict):
     """A message that still needs you."""
     key: int | None
     folder: str
+    uid: int | None                 # the copy's on the server, which tells two in one folder apart
     account: str
     thread_id: str | None
     who: str
@@ -34,6 +35,7 @@ class Awaited(TypedDict):
     thread_id: str
     key: int | None
     folder: str | None
+    uid: int | None
     subject: str
     to: str
     sent_ts: int

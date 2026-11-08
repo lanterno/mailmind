@@ -20,7 +20,7 @@ def _attention(r: Row) -> dict[str, bool]:
 def _listed_item(r: Row, group: bool) -> dict[str, Any]:
     """A row of a list of a folder or of the Inboxes, one conversation's latest message if `group`."""
     it: dict[str, Any] = {
-        "key": r["message_key"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+        "key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
@@ -41,7 +41,7 @@ def _waiting_item(r: Row) -> dict[str, Any]:
     else:
         label = "Awaiting your reply · " + rel_time(r["date_iso"])
     return {
-        "key": r["message_key"], "folder": r["folder"],
+        "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
         "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
         "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -64,17 +64,17 @@ class Queries:
     def _emails(self) -> list[str]:
         return [str(a["email"]) for a in self._accounts.accounts()]
 
-    def pk_of_copy(self, key: int, folder: str) -> int | None:
-        """The row the page's copy, a message's key and a folder, is now, or None if the message has no copy there. A pk is
-        not stable: the page never holds one, and asks this at each request."""
+    def pk_of_copy(self, key: int, folder: str, uid: int | None = None) -> int | None:
+        """The row the page's copy, a message's key, a folder and the copy's uid there, is now, or None if that copy isn't
+        there (`StoredMail.copy_pk`). A pk is not stable: the page never holds one, and asks this at each request."""
         with self._uow.read() as c:
-            return self._store.copy_pk(c, MessageKey(key), FolderName(folder))
+            return self._store.copy_pk(c, MessageKey(key), FolderName(folder), uid)
 
-    def pk_of_message(self, key: int, folder: str | None = None) -> int | None:
-        """A row of the message the page names by key now, or None if no copy is left: its copy in `folder`, where it has
-        one, else another."""
+    def pk_of_message(self, key: int, folder: str | None = None, uid: int | None = None) -> int | None:
+        """A row of the message the page names by key now, or None if no copy is left: its copy at `uid` in `folder`, else
+        its copy in `folder`, where it has one, else another."""
         with self._uow.read() as c:
-            return self._store.message_pk(c, MessageKey(key), None if folder is None else FolderName(folder))
+            return self._store.message_pk(c, MessageKey(key), None if folder is None else FolderName(folder), uid)
 
     def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
@@ -82,7 +82,7 @@ class Queries:
             rows = self._store.snoozed_rows(c, account, limit, offset)
             total = self._store.snoozed_count(c, account)
         items = [{
-            "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
@@ -102,7 +102,7 @@ class Queries:
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
-            "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -140,7 +140,7 @@ class Queries:
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
-            "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -207,7 +207,7 @@ class Queries:
                 continue
             seen_ids.add(key)
             items.append({
-                "key": r["message_key"], "folder": r["folder"],
+                "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
             "from_name": r["from_name"] or r["from_addr"],
                 "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
                 "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],

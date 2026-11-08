@@ -27,9 +27,11 @@ class ThreadArgs(QueryArgs):
 
 
 class CopyArgs(QueryArgs):
-    """A copy of a message, by its key and the folder it is in (`mailmind.http.named`)."""
+    """A copy of a message, by its key, the folder it is in and its uid there, which tells apart two copies in one folder
+    (`mailmind.http.named`)."""
     key: Number
     folder: str
+    uid: Number | None = None
 
 
 class CopyBodyArgs(CopyArgs):
@@ -42,9 +44,10 @@ class PartArgs(CopyArgs):
 
 class CopyDocumentArgs(QueryArgs):
     """Text and nothing but, so nothing here is ever refused: a frame shows what it's sent, and a JSON 400 isn't a document. A
-    key and folder that name no copy are the use case's document saying so."""
+    key, folder and uid that name no copy are the use case's document saying so."""
     key: str = ""
     folder: str = ""
+    uid: str = ""
     images: str = "0"
 
 
@@ -95,6 +98,7 @@ class SyncRetryBody(RequestBody):
 class MessageRow(Answer):
     key: int
     folder: str
+    uid: int                                # the copy's on the server: two in one folder can share a key
     from_name: str | None
     from_addr: str | None
     subject: str
@@ -273,6 +277,7 @@ class Pending(Answer):
 
 class DigestItem(_Verdict):
     key: int
+    uid: int
     account: str
     kind: str
     alias: str | None
@@ -413,6 +418,7 @@ class MessageOpened(Answer):
     ok: Literal[True]
     key: int
     folder: str
+    uid: int
     html: str | None
     text: str | None
     has_html: bool

@@ -22,6 +22,11 @@ _CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
 _GONE = "This message isn’t here any more."
 
 
+
+def _as_number(text: str) -> int | None:
+    """A number a query gave as text, as the body route's schema reads one, or None for what isn't a whole number."""
+    return as_int(text) if text.isascii() and text.isdigit() else None
+
 class Bodies:
     def __init__(self, uow: UnitOfWork, store: StoredMail, ingest: Ingest, reader: Reader):
         self._uow = uow
@@ -90,7 +95,8 @@ class Bodies:
         safe_html, info = self._safe_html(pk, parsed, False)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
-            "ok": True, "key": row["message_key"], "folder": row["folder"], "html": safe_html, "text": parsed.get("text"),
+            "ok": True, "key": row["message_key"], "folder": row["folder"], "uid": row["uid"], "html": safe_html,
+            "text": parsed.get("text"),
             "has_html": bool(parsed.get("html")), "attachments": parsed["attachments"],
             "invite": invite, "invite_part": invite_part,
             "blocked_images": info.get("blocked_images", 0),
@@ -105,17 +111,18 @@ class Bodies:
             **self._reader.draft_info(row),
         }
 
-    def as_document(self, pk: int, key: str, load_images: bool) -> tuple[int, str]:
+    def as_document(self, pk: int, key: str, load_images: bool, uid: int | None = None) -> tuple[int, str]:
         """(status, the document a message's frame loads). A frame shows what it is sent, and a browser's own error page
         for an answer it may not frame, so a failure comes as a document too. Asks nothing of the AI.
 
-        `key` must be the key of the row `pk` names: a pk can come to name another message (reconcile renumbers), and the
-        bar above the frame speaks for the message the page read, so a frame never shows another's body under it."""
+        `key` must be the key of the row `pk` names, and `uid`, where given, its uid: a pk can come to name another message
+        (reconcile renumbers), and the bar above the frame speaks for the copy the page read, so a frame never shows another's
+        body under it."""
         try:
             with self._uow.read() as c:
                 row = self._store.get_message(c, pk)
             parsed = None
-            if row and str(row["message_key"]) == key:
+            if row and str(row["message_key"]) == key and (uid is None or row["uid"] == uid):
                 parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
                                    priority=gates.Priority.INTERACTIVE)
             if parsed is None:
@@ -127,19 +134,22 @@ class Bodies:
             log.error("message %(id)s: its document failed", {"id": pk}, exc_info=e)
             return 500, frame.of_text("Couldn’t load this message.")
 
-    def copy_document(self, key: str, folder: str, load_images: bool) -> tuple[int, str]:
-        """(status, the document the frame of the copy `key` and `folder` name loads), as `as_document` gives it. A key and
-        folder that name no copy now, whatever they say, are a document saying so."""
+    def copy_document(self, key: str, folder: str, uid: str, load_images: bool) -> tuple[int, str]:
+        """(status, the document the frame of the copy `key`, `folder` and `uid` name loads), as `as_document` gives it, and
+        as the reader's body route reads them (`StoredMail.copy_pk`): a uid left out ("") is the only copy there. A key,
+        folder and uid that name no copy now, whatever they say, are a document saying so."""
         try:
-            number = as_int(key) if key.isascii() and key.isdigit() else None
+            number = _as_number(key)
+            at = None if uid == "" else _as_number(uid)
             with self._uow.read() as c:
-                pk = self._store.copy_pk(c, MessageKey(number), FolderName(folder)) if number is not None else None
+                pk = (self._store.copy_pk(c, MessageKey(number), FolderName(folder), at)
+                      if number is not None and (uid == "" or at is not None) else None)
         except Exception as e:                # scrub: log the detail, never echo it to the client
             log.error("a copy's document failed", exc_info=e)
             return 500, frame.of_text("Couldn’t load this message.")
         if pk is None:
             return 404, frame.of_text(_GONE)
-        return self.as_document(pk, str(number), load_images)     # the key as read, so "007" names what 7 does
+        return self.as_document(pk, str(number), load_images, at)     # the key as read, so "007" names what 7 does
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""

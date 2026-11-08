@@ -81,7 +81,7 @@ def router(assistant, mailbox):
     @r.get("/api/ai/draft-ahead", responses=answers(DraftAheadStatus | DraftAheadReady))    # serve/peek; the KICK needs the CSRF token
     def draft_ahead(request: Request, args: Annotated[DraftAheadArgs, Query()]):
         asked = args.as_query()
-        pk = mailbox.queries.pk_of_message(args.key, args.folder)
+        pk = mailbox.queries.pk_of_message(args.key, args.folder, args.uid)
         if pk is None:                      # nothing of it left to draft a reply to
             return {"ok": True, "status": "none"}
         asked["pk"] = [str(pk)]

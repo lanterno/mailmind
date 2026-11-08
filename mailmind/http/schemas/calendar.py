@@ -5,9 +5,10 @@ from mailmind.http.schemas.common import Answer, Number, RequestBody
 
 
 class RsvpBody(RequestBody):
-    """The invite, by its message's key, and the folder of the copy the page has (`mailmind.http.named`)."""
+    """The invite, by its message's key, and the folder and uid of the copy the page has (`mailmind.http.named`)."""
     key: Number
     folder: str | None = None
+    uid: Number | None = None
     decision: str | None = None
 
 
@@ -23,6 +24,7 @@ class RsvpQueued(Answer):
 class UpcomingEvent(Answer):
     key: int
     folder: str
+    uid: int                                # the copy's on the server, not the event's
     account: str
     thread_id: str | None
     summary: str
