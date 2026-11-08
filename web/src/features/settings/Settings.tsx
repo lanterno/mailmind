@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { get, post, refusalOf } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types";
+import type { ArchiveFormat, GetAnswers } from "../../lib/api/types";
+import { entries } from "../../lib/entries";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -262,8 +263,11 @@ function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: 
   );
 }
 
+const FORMAT_LABEL: Record<ArchiveFormat, string> = { eml: ".eml files", mbox: "mbox" };
+
 function Backup() {
   const { data } = useQuery({ queryKey: ["exportPlan"], queryFn: () => get("/api/export/plan") });
+  const [format, setFormat] = useState<ArchiveFormat>("eml");
   return (
     <div className="set-form" id="exportBlock">
       <div className="lbl">Backup &amp; Export</div>
@@ -271,7 +275,11 @@ function Backup() {
         <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
         <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail"><Icon name="download" /> Backup (.db)</a>
       </div>
-      <div className="set-help">Portable per-message files: <code>python3 -m mailmind export --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>
+      <div className="pref-line">
+        <Seg label="Export format" value={format} options={entries(FORMAT_LABEL)} onChange={setFormat} />
+        <a className="set-mini" href={`/api/export/archive?format=${format}`} download title="Download your synced mail as a zip any mail program can read"><Icon name="download" /> Export (.zip)</a>
+      </div>
+      <div className="set-help">The backup is MailMind’s own format. The zip is your mail for any other mail program: one .eml file a message, or one mbox a folder. A message with no full body stored comes as its headers. All local · read-only · never opens IMAP.</div>
     </div>
   );
 }

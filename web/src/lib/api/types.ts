@@ -45,6 +45,7 @@ export type BlockScope = Schemas["BlockScope"];
 export type RsvpDecision = Schemas["RsvpDecision"];
 export type ComposeMode = Schemas["ComposeMode"];
 export type DocumentKind = Schemas["DocumentKind"];
+export type ArchiveFormat = Schemas["ArchiveFormat"];
 export type Density = Schemas["Density"];
 export type Theme = Schemas["Theme"];
 export type ReadWidth = Schemas["ReadWidth"];
