@@ -10,7 +10,7 @@ import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, looksLikeAddr, namesItself, nothingToSave, payloadOf,
-  QUICK, rcptAddr, recipientProblem, replySeed, runChecks, splitChips,
+  QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, splitChips,
   type AnyWarning, type Attachment, type Composer, type Field, type OpenOptions, type OriginalMail, type Payload, type Person,
 } from "./model";
 
@@ -58,7 +58,7 @@ export type SendFloat =
   | { kind: "done"; text: string; clock?: boolean }
   | { kind: "failed"; text: string; edit: () => void; dismiss: () => void };
 
-type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout" | "near"> };
+type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0" | "redirect"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout" | "near" | "redirect"> };
 
 const AUTOSAVE_MS = 8000;
 const KNOWN_WAIT_MS = 150;
@@ -123,8 +123,8 @@ export function createComposing(env: Env) {
       origKey: opts.origKey ?? null, quote: opts.quote ?? null, draftId: opts.draftId ?? null, version: opts.version ?? null, conflict: false, resume: opts.resume ?? null,
       fwdAttach: opts.fwdAttach ?? 0, attachments: opts.attachments ?? [], reading: new Map(), idk: randomId(),
       dirty: false, edits: 0, saving: null, lastSaveHash: null, savedLine: "", note: opts.note ?? "",
-      autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null,
-      ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false, near: opts.ack?.near ?? [] },
+      autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null, redirect: opts.redirect ?? null,
+      ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false, near: opts.ack?.near ?? [], redirect: Boolean(opts.ack?.redirect) },
       guard: null, pendingAfter: 0, participants: new Set((opts.participants ?? []).map((a) => a.toLowerCase())),
       people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "",
     };
@@ -143,8 +143,8 @@ export function createComposing(env: Env) {
   function snapshot(x: Composer): Snapshot {
     return {
       mode: x.mode, from: x.from, to: x.to, cc: x.cc, bcc: x.bcc, subject: x.subject, body: x.body, origKey: x.origKey, quote: x.quote, fwdAttach: x.fwdAttach,
-      attachments: x.attachments, draftId: x.draftId, resume: x.resume, autoCc: x.autoCc, subject0: x.subject0, participants: [...x.participants],
-      ack: { subject: x.ack.subject, attach: x.ack.attach, fanout: x.ack.fanout, near: x.ack.near },
+      attachments: x.attachments, draftId: x.draftId, resume: x.resume, autoCc: x.autoCc, subject0: x.subject0, redirect: x.redirect, participants: [...x.participants],
+      ack: { subject: x.ack.subject, attach: x.ack.attach, fanout: x.ack.fanout, near: x.ack.near, redirect: x.ack.redirect },
     };
   }
 
@@ -152,7 +152,7 @@ export function createComposing(env: Env) {
   function reopen(s: Snapshot) {
     const opened = open({
       mode: s.mode, from: s.from, to: s.to.map((x) => x.v), cc: s.cc.map((x) => x.v), bcc: s.bcc.map((x) => x.v), subject: s.subject, subject0: s.subject0,
-      origKey: s.origKey, quote: s.quote, fwdAttach: s.fwdAttach, draftId: s.draftId, resume: s.resume, noSig: true, autoCc: s.autoCc, participants: s.participants,
+      origKey: s.origKey, quote: s.quote, fwdAttach: s.fwdAttach, draftId: s.draftId, resume: s.resume, noSig: true, autoCc: s.autoCc, redirect: s.redirect, participants: s.participants,
       ack: s.ack, body: s.body, attachments: s.attachments,
     });
     if (opened) {
@@ -513,7 +513,7 @@ export function createComposing(env: Env) {
     for (const k of g.keys) {
       if (k === "fanout") x.ack.fanout = Math.max(x.ack.fanout, g.fanN);
       else if (k === "near") x.ack.near = [...x.ack.near, ...(now.find((w) => w.key === "near") as { pairs: NearMiss[] } | undefined)?.pairs.map((p) => p.addr) ?? []];
-      else if (k === "subject" || k === "attach" || k === "unchecked") x.ack[k] = true;
+      else if (k === "subject" || k === "attach" || k === "unchecked" || k === "redirect") x.ack[k] = true;
     }
     const after = g.sendAfter;
     hideGuard(x);
@@ -742,7 +742,7 @@ export function createComposing(env: Env) {
     if (turn !== resumeTurn) return;
     if (c) return env.toast(busy);   // one opened while this loaded is never replaced
     const note = resumeNotice(d.notes);
-    open({ ...(resumeOpts(d) as OpenOptions), body: d.text ?? "", attachments: (d.files ?? []).slice(), note });
+    open({ ...(resumeOpts(d) as OpenOptions), body: d.text ?? "", attachments: (d.files ?? []).slice(), note, redirect: redirectOf(d.reply_to, d.original_from) });
     if (note) env.say(note);   // in the composer, not a toast under its backdrop: it stays until it closes
   }
 

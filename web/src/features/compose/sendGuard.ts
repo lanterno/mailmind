@@ -4,7 +4,8 @@ export interface GuardSnapshot {
   nAttach: number; fwdAttach: number; reading: string[]; sendAfter: number; now: number;
   to: string[]; cc: string[]; mine: string[]; autoCc: string[] | null; fresh: string[];
   near?: NearMiss[];     // recipients that read as someone you've written to, mistyped
-  ack: { subject: boolean; attach: boolean; fanout: number; near?: string[] };
+  redirect?: { to: string; sender: string; stranger: boolean } | null;   // a Reply-To took this reply away from its sender
+  ack: { subject: boolean; attach: boolean; fanout: number; near?: string[]; redirect?: boolean };
 }
 export interface NearMiss { addr: string; near: string }
 export type GuardBlock = "hard" | "confirm" | "soft";
@@ -15,6 +16,7 @@ export type GuardWarning =
   | { key: "attach"; block: "confirm"; word: string }
   | { key: "fanout"; block: "confirm"; n: number; removable: number }
   | { key: "near"; block: "confirm"; pairs: NearMiss[] }
+  | { key: "redirect"; block: "confirm" | "soft"; to: string; sender: string }
   | { key: "new"; block: "soft"; addrs: string[] };
 // What a line can be written for: a check's warning, or what the composer itself finds before the checks.
 export type GuardLineOf =
@@ -24,6 +26,7 @@ export type GuardLineOf =
   | Omit<Extract<GuardWarning, { key: "attach" }>, "block">
   | Omit<Extract<GuardWarning, { key: "fanout" }>, "block">
   | Omit<Extract<GuardWarning, { key: "near" }>, "block">
+  | Omit<Extract<GuardWarning, { key: "redirect" }>, "block">
   | Omit<Extract<GuardWarning, { key: "new" }>, "block">
   | { key: "unchecked" } | { key: "norcpt" } | { key: "bad"; v: string; more: number };
 export interface GuardFix { kind: string; label: string; swap?: GuardSwap }
@@ -123,6 +126,10 @@ export function guardCheck(s:GuardSnapshot):GuardWarning[]{
   const near=(s.near??[]).filter(p=>!s.ack.near?.includes(p.addr));
   if(near.length) w.push({key:"near",block:"confirm",pairs:near});
   const named=new Set(near.map(p=>p.addr));   // a line above names these already
+  const r=s.redirect, you=new Set(s.mine);
+  if(r&&s.to.includes(r.to)&&!s.to.includes(r.sender)&&!s.cc.includes(r.sender)&&!isMine(r.to,you)&&!isMine(r.sender,you)){
+    w.push({key:"redirect",block:r.stranger&&!s.ack.redirect?"confirm":"soft",to:r.to,sender:r.sender});
+    named.add(r.to); }
   const fresh=s.fresh.filter(a=>!named.has(a));
   if(fresh.length) w.push({key:"new",block:"soft",addrs:fresh});
   return w; }
@@ -139,6 +146,8 @@ export function guardLine(w:GuardLineOf):GuardText{   // whenText for "late" is 
     case "near": { const p=w.pairs[0]!, more=w.pairs.length-1;
       return {text:`“${p.addr}” is one typo away from ${p.near}, someone you’ve written to.${more?` ${more} more ${more===1?"looks":"look"} the same.`:""}`,
         fix:{kind:"near",label:`Use ${p.near}`,swap:{from:p.addr,to:p.near}}}; }
+    case "redirect": return {text:`Replies go to ${w.to}, not to the sender, ${w.sender}.`,
+      fix:{kind:"sender",label:"Reply to the sender instead",swap:{from:w.to,to:w.sender}}};
     case "new": return {text:`New to you: ${guardList(w.addrs)}.`, fix:null};
     case "unchecked": return {text:"The checks before sending couldn’t run.", fix:null};
     case "norcpt": return {text:"Add at least one recipient.", fix:{kind:"to",label:"Add one"}};

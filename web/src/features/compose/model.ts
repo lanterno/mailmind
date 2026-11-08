@@ -11,7 +11,8 @@ export type Mode = ComposeMode;
 export interface Recipient { v: string; bad: boolean }
 export interface Attachment { filename: string; content_type: string; size: number; b64: string }
 export interface Quote { html: string | null; text: string; from?: string; date?: string }
-export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean; near: string[] }
+export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean; near: string[]; redirect: boolean }
+export interface Redirect { to: string; sender: string }   // a Reply-To sent the reply to `to`, not to who wrote the mail
 export interface Person { known: boolean; self: boolean; near?: string }   // near: someone you've written to, whom this reads as a typo of
 
 export interface GuardLine { key: string; soft: boolean; text: string; fix: GuardFix | null; field?: Field }
@@ -30,7 +31,7 @@ export interface OpenOptions {
   mode?: Mode; from?: string | undefined; to?: string[]; cc?: string[]; bcc?: string[];
   subject?: string; subject0?: string; origKey?: number | null; quote?: Quote | null; draftId?: number | null | undefined; version?: number | null;
   resume?: ResumeFields | null; fwdAttach?: number; noSig?: boolean; autoCc?: string[] | null;
-  participants?: string[]; ack?: Partial<Ack> | null; body?: string; attachments?: Attachment[]; note?: string;
+  participants?: string[]; ack?: Partial<Ack> | null; body?: string; attachments?: Attachment[]; note?: string; redirect?: Redirect | null;
 }
 
 // The one composer. The machine holds it and changes it, and what it publishes for React is a copy.
@@ -61,6 +62,7 @@ export interface Composer {
   savedLine: string;
   note: string;
   autoCc: string[] | null;        // a reply-all's copied-in people
+  redirect: Redirect | null;      // where a Reply-To took this reply, for the check before it goes
   ack: Ack;
   guard: GuardView | null;
   pendingAfter: number;           // a Later time the check held back: the next Send schedules for it
@@ -100,6 +102,12 @@ export interface OriginalMail {
 
 const quoteOf = (d: OriginalMail): Quote => ({ html: d.has_html ? d.html ?? null : null, text: d.text ?? "", from: d.from_name || d.from_addr || "", date: d.date ?? "" });
 
+// Where a Reply-To sends a reply instead of to the mail's sender, or null if it sends it to them.
+export function redirectOf(replyTo: string | null | undefined, sender: string | null | undefined): Redirect | null {
+  const to = addrOf(replyTo).toLowerCase(), from = (sender ?? "").toLowerCase();
+  return to && from && to !== from ? { to, sender: from } : null;
+}
+
 export function replySeed(d: OriginalMail, all: boolean, mine: Set<string>): OpenOptions {
   const toAddr = (d.reply_to && addrOf(d.reply_to)) || d.from_addr || "";
   const to = toAddr ? [toAddr] : [];
@@ -117,6 +125,7 @@ export function replySeed(d: OriginalMail, all: boolean, mine: Set<string>): Ope
   return {
     mode: all ? "replyall" : "reply", from: d.account, to, cc, autoCc: cc.slice(),
     participants: [d.from_addr ?? "", ...parseAddrs(d.to), ...parseAddrs(d.cc)],   // not Reply-To: a redirect to a stranger gets marked
+    redirect: redirectOf(d.reply_to, d.from_addr),
     subject: rePrefix(d.subject, "Re:"), quote: quoteOf(d),
   };
 }
@@ -185,6 +194,12 @@ export function isNewToYou(c: Composer, a: string, mine: Set<string>): boolean {
   return Boolean(p) && !p!.known && !p!.self && !c.thin && !isMine(a, mine) && !c.participants.has(a);
 }
 
+// Someone the lookup says you've dealt with, or one of the thread's own people. Short of that, a stranger as far as we can tell.
+function knownHere(c: Composer, a: string): boolean {
+  const p = c.people.get(a);
+  return c.participants.has(a) || Boolean(p?.known || p?.self);
+}
+
 // Recipients the lookup said read as someone you've written to, mistyped, as far as it has answered: each once.
 export function nearMisses(c: Composer, mine: Set<string>): NearMiss[] {
   const out = new Map<string, NearMiss>();
@@ -204,6 +219,7 @@ export function guardSnapshot(c: Composer, sendAfter: number, nowSeconds: number
     autoCc: c.autoCc, ack: c.ack,
     fresh: [...new Set([...c.to, ...c.cc, ...c.bcc].filter((x) => !x.bad).map(n))].filter((a) => isNewToYou(c, a, mine)),
     near: nearMisses(c, mine),
+    redirect: c.redirect && { ...c.redirect, stranger: !knownHere(c, c.redirect.to) },
   };
 }
 

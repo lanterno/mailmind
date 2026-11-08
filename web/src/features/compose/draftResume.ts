@@ -4,6 +4,7 @@ export interface ResumeNotes { inline?: number; bcc_dropped?: number; plain?: bo
 export interface ReopenedDraft extends ResumeFields {
   draft_id?: number; version?: number; mode?: string; account?: string; subject?: string;
   to?: string[]; cc?: string[]; bcc?: string[]; original_key?: number | null; participants?: string[];
+  reply_to?: string; original_from?: string;
 }
 export interface ResumeOptions {
   mode: string; from: string | undefined; to: string[]; cc: string[]; bcc: string[];
