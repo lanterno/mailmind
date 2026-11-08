@@ -45,11 +45,11 @@ def mailbox(world, name):
 
 
 def test_a_link_from_when_the_app_lived_at_next_opens_the_same_place(page, world):
-    key = world.key(RECEIPT)
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX")
+    key, uid = world.key(RECEIPT), world.uid(RECEIPT)
+    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX&uid={uid}")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
-    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX") and "/next" not in page.url
+    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX&uid={uid}") and "/next" not in page.url
     clean(page)
 
 
@@ -73,30 +73,56 @@ def test_a_folder_is_a_link_and_back_comes_back(page, world):
 
 
 def test_a_deep_link_opens_the_message(page, world):
-    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}")
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
     clean(page)
 
 
+def inbox_pks():
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        return {r["pk"] for r in c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX'", (w.ADA,))}
+    finally:
+        c.close()
+
+
 def test_a_kept_link_still_opens_its_message_after_a_renumber(page, world):
     from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.mailbox import ingest, store
-
-    def inbox_pks():
-        c = store.conn()
-        try:
-            return {r["pk"] for r in c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX'", (w.ADA,))}
-        finally:
-            c.close()
-    link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX"
+    from mailmind.bootstrap.mailbox import ingest
+    link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}"
     before = inbox_pks()
-    world.server.renumber(w.ADA, "INBOX")                 # UIDVALIDITY changes: every row the Inbox had goes, and comes back anew
+    world.server.renumber(w.ADA, "INBOX")       # UIDVALIDITY changes: every row the Inbox had goes, and comes back anew, at the uids it had
     ingest.sync_new(accounts.get(w.ADA))
     assert inbox_pks() and before.isdisjoint(inbox_pks())
     page.goto(link)
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
+    clean(page)
+
+
+def test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid(page, world):
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest
+    link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}"
+    world.server.renumber(w.ADA, "INBOX", first=500)    # every copy in the Inbox now has a uid no link has seen
+    ingest.sync_new(accounts.get(w.ADA))
+    page.goto(link)
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    expect(page.locator("#reader .nores")).to_have_text("not found")
+    expect(page.locator(".rd-subj")).to_have_count(0)
+    expect(page.locator("iframe.rd-iframe")).to_have_count(0)
+    page.problems[:] = [p for p in page.problems if "404" not in p]
+    clean(page)
+
+
+def test_a_link_without_a_uid_opens_nothing(page, world):
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX")
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    page.wait_for_timeout(300)
+    expect(page.locator(".rd-subj")).to_have_count(0)
+    expect(page.locator("iframe.rd-iframe")).to_have_count(0)
     clean(page)
 
 

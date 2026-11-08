@@ -58,9 +58,17 @@ def arrives(world, body, ctype="text/html", subject="A message"):
     return r["pk"], r["message_key"]
 
 
+def inbox_uid(key):
+    """The uid of message `key`'s one copy in Ada's Inbox."""
+    c = store.conn()
+    r = c.execute("SELECT uid FROM messages WHERE account=? AND folder='INBOX' AND message_key=?", (w.ADA, key)).fetchone()
+    c.close()
+    return r["uid"]
+
+
 def reading(page, key):
     """The reader on the Inbox's copy of message `key`, its frame's document dressed."""
-    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX")
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX&uid={inbox_uid(key)}")
     frame = page.locator("iframe.rd-iframe")
     expect(frame).to_be_visible()
     until(page, lambda: frame.evaluate("f => !!f.contentDocument?.head?.querySelector('style')"), "the frame was never dressed")
@@ -95,7 +103,7 @@ def test_it_loads_from_its_own_url_with_its_own_policy(page, world):
     documents = []
     page.pw.on("response", lambda r: documents.append(r) if "/body.html" in r.url else None)
     frame = reading(page, key)
-    assert frame.get_attribute("src") == f"/api/message/body.html?key={key}&folder=INBOX&images=0"
+    assert frame.get_attribute("src") == f"/api/message/body.html?key={key}&folder=INBOX&uid={inbox_uid(key)}&images=0"
     assert frame.get_attribute("srcdoc") is None
     assert frame.get_attribute("sandbox") == "allow-same-origin"
     assert frame.evaluate("f => f.contentDocument.body.textContent") == "Hello"
@@ -391,6 +399,31 @@ def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, w
     clean(page)
 
 
+def test_two_copies_of_one_key_in_one_folder_each_open_as_themselves(page, world):
+    """A sender can reuse a Message-ID, so two copies in the Inbox can share a key. A link names one by its uid, and the
+    reader's subject and the frame's body are both that copy's."""
+    def copy_with(subject, said):
+        raw = (f"From: Mallory <mallory@evil.example.test>\r\nTo: Ada Park <ada@example.test>\r\nSubject: {subject}\r\n"
+               f"Date: Sun, 01 Nov 2026 09:00:00 +0000\r\nMessage-ID: <reused@evil.example.test>\r\nMIME-Version: 1.0\r\n"
+               f"Content-Type: text/html; charset=utf-8\r\n\r\n<p>{said}</p>").encode()
+        return world.deliver(w.ADA, "INBOX", raw)
+    first, second = copy_with("The first copy", "What the first says"), copy_with("The second copy", "What the second says")
+    c = store.conn()
+    keys = {r["message_key"] for r in c.execute("SELECT message_key FROM messages WHERE account=? AND folder='INBOX' AND uid IN (?, ?)",
+                                                 (w.ADA, first, second))}
+    c.close()
+    assert len(keys) == 1
+    key = keys.pop()
+    for uid, subject, said in ((second, "The second copy", "What the second says"), (first, "The first copy", "What the first says")):
+        page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX&uid={uid}")
+        expect(page.locator(".rd-subj")).to_have_text(subject)
+        frame = page.locator("iframe.rd-iframe")
+        expect(frame).to_have_attribute("src", f"/api/message/body.html?key={key}&folder=INBOX&uid={uid}&images=0")
+        until(page, lambda: frame.evaluate("f => f.contentDocument?.body?.textContent ?? ''").strip() == said,
+              f"the frame never showed {subject}")
+    clean(page)
+
+
 def test_a_conversation_gives_each_message_its_own_frame(page, world):
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
@@ -400,7 +433,7 @@ def test_a_conversation_gives_each_message_its_own_frame(page, world):
     frames = page.locator("iframe.rd-iframe")
     expect(frames).to_have_count(2)
     sources = [frames.nth(i).get_attribute("src") for i in range(2)]
-    assert sources[0] != sources[1] and all("/body.html?key=" in s for s in sources)
+    assert sources[0] != sources[1] and all(re.search(r"/body\.html\?key=\d+&folder=[^&]+&uid=\d+&images=0$", s) for s in sources)
     until(page, lambda: all(frames.nth(i).evaluate("f => !!f.contentDocument?.head?.querySelector('style')") for i in range(2)),
           "a frame was never dressed")
     clean(page)
