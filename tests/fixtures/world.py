@@ -257,8 +257,7 @@ class World:
                           if (m.headers().get("Message-ID") or "").strip() == message_id)
 
     def queued_move(self, name, dest):
-        """A move to a folder someone chose, as /api/move left one in the queue and on the undo stack before it went. None
-        is accepted now, but a row from then can still be queued or in the tray, so the worker, Undo and the tray read one."""
+        """A move to a folder someone chose, as /api/move leaves one in the queue and on the undo stack before it goes."""
         from mailmind.bootstrap.mailbox import store, undo
         acct, folder, _ = self.placed[name]
         row, mid = self.row(name), message_id(name)

@@ -27,36 +27,42 @@
     {
      "name": "INBOX",
      "role": "inbox",
+     "takes_filing": true,
      "total": 12,
      "unseen": 10
     },
     {
      "name": "Sent",
      "role": "sent",
+     "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
      "name": "Drafts",
      "role": "drafts",
+     "takes_filing": false,
      "total": 2,
      "unseen": 0
     },
     {
      "name": "Archive",
      "role": "archive",
+     "takes_filing": true,
      "total": 1,
      "unseen": 0
     },
     {
      "name": "Junk",
      "role": "junk",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "Trash",
      "role": "trash",
+     "takes_filing": true,
      "total": 1,
      "unseen": 0
     }
@@ -87,54 +93,63 @@
     {
      "name": "INBOX",
      "role": "inbox",
+     "takes_filing": true,
      "total": 2,
      "unseen": 1
     },
     {
      "name": "Sent",
      "role": "sent",
+     "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "Drafts",
      "role": "drafts",
+     "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
      "name": "Archive",
      "role": "archive",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "All Mail",
      "role": "all",
+     "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "Folders/Clients",
      "role": "custom",
+     "takes_filing": true,
      "total": 1,
      "unseen": 0
     },
     {
      "name": "Labels/Important",
      "role": "custom",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "Spam",
      "role": "junk",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "Trash",
      "role": "trash",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     }
@@ -165,42 +180,49 @@
     {
      "name": "INBOX",
      "role": "inbox",
+     "takes_filing": true,
      "total": 3,
      "unseen": 2
     },
     {
      "name": "[Gmail]/Sent Mail",
      "role": "sent",
+     "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
      "name": "[Gmail]/Drafts",
      "role": "drafts",
+     "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "[Gmail]/All Mail",
      "role": "all",
+     "takes_filing": false,
      "total": 4,
      "unseen": 2
     },
     {
      "name": "[Gmail]/Starred",
      "role": "custom",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "[Gmail]/Spam",
      "role": "junk",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
      "name": "[Gmail]/Trash",
      "role": "trash",
+     "takes_filing": true,
      "total": 0,
      "unseen": 0
     }
