@@ -139,6 +139,42 @@ describe("your own address, however it is tagged", () => {
   });
 });
 
+describe("an address one typo from someone you write to", () => {
+  const pair = { addr: "jon@example.test", near: "john@example.test" };
+  const other = { addr: "kat@example.test", near: "kate@example.test" };
+
+  it("holds the send, naming who it reads as", () => {
+    const w = guardCheck(S({ near: [pair] }));
+    expect(w).toEqual([{ key: "near", block: "confirm", pairs: [pair] }]);
+    expect(guardBlocks(w)).toBe(true);
+  });
+
+  it("is said once for all of them, the first by name", () => {
+    expect(guardCheck(S({ near: [pair, other] }))).toEqual([{ key: "near", block: "confirm", pairs: [pair, other] }]);
+  });
+
+  it("isn't asked again for one waved through, and is for one that wasn't", () => {
+    const ack = { subject: false, attach: false, fanout: 0, near: [pair.addr] };
+    expect(keys(guardCheck(S({ near: [pair], ack })))).toEqual([]);
+    expect(guardCheck(S({ near: [pair, other], ack }))).toEqual([{ key: "near", block: "confirm", pairs: [other] }]);
+  });
+
+  it("leaves a person it names out of the new-to-you line, and no one else", () => {
+    const w = guardCheck(S({ near: [pair], fresh: [pair.addr, "new@example.test"] }));
+    expect(w.map((x) => x.key)).toEqual(["near", "new"]);
+    expect(w.find((x) => x.key === "new")).toMatchObject({ addrs: ["new@example.test"] });
+  });
+
+  it("says so in words, and offers the address it reads as", () => {
+    expect(guardLine({ key: "near", pairs: [pair] })).toEqual({
+      text: "“jon@example.test” is one typo away from john@example.test, someone you’ve written to.",
+      fix: { kind: "near", label: "Use john@example.test", swap: { from: pair.addr, to: pair.near } },
+    });
+    expect(guardLine({ key: "near", pairs: [pair, other] }).text).toMatch(/1 more looks the same\.$/);
+    expect(guardLine({ key: "near", pairs: [pair, other, { addr: "z@x.test", near: "y@x.test" }] }).text).toMatch(/2 more look the same\.$/);
+  });
+});
+
 it("never stops a send for someone new alone", () => {
   const w = guardCheck(S({ fresh: ["new@example.test"] }));
   expect([keys(w), guardBlocks(w)]).toEqual([["new"], false]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, parseAddrs, quoteLabel, rcptAddr, rePrefix, replySeed, sendLaterPresets, splitChips } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -29,6 +29,28 @@ describe("subjects", () => {
     expect(rePrefix("Fwd: Lunch", "Re:")).toBe("Re: Lunch");
     expect(rePrefix("", "Fwd:")).toBe("Fwd:");
     expect(rePrefix(null, "Re:")).toBe("Re:");
+  });
+});
+
+describe("near misses", () => {
+  const composing = (over: Partial<Composer>, people: [string, Person][]) => ({ to: [], cc: [], bcc: [], participants: new Set<string>(), people: new Map(people), ...over }) as unknown as Composer;
+  const jon: [string, Person] = ["jon@example.test", { known: false, self: false, near: "john@example.test" }];
+  const mine = new Set(["ada@example.test"]);
+
+  it("names a chip the lookup called a typo of someone, once, whichever field holds it", () => {
+    const c = composing({ to: [chip("Jon <jon@example.test>")], bcc: [chip("jon@example.test")] }, [jon]);
+    expect(nearMisses(c, mine)).toEqual([{ addr: "jon@example.test", near: "john@example.test" }]);
+  });
+
+  it("names none the lookup said nothing of, and none it never answered", () => {
+    expect(nearMisses(composing({ to: [chip("bo@example.test")] }, [["bo@example.test", { known: false, self: false }]]), mine)).toEqual([]);
+    expect(nearMisses(composing({ to: [chip("jon@example.test")] }, []), mine)).toEqual([]);
+  });
+
+  it("leaves out you, the thread's people and a chip that isn't an address", () => {
+    expect(nearMisses(composing({ to: [chip("ada+x@example.test")] }, [["ada+x@example.test", { known: false, self: false, near: "ada@example.test" }]]), mine)).toEqual([]);
+    expect(nearMisses(composing({ to: [chip("jon@example.test")], participants: new Set(["jon@example.test"]) }, [jon]), mine)).toEqual([]);
+    expect(nearMisses(composing({ to: [{ v: "jon@example.test", bad: true }] }, [jon]), mine)).toEqual([]);
   });
 });
 

@@ -452,6 +452,75 @@ describe("the send-time check", () => {
   });
 });
 
+describe("an address one typo from someone you write to", () => {
+  const typo = (near = "john@example.test") => (b: Json) => ({ ok: true, thin: false, items: Object.fromEntries(b.addrs.map((a: string) => [a, { known: false, self: false, near }])) });
+
+  it("holds the send, and the fix takes the address it reads as", async () => {
+    const { m, answer, posted, focused, said } = setup();
+    answer("/api/contacts/known", typo());
+    m.open({ subject: "Plans" });
+    m.commitChip("to", "Jon <jon@example.test>");
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    const g = m.view.get()!.guard!;
+    expect(g.keys).toEqual(["near"]);
+    expect(posted("/api/send")).toEqual([]);
+    expect(g.lines[0]!.text).toMatch(/^“jon@example.test” is one typo away from john@example.test/);
+    m.guardFix(g.lines[0]!.fix!.kind, undefined, g.lines[0]!.fix!.swap);
+    const c = m.view.get()!;
+    expect(c.guard).toBeNull();
+    expect(c.to.map((x) => x.v)).toEqual(["Jon <john@example.test>"]);
+    expect(c.dirty).toBe(true);
+    expect(focused.at(-1)).toBe("send");
+    expect(said.at(-1)).toBe("Changed to john@example.test.");
+    m.send();
+    await flush();
+    expect(posted("/api/send").length).toBe(1);
+  });
+
+  it("goes on Send anyway, and an Undo doesn't ask about it again", async () => {
+    const { m, answer, posted, tick } = setup();
+    answer("/api/contacts/known", typo());
+    m.open({ subject: "Plans", to: ["jon@example.test"] });
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    expect(m.view.get()!.guard!.keys).toEqual(["near"]);
+    tick(800);
+    m.confirmGuard();
+    await flush();
+    expect(posted("/api/send").length).toBe(1);
+    const f = m.float.get();
+    if (f?.kind !== "countdown") throw new Error("no countdown");
+    answer("/api/contacts/known", typo());
+    f.undo();
+    await flush();
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    await flush();
+    expect(posted("/api/send").length).toBe(2);
+  });
+
+  it("asks again about someone not waved through before", async () => {
+    const { m, answer, tick } = setup();
+    answer("/api/contacts/known", typo());
+    m.open({ subject: "Plans", to: ["jon@example.test"] });
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    tick(800);
+    m.confirmGuard();
+    await flush();
+    const f = m.float.get();
+    if (f?.kind !== "countdown") throw new Error("no countdown");
+    f.undo();
+    await flush();
+    answer("/api/contacts/known", typo("kate@example.test"));
+    m.commitChip("cc", "kat@example.test");
+    await vi.advanceTimersByTimeAsync(200);
+    m.send();
+    expect(m.view.get()!.guard!.keys).toEqual(["near"]);
+  });
+});
+
 describe("sending", () => {
   const person = "bea@example.test";
   const ready = (m: ReturnType<typeof setup>["m"]) => {
