@@ -213,7 +213,7 @@ class Filing:
         verb, rows = body.get("verb"), body.get("rows")
         if verb not in ("archive", "trash", "junk") or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
-        wanted: list[tuple[int | tuple[MessageKey, FolderName], bool]] = []
+        wanted: list[tuple[tuple[MessageKey, FolderName], bool]] = []
         for one in rows:
             if not is_object(one):
                 raise Refused()
@@ -237,21 +237,16 @@ class Filing:
 
 
     @staticmethod
-    def _row_named(one: Mapping[str, Any]) -> int | tuple[MessageKey, FolderName]:
-        """What a marked row names: a copy by its key and folder, or a pk from a page before keys."""
-        if one.get("key") is not None:
-            key, folder = as_int(one.get("key")), one.get("folder")
-            if key is None or not isinstance(folder, str):
-                raise Refused()
-            return MessageKey(key), FolderName(folder)
-        pk = as_int(one.get("pk"))
-        if pk is None:
+    def _row_named(one: Mapping[str, Any]) -> tuple[MessageKey, FolderName]:
+        """The copy a marked row names, by its key and folder."""
+        key, folder = as_int(one.get("key")), one.get("folder")
+        if key is None or not isinstance(folder, str):
             raise Refused()
-        return pk
+        return MessageKey(key), FolderName(folder)
 
-    def _row_members(self, c: Connection, named: int | tuple[MessageKey, FolderName], whole: bool) -> list[int]:
+    def _row_members(self, c: Connection, named: tuple[MessageKey, FolderName], whole: bool) -> list[int]:
         """The messages a marked row stands for, none if its copy has gone."""
-        pk = named if isinstance(named, int) else self._store.copy_pk(c, *named)
+        pk = self._store.copy_pk(c, *named)
         if pk is None:
             return []
         return self._conversation_of(c, pk) if whole else [pk]
