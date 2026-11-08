@@ -241,7 +241,7 @@ def test_a_pk_that_wont_read_is_the_400(app, path, junk):
 @pytest.mark.parametrize("pk", [2 ** 53, 0, -1])
 def test_a_pk_that_reads_and_names_nothing_is_no_message(app, path, pk):
     r = app.get(path.format(pk))
-    assert r.json.get("detail", r.json.get("error")) in ("not found", "no such part")
+    assert (r.status, r.json["detail"]) in ((404, "not found"), (404, "no such part"))
 
 
 @pytest.mark.parametrize("part", ["1x", "1.0", "-1", "%31", "%D9%A3", "1%0A", "x"])
@@ -349,15 +349,15 @@ def test_a_path_too_long_to_read_as_a_number_is_no_route_either(app):
     assert (r.status, r.json) == NOT_A_ROUTE
 
 
-# ── a refusal with a 200, and who counts as here ─────────────────────────────────────────────────────────────────────
+# ── what finds nothing, and who counts as here ───────────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path, said", [("/api/thread", {"ok": False, "error": "missing account/thread"}),
-                                        ("/api/thread?account=&thread_id=", {"ok": False, "error": "missing account/thread"}),
-                                        ("/api/message/999999/body", {"ok": False, "error": "not found"}),
-                                        ("/api/message/999999/body?prefetch=1", {"ok": False, "error": "not found"})])
-def test_a_get_that_finds_nothing_still_answers_a_200_that_says_so(app, path, said):
+@pytest.mark.parametrize("path, said", [("/api/thread", problems.refused("missing account/thread")),
+                                        ("/api/thread?account=&thread_id=", problems.refused("missing account/thread")),
+                                        ("/api/message/999999/body", problems.not_found("not found")),
+                                        ("/api/message/999999/body?prefetch=1", problems.not_found("not found"))])
+def test_a_get_that_finds_nothing_says_so(app, path, said):
     r = app.get(path)
-    assert (r.status, r.json) == (200, said)
+    assert (r.status, r.json) == (said["status"], said)
 
 
 def test_folders_with_no_account_named_say_so_with_an_empty_list(app):

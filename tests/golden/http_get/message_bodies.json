@@ -357,12 +357,14 @@
  },
  {
   "body": {
-   "error": "not found",
-   "ok": false
+   "detail": "not found",
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -371,7 +373,7 @@
    "x-frame-options": "DENY"
   },
   "request": "GET /api/message/999999/body",
-  "status": 200
+  "status": 404
  },
  {
   "note": "UID FETCH commands per account",

@@ -145,7 +145,7 @@ def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):
     fetches = len(world.server.commands_for(w.BEA, "UID FETCH"))
     with gate.held_elsewhere():
         r = app.get(f"/api/message/{pk}/body?prefetch=1").json
-    assert r == {"ok": False, "busy": True}
+    assert r == {"ok": True, "prefetched": False}                  # it gave way, and the open will fetch it
     assert len(world.server.commands_for(w.BEA, "UID FETCH")) == fetches
     assert app.get(f"/api/message/{pk}/body?prefetch=1").json == {"ok": True, "prefetched": True}
     with gate.held_elsewhere():                              # already warm: no lock needed

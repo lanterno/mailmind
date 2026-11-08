@@ -1119,7 +1119,7 @@ def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, mon
         got["backfill"] = mailbox.syncing.backfill_round()               # yielded, its backlog left for the next round
         return got
     finished, got = while_locked(background)
-    assert finished and got == {"prefetch": {"ok": False, "busy": True}, "backfill": 8}
+    assert finished and got == {"prefetch": {"ok": True, "prefetched": False}, "backfill": 8}
     assert world.server.commands[n:] == []                       # none of them touched the server
 
 
