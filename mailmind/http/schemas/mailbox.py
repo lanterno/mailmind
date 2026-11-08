@@ -413,6 +413,7 @@ class Invite(Answer):
     exdates: list[str]
     recurrence_id: str
     tzid: str
+    sequence: int
     rdates: list[str] | None = None         # only where the text has some
 
 

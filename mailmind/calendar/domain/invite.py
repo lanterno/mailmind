@@ -35,6 +35,7 @@ class Invite(TypedDict):
     exdates: list[str]
     recurrence_id: str
     tzid: str
+    sequence: int                           # the organizer's count of its revisions
     rdates: NotRequired[list[str]]          # only where the text has some
 
 
@@ -55,6 +56,7 @@ class Fields(TypedDict, total=False):
     exdates: list[datetime | date]          # a date strikes that whole day from a timed series
     rdates: list[datetime]
     recurrence_id: datetime | None
+    sequence: int
 
 
 def _zone_names(tzid: str) -> Iterator[str]:
@@ -217,6 +219,7 @@ def invite_of(e: Fields, method: str) -> Invite:
         "exdates": [d.isoformat() for d in e.get("exdates", [])],
         "recurrence_id": (recurrence_id.isoformat() if recurrence_id else ""),
         "tzid": e.get("tzid", ""),
+        "sequence": e.get("sequence", 0),
     }
     if e.get("rdates"):
         inv["rdates"] = [d.isoformat() for d in e.get("rdates", [])]

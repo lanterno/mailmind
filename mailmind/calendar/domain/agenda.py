@@ -13,6 +13,12 @@ def event_key(inv: Invite) -> tuple[str | tuple[str, str], str]:
     return (inv.get("uid") or (inv["summary"], inv["start_iso"]), inv.get("recurrence_id", ""))
 
 
+def supersedes(inv: Invite, held: Invite) -> bool:
+    """Whether what an older message says (`inv`) still beats what a newer one does: only with the later of the organizer's
+    revisions. A message can come late, and a stale copy be sent again."""
+    return inv.get("sequence", 0) > held.get("sequence", 0)
+
+
 def dead(inv: Invite) -> bool:
     return inv.get("method") == "CANCEL" or inv.get("status") == "CANCELLED"
 

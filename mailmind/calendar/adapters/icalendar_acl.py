@@ -37,6 +37,7 @@ _DAY = timedelta(days=1)
 _READING = ("dateutil.", "icalendar", "recurring_ical_events", "x_wr_timezone", __name__)
 _RESUMED = inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR
 _AS_SAID = {"RRULE", "UID", "ORGANIZER", "ATTENDEE"}
+_MAX_SEQUENCE = 2 ** 31                     # a revision count, and what's said past one is no count at all
 
 
 class _Spent(BaseException):
@@ -172,6 +173,14 @@ def _midnight(d: datetime | date) -> datetime:
     return d if isinstance(d, datetime) else datetime.combine(d, day_time())
 
 
+def _sequence(prop: Any) -> int:
+    try:
+        said = int(str(prop).strip())
+    except ValueError:
+        return 0
+    return said if 0 <= said < _MAX_SEQUENCE else 0
+
+
 def _after(start: datetime, duration: timedelta) -> datetime | None:
     try:
         return start + duration
@@ -205,6 +214,8 @@ def _fields(ev: Any) -> Fields:
         e["organizer"] = party(str(organizer), _param(organizer, "CN"))
     if (recurrence_id := _last(ev, "RECURRENCE-ID")) is not None:
         e["recurrence_id"] = _time(recurrence_id)[0]
+    if (sequence := _last(ev, "SEQUENCE")) is not None:
+        e["sequence"] = _sequence(sequence)
     # A whole day struck from a timed series stays a date, which says so; from an all-day one it's that day's midnight.
     e["exdates"] = [_midnight(d) if e.get("all_day") else d for d in _times(ev, "EXDATE")]
     if rdates := [_midnight(d) for d in _times(ev, "RDATE")]:

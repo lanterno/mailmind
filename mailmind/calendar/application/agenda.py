@@ -18,10 +18,10 @@ class Agenda:
 
     def upcoming(self, now: datetime | None = None, limit: int = 5, days: int = 60) -> dict[str, Any]:
         """The events in calendar invites from the last `days` of mail that haven't ended yet, soonest first; a
-        repeating one at its next occurrence. One row per event UID, from the newest message that carries it. Times
-        are local wall-clock ISO strings."""
+        repeating one at its next occurrence. One row per event UID, from the message with its latest SEQUENCE, the newest
+        of those that have it. Times are local wall-clock ISO strings."""
         now = now or datetime.now()
-        seen: set[tuple[str | tuple[str, str], str]] = set()
+        seen: dict[tuple[str | tuple[str, str], str], int] = {}
         found: list[tuple[Row, Invite]] = []
         for r, text in self._stored.invite_parts(int(now.timestamp()) - days * 86400, agenda.SKIPPED_ROLES):
             try:
@@ -32,9 +32,12 @@ class Agenda:
                 if not invite.get("start_iso"):
                     continue
                 key = agenda.event_key(invite)
-                if key not in seen:
-                    seen.add(key)
+                held = seen.get(key)
+                if held is None:
+                    seen[key] = len(found)
                     found.append((r, invite))
+                elif agenda.supersedes(invite, found[held][1]):
+                    found[held] = (r, invite)
         moved, gone = agenda.changed_occurrences([inv for _r, inv in found])
         items: list[dict[str, Any]] = []
         expand_until = time.thread_time() + _EXPAND_SECONDS
