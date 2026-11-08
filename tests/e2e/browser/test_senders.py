@@ -155,6 +155,22 @@ def test_a_card_that_cannot_load_says_so(page, world):
     clean(page)
 
 
+def with_headers(subject, extra):
+    """One more receipt from the same sender, with these header lines added."""
+    raw = w.variant(RECEIPT, Message_ID=f"<{subject.replace(' ', '-')}@thimble.example.test>", Subject=subject, Date="Fri, 30 Oct 2026 11:05:00 +0000")
+    head, sep, body = raw.partition(b"\n\n")
+    return head + b"".join(f"\n{line}".encode() for line in extra) + sep + body
+
+
+def opened_mail(page, world, subject, reply_to):
+    world.deliver(w.ADA, "INBOX", with_headers(subject, [f"Reply-To: {reply_to}"]))
+    page.goto(f"/m/{w.ADA}/INBOX")
+    page.locator("#tab-all").click()
+    page.locator("#rows .row[data-key]").filter(has_text=subject).click()
+    expect(page.locator(".rd-subj")).to_contain_text(subject)
+    return page
+
+
 def test_the_reader_says_who_a_sender_is_without_asking_again(page, world):
     asked = []
     page.pw.on("request", lambda r: asked.append(r.url) if "/api/contact?" in r.url else None)
@@ -162,6 +178,31 @@ def test_the_reader_says_who_a_sender_is_without_asking_again(page, world):
     expect(page.locator(".rd-from .rd-mono")).to_have_text("T")
     expect(page.locator(".rd-from .rd-facts")).to_have_text(re.compile(r"^\d+ emails? · replied \d+× · first .+ ago$"))
     assert asked == []
+    clean(page)
+
+
+def test_a_reply_to_at_another_organisation_warns_outside_the_mail(page, world):
+    opened_mail(page, world, "Wire the deposit", reply_to="Accounts <accounts@elsewhere.test>")
+    note = page.locator(".rd-replyto")
+    expect(note).to_have_text("Replies go to accounts@elsewhere.test, not to the sender, orders@thimble.example.test.")
+    expect(page.frame_locator(".rd-iframe").locator("body")).not_to_contain_text("Replies go to")
+    clean(page)
+
+
+def test_a_reply_to_inside_the_senders_organisation_says_nothing(page, world):
+    opened_mail(page, world, "Your delivery", reply_to="help@support.thimble.example.test")
+    expect(page.locator(".rd-iframe")).to_be_visible()
+    expect(page.locator(".rd-replyto")).to_have_count(0)
+    clean(page)
+
+
+def test_a_conversation_warns_of_a_reply_to_too(page, world):
+    first = "<order-1042@thimble.example.test>"
+    world.deliver(w.ADA, "INBOX", with_headers("Re: Your receipt for order 1042", ["Reply-To: accounts@elsewhere.test", f"In-Reply-To: {first}", f"References: {first}"]))
+    page.goto(f"/m/{w.ADA}/INBOX")
+    page.locator("#tab-all").click()
+    page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="Your receipt").click()
+    expect(page.locator(".tmsg.open .rd-replyto")).to_contain_text("accounts@elsewhere.test")
     clean(page)
 
 
@@ -173,6 +214,12 @@ def test_the_screener_and_the_card_pass_axe(page, world, every_theme):
     opened_receipt(page, world)
     page.locator("button.rd-sender").click()
     expect(page.locator(".cc-name")).to_be_visible()
+    page.pw.evaluate(FADES_DONE)
+    assert found() == []
+    page.keyboard.press("Escape")
+    expect(page.locator(".contact-card")).to_have_count(0)
+    opened_mail(page, world, "Wire the deposit", reply_to="accounts@elsewhere.test")
+    expect(page.locator(".rd-replyto")).to_be_visible()
     page.pw.evaluate(FADES_DONE)
     assert found() == []
     clean(page)
