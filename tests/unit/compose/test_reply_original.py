@@ -1,6 +1,6 @@
 """What a delivered reply does to its original, \\Answered and a follow-up, goes by what outlasts a row: the Message-ID and
-the account the outbox row keeps (`orig_*`), or for a message with no Message-ID its key (`original_key`). The pk a request
-named may be another message's by then."""
+the account the outbox row keeps (`orig_*`), or for a message with no Message-ID its key (`original_key`). The pk the original's
+row had when the request named it may be another message's by then."""
 from datetime import timedelta
 
 import pytest
@@ -34,7 +34,8 @@ def execute(sql, *args):
 
 
 def reply(app, pk, key="k-reply"):
-    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": pk, "to": ["lin@example.test"],
+    """Reply to the message row `pk` holds now, named as the page names it: by its key."""
+    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "original_key": w.copy_of(pk)["key"], "to": ["lin@example.test"],
                                "subject": "Re: Lunch on Thursday?", "text": "See you.", "idempotency_key": key}).json
     assert r["ok"], r
     return r["outbox_id"]
@@ -69,7 +70,7 @@ def held_for_a_reply(app, world):
     """A reply on its way out, its original archived and gone from the database, and another message on its old pk."""
     original = world.row(LUNCH)
     reply(app, original["pk"])
-    assert app.post("/api/archive", {"pk": original["pk"]}).json["ok"]
+    assert app.post("/api/archive", w.copy_of(original["pk"])).json["ok"]
     assert query("SELECT 1 FROM messages WHERE pk=?", original["pk"]) == []
     bystander = world.row(OTHER)
     another_message_takes(original["pk"], bystander["pk"])

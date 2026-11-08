@@ -40,17 +40,30 @@ def test_a_search_with_nothing_typed_answers_whatever_the_limit_says(app):
     assert (r.status, r.json["ok"]) == (200, True)
 
 
-@pytest.mark.parametrize("path", ["/api/message/{}/body", "/api/message/{}/attachment/1"])
-@pytest.mark.parametrize("junk", ["x", TOO_LARGE])
+@pytest.mark.parametrize("path", ["/api/message/body?key={}&folder=INBOX", "/api/message/attachment?key={}&folder=INBOX&part_id=1"])
+@pytest.mark.parametrize("junk", ["x", TOO_LARGE, "1.5", "-"])
 def test_a_message_named_by_what_cant_be_a_number(app, path, junk):
     r = app.get(path.format(junk))
     assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
+@pytest.mark.parametrize("path", ["/api/message/body?folder=INBOX", "/api/message/body?key=1",
+                                  "/api/message/attachment?folder=INBOX&part_id=1", "/api/message/attachment?key=1&part_id=1",
+                                  "/api/message/attachment?key=1&folder=INBOX"])
+def test_a_copy_named_by_less_than_its_key_and_folder(app, path):
+    r = app.get(path)
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
 @pytest.mark.parametrize("junk", ["x", TOO_LARGE])
 def test_drafting_ahead_for_what_cant_be_a_message(app, junk):
-    r = app.get(f"/api/ai/draft-ahead?pk={junk}")
-    assert (r.status, r.json) == (400, problems.refused("bad pk"))
+    r = app.get(f"/api/ai/draft-ahead?key={junk}")
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
+def test_drafting_ahead_for_no_message_at_all(app):
+    r = app.get("/api/ai/draft-ahead")
+    assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
 @pytest.mark.parametrize("path", ["/api/outbox/retry", "/api/outbox/cancel", "/api/outbox/sendnow", "/api/pending/retry",
@@ -61,36 +74,47 @@ def test_a_queued_item_named_by_what_cant_be_a_number(app, path, junk):
     assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
-@pytest.mark.parametrize("path, field, said", [("/api/trash", "pk", "bad request"), ("/api/ai/summarize", "pk", "bad request"),
-                                               ("/api/ai/draft-reply", "pk", "bad request"), ("/api/mute", "pk", "bad request"),
-                                               ("/api/unmute", "pk", "bad request"), ("/api/followups/dismiss", "pk", "bad request"),
-                                               ("/api/replylater", "pk", "bad request"), ("/api/snooze", "pk", "bad request"),
-                                               ("/api/unsnooze", "pk", "bad request"), ("/api/invite/rsvp", "pk", "bad request"),
-                                               ("/api/draft/resume", "draft_id", "bad request"),
-                                               ("/api/draft/resume", "pk", "bad request")])
-@pytest.mark.parametrize("junk", [[1], 10 ** 30])
-def test_a_message_named_in_a_body_by_what_cant_be_a_number(app, path, field, said, junk):
-    r = app.post(path, {field: junk, "preset": "tomorrow"})
-    assert (r.status, r.json) == (400, problems.refused(said))
+@pytest.mark.parametrize("path, field", [("/api/trash", "key"), ("/api/ai/summarize", "key"), ("/api/ai/draft-reply", "key"),
+                                         ("/api/mute", "key"), ("/api/unmute", "key"), ("/api/followups/dismiss", "key"),
+                                         ("/api/replylater", "key"), ("/api/snooze", "key"), ("/api/unsnooze", "key"),
+                                         ("/api/invite/rsvp", "key"), ("/api/rules", "key"), ("/api/draft/resume", "draft_id"),
+                                         ("/api/draft/resume", "key")])
+@pytest.mark.parametrize("junk", [[1], 10 ** 30, "x"])
+def test_a_message_named_in_a_body_by_what_cant_be_a_number(app, path, field, junk):
+    r = app.post(path, {field: junk, "folder": "INBOX", "preset": "tomorrow", "decision": "accepted", "token": "lin@example.test",
+                        "verdict": "keep"})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
+@pytest.mark.parametrize("path", ["/api/trash", "/api/ai/summarize", "/api/mute", "/api/snooze", "/api/invite/rsvp",
+                                  "/api/rules", "/api/draft/resume"])
+@pytest.mark.parametrize("junk", [[1], 5])
+def test_a_copy_named_in_a_body_by_a_folder_that_isnt_text(app, world, path, junk):
+    r = app.post(path, {"key": world.key("ada-inbox-02-lunch-confirm.eml"), "folder": junk, "preset": "tomorrow",
+                        "decision": "accepted", "token": "lin@example.test", "verdict": "keep"})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
 @pytest.mark.parametrize("path", ["/api/seen", "/api/flag", "/api/archive", "/api/junk", "/api/thread/archive",
                                   "/api/thread/trash"])
 @pytest.mark.parametrize("junk", ["x", 10 ** 30])
 def test_filing_what_cant_be_a_message(app, path, junk):
-    r = app.post(path, {"pk": junk, "folder": "Archive"})
+    r = app.post(path, {"key": junk, "folder": "Archive"})
     assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
 @pytest.mark.parametrize("junk", [[1], 10 ** 30])
 def test_any_of_many_named_by_what_cant_be_a_number(app, world, junk):
-    pk = world.pk("ada-inbox-02-lunch-confirm.eml")
+    copy = world.copy("ada-inbox-02-lunch-confirm.eml")
     for path in ("/api/snooze", "/api/unsnooze"):
-        r = app.post(path, {"pks": [pk, junk], "preset": "tomorrow"})
+        r = app.post(path, {"copies": [copy, {"key": junk, "folder": "INBOX"}], "preset": "tomorrow"})
         assert (r.status, r.json) == (400, BAD_REQUEST)
+    r = app.post("/api/bulk/file", {"verb": "archive", "rows": [copy, {"key": junk, "folder": "INBOX"}]})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
     c = store.conn()
     try:
         assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
+        assert c.execute("SELECT COUNT(*) FROM mail_commands").fetchone()[0] == 0
     finally:
         c.close()
 
@@ -111,7 +135,7 @@ def test_a_discard_naming_what_cant_be_a_draft(app, junk):
 
 @pytest.mark.parametrize("junk", ["x", 10 ** 30])
 def test_a_reply_naming_what_cant_be_its_original(app, junk):
-    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": junk, "to": ["lin@example.test"], "text": "Hello"})
+    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "original_key": junk, "to": ["lin@example.test"], "text": "Hello"})
     assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
@@ -135,7 +159,7 @@ def test_a_text_field_that_holds_anything_else(app, path, field, junk):
 
 
 def test_a_text_field_may_say_nothing(app, world):
-    r = app.post("/api/mute", {"account": None, "thread_id": None, "pk": world.pk("ada-inbox-02-lunch-confirm.eml")})
+    r = app.post("/api/mute", {"account": None, "thread_id": None, **world.copy("ada-inbox-02-lunch-confirm.eml")})
     assert (r.status, r.json["ok"]) == (200, True)
 
 
@@ -184,19 +208,20 @@ def test_a_connection_test_of_what_cant_be_a_draft(app, junk):
 
 
 WALK_LEAVES_OUT = {"/api/refresh", "/api/undo", "/api/accounts/delete"}     # each would undo the walk's own world
-WALK_FIELDS = ("pk", "pks", "id", "draft_id", "account", "email", "thread_id", "from_addr", "token", "decision", "mode", "subject",
-               "text", "undo_group", "idempotency_key", "in_reply_to_pk", "port", "draft", "rows", "to", "attachments", "resume")
+WALK_FIELDS = ("key", "folder", "copies", "id", "draft_id", "account", "email", "thread_id", "from_addr", "token", "decision", "mode",
+               "subject", "text", "undo_group", "idempotency_key", "original_key", "port", "draft", "rows", "to", "attachments",
+               "resume")
 WALK_JUNK = ([1], 10 ** 30, float("inf"))
 
 
 def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai):
     """Every POST route, each field a route has choked on, each kind of junk that once got past the catch around a route, within
     a body otherwise good enough to get as far as reading it."""
-    pk = world.pk("ada-inbox-05-receipt.eml")
-    good = {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "seen": True, "id": 1,
+    copy = world.copy("ada-inbox-05-receipt.eml")
+    good = {**copy, "copies": [copy], "account": w.ADA, "email": w.ADA, "seen": True, "id": 1,
             "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": True,
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
-            "action": "keep", "verb": "archive", "decision": "accepted", "rows": [{"pk": pk}]}
+            "action": "keep", "verb": "archive", "decision": "accepted", "rows": [copy]}
     routes = sorted(path for method, path in route_tables.paths() if method == "POST" and path not in WALK_LEAVES_OUT)
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
            if app.post(path, {**good, field: junk}).status >= 500]

@@ -45,7 +45,7 @@ def test_it_counts_idles_workers_without_naming_their_accounts(app, monkeypatch)
 
 def test_it_counts_what_waits_in_each_queue_by_its_state(app, world, monkeypatch):
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")          # so the archive waits in its queue
-    assert app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml")}).json["status"] == "queued"
+    assert app.post("/api/archive", world.copy("ada-inbox-05-receipt.eml")).json["status"] == "queued"
     r = app.get("/api/debug/health")
     assert r.json["profile"] == "read-only"
     assert r.json["queues"]["commands"] == {"queued": 1}

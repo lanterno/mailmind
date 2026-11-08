@@ -82,7 +82,7 @@ def test_a_message_archived_then_undone_keeps_its_assessment_with_no_new_call(ap
     before, asked = world.row(LUNCH), len(ai.requests)
     assert asked and said(before["pk"])
     told = said(before["pk"])
-    assert app.post("/api/archive", {"pk": before["pk"]}).json["ok"]
+    assert app.post("/api/archive", w.copy_of(before["pk"])).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     [after] = q("SELECT pk, message_key FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
                 w.ADA, before["message_id"])
@@ -267,20 +267,22 @@ def test_migration_30_can_run_again(tmp_path):
 
 # -- where the API shows it -------------------------------------------------------------------------------
 
-def test_every_list_of_mail_gives_the_key_beside_the_pk(app, world, ai):
+def test_every_list_of_mail_names_each_row_by_its_key_and_no_pk(app, world, ai):
     from mailmind.bootstrap.mailbox import store
     assess()
     row = world.row(LUNCH)
-    pk, key = row["pk"], row["message_key"]
+    key = row["message_key"]
 
     def holds(items):
-        return [i["key"] for i in items if i["pk"] == pk] == [key]
+        """The lunch message's row names it by its key, and no row says a pk."""
+        mine = [i["key"] for i in items if (i["subject"], i["from_addr"]) == (row["subject"], row["from_addr"])]
+        return mine == [key] and not any("pk" in i for i in items)
     assert holds(app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"])
     assert holds(app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100&group=1").json["items"])
     assert holds(app.get(f"/api/thread?account={w.ADA}&thread_id={row['thread_id']}").json["items"])
     assert holds(app.get(f"/api/search?q=lunch&scope=all&account={w.ADA}").json["items"])
     assert holds(app.get("/api/digest").json["items"])
-    assert app.get(f"/api/message/{pk}/body").json["key"] == key
+    assert app.get("/api/message/body?key={key}&folder={folder}".format(**world.copy(LUNCH))).json["key"] == key
     c = store.conn()
     attention.book.mute_thread(c, w.ADA, row["thread_id"], "now")
     c.commit()

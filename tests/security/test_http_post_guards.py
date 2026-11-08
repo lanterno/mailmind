@@ -35,8 +35,7 @@ def raw_post(app, path, body=b"{}", headers=()):
 
 
 def test_the_guards(app, golden, world):
-    pk = world.pk("ada-inbox-02-lunch-confirm.eml")
-    seen = {"pk": pk, "seen": True}
+    seen = {**world.copy("ada-inbox-02-lunch-confirm.eml"), "seen": True}
     golden.record("POST /api/seen without the CSRF token", app.post("/api/seen", seen, headers={"X-CSRF-Token": None}))
     golden.record("POST /api/seen with a wrong CSRF token", app.post("/api/seen", seen, headers={"X-CSRF-Token": "nope"}))
     golden.record("POST /api/seen from a rebinding host", app.post("/api/seen", seen, headers={"Host": "evil.example.test"}))
@@ -78,8 +77,9 @@ def test_a_length_that_isnt_one_is_refused_before_any_route_runs(app, world, len
 
 def test_a_guarded_post_changes_nothing_on_the_server(app, world):
     since = world.mark()
-    app.post("/api/trash", {"pk": world.pk("ada-inbox-05-receipt.eml")}, headers={"X-CSRF-Token": None})
-    app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml")}, headers={"Host": "evil.example.test"})
+    receipt = world.copy("ada-inbox-05-receipt.eml")
+    assert app.post("/api/trash", receipt, headers={"X-CSRF-Token": None}).status == 403
+    assert app.post("/api/archive", receipt, headers={"Host": "evil.example.test"}).status == 403
     assert world.writes(since) == []
     assert world.where("ada-inbox-05-receipt.eml")["server"] == [[w.ADA, "INBOX", 5, []]]
 
@@ -90,7 +90,7 @@ def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(a
     from mailmind.bootstrap import assistant
     governor = assistant.governor()
     monkeypatch.setattr(governor, "_last_seen", 0.0)
-    seen = {"pk": world.pk("ada-inbox-02-lunch-confirm.eml"), "seen": True}
+    seen = {**world.copy("ada-inbox-02-lunch-confirm.eml"), "seen": True}
     assert app.post("/api/seen", seen, headers={"X-CSRF-Token": None}).status == 403
     assert app.post("/api/seen", seen, headers={"Host": "evil.example.test"}).status == 403
     assert app.post("/api/send", {}, headers={"Origin": None}).status == 403

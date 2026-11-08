@@ -6,6 +6,7 @@ from email.message import EmailMessage
 
 import pytest
 
+from fixtures import world as w
 from mailmind.bootstrap import calendar
 from mailmind.bootstrap.calendar import ics
 from mailmind.bootstrap.mailbox import store
@@ -27,17 +28,18 @@ def event(uid, start, method="REQUEST", status="", extra=""):
 
 @pytest.fixture
 def stored(data_dir):
-    """Store one message holding an invite, as fetching its body would."""
+    """Store one message holding an invite, as fetching its body would. Gives the copy, by its key and folder."""
     count = [0]
 
     def store_one(cal, days_ago=1):
         count[0] += 1
         n = count[0]
         c = store.conn()
-        pk = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, recipients) "
-                       "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        key = store.mint_key(c, ACCT, f"<m{n}@example.test>", "ren@example.test", None, "Invitation")
+        pk = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, recipients, "
+                       "message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                        (ACCT, "imap", "INBOX", n, f"<m{n}@example.test>", f"t{n}", int((NOW - timedelta(days=days_ago)).timestamp()),
-                        "ren@example.test", "Invitation", "")).lastrowid
+                        "ren@example.test", "Invitation", "", key)).lastrowid
         m = EmailMessage()
         m["From"], m["To"], m["Subject"] = "ren@example.test", ACCT, "Invitation"
         m.set_content("See the invite.")
@@ -49,12 +51,12 @@ def stored(data_dir):
                       (pk, a["part_id"], a["filename"], a["content_type"], a["size"], a["content_id"], a["is_inline"]))
         c.commit()
         c.close()
-        return pk
+        return w.copy_of(pk)
     return store_one
 
 
 def listed():
-    return [(x["pk"], x["start"]) for x in calendar.agenda.upcoming(now=NOW)["items"]]
+    return [({"key": x["key"], "folder": x["folder"]}, x["start"]) for x in calendar.agenda.upcoming(now=NOW)["items"]]
 
 
 def weekly():

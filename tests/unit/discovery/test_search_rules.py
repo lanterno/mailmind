@@ -110,7 +110,7 @@ ALIASES = {"ada@example.test": "Work"}
 
 def test_a_hit_reads_as_the_list_shows_it():
     assert search.hit(row(flagged=1, has_attach=1, is_junk=1, seen=0), ALIASES, when) == {
-        "pk": 1, "key": 10, "account": "ada@example.test", "folder": "INBOX", "alias": "Work",
+        "key": 10, "account": "ada@example.test", "folder": "INBOX", "alias": "Work",
         "from_name": "Lin Ma", "from_addr": "lin@example.test", "subject": "Fabric",
         "when": "when:2026-11-02T12:00:00+00:00", "date": "2026-11-02", "snippet": "swatches",
         "seen": False, "flagged": True, "has_attach": True, "is_junk": True, "bucket": "PERSONAL", "thread_id": None,
@@ -142,7 +142,7 @@ def test_the_verdict_on_a_hit_is_what_the_kernel_says():
 
 def test_a_row_past_the_page_says_there_is_more_and_doesnt_show():
     answer = search.page([row(1), row(2), row(3)], asked(q="heron", limit="2", offset="4"), ALIASES, when, "now")
-    assert [i["pk"] for i in answer["items"]] == [1, 2]
+    assert [i["key"] for i in answer["items"]] == [10, 20]
     assert answer["has_more"] is True
 
 

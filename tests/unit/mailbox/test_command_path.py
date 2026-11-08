@@ -59,7 +59,7 @@ def dies_before(row, first_try=False):
 
 
 def test_a_move_that_lands_leaves_its_command_done(app, world):
-    r = app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json
+    r = app.post("/api/archive", world.copy(RECEIPT)).json
     assert (r["ok"], r["msg"], r["undoable"]) == (True, "archived", True)
     [row] = rows()
     assert (row["kind"], row["state"], row["applied"], row["dest"], row["begun"]) == ("archive", "done", 1, "Archive", 1)
@@ -74,7 +74,7 @@ def changes_sent(world, since, user=w.ADA):
 
 def test_a_server_that_offers_move_gets_a_move(app, world):
     since = len(world.server.commands)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     assert [" ".join(line.split(" ")[:2]) for line in changes_sent(world, since)] == ["UID MOVE"]
     assert boxes(world, RECEIPT) == ["Archive"]
 
@@ -83,7 +83,7 @@ def test_a_server_that_doesnt_gets_a_copy_then_an_expunge_of_that_uid(app, world
     world.server.without = {"MOVE"}
     [(_, _, uid, _)] = world.where(RECEIPT)["server"]
     since = len(world.server.commands)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     assert [line.split(" ")[:3] for line in changes_sent(world, since)] == [
         ["UID", "COPY", str(uid)], ["UID", "STORE", str(uid)], ["UID", "EXPUNGE", str(uid)]]
     assert boxes(world, RECEIPT) == ["Archive"]
@@ -92,7 +92,7 @@ def test_a_server_that_doesnt_gets_a_copy_then_an_expunge_of_that_uid(app, world
 def test_a_gmail_archive_only_drops_the_label(app, world):
     name = "cy-inbox-03-unrelated.eml"
     since = len(world.server.commands)
-    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/archive", world.copy(name)).json["ok"]
     [change] = changes_sent(world, since, w.CY)
     assert change.startswith("UID STORE") and "-X-GM-LABELS" in change and "Inbox" in change
 
@@ -106,14 +106,14 @@ def test_while_the_server_is_asked_the_message_is_hidden_and_undo_already_knows_
         seen.update(hidden=hidden(pk), stack=undo_stack(), first_try=first_try)
         return apply(row, first_try)
     monkeypatch.setattr(server_ops, "apply", spy)
-    assert app.post("/api/trash", {"pk": pk}).json["ok"]
+    assert app.post("/api/trash", w.copy_of(pk)).json["ok"]
     assert seen["hidden"] is True and seen["first_try"] is True
     assert [e["command"] for e in seen["stack"]] == [rows()[0]["id"]]
 
 
 def test_a_first_try_sends_no_search_of_its_own(app, world):
     since = world.mark()
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     assert not [c for c in world.server.commands[since:] if "SEARCH" in c["line"]]
 
 
@@ -176,7 +176,7 @@ def test_a_refusal_in_a_click_leaves_nothing_behind(app, world):
     pk = world.pk(RECEIPT)
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
-    r = app.post("/api/archive", {"pk": pk})
+    r = app.post("/api/archive", w.copy_of(pk))
     assert (r.status, r.json) == (409, problems.conflict("the server refused the archive"))
     assert rows() == [] and undo_stack() == [] and not hidden(pk)
     assert mailbox.commands.list_open()["items"] == []
@@ -186,7 +186,7 @@ def test_a_refusal_in_a_click_leaves_nothing_behind(app, world):
 def test_a_refused_flag_change_in_a_click_puts_back_what_it_replaced(app, world):
     pk, before = world.pk(RECEIPT), world.row(RECEIPT)["flagged"]
     world.server.fail("UID STORE", user=w.ADA)
-    r = app.post("/api/flag", {"pk": pk, "flag": "flagged", "on": not before})
+    r = app.post("/api/flag", {**w.copy_of(pk), "flag": "flagged", "on": not before})
     assert (r.status, r.json) == (409, problems.conflict("the server refused the flag change"))
     assert world.row(RECEIPT)["flagged"] == before and rows() == []
 
@@ -199,7 +199,7 @@ def test_a_flag_change_shows_before_the_server_is_asked(app, world, monkeypatch)
         seen.append(world.row(RECEIPT)["flagged"])
         return apply(row, first_try)
     monkeypatch.setattr(server_ops, "apply", spy)
-    assert app.post("/api/flag", {"pk": pk, "flag": "flagged", "on": True}).json["msg"] == "ok"
+    assert app.post("/api/flag", {**w.copy_of(pk), "flag": "flagged", "on": True}).json["msg"] == "ok"
     assert seen == [1] and world.row(RECEIPT)["flagged"] == 1
     assert rows()[0]["state"] == "done"
 
@@ -209,7 +209,7 @@ def test_a_busy_gate_hands_a_click_to_the_worker(app, world, monkeypatch):
     monkeypatch.setattr(commands, "FILE_WAIT", 0.05)
     pk, since = world.pk(RECEIPT), world.mark()
     with held_elsewhere(w.ADA):
-        r = app.post("/api/archive", {"pk": pk}).json
+        r = app.post("/api/archive", w.copy_of(pk)).json
     assert (r["ok"], r["status"], r["undoable"]) == (True, "waiting", True)
     assert world.writes(since) == [] and hidden(pk)
     [row] = rows()
@@ -222,8 +222,8 @@ def test_a_busy_gate_hands_a_click_to_the_worker(app, world, monkeypatch):
 def test_a_message_on_its_way_out_cant_be_filed_again(app, world):
     pk = world.pk(RECEIPT)
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
-    r = app.post("/api/trash", {"pk": pk})
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
+    r = app.post("/api/trash", w.copy_of(pk))
     assert (r.status, r.json) == (404, problems.not_found("not found"))
     assert [r["kind"] for r in rows()] == ["archive"]
 
@@ -232,7 +232,7 @@ def test_a_try_that_raises_something_unforeseen_doesnt_leave_its_message_hidden_
     from mailmind.bootstrap.mailbox import commands, server_ops
     pk = world.pk(RECEIPT)
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
 
     def broken(row, first_try=False):
         raise ValueError("a bug")
@@ -247,7 +247,7 @@ def test_a_later_try_never_moves_what_another_message_now_holds_its_uid(app, wor
     from mailmind.bootstrap.mailbox import commands
     pk, uid = world.pk(RECEIPT), world.uid(RECEIPT)
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
     box = world.server.accounts[w.ADA].box("INBOX")
     with world.server.lock:
         taken = box.messages.pop(uid)
@@ -269,7 +269,7 @@ def test_a_uid_from_another_epoch_goes_nowhere_without_a_message_id(app, world):
     c.commit()
     c.close()
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
     world.server.renumber(w.ADA, "INBOX")
     since = world.mark()
     commands.drain()
@@ -283,7 +283,7 @@ def test_a_first_try_in_a_new_epoch_finds_the_message_by_its_id(app, world):
     c.execute("UPDATE sync_state SET uidvalidity=uidvalidity+1 WHERE account=? AND folder='INBOX'", (w.ADA,))
     c.commit()
     c.close()
-    assert app.post("/api/archive", {"pk": pk}).json["ok"]
+    assert app.post("/api/archive", w.copy_of(pk)).json["ok"]
     assert boxes(world, RECEIPT) == ["Archive"]
     assert commands.list_open()["items"] == []
 
@@ -295,7 +295,7 @@ def test_undo_takes_off_the_read_mark_a_server_set_on_the_way_to_trash(app, worl
     monkeypatch.setattr(mailbox._directory, "profile", lambda acct: dataclasses.replace(real(acct), marks_trash_read=True))
     pk = world.pk(RECEIPT)
     assert not world.row(RECEIPT)["seen"]
-    assert app.post("/api/trash", {"pk": pk}).json["ok"]
+    assert app.post("/api/trash", w.copy_of(pk)).json["ok"]
     assert "unseen" in (rows()[0]["outcome"] or "")
     assert app.post("/api/undo", {}).json["ok"]
     [(_, box, _, flags)] = world.where(RECEIPT)["server"]
@@ -322,9 +322,9 @@ def test_undo_of_an_older_entry_goes_by_the_move_and_not_a_later_flag_change(app
     from mailmind.bootstrap.mailbox import store
     pk = world.pk(RECEIPT)
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/flag", {"pk": pk, "flag": "flagged", "on": True}).json["status"] == "queued"
+    assert app.post("/api/flag", {**w.copy_of(pk), "flag": "flagged", "on": True}).json["status"] == "queued"
     c = store.conn()
     top = c.execute("SELECT id, entry FROM undo_entries ORDER BY id DESC LIMIT 1").fetchone()
     c.execute("UPDATE undo_entries SET entry=json_remove(entry, '$.command') WHERE id=?", (top["id"],))
@@ -347,7 +347,7 @@ def test_an_outage_of_hours_leaves_a_move_waiting_and_its_message_hidden(app, wo
     from mailmind.bootstrap.mailbox import commands
     pk = world.pk(RECEIPT)
     world.server.drop("SELECT", user=w.ADA, times=None)
-    assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
+    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
     for _ in range(12):
         commands.drain()
         app.clock.shift(timedelta(seconds=commands._BACKOFF_CAP + 1))
@@ -378,7 +378,7 @@ def test_undo_of_a_queued_archive_whose_mail_left_on_its_own_stays_out_of_the_wa
     from mailmind.bootstrap import mailbox
     from mailmind.bootstrap.mailbox import server_ops, store
     until = int((datetime.now(timezone.utc) + timedelta(hours=6)).timestamp())
-    assert app.post("/api/snooze", {"pk": world.pk(LUNCH), "until": until}).json["ok"]
+    assert app.post("/api/snooze", {**world.copy(LUNCH), "until": until}).json["ok"]
     pk = world.pk(RECEIPT)
     with monkeypatch.context() as m:
         m.setattr(server_ops, "apply", dies_before)

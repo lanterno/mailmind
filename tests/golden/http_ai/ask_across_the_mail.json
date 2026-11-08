@@ -3,9 +3,6 @@
   "body": {
    "account": "all",
    "answer": "Lunch is on Thursday at noon.",
-   "cited_pks": [
-    2
-   ],
    "generated": "2026-11-02T12:00:00+00:00",
    "model": "claude-opus-5-5",
    "ok": true,
@@ -17,7 +14,6 @@
      "folder": "INBOX",
      "from": "Lin Mori",
      "key": 2,
-     "pk": 2,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?"
     }
@@ -40,7 +36,6 @@
   "body": {
    "account": "bea@example.test",
    "answer": "stub answer",
-   "cited_pks": [],
    "generated": "2026-11-02T12:00:00+00:00",
    "model": "claude-opus-5-5",
    "ok": true,

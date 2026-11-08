@@ -151,7 +151,7 @@ def test_the_rail_gives_each_role_to_one_folder(app, world):
 
 def test_archive_on_gmail_without_an_archive_folder_still_files_by_label(app, world):
     name = "cy-inbox-02-thread-end.eml"
-    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/archive", world.copy(name)).json["ok"]
     assert (w.CY, "INBOX") not in world.where(name)["server"]
 
 

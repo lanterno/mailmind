@@ -99,10 +99,10 @@ def test_a_listener_hears_each_event_then_a_keepalive(app, golden, world, quick)
     golden.note("status and headers", {"status": s.status, "headers": {k: v for k, v in s.headers.items()
                                                                        if k not in CONNECTION_HEADERS}})
     golden.note("first frame", s.frame())
-    lunch = world.row(READ_THREAD)
-    app.post("/api/mute", {"pk": lunch["pk"]})
+    lunch = world.copy(READ_THREAD)
+    app.post("/api/mute", lunch)
     app.post("/api/undo", {})
-    app.post("/api/replylater", {"pk": lunch["pk"]})
+    app.post("/api/replylater", lunch)
     golden.note("frames for mute, undo and Reply Later", [s.event() for _ in range(3)])
     golden.note("then, with nothing to say", s.frame())
     s.close()
@@ -142,15 +142,15 @@ def test_a_cross_site_listener_is_refused(app, golden, quick):
 # -- a tab that reconnects ------------------------------------------------------
 
 def test_a_tab_that_reconnects_hears_what_it_missed(app, golden, world, quick):
-    lunch = world.row(READ_THREAD)
+    lunch = world.copy(READ_THREAD)
     s = Stream(app)
     golden.note("first frame", s.frame())
-    app.post("/api/mute", {"pk": lunch["pk"]})
+    app.post("/api/mute", lunch)
     heard = s.event()
     s.close()                                                     # the tab drops, say a laptop lid
     subscribers(quick, 0)
     app.post("/api/undo", {})
-    app.post("/api/replylater", {"pk": lunch["pk"]})
+    app.post("/api/replylater", lunch)
     last = heard.split("\n")[0].removeprefix("id: ")
     t = Stream(app, **{"Last-Event-ID": last})
     golden.note("after the mute, it reconnects and hears", [t.frame() for _ in range(3)])
@@ -164,7 +164,7 @@ def test_a_tab_that_never_heard_an_event_resumes_from_where_it_opened(app, golde
     opened = s.frame()
     s.close()
     subscribers(quick, 0)
-    app.post("/api/mute", {"pk": world.pk(READ_THREAD)})
+    app.post("/api/mute", world.copy(READ_THREAD))
     t = Stream(app, **{"Last-Event-ID": opened.split("\nid: ")[1].split("\n")[0]})
     golden.note("it opened with", opened)
     golden.note("and on reconnecting hears", [t.frame(), t.frame()])
@@ -175,7 +175,7 @@ def test_a_tab_that_never_heard_an_event_resumes_from_where_it_opened(app, golde
 def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
     s = Stream(app)
     s.frame()
-    app.post("/api/mute", {"pk": world.pk(READ_THREAD)})
+    app.post("/api/mute", world.copy(READ_THREAD))
     last = s.event().split("\n")[0].removeprefix("id: ")
     s.close()
     subscribers(quick, 0)
@@ -188,9 +188,9 @@ def test_a_tab_from_before_a_restart_is_told_to_fetch_afresh(app, golden, world,
 
 def test_a_tab_further_back_than_the_hub_keeps_is_told_to_fetch_afresh(app, golden, world, quick, monkeypatch):
     monkeypatch.setattr(quick, "HUB", quick.Hub(ring=2, run="small"))
-    lunch = world.row(READ_THREAD)
+    lunch = world.copy(READ_THREAD)
     for _ in range(2):
-        app.post("/api/mute", {"pk": lunch["pk"]})
+        app.post("/api/mute", lunch)
         app.post("/api/undo", {})
     t = Stream(app, **{"Last-Event-ID": "small-1"})
     golden.note("it reconnects and hears", [t.frame(), t.frame()])
@@ -232,7 +232,7 @@ def test_a_queued_move_the_server_refuses_tells_the_open_tabs(app, world, quick)
     s = Stream(app)
     s.frame()
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"),
+    assert app.post("/api/archive", {**world.copy("ada-inbox-05-receipt.eml"),
                                      "mutation_id": "m-no"}).json["status"] == "queued"
     assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
     world.server.fail("UID MOVE", user=w.ADA)
@@ -248,7 +248,7 @@ def test_a_queued_move_that_lands_tells_the_open_tabs(app, world, quick):
     s = Stream(app)
     s.frame()
     world.server.drop("SELECT", user=w.ADA)
-    r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
+    r = app.post("/api/archive", {**world.copy("ada-inbox-05-receipt.eml"), "mutation_id": "m-tabs"}).json
     assert r["status"] == "queued"
     assert s.event().split("\n")[1:] == ["event: outbox", "data: {}"]         # the tray shows it
     commands.drain()

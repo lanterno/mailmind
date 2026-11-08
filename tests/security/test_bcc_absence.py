@@ -90,10 +90,10 @@ def test_with_a_file(app, world):
 
 
 def test_a_reply_a_reply_all_and_a_forward(app, world):
-    pk = world.pk(LUNCH)
-    for n, more in enumerate(({"mode": "reply", "in_reply_to_pk": pk, "subject": "Re: Lunch"},
-                              {"mode": "replyall", "in_reply_to_pk": pk, "subject": "Re: Lunch", "cc": ["noor@studio.example.test"]},
-                              {"mode": "forward", "in_reply_to_pk": pk, "subject": "Fwd: Lunch"})):
+    key = world.key(LUNCH)
+    for n, more in enumerate(({"mode": "reply", "original_key": key, "subject": "Re: Lunch"},
+                              {"mode": "replyall", "original_key": key, "subject": "Re: Lunch", "cc": ["noor@studio.example.test"]},
+                              {"mode": "forward", "original_key": key, "subject": "Fwd: Lunch"})):
         assert app.post("/api/send", new(idempotency_key=f"k-{n}", **more)).json["ok"]
     deliver(app)
     assert len(world.smtp.messages) == 3
@@ -108,8 +108,8 @@ def test_a_reply_a_reply_all_and_a_forward(app, world):
 
 def test_from_gmail_which_files_what_it_sends_itself(app, world):
     """Gmail keeps what reached it, so nothing of the envelope may be in those bytes."""
-    end = world.row(THREAD_END)
-    app.post("/api/send", new(account=w.CY, mode="reply", in_reply_to_pk=end["pk"], subject="Re: Guild meetup venue"))
+    assert app.post("/api/send", new(account=w.CY, mode="reply", original_key=world.key(THREAD_END),
+                                     subject="Re: Guild meetup venue")).json["ok"]
     deliver(app)
     holds_the_blind_copy_only_in_its_envelope(world)
     [copy] = sent_copies(world, b"\r\nHi Lin", w.CY, "[Gmail]/Sent Mail")

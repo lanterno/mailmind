@@ -196,11 +196,11 @@ def test_undo_outlives_a_restart(world, tiny_build):
     """Archived in one run, undone in the next. Both run read-only, so the archive waits in the queue and its Undo asks
     no server."""
     from fixtures import world as w
-    receipt = world.pk("ada-inbox-05-receipt.eml")
+    receipt = world.copy("ada-inbox-05-receipt.eml")
     with serving(world.dir, tiny_build) as port:
-        assert post(port, "/api/archive", {"pk": receipt})["status"] == "queued"
+        assert post(port, "/api/archive", receipt)["status"] == "queued"
     with serving(world.dir, tiny_build) as port:
         r = post(port, "/api/undo", {})
         assert (r["ok"], r["label"], r["remaining"]) == (True, "Archived", 0)
         listed = json.loads(get(port, f"/api/messages?account={w.ADA}&limit=200")[1])["items"]
-        assert receipt in [it["pk"] for it in listed]
+        assert receipt in [{"key": it["key"], "folder": it["folder"]} for it in listed]

@@ -12,6 +12,7 @@ import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import pytest
 
@@ -96,12 +97,17 @@ def drafts(ai):
     return [r for r in ai.requests if r.prompt.startswith(DRAFTING)]
 
 
+def ahead(pk, **more):
+    """Draft-ahead's route for the copy the row `pk` is now, by its key and folder."""
+    return "/api/ai/draft-ahead?" + urlencode({**w.copy_of(pk), **more})
+
+
 def peek(app, pk):
-    return app.get(f"/api/ai/draft-ahead?pk={pk}&peek=1").json
+    return app.get(ahead(pk, peek=1)).json
 
 
 def kick(app, pk):
-    return app.get(f"/api/ai/draft-ahead?pk={pk}").json
+    return app.get(ahead(pk)).json
 
 
 def renumber_inbox(world, account):
@@ -190,7 +196,7 @@ AI_READS = {
     "brief": lambda app, world: app.post("/api/briefing", {}),
     "delta": lambda app, world: app.post("/api/briefing/since", {"since": 0}),
     "review": lambda app, world: app.post("/api/review", {}),
-    "thread summary": lambda app, world: app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)}),
+    "thread summary": lambda app, world: app.post("/api/ai/summarize", world.copy(LUNCH)),
 }
 UNUSABLE = {"brief": fa.answer({}), "delta": fa.answer({}), "review": fa.answer({}),
             "thread summary": fa.answer("Sorry, there is no JSON in this reply.")}
@@ -326,30 +332,30 @@ def test_hwf_a_thread_that_moves_on_during_a_pre_draft_is_drafted_again(app, wor
     assert [r["body"] for r in draft_rows(w.ADA, thread_key(world, LUNCH))] == [STALE]
     newest = pk_of("<lunch-9@lin.example.test>")
     assert peek(app, newest)["status"] == "none"
-    assert app.post("/api/ai/draft-reply", {"pk": newest}).json["body"] != STALE
+    assert app.post("/api/ai/draft-reply", w.copy_of(newest)).json["body"] != STALE
 
 
 def test_hwf_a_thread_that_moves_on_during_a_draft_click_is_not_served_from_the_bank(app, world, ai):
     ai.responder = moves_on_mid_draft(world)
-    assert app.post("/api/ai/draft-reply", {"pk": world.pk(LUNCH)}).json["body"] == STALE
+    assert app.post("/api/ai/draft-reply", world.copy(LUNCH)).json["body"] == STALE
     ai.responder = None
-    assert app.post("/api/ai/draft-reply", {"pk": pk_of("<lunch-9@lin.example.test>")}).json["body"] != STALE
+    assert app.post("/api/ai/draft-reply", w.copy_of(pk_of("<lunch-9@lin.example.test>"))).json["body"] != STALE
 
 
 def test_hwf_a_pre_draft_survives_its_folder_being_renumbered(app, world, ai):
     anchor = world.pk(LUNCH)
     ai.queue(fa.answer({"body": "See you at 12:30."}))
-    assert app.post("/api/ai/draft-reply", {"pk": anchor}).status == 200          # banked for the thread
+    assert app.post("/api/ai/draft-reply", world.copy(LUNCH)).status == 200      # banked for the thread
     renumber_inbox(world, w.ADA)
     moved = pk_of(LUNCH_MID)
-    assert moved != anchor
+    assert moved != anchor and w.copy_of(moved) == world.copy(LUNCH)          # a new pk, the same key and folder
     assert peek(app, moved) == {"ok": True, "status": "ready", "body": "See you at 12:30.", "tone": "balanced"}
 
 
 def test_hwf_one_thread_pays_for_one_default_draft_served_only_at_its_newest(app, world, ai):
     older, anchor = world.pk("ada-sent-01-lunch-reply.eml"), world.pk(LUNCH)
-    a = app.post("/api/ai/draft-reply", {"pk": older}).json
-    b = app.post("/api/ai/draft-reply", {"pk": anchor}).json
+    a = app.post("/api/ai/draft-reply", w.copy_of(older)).json
+    b = app.post("/api/ai/draft-reply", w.copy_of(anchor)).json
     assert len(drafts(ai)) == 1 and a["body"] == b["body"]
     assert peek(app, older)["status"] == "none"          # never paired with a composer quoting an older message
     assert peek(app, anchor)["status"] == "ready"
@@ -357,7 +363,7 @@ def test_hwf_one_thread_pays_for_one_default_draft_served_only_at_its_newest(app
 
 def test_hwf_a_pre_draft_rechecks_the_cache_after_winning_the_lead(app, world, ai):
     anchor = world.pk(LUNCH)
-    assert app.post("/api/ai/draft-reply", {"pk": anchor}).status == 200
+    assert app.post("/api/ai/draft-reply", world.copy(LUNCH)).status == 200
     ai.requests.clear()
     assert assistant.drafting._gen_draft_ahead(w.ADA, anchor) is None
     assert ai.requests == []
@@ -405,7 +411,8 @@ def test_hwf_the_client_kick_bar_is_what_the_server_says(app, world):
     said = []
     for (importance, category, action), _ in KICK_BAR:
         summarize_as(pk, importance, category, action)
-        [row] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"] if i["pk"] == pk]
+        [row] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]
+                 if i["key"] == world.key(QUILT)]
         said.append(row["reply_worthy"])
     assert said == [want for _, want in KICK_BAR]
 
@@ -417,7 +424,7 @@ def test_hwf_a_warm_pre_draft_answers_the_draft_button_for_free(app, world, ai):
     assert kick(app, pk)["status"] == "generating"
     app.settle()
     ai.requests.clear()
-    r = app.post("/api/ai/draft-reply", {"pk": pk}).json
+    r = app.post("/api/ai/draft-reply", world.copy(QUILT)).json
     assert (r["body"], r["model"]) == ("It looks wonderful, well done!", "claude-opus-5-5")
     assert ai.requests == []
 
@@ -425,7 +432,7 @@ def test_hwf_a_warm_pre_draft_answers_the_draft_button_for_free(app, world, ai):
 def test_hwf_a_custom_draft_is_never_banked(app, world, ai):
     pk = world.pk(QUILT)
     for custom in ({"tone": "warm"}, {"instruction": "Say I can't make it"}):
-        assert app.post("/api/ai/draft-reply", {"pk": pk, **custom}).status == 200
+        assert app.post("/api/ai/draft-reply", {**world.copy(QUILT), **custom}).status == 200
     assert len(drafts(ai)) == 2
     assert peek(app, pk)["status"] == "none"
     assert draft_rows(w.ADA, thread_key(world, QUILT)) == []
@@ -437,7 +444,7 @@ def test_hwf_a_failed_bank_write_still_returns_the_draft(app, world, ai, monkeyp
     def full_disk(*a, **kw):
         raise sqlite3.OperationalError("database or disk is full")
     monkeypatch.setattr(answers, "draft_ahead_put", full_disk)
-    r = app.post("/api/ai/draft-reply", {"pk": world.pk(QUILT)})
+    r = app.post("/api/ai/draft-reply", world.copy(QUILT))
     assert r.status == 200 and r.json["body"]
 
 
@@ -496,7 +503,7 @@ def test_hwf_the_tick_skips_a_warm_draft_and_drafts_the_next(app, world, ai, mon
 def test_hwf_the_tick_stops_when_only_background_requests_come_in(app, world, ai, monkeypatch, present):
     summarize_as(world.pk(QUILT), 5, "personal")
     app.clock.shift(timedelta(minutes=46))
-    for path in (f"/api/ai/draft-ahead?pk={world.pk(QUILT)}&peek=1", f"/api/folders?account={w.ADA}",
+    for path in (ahead(world.pk(QUILT), peek=1), f"/api/folders?account={w.ADA}",
                  "/api/stats", "/api/outbox"):                # what a hidden tab re-fetches on its own
         app.get(path)
     run_tick(app, monkeypatch, cycles=1)
@@ -549,7 +556,7 @@ def test_hwf_the_tick_sweeps_orphans_after_an_hour(app, world, ai, monkeypatch, 
 
 
 def test_hwf_a_draft_whose_thread_ends_in_your_own_sent_copy_is_dropped(app, world, ai, monkeypatch, present):
-    assert app.post("/api/ai/draft-reply", {"pk": world.pk(LUNCH)}).status == 200      # banked
+    assert app.post("/api/ai/draft-reply", world.copy(LUNCH)).status == 200      # banked
     key = thread_key(world, LUNCH)
     world.deliver(w.ADA, "Sent", w.variant("ada-sent-01-lunch-reply.eml", Message_ID="<lunch-4@ada.example.test>",
                                            Date="Mon, 02 Nov 2026 11:00:00 +0000"))
@@ -594,8 +601,22 @@ def test_hwf_do_plan_refuses_a_filter_that_matches_most_of_the_mailbox(app, worl
     assert r == {"ok": True, "intent": "search", "filter": "after:2020-01-01"}
 
 
-def test_hwf_snooze_caps_a_bulk_pk_list_server_side(app, world):
-    r = app.post("/api/snooze", {"pks": list(range(1, 601)), "preset": "tomorrow"})
+def test_hwf_snooze_caps_a_bulk_list_server_side(app, world):
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:                                                # 600 copies that are all there, more than one request may snooze
+        for i in range(600):
+            store.upsert_message(c, {"account": w.ADA, "kind": "imap", "folder": "INBOX", "uid": 10_000 + i,
+                                     "message_id": f"<bulk-{i}@example.test>", "gmail_thread": None,
+                                     "from_addr": "lin@example.test", "from_name": "Lin Mori", "subject": "Bulk",
+                                     "date_iso": None, "ts": 0, "snippet": "", "bucket": "other/personal-ish",
+                                     "is_junk": 0})
+        c.commit()
+    finally:
+        c.close()
+    copies = q("SELECT message_key AS key, folder FROM messages WHERE subject='Bulk'")
+    assert len(copies) == 600
+    r = app.post("/api/snooze", {"copies": copies, "preset": "tomorrow"})
     assert r.status == 200 and r.json["count"] == 500
 
 
@@ -652,9 +673,11 @@ def test_two_first_loads_of_a_cached_ai_read_pay_once(app, world, ai, monkeypatc
 
 
 def test_a_thread_summary_stays_fresh_across_a_renumber(app, world, ai):
-    assert app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)}).status == 200
+    lunch, before = world.copy(LUNCH), world.pk(LUNCH)      # what the page holds, by key and folder
+    assert app.post("/api/ai/summarize", lunch).status == 200
     renumber_inbox(world, w.ADA)
-    r = app.post("/api/ai/summarize", {"pk": pk_of(LUNCH_MID)}).json
+    assert pk_of(LUNCH_MID) != before
+    r = app.post("/api/ai/summarize", lunch).json
     assert r["cached"] is True
     assert r["stale"] is False
 
@@ -665,7 +688,7 @@ def test_a_brief_chip_counts_the_messages_it_holds(app, world, ai):
     ai.queue(fa.answer({"narrative": "Lin is waiting on lunch plans for Thursday, so reply today.",
                         "groups": [{"label": "Lunch", "count": 9, "pks": [anchor, 999999]}]}))
     [group] = app.post("/api/briefing", {}).json["groups"]
-    assert (group["count"], group["pks"]) == (1, [anchor])
+    assert (group["count"], group["messages"]) == (1, [world.copy(LUNCH)])
 
 
 def test_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai):
@@ -673,29 +696,31 @@ def test_a_cached_brief_still_names_its_messages_after_a_renumber(app, world, ai
     summarize_as(anchor, 5, "action-needed", "Reply")
     ai.queue(fa.answer({"narrative": "Lin is waiting on lunch plans for Thursday, so reply today.",
                         "groups": [{"label": "Lunch", "count": 1, "pks": [anchor]}]}))
-    assert app.post("/api/briefing", {}).json["groups"][0]["pks"] == [anchor]
+    assert app.post("/api/briefing", {}).json["groups"][0]["messages"] == [world.copy(LUNCH)]
     renumber_inbox(world, w.ADA)
-    pks = [p for g in app.post("/api/briefing", {}).json["groups"] for p in g["pks"]]
-    assert [m["message_id"] for p in pks for m in q("SELECT message_id FROM messages WHERE pk=?", p)] == [LUNCH_MID]
+    assert pk_of(LUNCH_MID) != anchor
+    named = [m for g in app.post("/api/briefing", {}).json["groups"] for m in g["messages"]]
+    assert [r["message_id"] for m in named
+            for r in q("SELECT message_id FROM messages WHERE message_key=? AND folder=?", m["key"], m["folder"])] == [LUNCH_MID]
 
 
 def test_a_message_without_a_thread_id_can_be_summarized(app, world, ai):
     pk = world.pk(QUILT)
     execute("UPDATE messages SET thread_id=NULL WHERE pk=?", pk)
-    first = app.post("/api/ai/summarize", {"pk": pk})
+    first = app.post("/api/ai/summarize", w.copy_of(pk))
     assert first.status == 200 and first.json["scope"] == "message" and len(ai.requests) == 1
-    assert app.post("/api/ai/summarize", {"pk": pk}).json["cached"] is True     # and it finds its summary again
+    assert app.post("/api/ai/summarize", w.copy_of(pk)).json["cached"] is True     # and it finds its summary again
     assert len(ai.requests) == 1
 
 
 def test_a_message_with_neither_thread_nor_message_id_can_be_summarized(app, world, ai):
     pk = world.pk(QUILT)
     execute("UPDATE messages SET thread_id=NULL, message_id='' WHERE pk=?", pk)
-    assert app.post("/api/ai/summarize", {"pk": pk}).status == 200
+    assert app.post("/api/ai/summarize", w.copy_of(pk)).status == 200
 
 
 def test_a_draft_survives_switching_the_from_account(app, world, ai):
-    assert app.post("/api/ai/draft-reply", {"pk": world.pk(CLIENT), "account": w.ADA}).status == 200
+    assert app.post("/api/ai/draft-reply", {**world.copy(CLIENT), "account": w.ADA}).status == 200
     [asked] = ai.requests
     assert w.ADA in asked.prompt and "Contract draft v2" in asked.prompt     # Ada answers Bea's mail
 

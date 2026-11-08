@@ -162,8 +162,8 @@ def test_a_kept_event_is_a_copy_of_the_data_it_was_given():
 
 
 def test_a_frame_is_id_event_and_json_data():
-    assert Event("r1-7", "draft-ready", {"account": "ada@example.test", "pk": 4}).frame() == \
-        b'id: r1-7\nevent: draft-ready\ndata: {"account": "ada@example.test", "pk": 4}\n\n'
+    assert Event("r1-7", "draft-ready", {"account": "ada@example.test", "key": 4}).frame() == \
+        b'id: r1-7\nevent: draft-ready\ndata: {"account": "ada@example.test", "key": 4}\n\n'
 
 
 def test_each_hub_draws_its_own_run():

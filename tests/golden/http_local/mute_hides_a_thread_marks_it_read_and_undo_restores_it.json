@@ -14,7 +14,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "mute the lunch thread by pk",
+  "request": "mute the lunch thread by key",
   "status": 200
  },
  {

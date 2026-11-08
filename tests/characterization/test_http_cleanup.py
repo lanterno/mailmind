@@ -12,6 +12,7 @@ the sweep, which deletes the rows it moves; most tests put the issue that carrie
 the Archive, which the sweep leaves alone, and the ones at the end keep it in the INBOX.
 """
 from datetime import timedelta
+from urllib.parse import urlencode
 
 import pytest
 
@@ -51,6 +52,11 @@ def pk_of(message_id):
         c.close()
 
 
+def opened(app, copy):
+    """Open a copy of a message, so its body is stored."""
+    return app.get("/api/message/body?" + urlencode(copy))
+
+
 def out(app):
     """Undo Send's window passes, and what's queued goes."""
     from mailmind.bootstrap.compose import outbox
@@ -63,7 +69,7 @@ def archived_issue(world, app, **headers):
     mid = "<issue-219@loom.example.test>"
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, Date="Mon, 02 Nov 2026 07:00:00 +0000",
                                               Subject="Issue 219: the archived issue", **headers), (w.SEEN,))
-    assert app.get(f"/api/message/{pk_of(mid)}/body").status == 200
+    assert opened(app, w.copy_of(pk_of(mid))).status == 200
 
 
 ONE_CLICK = {"List_Unsubscribe_Post": "List-Unsubscribe=One-Click"}    # RFC 8058's, the one spelling
@@ -92,7 +98,7 @@ def test_a_cleanup_blocks_and_sweeps_and_undo_reverses_both(app, golden, world, 
         world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID=f"<issue-{n}@loom.example.test>",
                                                 Date=f"Wed, {day} Oct 2026 07:00:00 +0000",
                                                 Subject=f"Issue {n}: weaving notes"))
-    app.get(f"/api/message/{world.pk(NEWSLETTER)}/body")
+    opened(app, world.copy(NEWSLETTER))
     token = preview(app, golden, LOOM)["confirm_token"]
     since = world.mark()
     execute(app, golden, "clean up the Loom", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token})
@@ -136,7 +142,7 @@ def test_a_mailto_unsubscribe_goes_out_by_smtp(app, golden, world, posts):
 
 
 def test_a_landing_page_goes_back_to_the_browser(app, golden, world, posts):
-    app.get(f"/api/message/{world.pk('ada-trash-01-promo.eml')}/body")
+    opened(app, world.copy("ada-trash-01-promo.eml"))
     token = preview(app, golden, SPINDLE)["confirm_token"]
     execute(app, golden, "clean up Spindle", {"from_addr": SPINDLE, "do_unsubscribe": True, "confirm_token": token})
     execute(app, golden, "again", {"from_addr": SPINDLE, "do_unsubscribe": True, "confirm_token": token})
@@ -175,7 +181,7 @@ def test_a_list_that_changed_its_way_out_since_the_preview_needs_a_new_look(app,
     mid = "<issue-220@loom.example.test>"
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, Date="Mon, 02 Nov 2026 11:00:00 +0000",
                                               Subject="Issue 220", **MAILTO), (w.SEEN,))
-    assert app.get(f"/api/message/{pk_of(mid)}/body").status == 200
+    assert opened(app, w.copy_of(pk_of(mid))).status == 200
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
     assert (r["status"], posts, world.smtp.messages) == ("no_token", [], [])
 
@@ -210,14 +216,14 @@ def rows(sql):
 # ── the unsubscribe goes out ─────────────────────────────────────────────
 
 def test_an_rfc_8058_sender_is_offered_one_click(app, world):
-    app.get(f"/api/message/{world.pk(NEWSLETTER)}/body")
+    opened(app, world.copy(NEWSLETTER))
     assert app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]["method"] == "one-click"
 
 
 def test_a_sender_whose_mail_is_in_the_inbox_is_still_unsubscribed(app, world, posts):
     world.deliver(w.ADA, "INBOX", w.variant(NEWSLETTER, Message_ID="<issue-219@loom.example.test>",
                                             Date="Mon, 02 Nov 2026 07:00:00 +0000", **MAILTO))
-    app.get(f"/api/message/{pk_of('<issue-219@loom.example.test>')}/body")
+    opened(app, w.copy_of(pk_of("<issue-219@loom.example.test>")))
     token = app.get(f"/api/cleanup/sender?addr={LOOM}").json["confirm_token"]
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": token}).json
     assert (r["swept"], r["status"]) == (2, "mailto_sent")

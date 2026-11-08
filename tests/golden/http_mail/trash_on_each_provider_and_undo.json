@@ -298,11 +298,11 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "trash without a pk",
+  "request": "trash without a key",
   "status": 400
  },
  {
-  "note": "trash without a pk: server writes",
+  "note": "trash without a key: server writes",
   "value": []
  },
  {

@@ -158,12 +158,12 @@ def test_due_goes_by_snoozes(c, world):
 
 
 def test_undo_of_a_second_snooze_gives_back_the_first_time(app, world):
-    pk = world.pk(LUNCH)
+    copy = world.copy(LUNCH)
     subject = world.row(LUNCH)["subject"]
     first = int((datetime.now(timezone.utc) + timedelta(hours=3)).timestamp())
     second = first + 3600
-    assert app.post("/api/snooze", {"pk": pk, "until": first}).json["ok"]
-    assert app.post("/api/snooze", {"pk": pk, "until": second}).json["ok"]
+    assert app.post("/api/snooze", {**copy, "until": first}).json["ok"]
+    assert app.post("/api/snooze", {**copy, "until": second}).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=__snoozed__&limit=100").json["items"] if i["subject"] == subject]
     assert item["snoozed_until"] == first

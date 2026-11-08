@@ -189,7 +189,7 @@ def test_a_sync_reads_the_flags_of_stored_mail_again(world):
 def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, world):
     from mailmind.bootstrap.mailbox import ingest
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/flag", {"pk": world.pk(RECEIPT), "flag": "flagged", "on": True}).json["status"] == "queued"
+    assert app.post("/api/flag", {**world.copy(RECEIPT), "flag": "flagged", "on": True}).json["status"] == "queued"
     ingest.sync_new(acct())                                     # the server hasn't heard of the star yet
     assert local_flags(world, RECEIPT)["flagged"] == 1
 

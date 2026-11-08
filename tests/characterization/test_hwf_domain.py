@@ -562,7 +562,7 @@ def test_hwf_search_ranks_subject_over_sender_over_recipients_over_snippet(db):
         put(db, f"<f{i}@example.test>", subject="plain notes", snippet="a note at dawn", recipients="Noor Haddad")
     db.commit()
     got = discovery.search.answer({"q": ["heron"], "scope": ["all"]})
-    assert [i["pk"] for i in got["items"]] == pks
+    assert [i["key"] for i in got["items"]] == [col(db, pk, "message_key") for pk in pks]
 
 
 # -- the classifier and its rules file ----------------------------------------

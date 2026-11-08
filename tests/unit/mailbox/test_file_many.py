@@ -16,11 +16,18 @@ def file(app, verb, *rows, **more):
 
 
 def row(world, name, whole=False):
-    return {"pk": world.pk(name), "whole": whole}
+    return {**world.copy(name), "whole": whole}
+
+
+def at(world, name):
+    """The copy the corpus put `name` in, as `listed` gives one."""
+    copy = world.copy(name)
+    return copy["key"], copy["folder"]
 
 
 def listed(app, email=w.ADA):
-    return {i["pk"] for i in app.get(f"/api/messages?account={email}&folder=INBOX&limit=500").json["items"]}
+    """Each copy the Inbox lists, by its key and folder."""
+    return {(i["key"], i["folder"]) for i in app.get(f"/api/messages?account={email}&folder=INBOX&limit=500").json["items"]}
 
 
 def folders_of(world, name):
@@ -33,10 +40,10 @@ def refuse_the_next_move(world):
 
 
 def test_it_files_each_row_and_one_undo_brings_them_all_back(app, world):
-    pks = {world.pk(RECEIPT), world.pk(NEWSLETTER)}
+    copies = {at(world, RECEIPT), at(world, NEWSLETTER)}
     a = file(app, "archive", row(world, RECEIPT), row(world, NEWSLETTER), undo_group="ug-1").json
     assert (a["ok"], a["count"], a["failed"], a["rows_failed"], a["partial"], a["undoable"]) == (True, 2, 0, 0, False, True)
-    assert not pks & listed(app)
+    assert not copies & listed(app)
     assert "INBOX" not in folders_of(world, RECEIPT) and "INBOX" not in folders_of(world, NEWSLETTER)
     assert len(mailbox.undo.entries()) == 1
     u = app.post("/api/undo", {}).json
@@ -47,7 +54,7 @@ def test_it_files_each_row_and_one_undo_brings_them_all_back(app, world):
 def test_a_whole_row_files_its_conversation_in_its_folder(app, world):
     a = file(app, "trash", row(world, CONFIRM, whole=True)).json
     assert a["count"] == 2 and a["rows_failed"] == 0
-    assert not {world.pk(LUNCH), world.pk(CONFIRM)} & listed(app)
+    assert not {at(world, LUNCH), at(world, CONFIRM)} & listed(app)
 
 
 def test_two_rows_of_one_conversation_count_once(app, world):
@@ -58,22 +65,23 @@ def test_two_rows_of_one_conversation_count_once(app, world):
 def test_junk_never_stands_for_a_conversation(app, world):
     a = file(app, "junk", row(world, CONFIRM, whole=True)).json
     assert a["count"] == 1
-    assert world.pk(LUNCH) in listed(app)
+    assert at(world, LUNCH) in listed(app)
 
 
 def test_rows_of_several_accounts_each_go_to_their_own_server(app, world):
     a = file(app, "archive", row(world, RECEIPT), row(world, GMAIL)).json
     assert (a["count"], a["rows_failed"]) == (2, 0)
-    assert world.pk(RECEIPT) not in listed(app) and world.pk(GMAIL) not in listed(app, w.CY)
+    assert at(world, RECEIPT) not in listed(app) and at(world, GMAIL) not in listed(app, w.CY)
 
 
 def test_a_row_that_is_gone_fails_alone(app, world):
-    a = file(app, "archive", {"pk": 999_999}, row(world, RECEIPT)).json
-    assert (a["ok"], a["count"], a["failed"], a["rows_failed"]) == (True, 1, 1, 1)
+    a = file(app, "archive", {"key": 999_999, "folder": "INBOX"}, row(world, RECEIPT)).json
+    assert (a["ok"], a["count"], a["failed"], a["rows_failed"]) == (True, 1, 0, 1)    # a copy gone is no message tried
+    assert a["filed"] == [world.copy(RECEIPT)]
 
 
 def test_one_the_server_refuses_goes_back_alone(app, world):
-    keep, go = world.pk(RECEIPT), world.pk(NEWSLETTER)
+    keep, go = at(world, RECEIPT), at(world, NEWSLETTER)
     refuse_the_next_move(world)
     a = file(app, "archive", row(world, RECEIPT), row(world, NEWSLETTER)).json
     assert (a["ok"], a["count"], a["failed"], a["rows_failed"]) == (True, 1, 1, 1)
@@ -110,7 +118,7 @@ def test_a_click_waits_about_as_long_as_for_one_and_the_worker_has_the_rest(app,
     assert (a["ok"], a["count"], a["undoable"]) == (True, 3, True)
     assert world.writes(since) and "INBOX" not in folders_of(world, RECEIPT)                  # the first was tried
     assert "INBOX" in folders_of(world, NEWSLETTER) and "INBOX" in folders_of(world, CONFIRM)
-    assert not {world.pk(RECEIPT), world.pk(NEWSLETTER), world.pk(CONFIRM)} & listed(app)     # they left the list together
+    assert not {at(world, RECEIPT), at(world, NEWSLETTER), at(world, CONFIRM)} & listed(app)  # they left the list together
     mailbox.commands.drain()
     for name in (RECEIPT, NEWSLETTER, CONFIRM):
         assert "INBOX" not in folders_of(world, name)
@@ -130,9 +138,9 @@ def test_a_busy_gate_costs_one_wait_and_each_stays_filed(app, world, monkeypatch
     {"verb": "delete", "rows": []},
     {"verb": "archive", "rows": "1,2"},
     {"verb": "archive", "rows": [1]},
-    {"verb": "archive", "rows": [{"pk": "x"}]},
+    {"verb": "archive", "rows": [{"key": "x", "folder": "INBOX"}]},
     {"verb": "archive"},
-    {"verb": "archive", "rows": [{"pk": 1}] * 501},
+    {"verb": "archive", "rows": [{"key": 1, "folder": "INBOX"}] * 501},
 ], ids=["unknown verb", "not a list", "not a row", "no number", "no rows", "too many"])
 def test_what_it_refuses_changes_nothing(app, body):
     assert app.post("/api/bulk/file", body).status == 400

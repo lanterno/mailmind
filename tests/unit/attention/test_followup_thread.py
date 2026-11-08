@@ -10,16 +10,18 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # the newest of Ada's lunch thre
 
 
 def newest_of(thread_id):
+    """The thread's newest copy, as a list names one: by its key and folder."""
     c = store.conn()
     try:
-        return c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? ORDER BY ts DESC, pk DESC LIMIT 1",
-                         (w.ADA, thread_id)).fetchone()["pk"]
+        pk = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? ORDER BY ts DESC, pk DESC LIMIT 1",
+                       (w.ADA, thread_id)).fetchone()["pk"]
     finally:
         c.close()
+    return w.copy_of(pk)
 
 
 def listed(app, view):
-    return [i["pk"] for i in app.get(f"/api/messages?account={w.ADA}&folder={view}").json["items"]]
+    return [{"key": i["key"], "folder": i["folder"]} for i in app.get(f"/api/messages?account={w.ADA}&folder={view}").json["items"]]
 
 
 def nudge_on(thread_id):
@@ -40,7 +42,7 @@ def test_a_nudge_lists_its_thread(app, world):
 
 def test_a_pinned_thread_lists_itself_and_unpins(app, world):
     thread = world.row(LUNCH)["thread_id"]
-    assert app.post("/api/replylater", {"pk": world.pk(LUNCH)}).json["ok"]
+    assert app.post("/api/replylater", world.copy(LUNCH)).json["ok"]
     assert listed(app, "__replylater__") == [newest_of(thread)]
     assert app.post("/api/replylater", {"account": w.ADA, "thread_id": thread, "on": False}).json["ok"]
     assert listed(app, "__replylater__") == []

@@ -24,7 +24,7 @@ def test_sender_rules(app, golden, world):
     post(app, golden, "block a domain", "/api/rules", {"token": "prizes.example.test", "verdict": "block"})
     since = world.mark()
     post(app, golden, "block a sender and trash the message", "/api/rules",
-         {"token": "news@loom.example.test", "verdict": "block", "pk": world.pk("ada-inbox-03-newsletter.eml")})
+         {"token": "news@loom.example.test", "verdict": "block", **world.copy("ada-inbox-03-newsletter.eml")})
     golden.note("server writes", world.writes(since))
     golden.note("where the newsletter is", world.where("ada-inbox-03-newsletter.eml"))
     post(app, golden, "remove a rule", "/api/rules", {"token": "prizes.example.test", "verdict": "remove"})

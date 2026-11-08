@@ -39,15 +39,15 @@ def test_each_is_heard_once_wired(app):
 
 def test_a_mute_says_so_and_a_repeat_says_nothing(app, world, heard):
     thread = world.row(CI)["thread_id"]
-    app.post("/api/mute", {"pk": world.pk(CI)})
+    app.post("/api/mute", world.copy(CI))
     assert heard == [ThreadMuted(w.ADA, thread)]
-    app.post("/api/mute", {"pk": world.pk(CI)})
+    app.post("/api/mute", world.copy(CI))
     assert heard == [ThreadMuted(w.ADA, thread)]
 
 
 def test_an_unmute_says_so(app, world, heard):
     thread = world.row(CI)["thread_id"]
-    app.post("/api/unmute", {"pk": world.pk(CI)})
+    app.post("/api/unmute", world.copy(CI))
     assert heard == [ThreadUnmuted(w.ADA, thread)]
 
 
@@ -58,19 +58,19 @@ def test_a_refused_mute_says_nothing(app, heard):
 
 
 def test_a_snooze_and_its_lifting_say_how_many(app, world, heard):
-    pk = world.pk(RECEIPT)
-    app.post("/api/snooze", {"pk": pk, "preset": "tomorrow"})
-    app.post("/api/unsnooze", {"pk": pk})
+    copy = world.copy(RECEIPT)
+    app.post("/api/snooze", {**copy, "preset": "tomorrow"})
+    app.post("/api/unsnooze", copy)
     assert heard == [SnoozeSet(1), SnoozeLifted(1)]
 
 
 def test_a_refused_snooze_says_nothing(app, world, heard):
-    assert app.post("/api/snooze", {"pk": world.pk(RECEIPT), "until": "soon"}).status == 400
+    assert app.post("/api/snooze", {**world.copy(RECEIPT), "until": "soon"}).status == 400
     assert heard == []
 
 
 def test_a_wake_says_how_many_in_which_accounts_and_no_wake_says_nothing(app, world, heard):
-    app.post("/api/snooze", {"pk": world.pk(RECEIPT), "preset": "tomorrow"})
+    app.post("/api/snooze", {**world.copy(RECEIPT), "preset": "tomorrow"})
     del heard[:]
     attention.snoozing.wake_due()
     assert heard == []
@@ -97,14 +97,14 @@ def test_a_round_says_so_only_when_what_is_due_changes(app, world, heard):
 
 def test_a_dismissal_says_so_whether_or_not_there_was_one(app, world, heard):
     thread = world.row(CI)["thread_id"]
-    app.post("/api/followups/dismiss", {"pk": world.pk(CI)})
+    app.post("/api/followups/dismiss", world.copy(CI))
     assert heard == [FollowUpDismissed(w.ADA, thread)]
 
 
 def test_a_pin_and_an_un_pin_say_so(app, world, heard):
     thread = world.row(CI)["thread_id"]
-    app.post("/api/replylater", {"pk": world.pk(CI)})
-    app.post("/api/replylater", {"pk": world.pk(CI), "on": False})
+    app.post("/api/replylater", world.copy(CI))
+    app.post("/api/replylater", {**world.copy(CI), "on": False})
     assert heard == [ReplyLaterChanged(w.ADA, thread)] * 2
 
 

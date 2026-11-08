@@ -37,7 +37,7 @@ def test_it_asks_for_a_kind_and_words_in_lowercase():
 
 def test_one_email_synced_to_two_folders_is_one_file():
     both = [row(pk=1, message_id="<same@example.test>"), row(pk=2, message_id="<same@example.test>")]
-    assert [d["pk"] for d in page(both)["docs"]] == [1]
+    assert [d["key"] for d in page(both)["docs"]] == [1]
 
 
 def test_two_files_of_one_message_arent():
@@ -52,8 +52,8 @@ def test_a_name_compares_in_lowercase():
 
 
 def test_with_no_message_id_it_goes_by_the_message():
-    assert [d["pk"] for d in page([row(pk=1, message_id=None), row(pk=2, message_id=None)])["docs"]] == [1, 2]
-    assert [d["pk"] for d in page([row(pk=2, message_id=None), row(pk=2, message_id=None, size=99)])["docs"]] == [2]
+    assert [d["key"] for d in page([row(pk=1, message_id=None), row(pk=2, message_id=None)])["docs"]] == [1, 2]
+    assert [d["key"] for d in page([row(pk=2, message_id=None), row(pk=2, message_id=None, size=99)])["docs"]] == [2]
 
 
 # -- what shows ---------------------------------------------------------------------
@@ -66,7 +66,7 @@ def test_what_isnt_a_document_counts_nowhere():
 def test_facets_count_every_kind_whatever_the_page_wants():
     answer = page([row(pk=1), row(pk=2, filename="a.png", content_type="image/png")], kind="pdf")
     assert answer["facets"] == {"pdf": 1, "image": 1} and answer["total"] == 2
-    assert (answer["matched"], [d["pk"] for d in answer["docs"]]) == (1, [1])
+    assert (answer["matched"], [d["key"] for d in answer["docs"]]) == (1, [1])
 
 
 @pytest.mark.parametrize("needle, found", [
@@ -83,13 +83,13 @@ def test_facets_count_those_the_words_left_out_too():
 
 def test_a_page_is_the_limit_from_the_offset_of_those_that_match():
     answer = page([row(pk=i) for i in range(1, 6)], limit=2, offset=1)
-    assert [d["pk"] for d in answer["docs"]] == [2, 3]
+    assert [d["key"] for d in answer["docs"]] == [2, 3]
     assert (answer["matched"], answer["shown"], answer["total"]) == (5, 2, 5)
 
 
 def test_a_document_says_where_to_download_it_and_says_little_as_nothing():
     doc = page([row(pk=7, part_id="1.2 a", size=None, from_name=None, subject=None)])["docs"][0]
-    assert doc == {"pk": 7, "key": 7, "folder": "INBOX", "part_id": "1.2 a", "filename": "plan.pdf", "kind": "pdf", "size": 0, "account": "ada@example.test",
+    assert doc == {"key": 7, "folder": "INBOX", "part_id": "1.2 a", "filename": "plan.pdf", "kind": "pdf", "size": 0, "account": "ada@example.test",
                    "from": "lin@example.test", "subject": "(no subject)", "when": "when:then",
                    "url": "/api/message/attachment?key=7&folder=INBOX&part_id=1.2+a"}
 

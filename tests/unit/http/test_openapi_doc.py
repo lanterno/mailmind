@@ -34,7 +34,7 @@ def test_a_model_has_one_name_whether_it_is_asked_or_answered(doc):
 
 def test_a_number_and_a_flag_read_as_the_page_reads_them(doc):
     snooze = doc["components"]["schemas"]["SnoozeBody"]["properties"]
-    assert {"type": "integer"} in snooze["pk"]["anyOf"] and {"type": "string"} in snooze["until"]["anyOf"]
+    assert {"type": "integer"} in snooze["key"]["anyOf"] and {"type": "string"} in snooze["until"]["anyOf"]
     assert {"type": "boolean"} in doc["components"]["schemas"]["ReplyLaterBody"]["properties"]["on"]["anyOf"]
 
 
@@ -45,7 +45,7 @@ def test_an_answer_is_closed_and_what_it_may_leave_out_isnt_required(doc):
 
 
 def test_a_route_that_answers_no_json_has_no_json_type(doc):
-    for path in ("/api/events", "/api/export", "/api/message/{pk}/body.html", "/api/message/{pk}/attachment/{part_id}", "/"):
+    for path in ("/api/events", "/api/export", "/api/message/body.html", "/api/message/attachment", "/"):
         assert "content" not in answered(doc, path), path
     assert list(answered(doc, "/api/events", status="503")["content"]) == ["application/problem+json"]
 

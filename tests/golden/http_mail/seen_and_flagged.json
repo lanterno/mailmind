@@ -374,11 +374,11 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "flag a bad pk",
+  "request": "flag a bad key",
   "status": 400
  },
  {
-  "note": "flag a bad pk: server writes",
+  "note": "flag a bad key: server writes",
   "value": []
  },
  {

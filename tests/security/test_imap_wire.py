@@ -8,6 +8,7 @@ looks like; test_hardening.py a scripted connection's few worked cases.
 """
 import imaplib
 import re
+import urllib.parse
 
 import pytest
 from hypothesis import assume, given, strategies as st
@@ -219,17 +220,20 @@ def test_a_stored_message_id_holding_a_line_break(app, world, wire):
     """As a folded header can leave it. A later try looks the message up by this id, and so does Undo."""
     pk = world.pk(RECEIPT)
     stored("UPDATE messages SET message_id=? WHERE pk=?", "<m@example.test>" + INJECTED, pk)
-    app.post("/api/archive", {"pk": pk})
-    app.post("/api/undo", {})
+    filed = app.post("/api/archive", world.copy(RECEIPT))
+    undone = app.post("/api/undo", {})
     assert on_the_wire(wire) == []
+    assert filed.status == 200 and undone.status == 409, (filed.body, undone.body)     # the move went, and Undo's search by the id didn't
 
 
 def test_a_stored_folder_holding_a_line_break(app, world, wire):
     pk = world.pk(RECEIPT)
     stored("UPDATE messages SET folder=? WHERE pk=?", EVIL, pk)
-    app.get(f"/api/message/{pk}/body")
-    app.post("/api/archive", {"pk": pk})
+    copy = w.copy_of(pk)
+    opened = app.get("/api/message/body?" + urllib.parse.urlencode(copy))
+    filed = app.post("/api/archive", copy)
     assert on_the_wire(wire) == []
+    assert opened.status not in (400, 404) and filed.status not in (400, 404), (opened.body, filed.body)     # each found the copy
 
 
 def test_an_expiry_rule_holding_a_line_break(world, wire):

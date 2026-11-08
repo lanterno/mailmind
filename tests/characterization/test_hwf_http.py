@@ -15,6 +15,7 @@ import socket
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import pytest
 
@@ -55,6 +56,11 @@ def pk_of(message_id, account=None):
     return r["pk"]
 
 
+def body_of(copy, **more):
+    """Where the reader opens a copy, by its key and folder."""
+    return "/api/message/body?" + urlencode({**copy, **more})
+
+
 def summary(pk, importance, category, action=""):
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
@@ -85,10 +91,10 @@ def server_boxes(world, name):
 
 def test_hwf_trash_moves_under_the_imap_lock_and_queues_when_it_cant(app, world):
     held = lock_spy(world, "UID MOVE", user=w.ADA)
-    assert app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/trash", {**world.copy(RECEIPT)}).json["ok"]
     assert held == [True]
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/trash", {"pk": world.pk(FOLDED)}).json["status"] == "queued"
+    assert app.post("/api/trash", {**world.copy(FOLDED)}).json["status"] == "queued"
 
 
 def test_hwf_testing_an_account_never_waits_on_the_imap_lock(app, world):
@@ -140,15 +146,15 @@ def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypat
 
 
 def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):
-    pk = world.pk("bea-inbox-01-client.eml")
+    prefetch = body_of(world.copy("bea-inbox-01-client.eml"), prefetch=1)
     fetches = len(world.server.commands_for(w.BEA, "UID FETCH"))
     with gate.held_elsewhere():
-        r = app.get(f"/api/message/{pk}/body?prefetch=1").json
+        r = app.get(prefetch).json
     assert r == {"ok": True, "prefetched": False}                  # it gave way, and the open will fetch it
     assert len(world.server.commands_for(w.BEA, "UID FETCH")) == fetches
-    assert app.get(f"/api/message/{pk}/body?prefetch=1").json == {"ok": True, "prefetched": True}
+    assert app.get(prefetch).json == {"ok": True, "prefetched": True}
     with gate.held_elsewhere():                              # already warm: no lock needed
-        assert app.get(f"/api/message/{pk}/body?prefetch=1").json == {"ok": True, "prefetched": True}
+        assert app.get(prefetch).json == {"ok": True, "prefetched": True}
 
 
 def test_hwf_smtp_delivery_holds_no_imap_lock(app, world):
@@ -175,7 +181,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap import assistant
     appends, stores = lock_spy(world, "APPEND", user=w.ADA), lock_spy(world, "UID STORE", user=w.ADA)
-    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk("ada-inbox-02-lunch-confirm.eml"),
+    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "original_key": world.key("ada-inbox-02-lunch-confirm.eml"),
                                "to": ["bea@example.test"], "subject": "Re: Lunch", "text": "See you there.",
                                "idempotency_key": "k-gated"}).json
     assert r["ok"]
@@ -185,7 +191,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
 
     moves = lock_spy(world, "UID MOVE", user=w.ADA)
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["status"] == "queued"
+    assert app.post("/api/archive", {**world.copy(RECEIPT)}).json["status"] == "queued"
     commands.drain()
     assert moves == [True]
 
@@ -201,7 +207,7 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
 def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_ships(app, world):
     from mailmind.bootstrap.mailbox import commands
     world.server.drop("SELECT", user=w.ADA)
-    r = app.post("/api/trash", {"pk": world.pk(RECEIPT)}).json
+    r = app.post("/api/trash", {**world.copy(RECEIPT)}).json
     assert (r["status"], r["undoable"]) == ("queued", True)
     assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == ["Trash"]   # known before any IMAP
     commands.drain()
@@ -212,7 +218,7 @@ def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_s
 
 
 def test_hwf_a_failed_undo_stays_on_the_stack_for_a_retry(app, world):
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", {**world.copy(RECEIPT)}).json["ok"]
     world.server.fail("UID SEARCH", user=w.ADA)              # the server can't find it this once
     r = app.post("/api/undo", {})
     assert r.status == 409 and server_boxes(world, RECEIPT) == [(w.ADA, "Archive")]
@@ -221,9 +227,9 @@ def test_hwf_a_failed_undo_stays_on_the_stack_for_a_retry(app, world):
 
 
 def test_hwf_undo_keeps_the_last_50_actions(app, world):
-    pk = world.pk(RECEIPT)
+    receipt = world.copy(RECEIPT)
     for _ in range(51):
-        assert app.post("/api/snooze", {"pk": pk, "preset": "tomorrow"}).json["ok"]
+        assert app.post("/api/snooze", {**receipt, "preset": "tomorrow"}).json["ok"]
     answers = [app.post("/api/undo", {}).json for _ in range(51)]
     assert [a.get("ok") for a in answers] == [True] * 50 + [None]
     assert answers[-1] == problems.not_found(empty=True)
@@ -231,13 +237,13 @@ def test_hwf_undo_keeps_the_last_50_actions(app, world):
 
 def test_marking_read_while_the_server_is_away_is_queued(app, world):
     world.server.drop("SELECT", user=w.ADA)
-    r = app.post("/api/seen", {"pk": world.pk(LUNCH_CONFIRM), "seen": True})
+    r = app.post("/api/seen", {**world.copy(LUNCH_CONFIRM), "seen": True})
     assert (r.status, r.json.get("status"), world.row(LUNCH_CONFIRM)["seen"]) == (200, "queued", 1)
 
 
 def archived_pair(app, world):
     for name in (RECEIPT, FOLDED):
-        assert app.post("/api/archive", {"pk": world.pk(name), "undo_group": "g1"}).json["ok"]
+        assert app.post("/api/archive", {**world.copy(name), "undo_group": "g1"}).json["ok"]
 
 
 def test_a_partly_failed_group_undo_keeps_what_it_couldnt_reverse(app, world):
@@ -277,7 +283,7 @@ def test_a_group_undo_that_reverses_nothing_keeps_the_whole_group(app, world):
 ])
 def test_hwf_weekend_and_next_week_from_the_weekend(app, world, now, preset, wake):
     app.clock.move_to(now)
-    r = app.post("/api/snooze", {"pk": world.pk(RECEIPT), "preset": preset}).json
+    r = app.post("/api/snooze", {**world.copy(RECEIPT), "preset": preset}).json
     assert datetime.fromtimestamp(r["until"], UTC) == wake
 
 
@@ -298,33 +304,30 @@ def test_hwf_since_is_held_between_a_day_ago_and_now(app, world, monkeypatch):
 
 
 def triaged_venue(world):
-    """Mae's last word in Cy's venue thread, called worth a reply; returns its pk."""
-    pk = world.pk(VENUE_END)
-    summary(pk, 5, "action-needed", "Confirm the date")
-    return pk
+    """Mae's last word in Cy's venue thread, called worth a reply; returns its copy."""
+    summary(world.pk(VENUE_END), 5, "action-needed", "Confirm the date")
+    return world.copy(VENUE_END)
 
 
-def draft_ahead(app, pk, peek=False):
-    return app.get(f"/api/ai/draft-ahead?pk={pk}" + ("&peek=1" if peek else "")).json["status"]
+def draft_ahead(app, copy, peek=False):
+    return app.get("/api/ai/draft-ahead?" + urlencode({**copy, **({"peek": 1} if peek else {})})).json["status"]
 
 
 @pytest.mark.parametrize("reply_warm", [False, True], ids=["drafting-fetches-a-body", "only-the-open-fetches"])
 def test_hwf_opening_a_message_keeps_its_threads_draft_ready(app, world, ai, reply_warm):
     # Cy's sent reply has no snippet, so writing the draft fetches its body. Warmed first, the
     # draft fetches nothing and opening the thread's first message is the only change after it.
-    pk = triaged_venue(world)
-    reply = world.pk("cy-sent-01-thread-reply.eml")
+    end = triaged_venue(world)
     if reply_warm:
-        assert app.get(f"/api/message/{reply}/body").json["ok"]
+        assert app.get(body_of(world.copy("cy-sent-01-thread-reply.eml"))).json["ok"]
     assert world.row("cy-sent-01-thread-reply.eml")["body_fetched"] == int(reply_warm)
-    assert draft_ahead(app, pk) == "generating"
+    assert draft_ahead(app, end) == "generating"
     app.settle()
-    assert draft_ahead(app, pk) == "ready"
-    start = world.pk(VENUE_START)
+    assert draft_ahead(app, end) == "ready"
     assert world.row(VENUE_START)["body_fetched"] == 0
-    assert app.get(f"/api/message/{start}/body").json["ok"]
+    assert app.get(body_of(world.copy(VENUE_START))).json["ok"]
     assert world.row(VENUE_START)["body_fetched"] == 1
-    assert draft_ahead(app, pk) == "ready"
+    assert draft_ahead(app, end) == "ready"
 
 
 def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monkeypatch):
@@ -334,7 +337,7 @@ def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monk
     monkeypatch.setattr(sse, "HEARTBEAT", 0.1)
     monkeypatch.setattr(governor, "_last_seen", 0.0)
     for path in (f"/api/folders?account={w.ADA}", "/api/outbox", "/api/stats",
-                 f"/api/ai/draft-ahead?pk={world.pk(VENUE_END)}"):
+                 "/api/ai/draft-ahead?" + urlencode(world.copy(VENUE_END))):
         assert app.get(path).status == 200
     s = socket.create_connection(("127.0.0.1", app.port), timeout=10)     # a hidden tab's event stream
     s.sendall(f"GET /api/events HTTP/1.1\r\nHost: 127.0.0.1:{app.port}\r\nSec-Fetch-Site: same-origin\r\n\r\n"
@@ -385,10 +388,10 @@ def test_hwf_unsubscribe_comes_from_the_newest_message_with_a_stored_body(app, w
     c.execute("UPDATE messages SET list_unsub_raw=NULL, list_unsub_method=NULL WHERE lower(from_addr)=?", (LOOM,))
     c.commit()
     c.close()
-    app.get(f"/api/message/{world.pk(NEWSLETTER)}/body")    # only the older issue's body is stored
+    app.get(body_of(world.copy(NEWSLETTER)))               # only the older issue's body is stored
     unsub = app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]
     assert unsub["method"] != "none" and unsub.get("mailto_to") != "stop-219@loom.example.test"
-    app.get(f"/api/message/{pk_of('<issue-219@loom.example.test>')}/body")
+    app.get(body_of(w.copy_of(pk_of("<issue-219@loom.example.test>"))))
     assert app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"] == {
         "method": "mailto", "mailto_to": "stop-219@loom.example.test"}
 
@@ -408,7 +411,7 @@ def test_hwf_the_cleanup_preview_says_when_the_sweep_is_capped(app, world, monke
 # -- send, drafts, digest, search ------------------------------------------
 
 def test_hwf_a_forward_leaves_inline_pictures_behind(app, world):
-    r = app.post("/api/send", {"account": w.ADA, "mode": "forward", "in_reply_to_pk": world.pk("ada-inbox-11-html-cid.eml"),
+    r = app.post("/api/send", {"account": w.ADA, "mode": "forward", "original_key": world.key("ada-inbox-11-html-cid.eml"),
                                "to": ["noor@studio.example.test"], "subject": "Fwd: The finished quilt",
                                "text": "Look!", "idempotency_key": "k-fwd-cid"}).json
     assert r["ok"]
@@ -423,7 +426,8 @@ def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
     saved = app.post("/api/draft", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"],
                                     "subject": "Held", "text": "Going out."}).json
     ingest.sync_folder(accounts.get(w.ADA), "Drafts")
-    [d] = rows("SELECT pk FROM messages WHERE account=? AND folder='Drafts' AND uid=?", w.ADA, saved["uid"])
+    [d] = rows("SELECT message_key AS key, folder FROM messages WHERE account=? AND folder='Drafts' AND uid=?",
+               w.ADA, saved["uid"])
     c = store.conn()
     oid, _ = book.outbox_insert(c, {"account": w.ADA, "idempotency_key": "k-held", "message_id": "<held@example.test>",
                                      "envelope": "[]", "recipients": "{}", "subject": "Held",
@@ -432,7 +436,7 @@ def test_hwf_a_draft_going_out_now_cant_be_reopened(app, world):
     c.execute("UPDATE outbox SET state='sending' WHERE id=?", (oid,))
     c.commit()
     c.close()
-    r = app.post("/api/draft/resume", {"pk": d["pk"]})
+    r = app.post("/api/draft/resume", d)
     assert r.status == 423
 
 
@@ -496,11 +500,11 @@ def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):
 
 def test_a_reply_marks_its_original_answered_after_the_original_is_archived(app, world):
     from mailmind.bootstrap.compose import outbox
-    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk(LUNCH_CONFIRM),
+    r = app.post("/api/send", {"account": w.ADA, "mode": "reply", "original_key": world.key(LUNCH_CONFIRM),
                                "to": ["lin@example.test"], "subject": "Re: Lunch on Thursday?", "text": "See you.",
                                "idempotency_key": "k-reply-archive"}).json
     assert r["ok"]
-    assert app.post("/api/archive", {"pk": world.pk(LUNCH_CONFIRM)}).json["ok"]
+    assert app.post("/api/archive", {**world.copy(LUNCH_CONFIRM)}).json["ok"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
     [(_, box, _, flags)] = world.where(LUNCH_CONFIRM)["server"]

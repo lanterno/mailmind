@@ -49,5 +49,5 @@ def test_someone_with_no_mail_is_not_known_and_has_no_dates():
 def test_a_recent_thread_reads_as_a_list_does():
     recent = [{"pk": 7, "message_key": 7, "folder": "INBOX", "account": "ada@example.test", "subject": None, "thread_id": "gm:1", "date_iso": "then", "seen": 1}]
     got = card(recent=recent)["recent"]
-    assert got == [{"pk": 7, "key": 7, "folder": "INBOX", "account": "ada@example.test", "subject": "(no subject)", "thread_id": "gm:1", "when": "when:then", "seen": True}]
+    assert got == [{"key": 7, "folder": "INBOX", "account": "ada@example.test", "subject": "(no subject)", "thread_id": "gm:1", "when": "when:then", "seen": True}]
     assert got[0]["seen"] is True

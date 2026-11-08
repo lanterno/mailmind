@@ -148,7 +148,7 @@ def test_a_save_made_while_a_push_is_on_its_way_stays_to_go(app, world, monkeypa
 
 
 def test_a_reply_keeps_its_quote_formatted_before_any_push(app, world):
-    reply = {"mode": "reply", "in_reply_to_pk": world.pk("ada-inbox-03-newsletter.eml"), "autosave": True}
+    reply = {"mode": "reply", "original_key": world.key("ada-inbox-03-newsletter.eml"), "autosave": True}
     first = save(app, **reply)
     assert b"text/html" in waiting(first["draft_id"])["raw"]
     second = save(app, mode="reply", resume=first["resume"], draft_id=first["draft_id"], autosave=True, text="Yes, Friday.")
@@ -222,32 +222,33 @@ def test_a_composer_whose_answer_was_lost_is_not_its_own_conflict(app, world):
 # -- reopening --------------------------------------------------------------------------------
 
 def opened_from_the_list(app, r):
+    """The draft's copy as the list names it: by its key and folder."""
     [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=Drafts").json["items"]
               if i["subject"] == "Swatch order"]
-    return item["pk"]
+    return {"key": item["key"], "folder": item["folder"]}
 
 
 def test_reopening_a_copy_prefers_the_newer_save(app, world):
     r = save(app, bcc=["cy@example.test"])
-    pk = opened_from_the_list(app, r)
+    copy = opened_from_the_list(app, r)
     save(app, autosave=True, draft_id=r["draft_id"], text="Three of each.", bcc=["dee@example.test"])
-    opened = app.post("/api/draft/resume", {"pk": pk}).json
+    opened = app.post("/api/draft/resume", copy).json
     assert opened["text"] == "Three of each." and opened["version"] == 2
     assert [b for b in opened["bcc"]] == ["dee@example.test"]
 
 
 def test_a_copy_another_app_changed_and_a_waiting_save_both_stay(app, world):
     r = save(app)
-    pk = opened_from_the_list(app, r)
+    copy = opened_from_the_list(app, r)
     did = r["draft_id"]
     save(app, autosave=True, draft_id=did, text="Mine, not pushed yet.")
     with world.server.lock:
         box = world.server.mailbox(w.ADA, "Drafts")
         raw = box.messages.pop(row(did)["uid"]).raw
     world.server.deliver(w.ADA, "Drafts", raw.replace(b"Two of each.", b"From another app."), flags=["\\Draft"])
-    assert app.post("/api/draft/resume", {"pk": pk}).status == 409   # the list hasn't heard yet
+    assert app.post("/api/draft/resume", copy).status == 409   # the list hasn't heard yet
     fresh = opened_from_the_list(app, r)
-    opened = app.post("/api/draft/resume", {"pk": fresh}).json
+    opened = app.post("/api/draft/resume", fresh).json
     assert "From another app." in opened["text"] and waiting(did) is None
     a_minute_on(app)
     drafts.push_round()
@@ -277,13 +278,13 @@ def test_discarding_what_never_reached_the_server_asks_nothing_of_it(app, world)
 
 def test_a_discard_outlasts_a_server_that_is_away(app, world):
     r = save(app)
-    pk = opened_from_the_list(app, r)
+    copy = opened_from_the_list(app, r)
     did = r["draft_id"]
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"] is True
     assert row(did) is not None and len(live_copies(world)) == 1
     assert [d["discarding"] for d in tray(app)] == [True]
-    assert app.post("/api/draft/resume", {"pk": pk}).status == 409
+    assert app.post("/api/draft/resume", copy).status == 409
     a_minute_on(app)
     drafts.push_round()
     assert row(did) is None and live_copies(world) == [] and tray(app) == []

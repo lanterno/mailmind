@@ -6,6 +6,8 @@ tests/golden/http_ai/.
 Unless a test queues replies, the fake answers each call from the call's own schema: "stub <field>"
 for strings, 1 for numbers and the first value of each enum.
 """
+from urllib.parse import urlencode
+
 import pytest
 
 from fakes import anthropic_api as fa
@@ -40,31 +42,31 @@ def sent(golden, ai, label):
 
 
 def test_summarize_a_thread_and_a_message(app, golden, world, ai):
-    lunch = world.row("ada-inbox-02-lunch-confirm.eml")
+    lunch = world.copy("ada-inbox-02-lunch-confirm.eml")
     ai.queue(fa.answer({"tldr": "Lunch with Lin is set for Thursday at 12:30.",
                         "points": ["Lin asked about Thursday", "Ada said yes", "Lin confirmed 12:30"],
                         "action": "", "participants": ["Lin Mori", "Ada Park"]}))
-    golden.record("summarize the lunch thread", app.post("/api/ai/summarize", {"pk": lunch["pk"]}))
+    golden.record("summarize the lunch thread", app.post("/api/ai/summarize", lunch))
     sent(golden, ai, "sent for the thread")
-    golden.record("again, from the cache", app.post("/api/ai/summarize", {"pk": lunch["pk"]}))
-    golden.record("again, forced", app.post("/api/ai/summarize", {"pk": lunch["pk"], "force": True}))
+    golden.record("again, from the cache", app.post("/api/ai/summarize", lunch))
+    golden.record("again, forced", app.post("/api/ai/summarize", {**lunch, "force": True}))
     golden.note("calls for the repeat and the forced run", len(ai.requests))
     ai.requests.clear()
     ai.queue(fa.answer(fa.STUB_TEXT))                  # a reply that isn't JSON: a fallback is cached
     golden.record("by account and thread", app.post("/api/ai/summarize",
                                                     {"account": w.CY, "thread_id": world.row("cy-inbox-01-thread-start.eml")["thread_id"]}))
     sent(golden, ai, "sent for the Gmail thread")
-    golden.record("a missing message", app.post("/api/ai/summarize", {"pk": 999999}))
+    golden.record("a missing message", app.post("/api/ai/summarize", {"key": 999999}))
     golden.record("an unknown account", app.post("/api/ai/summarize", {"account": "zed@example.test", "thread_id": "t"}))
     ai.queue(fa.error(400, "invalid_request_error", "bad request"))
-    golden.record("when the API fails", app.post("/api/ai/summarize", {"pk": world.pk("bea-inbox-01-client.eml")}))
+    golden.record("when the API fails", app.post("/api/ai/summarize", world.copy("bea-inbox-01-client.eml")))
 
 
 def test_draft_a_reply_and_rewrite(app, golden, world, ai):
-    pk = world.pk("bea-inbox-01-client.eml")
-    golden.record("draft a reply", app.post("/api/ai/draft-reply", {"pk": pk}))
+    client = world.copy("bea-inbox-01-client.eml")
+    golden.record("draft a reply", app.post("/api/ai/draft-reply", client))
     golden.record("draft a short, warm reply", app.post("/api/ai/draft-reply",
-                                                        {"pk": pk, "tone": "warm", "instruction": "Keep it short"}))
+                                                        {**client, "tone": "warm", "instruction": "Keep it short"}))
     sent(golden, ai, "sent for the drafts")
     golden.record("draft a reply to nothing", app.post("/api/ai/draft-reply", {}))
     for op in ("shorten", "elaborate", "formal", "friendly", "fix"):
@@ -155,19 +157,20 @@ def test_since_you_last_looked(app, golden, world, ai):
 
 def test_draft_ahead_generates_once_then_serves(app, golden, world, ai):
     triaged(ai)
-    pk = world.pk("cy-inbox-02-thread-end.eml")         # Mae's last word in the venue thread
-    golden.record("peek", app.get(f"/api/ai/draft-ahead?pk={pk}&peek=1"))
-    golden.record("ask without the CSRF token", app.get(f"/api/ai/draft-ahead?pk={pk}", headers={"X-CSRF-Token": None}))
+    def ahead(name, **more):
+        return "/api/ai/draft-ahead?" + urlencode({**world.copy(name), **more})
+
+    end = "cy-inbox-02-thread-end.eml"                  # Mae's last word in the venue thread
+    golden.record("peek", app.get(ahead(end, peek=1)))
+    golden.record("ask without the CSRF token", app.get(ahead(end), headers={"X-CSRF-Token": None}))
     golden.note("calls so far", len(ai.requests))
-    golden.record("ask", app.get(f"/api/ai/draft-ahead?pk={pk}"))
+    golden.record("ask", app.get(ahead(end)))
     app.settle()
     sent(golden, ai, "sent")
-    golden.record("ask again", app.get(f"/api/ai/draft-ahead?pk={pk}"))
-    golden.record("a message that isn't the thread's newest", app.get(
-        f"/api/ai/draft-ahead?pk={world.pk('cy-inbox-01-thread-start.eml')}"))
-    golden.record("a message AI didn't call reply-worthy", app.get(
-        f"/api/ai/draft-ahead?pk={world.pk('ada-inbox-09-rfc2047-folded.eml')}"))
-    golden.record("a pk that isn't a number", app.get("/api/ai/draft-ahead?pk=x"))
+    golden.record("ask again", app.get(ahead(end)))
+    golden.record("a message that isn't the thread's newest", app.get(ahead("cy-inbox-01-thread-start.eml")))
+    golden.record("a message AI didn't call reply-worthy", app.get(ahead("ada-inbox-09-rfc2047-folded.eml")))
+    golden.record("a key that isn't a number", app.get("/api/ai/draft-ahead?key=x"))
     app.settle()
     golden.note("calls for those", len(ai.requests))
 

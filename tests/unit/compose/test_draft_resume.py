@@ -16,6 +16,7 @@ import pytest
 import app_client
 import problems
 from answered import answered
+from fixtures import world as w
 from mailmind.bootstrap import accounts, mailbox
 from mailmind.bootstrap.compose import book, drafts, outbox, sending
 from mailmind.bootstrap.mailbox import store
@@ -107,10 +108,11 @@ def _original(uid=7):
     m.add_alternative("<p>Shall we meet <b>Saturday</b>?</p>", subtype="html")
     m.add_attachment(b"%PDF-1.4 map", maintype="application", subtype="pdf", filename="map.pdf")
     c = store.conn()
+    key = store.mint_key(c, ACCT, "<orig1@example.test>", "bo@example.test", None, "Plans")
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, from_name, "
-              "subject, refs, recipients) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              "subject, refs, recipients, message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
               (ACCT, "imap", "INBOX", uid, "<orig1@example.test>", "t-orig", 1_800_000_000, "bo@example.test",
-               "Bo Park", "Plans", "<root@example.test>", "ada@example.test, cy@example.test"))
+               "Bo Park", "Plans", "<root@example.test>", "ada@example.test, cy@example.test", key))
     pk = c.execute("SELECT pk FROM messages WHERE uid=? AND folder='INBOX'", (uid,)).fetchone()["pk"]
     store.store_body(c, pk, m.as_bytes(), "2026-10-31T09:00:00")
     c.commit()
@@ -125,10 +127,11 @@ def _synced(raw, uid, account=ACCT, folder="Drafts"):
     m = message_from_bytes(raw)
     c = store.conn()
     store.set_uidvalidity(c, account, folder, 777)
+    key = store.mint_key(c, account, (m["Message-ID"] or "").strip(), account, None, mime.dec(m["Subject"]))
     c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, from_addr, subject, "
-              "in_reply_to, refs) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              "in_reply_to, refs, message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
               (account, "imap", folder, uid, (m["Message-ID"] or "").strip(), f"td{uid}", 1_800_000_100, account,
-               mime.dec(m["Subject"]), m["In-Reply-To"] or None, m["References"] or None))
+               mime.dec(m["Subject"]), m["In-Reply-To"] or None, m["References"] or None, key))
     pk = c.execute("SELECT pk FROM messages WHERE folder=? AND uid=?", (folder, uid)).fetchone()["pk"]
     store.store_body(c, pk, raw, "2026-10-31T10:00:00")
     c.commit()
@@ -144,6 +147,13 @@ def _saved_and_synced(calls, **kw):
 
 def _resume(pk):
     return answered(drafts.resume, {"pk": pk})
+
+
+def _key(pk):
+    """The key of the message row `pk` holds: what a reopened draft names its original by."""
+    key = w.copy_of(pk)["key"]
+    assert key is not None
+    return key
 
 
 def _foreign(parts, headers=()):
@@ -585,7 +595,7 @@ def test_reply_draft_reopens_with_quote_files_bcc_and_thread(calls):
     assert (r["to"], r["cc"], r["bcc"]) == (["Bo Park <bo@example.test>"], ["cy@example.test"],
                                             ["Dee <dee@example.test>"]), r
     assert (r["in_reply_to"], r["references"]) == ("<orig1@example.test>", "<root@example.test> <orig1@example.test>"), r
-    assert r["orig_pk"] == opk and r["participants"] == ["bo@example.test", ACCT, "cy@example.test"], r
+    assert r["original_key"] == _key(opk) and r["participants"] == ["bo@example.test", ACCT, "cy@example.test"], r
     assert [(f["filename"], base64.b64decode(f["b64"])) for f in r["files"]] == [("notes.txt", b"bring water")], r["files"]
     assert r["notes"] == {"inline": 0, "bcc_dropped": 0, "plain": False}, r["notes"]
 
@@ -597,7 +607,7 @@ def test_forward_draft_reopens_with_its_files_as_chips(calls):
     assert code == 200 and (r["mode"], r["text"], r["split"]) == ("forward", "FYI", "exact"), r
     assert r["tail_text"].startswith("\n\n---------- Forwarded message ----------"), r["tail_text"]
     assert [(f["filename"], f["content_type"], f["size"]) for f in r["files"]] == [("map.pdf", "application/pdf", 12)], r
-    assert (r["orig_pk"], r["in_reply_to"]) == (None, ""), r
+    assert (r["original_key"], r["in_reply_to"]) == (None, ""), r
 
 
 def test_original_deleted_still_reopens(calls):
@@ -608,7 +618,7 @@ def test_original_deleted_still_reopens(calls):
     c.commit()
     c.close()
     r, code = _resume(pk)
-    assert code == 200 and (r["mode"], r["orig_pk"], r["participants"]) == ("reply", None, []), r
+    assert code == 200 and (r["mode"], r["original_key"], r["participants"]) == ("reply", None, []), r
     assert r["in_reply_to"] == "<orig1@example.test>" and r["text"] == OWN, r
 
 
@@ -621,7 +631,7 @@ def test_original_renumbered_found_by_message_id(calls):
     c.close()
     npk = _original(uid=8)                                      # reconcile gave it a new row
     assert npk != opk
-    assert _resume(pk)[0]["orig_pk"] == npk
+    assert _resume(pk)[0]["original_key"] == _key(npk)
 
 
 def test_raw_sha_proves_the_version_without_a_uid(calls):
@@ -723,7 +733,7 @@ def test_other_apps_draft_opens_whole_as_plain_text(calls):
     r, code = _resume(_synced(raw, 9))
     assert code == 200 and (r["mode"], r["split"]) == ("reply", "whole"), r
     assert r["text"] == "On my way.\n\nOn Mon, Bo wrote:\n> Shall we meet Saturday?" and r["tail_text"] == "", r
-    assert r["bcc"] == ["Cy Lee <cy@example.test>"] and r["orig_pk"] == opk, r
+    assert r["bcc"] == ["Cy Lee <cy@example.test>"] and r["original_key"] == _key(opk), r
     names = sorted(f["filename"] for f in r["files"])
     assert len(names) == 2 and "plan.pdf" in names and any(n.startswith("inline-") and n.endswith(".png")
                                                             for n in names), names
@@ -907,8 +917,8 @@ def test_bad_pk_unknown_and_not_a_draft(calls):
 
 def test_resume_route_requires_csrf(app, recorders):
     pk, _ = _saved_and_synced(recorders, text="Mine.")
-    assert app.post("/api/draft/resume", {"pk": pk}, headers={"X-CSRF-Token": None}).status == 403
-    r = app.post("/api/draft/resume", {"pk": pk})
+    assert app.post("/api/draft/resume", w.copy_of(pk), headers={"X-CSRF-Token": None}).status == 403
+    r = app.post("/api/draft/resume", w.copy_of(pk))
     assert r.status == 200 and r.json["text"] == "Mine.", r.body
 
 
@@ -1100,7 +1110,7 @@ def test_headers_that_wont_parse_fall_back_to_their_raw_values(calls):
     assert code == 200, (code, r)
     assert r["bcc"] == ["cy@example.test", "dee@example.test"], r["bcc"]       # bare addresses, nothing lost
     assert (r["in_reply_to"], r["references"]) == ("<orig1@example.test>", "<root@example.test> <orig1@example.test>"), r
-    assert (r["mode"], r["orig_pk"], r["to"]) == ("reply", opk, ["Bo Park <bo@example.test>"]), r
+    assert (r["mode"], r["original_key"], r["to"]) == ("reply", _key(opk), ["Bo Park <bo@example.test>"]), r
 
 
 def test_long_subject_reopens_as_drafted_however_often_it_is_saved(calls):

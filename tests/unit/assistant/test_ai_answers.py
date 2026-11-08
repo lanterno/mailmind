@@ -1,6 +1,6 @@
 """The brief, the delta and the review are kept in tables of their own (migration 37), and what they say
-about a message still holds when its row doesn't: they name messages by key, and a read gives the pks they
-have now."""
+about a message still holds when its row doesn't: they name messages by key, and a read names each copy by its
+key and the folder it is in now."""
 import json
 import time
 from datetime import datetime, timezone
@@ -55,8 +55,14 @@ def renumber_inbox(world, account=w.ADA):
     ingest.sync_new(accounts.get(account))
 
 
-def message_ids(pks):
-    return [r["message_id"] for p in pks for r in q("SELECT message_id FROM messages WHERE pk=?", p)]
+def named(items):
+    """The copies a list names, as the page names one: by key and folder."""
+    return [{"key": i["key"], "folder": i["folder"]} for i in items]
+
+
+def rows_named(item, *columns):
+    """The rows the copy `item` names by its key and folder."""
+    return q(f"SELECT {', '.join(columns)} FROM messages WHERE message_key=? AND folder=?", item["key"], item["folder"])
 
 
 def brief_of(ai, app, pks):
@@ -108,12 +114,12 @@ def test_a_stored_brief_finds_a_message_with_no_message_id_after_a_renumber(app,
     world.deliver(w.ADA, "INBOX", raw)
     [old] = q("SELECT pk FROM messages WHERE account=? AND (message_id='' OR message_id IS NULL)", w.ADA)
     summarize_as(old["pk"])
-    assert brief_of(ai, app, [old["pk"]])["groups"][0]["pks"] == [old["pk"]]
+    assert brief_of(ai, app, [old["pk"]])["groups"][0]["messages"] == [w.copy_of(old["pk"])]
     renumber_inbox(world)
     [new] = q("SELECT pk FROM messages WHERE account=? AND (message_id='' OR message_id IS NULL)", w.ADA)
     assert new["pk"] != old["pk"]
     [group] = brief_now(app)["groups"]
-    assert group["pks"] == [new["pk"]]
+    assert group["messages"] == [w.copy_of(new["pk"])]
 
 
 def test_a_stored_brief_counts_what_it_still_holds(app, world, ai):
@@ -123,7 +129,7 @@ def test_a_stored_brief_counts_what_it_still_holds(app, world, ai):
     assert brief_of(ai, app, [lunch, other])["groups"][0]["count"] == 2
     execute("DELETE FROM messages WHERE pk=?", other)
     [group] = brief_now(app)["groups"]
-    assert (group["count"], group["pks"]) == (1, [lunch])
+    assert (group["count"], group["messages"]) == (1, [w.copy_of(lunch)])
 
 
 def test_a_stored_brief_leaves_out_a_message_on_its_way_out(app, world, ai):
@@ -132,7 +138,7 @@ def test_a_stored_brief_leaves_out_a_message_on_its_way_out(app, world, ai):
     summarize_as(other)
     brief_of(ai, app, [lunch, other])
     execute("UPDATE messages SET pending_removal=1 WHERE pk=?", other)
-    assert brief_now(app)["groups"][0]["pks"] == [lunch]
+    assert brief_now(app)["groups"][0]["messages"] == [w.copy_of(lunch)]
 
 
 def test_a_stored_brief_prefers_the_copy_in_the_folder_it_was_read_from(app, world, ai):
@@ -141,7 +147,7 @@ def test_a_stored_brief_prefers_the_copy_in_the_folder_it_was_read_from(app, wor
     brief_of(ai, app, [anchor["pk"]])
     world.deliver(w.ADA, "Archive", w.raw(LUNCH))
     assert len(q("SELECT pk FROM messages WHERE message_key=?", anchor["message_key"])) == 2
-    assert brief_now(app)["groups"][0]["pks"] == [anchor["pk"]]
+    assert brief_now(app)["groups"][0]["messages"] == [{"key": anchor["message_key"], "folder": "INBOX"}]
 
 
 # -- the review ------------------------------------------------------------------------------------
@@ -150,32 +156,37 @@ def test_a_stored_review_opens_the_message_it_named_after_a_renumber(app, world,
     pk = world.pk(LUNCH)
     summarize_as(pk)
     first = review_of(ai, app)
-    assert pk in [n["pk"] for n in first["needs"]]
+    assert w.copy_of(pk) in named(first["needs"])
     renumber_inbox(world)
     again = review_now(app)
     assert again["cached"] is True and len(ai.requests) == 1
-    assert LUNCH_MID in message_ids(n["pk"] for n in again["needs"])
-    assert pk not in [n["pk"] for n in again["needs"]]
+    [now] = q("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?", w.ADA, LUNCH_MID)
+    assert now["pk"] != pk
+    assert w.copy_of(now["pk"]) in named(again["needs"])
+    assert LUNCH_MID in [r["message_id"] for n in again["needs"] for r in rows_named(n, "message_id")]
 
 
 def test_a_stored_reviews_waiting_list_follows_a_renumber_too(app, world, ai):
     lunch = world.row(LUNCH)
     waiting_on(lunch["thread_id"])
     first = review_of(ai, app)
-    old = [i["pk"] for i in first["waiting"] if i["thread_id"] == lunch["thread_id"]]
+    old = [r["pk"] for i in first["waiting"] if i["thread_id"] == lunch["thread_id"] for r in rows_named(i, "pk")]
+    assert old
     renumber_inbox(world)
     [item] = [i for i in review_now(app)["waiting"] if i["thread_id"] == lunch["thread_id"]]
-    assert item["pk"] not in old
-    assert q("SELECT thread_id FROM messages WHERE pk=?", item["pk"])[0]["thread_id"] == lunch["thread_id"]
+    [now] = rows_named(item, "pk", "thread_id")
+    assert now["pk"] not in old
+    assert now["thread_id"] == lunch["thread_id"]
 
 
 def test_a_stored_review_leaves_out_a_message_that_has_gone(app, world, ai):
     pk = world.pk(LUNCH)
+    copy = w.copy_of(pk)
     summarize_as(pk)
-    assert pk in [n["pk"] for n in review_of(ai, app)["needs"]]
+    assert copy in named(review_of(ai, app)["needs"])
     execute("DELETE FROM messages WHERE pk=?", pk)
     again = review_now(app)
-    assert pk not in [n["pk"] for n in again["needs"]]
+    assert copy not in named(again["needs"])
     assert again["stale"] is True            # and it says the mail changed
 
 
@@ -183,7 +194,7 @@ def test_a_waiting_item_that_named_no_message_stays(app, world, ai):
     waiting_on("rf:no-such-thread")
     review_of(ai, app)
     [item] = [i for i in review_now(app)["waiting"] if i["thread_id"] == "rf:no-such-thread"]
-    assert item["pk"] is None and item["key"] is None
+    assert "pk" not in item and item["key"] is None
 
 
 def test_a_stored_review_keeps_what_it_said_when_the_mail_moves_on(app, world, ai):

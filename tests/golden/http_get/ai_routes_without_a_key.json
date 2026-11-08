@@ -140,7 +140,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/ai/draft-ahead",
+  "request": "GET /api/ai/draft-ahead for the lunch confirmation",
   "status": 200
  },
  {
@@ -158,7 +158,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "GET /api/ai/draft-ahead without the CSRF token",
+  "request": "GET /api/ai/draft-ahead for the lunch confirmation without the CSRF token",
   "status": 200
  },
  {

@@ -87,7 +87,7 @@ def test_storing_a_body_reads_its_whole_list_again(app, world):
     c.commit()
     c.close()
     assert not _known(app, LONG[-1])[LONG[-1]]
-    assert app.get(f"/api/message/{pk}/body").status == 200
+    assert app.get("/api/message/body?key={key}&folder={folder}".format(**w.copy_of(pk))).status == 200
     assert _rows(pk) == sorted(LONG)
     assert _known(app, LONG[-1])[LONG[-1]]
 
@@ -120,7 +120,7 @@ def test_mail_someone_else_sent_you_vouches_for_nobody_it_went_to(app, world):
 def test_a_search_reaches_the_end_of_a_long_list(app, world):
     world.deliver(w.ADA, "Sent", _mail(", ".join(LONG)), (w.SEEN,))
     pk = _pk("sent-long@example.test")
-    assert pk in [m["pk"] for m in app.get(f"/api/search?q=to:{LONG[-1]}").json["items"]]
+    assert w.copy_of(pk) in [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/search?q=to:{LONG[-1]}").json["items"]]
 
 
 def test_the_text_kept_for_search_is_bounded(app, world, monkeypatch):

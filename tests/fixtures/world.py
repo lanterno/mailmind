@@ -72,6 +72,17 @@ def message_id(name):
     return (email.parser.BytesHeaderParser().parsebytes(raw(name)).get("Message-ID") or "").strip()
 
 
+def copy_of(pk):
+    """The copy the row `pk` is, as a request names one: its message's key and its folder. None for a pk with no row."""
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        r = c.execute("SELECT message_key, folder FROM messages WHERE pk=?", (pk,)).fetchone()
+    finally:
+        c.close()
+    return {"key": r["message_key"], "folder": r["folder"]} if r else None
+
+
 def variant(name, **headers):
     """Corpus file `name` with some headers replaced, for a test that needs one more message like
     it: variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@loom.example.test>").

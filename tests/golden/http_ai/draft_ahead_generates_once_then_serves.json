@@ -138,7 +138,7 @@
  },
  {
   "body": {
-   "detail": "bad pk",
+   "detail": "bad request",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
@@ -153,7 +153,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "a pk that isn't a number",
+  "request": "a key that isn't a number",
   "status": 400
  },
  {

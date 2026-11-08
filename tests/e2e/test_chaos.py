@@ -28,7 +28,7 @@ def per_account(monkeypatch):
 
 
 def unfetched(world, name):
-    """`name`'s pk, its body not yet fetched: opening it goes to the server."""
+    """Where to open `name`'s copy, its body not yet fetched: opening it goes to the server."""
     from mailmind.bootstrap.mailbox import store
     pk = world.pk(name)
     c = store.conn()
@@ -37,22 +37,22 @@ def unfetched(world, name):
         c.commit()
     finally:
         c.close()
-    return pk
+    return "/api/message/body?key={key}&folder={folder}".format(**world.copy(name))
 
 
 def test_a_black_holed_account_doesnt_slow_another_accounts_body_open(app, world, per_account):
     world.server.stall("EXAMINE", user=w.BEA)                 # Bea's server takes the login, then nothing
     bea = unfetched(world, "bea-inbox-01-client.eml")
-    hung = threading.Thread(target=lambda: app.get(f"/api/message/{bea}/body"), daemon=True)
+    hung = threading.Thread(target=lambda: app.get(bea), daemon=True)
     hung.start()
     try:
         assert wait_until(lambda: world.server.commands_for(w.BEA, "EXAMINE")) and gates.held(w.BEA)
         ada = [m[0] for m in w.MAIL if m[0].startswith("ada-inbox-")]
         took = []
         for name in ada * 2:
-            pk = unfetched(world, name)
+            opening = unfetched(world, name)
             began = time.monotonic()
-            assert app.get(f"/api/message/{pk}/body").json["ok"]
+            assert app.get(opening).json["ok"]
             took.append(time.monotonic() - began)
         p95 = sorted(took)[max(0, round(0.95 * len(took)) - 1)]
         assert p95 < 1.0, f"p95 {p95:.2f}s over {len(took)} opens"
@@ -157,7 +157,7 @@ def test_a_connection_dropped_mid_move_recovers(app, world, per_account, command
     if command == "UID COPY":
         world.server.without = {"MOVE"}
     world.server.drop_after(command, user=w.ADA)
-    r = app.post("/api/archive", {"pk": world.pk(name), "mutation_id": "m-1"}).json
+    r = app.post("/api/archive", {**world.copy(name), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     commands.drain()
     ingest.sync_folder(accounts.get(w.ADA), "Archive")

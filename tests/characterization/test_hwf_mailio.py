@@ -13,6 +13,7 @@ import email.policy
 import threading
 import time
 from datetime import timedelta
+from urllib.parse import urlencode
 
 import pytest
 
@@ -83,10 +84,15 @@ def count(world, command, user=w.ADA):
     return len(world.server.commands_for(user, command))
 
 
+def body_of(pk):
+    """Where the reader opens the copy the row `pk` is, by its key and folder."""
+    return "/api/message/body?" + urlencode(w.copy_of(pk))
+
+
 def queue(app, world, op="archive", name=RECEIPT, account=w.ADA, mutation_id="m-1"):
     """Ask for `op` on `name` while the server drops the connection: the move is queued."""
     world.server.drop("SELECT", user=account)
-    r = app.post(f"/api/{op}", {"pk": world.pk(name), "mutation_id": mutation_id}).json
+    r = app.post(f"/api/{op}", {**world.copy(name), "mutation_id": mutation_id}).json
     assert r["status"] == "queued", r
     return r
 
@@ -185,7 +191,7 @@ def test_hwf_a_folded_message_id_never_carries_its_line_break_to_imap(app, world
     [row] = q("SELECT pk, message_id FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid)
     assert "\r\n" in row["message_id"]
     since = len(world.server.commands)
-    assert app.post("/api/archive", {"pk": row["pk"]}).json["ok"]
+    assert app.post("/api/archive", w.copy_of(row["pk"])).json["ok"]
     assert app.post("/api/undo", {}).status == 409                    # it can't be found by that ID
     lines = [c["line"] for c in world.server.commands[since:]]
     assert not [line for line in lines if "DELETE" in line or "fold@" in line], lines
@@ -404,7 +410,7 @@ def test_hwf_a_flag_change_still_queued_holds_the_mark_so_the_row_is_read_again(
     from mailmind.bootstrap.mailbox import store
     name = "ada-inbox-02-lunch-confirm.eml"
     world.server.fail("LOGIN", user=w.ADA)            # so this one queues
-    assert app.post("/api/flag", {"pk": world.pk(name), "flag": "flagged", "on": True}).json["status"] == "queued"
+    assert app.post("/api/flag", {**world.copy(name), "flag": "flagged", "on": True}).json["status"] == "queued"
     mark = modseq()
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages[world.uid(name)].flags.add("\\Seen")
@@ -481,7 +487,7 @@ def test_hwf_a_refused_select_keeps_the_message(app, world):
     for path in ("/api/trash", "/api/archive", "/api/junk"):
         world.server.fail("SELECT", user=w.ADA)
         since = world.mark()
-        r = app.post(path, {"pk": world.pk(RECEIPT)})
+        r = app.post(path, world.copy(RECEIPT))
         assert (r.status, r.json["type"]) == (409, "/problems/conflict"), path
         assert world.writes(since) == [], path
         assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), path
@@ -489,7 +495,7 @@ def test_hwf_a_refused_select_keeps_the_message(app, world):
 
 def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
     name = "cy-inbox-03-unrelated.eml"
-    assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/archive", world.copy(name)).json["ok"]
     world.server.fail("UID STORE", user=w.CY)
     assert app.post("/api/undo", {}).status == 409
     assert app.post("/api/undo", {}).json["ok"]                  # kept for a retry, which works
@@ -497,7 +503,7 @@ def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
 
 
 def test_hwf_a_refused_move_back_is_not_reported_as_undone(app, world):
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
     assert app.post("/api/undo", {}).status == 409
@@ -509,7 +515,7 @@ def test_hwf_a_refused_move_back_is_not_reported_as_undone(app, world):
 def test_hwf_a_refused_login_queues_the_move_instead_of_dropping_it(app, world):
     from mailmind.bootstrap.mailbox import commands
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] invalid credentials", user=w.ADA)
-    r = app.post("/api/archive", {"pk": world.pk(RECEIPT), "mutation_id": "m-1"}).json
+    r = app.post("/api/archive", {**world.copy(RECEIPT), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [])
     app.clock.shift(timedelta(seconds=login_hold.FIRST + 1))     # it isn't sent again before then
@@ -522,7 +528,7 @@ def test_hwf_a_malformed_message_id_is_quoted_so_undo_finds_it(app, world):
     raw = w.raw(RECEIPT).replace(w.message_id(RECEIPT).encode(), mid.encode(), 1)
     uid = world.deliver(w.ADA, "INBOX", raw)
     [pk] = [r["pk"] for r in q("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid)]
-    assert app.post("/api/trash", {"pk": pk}).json["ok"]
+    assert app.post("/api/trash", w.copy_of(pk)).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     assert world.server.find(w.ADA, "INBOX", mid) and mid in stored().values()
 
@@ -894,9 +900,9 @@ def old_row(folder, uid, name="<filed@example.test>", email=w.ADA):
 @pytest.mark.parametrize("folder", ["Contract drafts", "Clients/Draft"])
 def test_hwf_received_mail_in_a_folder_named_for_drafts_is_no_draft(app, world, folder):
     pk, _ = filed(world, folder)
-    assert "is_draft" not in app.get(f"/api/message/{pk}/body").json
+    assert "is_draft" not in app.get(body_of(pk)).json
     since = world.mark()
-    refused = app.post("/api/draft/resume", {"pk": pk})
+    refused = app.post("/api/draft/resume", w.copy_of(pk))
     assert (refused.status, refused.json["type"]) == (400, "/problems/refused")
     assert world.writes(since) == [] and q("SELECT id FROM drafts WHERE folder=?", folder) == []
 
@@ -927,23 +933,23 @@ def test_hwf_a_drafts_folder_the_server_names_in_another_language_offers_edit(ap
     with world.server.lock:
         world.server.accounts[w.ADA].mailboxes["Drafts"].special = ""
     pk, _ = filed(world, "Brouillons", name="<brouillon@example.test>", special="\\Drafts")
-    assert "is_draft" not in app.get(f"/api/message/{pk}/body").json     # no list yet: the name says nothing
+    assert "is_draft" not in app.get(body_of(pk)).json     # no list yet: the name says nothing
     assert app.get(f"/api/folders?account={w.ADA}").json["folders"]
-    assert app.get(f"/api/message/{pk}/body").json["is_draft"]
-    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+    assert app.get(body_of(pk)).json["is_draft"]
+    assert app.post("/api/draft/resume", w.copy_of(pk)).json["ok"]
 
 
 def test_hwf_a_message_the_server_flags_a_draft_offers_edit_in_any_folder(app, world):
     pk, uid = filed(world, "Half written", name="<half@example.test>", flags=(w.SEEN, w.DRAFT))
-    assert app.get(f"/api/message/{pk}/body").json["is_draft"]
-    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+    assert app.get(body_of(pk)).json["is_draft"]
+    assert app.post("/api/draft/resume", w.copy_of(pk)).json["ok"]
     did = q("SELECT id FROM drafts WHERE folder='Half written'")[0]["id"]
     assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"]
     assert world.server.find(w.ADA, "Half written", "<half@example.test>") == []
 
 
 def listed(app, folder="Drafts", email=w.ADA):
-    return {i["subject"]: i["pk"] for i in app.get(
+    return {i["subject"]: i["key"] for i in app.get(
         f"/api/messages?account={email}&folder={folder}&limit=200").json["items"]}
 
 
@@ -998,7 +1004,7 @@ def test_hwf_a_draft_the_server_would_not_remove_stays_listed(app, world):
 
 def test_hwf_a_draft_moved_between_folders_leaves_the_old_list(app, world):
     pk, uid = filed(world, "Half written", name="<half@example.test>", flags=(w.SEEN, w.DRAFT))
-    assert app.post("/api/draft/resume", {"pk": pk}).json["ok"]
+    assert app.post("/api/draft/resume", w.copy_of(pk)).json["ok"]
     did = q("SELECT id FROM drafts WHERE folder='Half written'")[0]["id"]
     assert app.post("/api/draft", new(subject="Half done", draft_id=did)).json["ok"]
     assert q("SELECT pk FROM messages WHERE pk=?", pk) == []
@@ -1018,18 +1024,18 @@ def forget_row(world, name):
 
 
 def replying(world, **kw):
-    return {"account": w.ADA, "mode": "reply", "in_reply_to_pk": world.pk(LUNCH), "to": ["lin@example.test"],
+    return {"account": w.ADA, "mode": "reply", "original_key": world.key(LUNCH), "to": ["lin@example.test"],
             "subject": "Re: Lunch on Thursday?", "text": "See you there.", **kw}
 
 
 def test_hwf_a_reply_saved_once_no_longer_needs_its_originals_row(app, world):
     from mailmind.bootstrap.compose import outbox
-    pk, resave = world.pk(LUNCH), replying(world)
+    key, resave = world.key(LUNCH), replying(world)
     first = app.post("/api/draft", resave).json
     assert first["resume"]["in_reply_to"] and first["resume"]["tail_text"].startswith("\n\nOn ")
     forget_row(world, LUNCH)
-    assert app.post("/api/draft", replying(world) | {"in_reply_to_pk": pk}).status == 404      # the old way
-    named = {"in_reply_to_pk": pk, "draft_id": first["draft_id"], "resume": first["resume"]}
+    assert app.post("/api/draft", replying(world) | {"original_key": key}).status == 404      # the old way
+    named = {"original_key": key, "draft_id": first["draft_id"], "resume": first["resume"]}
     saved = app.post("/api/draft", replying(world) | named | {"text": "See you there. I booked."}).json
     assert saved["ok"] and "resume" not in saved
     sent = app.post("/api/send", replying(world) | named | {"text": "See you there. I booked.",
@@ -1049,8 +1055,8 @@ def test_hwf_a_forward_saved_once_carries_its_files_itself(app, world):
     msg = email.message_from_bytes(with_file, policy=email.policy.default)
     msg.add_attachment(b"linen swatch", maintype="application", subtype="octet-stream", filename="swatch.bin")
     world.deliver(w.ADA, "INBOX", msg.as_bytes())
-    [orig] = q("SELECT pk FROM messages WHERE message_id='<with-file@example.test>'")
-    body = {"account": w.ADA, "mode": "forward", "in_reply_to_pk": orig["pk"], "to": ["bea@example.test"],
+    [orig] = q("SELECT message_key FROM messages WHERE message_id='<with-file@example.test>'")
+    body = {"account": w.ADA, "mode": "forward", "original_key": orig["message_key"], "to": ["bea@example.test"],
             "subject": "Fwd: Lunch", "text": "For you."}
     first = app.post("/api/draft", body).json
     assert [(f["filename"], f["size"]) for f in first["files"]] == [("swatch.bin", 12)]
@@ -1069,7 +1075,7 @@ def test_hwf_a_reply_records_its_follow_up_after_its_original_is_archived(app, w
     from mailmind.bootstrap.compose import outbox
     assert app.post("/api/send", replying(world, idempotency_key="k-fu")).json["ok"]
     [before] = q("SELECT thread_id FROM messages WHERE pk=?", world.pk(LUNCH))
-    assert app.post("/api/archive", {"pk": world.pk(LUNCH)}).json["ok"]
+    assert app.post("/api/archive", world.copy(LUNCH)).json["ok"]
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
     assert [r["thread_id"] for r in q("SELECT thread_id FROM followups WHERE kind='sent'")] == [before["thread_id"]]
@@ -1197,7 +1203,7 @@ def test_hwf_a_reply_in_a_muted_thread_is_marked_read_on_the_server_too(app, wor
     # once, and on the server once the queue has told it.
     from mailmind.bootstrap.mailbox import commands
     lunch = world.row("ada-inbox-02-lunch-confirm.eml")
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", w.copy_of(lunch["pk"])).json["ok"]
     reply = w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<late-mute@example.test>",
                       In_Reply_To=lunch["message_id"])
     uid = world.deliver(w.ADA, "INBOX", reply)
@@ -1281,7 +1287,7 @@ def test_hwf_junk_goes_to_the_special_use_junk_folder(app, world):
     with world.server.lock:                                      # listed first, as a server may list it
         a.mailboxes = {"Bulk orders": Mailbox("Bulk orders", uidvalidity=1_700_000_999), **a.mailboxes}
     name = "ada-inbox-12-scam.eml"
-    assert app.post("/api/junk", {"pk": world.pk(name)}).json["ok"]
+    assert app.post("/api/junk", world.copy(name)).json["ok"]
     assert boxes(world, name)[0] == [(w.ADA, "Junk")]
 
 

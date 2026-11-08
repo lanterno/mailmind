@@ -1,5 +1,7 @@
 """A reply drafted ahead is kept under its thread, or its Message-ID for a message with no thread, and checked against a
 fingerprint of what those hold."""
+import urllib.parse
+
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import accounts
@@ -34,12 +36,13 @@ def pk_of(name):
 
 
 def peek(app, pk):
-    return app.get(f"/api/ai/draft-ahead?pk={pk}&peek=1").json["status"]
+    """What drafting ahead has for the message row `pk` is now, named as the page names it: by its key and folder."""
+    return app.get("/api/ai/draft-ahead?" + urllib.parse.urlencode({**w.copy_of(pk), "peek": 1})).json["status"]
 
 
 def banked(app, ai, pk):
     ai.queue(fa.answer({"body": DRAFT}))
-    assert app.post("/api/ai/draft-reply", {"pk": pk}).status == 200
+    assert app.post("/api/ai/draft-reply", w.copy_of(pk)).status == 200
 
 
 def test_a_draft_is_served_for_its_thread_alone(app, world, ai):

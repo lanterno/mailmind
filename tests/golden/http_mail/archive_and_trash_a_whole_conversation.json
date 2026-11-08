@@ -15,10 +15,6 @@
    ],
    "msg": "filed",
    "ok": true,
-   "pks": [
-    2,
-    1
-   ],
    "queued": 0,
    "undoable": true
   },
@@ -226,10 +222,6 @@
    ],
    "msg": "filed",
    "ok": true,
-   "pks": [
-    23,
-    22
-   ],
    "queued": 0,
    "undoable": true
   },
@@ -493,11 +485,11 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "archive a conversation with a bad pk",
+  "request": "archive a conversation with a bad key",
   "status": 400
  },
  {
-  "note": "archive a conversation with a bad pk: server writes",
+  "note": "archive a conversation with a bad key: server writes",
   "value": []
  }
 ]

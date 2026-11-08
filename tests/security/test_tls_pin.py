@@ -123,7 +123,7 @@ def test_trusting_an_unknown_account_is_refused(app, world):
 
 def test_a_move_while_the_certificate_is_wrong_waits_in_the_queue(app, world):
     pin(world, w.ADA, imap(world), WRONG)
-    r = app.post("/api/archive", {"pk": world.pk("ada-inbox-05-receipt.eml"), "mutation_id": "m-1"}).json
+    r = app.post("/api/archive", {**world.copy("ada-inbox-05-receipt.eml"), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     assert logins(world) == 0
 

@@ -19,7 +19,7 @@ RECEIPT = "ada-inbox-05-receipt.eml"
 def queue(app, world, op="archive", name=RECEIPT, account=w.ADA, mutation_id="m-1", **body):
     """Ask for `op` on `name` while the server drops the connection."""
     world.server.drop("SELECT", user=account)
-    r = app.post(f"/api/{op}", {"pk": world.pk(name), "mutation_id": mutation_id, **body}).json
+    r = app.post(f"/api/{op}", {**world.copy(name), "mutation_id": mutation_id, **body}).json
     assert r["status"] == "queued", r
     return r
 
@@ -82,7 +82,7 @@ def test_a_move_from_before_the_route_went_that_cant_land_goes_to_the_tray_and_g
     [r] = rows()
     assert (r["kind"], r["state"], r["applied"]) == ("move", "error", 0)
     assert boxes(world, name)[0] == [(w.BEA, "INBOX")]
-    assert world.pk(name) in {m["pk"] for m in app.get(f"/api/messages?account={w.BEA}&folder=INBOX").json["items"]}
+    assert world.copy(name) in [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/messages?account={w.BEA}&folder=INBOX").json["items"]]
 
 
 def test_a_queued_gmail_archive_drops_the_inbox_label(app, world):
@@ -200,7 +200,7 @@ def test_a_queued_move_leaves_its_message_out_of_the_lists_until_it_lands(app, w
     pk, thread = world.pk(RECEIPT), world.row(RECEIPT)["thread_id"]
     queue(app, world)
     listed = app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]
-    assert pk not in [m["pk"] for m in listed]
+    assert world.copy(RECEIPT) not in [{"key": m["key"], "folder": m["folder"]} for m in listed]
     assert app.get("/api/search?scope=all&q=receipt+1042").json["items"] == []
     assert app.get(f"/api/thread?account={w.ADA}&thread_id={thread}").json["items"] == []
     [r] = rows()
@@ -233,7 +233,7 @@ def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, 
 def flag_queued(app, world, path="/api/seen", body=None, name=RECEIPT, mutation_id="f-1"):
     """Ask for a flag change on `name` while the server drops the connection."""
     world.server.drop("SELECT", user=w.ADA)
-    r = app.post(path, {"pk": world.pk(name), "mutation_id": mutation_id, **(body or {"seen": True})}).json
+    r = app.post(path, {**world.copy(name), "mutation_id": mutation_id, **(body or {"seen": True})}).json
     assert r["status"] == "queued", r
     return r
 

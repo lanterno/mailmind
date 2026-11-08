@@ -120,7 +120,7 @@
  },
  {
   "body": {
-   "count": 1,
+   "count": 0,
    "ok": true,
    "until": 1793692800
   },
@@ -172,7 +172,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "snooze: a list of pks",
+  "request": "snooze: a list of copies",
   "status": 200
  },
  {
@@ -192,7 +192,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "snooze: a pk that isn't a number",
+  "request": "snooze: a key that isn't a number",
   "status": 400
  },
  {

@@ -218,7 +218,7 @@
    "x-content-type-options": "nosniff",
    "x-frame-options": "DENY"
   },
-  "request": "send: a reply by pk that is fine",
+  "request": "send: a reply by key that is fine",
   "status": 200
  },
  {

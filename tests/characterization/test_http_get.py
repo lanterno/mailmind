@@ -9,7 +9,7 @@ AI is off here: there is no key, so nothing reaches the fake Claude API. The AI 
 are in test_http_ai.py.
 """
 import sqlite3
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import pytest
 
@@ -20,6 +20,15 @@ from mailmind.bootstrap.assistant import answers
 
 def fetch(app, golden, path, label=None, **kw):
     return golden.record(label or "GET " + path, app.get(path, **kw))
+
+
+def body_of(copy, **more):
+    """Where the reader opens a copy, by its key and folder."""
+    return "/api/message/body?" + urlencode({**copy, **more})
+
+
+def attachment_of(copy, part_id):
+    return "/api/message/attachment?" + urlencode({**copy, "part_id": part_id})
 
 
 # ── the page and the guards every GET passes ─────────────────────────────────
@@ -128,8 +137,8 @@ def test_upcoming_screener_and_contacts(app, golden):
 
 def test_documents_and_cleanup(app, golden, world):
     fetch(app, golden, "/api/documents", "GET /api/documents before any body is opened")
-    app.get(f"/api/message/{world.pk('bea-drafts-01-apple-mail.eml')}/body")
-    app.get(f"/api/message/{world.pk('ada-inbox-11-html-cid.eml')}/body")
+    app.get(body_of(world.copy("bea-drafts-01-apple-mail.eml")))
+    app.get(body_of(world.copy("ada-inbox-11-html-cid.eml")))
     fetch(app, golden, "/api/documents")
     fetch(app, golden, "/api/documents?limit=nope")
     fetch(app, golden, "/api/cleanup/senders", "GET /api/cleanup/senders with one issue of each newsletter")
@@ -193,39 +202,39 @@ BODIES = ("ada-inbox-01-lunch.eml", "ada-inbox-06-outlook-invite.eml", "ada-inbo
 
 def test_message_bodies(app, golden, world):
     for name in BODIES:
-        fetch(app, golden, f"/api/message/{world.pk(name)}/body", f"GET body of {name}")
-    fetch(app, golden, f"/api/message/{world.pk('bea-inbox-01-client.eml')}/body?prefetch=1",
+        fetch(app, golden, body_of(world.copy(name)), f"GET body of {name}")
+    fetch(app, golden, body_of(world.copy("bea-inbox-01-client.eml"), prefetch="1"),
           "GET body of bea-inbox-01-client.eml as a prefetch")
-    fetch(app, golden, "/api/message/999999/body")
+    fetch(app, golden, body_of({"key": 999999, "folder": "INBOX"}))
     golden.note("UID FETCH commands per account",
                 {a: len(world.server.commands_for(a, "UID FETCH")) for a in (w.ADA, w.BEA, w.CY)})
 
 
 def test_attachments(app, golden, world):
-    pdf = world.pk("bea-drafts-01-apple-mail.eml")
-    cid = world.pk("ada-inbox-11-html-cid.eml")
-    fwd = world.pk("ada-inbox-07-forward-rfc822.eml")
-    for pk, name in ((pdf, "bea-drafts-01-apple-mail.eml"), (cid, "ada-inbox-11-html-cid.eml"),
-                     (fwd, "ada-inbox-07-forward-rfc822.eml")):
-        app.get(f"/api/message/{pk}/body")
-        for att in app.get(f"/api/message/{pk}/body").json.get("attachments", []):
-            fetch(app, golden, f"/api/message/{pk}/attachment/{att['part_id']}",
-                  f"GET attachment {att['part_id']} of {name}")
-    fetch(app, golden, f"/api/message/{pdf}/attachment/99", "GET a part that isn't there")
-    fetch(app, golden, f"/api/message/{pdf}/attachment/1x", "GET a part id that isn't a number")
-    fetch(app, golden, "/api/message/999999/attachment/1", "GET an attachment of no message")
+    pdf = world.copy("bea-drafts-01-apple-mail.eml")
+    cid = world.copy("ada-inbox-11-html-cid.eml")
+    fwd = world.copy("ada-inbox-07-forward-rfc822.eml")
+    for copy, name in ((pdf, "bea-drafts-01-apple-mail.eml"), (cid, "ada-inbox-11-html-cid.eml"),
+                       (fwd, "ada-inbox-07-forward-rfc822.eml")):
+        app.get(body_of(copy))
+        for att in app.get(body_of(copy)).json.get("attachments", []):
+            fetch(app, golden, attachment_of(copy, att["part_id"]), f"GET attachment {att['part_id']} of {name}")
+    fetch(app, golden, attachment_of(pdf, "99"), "GET a part that isn't there")
+    fetch(app, golden, attachment_of(pdf, "1x"), "GET a part id that isn't a number")
+    fetch(app, golden, attachment_of({"key": 999999, "folder": "INBOX"}, "1"), "GET an attachment of no message")
 
 
 # ── AI routes with AI off ────────────────────────────────────────────────
 
-def test_ai_routes_without_a_key(app, golden, anthropic_api):
+def test_ai_routes_without_a_key(app, golden, world, anthropic_api):
     fetch(app, golden, "/api/briefing")
     fetch(app, golden, "/api/review")
     fetch(app, golden, "/api/briefing/since")
     for path in ("/api/briefing", "/api/review", "/api/briefing/since"):
         golden.record(f"POST {path}", app.post(path, {}))
-    fetch(app, golden, "/api/ai/draft-ahead")
-    fetch(app, golden, "/api/ai/draft-ahead", "GET /api/ai/draft-ahead without the CSRF token",
+    ahead = "/api/ai/draft-ahead?" + urlencode(world.copy(LUNCH))
+    fetch(app, golden, ahead, "GET /api/ai/draft-ahead for the lunch confirmation")
+    fetch(app, golden, ahead, "GET /api/ai/draft-ahead for the lunch confirmation without the CSRF token",
           headers={"X-CSRF-Token": None})
     fetch(app, golden, "/api/digest", "GET /api/digest after those")
     golden.note("requests the fake Claude API received", len(anthropic_api.requests))
@@ -235,8 +244,8 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
 
 
 @pytest.mark.parametrize("path, body", [
-    ("/api/ai/summarize", {"pk": LUNCH}),
-    ("/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}),
+    ("/api/ai/summarize", {"key": LUNCH}),
+    ("/api/ai/draft-reply", {"key": LUNCH, "tone": "warm"}),
     ("/api/ai/rewrite", {"text": "can we move lunch to friday", "op": "shorten"}),
     ("/api/ai/ask", {"question": "When is lunch with Lin?"}),
     ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
@@ -248,8 +257,8 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
 def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api, capfd, path, body):
     from mailmind.bootstrap.mailbox import store
     lunch = world.pk(LUNCH)
-    if body.get("pk") == LUNCH:
-        body = {**body, "pk": lunch}
+    if body.get("key") == LUNCH:                       # the lunch confirmation, by its key and folder
+        body = {**body, **world.copy(LUNCH)}
     c = store.conn()
     try:                                               # triaged, so the brief has something to say
         answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
@@ -265,9 +274,10 @@ def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api
     assert (ai_line["engine"], ai_line["last_error"]) == ("none", "")
 
 
-def test_without_a_key_no_mail_leaves_for_the_api(app, anthropic_api):
-    for path in ("/api/briefing", "/api/review", "/api/briefing/since", "/api/ai/draft-ahead"):
-        app.get(path)
+def test_without_a_key_no_mail_leaves_for_the_api(app, world, anthropic_api):
+    ahead = "/api/ai/draft-ahead?" + urlencode(world.copy(LUNCH))
+    for path in ("/api/briefing", "/api/review", "/api/briefing/since", ahead):
+        assert app.get(path).status == 200
     for path in ("/api/briefing", "/api/review", "/api/briefing/since"):
         app.post(path, {})
     assert [r.prompt[:60] for r in anthropic_api.requests] == []

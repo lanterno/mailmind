@@ -26,6 +26,11 @@ def thread_with_a_reply(world):
     return lunch, world.deliver(w.ADA, "INBOX", reply)
 
 
+def named(row):
+    """The copy a stored row is, as a request names one: its key and folder."""
+    return {"key": row["message_key"], "folder": row["folder"]}
+
+
 def row_of(uid):
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
@@ -39,7 +44,7 @@ def test_muting_marks_the_unread_members_read_on_the_server(app, world):
     from mailmind.bootstrap.mailbox import commands
     lunch, uid = thread_with_a_reply(world)
     assert not seen_on_server(world, uid) and row_of(uid)["seen"] == 0
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     assert row_of(uid)["seen"] == 1                              # here at once, in the request
     assert not seen_on_server(world, uid)
     commands.drain()
@@ -53,15 +58,15 @@ def test_muting_a_thread_already_read_asks_nothing_of_the_server(app, world):
     c.execute("UPDATE messages SET seen=1 WHERE account=? AND thread_id=?", (w.ADA, lunch["thread_id"]))
     c.commit()
     c.close()
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     assert app.get("/api/pending").json["items"] == []
 
 
 def test_muting_again_queues_nothing_more(app, world):
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     before = len(app.get("/api/pending").json["items"])
-    assert before and app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert before and app.post("/api/mute", named(lunch)).json["ok"]
     assert len(app.get("/api/pending").json["items"]) == before
 
 
@@ -70,7 +75,7 @@ def test_undo_marks_unread_what_muting_marked_read_and_no_more(app, world):
     lunch, uid = thread_with_a_reply(world)
     other = world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<mute-read@example.test>",
                                                     In_Reply_To=lunch["message_id"]), flags=[w.SEEN])
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     commands.drain()
     assert seen_on_server(world, uid)
     assert app.post("/api/undo", {}).json["ok"]
@@ -83,7 +88,7 @@ def test_undo_marks_unread_what_muting_marked_read_and_no_more(app, world):
 def test_undo_before_the_mark_landed_ends_up_unread(app, world):
     from mailmind.bootstrap.mailbox import commands
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     commands.drain()
     assert not seen_on_server(world, uid) and row_of(uid)["seen"] == 0
@@ -93,7 +98,7 @@ def test_undo_finds_the_row_after_a_renumber(app, world):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import commands
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     commands.drain()
     world.server.renumber(w.ADA, "INBOX")
     ingest.sync_new(acct())
@@ -126,7 +131,7 @@ def test_an_undo_written_before_this_only_changes_the_local_row(app, world):
 def test_an_undo_after_a_merge_unmutes_the_thread_that_took_this_one_in(app, world):
     from mailmind.bootstrap.mailbox import store
     lunch, _ = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     survivor = "rf:<survivor@example.test>"
     c = store.conn()
     c.execute("UPDATE messages SET thread_id=? WHERE account=? AND thread_id=?", (survivor, w.ADA, lunch["thread_id"]))
@@ -144,7 +149,7 @@ def test_a_refused_mark_goes_to_the_tray_and_isnt_asked_again_each_sync(app, wor
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import commands
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     world.server.fail("UID STORE", user=w.ADA, times=None)
     commands.drain()
     assert row_of(uid)["seen"] == 0                              # as the server has it
@@ -160,7 +165,7 @@ def test_a_reply_after_a_marked_one_is_marked_as_well(app, world):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import commands
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     commands.drain()
     world.server.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<mute-later@example.test>",
                                                    In_Reply_To=lunch["message_id"]))
@@ -175,7 +180,7 @@ def test_read_only_mutes_and_the_mark_waits_in_the_queue(app, world, monkeypatch
     lunch, uid = thread_with_a_reply(world)
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     since = world.mark()
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     commands.drain()
     assert world.writes(since) == []
     assert row_of(uid)["seen"] == 1
@@ -186,7 +191,7 @@ def test_finished_queue_rows_go_after_a_month(app, world):
     from mailmind.bootstrap.mailbox import commands
     from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     commands.drain()
 
     def count():
@@ -206,7 +211,7 @@ def test_finished_queue_rows_go_after_a_month(app, world):
 
 def test_an_unfinished_queue_row_stays_past_a_month(app, world):
     lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", {"pk": lunch["pk"]}).json["ok"]
+    assert app.post("/api/mute", named(lunch)).json["ok"]
     open_rows = len(app.get("/api/pending").json["items"])
     app.clock.shift(timedelta(days=31))
     background.forget_round()

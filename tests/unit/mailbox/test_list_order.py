@@ -5,11 +5,20 @@ from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 
 
+def pk_of(item):
+    """The row a list's row names by its key and folder: the database breaks a tie in time by pk."""
+    c = store.conn()
+    try:
+        return c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=?", (item["key"], item["folder"])).fetchone()["pk"]
+    finally:
+        c.close()
+
+
 def read_in_pages(app, query):
     rows, offset = [], 0
     while True:
         page = app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=2&offset={offset}{query}").json
-        rows += [i["pk"] for i in page["items"]]
+        rows += [pk_of(i) for i in page["items"]]
         offset += 2
         if not page["has_more"]:
             return rows

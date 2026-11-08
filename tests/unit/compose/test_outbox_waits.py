@@ -129,8 +129,7 @@ def test_the_upgrade_reads_what_is_already_queued(data_dir):
 # -- what it still owes once it has gone out --------------------------------------
 
 def reply(app, world):
-    pk = world.pk("ada-inbox-03-newsletter.eml")
-    return app.post("/api/send", new(mode="reply", in_reply_to_pk=pk)).json["outbox_id"]
+    return app.post("/api/send", new(mode="reply", original_key=world.key("ada-inbox-03-newsletter.eml"))).json["outbox_id"]
 
 
 def test_a_reply_whose_answered_mark_failed_gets_it_on_a_later_try(app, world):

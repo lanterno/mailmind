@@ -3,6 +3,7 @@ hand. test_do_plans.py has what a plan does (confirmed once, ten minutes, what i
 a token names, and test_http_cleanup.py the unsubscribe it guards.
 """
 import threading
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -103,7 +104,8 @@ def test_an_id_nearly_right_is_none_and_leaves_the_plan_standing(app, world, ai)
 def test_a_confirm_does_what_the_preview_said_whatever_else_it_names(app, world, ai, verb):
     plan = preview(app, ai)
     more = {"verb": verb, "preset": "tomorrow", "dest": "Trash", "folder": "Trash", "filter": "in:INBOX", "account": w.BEA, "count": 99,
-            "pks": [1, 2, 3], "messages": [[1, "INBOX"]]}
+            "pks": [1, 2, 3], "messages": [[1, "INBOX"]], **world.copy("ada-inbox-05-receipt.eml"),
+            "copies": [world.copy("ada-inbox-05-receipt.eml")], "rows": [world.copy("ada-inbox-05-receipt.eml")]}
     assert app.post("/api/ai/do-confirm", {"plan": plan["plan"], **more}).json["count"] == plan["count"]
     assert folders_of(world, LUNCH_END) == ["Archive"]
     assert folders_of(world, "ada-inbox-05-receipt.eml") == ["INBOX"]
@@ -146,10 +148,15 @@ def issue(app, world):
     mid = "<issue-219@loom.example.test>"
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, Date="Mon, 02 Nov 2026 07:00:00 +0000",
                                               List_Unsubscribe_Post="List-Unsubscribe=One-Click", Subject="Issue 219"), (w.SEEN,))
+    assert opened(app, mid).status == 200
+
+
+def opened(app, message_id):
+    """Open the message `message_id` names in the reader, which stores its body."""
     c = store.conn()
-    pk = c.execute("SELECT pk FROM messages WHERE message_id=?", (mid,)).fetchone()["pk"]
+    r = c.execute("SELECT message_key, folder FROM messages WHERE message_id=?", (message_id,)).fetchone()
     c.close()
-    assert app.get(f"/api/message/{pk}/body").status == 200
+    return app.get(f"/api/message/body?{urllib.parse.urlencode({'key': r['message_key'], 'folder': r['folder']})}")
 
 
 def execute(app, token, addr=LOOM, **more):
@@ -197,10 +204,7 @@ def test_a_token_goes_no_further_than_its_sender_on_the_same_list(app, world, is
     way_out = app.get(f"/api/cleanup/sender?addr={LOOM}").json["unsub"]
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID="<twin-1@loom.example.test>", Date="Mon, 02 Nov 2026 07:30:00 +0000",
                                               From=f"Loom <{twin}>", List_Unsubscribe_Post="List-Unsubscribe=One-Click", Subject="Twin"), (w.SEEN,))
-    c = store.conn()
-    pk = c.execute("SELECT pk FROM messages WHERE message_id='<twin-1@loom.example.test>'").fetchone()["pk"]
-    c.close()
-    assert app.get(f"/api/message/{pk}/body").status == 200
+    assert opened(app, "<twin-1@loom.example.test>").status == 200
     assert app.get(f"/api/cleanup/sender?addr={twin}").json["unsub"] == way_out      # or this says nothing
     assert execute(app, token, addr=twin)["status"] == "no_token"
     assert posts == []

@@ -107,8 +107,8 @@ def test_a_new_message_with_cc_bcc_and_a_file(send):
 
 
 def test_a_reply_threads_quotes_and_marks_the_original(send):
-    lunch = send.world.row("ada-inbox-02-lunch-confirm.eml")
-    send.post("reply to Lin", "/api/send", {"account": w.ADA, "mode": "reply", "in_reply_to_pk": lunch["pk"],
+    lunch = send.world.key("ada-inbox-02-lunch-confirm.eml")
+    send.post("reply to Lin", "/api/send", {"account": w.ADA, "mode": "reply", "original_key": lunch,
                                             "to": ["lin@example.test"], "subject": "Re: Lunch on Thursday?",
                                             "text": "Great, see you then.", "idempotency_key": "k-reply"})
     send.drain("sent")
@@ -117,8 +117,8 @@ def test_a_reply_threads_quotes_and_marks_the_original(send):
 
 
 def test_reply_all_from_gmail_files_no_sent_copy_of_its_own(send):
-    end = send.world.row("cy-inbox-02-thread-end.eml")
-    send.post("reply all to Mae", "/api/send", {"account": w.CY, "mode": "replyall", "in_reply_to_pk": end["pk"],
+    end = send.world.key("cy-inbox-02-thread-end.eml")
+    send.post("reply all to Mae", "/api/send", {"account": w.CY, "mode": "replyall", "original_key": end,
                                                 "to": ["mae@guild.example.test"], "cc": ["guild@example.test"],
                                                 "subject": "Re: Guild meetup venue", "text": "Perfect, thanks!",
                                                 "idempotency_key": "k-replyall"})
@@ -131,12 +131,12 @@ def test_reply_all_from_gmail_files_no_sent_copy_of_its_own(send):
 
 def test_a_forward_from_proton_carries_the_attachments(send):
     send.post("forward Bea's draft with its PDF", "/api/send", {
-        "account": w.BEA, "mode": "forward", "in_reply_to_pk": send.world.pk("bea-drafts-01-apple-mail.eml"),
+        "account": w.BEA, "mode": "forward", "original_key": send.world.key("bea-drafts-01-apple-mail.eml"),
         "to": ["ivo@harbor.example.test"], "subject": "Fwd: Re: Contract draft v2", "text": "As promised.",
         "idempotency_key": "k-forward"})
     send.drain("sent")
     send.post("forward without the attachments", "/api/send", {
-        "account": w.BEA, "mode": "forward", "in_reply_to_pk": send.world.pk("bea-drafts-01-apple-mail.eml"),
+        "account": w.BEA, "mode": "forward", "original_key": send.world.key("bea-drafts-01-apple-mail.eml"),
         "forward_attachments": False, "to": ["ivo@harbor.example.test"], "subject": "Fwd: notes",
         "text": "Text only.", "idempotency_key": "k-forward-2"})
     send.drain("sent too")
@@ -246,19 +246,19 @@ def test_a_connection_lost_after_data_isnt_sent_again(send):
 # ── refusals ─────────────────────────────────────────────────────────────
 
 def test_send_refusals(send):
-    lunch = send.world.pk("ada-inbox-02-lunch-confirm.eml")
+    lunch = send.world.key("ada-inbox-02-lunch-confirm.eml")
     for label, body in (
         ("an account that isn't configured", new(account="zed@example.test")),
         ("no recipients", new(to=[])),
         ("a recipient that isn't an address", new(to=["lin at example dot test"])),
         ("a header break in the subject", new(subject="Hi\r\nBcc: everyone@example.test")),
         ("a reply with no original", {**new(), "mode": "reply"}),
-        ("a reply to a missing original", {**new(), "mode": "reply", "in_reply_to_pk": 999999}),
+        ("a reply to a missing original", {**new(), "mode": "reply", "original_key": 999999}),
         ("an attachment that isn't base64", new(attachments=[{"filename": "x.bin", "b64": "%%%"}])),
         ("attachments that aren't a list", new(attachments="x")),
         ("too many recipients", new(to=[f"p{i}@example.test" for i in range(101)])),
         ("resume data that isn't an object", {**new(), "resume": "x"}),
-        ("a reply by pk that is fine", {**new(), "mode": "reply", "in_reply_to_pk": lunch, "idempotency_key": "k-ok"}),
+        ("a reply by key that is fine", {**new(), "mode": "reply", "original_key": lunch, "idempotency_key": "k-ok"}),
     ):
         send.post(f"send: {label}", "/api/send", body)
     send.outbox("queued after the refusals")
@@ -287,7 +287,7 @@ def test_save_resave_resume_send_and_delete_drafts(send):
     ingest.sync_folder(accounts.get(w.ADA), "Drafts")      # the Drafts list shows it, as a sync would
     [draft] = rows("SELECT m.pk FROM drafts d JOIN messages m ON m.account=d.account AND m.folder=d.folder "
                    "AND m.uid=d.uid WHERE d.id=?", did)
-    resumed = send.post("reopen it", "/api/draft/resume", {"pk": draft["pk"]}).json
+    resumed = send.post("reopen it", "/api/draft/resume", w.copy_of(draft["pk"])).json
     send.post("save an empty draft", "/api/draft", {"account": w.ADA, "mode": "new"})
     send.post("send it", "/api/send", new(subject="Fabric order (draft)", draft_id=did, text=resumed.get("text", ""),
                                           idempotency_key="k-draft"))
@@ -302,36 +302,36 @@ def test_save_resave_resume_send_and_delete_drafts(send):
 
 def test_reopen_a_draft_another_client_saved(send):
     send.post("reopen Thunderbird's draft", "/api/draft/resume",
-              {"pk": send.world.pk("ada-drafts-02-thunderbird-v2.eml")})
+              send.world.copy("ada-drafts-02-thunderbird-v2.eml"))
     send.post("reopen Apple Mail's draft", "/api/draft/resume",
-              {"pk": send.world.pk("bea-drafts-01-apple-mail.eml")})
+              send.world.copy("bea-drafts-01-apple-mail.eml"))
     send.post("reopen a message that isn't a draft", "/api/draft/resume",
-              {"pk": send.world.pk("ada-inbox-02-lunch-confirm.eml")})
+              send.world.copy("ada-inbox-02-lunch-confirm.eml"))
     send.post("reopen nothing", "/api/draft/resume", {})
 
 
 # ── calendar replies ─────────────────────────────────────────────────────
 
 def test_rsvp_to_an_invite(send):
-    pk = send.world.pk("ada-inbox-06-outlook-invite.eml")
-    send.post("accept the design review", "/api/invite/rsvp", {"pk": pk, "decision": "accept"})
+    invite = send.world.copy("ada-inbox-06-outlook-invite.eml")
+    send.post("accept the design review", "/api/invite/rsvp", {**invite, "decision": "accept"})
     send.drain("sent")
-    send.post("an unknown decision", "/api/invite/rsvp", {"pk": pk, "decision": "maybe"})
+    send.post("an unknown decision", "/api/invite/rsvp", {**invite, "decision": "maybe"})
     send.post("a message with no invite", "/api/invite/rsvp",
-              {"pk": send.world.pk("ada-inbox-02-lunch-confirm.eml"), "decision": "accept"})
+              {**send.world.copy("ada-inbox-02-lunch-confirm.eml"), "decision": "accept"})
     send.post("no message", "/api/invite/rsvp", {"decision": "accept"})
 
 
 def test_a_double_submitted_rsvp_queues_once(app, world):
-    pk = world.pk("ada-inbox-06-outlook-invite.eml")
-    a = app.post("/api/invite/rsvp", {"pk": pk, "decision": "accept"}).json
-    b = app.post("/api/invite/rsvp", {"pk": pk, "decision": "accept"}).json
+    invite = world.copy("ada-inbox-06-outlook-invite.eml")
+    a = app.post("/api/invite/rsvp", {**invite, "decision": "accept"}).json
+    b = app.post("/api/invite/rsvp", {**invite, "decision": "accept"}).json
     assert (a["outbox_id"], b["queued"]) == (b["outbox_id"], False)
 
 
 def test_a_changed_mind_about_an_invite_sends_each_answer(app, world):
-    pk = world.pk("ada-inbox-06-outlook-invite.eml")
-    ids = [app.post("/api/invite/rsvp", {"pk": pk, "decision": d}).json["outbox_id"]
+    invite = world.copy("ada-inbox-06-outlook-invite.eml")
+    ids = [app.post("/api/invite/rsvp", {**invite, "decision": d}).json["outbox_id"]
            for d in ("accept", "decline", "accept", "accept")]
     assert len(set(ids[:3])) == 3 and ids[3] == ids[2]
 

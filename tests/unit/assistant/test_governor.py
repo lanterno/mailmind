@@ -276,8 +276,8 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
 
 
 @pytest.mark.parametrize("path, body", [
-    ("/api/ai/summarize", {"pk": LUNCH}),
-    ("/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}),
+    ("/api/ai/summarize", {"key": LUNCH}),
+    ("/api/ai/draft-reply", {"key": LUNCH, "tone": "warm"}),
     ("/api/ai/rewrite", REWRITE),
     ("/api/ai/ask", {"question": "When is lunch with Lin?"}),
     ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
@@ -289,8 +289,8 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
 def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, path, body):
     from mailmind.bootstrap.mailbox import store
     lunch = world.pk(LUNCH)
-    if body.get("pk") == LUNCH:
-        body = {**body, "pk": lunch}
+    if body.get("key") == LUNCH:
+        body = {**body, **world.copy(LUNCH)}
     c = store.conn()
     try:                                               # triaged, so the brief has something to say
         answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",

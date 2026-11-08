@@ -11,8 +11,8 @@ RECEIPT = "ada-inbox-05-receipt.eml"
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 
-def inbox_pks(app):
-    return {i["pk"] for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]}
+def inbox_copies(app):
+    return [{"key": i["key"], "folder": i["folder"]} for i in app.get(f"/api/messages?account={w.ADA}&folder=INBOX&limit=100").json["items"]]
 
 
 def tray(app):
@@ -21,7 +21,7 @@ def tray(app):
 
 def queue_archive(app, world, name=RECEIPT, group=None):
     world.server.drop("SELECT", user=w.ADA)
-    body = {"pk": world.pk(name), "mutation_id": f"m-{name}"}
+    body = {**world.copy(name), "mutation_id": f"m-{name}"}
     if group:
         body["undo_group"] = group
     assert app.post("/api/archive", body).json["status"] == "queued"
@@ -35,7 +35,7 @@ def test_a_move_says_where_it_is_going(app, world):
 
 def queue_star(app, world, name=RECEIPT):
     world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/flag", {"pk": world.pk(name), "flag": "flagged", "on": True}).json["status"] == "queued"
+    assert app.post("/api/flag", {**world.copy(name), "flag": "flagged", "on": True}).json["status"] == "queued"
     return tray(app)["items"][0]["id"]
 
 
@@ -86,18 +86,18 @@ def test_a_change_the_server_refused_stays_in_the_tray_as_stuck(app, world):
     got = tray(app)
     assert (got["waiting"], got["stuck"]) == (0, 1)
     assert (got["items"][0]["id"], got["items"][0]["state"], got["items"][0]["error"]) == (mid, "error", "refused")
-    assert world.pk(RECEIPT) in inbox_pks(app)
+    assert world.copy(RECEIPT) in inbox_copies(app)
 
 
 def test_retry_takes_the_message_out_of_the_lists_again_and_the_move_lands(app, world):
     from mailmind.bootstrap.mailbox import commands
-    pk = world.pk(RECEIPT)
+    copy = world.copy(RECEIPT)
     mid = queue_archive(app, world)
     refused(world, "UID MOVE", "UID COPY")
     commands.drain()
-    assert pk in inbox_pks(app)
+    assert copy in inbox_copies(app)
     assert app.post("/api/pending/retry", {"id": mid}).json == {"ok": True}
-    assert pk not in inbox_pks(app)
+    assert copy not in inbox_copies(app)
     assert tray(app)["waiting"] == 1
     commands.drain()
     assert tray(app)["items"] == []
@@ -132,12 +132,12 @@ def test_retry_answers_404_for_what_isnt_stuck(app, world):
 
 def test_discard_lists_a_queued_move_again_and_it_never_reaches_the_server(app, world):
     from mailmind.bootstrap.mailbox import commands
-    pk = world.pk(RECEIPT)
+    copy = world.copy(RECEIPT)
     mid = queue_archive(app, world)
     uid = world.uid(RECEIPT)
-    assert pk not in inbox_pks(app)
+    assert copy not in inbox_copies(app)
     assert app.post("/api/pending/discard", {"id": mid}).json == {"ok": True}
-    assert pk in inbox_pks(app)
+    assert copy in inbox_copies(app)
     assert tray(app)["items"] == []
     commands.drain()
     assert uid in world.server.mailbox(w.ADA, "INBOX").messages

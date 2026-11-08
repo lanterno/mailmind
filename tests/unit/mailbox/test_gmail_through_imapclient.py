@@ -52,7 +52,7 @@ def test_archive_takes_only_the_inbox_label_off(app, world):
     uid, subject = world.uid(UNRELATED), world.row(UNRELATED)["subject"]
     assert boxes(world, UNRELATED) == ["INBOX", ALL_MAIL]
     mark = world.mark()
-    r = app.post("/api/archive", {"pk": world.pk(UNRELATED)}).json
+    r = app.post("/api/archive", world.copy(UNRELATED)).json
     assert r["ok"]
     assert world.writes(mark) == [f"{w.CY} [INBOX] UID STORE {uid} -X-GM-LABELS (\\Inbox)"]
     assert boxes(world, UNRELATED) == [ALL_MAIL]
@@ -61,7 +61,7 @@ def test_archive_takes_only_the_inbox_label_off(app, world):
 
 def test_undo_of_an_archive_puts_the_label_back(app, world):
     subject = world.row(UNRELATED)["subject"]
-    app.post("/api/archive", {"pk": world.pk(UNRELATED)})
+    app.post("/api/archive", world.copy(UNRELATED))
     mark = world.mark()
     r = app.post("/api/undo", {}).json
     assert (r["ok"], r["label"], r["remaining"]) == (True, "Archived", 0)
@@ -72,7 +72,7 @@ def test_undo_of_an_archive_puts_the_label_back(app, world):
 
 
 def test_a_conversation_archived_together_comes_back_together(app, world):
-    r = app.post("/api/thread/archive", {"pk": world.pk(THREAD_END), "undo_group": "the-venue-thread"}).json
+    r = app.post("/api/thread/archive", {**world.copy(THREAD_END), "undo_group": "the-venue-thread"}).json
     assert r["ok"]
     assert boxes(world, THREAD_END) == [ALL_MAIL]
     assert app.post("/api/undo", {}).json["ok"]

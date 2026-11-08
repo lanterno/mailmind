@@ -386,9 +386,10 @@ def test_a_write_refused_read_only_says_what_was_refused(app, monkeypatch, capsy
     ("/api/send", lambda: compose.sending, "send", "[send] error: RuntimeError"),
     ("/api/draft/resume", lambda: compose.drafts, "resume", "[resume] error: RuntimeError"),
 ])
-def test_a_route_that_answers_its_own_failure_says_only_its_class(app, monkeypatch, capsys, path, holder, name, said):
+def test_a_route_that_answers_its_own_failure_says_only_its_class(app, world, monkeypatch, capsys, path, holder, name, said):
     monkeypatch.setattr(holder(), name, raises())
-    assert app.post(path, {}).status == 500
+    asked = {"key": world.key("ada-inbox-06-outlook-invite.eml")} if path == "/api/invite/rsvp" else {}    # an RSVP names its invite
+    assert app.post(path, asked).status == 500
     out = capsys.readouterr().out
     assert said + "\n" in out
     assert "example.test" not in out and "Lunch" not in out

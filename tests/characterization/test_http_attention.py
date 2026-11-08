@@ -1,5 +1,5 @@
 """Every list the page draws from says what a message's verdict asks of you, and the review's
-waiting list names the row a thread has now."""
+waiting list names the copy a thread has now."""
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
@@ -55,19 +55,19 @@ def rows(app, world, route):
 ])
 def test_each_list_says_what_the_verdict_asks(app, world, route, importance, category, action, expected):
     verdict(world, RECEIPT, importance, category, action)
-    pk = world.pk(RECEIPT)
+    key = world.key(RECEIPT)
     if route == "snoozed":
-        assert app.post("/api/snooze", {"pk": pk, "until": in_a_day()}).json["ok"]
-    [item] = [i for i in rows(app, world, route) if i["pk"] == pk]
+        assert app.post("/api/snooze", {**world.copy(RECEIPT), "until": in_a_day()}).json["ok"]
+    [item] = [i for i in rows(app, world, route) if i["key"] == key]
     assert verdicts(item) == expected
 
 
 @pytest.mark.parametrize("route", ["folder", "search", "snoozed"])
 def test_a_message_with_no_verdict_asks_nothing(app, world, route):
-    pk = world.pk(RECEIPT)
+    key = world.key(RECEIPT)
     if route == "snoozed":
-        assert app.post("/api/snooze", {"pk": pk, "until": in_a_day()}).json["ok"]
-    [item] = [i for i in rows(app, world, route) if i["pk"] == pk]
+        assert app.post("/api/snooze", {**world.copy(RECEIPT), "until": in_a_day()}).json["ok"]
+    [item] = [i for i in rows(app, world, route) if i["key"] == key]
     assert verdicts(item) == (False, False, False, False)
 
 
@@ -88,8 +88,10 @@ def test_the_reviews_waiting_list_names_the_row_the_thread_has_now(app, world):
     try:
         _, _, waiting = assistant.reviews._aggregate(c, {w.ADA}, 0)
         [item] = [i for i in waiting if i["thread_id"] == lunch["thread_id"]]
-        newest = c.execute("SELECT pk FROM messages WHERE account=? AND thread_id=? ORDER BY ts DESC, pk DESC LIMIT 1",
-                           (w.ADA, lunch["thread_id"])).fetchone()["pk"]
+        newest = c.execute("SELECT pk, message_key, folder FROM messages WHERE account=? AND thread_id=?"
+                           " ORDER BY ts DESC, pk DESC LIMIT 1", (w.ADA, lunch["thread_id"])).fetchone()
     finally:
         c.close()
-    assert item["pk"] == newest and item["pk"] != lunch["pk"]
+    assert newest["pk"] != lunch["pk"]                  # the renumber gave the thread's row another pk
+    assert (item["key"], item["folder"]) == (newest["message_key"], newest["folder"])
+    assert "pk" not in item

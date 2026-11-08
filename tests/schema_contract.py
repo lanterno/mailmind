@@ -76,9 +76,14 @@ class _Reads(dict):
     def __init__(self, given, model):
         super().__init__(given)
         self._model = model
+        self._put = set()
+
+    def __setitem__(self, name, value):
+        self._put.add(name)                 # what the route put in itself, such as the pk a key and folder name now
+        super().__setitem__(name, value)
 
     def _note(self, name):
-        if name not in self._model.model_fields:
+        if name not in self._model.model_fields and name not in self._put:
             violations.append(f"its use case read {name!r}, which {self._model.__name__} doesn't declare, so the client's goes nowhere")
 
     def get(self, name, default=None):

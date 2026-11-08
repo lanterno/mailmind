@@ -139,7 +139,7 @@ def test_every_folder_counts(app, world):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap import accounts
     addr = sender(world, RECEIPT)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     ingest.sync_folder(accounts.get(w.ADA), "Archive")
     rule(app, addr, "block")
     assert stored(world, RECEIPT, "Archive")["is_junk"] == 1

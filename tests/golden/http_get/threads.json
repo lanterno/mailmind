@@ -13,7 +13,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 1,
-     "pk": 1,
      "seen": true,
      "snippet": "Hi Ada,\n\nAre you free for lunch on Thursday? The noodle place by the station reopened.\n\nLin",
      "subject": "Lunch on Thursday?",
@@ -28,7 +27,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 13,
-     "pk": 13,
      "seen": true,
      "snippet": "",
      "subject": "Re: Lunch on Thursday?",
@@ -43,7 +41,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 2,
-     "pk": 2,
      "seen": false,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?",
@@ -52,7 +49,6 @@
    ],
    "ok": true,
    "reply_key": 2,
-   "reply_pk": 2,
    "thread_id": "rf:ada@example.test:f55e4e75612a3def"
   },
   "headers": {
@@ -82,7 +78,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 22,
-     "pk": 22,
      "seen": true,
      "snippet": "Shall we book the library hall again?",
      "subject": "Guild meetup venue",
@@ -97,7 +92,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 25,
-     "pk": 25,
      "seen": true,
      "snippet": "",
      "subject": "Re: Guild meetup venue",
@@ -112,7 +106,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 23,
-     "pk": 23,
      "seen": false,
      "snippet": "Booked for the 14th.",
      "subject": "Re: Guild meetup venue",
@@ -121,7 +114,6 @@
    ],
    "ok": true,
    "reply_key": 23,
-   "reply_pk": 23,
    "thread_id": "gm:cy@example.test:1800000000000000001"
   },
   "headers": {
@@ -151,7 +143,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 18,
-     "pk": 18,
      "seen": false,
      "snippet": "Bea, the second draft is ready for your comments.",
      "subject": "Contract draft v2",
@@ -166,7 +157,6 @@
      "has_attach": false,
      "is_junk": false,
      "key": 21,
-     "pk": 21,
      "seen": true,
      "snippet": "",
      "subject": "Re: Contract draft v2",
@@ -175,7 +165,6 @@
    ],
    "ok": true,
    "reply_key": 21,
-   "reply_pk": 21,
    "thread_id": "rf:bea@example.test:1f7815dd634a2ba6"
   },
   "headers": {
@@ -198,7 +187,6 @@
    "items": [],
    "ok": true,
    "reply_key": null,
-   "reply_pk": null,
    "thread_id": "no-such-thread"
   },
   "headers": {

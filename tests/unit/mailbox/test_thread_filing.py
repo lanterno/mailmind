@@ -43,11 +43,15 @@ def refuse_moves(world, *names):
     world.server.fail("UID COPY", user=w.ADA, times=None, when=when)
 
 
+def in_order(copies):
+    return sorted(copies, key=lambda c: (c["key"], c["folder"]))
+
+
 def test_files_every_message_of_the_thread_in_the_anchors_folder(app, world):
-    pks = sorted([world.pk(LUNCH), world.pk(CONFIRM)])
+    copies = in_order([world.copy(LUNCH), world.copy(CONFIRM)])
     set_thread(world, CLIENT, world.row(LUNCH)["thread_id"])   # the same id on another account: not this one
-    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
-    assert (r["ok"], r["count"], r["failed"], sorted(r["pks"])) == (True, 2, 0, pks)
+    r = app.post("/api/thread/archive", world.copy(CONFIRM)).json
+    assert (r["ok"], r["count"], r["failed"], in_order(r["filed"])) == (True, 2, 0, copies)
     assert boxes(world, LUNCH) == ["Archive"] and boxes(world, CONFIRM) == ["Archive"]
     assert boxes(world, REPLY) == ["Sent"]                     # your reply lives in Sent: not this row's
     assert boxes(world, RECEIPT) == ["INBOX"]                  # a different conversation
@@ -55,28 +59,28 @@ def test_files_every_message_of_the_thread_in_the_anchors_folder(app, world):
 
 
 def test_any_message_can_anchor_the_conversation(app, world):
-    pks = sorted([world.pk(LUNCH), world.pk(CONFIRM)])
-    r = app.post("/api/thread/trash", {"pk": world.pk(LUNCH)}).json
-    assert sorted(r["pks"]) == pks
+    copies = in_order([world.copy(LUNCH), world.copy(CONFIRM)])
+    r = app.post("/api/thread/trash", world.copy(LUNCH)).json
+    assert in_order(r["filed"]) == copies
 
 
 def test_a_message_without_a_thread_is_a_conversation_of_one(app, world):
     set_thread(world, RECEIPT, None)
     set_thread(world, CI, "")
-    pk = world.pk(RECEIPT)
-    r = app.post("/api/thread/archive", {"pk": pk}).json
-    assert (r["pks"], r["count"]) == ([pk], 1)
+    copy = world.copy(RECEIPT)
+    r = app.post("/api/thread/archive", copy).json
+    assert (r["filed"], r["count"]) == ([copy], 1)
     assert boxes(world, RECEIPT) == ["Archive"] and boxes(world, CI) == ["INBOX"]
 
 
 def test_the_trash_route_uses_trash(app, world):
-    r = app.post("/api/thread/trash", {"pk": world.pk(CONFIRM)}).json
+    r = app.post("/api/thread/trash", world.copy(CONFIRM)).json
     assert r["ok"] and boxes(world, LUNCH) == ["Trash"] and boxes(world, CONFIRM) == ["Trash"]
     assert stack()[-1]["label"] == "Trashed"
 
 
 def test_one_undo_entry_for_the_whole_conversation(app, world):
-    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
+    r = app.post("/api/thread/archive", world.copy(CONFIRM)).json
     [entry] = stack()
     assert r["undoable"] and entry["kind"] == "bulk" and len(entry["children"]) == 2
     assert app.post("/api/undo", {}).json["ok"]
@@ -84,24 +88,24 @@ def test_one_undo_entry_for_the_whole_conversation(app, world):
 
 
 def test_a_bulk_selection_shares_the_callers_undo_group(app, world):
-    app.post("/api/thread/archive", {"pk": world.pk(CONFIRM), "undo_group": "g-1"})
-    app.post("/api/thread/archive", {"pk": world.pk(RECEIPT), "undo_group": "g-1"})
+    app.post("/api/thread/archive", {**world.copy(CONFIRM), "undo_group": "g-1"})
+    app.post("/api/thread/archive", {**world.copy(RECEIPT), "undo_group": "g-1"})
     [entry] = stack()
     assert len(entry["children"]) == 3
 
 
 def test_a_partial_failure_reports_what_was_filed(app, world):
     refuse_moves(world, LUNCH)
-    confirm = world.pk(CONFIRM)
-    r = app.post("/api/thread/archive", {"pk": confirm}).json
-    assert (r["ok"], r["count"], r["failed"], r["pks"]) == (True, 1, 1, [confirm])
+    confirm = world.copy(CONFIRM)
+    r = app.post("/api/thread/archive", confirm).json
+    assert (r["ok"], r["count"], r["failed"], r["filed"]) == (True, 1, 1, [confirm])
     assert boxes(world, LUNCH) == ["INBOX"] and boxes(world, CONFIRM) == ["Archive"]
     assert world.row(LUNCH)["folder"] == "INBOX"
 
 
 def test_a_total_failure_is_the_first_refusal_and_leaves_nothing_to_undo(app, world):
     refuse_moves(world)
-    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)})
+    r = app.post("/api/thread/archive", world.copy(CONFIRM))
     assert (r.status, r.json) == (409, problems.conflict("the server refused the archive"))
     assert boxes(world, LUNCH) == ["INBOX"] and world.row(LUNCH)["folder"] == "INBOX"
     assert stack() == []
@@ -110,7 +114,7 @@ def test_a_total_failure_is_the_first_refusal_and_leaves_nothing_to_undo(app, wo
 def test_an_unreachable_server_queues_each_message(app, world):
     from mailmind.bootstrap.mailbox import store
     world.server.drop("SELECT", user=w.ADA, times=None)
-    r = app.post("/api/thread/trash", {"pk": world.pk(CONFIRM)}).json
+    r = app.post("/api/thread/trash", world.copy(CONFIRM)).json
     assert (r["ok"], r["count"], r["queued"]) == (True, 2, 2)
     c = store.conn()
     queued = c.execute("SELECT COUNT(*) FROM mail_commands WHERE kind='trash' AND applied=0").fetchone()[0]
@@ -120,9 +124,9 @@ def test_an_unreachable_server_queues_each_message(app, world):
 
 
 def test_a_missing_or_bad_anchor(app):
-    assert app.post("/api/thread/archive", {"pk": 999}).json == problems.not_found("not found")
-    assert app.post("/api/thread/archive", {"pk": "x"}).json["detail"] == "bad request"
-    assert app.post("/api/thread/archive", {}).json == problems.refused("bad pk")
+    assert app.post("/api/thread/archive", {"key": 999999, "folder": "INBOX"}).json == problems.not_found("not found")
+    assert app.post("/api/thread/archive", {"key": "x", "folder": "INBOX"}).json["detail"] == "bad request"
+    assert app.post("/api/thread/archive", {}).json == problems.BAD_REQUEST          # a key and folder are the schema's to require
 
 
 # -- one transaction accepts them all, and each is tried by itself ------------
@@ -165,7 +169,7 @@ def test_the_whole_conversation_leaves_the_lists_before_the_first_try(app, world
         listed.append([world.where(n)["db"] for n in (LUNCH, CONFIRM)])
         return real(row, first_try)
     monkeypatch.setattr(server_ops, "apply", looks)
-    assert app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json["count"] == 2
+    assert app.post("/api/thread/archive", world.copy(CONFIRM)).json["count"] == 2
     assert listed[0] == [[], []]
 
 
@@ -225,7 +229,7 @@ def test_a_try_that_raises_leaves_it_queued_and_the_rest_still_go(world, monkeyp
 
 def test_a_refusal_gives_back_only_its_own_message(app, world):
     refuse_moves(world, LUNCH)
-    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
+    r = app.post("/api/thread/archive", world.copy(CONFIRM)).json
     assert (r["count"], r["failed"]) == (1, 1)
     assert hidden() == [] and world.where(LUNCH)["db"] and world.where(CONFIRM)["db"] == []
     assert [x["message_id"] for x in commands()] == [w.message_id(CONFIRM)]
@@ -239,7 +243,7 @@ def test_a_refusal_gives_back_only_its_own_message(app, world):
 def test_an_undo_before_any_try_landed_lists_all_of_it_again(app, world):
     from mailmind.bootstrap.mailbox import commands as path
     world.server.drop("SELECT", user=w.ADA, times=None)
-    assert app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json["queued"] == 2
+    assert app.post("/api/thread/archive", world.copy(CONFIRM)).json["queued"] == 2
     since = world.mark()
     r = app.post("/api/undo", {}).json
     assert (r["ok"], r["reversed"], r["failed"]) == (True, 2, 0)
@@ -251,7 +255,7 @@ def test_an_undo_before_any_try_landed_lists_all_of_it_again(app, world):
 
 def test_a_gmail_conversation_loses_its_inbox_label_and_gets_it_back(app, world):
     start, end = "cy-inbox-01-thread-start.eml", "cy-inbox-02-thread-end.eml"
-    r = app.post("/api/thread/archive", {"pk": world.pk(end)}).json
+    r = app.post("/api/thread/archive", world.copy(end)).json
     assert (r["ok"], r["count"], r["failed"]) == (True, 2, 0)
     assert "INBOX" not in boxes(world, start) and "INBOX" not in boxes(world, end)
     assert "[Gmail]/All Mail" in boxes(world, start) and "[Gmail]/All Mail" in boxes(world, end)
@@ -265,7 +269,7 @@ def test_a_conversations_click_waits_about_as_long_as_for_one_message_and_the_wo
     from mailmind.bootstrap import mailbox
     monkeypatch.setattr(mailbox.commands, "FILE_WAIT", 0)
     since = world.mark()
-    a = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
+    a = app.post("/api/thread/archive", world.copy(CONFIRM)).json
     assert (a["ok"], a["count"], a["failed"]) == (True, 2, 0)
     tried = [name for name in (LUNCH, CONFIRM) if "INBOX" not in boxes(world, name)]
     assert len(tried) == 1 and world.writes(since)

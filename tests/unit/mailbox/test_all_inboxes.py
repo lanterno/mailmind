@@ -38,23 +38,37 @@ def execute(sql, *args):
     c.close()
 
 
+def named(item):
+    """The copy a row of a list names, by its key and folder."""
+    return item["key"], item["folder"]
+
+
+def pk_of(item):
+    """The row a list's row names, for an order the database breaks ties in by pk."""
+    c = store.conn()
+    try:
+        return c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=?", named(item)).fetchone()["pk"]
+    finally:
+        c.close()
+
+
 def test_every_inbox_is_one_list_newest_first_and_each_row_names_its_account(app):
     got = inboxes(app, "?limit=500")
     assert {i["account"] for i in got["items"]} == set(EVERYONE)
     assert [i["ts"] for i in got["items"]] == sorted((i["ts"] for i in got["items"]), reverse=True)
     for email in EVERYONE:
-        assert [i["pk"] for i in got["items"] if i["account"] == email] == [i["pk"] for i in of_account(app, email)]
+        assert [named(i) for i in got["items"] if i["account"] == email] == [named(i) for i in of_account(app, email)]
     assert got["total"] == len(got["items"]) and got["has_more"] is False
 
 
 def test_it_pages_through_all_of_it_each_row_once(app):
-    whole = [i["pk"] for i in inboxes(app, "?limit=500")["items"]]
+    whole = [named(i) for i in inboxes(app, "?limit=500")["items"]]
     assert len(whole) > 6
     pages, offset = [], 0
     while True:
         page = inboxes(app, f"?limit=3&offset={offset}")
         assert page["total"] == len(whole) and page["offset"] == offset
-        pages += [i["pk"] for i in page["items"]]
+        pages += [named(i) for i in page["items"]]
         offset += 3
         if not page["has_more"]:
             break
@@ -66,28 +80,28 @@ def test_grouped_it_holds_each_accounts_conversations(app):
     assert got["grouped"] is True and got["total"] == len(got["items"])
     for email in EVERYONE:
         alone = of_account(app, email, "&group=thread")
-        assert [(i["pk"], i["count"]) for i in got["items"] if i["account"] == email] == [(i["pk"], i["count"]) for i in alone]
+        assert [(named(i), i["count"]) for i in got["items"] if i["account"] == email] == [(named(i), i["count"]) for i in alone]
 
 
 def test_a_thread_id_means_something_only_within_its_account(app):
     before = inboxes(app, "?limit=500&group=thread")
-    one_each = {i["account"]: i["pk"] for i in before["items"]}
-    for pk in one_each.values():
-        execute("UPDATE messages SET thread_id='rf:same' WHERE pk=?", pk)
+    one_each = {i["account"]: named(i) for i in before["items"]}
+    for key, folder in one_each.values():
+        execute("UPDATE messages SET thread_id='rf:same' WHERE message_key=? AND folder=?", key, folder)
     after = inboxes(app, "?limit=500&group=thread")
-    assert {i["pk"] for i in after["items"] if i["thread_id"] == "rf:same"} == set(one_each.values())
+    assert {named(i) for i in after["items"] if i["thread_id"] == "rf:same"} == set(one_each.values())
     assert after["total"] == len(after["items"])
 
 
 def test_it_leaves_out_what_a_folders_list_leaves_out(app, world):
-    gone = {name: world.pk(name) for name in (LUNCH, RECEIPT, NEWSLETTER)}
+    gone = {name: world.copy(name) for name in (LUNCH, RECEIPT, NEWSLETTER)}
     until = int((datetime.now(timezone.utc) + timedelta(hours=6)).timestamp())
-    assert app.post("/api/snooze", {"pk": gone[LUNCH], "until": until}).json["ok"]
-    assert app.post("/api/mute", {"pk": gone[RECEIPT]}).json["ok"]
-    execute("UPDATE messages SET pending_removal=1 WHERE pk=?", gone[NEWSLETTER])
+    assert app.post("/api/snooze", {**gone[LUNCH], "until": until}).json["ok"]
+    assert app.post("/api/mute", gone[RECEIPT]).json["ok"]
+    execute("UPDATE messages SET pending_removal=1 WHERE pk=?", world.pk(NEWSLETTER))
     for query in ("?limit=500", "?limit=500&group=thread"):
         got = inboxes(app, query)
-        assert not {i["pk"] for i in got["items"]} & set(gone.values())
+        assert not {named(i) for i in got["items"]} & {named(copy) for copy in gone.values()}
         assert got["total"] == len(got["items"])
 
 
@@ -136,7 +150,7 @@ def waiting_threads(app):
     newest = {}
     for email in EVERYONE:
         newest[email] = of_account(app, email)[0]
-    return sorted(newest.values(), key=lambda i: (i["ts"], i["pk"]))
+    return sorted(newest.values(), key=lambda i: (i["ts"], pk_of(i)))
 
 
 def test_who_you_wait_on_is_one_list_longest_wait_first(app):
@@ -144,7 +158,7 @@ def test_who_you_wait_on_is_one_list_longest_wait_first(app):
     for i in threads:
         follow_up(i["account"], i["thread_id"], "sent", 1)
     got = app.get("/api/waiting-on-others").json
-    assert [(i["pk"], i["account"], i["kind"]) for i in got["items"]] == [(i["pk"], i["account"], "sent") for i in threads]
+    assert [(named(i), i["account"], i["kind"]) for i in got["items"]] == [(named(i), i["account"], "sent") for i in threads]
 
 
 def test_a_thread_waiting_on_you_or_pinned_isnt_someone_you_wait_on(app):

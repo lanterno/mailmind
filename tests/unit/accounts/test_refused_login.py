@@ -63,7 +63,7 @@ def test_a_move_queues_and_waits_out_the_hold(app, world):
     world.server.fail("LOGIN", REFUSED, user=w.ADA)
     sync()
     name = "ada-inbox-05-receipt.eml"
-    r = app.post("/api/archive", {"pk": world.pk(name), "mutation_id": "m-1"}).json
+    r = app.post("/api/archive", {**world.copy(name), "mutation_id": "m-1"}).json
     assert r["status"] == "queued"
     before = logins(world)
     mailbox.commands.drain()

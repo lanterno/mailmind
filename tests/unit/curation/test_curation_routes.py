@@ -21,8 +21,9 @@ NEWSLETTER = "ada-inbox-03-newsletter.eml"
     ("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": 17}),
     ("/api/cleanup/execute", {"from_addr": LOOM, "undo_group": 5}),
     ("/api/rules", {"token": LOOM, "verdict": 5}),
-    ("/api/rules", {"token": LOOM, "verdict": "block", "pk": "x"}),
-    ("/api/rules", {"token": LOOM, "verdict": "block", "pk": [1]}),
+    ("/api/rules", {"token": LOOM, "verdict": "block", "key": "x"}),
+    ("/api/rules", {"token": LOOM, "verdict": "block", "key": [1]}),
+    ("/api/rules", {"token": LOOM, "verdict": "block", "key": 1, "folder": 5}),
 ])
 def test_a_value_its_model_refuses_is_the_400_and_nothing_is_decided(app, world, path, body):
     before, where = rules.load(), world.where(NEWSLETTER)

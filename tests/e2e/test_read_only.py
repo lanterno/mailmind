@@ -118,16 +118,16 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
     since = world.mark()
     for path, name, extra in (("/api/archive", RECEIPT, {}), ("/api/trash", SCAM, {}),
                               ("/api/junk", NEWSLETTER, {}), ("/api/archive", CI, {})):
-        r = app.post(path, {"pk": world.pk(name), "mutation_id": f"m-{name}", **extra}).json
+        r = app.post(path, {**world.copy(name), "mutation_id": f"m-{name}", **extra}).json
         assert (r["ok"], r["status"]) == (True, "queued"), (path, r)
-    assert app.post("/api/thread/archive", {"pk": world.pk(LUNCH_CONFIRM)}).json["ok"]
+    assert app.post("/api/thread/archive", world.copy(LUNCH_CONFIRM)).json["ok"]
     commands.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
     assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"queued"}
     assert q("SELECT max(attempts) n FROM mail_commands") == [{"n": 0}]
     assert on_server(world, RECEIPT) == [(w.ADA, "INBOX")]
-    listed = {m["pk"] for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]}
-    assert not listed & {world.pk(n) for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM)}
+    listed = [{"key": m["key"], "folder": m["folder"]} for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]]
+    assert not [n for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM) if world.copy(n) in listed]
 
     read_only.end()
     commands.drain()
@@ -141,7 +141,7 @@ def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_
 
 def test_undo_takes_a_waiting_move_back_without_a_write(app, world, read_only):
     since = world.mark()
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["status"] == "queued"
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["status"] == "queued"
     assert app.post("/api/undo", {}).json["ok"]
     assert q("SELECT id FROM mail_commands") == []
     assert world.writes(since) == []
@@ -166,7 +166,7 @@ def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world
     from mailmind.bootstrap.mailbox import commands
     since = world.mark()
     for path, body in (("/api/seen", {"seen": True}), ("/api/flag", {"flag": "flagged", "on": True})):
-        r = app.post(path, {"pk": world.pk(RECEIPT), **body})
+        r = app.post(path, {**world.copy(RECEIPT), **body})
         assert (r.status, r.json["status"]) == (200, "queued"), path
     commands.drain()                                                   # a read-only drain does nothing
     assert world.writes(since) == []
@@ -224,8 +224,8 @@ def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, wor
     mid = "<issue-219@loom.example.test>"                             # one-click, filed where the sweep can't reach
     world.deliver(w.ADA, "Archive", w.variant(NEWSLETTER, Message_ID=mid, List_Unsubscribe_Post="List-Unsubscribe=One-Click",
                                               Date="Mon, 02 Nov 2026 07:00:00 +0000"), (w.SEEN,))
-    [archived] = q("SELECT pk FROM messages WHERE message_id=?", mid)
-    assert app.get(f"/api/message/{archived['pk']}/body").status == 200
+    [archived] = q("SELECT message_key, folder FROM messages WHERE message_id=?", mid)
+    assert app.get("/api/message/body?key={message_key}&folder={folder}".format(**archived)).status == 200
     plan = app.get(f"/api/cleanup/sender?addr={LOOM}").json
     assert plan["unsub"]["method"] == "one-click"
     since = world.mark()

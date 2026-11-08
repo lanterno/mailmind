@@ -20,7 +20,7 @@ def until(app, hours=6):
 
 
 def snooze(app, world, name=RECEIPT, hours=6):
-    assert app.post("/api/snooze", {"pk": world.pk(name), "until": until(app, hours)}).json["ok"]
+    assert app.post("/api/snooze", {**world.copy(name), "until": until(app, hours)}).json["ok"]
 
 
 def listed(app, folder="INBOX"):
@@ -70,7 +70,7 @@ def test_the_sql_wakes_what_the_domain_calls_due(app, world):
 
 
 def test_a_time_too_large_to_be_a_number_is_refused_like_any_other_bad_time(app, world):
-    r = app.post("/api/snooze", {"pk": world.pk(RECEIPT), "until": float("inf")})
+    r = app.post("/api/snooze", {**world.copy(RECEIPT), "until": float("inf")})
     assert (r.status, r.json["type"]) == (400, "/problems/refused")
     assert world.row(RECEIPT)["subject"] in listed(app)
 
@@ -110,7 +110,7 @@ def test_undo_from_a_stack_written_before_the_rows_were_named(app, world):
 
 def test_unsnoozing_ends_it_for_good(app, world):
     snooze(app, world)
-    assert app.post("/api/unsnooze", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/unsnooze", world.copy(RECEIPT)).json["ok"]
     renumber(world)
     assert copy(world)["snooze_until"] is None
 
@@ -119,7 +119,7 @@ def test_a_snoozed_message_filed_elsewhere_isnt_hidden_there(app, world):
     from mailmind.bootstrap.mailbox import ingest
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     ingest.sync_folder(acct(), "Archive")
     assert copy(world, folder="Archive")["snooze_until"] is None
     assert subject in listed(app, "Archive")
@@ -129,7 +129,7 @@ def test_undo_of_filing_it_brings_the_snooze_back_if_it_hasnt_come_due(app, worl
     from mailmind.bootstrap.mailbox import ingest
     subject = world.row(RECEIPT)["subject"]
     snooze(app, world)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     ingest.sync_new(acct())
     assert copy(world)["snooze_until"] is not None and subject not in listed(app)
@@ -139,7 +139,7 @@ def test_one_that_comes_due_while_the_message_is_filed_elsewhere_is_over(app, wo
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
     snooze(app, world)
-    assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
     app.clock.shift(timedelta(hours=7))
     attention.snoozing.wake_due()
     c = store.conn()

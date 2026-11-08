@@ -22,7 +22,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
 VENUE_END = "cy-inbox-02-thread-end.eml"        # Mae's last word in the venue thread
 REWRITE = {"op": "shorten", "text": "see you thursday"}
 # Every route that spends, with what it takes to get as far as a call.
-SPENDS = [("/api/ai/summarize", {"pk": LUNCH}), ("/api/ai/draft-reply", {"pk": LUNCH, "tone": "warm"}), ("/api/ai/rewrite", REWRITE),
+SPENDS = [("/api/ai/summarize", {"key": LUNCH}), ("/api/ai/draft-reply", {"key": LUNCH, "tone": "warm"}), ("/api/ai/rewrite", REWRITE),
           ("/api/ai/ask", {"question": "When is lunch with Lin?"}), ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
           ("/api/briefing", {}), ("/api/briefing/refresh", {}), ("/api/briefing/since", {"since": 0}), ("/api/review", {}),
           ("/api/review/refresh", {})]
@@ -45,9 +45,8 @@ def triaged(pk):
 
 def ready_to_call(world, body):
     """`body`, naming a real message, with one triaged, so a brief, a delta and a review all have something to call about."""
-    lunch = world.pk(LUNCH)
-    triaged(lunch)
-    return {**body, "pk": lunch} if body.get("pk") == LUNCH else body
+    triaged(world.pk(LUNCH))
+    return {**body, **world.copy(LUNCH)} if body.get("key") == LUNCH else body
 
 
 def spend(micros):
@@ -148,32 +147,38 @@ def test_drafting_ahead_has_no_post(app, ai):
 
 @pytest.mark.parametrize("headers", [{"X-CSRF-Token": None}, {"X-CSRF-Token": "wrong"}, {"X-CSRF-Token": ""}])
 def test_only_the_pages_token_starts_a_draft_ahead(app, world, ai, headers):
-    pk = world.pk(VENUE_END)
-    triaged(pk)
-    r = app.get(f"/api/ai/draft-ahead?pk={pk}", headers=headers)
+    triaged(world.pk(VENUE_END))
+    key = world.key(VENUE_END)
+    r = app.get(f"/api/ai/draft-ahead?key={key}", headers=headers)
     assert (r.status, r.json) == (200, {"ok": True, "status": "none"})
     app.settle()
     assert ai.requests == []
-    assert app.get(f"/api/ai/draft-ahead?pk={pk}&peek=1").json == {"ok": True, "status": "none"}
+    assert app.get(f"/api/ai/draft-ahead?key={key}&peek=1").json == {"ok": True, "status": "none"}
     app.settle()
     assert ai.requests == []
-    assert app.get(f"/api/ai/draft-ahead?pk={pk}").json["status"] == "generating"
+    assert app.get(f"/api/ai/draft-ahead?key={key}").json["status"] == "generating"
     app.settle()
     assert len(ai.requests) == 1
-    r = app.get(f"/api/ai/draft-ahead?pk={pk}", headers=headers)
+    r = app.get(f"/api/ai/draft-ahead?key={key}", headers=headers)
     assert (r.json["status"], r.json["body"]) == ("ready", "stub body")
 
 
-@pytest.mark.parametrize("query", ["", "?pk=", "?peek=1", "?pk=999999"])
+@pytest.mark.parametrize("query", ["?key=999999", "?key=999999&peek=1", "?key=999999&folder=INBOX"])
 def test_drafting_ahead_for_no_message(app, query):
     assert app.get("/api/ai/draft-ahead" + query).json == {"ok": True, "status": "none"}
+
+
+@pytest.mark.parametrize("query", ["", "?key=", "?peek=1", "?key=soon"])
+def test_drafting_ahead_names_a_message_or_is_the_400(app, ai, query):
+    r = app.get("/api/ai/draft-ahead" + query)
+    assert (r.status, r.json, ai.requests) == (400, BAD_REQUEST, [])
 
 
 def test_asking_after_a_draft_ahead_counts_as_no_one(app, monkeypatch):
     """A hidden tab asks: that says nothing of anyone being here. Reading the brief does."""
     seen = []
     monkeypatch.setattr(assistant.governor(), "saw_someone", lambda: seen.append(1))
-    assert app.get("/api/ai/draft-ahead").status == 200
+    assert app.get("/api/ai/draft-ahead?key=999999").status == 200
     assert seen == []
     assert app.get("/api/briefing").status == 200
     assert seen == [1]
@@ -183,7 +188,7 @@ def test_asking_after_a_draft_ahead_counts_as_no_one(app, monkeypatch):
 
 def test_a_summary_still_going_is_the_504(app, world, ai, monkeypatch):
     monkeypatch.setattr(assistant.threads._FLIGHTS, "run", lambda *args, **kwargs: None)
-    r = app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)})
+    r = app.post("/api/ai/summarize", world.copy(LUNCH))
     assert (r.status, r.json) == (504, problems.blank(504, "still summarizing"))
 
 
@@ -212,10 +217,10 @@ def test_a_confirm_hands_on_its_undo_group(app, ai, monkeypatch, given, group):
 # ── what the schemas refuse, and what they let by ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path, body", [
-    ("/api/ai/summarize", {"pk": 1, "force": "yes"}),
-    ("/api/ai/summarize", {"pk": 1, "force": 1}),
-    ("/api/ai/draft-reply", {"pk": 1, "tone": 5}),
-    ("/api/ai/draft-reply", {"pk": 1, "instruction": ["x"]}),
+    ("/api/ai/summarize", {"key": 1, "force": "yes"}),
+    ("/api/ai/summarize", {"key": 1, "force": 1}),
+    ("/api/ai/draft-reply", {"key": 1, "tone": 5}),
+    ("/api/ai/draft-reply", {"key": 1, "instruction": ["x"]}),
     ("/api/ai/rewrite", {**REWRITE, "op": 5}),
     ("/api/ai/rewrite", {**REWRITE, "lang": 5}),
     ("/api/ai/rewrite", {**REWRITE, "text": ["x"]}),

@@ -79,7 +79,8 @@ def test_a_confirm_ignores_any_list_a_request_names(app, world, ai):
     other = world.pk("ada-inbox-03-newsletter.eml")
     plan = preview(app, ai, flt=f'{FROM_LIN} subject:quilt')
     assert plan["count"] == 1
-    assert confirm(app, plan, pks=[other], pk=other, verb="trash").json["count"] == 1
+    named = world.copy("ada-inbox-03-newsletter.eml")
+    assert confirm(app, plan, pks=[other], pk=other, copies=[named], **named, verb="trash").json["count"] == 1
     assert folders(world, "ada-inbox-03-newsletter.eml") == ["INBOX"]
     assert folders(world, QUILT) == ["Archive"]             # archived, as planned, not trashed
 
@@ -107,7 +108,7 @@ def test_mail_that_came_after_the_preview_stays(app, world, ai):
 
 def test_a_message_moved_since_the_preview_is_left_where_it_went(app, world, ai):
     plan = preview(app, ai, verb="trash")
-    assert app.post("/api/archive", {"pk": world.pk(QUILT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(QUILT)).json["ok"]
     r = confirm(app, plan).json
     assert (r["count"], r["gone"]) == (plan["count"] - 1, 1)
     assert folders(world, QUILT) == ["Archive"]
@@ -277,7 +278,7 @@ def test_a_message_that_raises_is_counted_and_the_rest_go_on(app, world, ai, mon
 
 def test_a_plan_whose_messages_have_all_gone_files_nothing(app, world, ai):
     plan = preview(app, ai, flt=f"{FROM_LIN} subject:quilt")
-    assert app.post("/api/archive", {"pk": world.pk(QUILT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(QUILT)).json["ok"]
     since = world.mark()
     r = confirm(app, plan).json
     assert (r["ok"], r["count"], r["gone"], r["undoable"]) == (True, 0, 1, False) and world.writes(since) == []
@@ -332,7 +333,7 @@ def test_it_snoozes_until_the_preset_and_undo_brings_them_back(app, world, ai):
 
 def test_a_snooze_plan_with_nothing_left_snoozes_nothing(app, world, ai):
     plan = preview(app, ai, verb="snooze", flt=f"{FROM_LIN} subject:quilt")
-    assert app.post("/api/archive", {"pk": world.pk(QUILT)}).json["ok"]
+    assert app.post("/api/archive", world.copy(QUILT)).json["ok"]
     r = confirm(app, plan).json
     assert (r["count"], r["gone"], r["undoable"]) == (0, 1, False)
 

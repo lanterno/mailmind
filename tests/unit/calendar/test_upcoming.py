@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from fixtures import world as w
 from mailmind.bootstrap import calendar, mailbox
 from mailmind.bootstrap.calendar import ics
 from mailmind.bootstrap.mailbox import ingest, store
@@ -39,11 +40,12 @@ def _msg(cal=None, folder="INBOX", ts=None, account=ACCT, fetched=True, thread_i
     """One message; with `cal`, an invite whose .ics part is stored as fetch_body would store it."""
     uid = next(_uid)
     c = store.conn()
+    key = store.mint_key(c, account, f"<m{uid}@example.test>", "ren@example.test", None, "Invitation")
     cur = c.execute("INSERT INTO messages (account, kind, folder, uid, message_id, thread_id, ts, "
-                    "from_addr, subject, recipients) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    "from_addr, subject, recipients, message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (account, "imap", folder, uid, f"<m{uid}@example.test>",
                      thread_id or f"t{uid}", int((ts or NOW - timedelta(days=1)).timestamp()),
-                     "ren@example.test", "Invitation", to))
+                     "ren@example.test", "Invitation", to, key))
     pk = cur.lastrowid
     if cal is not None and fetched:
         m = EmailMessage()
@@ -65,11 +67,20 @@ def _up(**kw):
     return calendar.agenda.upcoming(now=NOW, **kw)["items"]
 
 
+def _named(item):
+    """The copy a listed item names, as the page names one: its key and folder."""
+    return {"key": item["key"], "folder": item["folder"]}
+
+
+def _copies(items):
+    return [_named(x) for x in items]
+
+
 def test_lists_future_events_soonest_first_with_local_times(data_dir):
     later = _msg(_ics("b", NOW + timedelta(days=2), summary="Hike"))
     soon = _msg(_ics("a", NOW + timedelta(hours=3), NOW + timedelta(hours=3, minutes=30)))
     items = _up()
-    assert [x["pk"] for x in items] == [soon, later], items
+    assert _copies(items) == [w.copy_of(soon), w.copy_of(later)], items
     a = items[0]
     assert a["summary"] == "Studio sync" and a["location"] == "Roof room"
     assert a["start"] == "2026-10-30T15:00" and a["end"] == "2026-10-30T15:30", a
@@ -79,7 +90,7 @@ def test_lists_future_events_soonest_first_with_local_times(data_dir):
 def test_an_event_that_has_ended_drops_out_but_one_in_progress_stays(data_dir):
     _msg(_ics("done", NOW - timedelta(hours=3), NOW - timedelta(hours=2)))
     on = _msg(_ics("now", NOW - timedelta(minutes=30), NOW + timedelta(minutes=30)))
-    assert [x["pk"] for x in _up()] == [on]
+    assert _copies(_up()) == [w.copy_of(on)]
 
 
 def test_utc_times_come_back_as_local_wall_clock(machine_zone, data_dir):
@@ -94,7 +105,7 @@ def test_an_all_day_event_today_stays_until_midnight(data_dir):
     today = NOW.replace(hour=0)
     pk = _msg(_ics("d", today, all_day=True))
     items = _up()
-    assert [x["pk"] for x in items] == [pk] and items[0]["all_day"] is True
+    assert _copies(items) == [w.copy_of(pk)] and items[0]["all_day"] is True
     assert items[0]["end"] == (today + timedelta(days=1)).isoformat(timespec="minutes")
 
 
@@ -102,7 +113,7 @@ def test_an_update_replaces_the_original(data_dir):
     _msg(_ics("u", NOW + timedelta(days=1), summary="Old time"), ts=NOW - timedelta(days=3))
     new = _msg(_ics("u", NOW + timedelta(days=2), summary="New time"), ts=NOW - timedelta(days=1))
     items = _up()
-    assert [(x["pk"], x["summary"]) for x in items] == [(new, "New time")], items
+    assert [(_named(x), x["summary"]) for x in items] == [(w.copy_of(new), "New time")], items
 
 
 def test_a_cancellation_removes_the_event(data_dir):
@@ -131,7 +142,7 @@ def test_a_series_is_listed_at_its_next_occurrence(data_dir):
     items = _up()
     assert [(x["summary"], x["start"]) for x in items] == [
         ("Standup", "2026-10-30T12:00"), ("Yoga", "2026-11-06T12:00")], items   # today's in progress
-    assert items[0]["pk"] == pk and items[0]["recurrence"] == "Every week"
+    assert _named(items[0]) == w.copy_of(pk) and items[0]["recurrence"] == "Every week"
 
 
 def test_moving_or_cancelling_one_occurrence_leaves_the_series(data_dir):
@@ -166,7 +177,7 @@ def test_a_list_past_its_allowance_shows_a_series_at_its_first_date_alone(data_d
     one_off = _msg(_ics("o", NOW + timedelta(days=1)))
     ahead = _msg(_ics("a", NOW + timedelta(days=2)).replace("END:VEVENT", "RRULE:FREQ=WEEKLY\r\nEND:VEVENT"))
     _msg(_ics("b", NOW - timedelta(days=3)).replace("END:VEVENT", "RRULE:FREQ=WEEKLY\r\nEND:VEVENT"))        # would next be in four days
-    assert [x["pk"] for x in _up()] == [one_off, ahead]
+    assert _copies(_up()) == [w.copy_of(one_off), w.copy_of(ahead)]
 
 
 def test_one_message_of_series_that_each_use_up_their_budget_cant_hold_a_list_for_long(data_dir, monkeypatch):
@@ -179,7 +190,7 @@ def test_one_message_of_series_that_each_use_up_their_budget_cant_hold_a_list_fo
     _msg("\r\n".join([*lines, "END:VCALENDAR", ""]))
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
     began = time.thread_time()
-    assert ok in [x["pk"] for x in _up()]
+    assert w.copy_of(ok) in _copies(_up())
     assert time.thread_time() - began < 2
 
 
@@ -201,7 +212,7 @@ def test_every_account_and_a_limit(data_dir):
 def test_a_broken_calendar_part_is_skipped(data_dir):
     _msg("not a calendar at all")
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
-    assert [x["pk"] for x in _up()] == [ok]
+    assert _copies(_up()) == [w.copy_of(ok)]
 
 
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -317,7 +328,7 @@ def test_a_time_at_the_edge_of_a_datetime_costs_only_that_event_its_place(machin
     """In a zone that pushes it past year 1 or 9999, a stranger's invite took the whole list down with it."""
     _msg(_when_said(*times), ts=NOW - timedelta(days=2))
     ok = _msg(_ics("k", NOW + timedelta(days=1)))
-    assert ok in [x["pk"] for x in _up()]
+    assert w.copy_of(ok) in _copies(_up())
 
 
 class _FakeSession:
@@ -348,7 +359,7 @@ def test_ingest_keeps_an_invite_so_it_is_listed_unopened(data_dir):
     c.close()
     assert rows[1]["body_fetched"] == 1 and rows[1]["seen"] == 0, dict(rows[1])
     assert rows[2]["body_fetched"] == 0, "mail without an invite is stored as before"
-    assert [x["pk"] for x in _up()] == [rows[1]["pk"]]
+    assert _copies(_up()) == [w.copy_of(rows[1]["pk"])]
 
 
 def _alt(cal, attach=False):
@@ -375,7 +386,7 @@ def test_an_inline_only_invite_is_recorded_once_and_listed(data_dir):
     ingest._keep_body(c, pk, _alt(cal), mime.parse(_alt(cal)))
     c.commit()
     c.close()
-    assert [(x["pk"], x["summary"]) for x in _up()] == [(pk, "Quarterly review")]
+    assert [(_named(x), x["summary"]) for x in _up()] == [(w.copy_of(pk), "Quarterly review")]
 
 
 def test_waiting_names_who_a_sent_thread_waits_on(data_dir):
@@ -386,4 +397,4 @@ def test_waiting_names_who_a_sent_thread_waits_on(data_dir):
     c.commit()
     c.close()
     items = mailbox.queries.waiting_in(ACCT, 0, 10)["items"]
-    assert [(x["pk"], x["kind"], x["to"]) for x in items] == [(pk, "sent", "Lio Park <lio@example.test>")], items
+    assert [(_named(x), x["kind"], x["to"]) for x in items] == [(w.copy_of(pk), "sent", "Lio Park <lio@example.test>")], items

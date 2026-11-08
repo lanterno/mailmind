@@ -27,7 +27,7 @@ def new(**more):
 
 
 def forward(world, **more):
-    return {"account": w.BEA, "mode": "forward", "in_reply_to_pk": world.pk(WITH_A_PDF), "to": ["ivo@harbor.example.test"], "text": "As promised.",
+    return {"account": w.BEA, "mode": "forward", "original_key": world.key(WITH_A_PDF), "to": ["ivo@harbor.example.test"], "text": "As promised.",
             "autosave": True, **more}
 
 
@@ -51,7 +51,7 @@ def test_a_value_its_model_refuses_is_the_400(app, path):
     for field, junk in (("to", 5), ("to", [1]), ("to", {"a": 1}), ("to", [None]), ("cc", 5), ("bcc", [["x"]]),
                         ("attachments", "x"), ("attachments", 5), ("attachments", {"filename": "x"}),
                         ("resume", "x"), ("resume", [1]), ("resume", 5),
-                        ("in_reply_to_pk", "x"), ("in_reply_to_pk", [1]), ("in_reply_to_pk", 10 ** 30),
+                        ("original_key", "x"), ("original_key", [1]), ("original_key", 10 ** 30),
                         ("forward_attachments", "no"), ("forward_attachments", 0),
                         ("draft_id", [1]), ("idempotency_key", 5)):
         r = app.post(path, new(**{field: junk}))
@@ -243,7 +243,7 @@ def test_a_body_that_never_says_runs_past_its_cap_and_is_the_413(app, path, cap)
 
 def test_only_a_send_and_a_save_get_the_larger_cap(app):
     """Reopening a draft only names it."""
-    status, said = raw(app, "/api/draft/resume", json.dumps({"pk": 1, "padding": "x" * MAX_POST}).encode())
+    status, said = raw(app, "/api/draft/resume", json.dumps({"draft_id": 1, "padding": "x" * MAX_POST}).encode())
     assert (status, json.loads(said)) == (413, problems.blank(413, "payload too large"))
 
 
@@ -281,7 +281,7 @@ def test_what_a_reopening_raises(app, monkeypatch):
                                   (ValueError(SECRET), 500, problems.blank(500, "Couldn’t open this draft.")),
                                   (Locked("held"), 423, problems.locked("held"))):
         monkeypatch.setattr(compose.drafts, "resume", _raises(error))
-        r = app.post("/api/draft/resume", {"pk": 1})
+        r = app.post("/api/draft/resume", {"draft_id": 1})
         assert (r.status, r.json) == (status, answer), error
 
 

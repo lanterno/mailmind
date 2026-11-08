@@ -21,20 +21,23 @@ SECRET = "hunter2-secret-token"
 SEEN = "ada-inbox-05-receipt.eml"
 # What never ends, or isn't an answer about anything: the page and its files, which read no mail.
 NOT_WALKED = {("GET", "/api/events"), ("GET", "/")}
-QUERY = ("?account={account}&folder=INBOX&addr=lin@example.test&q=lunch&thread_id=t&kind=all&format=eml"
+QUERY = ("?account={account}&folder=INBOX&key={key}&part_id=1&addr=lin@example.test&q=lunch&thread_id=t&kind=all&format=eml"
          "&days=7&limit=5")
 
 
-def every_route(pk):
-    return sorted(route_tables.paths(pk) - NOT_WALKED)
+def every_route():
+    return sorted(route_tables.paths() - NOT_WALKED)
 
 
-def body_for(pk, **more):
-    """A body with something for any route to go on, so that as many as can get as far as a server."""
-    return {"pk": pk, "pks": [pk], "account": w.ADA, "email": w.ADA, "folder": "INBOX", "seen": True, "flagged": True,
+def body_for(copy, **more):
+    """A body with something for any route to go on, so that as many as can get as far as a server: `copy` names the message
+    and its copy in INBOX each way a route asks for one."""
+    key = copy["key"]
+    return {"key": key, "copies": [copy], "rows": [copy], "original_key": key, "account": w.ADA, "email": w.ADA, "folder": copy["folder"],
+            "seen": True, "flagged": True,
             "id": 1, "thread_id": "t", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello", "mode": "new", "dry_run": False,
             "token": "lin@example.test", "verdict": "keep", "cmd": "archive what lin sent", "question": "what did lin say",
-            "q": "lunch", "preset": "tomorrow", "from_addr": "lin@example.test", "do_unsubscribe": False, "in_reply_to_pk": pk,
+            "q": "lunch", "preset": "tomorrow", "from_addr": "lin@example.test", "do_unsubscribe": False,
             "tone": "shorter", "instruction": "shorter", "plan": "none", "draft_id": 1, "name": "v", "action": "keep", **more}
 
 
@@ -46,7 +49,7 @@ def holds_it(r, *secrets):
 
 def walk_for_leaks(app, routes, body, secrets):
     leaks = {}
-    query = QUERY.format(account=w.ADA)
+    query = QUERY.format(account=w.ADA, key=body.get("key", 1))
     for method, path in routes:
         r = app.post(path, body) if method == "POST" else app.get(path + query)
         found = holds_it(r, *secrets)
@@ -65,8 +68,7 @@ RAISED = {"RuntimeError": lambda: RuntimeError(SECRET), "KeyError": lambda: KeyE
 
 @pytest.mark.parametrize("what", sorted(RAISED))
 def test_whatever_a_route_raises_its_answer_says_only_that_it_failed(app, monkeypatch, what):
-    pk = 1
-    routes = every_route(pk)
+    routes = every_route()
     assert ("POST", "/api/send") in routes and ("GET", "/api/digest") in routes
     route_tables.raise_on_every_route(monkeypatch, RAISED[what])
     answers = {}
@@ -92,20 +94,19 @@ def test_what_an_imap_server_says_stays_out_of_every_answer(app, world, refuses,
     held back, which would leave all routes but the first with nothing a server said to hold, so here it isn't."""
     from mailmind.bootstrap import accounts
     monkeypatch.setattr(accounts.logins, "held", lambda acct: False)
-    pk = world.pk(SEEN)
+    copy = world.copy(SEEN)
     commands = {"login": ("LOGIN",), "every mailbox command": MAILBOX_COMMANDS, "only a move": ("UID MOVE", "UID COPY")}[refuses]
     for command in commands:
         world.server.fail(command, f"NO [AUTHENTICATIONFAILED] {SECRET}", times=None)
     password = world.server.accounts[w.ADA].password
-    routes = [r for r in every_route(pk) if r not in REPEAT_A_SERVER]
-    first = walk_for_leaks(app, routes, body_for(pk), (SECRET, password))
-    again = walk_for_leaks(app, routes, body_for(pk), (SECRET, password))     # what the first pass left behind, read back
+    routes = [r for r in every_route() if r not in REPEAT_A_SERVER]
+    first = walk_for_leaks(app, routes, body_for(copy), (SECRET, password))
+    again = walk_for_leaks(app, routes, body_for(copy), (SECRET, password))     # what the first pass left behind, read back
     assert {**first, **again} == {}
 
 
 def test_what_an_smtp_server_says_stays_out_of_every_answer(app, world):
     from mailmind.bootstrap.compose import outbox
-    pk = world.pk(SEEN)
     world.smtp.fail("MAIL", f"550 5.7.1 {SECRET}", times=None)
     assert app.post("/api/send", {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello",
                                   "idempotency_key": "k"}).json["ok"]
@@ -113,7 +114,7 @@ def test_what_an_smtp_server_says_stays_out_of_every_answer(app, world):
     outbox.drain()
     assert walk_for_leaks(app, [("GET", "/api/outbox"), ("GET", "/api/pending"), ("GET", "/api/account-health"), ("GET", "/api/stats"),
                                 ("GET", "/api/debug/jobs"), ("GET", "/api/audit")], {}, (SECRET,)) == {}
-    assert walk_for_leaks(app, [("POST", "/api/outbox/retry")], body_for(pk), (SECRET,)) == {}
+    assert walk_for_leaks(app, [("POST", "/api/outbox/retry")], body_for(world.copy(SEEN)), (SECRET,)) == {}
 
 
 def test_what_an_smtp_server_says_at_login_stays_out_too(app, world):
@@ -135,12 +136,11 @@ def said_by_the_api(ai, status, kind):
 
 @pytest.mark.parametrize("status, kind", [(400, "invalid_request_error"), (401, "authentication_error")])
 def test_what_the_claude_api_says_stays_out_of_every_answer_but_the_digests(app, world, ai, status, kind):
-    pk = world.pk(SEEN)
     said_by_the_api(ai, status, kind)
-    routes = [r for r in every_route(pk) if "/ai/" in r[1] or r[1] in ("/api/briefing", "/api/briefing/refresh", "/api/briefing/since",
+    routes = [r for r in every_route() if "/ai/" in r[1] or r[1] in ("/api/briefing", "/api/briefing/refresh", "/api/briefing/since",
                                                                        "/api/review", "/api/review/refresh")]
     assert len(routes) > 8
-    assert walk_for_leaks(app, routes + [("GET", "/api/debug/ai")], body_for(pk), (SECRET,)) == {}
+    assert walk_for_leaks(app, routes + [("GET", "/api/debug/ai")], body_for(world.copy(SEEN)), (SECRET,)) == {}
 
 
 def digest_after_a_failed_call(app, ai, status, kind):
@@ -159,7 +159,7 @@ def test_the_digest_says_why_a_call_failed_in_words_of_its_own(app, world, ai, s
 @pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
 def test_a_sweep_or_a_reconcile_says_an_account_failed_in_words_of_its_own(app, world, path):
     world.server.fail("LOGIN", f"NO [AUTHENTICATIONFAILED] {SECRET}", times=None)
-    assert not holds_it(app.post(path, body_for(world.pk(SEEN))), SECRET)
+    assert not holds_it(app.post(path, body_for(world.copy(SEEN))), SECRET)
 
 
 @pytest.mark.parametrize("status, kind", [(400, "invalid_request_error"), (500, "api_error")])

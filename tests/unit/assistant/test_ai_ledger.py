@@ -196,13 +196,13 @@ def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
     assistant.assessments.summarize_pending(limit=1, workers=1)
     lunch = world.pk(LUNCH)
     summarize_as(lunch, 5, "action-needed")
-    assert app.post("/api/ai/summarize", {"pk": lunch}).status == 200
+    assert app.post("/api/ai/summarize", world.copy(LUNCH)).status == 200
     assert app.post("/api/briefing", {}).status == 200
     assert app.post("/api/briefing/since", {"since": 0}).status == 200
     assert app.post("/api/review", {}).status == 200
-    assert app.post("/api/ai/draft-reply", {"pk": lunch, "tone": "warm"}).status == 200
+    assert app.post("/api/ai/draft-reply", {**world.copy(LUNCH), "tone": "warm"}).status == 200
     app.clock.shift(timedelta(seconds=46))         # drafting ahead yields to the calls just made
-    assert app.get(f"/api/ai/draft-ahead?pk={lunch}").json["status"] == "generating"
+    assert app.get(f"/api/ai/draft-ahead?key={world.key(LUNCH)}").json["status"] == "generating"
     app.settle()
     assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
     assert app.post("/api/ai/ask", {"question": "When is lunch with Lin?"}).status == 200
