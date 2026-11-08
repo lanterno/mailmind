@@ -121,7 +121,8 @@ def test_one_left_out_is_still_the_use_cases_to_word(app, path, body, said):
 
 def test_each_limit_the_page_has_is_the_one_its_use_case_holds_to():
     assert PAGE_LIMITS == {"attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
-                           "instruction_chars": prompts.INSTRUCTION_MAX, "undo_send_seconds": outbox_item.SEND_DELAY}
+                           "instruction_chars": prompts.INSTRUCTION_MAX, "snooze_copies": snooze.BULK_CAP,
+                           "undo_send_seconds": outbox_item.SEND_DELAY}
 
 
 def test_the_limits_module_says_each_as_a_number():
