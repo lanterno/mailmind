@@ -164,9 +164,7 @@ export function createComposing(env: Env) {
 
   function closeSaveFailed(x: Composer, s: Snapshot) {
     failedSend = { ...s, draftId: x.draftId };
-    const m = "Your message couldn’t be saved";
-    showFailed(m);
-    env.say(m);
+    showFailed("Your message couldn’t be saved");
   }
 
   function close(force = false) {

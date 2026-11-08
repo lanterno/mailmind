@@ -1,7 +1,7 @@
 // The composer: what you see of the machine in compose.ts. Each control asks the machine, and
 // what it shows is the copy the machine published.
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { Float, toast } from "../../lib/toast";
+import { Float, toast, type Shown } from "../../lib/toast";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
@@ -13,6 +13,7 @@ import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
 import { QuoteFrame } from "../mailbox";
 import { composing, draftTone, setDraftTone } from "./compose";
 import { cleanLinks } from "./linkClean";
+import type { SendFloat } from "./machine";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";
 
@@ -447,17 +448,20 @@ export function ComposerModal({ senders, aliases, ai }: { senders: string[]; ali
 }
 
 // What a send is doing once the composer has gone: the ten seconds with Undo, the time it went out for, or what failed.
+// The countdown is told once: a number read out every second would drown whatever else is said.
+function shownOf(f: SendFloat): Shown {
+  if (f.kind === "countdown") return { words: <>↑ Sending in {f.left}s…</>, turn: f.id, life: f.total * 1000, speak: `Sending. You have ${f.total} seconds to undo.` };
+  if (f.kind === "failed") return { words: <><Icon name="alert" /> {f.text}</>, turn: 0 };
+  return { words: <>{f.clock && <Icon name="clock" />} {f.text}</>, turn: 0, speak: f.text.replace(/^[↑✓]\s*/, "") };
+}
+
 export function SendFloatView() {
   const f = composing.float.useValue();
-  if (!f) return null;
-  const tone = f.kind === "done" ? "sent" : f.kind === "failed" ? "failed" : "sending";
-  const words = f.kind === "countdown" ? <>↑ Sending in {f.left}s…</>
-    : f.kind === "failed" ? <><Icon name="alert" /> {f.text}</>
-    : <>{f.clock && <Icon name="clock" />} {f.text}</>;
+  const tone = f?.kind === "done" ? "sent" : f?.kind === "failed" ? "failed" : "sending";
   return (
-    <Float id="sendFloat" className={`send-float ${tone}`} shown={{ words, turn: f.kind === "countdown" ? f.id : 0, ...(f.kind === "countdown" ? { life: f.total * 1000 } : {}) }}>
-      {f.kind === "countdown" && <button id="sfUndo" onClick={f.undo}>Undo</button>}
-      {f.kind === "failed" && <><button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button></>}
+    <Float id="sendFloat" className={`send-float ${tone}`} shown={f && shownOf(f)}>
+      {f?.kind === "countdown" && <button id="sfUndo" onClick={f.undo}>Undo</button>}
+      {f?.kind === "failed" && <><button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button></>}
     </Float>
   );
 }

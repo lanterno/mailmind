@@ -39,7 +39,8 @@ export function toggleMark(id: string) {
 export const clearMarks = () => marked.set(new Set());
 
 export const undoFloat = createFloat(OFFERS_MS);
-export const offerUndo = (label: string) => undoFloat.show(label);
+// A toast has just told a screen reader what happened: this adds what can be done about it.
+export const offerUndo = (label: string) => undoFloat.show(label, "Undo is available");
 
 export const readOnly = createStore(false);
 

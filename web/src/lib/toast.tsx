@@ -6,13 +6,14 @@ import { createStore, type Store } from "./store";
 export interface Shown {
   words: ReactNode;
   turn: number;      // a float of its own: another with the same words is still a new one
-  life?: number;     // ms, for one that goes by itself: what can be done about it drains over this
+  life?: number | undefined;     // ms, for one that goes by itself: what can be done about it drains over this
+  speak?: string | undefined;    // what a screen reader hears in place of the words, which are for the eye
   over?: boolean;
 }
 
 export interface FloatPlace {
   shown: Store<Shown | null>;
-  show(words: ReactNode): void;
+  show(words: ReactNode, speak?: string): void;
   clear(): void;
 }
 
@@ -25,9 +26,9 @@ export function createFloat(life: number): FloatPlace {
   let turn = 0;
   return {
     shown,
-    show(words) {
+    show(words, speak) {
       clearTimeout(timer);
-      const now: Shown = { words, turn: ++turn, life };
+      const now: Shown = { words, turn: ++turn, life, speak };
       shown.set(now);
       timer = setTimeout(() => shown.set({ ...now, over: true }), life);
     },
@@ -38,14 +39,21 @@ export function createFloat(life: number): FloatPlace {
   };
 }
 
-// A float, and what can be done about it (`children`). A dialog makes what's outside it inert, and a click goes straight
-// through that: a float stays in reach over one.
+// A float, and what can be done about it (`children`). A screen reader reads what lands in a live region that was already
+// there, so the region stays when the float goes. A dialog makes what's outside it inert, and a click goes straight through
+// that: a float stays in reach over one.
 export function Float({ id, className, shown, children }: { id: string; className: string; shown: Shown | null; children?: ReactNode }) {
-  if (!shown || shown.over) return null;
+  const now = shown && !shown.over ? shown : null;
   return (
-    <div id={id} key={shown.turn} className={className} data-react-aria-top-layer="true">
-      <span>{shown.words}</span>{children}
-      {shown.life ? <div className="float-bar" aria-hidden="true" style={{ animationDuration: `${shown.life}ms` }} /> : null}
+    <div className="float-live" role="status" aria-live="polite" aria-atomic="true" data-react-aria-top-layer="true">
+      {now && (
+        <div id={id} key={now.turn} className={className}>
+          <span aria-hidden={now.speak ? true : undefined}>{now.words}</span>
+          {now.speak && <span className="visually-hidden">{now.speak}</span>}
+          {children}
+          {now.life ? <div className="float-bar" aria-hidden="true" style={{ animationDuration: `${now.life}ms` }} /> : null}
+        </div>
+      )}
     </div>
   );
 }
