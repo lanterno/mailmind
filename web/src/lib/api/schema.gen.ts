@@ -2516,6 +2516,8 @@ export interface components {
             /** High Contrast */
             high_contrast?: boolean | null;
             mail_colors?: components["schemas"]["MailColors"] | null;
+            /** Morning Brief */
+            morning_brief?: boolean | null;
             /** Notify Meetings */
             notify_meetings?: boolean | null;
             /** Notify New Mail */
@@ -4378,6 +4380,8 @@ export interface components {
             /** High Contrast */
             high_contrast: boolean;
             mail_colors: components["schemas"]["MailColors"];
+            /** Morning Brief */
+            morning_brief: boolean;
             /** Notify Meetings */
             notify_meetings: boolean;
             /** Notify New Mail */
