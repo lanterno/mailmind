@@ -14,6 +14,16 @@ const routes: Route[] = [
   { source: { kind: "search", q: "from:lin subject:lunch", account: "", asked: "emails from lin about lunch" }, opened: null },
 ];
 
+describe("the Document Hub", () => {
+  it("is a place of its own, and a file opened from it stays there", () => {
+    expect(pathOf({ source: { kind: "documents" }, opened: null })).toBe("/documents");
+    expect(parseRoute("/documents", "")).toEqual({ source: { kind: "documents" }, opened: null });
+    const opened = { kind: "message", key: 7, folder: "INBOX", uid: 70 } as const;
+    expect(parseRoute("/documents", "?key=7&folder=INBOX&uid=70")).toEqual({ source: { kind: "documents" }, opened });
+    expect(sourceKey({ kind: "documents" })).toEqual(["documents"]);
+  });
+});
+
 describe("the URL", () => {
   it.each(routes.map((r) => [pathOf(r), r] as const))("round-trips %s", (path, route) => {
     const u = new URL(path, "http://127.0.0.1");

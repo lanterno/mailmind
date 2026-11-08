@@ -56,7 +56,8 @@ def docs(page):
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox", name="Command").fill("Documents")
     page.keyboard.press("Enter")
-    expect(page.get_by_role("dialog", name="Documents")).to_be_visible()
+    expect(page.locator("#docSearch")).to_be_visible()
+    assert page.url.endswith("/documents")
     return page
 
 
@@ -193,7 +194,7 @@ def test_the_hub_searches_files_it_has_not_loaded(page, world):
     expect(page.locator("#docList .doc-row")).to_have_count(200)
     page.locator("#docSearch").fill("needle")
     expect(page.locator("#docList .doc-fn")).to_have_text(["needle.pdf"])
-    expect(page.locator("#docCount")).to_have_text("· 1")
+    expect(page.locator("#docCount")).to_have_text("1 file")
     page.locator("#docSearch").fill("nothing-is-called-this")
     expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
     clean(page)
@@ -279,8 +280,9 @@ def test_a_file_opens_its_mail_and_downloads_from_its_link(page, world):
     link = row.get_by_role("link", name="Download invoice.pdf")
     expect(link).to_have_attribute("download", "invoice.pdf")
     row.get_by_role("button").click()
-    expect(page.get_by_role("dialog", name="Documents")).to_have_count(0)
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
+    expect(row).to_be_visible()                                 # the Hub stays beside what it opened
+    assert "/documents?" in page.url
     clean(page)
 
 
@@ -289,12 +291,45 @@ def test_opening_the_hub_again_reads_it_again(page, world):
     docs(page)
     expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(1)
     page.keyboard.press("Escape")
-    expect(page.get_by_role("dialog", name="Documents")).to_have_count(0)
+    expect(page.locator("#docSearch")).to_have_count(0)
     one_file(world, RECEIPT, "later.pdf")
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox", name="Command").fill("Documents")
     page.keyboard.press("Enter")
     expect(page.locator("#docList .doc-fn").filter(has_text="later.pdf")).to_have_count(1)
+    clean(page)
+
+
+def test_the_hub_is_a_place_in_the_rail_that_a_reload_and_back_come_back_to(page, world):
+    hub_files(world, 2)
+    page.goto(f"/m/{w.BEA}/INBOX")
+    lane = page.locator('#folderrail .frow:has-text("Documents")')
+    expect(lane).to_have_attribute("href", "/documents")
+    lane.click()
+    expect(page.locator("#listTitle")).to_have_text("Documents")
+    expect(lane).to_have_attribute("aria-current", "page")
+    expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(2)
+    expect(page.locator(".acct-sw")).to_contain_text("All inboxes")   # it holds every account's files
+    expect(page.locator("#threadToggle")).to_have_count(0)
+    expect(page.locator("#count")).to_have_count(0)
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url) if "/api/inboxes" in r.url else None)
+    page.reload()
+    expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(2)
+    assert asked == []                                          # it reads files, and no list of mail behind them
+    page.pw.go_back()
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    clean(page)
+
+
+def test_a_sync_shows_new_files_on_an_open_hub(page, world):
+    hub_files(world, 1)
+    docs(page)
+    expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(1)
+    one_file(world, RECEIPT, "arrived.pdf")
+    from mailmind.platform import sse
+    sse.publish("sync-done", {})
+    expect(page.locator("#docList .doc-fn").filter(has_text="arrived.pdf")).to_have_count(1)
     clean(page)
 
 
