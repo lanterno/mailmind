@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from mailmind.discovery.api import DocumentKind, ViewVerb
+from mailmind.discovery.api import DocumentGrouping, DocumentKind, ViewVerb
 from mailmind.http.schemas.common import Answer, QueryArgs, RequestBody
 
 
@@ -23,6 +23,7 @@ class DocumentsArgs(QueryArgs):
     no one, so they stay text too."""
     q: str | None = None
     kind: str | None = None
+    group: DocumentGrouping | None = None
     limit: str | None = None
     offset: str | None = None
 
@@ -133,6 +134,13 @@ class Document(Answer):
     when: str
     url: str
     preview: str | None         # where its preview loads from, for an image of a kind one shows
+    group: str                  # the id of its section in `groups`, or "" with no sections asked for
+
+
+class DocumentSection(Answer):
+    id: str
+    name: str
+    count: int
 
 
 class Documents(Answer):
@@ -141,6 +149,7 @@ class Documents(Answer):
     matched: int
     shown: int
     facets: dict[str, int]
+    groups: list[DocumentSection]
     docs: list[Document]
 
 
