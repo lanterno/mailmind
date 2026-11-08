@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/all/{place}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page
+         * @description The app, or how to make one: only a build holds it.
+         */
+        get: operations["page_all__place__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/account-health": {
         parameters: {
             query?: never;
@@ -760,6 +780,23 @@ export interface paths {
         };
         /** Folders */
         get: operations["folders_api_folders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/folders/across": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Folders Across */
+        get: operations["folders_across_api_folders_across_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3424,6 +3461,8 @@ export interface components {
         };
         /** MutedRow */
         MutedRow: {
+            /** Account */
+            account: string;
             /** Bucket */
             bucket: string | null;
             /** Count */
@@ -4090,6 +4129,8 @@ export interface components {
         };
         /** ReplyLaterRow */
         ReplyLaterRow: {
+            /** Account */
+            account: string;
             /** Bucket */
             bucket: string | null;
             /** Count */
@@ -4706,6 +4747,8 @@ export interface components {
         };
         /** SnoozedRow */
         SnoozedRow: {
+            /** Account */
+            account: string;
             /** Bucket */
             bucket: string | null;
             /** Commitment Worthy */
@@ -5083,6 +5126,25 @@ export interface components {
             q?: string | null;
             verb?: components["schemas"]["ViewVerb"] | null;
         };
+        /**
+         * ViewCounts
+         * @description How many rows each view that isn't a folder holds.
+         */
+        ViewCounts: {
+            /** Muted */
+            muted: number;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            /** Replylater */
+            replylater: number;
+            /** Snoozed */
+            snoozed: number;
+            /** Waiting */
+            waiting: number;
+        };
         /** @enum {string} */
         ViewVerb: "create" | "delete";
         /** Views */
@@ -5138,63 +5200,17 @@ export interface components {
         /** WaitingOnOthers */
         WaitingOnOthers: {
             /** Items */
-            items: components["schemas"]["WaitingOnOthersRow"][];
+            items: components["schemas"]["WaitingRow"][];
             /**
              * Ok
              * @constant
              */
             ok: true;
         };
-        /** WaitingOnOthersRow */
-        WaitingOnOthersRow: {
-            /** Account */
-            account: string;
-            /** Bucket */
-            bucket: string | null;
-            /** Count */
-            count: number;
-            /** Flagged */
-            flagged: boolean;
-            /** Folder */
-            folder: string;
-            /** From Addr */
-            from_addr: string | null;
-            /** From Name */
-            from_name: string | null;
-            /** Has Attach */
-            has_attach: boolean;
-            /** Is Junk */
-            is_junk: boolean;
-            /** Key */
-            key: number;
-            /** Kind */
-            kind: string;
-            /** Seen */
-            seen: boolean;
-            /** Snippet */
-            snippet: string;
-            /** Subject */
-            subject: string;
-            /** Thread Id */
-            thread_id: string | null;
-            /** To */
-            to: string;
-            /** Ts */
-            ts: number | null;
-            /** Uid */
-            uid: number;
-            /**
-             * Waiting
-             * @constant
-             */
-            waiting: true;
-            /** Waiting Label */
-            waiting_label: string;
-            /** When */
-            when: string;
-        };
         /** WaitingRow */
         WaitingRow: {
+            /** Account */
+            account: string;
             /** Bucket */
             bucket: string | null;
             /** Count */
@@ -5369,6 +5385,114 @@ export interface operations {
         };
     };
     page_all_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    page_all__place__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -10371,6 +10495,116 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["FoldersRefused"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    folders_across_api_folders_across_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewCounts"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
