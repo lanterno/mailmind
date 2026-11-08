@@ -15,6 +15,7 @@ class SearchArgs(QueryArgs):
     account: str | None = None
     limit: str | None = None
     offset: str | None = None
+    thread: str | None = None               # only this conversation of `account`
 
 
 class DocumentsArgs(QueryArgs):
@@ -30,11 +31,11 @@ class ContactsArgs(QueryArgs):
     q: str | None = None
 
 
-class ContactArgs(QueryArgs):
 class SuggestArgs(QueryArgs):
     q: str | None = None                    # the box as it reads now, whole
 
 
+class ContactArgs(QueryArgs):
     addr: str | None = None                 # left out is the use case's `bad address`
 
 
@@ -93,7 +94,6 @@ class NothingAsked(Answer):
     has_more: bool
 
 
-class ListedView(Answer):
 class SearchSuggestion(Answer):
     value: str                              # the whole box as it reads with this one taken
     label: str
@@ -106,6 +106,7 @@ class SearchSuggestions(Answer):
     items: list[SearchSuggestion]
 
 
+class ListedView(Answer):
     id: str
     name: str
     q: str

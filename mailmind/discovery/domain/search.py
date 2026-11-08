@@ -19,6 +19,7 @@ class Asked:
     account: str | None         # the one account searched: None under every account, whichever the request named
     limit: int
     offset: int
+    thread: str | None = None   # only this conversation of `account`
 
 
 def asked(qs: Mapping[str, list[str]]) -> Asked | None:
@@ -29,7 +30,8 @@ def asked(qs: Mapping[str, list[str]]) -> Asked | None:
         return None
     scope = qs.get("scope", ["account"])[0]
     return Asked(q, QuerySpec.parse(q), scope, None if scope == "all" else qs.get("account", [None])[0],
-                 max(1, min(200, required_int(qs.get("limit", ["80"])[0]))), max(0, required_int(qs.get("offset", ["0"])[0])))
+                 max(1, min(200, required_int(qs.get("limit", ["80"])[0]))), max(0, required_int(qs.get("offset", ["0"])[0])),
+                 qs.get("thread", [None])[0] or None)
 
 
 def nothing_asked() -> dict[str, Any]:

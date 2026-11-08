@@ -21,7 +21,7 @@ class Search:
         if want is None:
             return search.nothing_asked()
         aliases = self._accounts.aliases()
-        rows = self._index.search(want.spec, want.account, want.limit, want.offset)
+        rows = self._index.search(want.spec, want.account, want.limit, want.offset, want.thread)
         if rows is None:
             raise Refused("bad query")
         return search.page(rows, want, aliases, rel_time, now_iso())

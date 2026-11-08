@@ -21,7 +21,7 @@ class StoredMail:
             return "0=1", []                # a bare 0 in an ORDER BY would name a column
         return "(m.account, m.folder) IN (VALUES " + ",".join("(?,?)" for _ in pairs) + ")", [x for p in pairs for x in p]
 
-    def search(self, spec, account, limit, offset):
+    def search(self, spec, account, limit, offset, thread=None):
         """What the query finds, up to one more than `limit`, or None for one the index rejects. A message is one
         result however many folders hold it: its copy in the Inbox, else any but the one in All Mail, among the
         copies the query found."""
@@ -30,6 +30,9 @@ class StoredMail:
         if account:
             where = where + ["m.account = ?"]
             params = params + [account]
+        if thread:
+            where = where + ["m.thread_id = ?"]
+            params = params + [thread]
         where_sql = (" AND " + " AND ".join(where)) if where else ""
         with _uow.read() as c:
             try:
@@ -143,9 +146,6 @@ class StoredMail:
             base += "GROUP BY lower(from_addr) ORDER BY n DESC, last DESC LIMIT 8"
             return c.execute(base, params).fetchall()
 
-    def card(self, a):
-        with _uow.read() as c:
-            agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
     def sender_domains_like(self, q):
         """The domains people have written from, the commonest first: what's after the @, whatever the case."""
         domain = "lower(substr(from_addr, instr(from_addr, '@') + 1))"
@@ -154,6 +154,9 @@ class StoredMail:
                              f"WHERE instr(from_addr, '@') > 0 AND {domain} LIKE ? "
                              "GROUP BY domain ORDER BY n DESC, domain LIMIT 3", (f"%{q}%",)).fetchall()
 
+    def card(self, a):
+        with _uow.read() as c:
+            agg = c.execute("SELECT COUNT(*) n, MAX(ts) last, MIN(ts) first, MAX(from_name) name, "
                             "SUM(CASE WHEN answered=1 THEN 1 ELSE 0 END) replied "
                             "FROM messages WHERE lower(from_addr)=?", (a,)).fetchone()
             accts = [r[0] for r in c.execute(
