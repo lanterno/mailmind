@@ -6,7 +6,7 @@ import { mayNotify } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { announce } from "../../lib/toast";
 
-interface Pending { count: number; account: string; since: number; headline: string }
+interface Pending { count: number; woke: number; account: string; since: number; headline: string }
 const pending = createStore<Pending | null>(null);
 
 const LOOK_KEY = "mm_lastlook";
@@ -37,7 +37,7 @@ const landedHere = (source: ListSource | null, account: string, folder: string) 
 let writing = false, aiOn = false, timer: ReturnType<typeof setTimeout> | undefined;
 async function headline(ai: boolean) {
   const p = pending.get();
-  if (!p || !ai || writing || document.hidden) return;     // nobody's reading it, and asking would count as someone here
+  if (!p?.count || !ai || writing || document.hidden) return;     // nobody's reading it, and asking would count as someone here
   writing = true;
   try {
     const since = Math.floor(p.since / 1000);
@@ -87,6 +87,7 @@ export function onNewMail(d: { account?: string; folder?: string; count?: number
   const was = pending.get();
   pending.set({
     count: (was?.count ?? 0) + count,
+    woke: was?.woke ?? 0,
     account: was && was.account !== account ? "" : account,
     since: was?.since ?? (looks()[account] || Date.now() - FIRST_LOOK_MS),
     headline: was?.headline ?? "",
@@ -96,10 +97,26 @@ export function onNewMail(d: { account?: string; folder?: string; count?: number
   timer = setTimeout(() => void headline(ai), 1500);   // a burst is one call
 }
 
+// Mail back from a snooze, and no Inbox on screen to show it: nobody saw it happen, so it stays said (see lib/toast.tsx) until
+// the Inbox is looked at. An Inbox on screen shows it as it does new mail, and nothing is said over that.
+export function onSnoozeWake(d: { accounts?: string[]; count?: number }, route: Route) {
+  const accounts = d.accounts ?? [], account = accounts.length === 1 ? accounts[0]! : "", woke = d.count || 1;
+  if (landedHere(route.source, account, "INBOX")) return;
+  if (!document.hidden) announce(`${woke} snoozed message${woke === 1 ? "" : "s"} back`);
+  const was = pending.get();
+  pending.set({
+    count: was?.count ?? 0,
+    woke: (was?.woke ?? 0) + woke,
+    account: was && was.account !== account ? "" : account,
+    since: was?.since ?? (looks()[account] || Date.now() - FIRST_LOOK_MS),
+    headline: was?.headline ?? "",
+  });
+}
+
 export function NewMailPill() {
   const p = pending.useValue();
   if (!p) return null;
-  const head = `▾ ${p.count} new — open the Inbox`;
+  const head = `▾ ${[p.count ? `${p.count} new` : "", p.woke ? `${p.woke} back from snooze` : ""].filter(Boolean).join(", ")} — open the Inbox`;
   return (
     <button
       id="newPill"

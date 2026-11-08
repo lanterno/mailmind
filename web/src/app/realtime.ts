@@ -3,15 +3,11 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { GetAnswers } from "../lib/api/types";
-import { asking } from "../features/assistant/ask";
-import { onNewMail } from "../features/assistant/NewMail";
-import { composing } from "../features/compose/compose";
+import { onNewMail, onSnoozeWake } from "../features/assistant/NewMail";
 import { onDraftReady } from "../features/compose/draftAhead";
-import { marked } from "../features/mailbox/actions";
 import type { ListData } from "../features/mailbox/data";
 import { createStore } from "../lib/store";
 import { shortAddress } from "../lib/text";
-import { toast } from "../lib/toast";
 import { parseRoute } from "./route";
 
 export const newBuild = createStore(false);
@@ -48,14 +44,7 @@ export function useRealtime() {
       const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
       onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, parseRoute(location.pathname, location.search), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
     });
-    es.addEventListener("snooze-wake", (e) => {   // the list on screen shows it; anywhere else this says so
-      const d = JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number };
-      const { source } = parseRoute(location.pathname, location.search);
-      const onList = source?.kind === "allInboxes" || (source?.kind === "folder" && d.accounts?.includes(source.account));
-      if (onList && !composing.isOpen() && !asking.get() && !marked.get().size) return;
-      const n = d.count || 1;
-      toast(`${n} snoozed message${n > 1 ? "s" : ""} back`);
-    });
+    es.addEventListener("snooze-wake", (e) => onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, parseRoute(location.pathname, location.search)));
     es.addEventListener("resync", () => again("digest"));
     // With the stream down nothing says what changed, so the counts and the tray are read on a timer until it reconnects.
     let up = false;

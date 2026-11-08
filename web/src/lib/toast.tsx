@@ -58,6 +58,9 @@ export function Float({ id, className, shown, children }: { id: string; classNam
   );
 }
 
+// Which way a thing is said: persistent if and only if it happened while the person wasn't looking. A toast or a float answers
+// what they just did, in front of them. What happens behind their back stays said where it can wait for them (the new-mail pill,
+// the outbox tray, the account banner), since a toast would be gone before they came back to it.
 const told = createFloat(SAYS_MS);
 const spoken = createStore("");
 
