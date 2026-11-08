@@ -415,6 +415,7 @@
   .set-sig:focus{outline:none;border-color:var(--focus)}
 
   .nores{padding:50px 20px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.9}
+  .nores-sub{font-variant-numeric:tabular-nums}
 
   /* ---------- curate drawer ---------- */
   .drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);z-index:40;background:var(--panel);

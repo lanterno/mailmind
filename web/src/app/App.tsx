@@ -12,6 +12,7 @@ import { Panels } from "../features/assistant/Panels";
 import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, readOnly, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { searchScope, setSearchScope } from "../features/mailbox/data";
+import { FirstRead } from "../features/mailbox/FirstRead";
 import { FolderRail } from "../features/mailbox/FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
 import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
@@ -247,7 +248,7 @@ export function App() {
   else if (list.isPending && source) empty = <div className="nores" role="status">Loading…</div>;
   else if (last?.error) empty = <div className="nores">{last.error}</div>;
   else if (inInbox && !searching && tab !== "all" && all.length) empty = <div className="nores">{tab === "needs" ? "Nothing needs you." : "Nothing unread."} Everything else is in <button className="linkbtn" onClick={() => setInboxTab("all")}>Everything</button>.</div>;
-  else if (last?.syncing) empty = <div className="nores" role="status">Reading this folder for the first time…</div>;
+  else if (last?.syncing) empty = <FirstRead />;
   else if (last?.syncFailed) empty = <div className="nores" role="status">Couldn’t sync this folder. <button className="ai-rerun" onClick={() => void list.refetch()}>Retry</button></div>;
 
   const footer = list.hasNextPage ? <button className="load-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{searching ? "Load more results" : "Load 200 more"}</button> : null;
