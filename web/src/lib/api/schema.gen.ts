@@ -2941,12 +2941,16 @@ export interface components {
             recurrence_id: string;
             /** Rrule */
             rrule: string;
+            /** Sequence */
+            sequence: number;
             /** Start Iso */
             start_iso: string;
             /** Status */
             status: string;
             /** Summary */
             summary: string;
+            /** This And Future */
+            this_and_future?: boolean | null;
             /** Tzid */
             tzid: string;
             /** Uid */
