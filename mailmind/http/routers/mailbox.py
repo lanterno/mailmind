@@ -33,7 +33,6 @@ from mailmind.http.schemas.mailbox import (
     NamesAPending,
     NoMessage,
     NoThread,
-    NotFiled,
     NothingToUndo,
     NotUndone,
     Pending,
@@ -71,8 +70,8 @@ class _FramePk(Convertor[int]):
 
 register_url_convertor("frame_pk", _FramePk())
 
-_FILED = answers(Filed | NotFiled)
-_THREAD_FILED = answers(ManyFiled | NotFiled)
+_FILED = answers(Filed)
+_THREAD_FILED = answers(ManyFiled)
 
 
 def _safe_filename(name):

@@ -1,11 +1,12 @@
-"""Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. The
-tray's Retry and Discard of what is waiting are here too."""
+"""Filing a message as a person asks, through the one command path (MailCommands), and what each outcome answers. A message
+that has gone raises NotFound, and one the server wouldn't take raises Conflict in the words for it: either way it is where it
+was. The tray's Retry and Discard of what is waiting are here too."""
 import secrets
 import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.errors import Conflict, NotFound, Problem, Refused
 from mailmind.kernel.ids import FolderName, MessageKey
 from mailmind.kernel.parsed import as_int, is_list, is_object
 from mailmind.kernel.row import Connection
@@ -26,7 +27,8 @@ do_log = get_logger("do")
 _FILED = {"trash": "trashed", "archive": "archived", "junk": "junked"}
 _REFUSED = {"archive": "the server refused the archive"}
 _NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
-_NOT_FOUND: dict[str, Any] = {"ok": False, "msg": "not found", "undoable": False}
+_GONE = "not found"
+_NOT_FILED = (NotFound, Conflict)    # what filing one message raises: it is where it was
 
 
 class Filing:
@@ -67,7 +69,7 @@ class Filing:
     def _submit_move(self, kind: str, accepted: command.Accepted | None) -> dict[str, Any]:
         """A move accepted and committed: a try at it, and what the person hears of it."""
         if accepted is None:
-            return dict(_NOT_FOUND)
+            raise NotFound(_GONE)
         if not accepted.created:
             return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
         outcome = self._commands.submit(accepted)
@@ -80,15 +82,15 @@ class Filing:
         if outcome == command.CANCELLED:
             return {"ok": True, "msg": "cancelled", "undoable": False}
         self._stats.invalidate()            # the message is listed again
-        msg = (_NO_FOLDER.get(kind) if outcome == command.NO_FOLDER else None) or _REFUSED.get(kind, "the server refused the move")
-        return {"ok": False, "msg": msg, "undoable": False}
+        raise Conflict((_NO_FOLDER.get(kind) if outcome == command.NO_FOLDER else None)
+                       or _REFUSED.get(kind, "the server refused the move"))
 
 
     def _set_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> dict[str, Any]:
         """A flag change, through the command path: what the person hears of it."""
         accepted = self._commands.accept_flags(pk, flags, mutation_id)
         if accepted is None:
-            return dict(_NOT_FOUND)
+            raise NotFound(_GONE)
         if not accepted.created:
             return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
         outcome = self._commands.submit(accepted)
@@ -100,7 +102,7 @@ class Filing:
             return self._waiting(outcome, False)
         if outcome == command.CANCELLED:
             return {"ok": True, "msg": "cancelled", "undoable": False}
-        return {"ok": False, "msg": "the server refused the flag change", "undoable": False}
+        raise Conflict("the server refused the flag change")
 
 
     def flags_queued(self) -> None:
@@ -147,18 +149,18 @@ class Filing:
         """Per-message mailbox writes (flags/seen/archive/junk)."""
         pk = as_int(body.get("pk"))
         if pk is None:
-            return {"ok": False, "msg": "bad pk"}
+            raise Refused("bad pk")
         if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
             # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
             # request's: \Deleted from here would bypass Trash and undo.
-            return {"ok": False, "msg": "unknown flag"}
+            raise Refused("unknown flag")
         if path in ("/api/seen", "/api/flag"):
             flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
                      else {body.get("flag", "flagged"): bool(body.get("on", True))})
             return self._set_flags(pk, flags, body.get("mutation_id"))
         moves = {"/api/archive": "archive", "/api/junk": "junk"}
         if path not in moves:
-            return {"ok": False, "msg": "unknown", "undoable": False}
+            raise Refused("unknown")
         return self._file(moves[path], pk, body.get("undo_group"), body.get("mutation_id"))
 
 
@@ -172,7 +174,11 @@ class Filing:
 
     def trash_now(self, pk: int) -> bool:
         """Trash with nothing for Undo to reverse, as blocking a sender does: whether it went or will go."""
-        return self._file("trash", int(pk), None, None, undo=False)["ok"]
+        try:
+            self._file("trash", int(pk), None, None, undo=False)
+        except _NOT_FILED:
+            return False
+        return True
 
 
     def do_thread_file(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -184,17 +190,16 @@ class Filing:
         One transaction accepts them all under one undo group, so they leave the lists together, a single
         Undo restores the conversation, and a crash midway leaves all of it as it was. Then each one is tried
         as filing one message is, on the gate with no transaction open, and each answers for itself: one the
-        server refuses goes back to its folder alone, and the rest stay filed."""
+        server refuses goes back to its folder alone, and the rest stay filed. When none was filed, it raises what the first
+        one did."""
         pk = as_int(body.get("pk"))
         if pk is None:
-            return {"ok": False, "msg": "bad pk"}
+            raise Refused("bad pk")
         kind = "archive" if path == "/api/thread/archive" else "trash"
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             pks = self._conversation_of(c, pk)
             accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push)) for p in pks]
-        if not accepted:
-            return {"ok": False, "msg": "not found"}
         return self._heard(accepted, self._try_each(kind, accepted))
 
 
@@ -202,9 +207,9 @@ class Filing:
         """Archive, trash or junk the marked rows as one: `rows` is [{pk, whole}], `whole` for a row that stands for its
         conversation in its folder, which junk never does. As with a conversation, one transaction accepts them all under
         one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed, and is
-        `partial` if some were."""
+        `partial` if some were. When no row was, it raises what the first message did."""
         verb, rows = body.get("verb"), body.get("rows")
-        if verb not in ("archive", "trash", "junk") or not is_list(rows) or len(rows) > self.BULK_MAX:
+        if verb not in ("archive", "trash", "junk") or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
         wanted: list[tuple[int, bool]] = []
         for one in rows:
@@ -226,7 +231,7 @@ class Filing:
                         accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push)))
         results = self._try_each(verb, accepted)
         heard = self._heard(accepted, results)
-        each = [sum(bool(results.get(p, {}).get("ok")) for p in pks) for pks in members]
+        each = [sum(not isinstance(results[p], Problem) for p in pks) for pks in members]
         return {**heard, "rows_failed": each.count(0),
                 "partial": any(0 < n < len(pks) for n, pks in zip(each, members))}
 
@@ -242,11 +247,12 @@ class Filing:
         return [pk]
 
 
-    def _try_each(self, kind: str, accepted: Sequence[tuple[int, command.Accepted | None]]) -> dict[int, dict[str, Any]]:
+    def _try_each(self, kind: str,
+                  accepted: Sequence[tuple[int, command.Accepted | None]]) -> dict[int, dict[str, Any] | Problem]:
         """Moves accepted and committed: a try at each, as filing one message is, on the gate with no transaction open. Whoever
         clicked waits about as long as for one: past FILE_WAIT the rest are left to the worker, so a busy gate or a server
-        gone quiet costs one wait, not one for each message."""
-        out: dict[int, dict[str, Any]] = {}
+        gone quiet costs one wait, not one for each message. What one that wasn't filed raised stands for it."""
+        out: dict[int, dict[str, Any] | Problem] = {}
         until = time.monotonic() + self._commands.FILE_WAIT
         left = False
         for i, (p, one) in enumerate(accepted):
@@ -257,6 +263,8 @@ class Filing:
                     left = True
                 else:
                     out[p] = self._submit_move(kind, one)
+            except _NOT_FILED as no:
+                out[p] = no
             except Exception as e:                   # it's back in the queue; the rest are claimed, and wait on this loop
                 do_log.warning("%(what)s failed", {"what": kind}, exc_info=e)
                 self.flags_queued()
@@ -267,14 +275,16 @@ class Filing:
 
 
     def _heard(self, accepted: Sequence[tuple[int, command.Accepted | None]],
-               results: Mapping[int, Mapping[str, Any]]) -> dict[str, Any]:
-        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed."""
-        filed = [p for p, _ in accepted if results[p].get("ok")]
-        queued = sum(results[p].get("status") == "queued" for p in filed)
-        msg = next((str(results[p].get("msg") or "") for p, _ in accepted if not results[p].get("ok")), "")
-        return {"ok": bool(filed), "msg": msg if not filed else ("queued" if queued else "filed"),
-                "pks": filed, "count": len(filed), "failed": len(accepted) - len(filed),
-                "queued": queued, "undoable": any(results[p].get("undoable") for p in filed)}
+               results: Mapping[int, Mapping[str, Any] | Problem]) -> dict[str, Any]:
+        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed. With none
+        filed, what the first raised, or NotFound when there was none to file."""
+        filed = {p: said for p, _ in accepted if not isinstance(said := results[p], Problem)}
+        if not filed:
+            raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(_GONE))
+        queued = sum(said.get("status") == "queued" for said in filed.values())
+        return {"ok": True, "msg": "queued" if queued else "filed",
+                "pks": list(filed), "count": len(filed), "failed": len(accepted) - len(filed),
+                "queued": queued, "undoable": any(said.get("undoable") for said in filed.values())}
 
 
     def settled(self, _event: object = None) -> None:
@@ -314,6 +324,8 @@ class Filing:
         for pk in pks:
             try:
                 res: dict[str, Any] = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
+            except _NOT_FILED:                     # counted, and nothing went wrong here
+                res = {}
             except Exception as e:                 # the rest still go: this run has no second try
                 do_log.warning("%(what)s failed", {"what": verb}, exc_info=e)
                 res = {}

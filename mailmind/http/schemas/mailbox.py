@@ -462,14 +462,8 @@ class Filed(Answer):
     status: str | None = None               # `queued` or `waiting`: the worker has it
 
 
-class NotFiled(Answer):
-    ok: Literal[False]
-    msg: str
-    undoable: Literal[False] | None = None  # left out when the request went no further than its own reading
-
-
 class ManyFiled(Answer):
-    ok: bool                                # whether any of them was filed
+    ok: Literal[True]                       # some of them were: none is a 404 or a 409
     msg: str
     pks: list[int]
     count: int
