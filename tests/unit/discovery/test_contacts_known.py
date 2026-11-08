@@ -144,6 +144,34 @@ def test_own_addresses_are_self(home):
     assert res["items"]["ada@example.test"]["self"] is False, res
 
 
+def test_a_plus_address_of_yours_is_yours(home):
+    res = discovery.known.ask(["Ada+News@example.test", "ada.news@example.test", "lio+ada@example.test"])
+    assert res["items"]["ada+news@example.test"] == {"known": True, "self": True}, res
+    assert res["items"]["ada.news@example.test"]["self"] is False, res
+    assert res["items"]["lio+ada@example.test"]["self"] is False, res
+
+
+def test_a_tagged_account_owns_its_plain_mailbox():
+    from mailmind.discovery.domain import known
+    own = known.own_addresses(["Ada+Work@example.test"], [], [])
+    assert known.is_own("ada@example.test", own) and known.is_own("ada+other@example.test", own)
+    assert known.untagged("+only@example.test") == "+only@example.test"
+    assert known.untagged("nobody") == "nobody"
+
+
+def test_an_address_you_have_sent_from_is_yours(home):
+    _msg("ada@alias.example.test", "pat@example.test", folder="Sent")
+    _msg("mira@example.test", "pat@example.test")                # received: known, but no address of yours
+    res = discovery.known.ask(["ada@alias.example.test", "mira@example.test"])
+    assert res["items"]["ada@alias.example.test"] == {"known": True, "self": True}, res
+    assert res["items"]["mira@example.test"] == {"known": True, "self": False}, res
+
+
+def test_mail_sent_from_a_tag_of_yours_vouches_for_who_it_went_to(home):
+    _msg("ada+work@example.test", "pat@example.test", folder="Archive")
+    assert _known(["pat@example.test"]) == {"pat@example.test": True}
+
+
 @pytest.mark.parametrize("addrs", ["lio@example.test", None])
 def test_input_that_is_no_list_is_refused(addrs, home):
     assert answered(discovery.known.ask, addrs)[1] == 400
