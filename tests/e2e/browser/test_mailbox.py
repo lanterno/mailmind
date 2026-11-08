@@ -269,7 +269,8 @@ def test_e_on_a_conversations_row_files_every_message_its_sent_copy_stays_and_z_
     opened(page)
     convo = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday?")
     expect(convo).to_have_count(1)                        # one row for the two inbox messages
-    expect(convo.locator(".thr-count")).to_have_text("2")
+    expect(convo.locator(".thr-count")).to_have_text("3")  # and all three that opening it shows, the Sent reply's too
+    expect(convo.locator(".thr-count")).to_have_attribute("title", "3 messages")
     convo.click()
     page.keyboard.press("e")
     expect(convo).to_have_count(0)

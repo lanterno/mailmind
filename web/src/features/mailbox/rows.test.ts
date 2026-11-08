@@ -35,6 +35,13 @@ describe("a conversation row", () => {
   it("isn't one in a draft folder, whose older copies are no conversation", () => {
     expect(isConversation(row({ count: 3, folder: "Drafts" }), true)).toBe(false);
   });
+  it("counts what opening it shows, apart from what filing it takes", () => {
+    expect(fromFolder(folderRow({ count: 2, thread_count: 3 }), "a")).toMatchObject({ count: 2, threadCount: 3 });
+  });
+  it("counts what a list that says one number holds", () => {
+    expect(fromFolder(folderRow({ count: 4 }), "a")).toMatchObject({ count: 4, threadCount: 4 });
+    expect(fromFolder(folderRow(), "a")).toMatchObject({ count: 1, threadCount: 1 });
+  });
 });
 
 describe("the Inbox's tabs", () => {
