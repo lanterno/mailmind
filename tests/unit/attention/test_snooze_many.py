@@ -67,3 +67,10 @@ def test_more_than_one_request_snoozes_as_more_requests_under_one_undo_group(app
     u = app.post("/api/undo", {}).json
     assert (u["ok"], u["reversed"], u["failed"]) == (True, 2, 0)
     assert snoozed() == 0
+
+
+def test_a_planned_snooze_never_names_more_than_one_snooze_takes():
+    """A bulk command's confirm snoozes every message its plan froze in one call (`Filing.carry_out`), so the plan's ceiling
+    must stay within the snooze's, or raising it would turn a planned snooze into a refusal."""
+    from mailmind.assistant.domain.action_plan import CAP
+    assert CAP <= BULK_CAP
