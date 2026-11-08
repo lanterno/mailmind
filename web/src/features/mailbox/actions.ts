@@ -122,14 +122,35 @@ export type Target = (Copy & { thread_id?: string | null }) | { account: string;
 
 export type Snoozing = { preset: SnoozePreset } | { until: string };
 
+// Marked copies go as many requests as the server's limit on one asks, under one undo group, as filing's do: one z brings
+// them all back. A request that fails says how many stayed; when none went, it says why, as one request would.
 export function snooze(qc: QueryClient, target: Target, when: Snoozing, rows: string[], after: Route | null) {
+  const fail = (why: string) => `Couldn’t snooze${why ? `: ${why}` : ""}`;
+  if (!("copies" in target)) {
+    return act(qc, { rows, after, call: () => post("/api/snooze", { ...target, ...when }), say: () => "Snoozed", undoLabel: () => "Snoozed", fail });
+  }
+  const { copies } = target, group = undoGroup();
+  let failed = 0;
   return act(qc, {
     rows,
     after,
-    call: () => post("/api/snooze", { ...target, ...when }),
-    say: () => "Snoozed",
+    call: async () => {
+      let first: unknown;
+      for (let at = 0; at < copies.length; at += LIMITS.snooze_copies) {
+        const chunk = copies.slice(at, at + LIMITS.snooze_copies);
+        try {
+          await post("/api/snooze", { copies: chunk, ...when, undo_group: group });
+        } catch (e) {
+          first ??= e;
+          failed += chunk.length;
+        }
+      }
+      if (first !== undefined && failed === copies.length) throw first;
+      return { ok: true };
+    },
+    say: () => (failed ? `Snoozed ${copies.length - failed}, ${failed} failed` : "Snoozed"),
     undoLabel: () => "Snoozed",
-    fail: (why) => `Couldn’t snooze${why ? `: ${why}` : ""}`,
+    fail,
   });
 }
 
