@@ -347,7 +347,7 @@
  },
  {
   "body": {
-   "detail": "verb must be create|delete",
+   "detail": "bad request",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"

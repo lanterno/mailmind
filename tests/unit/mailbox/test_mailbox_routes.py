@@ -162,9 +162,10 @@ def test_what_is_left_out_does_what_it_always_did(app, world):
     assert row_of(pk)["flagged"]
     assert app.post("/api/flag", {**copy, "on": False}).json["ok"]
     assert not row_of(pk)["flagged"]
-    for flag in (None, "deleted"):
-        r = app.post("/api/flag", {**copy, "flag": flag})
-        assert (r.status, r.json) == (400, problems.refused("unknown flag"))
+    r = app.post("/api/flag", {**copy, "flag": None})
+    assert (r.status, r.json) == (400, problems.refused("unknown flag"))
+    r = app.post("/api/flag", {**copy, "flag": "deleted"})               # no flag a request may set: the schema's
+    assert (r.status, r.json) == (400, BAD_REQUEST)
 
 
 def test_a_number_may_still_come_as_text(app, world):

@@ -110,11 +110,18 @@ def test_a_view_named_by_anything_but_text_is_the_400(app):
 
 
 def test_a_change_it_cant_make_is_refused_in_its_own_words(app):
-    for body, msg in (({}, "verb must be create|delete"), ({"verb": None}, "verb must be create|delete"), ({"verb": "rename"}, "verb must be create|delete"),
+    for body, msg in (({}, "verb must be create|delete"), ({"verb": None}, "verb must be create|delete"),
                       ({"verb": "create"}, "need a name and a query"), ({"verb": "create", "name": "Lunch"}, "need a name and a query"),
                       ({"verb": "create", "name": " ", "q": "lunch"}, "need a name and a query")):
         r = app.post("/api/views", body)
         assert (r.status, r.json) == (400, problems.refused(msg)), body
+
+
+def test_a_verb_it_doesnt_know_is_the_schemas_400(app):
+    before = app.get("/api/views").json
+    r = app.post("/api/views", {"verb": "rename", "id": "x", "name": "Lunch"})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+    assert app.get("/api/views").json == before
 
 
 def test_a_field_nothing_here_reads_is_nothing_to_refuse(app):

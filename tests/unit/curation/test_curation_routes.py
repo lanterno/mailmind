@@ -21,6 +21,9 @@ NEWSLETTER = "ada-inbox-03-newsletter.eml"
     ("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True, "confirm_token": 17}),
     ("/api/cleanup/execute", {"from_addr": LOOM, "undo_group": 5}),
     ("/api/rules", {"token": LOOM, "verdict": 5}),
+    ("/api/rules", {"token": LOOM, "verdict": "maybe"}),
+    ("/api/rules", {"token": "nothing", "verdict": "maybe"}),
+    ("/api/cleanup/execute", {"from_addr": LOOM, "block_scope": "everyone"}),
     ("/api/rules", {"token": LOOM, "verdict": "block", "key": "x"}),
     ("/api/rules", {"token": LOOM, "verdict": "block", "key": [1]}),
     ("/api/rules", {"token": LOOM, "verdict": "block", "key": 1, "folder": 5}),
@@ -86,7 +89,7 @@ def test_a_sweep_that_answers_an_account_by_account_failure_fits(app, world):
 @pytest.mark.parametrize("body, said", [({"token": "nothing", "verdict": "keep"}, "invalid token (need a domain or an address)"),
                                         ({"verdict": "keep"}, "invalid token (need a domain or an address)"),
                                         ({"token": LOOM}, "verdict must be keep|block|remove"),
-                                        ({"token": LOOM, "verdict": "maybe"}, "verdict must be keep|block|remove")])
+                                        ({"token": LOOM, "verdict": None}, "verdict must be keep|block|remove")])
 def test_a_rule_that_wont_do_is_refused_in_its_own_words(app, body, said):
     r = app.post("/api/rules", body)
     assert (r.status, r.json) == (400, problems.refused(said))

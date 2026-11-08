@@ -66,6 +66,14 @@ def test_it_writes_the_document_as_a_program_reading_nothing_and_sending_nothing
     assert json.loads(out.read_text(encoding="utf-8")) == json.loads(json.dumps(openapi_doc.document()))
 
 
+def test_given_a_second_path_it_writes_the_pages_limits_there_too(tmp_path):
+    out, limits = tmp_path / "openapi.json", tmp_path / "limits.gen.ts"
+    run = subprocess.run([sys.executable, str(ROOT / "tests" / "openapi_doc.py"), str(out), str(limits)], cwd=tmp_path,
+                         capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr
+    assert limits.read_text(encoding="utf-8") == openapi_doc.limits_module()
+
+
 def test_it_stops_at_any_try_to_connect():
     with pytest.raises(RuntimeError, match="socket.connect"):
         openapi_doc._refuse("socket.connect", ())

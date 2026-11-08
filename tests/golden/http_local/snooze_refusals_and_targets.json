@@ -1,7 +1,7 @@
 [
  {
   "body": {
-   "detail": "bad snooze time",
+   "detail": "bad request",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"

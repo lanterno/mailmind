@@ -257,7 +257,7 @@
  },
  {
   "body": {
-   "detail": "unknown flag",
+   "detail": "bad request",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
@@ -308,7 +308,7 @@
  },
  {
   "body": {
-   "detail": "unknown flag",
+   "detail": "bad request",
    "status": 400,
    "title": "Refused",
    "type": "/problems/refused"
