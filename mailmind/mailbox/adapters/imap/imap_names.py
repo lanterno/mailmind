@@ -5,8 +5,11 @@ escapes in place, as the database stores it. mailbox_arg only wraps it, and refu
 isn't a valid quoted-string body. unescaped turns it back into the name itself, for a client
 that quotes on its own (IMAPClient).
 
+A Gmail label comes off a FETCH response line in the same quoted form, and is read here as a person reads it.
+
 Standard library only.
 """
+import base64
 import imaplib
 import re
 
@@ -44,6 +47,47 @@ def gmail_labels(labels):
     """Gmail's labels as an X-GM-LABELS list: a system label (\\Inbox) as it is, any other quoted.
     Both adapters send this one form."""
     return "(" + " ".join(lb if _SYSTEM_LABEL.fullmatch(lb) else imap_quote(lb) for lb in labels) + ")"
+
+
+_LABELS_AT = b"X-GM-LABELS ("
+_LABEL = re.compile(rb'\s*(?:"((?:[^"\\]|\\.)*)"|([^\s()"]+))')
+_LITERAL = re.compile(rb"\{\d+\}")
+_SHIFTED = re.compile(r"&([^-]*)-")
+
+
+def _shifted(found):
+    """One run of IMAP's modified UTF-7: `&-` is an ampersand, and anything else base64 of UTF-16, with , for /."""
+    if not found.group(1):
+        return "&"
+    try:
+        run = found.group(1).replace(",", "/")
+        return base64.b64decode(run + "=" * (-len(run) % 4)).decode("utf-16-be")
+    except ValueError:
+        return found.group(0)
+
+
+def label_name(raw):
+    """A Gmail label as a person reads it: IMAP names non-ASCII ones in modified UTF-7. A system label (\\Inbox) is as it came."""
+    return _SHIFTED.sub(_shifted, raw)
+
+
+def read_gmail_labels(line):
+    """The labels on an IMAP FETCH response line: `X-GM-LABELS ("\\\\Inbox" Work "Two words")`, quoted or atoms. Stops at the
+    closing paren. A literal (never seen from Gmail, and a line can't hold one) leaves the rest unread."""
+    start = line.find(_LABELS_AT)
+    if start < 0:
+        return frozenset()
+    at, out = start + len(_LABELS_AT), set()
+    while True:
+        one = _LABEL.match(line, at)
+        if not one:
+            break
+        raw = one.group(1) if one.group(1) is not None else one.group(2)
+        if one.group(2) is not None and _LITERAL.fullmatch(one.group(2)):
+            break
+        out.add(label_name(re.sub(rb'\\(["\\])', rb"\1", raw).decode("utf-8", "replace")))
+        at = one.end()
+    return frozenset(out)
 
 
 def mailbox_arg(name):

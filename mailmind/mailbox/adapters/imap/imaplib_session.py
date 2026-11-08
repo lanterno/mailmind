@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters.imap import imap_list
-from mailmind.mailbox.adapters.imap.imap_names import gmail_labels, imap_quote, mailbox_arg
+from mailmind.mailbox.adapters.imap.imap_names import gmail_labels, imap_quote, mailbox_arg, read_gmail_labels
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain import move_strategy
@@ -113,9 +113,9 @@ class ImaplibSession:
         data = _ok("SEARCH", *self._M.uid("SEARCH", None, "MODSEQ", str(int(modseq) + 1)))
         return [int(u) for u in _SEARCH_MODSEQ.sub(b"", data[0] or b"").split()]     # "1 2 (MODSEQ 9)"
 
-    def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
-        items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "") + ("INTERNALDATE " if internaldate else "")
-                 + "BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")])")
+    def headers(self, uids, fields, *, gmail_thread=False, gmail_labels=False, internaldate=False):
+        items = ("(UID FLAGS " + ("X-GM-THRID " if gmail_thread else "") + ("X-GM-LABELS " if gmail_labels else "")
+                 + ("INTERNALDATE " if internaldate else "") + "BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")])")
         uids, out = [int(u) for u in uids], []
         for start in range(0, len(uids), port.HEADER_BATCH):
             data = _ok("FETCH", *self._M.uid("FETCH", _uid_set(uids[start:start + port.HEADER_BATCH]), items))
@@ -129,7 +129,8 @@ class ImaplibSession:
                     out.append(Headers(int(uid.group(1)),
                                        frozenset(f.decode() for f in flags.group(1).split()) if flags else frozenset(),
                                        item[1] or b"", thread.group(1).decode() if thread else None,
-                                       _arrived(meta) if internaldate else None))
+                                       _arrived(meta) if internaldate else None,
+                                       read_gmail_labels(meta) if gmail_labels else None))
         return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):

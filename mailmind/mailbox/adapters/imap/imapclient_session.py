@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from imapclient import IMAPClient
 
-from mailmind.mailbox.adapters.imap.imap_names import escaped, gmail_labels, imap_quote, sendable, unescaped
+from mailmind.mailbox.adapters.imap.imap_names import escaped, gmail_labels, imap_quote, label_name, sendable, unescaped
 from mailmind.mailbox.application import session as port
 from mailmind.mailbox.application.session import Headers, Selected, move_by_copy
 from mailmind.mailbox.domain import move_strategy
@@ -108,8 +108,8 @@ class ImapClientSession:
     def uids_changed_since(self, modseq):
         return sorted(int(u) for u in self._c.search(["MODSEQ", str(int(modseq) + 1)]))
 
-    def headers(self, uids, fields, *, gmail_thread=False, internaldate=False):
-        items = ["UID", "FLAGS"] + (["X-GM-THRID"] if gmail_thread else []) + \
+    def headers(self, uids, fields, *, gmail_thread=False, gmail_labels=False, internaldate=False):
+        items = ["UID", "FLAGS"] + (["X-GM-THRID"] if gmail_thread else []) + (["X-GM-LABELS"] if gmail_labels else []) + \
             (["INTERNALDATE"] if internaldate else []) + ["BODY.PEEK[HEADER.FIELDS (" + " ".join(fields) + ")]"]
         uids, out = [int(u) for u in uids], []
         for start in range(0, len(uids), port.HEADER_BATCH):
@@ -118,7 +118,8 @@ class ImapClientSession:
                 thread, arrived = got.get(b"X-GM-THRID"), got.get(b"INTERNALDATE")
                 out.append(Headers(int(uid), frozenset(_text(f) for f in got.get(b"FLAGS", ())), raw or b"",
                                    str(thread) if thread is not None else None,
-                                   arrived.astimezone(timezone.utc) if isinstance(arrived, datetime) else None))
+                                   arrived.astimezone(timezone.utc) if isinstance(arrived, datetime) else None,
+                                   frozenset(label_name(_text(lb)) for lb in got.get(b"X-GM-LABELS", ())) if gmail_labels else None))
         return sorted(out, key=lambda h: h.uid)
 
     def body(self, uid):

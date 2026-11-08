@@ -41,6 +41,7 @@ class Headers:
     raw: bytes                          # the fields asked for, as the server sent them
     gmail_thread: str | None = None     # Gmail's X-GM-THRID, when asked for: fetch data, not a header
     internaldate: datetime | None = None   # when the server took it in (INTERNALDATE), when asked for
+    gmail_labels: frozenset[str] | None = None   # Gmail's X-GM-LABELS when asked for: fetch data, a system one as \\Inbox
 
 
 HEADER_BATCH = 300                      # UIDs to a header FETCH, so no command line grows too long
@@ -60,7 +61,7 @@ class MailSession(Protocol):
     def flags(self, uids: Uids) -> dict[int, frozenset[str]]: ...
     def enable_condstore(self) -> bool: ...                     # before any select; False: it won't
     def uids_changed_since(self, modseq: int) -> list[int]: ...  # after enable_condstore
-    def headers(self, uids: Uids, fields: Iterable[str], *, gmail_thread: bool = False,
+    def headers(self, uids: Uids, fields: Iterable[str], *, gmail_thread: bool = False, gmail_labels: bool = False,
                 internaldate: bool = False) -> list[Headers]: ...                  # in UID order
     def body(self, uid: int) -> bytes | None: ...                           # BODY.PEEK[]
     def add_flags(self, uids: Uids, flags: Iterable[str]) -> None: ...
@@ -145,9 +146,9 @@ class ReadOnlySession:
     def uids_changed_since(self, modseq: int) -> list[int]:
         return self._session.uids_changed_since(modseq)
 
-    def headers(self, uids: Uids, fields: Iterable[str], *, gmail_thread: bool = False,
+    def headers(self, uids: Uids, fields: Iterable[str], *, gmail_thread: bool = False, gmail_labels: bool = False,
                 internaldate: bool = False) -> list[Headers]:
-        return self._session.headers(uids, fields, gmail_thread=gmail_thread, internaldate=internaldate)
+        return self._session.headers(uids, fields, gmail_thread=gmail_thread, gmail_labels=gmail_labels, internaldate=internaldate)
 
     def body(self, uid: int) -> bytes | None:
         return self._session.body(uid)
