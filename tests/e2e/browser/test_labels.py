@@ -5,6 +5,7 @@ from playwright.sync_api import expect
 from fixtures import world as w
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.platform import sse
 
 pytestmark = pytest.mark.browser
 
@@ -42,6 +43,16 @@ def test_a_gmail_accounts_labels_are_lanes_that_open_what_carries_each(page, wor
     expect(page.locator("#clientCtx b")).to_have_text('label:"Travel"')
     expect(page.locator(f'#rows .row[data-key="{world.key(CY)}"]')).to_be_visible()
     expect(lane).to_have_attribute("aria-current", "page")
+    clean(page)
+
+
+def test_a_label_a_sync_brought_shows_in_a_tab_already_open(page, world):
+    accounts_inbox(page, w.CY)
+    lane = page.locator("#folderrail a.frow", has_text="Travel")
+    expect(lane).to_have_count(0)
+    labelled(world)
+    sse.publish("sync-done", {"account": w.CY})
+    expect(lane.locator(".unread")).to_have_text("1")
     clean(page)
 
 
