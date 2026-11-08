@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get } from "../../lib/api/client";
+import type { DocumentKind } from "../../lib/api/types";
+import { entries } from "../../lib/entries";
 import { useLayer } from "../../lib/backTrap";
 import { copyId, copyOf } from "../../lib/copy";
 import { fileSize } from "../../lib/text";
@@ -13,11 +15,12 @@ import type { Mailbox } from "../mailbox";
 import { docsOpen } from "./open";
 
 const PAGE = 200;
-const ICON: Record<string, string> = { pdf: "file", image: "image", doc: "file", sheet: "table", slide: "slides", archive: "archive", text: "file", other: "clip" };
-const LABEL: Record<string, string> = { pdf: "PDFs", image: "Images", doc: "Docs", sheet: "Sheets", slide: "Slides", archive: "Archives", text: "Text", other: "Other" };
+// The server's kinds of document: each one's icon, and its words in the order the facets show them.
+const ICON: Record<DocumentKind, string> = { pdf: "file", image: "image", doc: "file", sheet: "table", slide: "slides", archive: "archive", text: "file", other: "clip" };
+const LABEL: Record<DocumentKind, string> = { pdf: "PDFs", image: "Images", doc: "Docs", sheet: "Sheets", slide: "Slides", archive: "Archives", text: "Text", other: "Other" };
 
 function Hub({ m }: { m: Mailbox }) {
-  const [kind, setKind] = useState("all");
+  const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [typed, setTyped] = useState("");
   const [q, setQ] = useState("");
   useEffect(() => {
@@ -69,7 +72,7 @@ function Hub({ m }: { m: Mailbox }) {
       <>
         {docs.map((x) => (
           <div className="doc-row" key={`${copyId(x)}/${x.part_id}/${x.filename}`} data-doc-key={x.key}>
-            <div className="doc-ic"><Icon name={ICON[x.kind] ?? "clip"} /></div>
+            <div className="doc-ic"><Icon name={ICON[x.kind]} /></div>
             <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(copyOf(x)); }}>
               <div className="doc-fn">{x.filename}</div>
               <div className="doc-meta"><span className="who">{x.from}</span> · {x.subject} · {x.when}</div>
@@ -89,7 +92,7 @@ function Hub({ m }: { m: Mailbox }) {
       <input className="doc-search" id="docSearch" autoFocus placeholder="Search files, senders, subjects…" aria-label="Search documents" value={typed} onChange={(e) => setTyped(e.target.value)} />
       <div className="doc-filters" id="docFilters">
         <button className={kind === "all" ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind("all")}>All <span className="c">{total}</span></button>
-        {Object.keys(LABEL).filter((k) => facets[k]).map((k) => <button key={k} className={kind === k ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind(k)}>{LABEL[k]} <span className="c">{facets[k]}</span></button>)}
+        {entries(LABEL).filter(([k]) => facets[k]).map(([k, label]) => <button key={k} className={kind === k ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind(k)}>{label} <span className="c">{facets[k]}</span></button>)}
       </div>
       <div className="rv-scroll" id="docList">{body}</div>
       <div className="commit-hint"><Icon name="download" /> download · click a file to open its email · Esc to close</div>

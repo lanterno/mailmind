@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post } from "../../lib/api/client";
+import type { Verdict } from "../../lib/api/types";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -15,7 +16,7 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
   const { data } = useScreener(account);
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
   const rows = (data?.items ?? []).filter((s) => !decided.has(s.from_addr));
-  const decide = async (addr: string, verdict: "keep" | "block") => {
+  const decide = async (addr: string, verdict: Verdict) => {
     setDecided(new Set([...decided, addr]));
     try {
       const d = await post("/api/rules", { token: addr, verdict });

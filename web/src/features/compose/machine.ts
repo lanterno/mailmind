@@ -4,6 +4,8 @@
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
 import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
+import type { LIMITS } from "../../lib/api/limits.gen";
+import type { DraftTone, RewriteOp } from "../../lib/api/types";
 import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
@@ -27,7 +29,8 @@ export interface Env {
   current(): string | undefined;
   mine(): Set<string>;
   signature(email: string): string;
-  tone(): string;
+  tone(): DraftTone;
+  limits: Limits;   // the server's, as lib/api/limits.gen.ts has them
   // Where focus is, to put it back after a check; and to put it somewhere the machine names.
   focusHere(): unknown;
   focusBack(where: unknown, fallback: Focus): void;
@@ -47,6 +50,8 @@ export interface Env {
   clock(): number;   // ms, for the arm delay
 }
 
+export type Limits = { readonly [K in keyof typeof LIMITS]: number };
+
 export type SendFloat =
   | { kind: "progress"; text: string; clock?: boolean }
   | { kind: "countdown"; left: number; undo: () => void }
@@ -55,10 +60,8 @@ export type SendFloat =
 
 type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout"> };
 
-const MAX_ATTACH = 25 * 1024 * 1024;
 const AUTOSAVE_MS = 8000;
 const KNOWN_WAIT_MS = 150;
-const UNDO_SECONDS = 10;
 
 // An Undo Send the server said no to: it's past its window (a 409), and goes as it was going.
 const tooLate = (e: unknown) => (e as { status?: unknown } | null)?.status === 409;
@@ -357,8 +360,8 @@ export function createComposing(env: Env) {
     if (!x) return;
     let total = x.attachments.reduce((s, a) => s + a.size, 0);
     for (const f of files) {
-      if (total + f.size > MAX_ATTACH) {
-        env.toast("Attachments too large (25 MB max)");
+      if (total + f.size > env.limits.attach_bytes) {
+        env.toast(`Attachments too large (${Math.round(env.limits.attach_bytes / 1048576)} MB max)`);
         continue;
       }
       total += f.size;
@@ -601,7 +604,7 @@ export function createComposing(env: Env) {
 
   function countdown(id: number, snap: Snapshot, recipients: number | undefined) {
     clearInterval(undoTimer);
-    let left = UNDO_SECONDS;
+    let left = env.limits.undo_send_seconds;
     const undo = () => void undoSend(id, snap);
     showFloat({ kind: "countdown", left, undo });
     undoTimer = setInterval(() => {
@@ -614,10 +617,10 @@ export function createComposing(env: Env) {
     }, 1000);
   }
 
-  // Something the server built and queued, with the same ten seconds: an RSVP.
+  // Something the server built and queued, with the same window to undo it in: an RSVP.
   function queued(id: number, what: string) {
     clearInterval(undoTimer);
-    let left = UNDO_SECONDS;
+    let left = env.limits.undo_send_seconds;
     const undo = () => {
       clearInterval(undoTimer);
       void (async () => {
@@ -739,7 +742,7 @@ export function createComposing(env: Env) {
     retireGuard(x);   // a scripted write fires no input event
   }
 
-  async function aiDraft(opts: { tone?: string; instruction?: string; unless?: string; quiet?: boolean } = {}) {
+  async function aiDraft(opts: { tone?: DraftTone; instruction?: string; unless?: string; quiet?: boolean } = {}) {
     const x = c;
     if (!x) return;
     if (x.origKey === null) return env.toast("Open a reply to draft one");
@@ -764,7 +767,7 @@ export function createComposing(env: Env) {
     }
   }
 
-  async function aiRewrite(op: string) {
+  async function aiRewrite(op: RewriteOp) {
     const x = c;
     if (!x || x.ai) return;
     const full = x.body, [s, e] = env.selection(), hasSel = e > s, text = hasSel ? full.slice(s, e) : full;

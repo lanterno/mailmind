@@ -49,7 +49,7 @@ function Body({ at, account }: { at: Doing; account: string }) {
       </>
     );
   }
-  const d = at.plan, verb = d.verb ?? "", label = VERB_LABEL[verb] || verb;
+  const d = at.plan, verb = d.verb, label = VERB_LABEL[verb];
   const danger = verb === "trash" || verb === "junk";
   const count = d.count ?? 0, acting = d.capped ? d.cap : count, sample = d.sample ?? [], more = count - sample.length;
   const press = () => {
@@ -59,7 +59,7 @@ function Body({ at, account }: { at: Doing; account: string }) {
   return (
     <div className={danger ? "do-plan do-plan-danger" : "do-plan"}>
       <div className="do-hd"><Icon name="wind" /> {label} <b>{count}</b> message{count === 1 ? "" : "s"}?</div>
-      <div className="do-scope">matching <code>{d.filter}</code>{verb === "snooze" && <> · until <b>{(d.snooze_preset || "tomorrow").replace(/_/g, " ")}</b></>}</div>
+      <div className="do-scope">matching <code>{d.filter}</code>{verb === "snooze" && <> · until <b>{d.snooze_preset.replace(/_/g, " ")}</b></>}</div>
       <div className="do-srcs">
         {sample.map((s, i) => <div className="do-src" key={i}><span className="do-src-from">{s.from}</span><span className="do-src-subj">{s.subject}</span><span className="do-src-when">{s.when}</span></div>)}
         {more > 0 && <div className="do-more">+ {more} more</div>}

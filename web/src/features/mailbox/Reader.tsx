@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types";
+import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
 import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
@@ -80,11 +80,11 @@ function QuickReplies({ to }: { to: Copy }) {
   );
 }
 
-const SAID: Record<string, string> = { accept: "Accepted ✓", tentative: "Tentative ?", decline: "Declined ✕" };
+const SAID: Record<RsvpDecision, string> = { accept: "Accepted ✓", tentative: "Tentative ?", decline: "Declined ✕" };
 
 function Rsvp({ invite }: { invite: Copy }) {
   const [said, setSaid] = useState<{ done: boolean; text: string } | null>(null);
-  const reply = async (decision: string) => {
+  const reply = async (decision: RsvpDecision) => {
     setSaid({ done: false, text: "Sending RSVP…" });
     try {
       const r = await post("/api/invite/rsvp", { ...copyOf(invite), decision });

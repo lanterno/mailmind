@@ -1,7 +1,7 @@
 // The API's answers and bodies by path, from schema.gen.ts, which `just gen-api` writes from the server's schemas (its OpenAPI
 // document). A path is here only if its route answers JSON: a file, a document or a stream (the mail frame, an attachment, the
 // event stream, the export) has no JSON type to misuse.
-import type { paths } from "./schema.gen";
+import type { components, paths } from "./schema.gen";
 
 type ApiPath = keyof paths & `/api/${string}`;
 
@@ -29,3 +29,19 @@ export type AnyOf<U> = { [K in InEvery<U>]: FieldOf<U, K> } & { [K in Exclude<Ke
 export type PostBodies = {
   [P in keyof PostAnswers]: NonNullable<NonNullable<paths[P]["post"]>["requestBody"]> extends { content: { "application/json": infer Body } } ? Body : never;
 };
+
+// The closed sets the server takes and answers with, each declared once there, in the constant its use case checks against. The
+// page's words for one are a `Record<Set, string>`, in the order its menu offers them, so tsc fails when the server adds or drops
+// a member and the page hasn't followed. The page keeps no list of its own.
+type Schemas = components["schemas"];
+export type SnoozePreset = Schemas["SnoozePreset"];
+export type DraftTone = Schemas["DraftTone"];
+export type RewriteOp = Schemas["RewriteOp"];
+export type PlanVerb = Schemas["PlanVerb"];
+export type FilingVerb = Schemas["FilingVerb"];
+export type Verdict = Schemas["Verdict"];
+export type RuleChange = Schemas["RuleChange"];
+export type BlockScope = Schemas["BlockScope"];
+export type RsvpDecision = Schemas["RsvpDecision"];
+export type ComposeMode = Schemas["ComposeMode"];
+export type DocumentKind = Schemas["DocumentKind"];

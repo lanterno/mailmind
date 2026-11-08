@@ -2,7 +2,8 @@
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
 import { post, refusalOf } from "../../lib/api/client";
-import type { GetAnswers, PostAnswers } from "../../lib/api/types";
+import { LIMITS } from "../../lib/api/limits.gen";
+import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
@@ -10,7 +11,7 @@ import { toast } from "../../lib/toast";
 import type { ListData } from "./data";
 import { filedWords, type Row } from "./rows";
 
-export type Filing = "archive" | "trash" | "junk";
+export type Filing = FilingVerb;
 const WORDS: Record<Filing, { verb: string; act: string }> = {
   archive: { verb: "Archived", act: "archive" },
   trash: { verb: "Trashed", act: "delete" },
@@ -119,7 +120,7 @@ export function fileRow(qc: QueryClient, kind: Filing, row: Copy, whole: boolean
 // What a verb is about: a copy, a whole thread, or the copies x marked. A copy may say its thread, for a verb on the thread.
 export type Target = (Copy & { thread_id?: string | null }) | { account: string; thread_id: string } | { copies: Copy[] };
 
-export type Snoozing = { preset: string } | { until: string };
+export type Snoozing = { preset: SnoozePreset } | { until: string };
 
 export function snooze(qc: QueryClient, target: Target, when: Snoozing, rows: string[], after: Route | null) {
   return act(qc, {
@@ -165,9 +166,6 @@ export function replyLaterDone(qc: QueryClient, target: Target, rows: string[], 
 }
 
 export type BulkVerb = Filing | "read" | "unread" | "star" | "mute";
-
-// What one request may file (`Filing.BULK_MAX`): more go as more requests, under one undo group.
-const BULK_MAX = 500;
 
 // A verb on every marked row, under one undo group: filing as one request, the rest one request each.
 export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole: (r: Row) => boolean, after: Route | null) {
@@ -217,8 +215,8 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
     rows: ids,
     after,
     call: async () => {
-      for (let at = 0; at < rows.length; at += BULK_MAX) {
-        const chunk = rows.slice(at, at + BULK_MAX);
+      for (let at = 0; at < rows.length; at += LIMITS.bulk_rows) {     // what one request may file: more go as more requests
+        const chunk = rows.slice(at, at + LIMITS.bulk_rows);
         try {
           const a = await post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group });
           failed += a.rows_failed;

@@ -4,6 +4,9 @@ import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "re
 import { toast } from "../../lib/toast";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
+import { LIMITS } from "../../lib/api/limits.gen";
+import type { ComposeMode, RewriteOp } from "../../lib/api/types";
+import { entries } from "../../lib/entries";
 import { fileSize, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
@@ -12,8 +15,9 @@ import { composing, draftTone, setDraftTone } from "./compose";
 import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";
 
-const TITLES: Record<string, string> = { reply: "Reply", replyall: "Reply all", forward: "Forward" };
-const REWRITES: [string, string][] = [["shorten", "Shorten"], ["elaborate", "Elaborate"], ["formal", "Formal"], ["friendly", "Friendly"], ["fix", "Fix grammar"], ["translate", "Translate…"]];
+const TITLES: Record<ComposeMode, string> = { new: "New message", reply: "Reply", replyall: "Reply all", forward: "Forward" };
+// The server's rewrites, in the row's order and words.
+const REWRITES = entries<RewriteOp, string>({ shorten: "Shorten", elaborate: "Elaborate", formal: "Formal", friendly: "Friendly", fix: "Fix grammar", translate: "Translate…" });
 
 interface Contact { addr: string; name: string }
 
@@ -229,14 +233,14 @@ function DraftMenu({ anchor, onClose }: { anchor: React.RefObject<HTMLButtonElem
         <div id="draftMenu" ref={inside}>
           <div className="dm-k" id="dmToneK">Tone</div>
           <div className="dm-tones" role="group" aria-labelledby="dmToneK">
-            {Object.entries(DRAFT_TONES).map(([k, label]) => (
+            {entries(DRAFT_TONES).map(([k, label]) => (
               <button key={k} type="button" aria-pressed={k === tone} onClick={() => setDraftTone(k)}>{label}</button>
             ))}
           </div>
           <label className="dm-k" htmlFor="dmSay">What should it say? <small>optional</small></label>
           <input
             id="dmSay"
-            maxLength={400}
+            maxLength={LIMITS.instruction_chars}
             autoComplete="off"
             placeholder="e.g. yes, but not before 3 pm"
             value={say}
@@ -288,8 +292,8 @@ function Foot({ c, ai }: { c: Composer; ai: boolean }) {
       <button type="button" className="abtn" id="cmpAttachBtn" title="Attach files" onClick={() => file.current?.click()}><Icon name="clip" /> Attach</button>
       {offered && (
         <span className="ai-split" id="cmpAiSplit">
-          <button type="button" className="abtn ai" id="cmpAiDraft" disabled={c.ai === "draft"} title={`Draft a reply with AI, ${DRAFT_TONES[tone]!.toLowerCase()} tone`} onClick={() => void composing.aiDraft()}>
-            <Icon name="wind" /><span className="ai-t">{c.ai === "draft" ? "Drafting…" : tone === "balanced" ? "Draft" : `Draft · ${DRAFT_TONES[tone]!.toLowerCase()}`}</span>
+          <button type="button" className="abtn ai" id="cmpAiDraft" disabled={c.ai === "draft"} title={`Draft a reply with AI, ${DRAFT_TONES[tone].toLowerCase()} tone`} onClick={() => void composing.aiDraft()}>
+            <Icon name="wind" /><span className="ai-t">{c.ai === "draft" ? "Drafting…" : tone === "balanced" ? "Draft" : `Draft · ${DRAFT_TONES[tone].toLowerCase()}`}</span>
           </button>
           <button ref={moreBtn} type="button" className="abtn ai ai-more" id="cmpAiMore" disabled={c.ai === "draft"} aria-label="Draft options" aria-expanded={drafting} onClick={() => setDrafting(!drafting)}>▾</button>
           {drafting && <DraftMenu anchor={moreBtn} onClose={() => setDrafting(false)} />}
@@ -332,7 +336,7 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
     <div className="set-box cmp-box" id="composeModal">
       <div className="set-head">
         <div>
-          <h3 id="cmpTitle">{TITLES[c.mode] ?? "New message"}</h3>
+          <h3 id="cmpTitle">{TITLES[c.mode]}</h3>
           <div className="set-sub" id="cmpSub">Queued to the outbox · sent in the background</div>
         </div>
         <button type="button" className="x" id="cmpClose" aria-label="Close" onClick={() => composing.close()}>✕</button>

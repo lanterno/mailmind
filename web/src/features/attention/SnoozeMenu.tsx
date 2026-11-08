@@ -1,11 +1,14 @@
 // When to bring it back: a preset, by click or by its digit, or a time of your own. One menu for the open message, a
 // conversation and a marked set; whatever asks for it says what it's about and where to hang it.
 import { Dialog, Popover } from "react-aria-components";
+import type { SnoozePreset } from "../../lib/api/types";
+import { entries } from "../../lib/entries";
 import { createStore } from "../../lib/store";
 import { useDigitKeys, useFocusFirst } from "../../lib/ui/menuKeys";
 import type { Snoozing, Target } from "../mailbox";
 
-const PRESETS: [string, string][] = [["later_today", "Later today"], ["tomorrow", "Tomorrow 8am"], ["weekend", "This weekend"], ["next_week", "Next week"]];
+// The server's presets, in the menu's order and words.
+const PRESETS = entries<SnoozePreset, string>({ later_today: "Later today", tomorrow: "Tomorrow 8am", weekend: "This weekend", next_week: "Next week" });
 
 export interface SnoozeAsk { target: Target; rows: string[]; anchor: Element | null; canUnsnooze: boolean }
 export const snoozeAsk = createStore<SnoozeAsk | null>(null);

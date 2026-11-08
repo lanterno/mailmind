@@ -2,7 +2,7 @@
 // would touch is frozen by the server at the preview, and nothing happens until you confirm it, by the plan's id.
 import type { QueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../lib/api/client";
-import type { PostAnswers } from "../../lib/api/types";
+import type { PlanVerb, PostAnswers } from "../../lib/api/types";
 import { readAgain, offerUndo, undoGroup } from "../mailbox";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore } from "../../lib/store";
@@ -38,8 +38,8 @@ export function stopAsking() {
   if (asking.get()) asking.set(null);
 }
 
-export const VERB_LABEL: Record<string, string> = { archive: "Archive", trash: "Delete", junk: "Mark junk", read: "Mark read", unread: "Mark unread", star: "Star", snooze: "Snooze" };
-const VERB_DONE: Record<string, string> = { archive: "Archived", trash: "Trashed", junk: "Marked junk", snooze: "Snoozed" };
+export const VERB_LABEL: Record<PlanVerb, string> = { archive: "Archive", trash: "Delete", junk: "Mark junk", read: "Mark read", unread: "Mark unread", star: "Star", snooze: "Snooze" };
+const VERB_DONE: Partial<Record<PlanVerb, string>> = { archive: "Archived", trash: "Trashed", junk: "Marked junk", snooze: "Snoozed" };
 
 export type Doing =
   | { state: "intro" }
@@ -70,7 +70,7 @@ export async function runDo(cmd: string, search: (q: string) => void) {
     return search(q);
   }
   doing.set({ state: "plan", cmd, plan: d, armed: false });
-  announce(`${VERB_LABEL[d.verb ?? ""] || d.verb} ${d.count} messages? Review and confirm.`);
+  announce(`${VERB_LABEL[d.verb]} ${d.count} messages? Review and confirm.`);
 }
 
 export function stopDoing() {
@@ -81,8 +81,8 @@ export function stopDoing() {
 export async function confirmPlan(qc: QueryClient, plan: Plan, clearBox: () => void) {
   if (plan.intent !== "act" || !plan.plan) return;
   stopDoing();
-  const verb = plan.verb ?? "";
-  toast(`${VERB_LABEL[verb] || verb} ${plan.capped ? plan.cap : plan.count}…`);
+  const verb = plan.verb;
+  toast(`${VERB_LABEL[verb]} ${plan.capped ? plan.cap : plan.count}…`);
   try {
     const r = await post("/api/ai/do-confirm", { plan: plan.plan, undo_group: undoGroup() });
     const done = VERB_DONE[verb] || "Updated";

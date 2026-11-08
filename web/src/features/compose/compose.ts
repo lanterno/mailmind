@@ -1,13 +1,14 @@
 // The app's one composer: the machine, on this page's server, storage and DOM.
 import type { QueryClient } from "@tanstack/react-query";
 import { get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types";
+import { LIMITS } from "../../lib/api/limits.gen";
+import type { DraftTone, GetAnswers } from "../../lib/api/types";
 import { go, parseRoute } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore, store, stored } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";
 import { createComposing, type Focus } from "./machine";
-import { DRAFT_TONES } from "./model";
+import { isDraftTone } from "./model";
 
 let qc: QueryClient | undefined;
 export const bindComposer = (client: QueryClient) => void (qc = client);
@@ -21,8 +22,8 @@ export function myAddresses(d = digest()): Set<string> {
 }
 
 const savedTone = stored("mm_draft_tone");
-export const draftTone = createStore(savedTone && DRAFT_TONES[savedTone] ? savedTone : "balanced");
-export function setDraftTone(tone: string) {
+export const draftTone = createStore<DraftTone>(isDraftTone(savedTone) ? savedTone : "balanced");
+export function setDraftTone(tone: DraftTone) {
   draftTone.set(tone);
   store("mm_draft_tone", tone);
 }
@@ -57,6 +58,7 @@ export const composing = createComposing({
     return d?.signatures?.[email] || d?.signature_default || "";
   },
   tone: draftTone.get,
+  limits: LIMITS,
   focusHere: () => {   // a chip's input by its field: chips come and go around it
     const el = document.activeElement as HTMLElement | null;
     if (!el?.closest("#composeModal") || el.closest("#cmpGuard")) return null;

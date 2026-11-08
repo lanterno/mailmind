@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post, refusalOf } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types";
+import type { BlockScope, GetAnswers, RuleChange } from "../../lib/api/types";
+import { entries } from "../../lib/entries";
 import { go } from "../../app/route";
 import { useLayer } from "../../lib/backTrap";
 import { createStore } from "../../lib/store";
@@ -17,7 +18,9 @@ import { curateOpen } from "./open";
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
 
 type Sender = GetAnswers["/api/cleanup/sender"];
-interface Cleaning { d: Sender; scope: "sender" | "domain"; unsubscribe: boolean; armed: boolean }
+interface Cleaning { d: Sender; scope: BlockScope; unsubscribe: boolean; armed: boolean }
+// How far a block may go, as the server has it, in the toggle's order and words.
+const SCOPES = entries<BlockScope, string>({ sender: "this sender", domain: "whole domain" });
 const cleaning = createStore<Cleaning | null>(null);
 const CLEANED: Record<string, string> = { unsubscribed_oneclick: "unsubscribed", mailto_sent: "unsub email sent", needs_browser: "opened the unsub page", no_method: "no unsub link", failed: "unsub couldn’t send — retry later", no_token: "unsub not sent — reopen to retry", read_only: "unsub not sent — MailMind is read-only", skipped: "" };
 
@@ -83,7 +86,7 @@ export function CleanupPanel() {
               <div className="do-scope">{d.count} message{d.count === 1 ? "" : "s"} in your synced mail{accounts.length > 1 ? ` · ${accounts.length} inboxes` : ""}</div>
               <div className="do-line rev"><span className="ic">✓</span><span>Block <b>{p.scope === "domain" ? d.domain : d.from_addr}</b> — future mail auto-filed</span><span className="tag">reversible</span></div>
               <div className="do-scopetoggle">
-                {(["sender", "domain"] as const).map((s) => <button key={s} className={p.scope === s ? "on" : ""} aria-pressed={p.scope === s} onClick={() => cleaning.set({ ...p, scope: s, armed: false })}>{s === "sender" ? "this sender" : "whole domain"}</button>)}
+                {SCOPES.map(([s, label]) => <button key={s} className={p.scope === s ? "on" : ""} aria-pressed={p.scope === s} onClick={() => cleaning.set({ ...p, scope: s, armed: false })}>{label}</button>)}
               </div>
               <div className="do-line rev"><span className="ic">✓</span><span>Move <b>{d.sweep_count}</b> inbox message{d.sweep_count === 1 ? "" : "s"}{p.scope === "domain" ? ` from ${d.from_addr}` : ""} to Trash</span><span className="tag">reversible</span></div>
               {method === "none"
@@ -206,7 +209,7 @@ function Rules() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["rules"], queryFn: () => get("/api/rules") });
   const [text, setText] = useState("");
-  const send = async (token: string, verdict: "keep" | "block" | "remove", say: string) => {
+  const send = async (token: string, verdict: RuleChange, say: string) => {
     try {
       const d = await post("/api/rules", { token, verdict });
       toast(say);

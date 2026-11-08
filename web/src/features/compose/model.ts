@@ -2,10 +2,11 @@
 // and the send-time check's input. The machine beside it runs these.
 import { guardBlocks, guardCheck, guardHard, guardLine, type GuardFix, type GuardSnapshot, type GuardWarning } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
+import type { ComposeMode, DraftTone } from "../../lib/api/types";
 
 export type Field = "to" | "cc" | "bcc";
 export const FIELDS: Field[] = ["to", "cc", "bcc"];
-export type Mode = "new" | "reply" | "replyall" | "forward";
+export type Mode = ComposeMode;
 
 export interface Recipient { v: string; bad: boolean }
 export interface Attachment { filename: string; content_type: string; size: number; b64: string }
@@ -262,4 +263,6 @@ export function canQuickReply(addr: string | null | undefined, mine: Set<string>
   return !(row?.isJunk || /^(receipts|automated|newsletters|spam|blocked)/.test(row?.bucket ?? ""));
 }
 
-export const DRAFT_TONES: Record<string, string> = { brief: "Brief", balanced: "Balanced", warm: "Warm", formal: "Formal" };
+// The server's tones, in the menu's order and words.
+export const DRAFT_TONES: Record<DraftTone, string> = { brief: "Brief", balanced: "Balanced", warm: "Warm", formal: "Formal" };
+export const isDraftTone = (tone: unknown): tone is DraftTone => typeof tone === "string" && Object.hasOwn(DRAFT_TONES, tone);
