@@ -265,6 +265,8 @@ export async function undo(qc: QueryClient) {
   }
   if (d.failed) toast(`${d.failed} couldn’t be restored — press z to try again`);
   else toast(`${d.label || "Action"} undone`);
+  // A move's Undo gives each copy a new uid, so a conversation held from before names copies that are gone.
+  qc.removeQueries({ queryKey: ["thread"] });
   readAgain(qc);
 }
 
