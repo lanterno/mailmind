@@ -822,6 +822,35 @@ def test_hwf_which_parts_are_listed_as_attachments(headers, want):
     assert got == ([want] if want else [])
 
 
+FORWARD_RULE = [
+    # (case, part headers, whether a forward takes it)
+    ("attachment, no name", b"Content-Disposition: attachment\r\n", True),
+    ("attachment with a cid", b"Content-Disposition: attachment; filename=a.bin\r\nContent-ID: <a@example.test>\r\n", True),
+    ("a name, no disposition", b"Content-Type: application/octet-stream; name=a.bin\r\n", True),
+    ("a name and a cid", b"Content-Type: application/octet-stream; name=a.bin\r\nContent-ID: <a@example.test>\r\n", False),
+    ("inline with a name, no cid", b"Content-Disposition: inline; filename=a.bin\r\n", False),
+    ("inline with a name and a cid", b"Content-Disposition: inline; filename=a.bin\r\nContent-ID: <a@example.test>\r\n", False),
+    ("a cid alone", b"Content-ID: <a@example.test>\r\n", False),
+]
+
+
+@pytest.mark.parametrize("headers,taken", [c[1:] for c in FORWARD_RULE], ids=[c[0] for c in FORWARD_RULE])
+def test_hwf_a_part_says_whether_a_forward_takes_it(headers, taken):
+    from mailmind.content import mime
+    raw = _with_part(headers)
+    assert [a["travels"] for a in mime.parse(raw)["attachments"]] == [taken]
+    assert len(attachments.extract(raw)) == int(taken)
+
+
+def test_hwf_outlooks_unnamed_invite_is_listed_but_stays_behind_on_a_forward():
+    from mailmind.content import mime
+    raw = (b"From: lin@example.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"b\"\r\n\r\n"
+           b"--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b\r\nContent-Type: text/calendar; method=REQUEST\r\n\r\n"
+           b"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n--b--\r\n")
+    assert [(a["filename"], a["travels"]) for a in mime.parse(raw)["attachments"]] == [("invite.ics", False)]
+    assert attachments.extract(raw) == []
+
+
 def _forwarded_email(outer_text):
     inner = EmailMessage()
     inner["From"], inner["Subject"] = "lin@example.test", "Fabric"
@@ -871,8 +900,10 @@ def test_hwf_a_forward_carries_an_attached_email_whole_and_not_base64():
     import email
     from email import policy
     from mailmind.compose import api as compose
+    from mailmind.content import mime
     [att] = attachments.extract(_forwarded_email(True))
     assert att["content_type"] == "message/rfc822" and b"Subject: Fabric" in att["data"]
+    assert [a["travels"] for a in mime.parse(_forwarded_email(True))["attachments"]] == [True]
     built = compose.build_message({"account": A, "to": ["lin@example.test"], "subject": "Fwd: Fabric", "text": "fyi",
                                    "attachments": [att]})
     [out] = email.message_from_bytes(built["raw"], policy=policy.default).iter_attachments()
