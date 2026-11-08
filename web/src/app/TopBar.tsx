@@ -15,6 +15,7 @@ import { toast } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
 import { go, type ListSource } from "./route";
 import { useLayer } from "../lib/backTrap";
+import { SuggestMenu, useSuggestions, type Offer } from "./SearchSuggest";
 
 // Wide windows: the control switches the rail between icons and icons with names. Narrower: it opens it as a drawer.
 const docked = matchMedia("(min-width:1101px)");
@@ -98,12 +99,32 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
     ? source.account ? { kind: "folder", account: source.account, folder: "INBOX" } : { kind: "allInboxes" }
     : null;
   const account = source?.kind === "folder" || source?.kind === "search" ? source.account : "";
+  const suggest = useSuggestions(input);
   const leave = () => {
     setText("");
+    suggest.close();
     stopAsking();
     setFolded(true);
     input.current?.blur();
     if (home) go({ source: home, opened: null });
+  };
+  // A search goes where the last one was: a search held to a conversation stays held to it until you take that away.
+  const searchFor = (q: string, within = source?.kind === "search" && source.thread ? { id: source.thread, account: source.account } : undefined) => {
+    suggest.close();
+    stopAsking();
+    if (within) go({ source: { kind: "search", q, account: within.account, thread: within.id }, opened: m.opened });
+    else go({ source: { kind: "search", q, account }, opened: null });
+  };
+  const inConversation = (value: string): Offer | undefined => {
+    const q = value.trim();
+    if (!m.conversation || !q || /^[?!]/.test(q)) return undefined;
+    return { value: q, label: `“${q}” in this conversation only`, detail: "", complete: true, conversation: m.conversation };
+  };
+  const take = (offer: Offer, run: boolean) => {
+    suggest.close();
+    setText(offer.value);
+    if (!offer.complete) suggest.lookUp(offer.value);       // an operator: on to its values
+    else if (run) searchFor(offer.value.trim(), offer.conversation);
   };
   return (
     <header className="top">
@@ -124,12 +145,26 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
           id="search"
           placeholder="Ask a question (start with ?) or search — is:unread, from:amazon"
           aria-label="Search"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={suggest.items.length > 0}
+          aria-controls={suggest.listId}
+          aria-activedescendant={suggest.activeId}
+          autoComplete="off"
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => { if (!text.trim()) setFolded(true); }}
+          onChange={(e) => {
+            setText(e.target.value);
+            suggest.lookUp(e.target.value, inConversation(e.target.value));
+          }}
+          onBlur={() => {
+            suggest.close();
+            if (!text.trim()) setFolded(true);
+          }}
           onKeyDown={(e) => {
+            if (suggest.onKey(e, take)) return;
             if (e.key === "Escape") leave();
             else if (e.key === "Enter") {
+              suggest.close();
               const q = text.trim();
               const words = q.slice(1).trim();
               if (q.startsWith("?") && words) void ask(words, searchScope.get() === "account" && account ? account : "all");
@@ -137,13 +172,12 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
                 stopAsking();
                 if (words) void runDo(words, (filter) => go({ source: { kind: "search", q: filter, account }, opened: null }));
                 else doing.set({ state: "intro" });
-              } else if (q && !q.startsWith("?")) {
-                stopAsking();
-                go({ source: { kind: "search", q, account }, opened: null });
-              } else leave();
+              } else if (q && !q.startsWith("?")) searchFor(q);
+              else leave();
             }
           }}
         />
+        <SuggestMenu box={suggest.box} items={suggest.items} at={suggest.at} take={take} />
         <button className="tbtn search-x" onMouseDown={(e) => e.preventDefault()} onClick={leave}>Cancel</button>
         <button
           className="tbtn icon search-tog"

@@ -66,6 +66,9 @@ export function useMailbox() {
   });
   useEffect(() => prefetchNext(), [nextTwoNow]);
 
+  // The conversation being read, if what's open is part of one: a search can be held to it.
+  const conversation = opened?.kind === "thread" ? { id: opened.id, account: opened.account }
+    : openRow?.threadId ? { id: openRow.threadId, account: openRow.account } : null;
   const isWhole = (r: Row) => !searching && isConversation(r, grouped, r.folder);
   const opening = (r: Row): Opened =>
     isWhole(r) ? { kind: "thread", id: r.threadId, account: r.account, ...copyOf(r) } : { kind: "message", ...copyOf(r) };
@@ -197,6 +200,7 @@ export function useMailbox() {
     openCopy,
     openId,
     openRow,
+    conversation,
     marks,
     markedRows,
     title: allInboxes ? "Inbox" : source?.kind === "search" ? (source.lane ? LANE_TITLE[source.lane] : "Search") : source?.kind === "digest" ? (source.list === "topic" ? source.label : DIGEST_TITLE[source.list]) : folderTitle(folder, folderData?.folders),

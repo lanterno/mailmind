@@ -74,6 +74,15 @@ function ScopeToggle({ account }: { account: string }) {
   return <button type="button" className="scopetog" id="scopeTog" onClick={() => setSearchScope(scope === "all" ? "account" : "all")}>{scope === "all" ? "all accounts" : "this account"} ▾</button>;
 }
 
+// A search held to the conversation being read, or the way to hold it to that. Where it is held, that's the whole scope, in place
+// of the account's: a conversation is in one account.
+function ConversationScope({ m, source }: { m: Mailbox; source: Extract<ListSource, { kind: "search" }> }) {
+  if (source.thread) return <button type="button" className="scopetog" id="scopeThread" aria-label="Search this account instead of only this conversation" onClick={() => go({ source: { kind: "search", q: source.q, account: source.account }, opened: m.opened })}>this conversation only ✕</button>;
+  if (!m.conversation) return null;
+  const { id, account } = m.conversation;
+  return <> · <button type="button" className="scopetog" id="scopeThread" onClick={() => go({ source: { kind: "search", q: source.q, account, thread: id }, opened: m.opened })}>this conversation only</button></>;
+}
+
 function BulkBar({ m }: { m: Mailbox }) {
   const n = m.marks.size;
   if (!n) return null;
@@ -282,7 +291,7 @@ export function App() {
             {screening && <div className="client-ctx" id="clientCtx"><b>Screener</b> · {toScreen} new sender{toScreen === 1 ? "" : "s"} awaiting a decision</div>}
             {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
-                <Icon name="search" /> <b>{source.q}</b> · {all.length} <ScopeToggle account={source.account} />
+                <Icon name="search" /> <b>{source.q}</b> · {all.length} {!source.thread && <ScopeToggle account={source.account} />}<ConversationScope m={m} source={source} />
                 {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
               </div>
             )}
