@@ -1,10 +1,10 @@
 """What a save and a send share: a request made into the message it asks for."""
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from mailmind.compose.application.ports import Accounts, Account, Book, Messages, Screen
 from mailmind.compose.domain import composition
-from mailmind.compose.domain.attachments import Attachment, decode as attachments_of, extract, take_along
+from mailmind.compose.domain.attachments import Attachment, decode as attachments_of, extract, pictures_of, take_along
 from mailmind.compose.domain.builder import Composed
 from mailmind.compose.domain.resume import REPLIES
 from mailmind.content.mime import Parsed
@@ -22,9 +22,9 @@ class Composing:
     def __init__(self, uow: UnitOfWork, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
         self._uow, self._book, self._accounts, self._mail, self._screen = uow, book, accounts, mail, screen
 
-    def preview(self, text: str) -> dict[str, Any]:
+    def preview(self, text: str, pictures: Collection[str] = ()) -> dict[str, Any]:
         """What you typed as it would go out, for the composer's Preview. Your own words, so it reads and writes nothing."""
-        html, formatted = composition.preview(text)
+        html, formatted = composition.preview(text, pictures)
         return {"ok": True, "html": html, "formatted": formatted}
 
     def spec(self, body: Mapping[str, Any]) -> tuple[Composed, int | None, Account]:
@@ -39,13 +39,14 @@ class Composing:
         in_reply_to_pk: int | None = None
         forwarded: list[Attachment] = []    # the original's files a forward added to the payload's
         attachments = attachments_of(body.get("attachments"))
+        pictures = pictures_of(attachments)
         resume = body.get("resume")
         if resume is not None:
             if not is_object(resume):
                 raise Refused("bad draft data")
             tail = composition.tail_of(resume)
             made = composition.as_drafted(text, tail, self._recorded_quote(body, tail), resume.get("in_reply_to"),
-                                          resume.get("references"))
+                                          resume.get("references"), pictures)
             if mode in REPLIES and made.in_reply_to:
                 orow = self._reopened_original(body, acct, made.in_reply_to)
                 in_reply_to_pk = orow["pk"] if orow else None
@@ -63,15 +64,15 @@ class Composing:
                 log.warning("original fetch failed for pk %(id)s: %(why)s", {"id": opk, "why": self._screen.quiet_error(e)})
                 raise Unreachable("could not load the original message")
             if mode == "forward":
-                made = composition.as_forward(text, orow, parsed)
+                made = composition.as_forward(text, orow, parsed, pictures)
                 if body.get("forward_attachments", True):
                     forwarded = take_along(attachments, extract(self._mail.body(opk)))
                     attachments.extend(forwarded)
             else:
-                made = composition.as_reply(text, orow, parsed)
+                made = composition.as_reply(text, orow, parsed, pictures)
                 in_reply_to_pk = opk
         else:
-            made = composition.as_typed(text)
+            made = composition.as_typed(text, pictures)
         return composition.composed(acct, body, made, attachments, forwarded), in_reply_to_pk, acct
 
     def _recorded_quote(self, body: Mapping[str, Any], tail: str) -> Row | None:

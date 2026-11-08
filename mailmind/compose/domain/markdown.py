@@ -1,12 +1,14 @@
 """What a person typed in Markdown, as the HTML that goes out beside it, on Python alone. A subset that reads well in mail:
-paragraphs, *emphasis* and **strong**, [links](https://example.test), lists, > quotes, `code` and fences, and # headings. A
-line break stays one, as it does in a message. What it doesn't know stays as typed, escaped, so no HTML a person typed gets
-through, and what comes out goes through the sanitizer all the same.
+paragraphs, *emphasis* and **strong**, [links](https://example.test), lists, > quotes, `code` and fences, # headings and a
+picture the message itself carries, ![its name](cid:its-id). A line break stays one, as it does in a message. What it doesn't
+know stays as typed, escaped, so no HTML a person typed gets through, and what comes out goes through the sanitizer all the
+same.
 
 `render` answers None for text with no Markdown in it, which goes out as plain text. A bare address is no Markdown, and neither
 is a `>` line, which plain mail has always quoted with: each becomes a link or a quote only in a message that has HTML anyway.
 Each span gives up at the first thing it can't close and bounds what it looks
 ahead at, so the time this takes follows the length of the text."""
+from collections.abc import Collection
 from html import escape
 import re
 import string
@@ -17,13 +19,16 @@ MAX_TEXT = 200_000           # past this it goes out as typed: no message is thi
 MAX_DEPTH = 8                # quotes and lists inside each other, past which a line is a paragraph
 _MAX_SPAN_DEPTH = 4          # emphasis inside emphasis, past which it is text
 _MAX_LINK_TEXT = 2000
+TOKEN = re.compile(r"[A-Za-z0-9_-]{1,64}")   # what a picture's mark names it by
+_CID_SUFFIX = "@mailmind"                    # a Content-ID has an address's form
 
 _FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)$")
 _HASHES = re.compile(r" {0,3}(#{1,6})[ \t]+")
 _QUOTE = re.compile(r" {0,3}> ?")
 _ITEM = re.compile(r"( {0,3})([-*+]|(\d{1,9})[.)]) +(?=\S)")
 
-_SPECIAL = re.compile(r"[\\`*_\[<\n]|https?://", re.I)
+_SPECIAL = re.compile(r"[\\`*_\[!<\n]|https?://", re.I)
+_PICTURE = re.compile(r"!\[([^\[\]\n]{0,300})\]\(cid:([A-Za-z0-9_-]{1,64})\)")
 _BACKTICKS = re.compile(r"`+")
 _PUNCTUATION = frozenset(string.punctuation)
 _LINK_TARGET = re.compile(r"\(\s*<?((?:https?:|mailto:)[^\s<>()]*(?:\([^\s<>()]*\)[^\s<>()]*)*)>?(?:\s+\"[^\"\n]*\")?\s*\)", re.I)
@@ -33,6 +38,24 @@ _BARE_URL = re.compile(r"https?://[^\s<>\"']{1,2048}", re.I)
 
 def _text(s: str) -> str:
     return escape(s, quote=False)
+
+
+def content_id(token: str) -> str:
+    """The Content-ID, without its angle brackets, of the picture a mark names by `token`."""
+    return token + _CID_SUFFIX
+
+
+def token_of(cid: str | None) -> str | None:
+    """The token of a Content-ID this renderer gave out, and None for anyone else's."""
+    if not cid or not cid.endswith(_CID_SUFFIX):
+        return None
+    token = cid[:-len(_CID_SUFFIX)]
+    return token if TOKEN.fullmatch(token) else None
+
+
+def plain_pictures(text: str, shown: Collection[str]) -> str:
+    """What a picture's mark reads as for someone reading the text alone: its name, as a mention of what they aren't seeing."""
+    return _PICTURE.sub(lambda m: f"[{m[1]}]" if m[2] in shown else m[0], text)
 
 
 def _closing_fence(lines: list[str], at: int) -> int | None:
@@ -95,8 +118,9 @@ def _closer(s: str, start: int, mark: str) -> int | None:
 class _Render:
     """One text's rendering. `formatted` says whether anything in it was Markdown."""
 
-    def __init__(self) -> None:
+    def __init__(self, pictures: Collection[str]) -> None:
         self.formatted = False
+        self.pictures = pictures
 
     def blocks(self, lines: list[str], depth: int) -> str:
         out: list[str] = []
@@ -211,6 +235,14 @@ class _Render:
                     pos += 1
                 else:
                     out.append("\\")
+            elif ch == "!":
+                picture = _PICTURE.match(s, at)
+                if picture and picture[2] in self.pictures:
+                    out.append(f'<img src="cid:{content_id(picture[2])}" alt="{escape(picture[1], quote=True)}">')
+                    self.formatted = True
+                    pos = picture.end()
+                else:
+                    out.append("!")
             elif ch == "<":
                 angled = _ANGLED.match(s, at) if not in_link else None
                 if angled:
@@ -287,12 +319,13 @@ class _Render:
         return at + len(url), self._link(url, _text(url))
 
 
-def render(text: str | None) -> str | None:
-    """The sanitized HTML of what a person typed, or None where there is no Markdown in it to render."""
+def render(text: str | None, pictures: Collection[str] = ()) -> str | None:
+    """The sanitized HTML of what a person typed, or None where there is no Markdown in it to render. `pictures` are the
+    tokens of the files this message carries in its text: a mark naming any other stays as typed."""
     if not text or len(text) > MAX_TEXT:
         return None
-    r = _Render()
+    r = _Render(pictures)
     html = r.blocks(text.replace("\r\n", "\n").replace("\r", "\n").split("\n"), 0)
     if not r.formatted:
         return None
-    return sanitize.sanitize(html, load_images=False, fold=False)[0]
+    return sanitize.sanitize(html, load_images=bool(pictures), fold=False)[0]      # no image gets here but a mark's

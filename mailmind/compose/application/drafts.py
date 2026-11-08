@@ -400,4 +400,4 @@ class Drafts:
                 "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,
                 "reply_to": mime.parse(self._mail.body(original["pk"]) or b"")["reply_to"] if original else "",
                 "original_from": (original["from_addr"] or "") if original else "",
-                "notes": {"inline": inline, "bcc_dropped": dropped, "plain": reopening.loses_formatting(how, own, parsed["html"])}}
+                "notes": {"inline": inline, "bcc_dropped": dropped, "plain": reopening.loses_formatting(how, own, parsed["html"], files)}}

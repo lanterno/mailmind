@@ -91,7 +91,7 @@ def router(compose, mailbox):
 
     @r.post("/api/compose/preview", responses=answers(Preview))       # read-only: what you typed, as it would go out
     def compose_preview(body: PreviewBody):
-        return compose.composing.preview(body.text or "")
+        return compose.composing.preview(body.text or "", {p.cid for p in body.pictures or ()})
 
     @r.post("/api/draft/resume", responses=answers(DraftOpened))      # read-only: a saved draft, back into the composer
     def draft_resume(body: ResumeBody):

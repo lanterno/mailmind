@@ -1,7 +1,7 @@
 """What the page asks of Compose, and what it answers."""
 from typing import Any, Literal
 
-from mailmind.compose.api import ComposeMode
+from mailmind.compose.api import ComposeMode, PictureType
 from mailmind.http.schemas.common import Answer, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 # As a person typed them: a string of addresses, or one for each chip (`addresses.parse_addr_list`, which judges each).
@@ -44,8 +44,15 @@ class DraftBody(Composition):
     base_version: Number | None = None        # none overwrites, and 0 is a version
 
 
+class PreviewPicture(RequestBody):
+    """A file the message carries in its text. `content_type` is what it has to be to go there."""
+    cid: str
+    content_type: PictureType
+
+
 class PreviewBody(RequestBody):
     text: str | None = None
+    pictures: list[PreviewPicture] | None = None
 
 
 class ResumeBody(NamesAMessage):
@@ -113,6 +120,7 @@ class DraftFile(Answer):
     content_type: str
     size: int
     b64: str
+    cid: str | None = None                    # the token its mark in the text names it by
 
 
 class HandedOver(Answer):

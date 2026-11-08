@@ -11,7 +11,8 @@ import re
 from collections.abc import Iterable
 from typing import Any, TypedDict
 
-from mailmind.compose.domain.attachments import Attachment
+from mailmind.compose.domain import markdown
+from mailmind.compose.domain.attachments import Attachment, in_the_text
 from mailmind.kernel.addresses import MAX_RECIPIENTS, clean, parse_addr_list, validate_pair
 
 _MSGID = re.compile(r"^<[^<>\s]+@[^<>\s]+>$")
@@ -101,10 +102,17 @@ def _each_once(addrs: Iterable[str]) -> list[str]:
     return list(first.values())
 
 
+def _kind(att: Attachment) -> tuple[str, str]:
+    ct = (att.get("content_type") or "application/octet-stream").split(";")[0].strip()
+    maintype, _, subtype = ct.partition("/")
+    return (maintype, subtype) if subtype else ("application", "octet-stream")
+
+
 def build_message(spec: MessageSpec, draft: bool = False) -> Built:
     """spec: {account, account_name, to, cc, bcc (lists of raw tokens or strings),
-    subject, text, html|None, attachments [{filename,content_type,data:bytes}],
-    in_reply_to|None, references|list|None}.
+    subject, text, html|None, attachments [{filename,content_type,data:bytes,cid?}],
+    in_reply_to|None, references|list|None}. A picture the HTML shows goes beside it in multipart/related, by a Content-ID;
+    its mark stays in a draft's text, so it reopens as it was typed, and is the picture's name in the text a send carries.
     Returns {raw: bytes (Bcc-less, CRLF), message_id, envelope: [addr-spec,...],
     to_disp/cc_disp/bcc_disp: [addr-spec,...] for the outbox UI}.
     draft=True relaxes the require-a-recipient rule (a draft may be half-written) but
@@ -143,16 +151,24 @@ def build_message(spec: MessageSpec, draft: bool = False) -> Built:
             m["References"] = " ".join(toks)
     m["User-Agent"] = "MailMind"
 
-    m.set_content(spec.get("text") or "", subtype="plain", charset="utf-8",
+    html = spec.get("html")
+    pictures, files = in_the_text(html, spec.get("attachments") or [])
+    text = spec.get("text") or ""
+    if pictures and not draft:
+        text = markdown.plain_pictures(text, {a.get("cid") or "" for a in pictures})
+    m.set_content(text, subtype="plain", charset="utf-8",
                   cte="quoted-printable")
-    if html := spec.get("html"):
+    if html:
         m.add_alternative(html, subtype="html", charset="utf-8",
                           cte="quoted-printable")
-    for att in spec.get("attachments") or []:
-        ct = (att.get("content_type") or "application/octet-stream").split(";")[0].strip()
-        maintype, _, subtype = ct.partition("/")
-        if not subtype:
-            maintype, subtype = "application", "octet-stream"
+    for att in pictures:
+        html_part = m.get_payload(1)                         # add_related makes this very part its multipart/related
+        assert isinstance(html_part, EmailMessage)
+        maintype, subtype = _kind(att)
+        html_part.add_related(att["data"], maintype=maintype, subtype=subtype, cid=f"<{markdown.content_id(att.get('cid') or '')}>",
+                              disposition="inline", filename=clean(att.get("filename") or "picture"))
+    for att in files:
+        maintype, subtype = _kind(att)
         extra: dict[str, Any] = {}
         if params := att.get("params"):      # e.g. iMIP text/calendar; method=REPLY
             extra["params"] = {str(k): str(v) for k, v in params.items()}

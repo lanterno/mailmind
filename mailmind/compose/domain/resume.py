@@ -8,7 +8,7 @@ import hashlib
 import json
 import mimetypes
 import re
-from typing import Literal, TypedDict, get_args
+from typing import Literal, NotRequired, TypedDict, get_args
 
 from mailmind.compose.domain import limits, markdown
 from mailmind.kernel.errors import Unreadable
@@ -32,11 +32,12 @@ class Record(TypedDict, total=False):
 
 
 class ResumedFile(TypedDict):
-    """A file as the composer takes it back."""
+    """A file as the composer takes it back. `cid` is the token its mark in the text names it by."""
     filename: str
     content_type: str
     size: int
     b64: str
+    cid: NotRequired[str]
 
 
 @dataclass(frozen=True)
@@ -117,10 +118,11 @@ def split_to_fit(text: str | None, record: Row, exact: bool, files: list[Resumed
     return split
 
 
-def loses_formatting(how: str, own: str, html: str | None) -> bool:
+def loses_formatting(how: str, own: str, html: str | None, files: list[ResumedFile]) -> bool:
     """Whether a draft comes back as bare text with formatting beside it that saving would lose. Not where that formatting
     is only what this text's Markdown comes to, which the next save writes again."""
-    return how == "whole" and bool(html) and lf(html).strip() != (markdown.render(own) or "").strip()
+    pictures = [f["cid"] for f in files if "cid" in f]
+    return how == "whole" and bool(html) and lf(html).strip() != (markdown.render(own, pictures) or "").strip()
 
 
 def mode_of(stored: str | None, in_reply_to: str | None) -> ComposeMode:
@@ -204,10 +206,13 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
             raise Unreadable("This draft’s files add up to more than 25 MB, more than MailMind "
                              "can send." + ELSEWHERE)
         name = a["filename"]
-        if a["content_id"] and a["is_inline"]:
+        token = markdown.token_of(a["content_id"]) if a["is_inline"] else None
+        if a["content_id"] and a["is_inline"] and not token:
             inline += 1                                  # a picture in the text: it comes back as a file
             if re.fullmatch(r"inline-\d+", name):
                 name += mimetypes.guess_extension(ct or "") or ""
-        files.append({"filename": name, "content_type": ct,
-                      "size": len(data), "b64": base64.b64encode(data).decode("ascii")})
+        file: ResumedFile = {"filename": name, "content_type": ct, "size": len(data), "b64": base64.b64encode(data).decode("ascii")}
+        if token:
+            file["cid"] = token
+        files.append(file)
     return files, inline

@@ -1,6 +1,6 @@
 """What a request to send or save comes to, before it is a message: its text and HTML, how much of that you typed and how much
 is the quote, and its threading. Reading the original is the use case's, which hands over what it found."""
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,23 +26,23 @@ class Body:
     references: list[str] | None = None
 
 
-def _html_with(own: str, tail_text: str | None, tail_html: str | None) -> str | None:
+def _html_with(own: str, tail_text: str | None, tail_html: str | None, pictures: Collection[str]) -> str | None:
     """The HTML that goes beside the text. What you typed in Markdown is its own HTML, then the quote's, or the quote's text
     where that has none. With no Markdown in it, a quote's HTML is what makes there be any at all."""
-    mine = markdown.render(own)
+    mine = markdown.render(own, pictures)
     if mine is None:
         return own_html(own) + tail_html if tail_html else None
     return mine + (tail_html or (quoted_text_html(tail_text) if tail_text else ""))
 
 
-def preview(text: str) -> tuple[str, bool]:
+def preview(text: str, pictures: Collection[str] = ()) -> tuple[str, bool]:
     """What the Preview shows of what you typed, and whether it goes out as HTML at all."""
-    mine = markdown.render(text)
+    mine = markdown.render(text, pictures)
     return (own_html(text), False) if mine is None else (mine, True)
 
 
-def as_typed(text: str) -> Body:
-    return Body(text, text, _html_with(text, None, None))
+def as_typed(text: str, pictures: Collection[str] = ()) -> Body:
+    return Body(text, text, _html_with(text, None, None, pictures))
 
 
 def tail_of(resume: Mapping[str, Any]) -> str:
@@ -50,7 +50,8 @@ def tail_of(resume: Mapping[str, Any]) -> str:
     return lf(str(resume.get("tail_text") or ""))
 
 
-def as_drafted(text: str, tail: str, recorded: Row | None, in_reply_to: object, references: object) -> Body:
+def as_drafted(text: str, tail: str, recorded: Row | None, in_reply_to: object, references: object,
+               pictures: Collection[str] = ()) -> Body:
     """A reopened draft goes out as drafted: your text, the quote it already carried and its own threading headers. The
     original is never fetched, quoted again or attached again. `recorded` is what the draft's newest save holds of its
     quote. Its HTML goes only where that vouches for this exact quote: built and sanitized by us at that save, it isn't
@@ -60,7 +61,7 @@ def as_drafted(text: str, tail: str, recorded: Row | None, in_reply_to: object, 
     if tail and recorded and recorded["tail_html"] and lf(recorded["tail_text"] or "") == tail:
         tail_html = sanitize.without_fold(recorded["tail_html"])
     irt, refs = thread_ids(in_reply_to, references)
-    return Body(own, own + tail, _html_with(own, tail or None, tail_html), tail or None, tail_html, irt, refs)
+    return Body(own, own + tail, _html_with(own, tail or None, tail_html, pictures), tail or None, tail_html, irt, refs)
 
 
 def named_original(named: Row | None, in_reply_to: str) -> Row | None:
@@ -73,19 +74,19 @@ def _original(row: Row, parsed: Mapping[str, Any]) -> Original:
             "to": parsed.get("to"), "cc": parsed.get("cc"), "text": parsed.get("text"), "html": parsed.get("html")}
 
 
-def as_reply(own: str, original: Row, parsed: Mapping[str, Any]) -> Body:
+def as_reply(own: str, original: Row, parsed: Mapping[str, Any], pictures: Collection[str] = ()) -> Body:
     """`original` is the message's row, `parsed` its body as far as it could be read."""
     text, html = reply_bodies(own, _original(original, parsed))
     tail_text, tail_html = quote_tail(own, text, html)
-    return Body(own, text, _html_with(own, tail_text, tail_html), tail_text, tail_html, original["message_id"],
+    return Body(own, text, _html_with(own, tail_text, tail_html, pictures), tail_text, tail_html, original["message_id"],
                 reference_chain(original["message_id"], original["refs"], original["in_reply_to"]))
 
 
-def as_forward(own: str, original: Row, parsed: Mapping[str, Any]) -> Body:
+def as_forward(own: str, original: Row, parsed: Mapping[str, Any], pictures: Collection[str] = ()) -> Body:
     """A forward starts a thread of its own, so it names no original."""
     text, html = forward_bodies(own, _original(original, parsed))
     tail_text, tail_html = quote_tail(own, text, html)
-    return Body(own, text, _html_with(own, tail_text, tail_html), tail_text, tail_html)
+    return Body(own, text, _html_with(own, tail_text, tail_html, pictures), tail_text, tail_html)
 
 
 def composed(acct: Mapping[str, Any], body: Mapping[str, Any], made: Body, attachments: list[Attachment],
