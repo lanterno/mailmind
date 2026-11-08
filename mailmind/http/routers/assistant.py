@@ -37,6 +37,8 @@ from mailmind.http.schemas.assistant import (
     RewriteBody,
     ScreenerSuggestBody,
     ScreenerSuggestions,
+    SenderSummary,
+    SenderSummaryBody,
     SummarizeBody,
     Summary,
     Unavailable,
@@ -129,6 +131,11 @@ def router(assistant, mailbox):
     @_scrubbed("cleanup rationale error", "rationale failed")
     def cleanup_rationale(body: RationaleBody):
         return assistant.rationales.explain(body.senders)
+
+    @r.post("/api/contact/summary", responses=answers(SenderSummary, {**_MAY_FAIL, 404: Failure}))     # on a person's click, from the card
+    @_scrubbed("sender summary error", "summary failed")
+    def sender_summary(body: SenderSummaryBody):
+        return assistant.sender_digest.summarize(body.addr)
 
     @r.post("/api/screener/suggest", responses=answers(ScreenerSuggestions, _MAY_FAIL))     # suggests; only a person's click writes a rule
     @_scrubbed("screener suggest error", "suggestions failed")

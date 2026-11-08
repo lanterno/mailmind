@@ -223,4 +223,16 @@ Senders:
 {senders}
 """)
 
-BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT, SCREEN, RATIONALE)
+
+
+SENDER = Template("sender", 1, """You are telling the owner of a mailbox what one sender has been writing to them about, from \
+the threads below, newest first. Write 2-3 plain sentences saying who this sender seems to be and what they have been in touch \
+about. Name up to 4 short topics, and the one thing still waiting on the owner, or "" if none is. Do not invent anything the \
+threads don't show. Reply with ONLY a JSON object {"summary": "...", "topics": ["..."], "open": ""}.
+
+Sender: {who}
+Threads ({n}):
+{threads}
+""")
+
+BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT, SCREEN, RATIONALE, SENDER)

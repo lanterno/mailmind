@@ -721,7 +721,7 @@ def sender_recent(c, addr, n):
     """A sender's newest mail, one row a message however many folders hold it, with what the AI said of each and nothing on
     its way out. For the Assistant, which is told the subjects and that, and no body."""
     return c.execute(
-        "SELECT m.account, m.thread_id, m.subject, m.date_iso, m.ts, m.seen, m.answered, m.snippet, s.summary, s.category "
+        "SELECT m.account, m.thread_id, m.from_name, m.subject, m.date_iso, m.ts, m.seen, m.answered, m.snippet, s.summary, s.category "
         "FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key "
         "WHERE lower(m.from_addr)=? AND m.pending_removal IS NULL "
         "GROUP BY m.message_key ORDER BY m.ts DESC LIMIT ?", (addr, n)).fetchall()

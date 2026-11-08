@@ -36,6 +36,7 @@ from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rationale import Rationales
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.screening import Screening
+from mailmind.assistant.application.sender_digest import SenderDigest
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import limits
@@ -45,7 +46,7 @@ from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "status", "threads", "transport", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "sender_digest", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = environment.ANTHROPIC_API_KEY.name
@@ -244,3 +245,4 @@ drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, repli
 bulk = BulkCommands(calls, _Search())
 screening = Screening(calls, _uow, _mail)
 rationales = Rationales(calls, _uow, _mail)
+sender_digest = SenderDigest(calls, _uow, _mail)

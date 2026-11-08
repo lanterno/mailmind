@@ -192,6 +192,19 @@ class CleanupRationales(Answer):
     rationales: dict[str, str]              # by sender
 
 
+class SenderSummaryBody(RequestBody):
+    addr: str | None = None                 # left out is the use case's `bad address`
+
+
+class SenderSummary(Answer):
+    ok: Literal[True]
+    addr: str
+    threads: int                            # how many of their threads it read
+    summary: str
+    topics: list[str]
+    open: str
+
+
 class ScreenerSuggestBody(RequestBody):
     account: str | None = None
 
