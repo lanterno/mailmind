@@ -7,7 +7,7 @@ import type { Copy } from "../lib/copy";
 export type ListSource =
   | { kind: "folder"; account: string; folder: string }
   | { kind: "allInboxes" }
-  | { kind: "search"; q: string; account: string; lane?: Lane; thread?: string }     // thread: only this conversation of the account
+  | { kind: "search"; q: string; account: string; lane?: Lane; thread?: string; asked?: string }     // thread: only this conversation of the account. asked: the sentence `q` was translated from
   | ({ kind: "digest" } & DigestList);
 
 // Lists the digest answers rather than a folder holds: what needs you, what is safe to file, a topic from the brief.
@@ -37,6 +37,7 @@ export function pathOf({ source, opened, brief }: Route): string {
     if (source.account) query.set("account", source.account);
     if (source.lane) query.set("lane", source.lane);
     if (source.thread) query.set("thread", source.thread);
+    if (source.asked) query.set("asked", source.asked);
   }
   else if (source?.kind === "digest") path += source.list === "topic" ? `/brief/topic/${seg(source.label)}` : `/brief/${source.list}`;
   if (brief) query.set("brief", "1");
@@ -61,8 +62,8 @@ export function parseRoute(pathname: string, search: string): Route {
   else if (parts[0] === "all") source = { kind: "allInboxes" };
   else if (parts[0] === "search") {
     const lane = q.get("lane");
-    const thread = q.get("thread");
-    source = { kind: "search", q: q.get("q") ?? "", account: q.get("account") ?? "", ...(lane === "feed" || lane === "papertrail" ? { lane } : {}), ...(thread ? { thread } : {}) };
+    const thread = q.get("thread"), asked = q.get("asked");
+    source = { kind: "search", q: q.get("q") ?? "", account: q.get("account") ?? "", ...(lane === "feed" || lane === "papertrail" ? { lane } : {}), ...(thread ? { thread } : {}), ...(asked ? { asked } : {}) };
   }
   else if (parts[0] === "brief" && (parts[1] === "needs" || parts[1] === "tidy")) source = { kind: "digest", list: parts[1] };
   else if (parts[0] === "brief" && parts[1] === "topic" && parts[2]) source = { kind: "digest", list: "topic", label: parts[2] };

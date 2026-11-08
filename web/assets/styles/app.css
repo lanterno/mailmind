@@ -1053,6 +1053,9 @@
   .scopetog:hover{color:var(--primary-hi)}
   .ctx-save{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:2px 8px;cursor:pointer}
   .ctx-save:hover{color:var(--primary-ink)}
+  .ctx-chip{display:inline-flex;align-items:center;gap:4px;background:var(--sel);border-radius:var(--r-xs);color:var(--mute);font-size:11px;padding:2px 6px;margin-left:4px}
+  .ctx-chip button{background:none;border:none;color:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0 1px}
+  .ctx-chip button:hover{color:var(--primary-ink)}
   /* ---------- Phase 5: AI card · snooze menu · realtime pill ---------- */
   .ai-card{border:none;border-left:3px solid var(--ai);background:var(--panel);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px;box-shadow:var(--sh-1)}
   .ai-card .ai-hd{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--ai);margin-bottom:8px;font-weight:600}

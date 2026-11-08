@@ -78,6 +78,42 @@ export function stopDoing() {
   doing.set(null);
 }
 
+// A search box's sentence, turned into a search by the planner a bulk command uses. Only ever from Enter (the box asks
+// `readsAsProse` first), and only with the literal search already on screen: a call that fails, is off, or is over the day's limit
+// leaves that standing, and asks nobody anything. A plan's verb goes unread, so a sentence that reads like a command is a search.
+export const translating = createStore<string | null>(null);
+let translateSeq = 0;
+let lastTranslation: { prose: string; filter: string } | null = null;     // pressing Enter again on the same words costs nothing
+const keptLiteral = new Set<string>();                                    // whose translation someone took back
+
+export async function translateProse(prose: string, show: (filter: string) => void) {
+  if (keptLiteral.has(prose) || translating.get() === prose) return;
+  if (lastTranslation?.prose === prose) return show(lastTranslation.filter);
+  const seq = ++translateSeq;
+  translating.set(prose);
+  let filter: string;
+  try {
+    filter = ((await post("/api/ai/do-plan", { cmd: prose })).filter ?? "").trim();
+  } catch {
+    filter = "";
+  }
+  if (seq !== translateSeq) return;
+  translating.set(null);
+  if (!filter || filter.toLowerCase() === prose.toLowerCase()) return;
+  lastTranslation = { prose, filter };
+  show(filter);
+}
+
+export function stopTranslating() {
+  translateSeq++;
+  translating.set(null);
+}
+
+export function keepLiteral(prose: string) {
+  keptLiteral.add(prose);
+  if (lastTranslation?.prose === prose) lastTranslation = null;
+}
+
 export async function confirmPlan(qc: QueryClient, plan: Plan, clearBox: () => void) {
   if (plan.intent !== "act" || !plan.plan) return;
   stopDoing();

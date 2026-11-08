@@ -1,7 +1,8 @@
 // The bar across the top: the rail's control, search, and the way back to the current app. Each keeps its state in the
 // body's classes and the storage keys the current page uses, since the two share a stylesheet and a browser.
 import { useEffect, useRef, useState } from "react";
-import { ask, doing, runDo, stopAsking } from "../features/assistant/ask";
+import { ask, doing, runDo, stopAsking, stopTranslating, translateProse } from "../features/assistant/ask";
+import { readsAsProse } from "../features/assistant/prose";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
 import { searchScope } from "../features/mailbox/data";
@@ -13,7 +14,7 @@ import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
-import { go, type ListSource } from "./route";
+import { go, parseRoute, type ListSource } from "./route";
 import { useLayer } from "../lib/backTrap";
 import { SuggestMenu, useSuggestions, type Offer } from "./SearchSuggest";
 
@@ -104,6 +105,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
     setText("");
     suggest.close();
     stopAsking();
+    stopTranslating();
     setFolded(true);
     input.current?.blur();
     if (home) go({ source: home, opened: null });
@@ -112,8 +114,13 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
   const searchFor = (q: string, within = source?.kind === "search" && source.thread ? { id: source.thread, account: source.account } : undefined) => {
     suggest.close();
     stopAsking();
-    if (within) go({ source: { kind: "search", q, account: within.account, thread: within.id }, opened: m.opened });
-    else go({ source: { kind: "search", q, account }, opened: null });
+    if (within) return go({ source: { kind: "search", q, account: within.account, thread: within.id }, opened: m.opened });
+    go({ source: { kind: "search", q, account }, opened: null });
+    if (!m.digest || m.digest.ai.engine === "none" || !readsAsProse(q)) return;
+    void translateProse(q, (filter) => {
+      const now = parseRoute(location.pathname, location.search).source;
+      if (now?.kind === "search" && now.q === q) go({ source: { kind: "search", q: filter, account, asked: q }, opened: null }, { replace: true });
+    });
   };
   const inConversation = (value: string): Offer | undefined => {
     const q = value.trim();

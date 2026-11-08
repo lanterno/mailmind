@@ -3,7 +3,7 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import { post, refusalOf } from "../lib/api/client";
 import { copyId, copyOf } from "../lib/copy";
 import { composing } from "../features/compose/compose";
-import { asking, stopAsking } from "../features/assistant/ask";
+import { asking, keepLiteral, stopAsking, translating } from "../features/assistant/ask";
 import { AskPane } from "../features/assistant/AskPane";
 import { DoPanel } from "../features/assistant/Do";
 import { backFromDigest, BriefRow } from "../features/assistant/Brief";
@@ -81,6 +81,24 @@ function ConversationScope({ m, source }: { m: Mailbox; source: Extract<ListSour
   if (!m.conversation) return null;
   const { id, account } = m.conversation;
   return <> · <button type="button" className="scopetog" id="scopeThread" onClick={() => go({ source: { kind: "search", q: source.q, account, thread: id }, opened: m.opened })}>this conversation only</button></>;
+}
+
+// A sentence in the box is searched as written, then as the search it was translated into. The chip says which you're looking at,
+// and takes the translation back.
+function TranslatedChip({ source }: { source: Extract<ListSource, { kind: "search" }> }) {
+  const going = translating.useValue();
+  if (going === source.q) return <span className="ctx-chip" role="status"><span className="spin">↻</span> Translating…</span>;
+  const words = source.asked;
+  if (!words) return null;
+  return (
+    <span className="ctx-chip" id="translatedChip">
+      <Icon name="wind" /> Translated from “{words}”
+      <button type="button" aria-label={`Search for “${words}” as typed instead`} onClick={() => {
+        keepLiteral(words);
+        go({ source: { kind: "search", q: words, account: source.account }, opened: null });
+      }}>×</button>
+    </span>
+  );
 }
 
 function BulkBar({ m }: { m: Mailbox }) {
@@ -291,7 +309,7 @@ export function App() {
             {screening && <div className="client-ctx" id="clientCtx"><b>Screener</b> · {toScreen} new sender{toScreen === 1 ? "" : "s"} awaiting a decision</div>}
             {searching && !lane && source?.kind === "search" && (
               <div className="client-ctx" id="clientCtx">
-                <Icon name="search" /> <b>{source.q}</b> · {all.length} {!source.thread && <ScopeToggle account={source.account} />}<ConversationScope m={m} source={source} />
+                <Icon name="search" /> <b>{source.q}</b> · {all.length} {!source.thread && <ScopeToggle account={source.account} />}<ConversationScope m={m} source={source} /> <TranslatedChip source={source} />
                 {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
               </div>
             )}
