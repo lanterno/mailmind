@@ -34,6 +34,7 @@ from starlette.routing import Match
 
 from mailmind.assistant.api import allowing_over
 from mailmind.http import shared
+from mailmind.http.schemas.common import NotJson
 from mailmind.platform.db import txguard
 from mailmind.platform.logging import for_request, get_logger
 
@@ -91,6 +92,12 @@ class Route(APIRoute):
             raise TypeError(f"{path}: a handler is a plain def, which runs on a thread of its own")
         if not isinstance(response_model, DefaultPlaceholder):
             raise TypeError(f"{path}: an answer's model goes in `responses`, which never filters or refuses an answer")
+        responses = kw.get("responses") or {}
+        if responses.get(200, {}).get("model") is NotJson:
+            # A file, a document or a stream: no model and no media type, so OpenAPI says its answer holds no JSON, and the page's
+            # types give it none.
+            kw["responses"] = {**responses, 200: {"description": NotJson.__doc__}}
+            kw["response_class"] = Response
         self.work = endpoint
 
         @wraps(endpoint)
