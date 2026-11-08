@@ -150,8 +150,8 @@ export function BriefPane({ m }: { m: Mailbox }) {
   if (aiOn === false && !brief?.narrative) narrative = <AiOff />;
   else if (writing) narrative = <p className="bf-wait"><span className="spin"><Icon name="wind" /></span> Reading your inbox…</p>;
   else if (brief?.narrative) narrative = <p className="ai-tldr bf-narr">{brief.narrative}</p>;
-  else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="ai-rerun" onClick={() => write(false)}>Write it</button></p>;
-  else if (error) narrative = <p className="bf-wait">The brief isn’t available right now ({failing || error}). <button className="ai-rerun" onClick={() => write(false)}>Try again</button></p>;
+  else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="btn-retry" onClick={() => write(false)}>Write it</button></p>;
+  else if (error) narrative = <p className="bf-wait">The brief isn’t available right now ({failing || error}). <button className="btn-retry" onClick={() => write(false)}>Try again</button></p>;
   else narrative = <p className="bf-wait">Nothing to brief yet.</p>;
 
   const fileTidy = async () => {

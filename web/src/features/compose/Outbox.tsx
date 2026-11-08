@@ -36,8 +36,8 @@ function HeldRow({ p, readOnly, act }: { p: Held; readOnly: boolean; act: (what:
     <div className="ob-row">
       <span className={`ob-st ${stuck ? "error" : p.state === "running" ? "sending" : "queued"}`}>{stuck ? "stuck" : p.state === "running" ? "trying" : "waiting"}</span>
       <span className="ob-sub">{whatItDoes(p)}: {p.subject || "(no subject)"}<br /><span className="ob-to ob-why">{why} · {p.account}</span></span>
-      {stuck && <button className="ob-retry" onClick={() => act("retry", p.id)}>Retry</button>}
-      <button className="ob-retry" onClick={() => act("discard", p.id)}>Discard</button>
+      {stuck && <button className="btn-retry" onClick={() => act("retry", p.id)}>Retry</button>}
+      <button className="btn-retry" onClick={() => act("discard", p.id)}>Discard</button>
     </div>
   );
 }
@@ -51,8 +51,8 @@ function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolea
       <span className="ob-sub">{d.subject || "(no subject)"}<br /><span className="ob-to ob-why">{why} · {d.account}</span></span>
       {!d.discarding && (
         <>
-          <button className="ob-retry" onClick={edit}>Edit</button>
-          <button className="ob-retry" onClick={discard}>Discard</button>
+          <button className="btn-retry" onClick={edit}>Edit</button>
+          <button className="btn-retry" onClick={discard}>Discard</button>
         </>
       )}
     </div>
@@ -70,11 +70,11 @@ function SentRow({ o, call }: { o: Sent; call: Call }) {
       <span className="ob-sub">{o.subject}<br /><span className={o.error ? "ob-to ob-why" : "ob-to"}>to {to}{o.scheduled ? ` · ${fmtWhen(o.next_attempt_at)}` : ""}{o.error ? ` · ${o.error}` : ""}</span></span>
       {(o.scheduled || o.retrying) && (
         <>
-          <button className="ob-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>{o.retrying ? "Try now" : "Send now"}</button>
-          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, () => "Send cancelled", "Cancel failed", "Too late to cancel")}>Cancel</button>
+          <button className="btn-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>{o.retrying ? "Try now" : "Send now"}</button>
+          <button className="btn-retry" onClick={() => call("/api/outbox/cancel", o.id, () => "Send cancelled", "Cancel failed", "Too late to cancel")}>Cancel</button>
         </>
       )}
-      {o.state === "error" && <button className="ob-retry" onClick={() => call("/api/outbox/retry", o.id, (r) => (r.gone ? "It had gone out, so it wasn’t sent again" : "Retrying…"), "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
+      {o.state === "error" && <button className="btn-retry" onClick={() => call("/api/outbox/retry", o.id, (r) => (r.gone ? "It had gone out, so it wasn’t sent again" : "Retrying…"), "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
     </div>
   );
 }

@@ -236,7 +236,7 @@ function MailContent({ copy, mine, minHeight, pad, whole = false }: { copy: Copy
   const { data: d, error, isError, refetch } = useBody(copy);
   const gone = refusalOf(error);     // no such message: it says so, and a retry wouldn't find it either
   if (gone) return <div className="nores">{gone.detail || "error"}</div>;
-  if (isError) return <div className="nores">Couldn’t load. <button className="ai-rerun" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
+  if (isError) return <div className="nores">Couldn’t load. <button className="btn-retry" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
   if (!d) return <Fetching whole={whole} />;
   const blocked = images ? 0 : (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
   return (

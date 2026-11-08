@@ -34,7 +34,7 @@ export function OverLimitDialog() {
             MailMind has spent {usd(asked?.spent_micros ?? 0)} on AI today, and its daily limit is {usd(asked?.limit_micros ?? 0)}. Go over the limit for this?
           </p>
           <div className="do-foot">
-            <Button className="do-confirm" onPress={() => settle(true)}>Go over the limit</Button>
+            <Button className="btn-retry strong" onPress={() => settle(true)}>Go over the limit</Button>
             <Button className="do-cancel" autoFocus onPress={() => settle(false)}>Not now</Button>
           </div>
         </Dialog>

@@ -21,7 +21,7 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
   if (at.state === "error") {
     return (
       <div id="rows">
-        <div className="ask-wrap"><div className="ai-card"><div className="ask-err">Couldn’t answer: {at.error} <button className="ai-rerun" onClick={() => void ask(at.question)}>Retry</button></div></div></div>
+        <div className="ask-wrap"><div className="ai-card"><div className="ask-err">Couldn’t answer: {at.error} <button className="btn-retry" onClick={() => void ask(at.question)}>Retry</button></div></div></div>
       </div>
     );
   }
@@ -32,7 +32,7 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
         <div className="ai-card">
           <div className="ai-hd"><span className="ai-mark"><Icon name="wind" />Answer</span><span className="ask-q">{d.question || at.question}</span></div>
           <div className="ask-answer">{d.answer}</div>
-          <div className="ai-foot">{d.model || "claude"} · grounded in your mail · <button className="ai-rerun" onClick={() => void ask(at.question)}>↻ Ask again</button></div>
+          <div className="ai-foot">{d.model || "claude"} · grounded in your mail · <button className="btn-retry" onClick={() => void ask(at.question)}>↻ Ask again</button></div>
         </div>
         {sources.length > 0
           ? (

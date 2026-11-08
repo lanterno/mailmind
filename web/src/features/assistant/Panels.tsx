@@ -100,7 +100,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
       <div className="rv-foot">
         {d.model === "fallback" ? "summary from your data" : d.model || "claude"}
         {d.generated ? ` · ${d.generated.slice(0, 10)}` : ""}{d.cached ? " · cached" : ""}
-        {d.stale && <> · <span className="ai-stale">mail changed — <button className="ai-rerun" onClick={again}>refresh</button></span></>}
+        {d.stale && <> · <span className="ai-stale">mail changed — <button className="btn-retry" onClick={again}>refresh</button></span></>}
       </div>
     </>
   );
@@ -111,14 +111,14 @@ function YourWeek({ m }: { m: Mailbox }) {
   let body: React.ReactNode = null;
   if (loading) body = <div className="rv-load"><span className="spin">↻</span> Looking back over your week…</div>;
   else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>;
-  else if (error instanceof ApiError && error.overLimit) body = <div className="rv-err">Today’s AI limit is reached, so your review isn’t written. <button className="ai-rerun" onClick={again}>Write it</button></div>;
-  else if (error) body = <div className="rv-err">{refusalOf(error)?.detail || "Couldn’t build your review."} <button className="ai-rerun" onClick={again}>Retry</button></div>;
+  else if (error instanceof ApiError && error.overLimit) body = <div className="rv-err">Today’s AI limit is reached, so your review isn’t written. <button className="btn-retry" onClick={again}>Write it</button></div>;
+  else if (error) body = <div className="rv-err">{refusalOf(error)?.detail || "Couldn’t build your review."} <button className="btn-retry" onClick={again}>Retry</button></div>;
   else if (review) body = <ReviewBody d={review} m={m} again={again} />;
   return (
     <>
       <div className="commit-hd">
         <Icon name="cal" /> Your week <span className="sub" id="rvRange">{review ? "· last 7 days" : ""}</span>
-        <button className="ai-rerun" id="rvRerun" title="Regenerate" aria-label="Regenerate" style={{ marginLeft: 8 }} onClick={again}>↻</button>
+        <button className="btn-retry" id="rvRerun" title="Regenerate" aria-label="Regenerate" style={{ marginLeft: 8 }} onClick={again}>↻</button>
       </div>
       <div className="rv-scroll" id="rvBody">{body}</div>
       <div className="commit-hint">click an item to open it · ↻ regenerate · Esc to close</div>

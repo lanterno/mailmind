@@ -101,7 +101,7 @@ export function CleanupPanel() {
               {d.sweep_capped && <div className="do-cap"><Icon name="alert" /> Sweeps the most recent {d.sweep_count} — run again for the rest.</div>}
               <div className="do-danger-note">Block + sweep undo with <b>z</b>. {method === "none" ? "" : "Unsubscribing can’t be undone."}</div>
               <div className="do-foot">
-                <button className={p.armed ? "do-confirm do-confirm-danger armed" : "do-confirm do-confirm-danger"} onClick={() => { if (p.armed) void runCleanup(qc, p); else cleaning.set({ ...p, armed: true }); }}>{p.armed ? "Click again to confirm" : "Clean up"}</button>
+                <button className={p.armed ? "btn-retry strong danger armed" : "btn-retry strong danger"} onClick={() => { if (p.armed) void runCleanup(qc, p); else cleaning.set({ ...p, armed: true }); }}>{p.armed ? "Click again to confirm" : "Clean up"}</button>
                 <button className="do-cancel" onClick={() => cleaning.set(null)}>Cancel</button>
               </div>
             </div>

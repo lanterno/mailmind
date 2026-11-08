@@ -48,7 +48,7 @@ export function AiCard({ target, row }: { target: Target | null; row: Row | unde
         <div className="ai-hd">{heading}</div>
         {sum && <div className="ai-tldr">{sum}</div>}
         {action && <div className="ai-action">→ {action}</div>}
-        <div className="ai-foot">Saved summary · <button className="ai-rerun" onClick={() => rerun(false)}><Icon name="wind" /> Full summary (i)</button></div>
+        <div className="ai-foot">Saved summary · <button className="btn-retry" onClick={() => rerun(false)}><Icon name="wind" /> Full summary (i)</button></div>
       </div>
     );
   }
@@ -61,19 +61,19 @@ export function AiCard({ target, row }: { target: Target | null; row: Row | unde
       </div>
     );
   }
-  if (shown.kind === "error") return <div className="ai-card" id="aiCard"><div className="ai-err">Couldn’t summarize{shown.error ? ` — ${shown.error}` : ""}. <button className="ai-rerun" onClick={() => rerun(false)}>Retry</button></div></div>;
+  if (shown.kind === "error") return <div className="ai-card" id="aiCard"><div className="ai-err">Couldn’t summarize{shown.error ? ` — ${shown.error}` : ""}. <button className="btn-retry" onClick={() => rerun(false)}>Retry</button></div></div>;
   const { d } = shown;
   return (
     <div className="ai-card" id="aiCard">
       <div className="ai-hd">
         {heading}
         {d.cached && <> <span className="ai-cached">cached</span></>}
-        {d.stale && <> <span className="ai-stale">thread grew — <button className="ai-rerun" onClick={() => rerun()}>re-run</button></span></>}
+        {d.stale && <> <span className="ai-stale">thread grew — <button className="btn-retry" onClick={() => rerun()}>re-run</button></span></>}
       </div>
       <div className="ai-tldr">{d.tldr}</div>
       {d.points?.length > 0 && <ul className="ai-points">{d.points.map((p, i) => <li key={i}>{p}</li>)}</ul>}
       {d.action && <div className="ai-action">→ {d.action}</div>}
-      <div className="ai-foot">{d.message_count || 1} msg · {d.model} <button className="ai-rerun" onClick={() => rerun()}>↻ re-run</button></div>
+      <div className="ai-foot">{d.message_count || 1} msg · {d.model} <button className="btn-retry" onClick={() => rerun()}>↻ re-run</button></div>
     </div>
   );
 }

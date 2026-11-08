@@ -568,7 +568,7 @@
     border-bottom:1px solid color-mix(in srgb,var(--err) 40%,transparent);color:var(--err);font-size:12.5px}
   .acct-alert .aa-fix{background:none;border:1px solid var(--err);border-radius:var(--r-xs);color:var(--err);font:inherit;font-size:12px;font-weight:600;padding:3px 9px;cursor:pointer}
   .acct-alert .aa-x{margin-left:auto;background:none;border:none;color:var(--err);cursor:pointer;font-size:13px}
-  .frail-retry{margin:8px 10px;background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--primary-ink);font:inherit;font-size:12px;padding:5px 10px;cursor:pointer}
+  .btn-retry.in-rail{margin:8px 10px;color:var(--primary-ink);font-size:12px;padding:5px 10px} .btn-retry.in-rail:hover{color:var(--primary-ink)}
   .firstrun{text-align:center;padding:48px 20px}
   .firstrun .fr-h{font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:-.02em;color:var(--ink);margin-bottom:6px}
   .firstrun .fr-b{color:var(--mute);font-size:13.5px;margin-bottom:18px}
@@ -1074,7 +1074,7 @@
   .ob-row .ob-sub{flex:1;min-width:0;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ob-row .ob-to{color:var(--faint);font-size:10.5px;font-family:var(--font-mono)}
   .ob-row .ob-why{white-space:normal}
-  .ob-row button.ob-retry{background:var(--primary-wash);border:none;color:var(--primary-ink);border-radius:var(--r-xs);font:inherit;font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer}
+  .ob-row button.btn-retry{background:var(--primary-wash);color:var(--primary-ink);font-weight:600;padding:4px 9px} .ob-row button.btn-retry:hover{color:var(--primary-ink)}
   /* ---------- Phase 4: threading + search + downloads ---------- */
   .thread-toggle{background:none;border:none;border-radius:var(--r-xs);color:var(--mute);
     font:inherit;font-size:11px;font-weight:500;padding:3px 9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
@@ -1118,8 +1118,9 @@
   .ai-card .ai-action{margin-top:9px;font-size:13.5px;color:var(--gold);font-weight:600}
   .ai-card .ai-foot{margin-top:10px;font-size:11.5px;color:var(--faint);display:flex;gap:10px;align-items:center}
   .ai-card .ai-err{font-size:13.5px;color:var(--soft);display:flex;align-items:center;gap:10px}
-  .ai-rerun{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
-  .ai-rerun:hover{color:var(--ai)}
+  /* the one retry-and-confirm button: quiet by default, .strong for the step that carries out a plan */
+  .btn-retry{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
+  .btn-retry:hover{color:var(--ai)}
   .invite-card{border:none;border-left:3px solid var(--keep);background:var(--panel);
     border-radius:var(--r-md);padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh-1)}
   .invite-card .inv-hd{font-size:11px;color:var(--keep);font-weight:600;margin-bottom:5px}
@@ -1226,10 +1227,10 @@
   .do-danger-note{margin-top:11px;font-size:12.5px;color:var(--err)}
   .do-note{margin-top:11px;font-size:11.5px;color:var(--faint)}
   .do-foot{margin-top:16px;display:flex;gap:9px;align-items:center}
-  .do-confirm{background:var(--ai);border:none;color:var(--ai-ink);font-weight:600;border-radius:var(--r-sm);font:inherit;font-size:13px;padding:9px 17px;cursor:pointer;transition:filter var(--t-fast)}
-  .do-confirm:hover{filter:brightness(1.08)}
-  .do-confirm-danger{background:var(--err);color:var(--on-err)}
-  .do-confirm.armed{animation:pulse .9s ease-in-out infinite}
+  .btn-retry.strong{background:var(--ai);color:var(--ai-ink);border-radius:var(--r-sm);font-size:13px;padding:9px 17px;transition:filter var(--t-fast)}
+  .btn-retry.strong:hover{filter:brightness(1.08);color:var(--ai-ink)}
+  .btn-retry.strong.danger{background:var(--err);color:var(--on-err)} .btn-retry.strong.danger:hover{color:var(--on-err)}
+  .btn-retry.strong.armed{animation:pulse .9s ease-in-out infinite}
   @keyframes pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.28)}}
   .do-cancel,.do-assearch{background:none;border:none;border-radius:var(--r-sm);color:var(--mute);font:inherit;font-size:12.5px;font-weight:500;padding:9px 13px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .do-assearch{margin-left:auto;color:var(--faint)}

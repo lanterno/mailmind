@@ -22,7 +22,7 @@ function Body({ at, account }: { at: Doing; account: string }) {
       <>
         {hd}<div className="do-err">Couldn’t plan that: {at.error}</div>
         <div className="do-foot">
-          <button className="do-confirm" onClick={() => void runDo(at.cmd, search(account))}>Retry</button>
+          <button className="btn-retry strong" onClick={() => void runDo(at.cmd, search(account))}>Retry</button>
           <button className="do-cancel" onClick={dismiss}>Close</button>
         </div>
       </>
@@ -68,7 +68,7 @@ function Body({ at, account }: { at: Doing; account: string }) {
       {danger && <div className="do-danger-note">{verb === "trash" ? "Moves to Trash" : "Marks as junk"} — reversible with <b>Undo</b> (z).</div>}
       {(verb === "read" || verb === "unread" || verb === "star") && <div className="do-note">Not tracked by Undo — reverse it with the opposite command.</div>}
       <div className="do-foot">
-        <button className={`do-confirm${danger ? " do-confirm-danger" : ""}${at.armed ? " armed" : ""}`} onClick={press}>{at.armed ? "Click again to confirm" : `${label} ${acting}`}</button>
+        <button className={`btn-retry strong${danger ? " danger" : ""}${at.armed ? " armed" : ""}`} onClick={press}>{at.armed ? "Click again to confirm" : `${label} ${acting}`}</button>
         <button className="do-cancel" onClick={dismiss}>Cancel</button>
         <button className="do-assearch" onClick={() => { stopDoing(); search(account)(d.filter || ""); }}>Show as search</button>
       </div>

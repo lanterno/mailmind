@@ -164,7 +164,7 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
         {isError && !data && (
           <>
             <div className="frail-acct">Couldn’t list folders</div>
-            <button className="frail-retry" onClick={() => void refetch()}>↻ Retry</button>
+            <button className="btn-retry in-rail" onClick={() => void refetch()}>↻ Retry</button>
           </>
         )}
         {data?.folders.map((f: FolderInfo) => (

@@ -31,7 +31,7 @@ export function ConfirmDialog() {
           <div className="do-hd" id="cfHd">{q?.title}</div>
           <p className="do-intro" id="cfText">{q?.body}</p>
           <div className="do-foot">
-            <Button className="do-confirm" onPress={() => settle(true)}>{q?.yes}</Button>
+            <Button className="btn-retry strong" onPress={() => settle(true)}>{q?.yes}</Button>
             <Button className="do-cancel" autoFocus onPress={() => settle(false)}>{q?.no ?? "Not now"}</Button>
           </div>
         </Dialog>

@@ -42,7 +42,7 @@ function Fields({ form }: { form: FilterForm }) {
       <div className="flt-note">Applies to new mail arriving in your Inbox, not to what’s already here. Your mail server hears of it too. A filter never moves mail.</div>
       {why && <div className="do-err" id="filterWhy" role="alert">{why}</div>}
       <div className="do-foot">
-        <button type="submit" className="do-confirm" id="filterSave" disabled={saving}>{form.id ? "Save" : "Create filter"}</button>
+        <button type="submit" className="btn-retry strong" id="filterSave" disabled={saving}>{form.id ? "Save" : "Create filter"}</button>
         <button type="button" className="do-cancel" onClick={() => filterForm.set(null)}>Cancel</button>
       </div>
     </form>
