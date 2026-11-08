@@ -10,8 +10,8 @@ import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScreener } from "../curation";
 import { settingsOpen } from "../settings";
-import { useFolders, useFoldersAcross, useViews } from "./data";
-import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
+import { useFolders, useFoldersAcross, useLabels, useViews } from "./data";
+import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "./rows";
 
 const ALL = "__all__", MANAGE = "__manage__";
 
@@ -139,6 +139,23 @@ function Views({ source, account }: { source: ListSource | null; account: string
   );
 }
 
+// A Gmail account's own labels, each a lane of the mail that carries it, wherever that mail is stored.
+function Labels({ source, account }: { source: ListSource | null; account: string | undefined }) {
+  const { data } = useLabels(account);
+  const labels = data?.labels ?? [];
+  if (!account || !labels.length) return null;
+  return (
+    <>
+      <div className="frail-acct">Labels</div>
+      {labels.map((l) => {
+        const q = labelQuery(l.name);
+        const to: ListSource = { kind: "search", q, account };
+        return <RailRow key={l.name} source={to} on={source?.kind === "search" && source.q === q && source.account === account} icon="tag" label={l.name} count={l.count} />;
+      })}
+    </>
+  );
+}
+
 export function FolderRail({ accounts, aliases, source, down }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null; down: string[] }) {
   const across = source?.kind === "allInboxes" || source?.kind === "across" || source?.kind === "documents";   // the Hub is every account's
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : across ? undefined : accounts[0];
@@ -172,6 +189,7 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
         ))}
         <Views source={source} account={account ?? ""} />
         <RailRow source={{ kind: "documents" }} on={source?.kind === "documents"} icon="file" label="Documents" />
+        <Labels source={source} account={account} />
         {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
         {virtual.map(([name, icon, label, n]) => (n || name === "__snoozed__" ? <RailRow key={name} source={lane(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
       </nav>

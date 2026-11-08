@@ -20,6 +20,10 @@ export const useDigest = () => useQuery({
   refetchInterval: (q) => (q.state.status === "error" ? 5000 : false),     // the first read failed: the server may be starting
 });
 
+// A Gmail account's own labels: its lanes in the rail. Any other account has none.
+export const useLabels = (account: string | undefined) =>
+  useQuery({ queryKey: ["labels", account], queryFn: () => get(`/api/labels?account=${q(account!)}`), enabled: Boolean(account), staleTime: 60_000 });
+
 export const useFolders = (account: string | undefined) =>
   useQuery({ queryKey: ["folders", account], queryFn: () => get(`/api/folders?account=${q(account!)}`), enabled: Boolean(account) });
 

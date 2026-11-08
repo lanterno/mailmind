@@ -59,6 +59,7 @@ export function useRealtime() {
       again("digest");
       again("folders");
       again("documents");
+      again("labels");
     });
     es.addEventListener("outbox", () => {
       again("outbox");

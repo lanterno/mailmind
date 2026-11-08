@@ -137,3 +137,6 @@ export function filedWords(verb: string, r: { count?: number; failed?: number; s
   const where = to ? ` to ${to}` : "";
   return (r.failed ? `${verb} ${n} of ${n + r.failed}${where} — the rest stayed` : n > 1 ? `${verb} ${n} messages${where}` : `${verb}${where}`) + later;
 }
+
+// A label as the search grammar takes it. A name can hold a space or a quote, and shlex reads it back through either.
+export const labelQuery = (name: string) => `label:"${name.replace(/(["\\])/g, "\\$1")}"`;
