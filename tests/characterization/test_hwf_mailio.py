@@ -579,7 +579,7 @@ def test_hwf_an_offline_trash_undone_while_offline_comes_back(app, world):
     assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
 
 
-# -- sweep, expiry and the AI sweep ----------------------------------------
+# -- sweep, expiry and the sweep of stored junk ----------------------------------------
 
 def audit(world):
     import json
@@ -697,10 +697,10 @@ def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
     assert world.server.find(w.ADA, "Trash", "<loom-new-header@example.test>")
 
 
-def test_hwf_the_ai_sweep_finds_its_targets_in_the_live_inbox_by_message_id(world):
+def test_hwf_a_sweep_of_stored_junk_finds_its_targets_in_the_live_inbox_by_message_id(world):
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # every stored UID is now one off
-    res = curation.sweeps.sweep_ai(acct())
+    res = curation.sweeps.sweep_stored(acct())
     assert (res["moved"], res["stragglers"]) == (3, [])
     for name in JUNK_INBOX:
         assert boxes(world, name) == ([(w.ADA, "Trash")], []), name

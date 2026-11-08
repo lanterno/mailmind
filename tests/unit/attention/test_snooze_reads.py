@@ -121,7 +121,7 @@ def test_a_sweep_leaves_a_snoozed_message_alone_by_snoozes(c, world):
     r = world.row(LUNCH)
     c.execute("UPDATE messages SET is_junk=1 WHERE pk=?", (r["pk"],))
     c.commit()
-    junk = curation._mail.ai_junk_ids
+    junk = curation._mail.stored_junk_ids
     assert r["message_id"] in junk(w.ADA)
     set_snooze(c, r["pk"])
     c.commit()

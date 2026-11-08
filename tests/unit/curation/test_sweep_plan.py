@@ -114,23 +114,23 @@ def test_a_stored_rows_subject_counts():
     assert sweep_plan.stored_bucket(stored("a@example.test", subject="Your receipt"), NO_RULES)[0] == classifier.RECEIPT
 
 
-# ── an AI sweep ───────────────────────────────────────────────────────────────
+# ── a sweep of stored junk ───────────────────────────────────────────────────────────────
 def test_an_ai_sweep_takes_what_was_called_junk_by_message_id():
     called, other = read("a@example.test", mid="<j@example.test>"), read("a@example.test", mid="<k@example.test>")
-    assert sweep_plan.ai_targets([called, other], {"<j@example.test>"}, NO_RULES) == ([called], 0)
+    assert sweep_plan.stored_targets([called, other], {"<j@example.test>"}, NO_RULES) == ([called], 0)
 
 
 def test_mail_with_no_message_id_is_out_of_an_ai_sweeps_reach():
-    assert sweep_plan.ai_targets([read("a@example.test", mid="")], {""}, NO_RULES) == ([], 0)
+    assert sweep_plan.stored_targets([read("a@example.test", mid="")], {""}, NO_RULES) == ([], 0)
 
 
 def test_a_keep_rule_holds_an_ai_sweep_back_and_is_counted():
     live = [read("kept@example.test", mid="<j@example.test>"), read("a@kept.example.test", mid="<j@example.test>"),
             read("other@example.test", mid="<j@example.test>")]
-    targets, kept = sweep_plan.ai_targets(live, {"<j@example.test>"}, rules(keep_senders=["kept@example.test"], keep_domains=["kept.example.test"]))
+    targets, kept = sweep_plan.stored_targets(live, {"<j@example.test>"}, rules(keep_senders=["kept@example.test"], keep_domains=["kept.example.test"]))
     assert ([t["from"] for t in targets], kept) == (["other@example.test"], 2)
 
 
 def test_the_audit_says_an_ai_verdict_took_it():
-    assert sweep_plan.ai_audited([read("a@example.test", uid="9", subject="Offer")]) == [
-        {"uid": "9", "from": "a@example.test", "subject": "Offer", "bucket": "ai-junk", "reason": "is_junk (AI verdict)"}]
+    assert sweep_plan.stored_audited([read("a@example.test", uid="9", subject="Offer")]) == [
+        {"uid": "9", "from": "a@example.test", "subject": "Offer", "bucket": "stored-junk", "reason": "is_junk (the classifier, at ingest)"}]
