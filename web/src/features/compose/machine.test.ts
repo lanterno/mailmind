@@ -625,6 +625,37 @@ describe("files", () => {
   });
 });
 
+describe("forwarding", () => {
+  const copy = { key: 5, folder: "INBOX", uid: 2 };
+  const reading = (attachments: Json[]) => ({ get: vi.fn(async () => ({ account: FROM, subject: "x", text: "", attachments })) });
+
+  it("takes along what the server says travels, and no more", async () => {
+    const { m } = setup(reading([{ travels: false, size: 3 }, { travels: true, size: 2 }]));
+    expect((await m.forward(copy))!.fwdAttach).toBe(1);
+  });
+
+  it("still asks about \"see attached\" on a forward whose parts all stay behind", async () => {
+    const { m } = setup(reading([{ travels: false, size: 3 }]));
+    await m.forward(copy);
+    m.commitChip("to", "bea@example.test");
+    m.edit("subject", "Fwd: x");
+    m.edit("body", "see attached");
+    m.send();
+    expect(m.view.get()!.guard!.keys).toEqual(["attach"]);
+  });
+
+  it("stays quiet when one of the forward's files does travel", async () => {
+    const { m, posted } = setup(reading([{ travels: true, size: 3 }]));
+    await m.forward(copy);
+    m.commitChip("to", "bea@example.test");
+    m.edit("subject", "Fwd: x");
+    m.edit("body", "see attached");
+    m.send();
+    await flush();
+    expect(posted("/api/send").length).toBe(1);
+  });
+});
+
 describe("from the mail", () => {
   const mail = { ok: true, account: FROM, subject: "Lunch", from_addr: "bea@example.test", from_name: "Bea", to: "ada@example.test, cy@example.test", cc: "", text: "soon?", date: "today" };
 

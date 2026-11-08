@@ -33,12 +33,18 @@ describe("subjects", () => {
 });
 
 describe("forwarding", () => {
-  it("counts the files that travel, not the pictures inside the text", () => {
-    const seed = forwardSeed({ account: "a", subject: "x", attachments: [{ is_inline: true, content_id: "c1" }, { is_inline: false }, { is_inline: true }] });
+  it("counts the files the server says travel, not what stays with the text", () => {
+    const seed = forwardSeed({ account: "a", subject: "x", attachments: [{ travels: true, size: 3 }, { travels: false, size: 9 }, { travels: true, size: 2 }] }, 1000);
     expect(seed.fwdAttach).toBe(2);
     expect(seed.subject).toBe("Fwd: x");
     expect(quoteLabel({ mode: "forward", fwdAttach: 2 }, false)).toBe("▸ forwarded message · 2 attachments");
     expect(quoteLabel({ mode: "reply", fwdAttach: 0 }, true)).toBe("▾ quoted message");
+  });
+
+  it("counts nothing the budget ends before", () => {
+    const seed = forwardSeed({ account: "a", attachments: [{ travels: true, size: 40 }, { travels: true, size: 70 }, { travels: true, size: 1 }] }, 100);
+    expect(seed.fwdAttach).toBe(1);
+    expect(forwardSeed({ account: "a" }, 100).fwdAttach).toBe(0);
   });
 });
 
