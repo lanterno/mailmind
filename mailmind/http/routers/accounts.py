@@ -7,7 +7,6 @@ from mailmind.http.schemas.accounts import (
     Listed,
     LoggedIn,
     NamesAnAccount,
-    NotDone,
     Removed,
     Saved,
     Standing,
@@ -40,7 +39,7 @@ def router(accounts, mailbox):
     def account_health():
         return accounts.health.answer()
 
-    @r.post("/api/accounts/test", responses=answers(LoggedIn | CouldntLogIn | NotDone))
+    @r.post("/api/accounts/test", responses=answers(LoggedIn | CouldntLogIn))
     def test(body: TryBody):
         return accounts.connections.test(body.model_dump(exclude_unset=True))
 
@@ -52,11 +51,11 @@ def router(accounts, mailbox):
     def add(body: AccountBody):
         return change("add", body.model_dump(exclude_unset=True))
 
-    @r.post("/api/accounts/edit", responses=answers(Saved | NotDone))
+    @r.post("/api/accounts/edit", responses=answers(Saved))
     def edit(body: AccountBody):
         return change("edit", body.model_dump(exclude_unset=True))
 
-    @r.post("/api/accounts/delete", responses=answers(Removed | NotDone))
+    @r.post("/api/accounts/delete", responses=answers(Removed))
     def delete(body: NamesAnAccount):
         return change("delete", body.model_dump(exclude_unset=True))
 

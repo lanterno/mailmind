@@ -29,7 +29,8 @@ class Connections:
     def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Test a SAVED account ({email}), at its saved server, or an UNSAVED draft (no disk write; what it may try
         is mailmind.accounts.domain.draft's to say). Errors are sanitized — never echoes the attempted password or
-        server banner."""
+        server banner. A login that didn't work is an answer (`connect: false`); an account it doesn't know raises NotFound,
+        and a draft it may not try Refused."""
         t0 = time.time()
         if body.get("draft") and not is_object(body["draft"]):
             raise Refused()
@@ -44,9 +45,9 @@ class Connections:
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:
-            return {"ok": False, "error": "account not found"}
+            raise NotFound("account not found") from None
         except DraftRefused as no:
-            return {"ok": False, "error": str(no)}
+            raise Refused(str(no)) from no
         except Exception as e:
             draft: Entry = body.get("draft") or {}
             return {"ok": True, "connect": False,
@@ -66,15 +67,18 @@ class Connections:
 
 
     def change(self, action: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Add, edit or delete an account. Raises NotFound for one the file doesn't hold, and Refused for any other action."""
         if action == "add":
             return {"ok": True, "account": self._config.add_account(body)}
         if action == "edit":
             row = self._config.update_account(body.get("email"), body)
-            return {"ok": True, "account": row} if row else {"ok": False, "error": "not found"}
+            if not row:
+                raise NotFound("not found")
+            return {"ok": True, "account": row}
         if action == "delete":
             em = body.get("email")
             if self._config.remove_account(em):
                 self._forget_status(em)
                 return {"ok": True, "removed": em}
-            return {"ok": False, "error": "not found"}
-        return {"ok": False, "error": "unknown action"}
+            raise NotFound("not found")
+        raise Refused("unknown action")

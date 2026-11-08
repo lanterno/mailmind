@@ -126,12 +126,6 @@ class CouldntLogIn(Answer):
     error: str
 
 
-class NotDone(Answer):
-    """`ok: false` with a 200, in the use case's words."""
-    ok: Literal[False]
-    error: str
-
-
 class Saved(Answer):
     ok: Literal[True]
     account: AccountRow
