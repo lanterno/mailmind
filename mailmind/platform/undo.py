@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from mailmind.kernel.errors import Conflict, NotFound
 from mailmind.kernel.row import Connection
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -153,11 +154,13 @@ class Undo:
         return False, d.get("account"), None
 
 
-    def undo_last(self) -> tuple[dict[str, Any], int]:
-        """Pop the last undoable action and reverse it. Returns (result, code)."""
+    def undo_last(self) -> dict[str, Any]:
+        """Pop the last undoable action and reverse it, and say what went back: a group says how many of it did and how
+        many didn't. Raises NotFound (`empty`) when there is nothing to undo, and Conflict when none of it went back. What
+        didn't go back is on the stack again for another try, and so is all of it when a reversal raised, which goes on up."""
         entry = self._undo_db(pop)                # off the stack before any server is asked
         if entry is None:
-            return {"ok": False, "empty": True}, 200
+            raise NotFound(empty=True)
         kept = False                              # what couldn't be reversed is back on the stack
         try:
             if entry.get("kind") == "bulk":
@@ -178,22 +181,24 @@ class Undo:
                     self._undo_db(lambda c: put_back(c, {**entry, "children": left[::-1]}))
                     kept = True
                 okk = done > 0
-                res = {"ok": okk, "label": entry.get("label"), "account": acct, "folder": folder,
+                res = {"ok": True, "label": entry.get("label"), "account": acct, "folder": folder,
                        "reversed": done, "failed": len(left)}
             else:
                 ok, acct, folder = self._reverse_one(entry)
                 okk = ok
-                res = {"ok": ok, "label": entry.get("label"), "account": acct, "folder": folder}
+                res = {"ok": True, "label": entry.get("label"), "account": acct, "folder": folder}
             if not okk:
                 if not kept:                      # couldn't reverse -> keep it so the user can retry
                     self._undo_db(lambda c: put_back(c, entry))
-                return {"ok": False, "error": "couldn’t undo — the message may have moved"}, 200
+                raise Conflict("couldn’t undo — the message may have moved")
             self._after()
             sse.publish("undo-done", {})
             res["remaining"] = len(self.entries())
-            return res, 200
+            return res
+        except Conflict:
+            raise
         except Exception as e:
             if not kept:
                 self._undo_db(lambda c: put_back(c, entry))
             log.error("error: %(why)s", {"why": self._quiet_error(e)})
-            return {"ok": False, "error": "couldn’t undo"}, 200
+            raise

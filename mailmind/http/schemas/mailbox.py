@@ -487,14 +487,9 @@ class Undone(Answer):
     failed: int | None = None
 
 
-class NothingToUndo(Answer):
-    ok: Literal[False]
-    empty: Literal[True]
-
-
-class NotUndone(Answer):
-    ok: Literal[False]
-    error: str
+class NothingToUndo(Failure):
+    """The stack is empty: any other 404 says what `Failure` says."""
+    empty: Literal[True] | None = None
 
 
 class Done(Answer):

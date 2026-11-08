@@ -34,7 +34,6 @@ from mailmind.http.schemas.mailbox import (
     NoMessage,
     NoThread,
     NothingToUndo,
-    NotUndone,
     Pending,
     Prefetched,
     ReconcileBody,
@@ -53,7 +52,7 @@ from mailmind.http.schemas.mailbox import (
     WaitingListing,
     WaitingOnOthers,
 )
-from mailmind.kernel.errors import NotFound, Refused
+from mailmind.kernel.errors import NotFound, Problem, Refused
 from mailmind.platform import perimeter
 
 
@@ -188,9 +187,14 @@ def router(mailbox):
     def junk(body: MoveBody):
         return mailbox.filing.do_write("/api/junk", body.model_dump(exclude_unset=True))
 
-    @r.post("/api/undo", responses=answers(Undone | NothingToUndo | NotUndone))
+    @r.post("/api/undo", responses=answers(Undone, {404: NothingToUndo}))
     def undo(body: NoBody):
-        return mailbox.undo.undo_last()
+        try:
+            return mailbox.undo.undo_last()
+        except Problem:
+            raise
+        except Exception:                   # Undo logged it, and put it back for another try
+            return route.problem(500, "couldn’t undo")
 
     @r.post("/api/refresh", responses=answers(SyncStarted))
     def refresh(body: NoBody):
