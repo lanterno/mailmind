@@ -22,7 +22,7 @@ from mailmind.http.schemas.compose import (
     SendBody,
     SentNow,
 )
-from mailmind.kernel.errors import NotFound, Problem, Refused
+from mailmind.kernel.errors import Conflict, NotFound, Problem, Refused
 from mailmind.platform.logging import get_logger
 
 log = get_logger("send")
@@ -57,7 +57,9 @@ def router(compose):
 
     @r.post("/api/outbox/cancel", responses=answers(Cancelled))
     def outbox_cancel(body: NamesASend):
-        return {"ok": compose.outbox.cancel(body.id)}
+        if not compose.outbox.cancel(body.id):
+            raise Conflict("too late to cancel")
+        return {"ok": True}
 
     @r.post("/api/outbox/sendnow", responses=answers(SentNow))
     def outbox_send_now(body: NamesASend):

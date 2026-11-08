@@ -87,7 +87,7 @@ class Retried(Answer):
 
 
 class Cancelled(Answer):
-    ok: bool                                  # false with a 200: too late to cancel
+    ok: Literal[True]                         # too late to cancel is a 409
 
 
 class SentNow(Answer):
