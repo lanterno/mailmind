@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, roleLabel, type FolderRow, type Row, type SearchRow } from "./rows";
 
 const folderRow = (o: Partial<FolderRow> = {}): FolderRow => ({
-  pk: 1, key: 1, bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
+  pk: 1, key: 1, folder: "INBOX", bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
   is_junk: false, seen: false, snippet: "s", subject: "Hi", thread_id: "t1", when: "Mon", ...o,
 });
 const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow(), "a@example.test", "INBOX"), ...o });
