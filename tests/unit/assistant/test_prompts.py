@@ -14,7 +14,7 @@ VERSIONS = {
     "thread": (2, "be1028b02f09cab6"),
     "brief": (2, "bcbd957dea20c0c5"),
     "delta": (2, "7fae188476723487"),
-    "review": (2, "4da5c0d5cfbd4bed"),
+    "review": (3, "5691994e50f7819f"),
     "reply": (2, "824ae42f38e75946"),
     "rewrite": (2, "056af8ea09290efb"),
     "ask": (2, "071dda9e6a1d71ca"),
