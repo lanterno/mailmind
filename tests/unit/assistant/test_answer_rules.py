@@ -115,7 +115,7 @@ def test_two_stale_watermarks_a_moment_apart_look_back_to_the_same_place():
 
 # ── a weekly review ───────────────────────────────────────────────────────────
 
-STATS = {"sent": 1, "received": 2, "by_bucket": {}, "needs_you": 1, "waiting_on": 0, "reply_later": 0, "cleaned": 0}
+STATS = {"sent": 1, "received": 2, "by_bucket": {}, "needs_you": 1, "waiting_on": 0, "reply_later": 0, "cleaned": 0, "handled": 0}
 NEEDED = {"account": "ada@example.test", "thread_id": "t1", "who": "Bea", "subject": "Lunch"}
 
 
