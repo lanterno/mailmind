@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
-import type { BlockScope, GetAnswers, RuleChange } from "../../lib/api/types";
+import type { BlockScope, GetAnswers, PostAnswers, RuleChange } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { go } from "../../app/route";
 import { useLayer } from "../../lib/backTrap";
@@ -24,6 +24,10 @@ interface Cleaning { d: Sender; scope: BlockScope; unsubscribe: boolean; armed: 
 // How far a block may go, as the server has it, in the toggle's order and words.
 const SCOPES = entries<BlockScope, string>({ sender: "this sender", domain: "whole domain" });
 const cleaning = createStore<Cleaning | null>(null);
+// Senders marked in the list, and what cleaning up all of them would do, once someone has asked.
+const flooded = createStore<ReadonlySet<string>>(new Set());
+interface Batching { d: PostAnswers["/api/cleanup/batch/preview"]; armed: boolean }
+const batching = createStore<Batching | null>(null);
 const CLEANED: Record<string, string> = { unsubscribed_oneclick: "unsubscribed", mailto_sent: "unsub email sent", needs_browser: "opened the unsub page", no_method: "no unsub link", failed: "unsub couldn’t send — retry later", no_token: "unsub not sent — reopen to retry", read_only: "unsub not sent — MailMind is read-only", skipped: "" };
 
 const again = (qc: QueryClient) => {
@@ -67,6 +71,74 @@ async function runCleanup(qc: QueryClient, p: Cleaning) {
   toast(`Blocked · swept ${d.swept}${extra ? ` · ${extra}` : ""}`);
   offerUndo(`Cleaned up ${p.d.from_addr}`);
   again(qc);
+}
+
+async function previewBatch(senders: string[]) {
+  try {
+    batching.set({ d: await post("/api/cleanup/batch/preview", { senders }), armed: false });
+  } catch (e) {
+    toast(refusalOf(e)?.detail || "Couldn’t load those senders");
+  }
+}
+
+async function runBatch(qc: QueryClient, senders: string[]) {
+  batching.set(null);
+  flooded.set(new Set());
+  toast(`Cleaning up ${senders.length} senders…`);
+  let d;
+  try {
+    d = await post("/api/cleanup/batch", { senders, undo_group: undoGroup() });
+  } catch {
+    return toast("Cleanup failed");
+  }
+  toast(`Blocked ${d.blocked.length} · swept ${d.swept}${d.sweep_failed ? ` · ${d.sweep_failed} failed` : ""}`);
+  offerUndo(`Cleaned up ${d.blocked.length} senders`);
+  again(qc);
+}
+
+// Why each is worth cleaning up. An extra: the preview stands without it, so this makes no fuss at the limit or with AI off.
+const useRationales = (senders: string[]) =>
+  useQuery({ queryKey: ["rationales", [...senders].sort()], queryFn: () => post("/api/cleanup/rationale", { senders }), enabled: senders.length > 0, staleTime: Infinity, retry: false });
+
+function BatchRow({ s, why }: { s: Batching["d"]["senders"][number]; why: string | undefined }) {
+  return (
+    <div className="do-line rev" data-batch-sender={s.from_addr}>
+      <span className="ic">✓</span>
+      <span className="batch-who">
+        <b>{s.from_addr}</b> <span className="batch-n">{s.count} message{s.count === 1 ? "" : "s"}{s.unseen ? ` · ${s.unseen} unread` : ""} · {s.sweep_count} to Trash</span>
+        {why && <span className="batch-why"><Icon name="wind" /> {why}</span>}
+      </span>
+    </div>
+  );
+}
+
+export function BatchPanel() {
+  const qc = useQueryClient();
+  const p = batching.useValue();
+  useLayer(p !== null, () => batching.set(null));
+  const senders = p?.d.senders.map((s) => s.from_addr) ?? [];
+  const { data, isFetching } = useRationales(senders);
+  return (
+    <ModalOverlay className="do-overlay show" isOpen={p !== null} isDismissable onOpenChange={(open) => { if (!open) batching.set(null); }}>
+      <Modal className="modal-through">
+        <Dialog aria-label="Clean up these senders" className="do-panel">
+          {p && (
+            <div className="do-plan do-plan-danger">
+              <div className="do-hd">Clean up <b>{p.d.senders.length} senders</b>?</div>
+              <div className="do-scope">{isFetching ? "Writing why each one is here…" : `${p.d.sweep_count} inbox message${p.d.sweep_count === 1 ? "" : "s"} go to Trash`}</div>
+              <div className="batch-list">{p.d.senders.map((s) => <BatchRow key={s.from_addr} s={s} why={data?.rationales[s.from_addr]} />)}</div>
+              {p.d.sweep_capped && <div className="do-cap"><Icon name="alert" /> Sweeps the most recent {p.d.sweep_count} — run again for the rest.</div>}
+              <div className="do-danger-note">Each one is blocked and swept, and one <b>z</b> takes it all back. This doesn’t unsubscribe: do that one sender at a time.</div>
+              <div className="do-foot">
+                <button className={p.armed ? "do-confirm do-confirm-danger armed" : "do-confirm do-confirm-danger"} onClick={() => { if (p.armed) void runBatch(qc, senders); else batching.set({ ...p, armed: true }); }}>{p.armed ? "Click again to confirm" : `Clean up ${p.d.senders.length}`}</button>
+                <button className="do-cancel" onClick={() => batching.set(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
+  );
 }
 
 export function CleanupPanel() {
@@ -115,15 +187,31 @@ export function CleanupPanel() {
 
 function Flood() {
   const { data, isError } = useQuery({ queryKey: ["flood"], queryFn: () => get("/api/cleanup/senders") });
+  const marked = flooded.useValue();
+  const toggle = (addr: string, on: boolean) => {
+    const next = new Set(marked);
+    if (on) next.add(addr);
+    else next.delete(addr);
+    flooded.set(next);
+  };
   if (isError) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Couldn’t load.</div>;
   if (!data) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Measuring…</div>;
   const senders = data.senders ?? [];
   if (!senders.length) return <div style={{ color: "var(--faint)", fontSize: 11.5, padding: "6px 2px" }}>{EMPTY.flooding}</div>;
+  const named = senders.map((x) => x.from_addr).filter((a) => marked.has(a));
   return (
     <>
+      {named.length > 0 && (
+        <div className="flood-bar">
+          <span>{named.length} marked</span>
+          <button className="flood-go" onClick={() => void previewBatch(named)}>Clean up {named.length}</button>
+          <button className="flood-go" onClick={() => flooded.set(new Set())}>Clear</button>
+        </div>
+      )}
       {senders.map((x) => (
         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's larger target for the row's own button, which the keyboard has
         <div className="flood-row" key={x.from_addr} data-flood={x.from_addr} onClick={() => void previewCleanup(x.from_addr)}>
+          <input type="checkbox" className="flood-mark" aria-label={`Mark ${x.from_addr}`} checked={marked.has(x.from_addr)} onChange={(e) => toggle(x.from_addr, e.target.checked)} onClick={(e) => e.stopPropagation()} />
           <div className="flood-main">
             <div className="flood-nm">{x.from_name || x.from_addr}</div>
             <div className="flood-ad">{x.from_addr}</div>
@@ -297,6 +385,7 @@ export function Curate() {
       </ModalOverlay>
       <CleanupPanel />
       <FilterDialog />
+      <BatchPanel />
     </>
   );
 }
