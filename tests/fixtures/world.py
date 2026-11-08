@@ -178,6 +178,22 @@ class World:
             c.close()
         return r["pk"] if r else None
 
+    def key(self, name):
+        """The message's key: what the page and every request name it by, wherever its copies are now."""
+        from mailmind.bootstrap.mailbox import store
+        from mailmind.mailbox.domain import identity
+        c = store.conn()
+        try:
+            r = c.execute("SELECT key FROM message_identity WHERE account=? AND identity=?",
+                          (self.placed[name][0], identity.of(message_id(name), None, None, None))).fetchone()
+        finally:
+            c.close()
+        return r["key"] if r else None
+
+    def copy(self, name):
+        """The message's copy where the corpus put it, as a request names one: its key and folder."""
+        return {"key": self.key(name), "folder": self.placed[name][1]}
+
     def deliver(self, acct, folder, data, flags=()):
         """Put one more message on the server and run the app's own incremental sync of that
         folder, as the background sync would. Returns its UID."""

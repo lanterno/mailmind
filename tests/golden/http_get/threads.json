@@ -51,6 +51,7 @@
     }
    ],
    "ok": true,
+   "reply_key": 2,
    "reply_pk": 2,
    "thread_id": "rf:ada@example.test:f55e4e75612a3def"
   },
@@ -119,6 +120,7 @@
     }
    ],
    "ok": true,
+   "reply_key": 23,
    "reply_pk": 23,
    "thread_id": "gm:cy@example.test:1800000000000000001"
   },
@@ -172,6 +174,7 @@
     }
    ],
    "ok": true,
+   "reply_key": 21,
    "reply_pk": 21,
    "thread_id": "rf:bea@example.test:1f7815dd634a2ba6"
   },
@@ -194,6 +197,7 @@
    "count": 0,
    "items": [],
    "ok": true,
+   "reply_key": null,
    "reply_pk": null,
    "thread_id": "no-such-thread"
   },

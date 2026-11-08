@@ -3,6 +3,16 @@
   "body": {
    "count": 2,
    "failed": 0,
+   "filed": [
+    {
+     "folder": "INBOX",
+     "key": 2
+    },
+    {
+     "folder": "INBOX",
+     "key": 1
+    }
+   ],
    "msg": "filed",
    "ok": true,
    "pks": [
@@ -204,6 +214,16 @@
   "body": {
    "count": 2,
    "failed": 0,
+   "filed": [
+    {
+     "folder": "INBOX",
+     "key": 23
+    },
+    {
+     "folder": "INBOX",
+     "key": 22
+    }
+   ],
    "msg": "filed",
    "ok": true,
    "pks": [

@@ -101,7 +101,7 @@ def test_a_value_its_model_refuses_is_the_400_and_nothing_happens(app, world, pa
 
 
 @pytest.mark.parametrize("path", ["/api/trash", "/api/archive", "/api/junk", "/api/seen", "/api/flag", "/api/thread/trash"])
-@pytest.mark.parametrize("field", ["subject", "text", "account", "thread_id", "folder"])
+@pytest.mark.parametrize("field", ["subject", "text", "account", "thread_id"])
 def test_a_field_nothing_here_reads_is_nothing_to_refuse(app, world, path, field):
     r = app.post(path, {"pk": world.pk(RECEIPT), field: 5})
     assert (r.status, r.json["ok"]) == (200, True)
@@ -163,7 +163,7 @@ def test_a_number_may_still_come_as_text(app, world):
 # ── what each use case is handed ─────────────────────────────────────────────────────────────────────────────────────
 
 FILED = {"ok": True, "msg": "ok", "undoable": False}
-MANY = {"ok": True, "msg": "filed", "pks": [5], "count": 1, "failed": 0, "queued": 0, "undoable": True}
+MANY = {"ok": True, "msg": "filed", "pks": [5], "filed": [{"key": 9, "folder": "INBOX"}], "count": 1, "failed": 0, "queued": 0, "undoable": True}
 EACH_SAYS = {"pk": 5, "undo_group": "g", "mutation_id": "m"}
 
 
