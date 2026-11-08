@@ -288,7 +288,7 @@ def test_a_message_whose_closing_save_fails_stays_a_click_away(page, world):
     float_ = page.locator("#sendFloat")
     expect(float_).to_contain_text("Your message couldn’t be saved")
     expect(body(page)).to_be_hidden()
-    expect(page.locator("#srLive")).to_have_text("Your message couldn’t be saved")
+    expect(page.get_by_role("status").filter(has=float_)).to_contain_text("Your message couldn’t be saved")
     assert page.problems and all("500" in x for x in page.problems)   # the save's answer, as the console logs it
     page.problems.clear()
     page.pw.unroute("**/api/draft")

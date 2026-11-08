@@ -95,3 +95,35 @@ def test_a_sends_countdown_drains_once_over_the_window_and_doesnt_start_over_eac
     expect(float_).to_contain_text("Sent")
     expect(bar_of(float_)).to_have_count(0)                     # nothing left to run out of
     clean(page)
+
+
+# ── who hears it ────────────────────────────────────────────────────────
+
+def live_of(page, inner):
+    return page.get_by_role("status").filter(has=page.locator(inner))
+
+
+def test_the_send_and_undo_floats_are_read_out_and_the_ticking_number_is_not(page, world):
+    opened(page)
+    expect(page.locator(".float-live")).to_have_count(2)          # already there, so what lands in them is read
+    row(page, world, RECEIPT).click()
+    page.keyboard.press("e")
+    expect(page.locator("#undoFloat")).to_contain_text("Archived")
+    offer = live_of(page, "#undoFloat")
+    expect(offer).to_contain_text("Undo is available")
+    expect(offer.locator("#ufUndo")).to_contain_text("Undo")
+
+    writing(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
+    send(page)
+    float_ = page.locator("#sendFloat")
+    expect(float_).to_contain_text("Sending in 10s")
+    status = live_of(page, "#sendFloat")
+    expect(status).to_contain_text("You have 10 seconds to undo")
+    expect(float_.locator('[aria-hidden="true"]', has_text="Sending in 10s")).to_have_count(1)   # the tick is for the eye
+    page.clock.run_for(3_000)
+    expect(float_).to_contain_text("Sending in 7s")
+    expect(status).to_contain_text("You have 10 seconds to undo")   # no new words: it isn't read out again
+    page.clock.run_for(8_000)
+    expect(float_).to_contain_text("Sent")
+    expect(status).to_contain_text("Sent · 1 recipient")
+    clean(page)
