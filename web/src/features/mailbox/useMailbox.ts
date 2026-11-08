@@ -2,14 +2,13 @@
 // The reader's buttons, the keys and the command palette all go through this one set of verbs.
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { get } from "../../lib/api/client";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
-import { copyId, copyOf, copyQuery, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
+import { copyId, copyOf, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
 import { settingsOpen } from "../settings";
 import * as actions from "./actions";
-import { groupedPref, saveGroupedPref, useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews } from "./data";
+import { groupedPref, saveGroupedPref, useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews, warmBody } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";
 
 function initialTab(): InboxTab {
@@ -19,7 +18,6 @@ function initialTab(): InboxTab {
 const DIGEST_TITLE = { needs: "Needs you", tidy: "Safe to file" };
 const LANE_TITLE = { feed: "Feed", papertrail: "Paper Trail" };
 const inboxTab = createStore<InboxTab>(initialTab());
-const prefetched = new Set<string>();
 const grouping = createStore(groupedPref());
 
 export function setInboxTab(tab: InboxTab) {
@@ -66,11 +64,7 @@ export function useMailbox() {
   const nextTwo = openId === null || at < 0 ? [] : rows.slice(at + 1, at + 3);
   const nextTwoNow = nextTwo.map((r) => r.id).join("\n");   // by value: the array itself is new each render
   const prefetchNext = useEffectEvent(() => {
-    for (const r of nextTwo) {
-      if (prefetched.has(r.id)) continue;
-      prefetched.add(r.id);
-      get(`/api/message/body?${copyQuery(r)}&prefetch=1`).catch(() => prefetched.delete(r.id));
-    }
+    for (const r of nextTwo) void warmBody(r);
   });
   useEffect(() => prefetchNext(), [nextTwoNow]);
 

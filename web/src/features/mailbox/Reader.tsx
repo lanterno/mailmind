@@ -1,5 +1,5 @@
 // The reader pane: one message, or a whole conversation with its latest open.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
@@ -12,7 +12,7 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { armDwell, cancelDwell, markSeen } from "./actions";
 import { AiCard, summarize } from "./AiCard";
-import { useBody, useThread, type Opened } from "./data";
+import { useBody, useThread, warmMembers, type Opened } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
@@ -341,6 +341,15 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
   const replyTo = latest ? copyOf(latest) : null;
   useDraftAhead(replyTo, false, m.folder === "__muted__");
   const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
+  // The members still closed, made ready: the last opens by itself.
+  const closed = items.slice(0, -1);
+  const closedNow = closed.map(copyId).join("\n");   // by value: the array itself is new each render
+  const warmClosed = useEffectEvent((wanted: () => boolean) => void warmMembers(closed, wanted));
+  useEffect(() => {
+    let wanted = true;
+    warmClosed(() => wanted);
+    return () => { wanted = false; };
+  }, [closedNow]);
   return (
     <>
       <div className="rd-actions">

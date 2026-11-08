@@ -5,7 +5,7 @@ import { get, refusalOf } from "../../lib/api/client";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
-import { copyQuery, type Copy } from "../../lib/copy";
+import { copyId, copyQuery, type Copy } from "../../lib/copy";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
@@ -110,6 +110,31 @@ export function useEveryAccountsFolders(accounts: string[]) {
 
 // A body as the reader opens it, by the copy it is. Only a `prefetch` answers `prefetched`, and the reader never asks for one.
 export type Opened = Exclude<GetAnswers["/api/message/body"], { prefetched: boolean }>;
+
+const warmed = new Set<string>();
+
+// A body made ready on the server for when it opens, once a page. The server skips one it would have to wait for, and that
+// one may be asked for again.
+export function warmBody(copy: Copy): Promise<unknown> {
+  const id = copyId(copy);
+  if (warmed.has(id)) return Promise.resolve();
+  warmed.add(id);
+  return (get(`/api/message/body?${copyQuery(copy)}&prefetch=1`) as Promise<{ prefetched: boolean }>).then(
+    (a) => { if (!a.prefetched) warmed.delete(id); },
+    () => warmed.delete(id),
+  );
+}
+
+const WARM_MEMBERS = 12;
+
+// The members of a conversation a person might open next. The newest first, as a thread reads up from its end, and one at a
+// time: the server skips a body it would have to wait for, so asked all at once it would warm one.
+export async function warmMembers(members: Copy[], wanted: () => boolean) {
+  for (const copy of members.slice(-WARM_MEMBERS).reverse()) {
+    if (!wanted()) return;
+    await warmBody(copy);
+  }
+}
 
 export const useBody = (copy: Copy | null) =>
   useQuery({
