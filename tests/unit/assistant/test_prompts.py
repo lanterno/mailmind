@@ -21,6 +21,7 @@ VERSIONS = {
     "plan": (2, "b09d1367a866c8d8"),
     "extract": (1, "5b6756b19b2b17b9"),
     "screen": (1, "c7c22a019a702ca2"),
+    "rationale": (1, "2d053a693a07e122"),
 }
 
 
