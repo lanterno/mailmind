@@ -15,11 +15,11 @@ from mailmind.assistant.domain import action_plan, prompts
 from mailmind.assistant.domain import limits as limits_of_ai
 from mailmind.attention.domain import snooze
 from mailmind.calendar.domain import rsvp
-from mailmind.compose.domain import limits, outbox_item, resume
+from mailmind.compose.domain import limits, resume
 from mailmind.curation.domain import cleanup_plan, rulebook
 from mailmind.discovery.domain import documents, views
 from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
-from mailmind.kernel import snoozed
+from mailmind.kernel import send_window, snoozed
 from mailmind.mailbox.application.filing import Filing
 from mailmind.mailbox.domain import filing
 
@@ -127,7 +127,7 @@ def test_each_limit_the_page_has_is_the_one_its_use_case_holds_to():
     assert PAGE_LIMITS == {"ai_daily_limit_usd": preferences.AI_DAILY_LIMIT_MAX,
                            "attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
                            "instruction_chars": prompts.INSTRUCTION_MAX, "snooze_copies": snooze.BULK_CAP,
-                           "undo_send_seconds": outbox_item.SEND_DELAY}
+                           "undo_send_longest": send_window.LONGEST, "undo_send_shortest": send_window.SHORTEST}
 
 
 def test_the_limits_module_says_each_as_a_number():

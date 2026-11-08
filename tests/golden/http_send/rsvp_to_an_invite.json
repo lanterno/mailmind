@@ -6,7 +6,8 @@
    "organizer": "noor@studio.example.test",
    "outbox_id": 1,
    "queued": true,
-   "summary": "Design review"
+   "summary": "Design review",
+   "undo_seconds": 10
   },
   "headers": {
    "cache-control": "no-store",

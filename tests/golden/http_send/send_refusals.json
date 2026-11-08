@@ -65,7 +65,8 @@
    "outbox_id": 1,
    "queued": true,
    "recipients": 1,
-   "scheduled": false
+   "scheduled": false,
+   "undo_seconds": 10
   },
   "headers": {
    "cache-control": "no-store",
@@ -206,7 +207,8 @@
    "outbox_id": 2,
    "queued": true,
    "recipients": 1,
-   "scheduled": false
+   "scheduled": false,
+   "undo_seconds": 10
   },
   "headers": {
    "cache-control": "no-store",
