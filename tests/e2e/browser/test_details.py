@@ -414,7 +414,7 @@ def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invi
     key = world.key(RECEIPT)
     page.pw.add_init_script(AWAY + "window.away = true;")
     page.pw.route("**/api/upcoming", lambda route: route.fulfill(json={"ok": True, "items": [
-        {"key": key, "folder": "INBOX", "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
+        {"key": key, "folder": "INBOX", "uid": world.uid(RECEIPT), "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
     opened(page)
     expect(page.locator("#soonPill")).to_be_visible()
     until(page, lambda: page.pw.evaluate("notes.filter((n) => n.tag.startsWith('mailmind-soon-')).length") == 1, "the reminder went out")
