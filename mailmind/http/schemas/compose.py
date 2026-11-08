@@ -168,4 +168,6 @@ class DraftOpened(Answer):
     participants: list[str]
     files: list[DraftFile]
     split: str
+    reply_to: str                             # the Reply-To of what it replies to, as a reply opened from the mail reads it
+    original_from: str
     notes: DraftNotes

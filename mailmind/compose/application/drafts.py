@@ -9,6 +9,7 @@ from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.ports import Account, Accounts, Book, Copies, Messages, Screen
 from mailmind.compose.domain import draft, draft_journal, resume as reopening
 from mailmind.compose.domain.builder import Built, Composed, build_message, thread_ids
+from mailmind.content import mime
 from mailmind.content.headers import header_chips, header_text
 from mailmind.kernel.errors import Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.kernel.ids import FolderName
@@ -397,4 +398,6 @@ class Drafts:
                 "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
                 "original_key": original["message_key"] if original else None,
                 "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,
+                "reply_to": mime.parse(self._mail.body(original["pk"]) or b"")["reply_to"] if original else "",
+                "original_from": (original["from_addr"] or "") if original else "",
                 "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}
