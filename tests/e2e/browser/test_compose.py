@@ -2,6 +2,8 @@
 
 The rules these lean on are also pinned without a browser in web/src/features/compose/machine.test.ts.
 """
+import email
+import email.policy
 import re
 from datetime import timedelta
 
@@ -942,4 +944,51 @@ def test_a_paste_with_nothing_to_clean_is_left_to_the_browser(page, world):
       el.dispatchEvent(e); return !e.defaultPrevented; }""")
     assert untouched
     expect(box).to_have_value("x")                       # a script's event inserts nothing by itself: the browser's paste would
+    clean(page)
+
+
+# ── Markdown ─────────────────────────────────────────────────────────────
+
+def mode(page, name):
+    return page.get_by_role("button", name=name, exact=True)
+
+
+def test_preview_shows_the_markdown_in_a_frame_with_nothing_allowed_and_write_goes_back(page, app, world):
+    opened(page)
+    writing(page, LIN, "Notes", "**Bold** and <script>no</script>")
+    mode(page, "Preview").click()
+    frame = page.locator("#cmpPreview iframe")
+    expect(frame).to_have_attribute("sandbox", "")
+    expect(frame).to_have_attribute("srcdoc", re.compile("<strong>Bold</strong> and &lt;script&gt;"))
+    expect(body(page)).to_be_hidden()
+    expect(page.locator("#cmpPreview")).not_to_contain_text("plain text")
+    mode(page, "Write").click()
+    expect(body(page)).to_be_visible()
+    expect(body(page)).to_have_value("**Bold** and <script>no</script>")
+    expect(body(page)).to_be_focused()
+    clean(page)
+
+
+def test_preview_says_so_when_it_goes_as_plain_text(page, app, world):
+    opened(page)
+    writing(page, LIN, "Notes", "Just words")
+    mode(page, "Preview").click()
+    expect(page.locator("#cmpPreview")).to_contain_text("plain text")
+    expect(page.locator("#cmpPreview iframe")).to_have_attribute("srcdoc", re.compile("Just words"))
+    clean(page)
+
+
+def test_a_markdown_message_goes_out_as_text_and_html_and_reopens_as_typed(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric notes", "**Linen** came in")
+    mode(page, "Preview").click()
+    expect(page.locator("#cmpPreview iframe")).to_have_attribute("srcdoc", re.compile("<strong>Linen</strong>"))
+    send_button(page).click()
+    let_undo_pass(page)
+    due(app)
+    [sent] = world.smtp.messages
+    m = email.message_from_bytes(sent.data, policy=email.policy.default)
+    assert m.get_content_type() == "multipart/alternative"
+    assert m.get_body(preferencelist=("plain",)).get_content().strip() == "**Linen** came in"
+    assert "<strong>Linen</strong>" in m.get_body(preferencelist=("html",)).get_content()
     clean(page)

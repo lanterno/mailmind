@@ -944,3 +944,85 @@ describe("the AI's words", () => {
     expect(m.view.get()!.body).toBe("fresh");
   });
 });
+
+describe("write and preview", () => {
+  it("asks the server what the text comes to, and shows that instead of the box", async () => {
+    const { m, posted, answer } = setup();
+    m.open();
+    m.edit("body", "**hi**");
+    answer("/api/compose/preview", () => ({ ok: true, html: "<p><strong>hi</strong></p>", formatted: true }));
+    void m.preview();
+    expect(m.view.get()!.previewing).toBe(true);
+    expect(m.view.get()!.preview).toBeNull();
+    await flush();
+    expect(posted("/api/compose/preview")).toEqual([{ text: "**hi**" }]);
+    expect(m.view.get()!.preview).toEqual({ html: "<p><strong>hi</strong></p>", formatted: true });
+  });
+
+  it("says when a preview can't be had, and goes back to the box", async () => {
+    const { m, env, toasts } = setup();
+    m.open();
+    vi.mocked(env.post).mockRejectedValueOnce(new Error("offline"));
+    await m.preview();
+    expect(m.view.get()!.previewing).toBe(false);
+    expect(toasts.at(-1)).toMatch(/preview/);
+  });
+
+  it("Write goes back to the text, with the cursor in it", async () => {
+    const { m, focused } = setup();
+    m.open();
+    m.edit("body", "x");
+    await m.preview();
+    m.write();
+    expect(m.view.get()!.previewing).toBe(false);
+    expect(focused.at(-1)).toBe("body");
+  });
+
+  it("drops an answer that came after Write", async () => {
+    const gate = deferred<Json>();
+    const { m, env } = setup();
+    m.open();
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
+    void m.preview();
+    m.write();
+    gate.resolve({ ok: true, html: "<p>late</p>", formatted: true });
+    await flush();
+    expect(m.view.get()!.preview).toBeNull();
+    expect(m.view.get()!.previewing).toBe(false);
+  });
+
+  it("anything that changes the text goes back to it", async () => {
+    const { m, answer } = setup({ signature: (e) => (e === "bea@example.test" ? "Bea" : "") });
+    m.open({ mode: "reply", origKey: 3, to: ["bea@example.test"] });
+    answer("/api/ai/draft-reply", () => ({ ok: true, body: "AI words" }));
+    await m.preview();
+    await m.aiDraft();
+    expect(m.view.get()!.previewing).toBe(false);
+    await m.preview();
+    m.rewriteUndo();
+    m.setFrom("bea@example.test");
+    expect(m.view.get()!.previewing).toBe(false);
+  });
+
+  it("sends what was typed from a preview", async () => {
+    const { m, posted } = setup();
+    m.open({ to: ["bea@example.test"], subject: "s" });
+    m.edit("body", "**hi**");
+    await m.preview();
+    m.send();
+    await flush();
+    expect(posted("/api/send")[0].text).toBe("**hi**");
+  });
+
+  it("a closed composer forgets what it was showing", async () => {
+    const gate = deferred<Json>();
+    const { m, env } = setup();
+    m.open();
+    vi.mocked(env.post).mockImplementationOnce(() => gate.promise);
+    void m.preview();
+    m.close(true);
+    gate.resolve({ ok: true, html: "x", formatted: true });
+    await flush();
+    expect(m.view.get()).toBeNull();
+  });
+});
