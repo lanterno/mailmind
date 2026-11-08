@@ -4,5 +4,6 @@ export const LIMITS = {
   attach_bytes: 26214400,
   bulk_rows: 500,
   instruction_chars: 400,
+  snooze_copies: 500,
   undo_send_seconds: 10,
 } as const;

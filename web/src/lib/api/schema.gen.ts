@@ -3267,7 +3267,8 @@ export interface components {
         /**
          * NamesThreadOrMessages
          * @description A whole thread, by its account and id, else the copies named by key and folder (`snooze.named_thread`, `named_pks`):
-         *     `copies`, or the one `key` and `folder` name.
+         *     `copies`, or the one `key` and `folder` name. More copies than BULK_CAP is the `bad request`, never the first of them: the
+         *     page sends more as more requests, under one undo group.
          */
         NamesThreadOrMessages: {
             /** Account */
