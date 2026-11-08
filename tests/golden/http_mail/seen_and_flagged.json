@@ -257,12 +257,14 @@
  },
  {
   "body": {
-   "msg": "unknown flag",
-   "ok": false
+   "detail": "unknown flag",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -271,7 +273,7 @@
    "x-frame-options": "DENY"
   },
   "request": "flag deleted",
-  "status": 200
+  "status": 400
  },
  {
   "note": "flag deleted: server writes",
@@ -306,12 +308,14 @@
  },
  {
   "body": {
-   "msg": "unknown flag",
-   "ok": false
+   "detail": "unknown flag",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -320,7 +324,7 @@
    "x-frame-options": "DENY"
   },
   "request": "flag answered",
-  "status": 200
+  "status": 400
  },
  {
   "note": "flag answered: server writes",
@@ -379,13 +383,14 @@
  },
  {
   "body": {
-   "msg": "not found",
-   "ok": false,
-   "undoable": false
+   "detail": "not found",
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -394,7 +399,7 @@
    "x-frame-options": "DENY"
   },
   "request": "flag a missing message",
-  "status": 200
+  "status": 404
  },
  {
   "note": "flag a missing message: server writes",

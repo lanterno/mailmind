@@ -17,6 +17,7 @@ import pytest
 
 import app_client
 import problems
+from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import accounts, assistant, background, curation, mailbox
 from mailmind.bootstrap.accounts import config
@@ -377,8 +378,7 @@ def _uid_of(pk):
 def test_a_request_can_only_star_or_mark_read(flag, home, connected):
     pk = _message()
     M = connected(_ScriptedIMAP())
-    res = mailbox.filing.do_write("/api/flag", {"pk": pk, "flag": flag, "on": True})
-    assert res["ok"] is False, res
+    assert answered(mailbox.filing.do_write, "/api/flag", {"pk": pk, "flag": flag, "on": True}) == (problems.refused("unknown flag"), 400)
     assert M.calls == []
 
 
@@ -417,8 +417,8 @@ def test_a_refused_move_keeps_the_message_and_says_so(op, home, connected):
     pk = _message()
     depth = len(mailbox.undo.entries())
     connected(_refusing())
-    res = op(pk)
-    assert res["ok"] is False and res["undoable"] is False, res
+    res, status = answered(op, pk)
+    assert (status, res["type"]) == (409, "/problems/conflict"), res
     assert len(mailbox.undo.entries()) == depth
     assert _still_there(pk)
 
@@ -428,8 +428,8 @@ def test_a_refused_gmail_archive_keeps_the_message(home, connected, monkeypatch)
     real = accounts.get
     monkeypatch.setattr(accounts, "get", lambda email: {**real(email), "kind": "gmail"})
     connected(_ScriptedIMAP(STORE=("NO", [b"label not removed"])))
-    res = mailbox.filing.do_write("/api/archive", {"pk": pk})
-    assert res["ok"] is False and res["undoable"] is False, res
+    res, status = answered(mailbox.filing.do_write, "/api/archive", {"pk": pk})
+    assert (status, res["type"]) == (409, "/problems/conflict"), res
     assert _still_there(pk)
 
 
@@ -450,8 +450,8 @@ def test_the_route_reports_a_refusal_and_offers_no_undo(home, connected):
     pk = _message()
     depth = len(mailbox.undo.entries())
     connected(_refusing())
-    res = mailbox.filing.do_write("/api/archive", {"pk": pk})
-    assert res["ok"] is False and res["undoable"] is False, res
+    res, status = answered(mailbox.filing.do_write, "/api/archive", {"pk": pk})
+    assert (status, res["type"]) == (409, "/problems/conflict"), res
     assert len(mailbox.undo.entries()) == depth
     assert _still_there(pk)
 

@@ -1,13 +1,14 @@
 [
  {
   "body": {
-   "msg": "the server refused the archive",
-   "ok": false,
-   "undoable": false
+   "detail": "the server refused the archive",
+   "status": 409,
+   "title": "Conflict",
+   "type": "/problems/conflict"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -16,7 +17,7 @@
    "x-frame-options": "DENY"
   },
   "request": "archive refused by the server",
-  "status": 200
+  "status": 409
  },
  {
   "note": "archive refused by the server: server writes",

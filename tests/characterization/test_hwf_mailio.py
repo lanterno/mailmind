@@ -480,8 +480,8 @@ def test_hwf_a_refused_select_keeps_the_message(app, world):
     for path in ("/api/trash", "/api/archive", "/api/junk"):
         world.server.fail("SELECT", user=w.ADA)
         since = world.mark()
-        r = app.post(path, {"pk": world.pk(RECEIPT)}).json
-        assert (r["ok"], r["undoable"]) == (False, False), path
+        r = app.post(path, {"pk": world.pk(RECEIPT)})
+        assert (r.status, r.json["type"]) == (409, "/problems/conflict"), path
         assert world.writes(since) == [], path
         assert boxes(world, RECEIPT) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), path
 

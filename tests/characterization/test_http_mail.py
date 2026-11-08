@@ -6,6 +6,7 @@ files are in tests/golden/http_mail/.
 Each provider files mail its own way. Ada's plain IMAP host moves the message. Bea's Proton Bridge
 moves it, and marks anything copied into Trash as read. Cy's Gmail drops a label instead.
 """
+import problems
 from fixtures import world as w
 
 
@@ -45,7 +46,7 @@ def test_a_refused_flag_change_leaves_the_local_row_alone(app, world):
     name = "ada-inbox-02-lunch-confirm.eml"
     world.server.fail("UID STORE")
     r = app.post("/api/seen", {"pk": world.pk(name), "seen": True})
-    assert (r.json["ok"], world.row(name)["seen"]) == (False, 0)
+    assert (r.status, r.json, world.row(name)["seen"]) == (409, problems.conflict("the server refused the flag change"), 0)
 
 
 # ── archive, junk, trash, and their undo ─────────────────────────────

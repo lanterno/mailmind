@@ -11,6 +11,7 @@ import time
 
 import pytest
 
+from answered import answered
 from fakes.imap_server import FakeIMAPServer
 
 ADA = "ada@example.test"
@@ -218,8 +219,8 @@ def test_a_scripted_no_reaches_the_app_as_a_refusal(srv, app):
     c.close()
     srv.fail("UID MOVE", "NO [CANNOT] not today")
     srv.fail("UID COPY", "NO [OVERQUOTA] full")
-    answer = mailbox.filing.do_trash({"pk": pk})
-    assert (answer["ok"], answer["undoable"]) == (False, False)
+    answer, status = answered(mailbox.filing.do_trash, {"pk": pk})
+    assert (status, answer["type"]) == (409, "/problems/conflict")
     assert list(srv.messages(ADA, "INBOX")) == [uid]
 
 

@@ -116,12 +116,12 @@ def test_a_route_that_reads_no_body_still_wants_an_object(app, path):
 
 
 @pytest.mark.parametrize("path, status, answer", [
-    ("/api/archive", 200, {"ok": False, "msg": "bad pk"}),
-    ("/api/junk", 200, {"ok": False, "msg": "bad pk"}),
-    ("/api/seen", 200, {"ok": False, "msg": "bad pk"}),
-    ("/api/flag", 200, {"ok": False, "msg": "bad pk"}),
-    ("/api/thread/archive", 200, {"ok": False, "msg": "bad pk"}),
-    ("/api/thread/trash", 200, {"ok": False, "msg": "bad pk"}),
+    ("/api/archive", 400, problems.refused("bad pk")),
+    ("/api/junk", 400, problems.refused("bad pk")),
+    ("/api/seen", 400, problems.refused("bad pk")),
+    ("/api/flag", 400, problems.refused("bad pk")),
+    ("/api/thread/archive", 400, problems.refused("bad pk")),
+    ("/api/thread/trash", 400, problems.refused("bad pk")),
     ("/api/trash", 400, BAD_REQUEST),
     ("/api/bulk/file", 400, BAD_REQUEST),
     ("/api/pending/retry", 400, BAD_REQUEST),
@@ -147,8 +147,9 @@ def test_what_is_left_out_does_what_it_always_did(app, world):
     assert row_of(pk)["flagged"]
     assert app.post("/api/flag", {"pk": pk, "on": False}).json["ok"]
     assert not row_of(pk)["flagged"]
-    assert app.post("/api/flag", {"pk": pk, "flag": None}).json == {"ok": False, "msg": "unknown flag"}
-    assert app.post("/api/flag", {"pk": pk, "flag": "deleted"}).json == {"ok": False, "msg": "unknown flag"}
+    for flag in (None, "deleted"):
+        r = app.post("/api/flag", {"pk": pk, "flag": flag})
+        assert (r.status, r.json) == (400, problems.refused("unknown flag"))
 
 
 def test_a_number_may_still_come_as_text(app, world):

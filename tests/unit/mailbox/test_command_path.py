@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import problems
 from fixtures import world as w
 from gate import held_elsewhere
 
@@ -175,8 +176,8 @@ def test_a_refusal_in_a_click_leaves_nothing_behind(app, world):
     pk = world.pk(RECEIPT)
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
-    r = app.post("/api/archive", {"pk": pk}).json
-    assert (r["ok"], r["msg"], r["undoable"]) == (False, "the server refused the archive", False)
+    r = app.post("/api/archive", {"pk": pk})
+    assert (r.status, r.json) == (409, problems.conflict("the server refused the archive"))
     assert rows() == [] and undo_stack() == [] and not hidden(pk)
     assert mailbox.commands.list_open()["items"] == []
     assert boxes(world, RECEIPT) == ["INBOX"]
@@ -185,8 +186,8 @@ def test_a_refusal_in_a_click_leaves_nothing_behind(app, world):
 def test_a_refused_flag_change_in_a_click_puts_back_what_it_replaced(app, world):
     pk, before = world.pk(RECEIPT), world.row(RECEIPT)["flagged"]
     world.server.fail("UID STORE", user=w.ADA)
-    r = app.post("/api/flag", {"pk": pk, "flag": "flagged", "on": not before}).json
-    assert (r["ok"], r["msg"]) == (False, "the server refused the flag change")
+    r = app.post("/api/flag", {"pk": pk, "flag": "flagged", "on": not before})
+    assert (r.status, r.json) == (409, problems.conflict("the server refused the flag change"))
     assert world.row(RECEIPT)["flagged"] == before and rows() == []
 
 
@@ -222,7 +223,8 @@ def test_a_message_on_its_way_out_cant_be_filed_again(app, world):
     pk = world.pk(RECEIPT)
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/archive", {"pk": pk}).json["status"] == "queued"
-    assert app.post("/api/trash", {"pk": pk}).json == {"ok": False, "msg": "not found", "undoable": False}
+    r = app.post("/api/trash", {"pk": pk})
+    assert (r.status, r.json) == (404, problems.not_found("not found"))
     assert [r["kind"] for r in rows()] == ["archive"]
 
 

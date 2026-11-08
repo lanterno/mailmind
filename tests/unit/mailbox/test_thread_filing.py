@@ -2,6 +2,7 @@
 one Undo for all of them, and what a failure leaves, on the fake IMAP server."""
 import pytest
 
+import problems
 from fixtures import world as w
 
 LUNCH = "ada-inbox-01-lunch.eml"
@@ -98,11 +99,10 @@ def test_a_partial_failure_reports_what_was_filed(app, world):
     assert world.row(LUNCH)["folder"] == "INBOX"
 
 
-def test_a_total_failure_is_not_ok_and_leaves_nothing_to_undo(app, world):
+def test_a_total_failure_is_the_first_refusal_and_leaves_nothing_to_undo(app, world):
     refuse_moves(world)
-    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)}).json
-    assert (r["ok"], r["pks"], r["failed"]) == (False, [], 2)
-    assert r["msg"]
+    r = app.post("/api/thread/archive", {"pk": world.pk(CONFIRM)})
+    assert (r.status, r.json) == (409, problems.conflict("the server refused the archive"))
     assert boxes(world, LUNCH) == ["INBOX"] and world.row(LUNCH)["folder"] == "INBOX"
     assert stack() == []
 
@@ -120,9 +120,9 @@ def test_an_unreachable_server_queues_each_message(app, world):
 
 
 def test_a_missing_or_bad_anchor(app):
-    assert app.post("/api/thread/archive", {"pk": 999}).json["ok"] is False
+    assert app.post("/api/thread/archive", {"pk": 999}).json == problems.not_found("not found")
     assert app.post("/api/thread/archive", {"pk": "x"}).json["detail"] == "bad request"
-    assert app.post("/api/thread/archive", {}).json["msg"] == "bad pk"
+    assert app.post("/api/thread/archive", {}).json == problems.refused("bad pk")
 
 
 # -- one transaction accepts them all, and each is tried by itself ------------

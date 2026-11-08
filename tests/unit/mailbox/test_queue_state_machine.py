@@ -106,8 +106,8 @@ class Machine(RuleBasedStateMachine):
         self.mutation += 1
         self.allow(name, OPS[op])
         body = {"pk": pk, "mutation_id": f"m-{self.mutation}"}
-        got = mailbox.filing.do_trash(body) if op == "trash" else mailbox.filing.do_write(f"/api/{op}", body)
-        assert got["ok"] in (True, False)
+        got, status = answered(mailbox.filing.do_trash, body) if op == "trash" else answered(mailbox.filing.do_write, f"/api/{op}", body)
+        assert status in (200, 404, 409), got          # filed or the worker has it, gone, or the server said no
 
     def members(self, name):
         return LUNCH if name in LUNCH else (name,)
@@ -119,8 +119,8 @@ class Machine(RuleBasedStateMachine):
         self.mutation += 1
         for member in self.members(name):
             self.allow(member, OPS[op])
-        got = mailbox.filing.do_thread_file(f"/api/thread/{op}", {"pk": pk, "mutation_id": f"t-{self.mutation}"})
-        assert got["ok"] in (True, False)
+        got, status = answered(mailbox.filing.do_thread_file, f"/api/thread/{op}", {"pk": pk, "mutation_id": f"t-{self.mutation}"})
+        assert status in (200, 404, 409), got
 
     @rule(name=st.sampled_from(NAMES), op=st.sampled_from(("archive", "trash")))
     def file_the_conversation(self, name, op):
@@ -165,7 +165,7 @@ class Machine(RuleBasedStateMachine):
         if not pk:
             return
         self.mutation += 1
-        mailbox.filing.do_write("/api/flag", {"pk": pk, "flag": flag, "on": on, "mutation_id": f"f-{self.mutation}"})
+        answered(mailbox.filing.do_write, "/api/flag", {"pk": pk, "flag": flag, "on": on, "mutation_id": f"f-{self.mutation}"})
 
     @rule()
     def undo(self):
@@ -296,7 +296,7 @@ class Machine(RuleBasedStateMachine):
         body = {"pk": pk, "mutation_id": f"m-{self.mutation}"}
         with mock.patch.object(server_ops, "apply", effect(server_ops.apply)):
             try:
-                mailbox.filing.do_trash(body) if op == "trash" else mailbox.filing.do_write(f"/api/{op}", body)
+                answered(mailbox.filing.do_trash, body) if op == "trash" else answered(mailbox.filing.do_write, f"/api/{op}", body)
             except Crash:
                 pass
         self.restart()
