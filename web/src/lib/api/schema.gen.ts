@@ -2261,6 +2261,8 @@ export interface components {
             conversations?: boolean | null;
             density?: components["schemas"]["Density"] | null;
             draft_tone?: components["schemas"]["DraftTone"] | null;
+            /** Guide Offered */
+            guide_offered?: boolean | null;
             /** High Contrast */
             high_contrast?: boolean | null;
             mail_colors?: components["schemas"]["MailColors"] | null;
@@ -4029,6 +4031,8 @@ export interface components {
             conversations: boolean;
             density: components["schemas"]["Density"];
             draft_tone: components["schemas"]["DraftTone"];
+            /** Guide Offered */
+            guide_offered: boolean;
             /** High Contrast */
             high_contrast: boolean;
             mail_colors: components["schemas"]["MailColors"];
