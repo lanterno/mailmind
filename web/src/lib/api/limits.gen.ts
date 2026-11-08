@@ -6,7 +6,8 @@ export const LIMITS = {
   bulk_rows: 500,
   instruction_chars: 400,
   snooze_copies: 500,
-  undo_send_seconds: 10,
+  undo_send_longest: 60,
+  undo_send_shortest: 5,
 } as const;
 
 export const PREFERENCE_DEFAULTS = {

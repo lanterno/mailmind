@@ -3781,6 +3781,8 @@ export interface components {
             recipients: number;
             /** Scheduled */
             scheduled: boolean;
+            /** Undo Seconds */
+            undo_seconds: number;
         };
         /** Queues */
         Queues: {
@@ -4183,6 +4185,8 @@ export interface components {
             queued: boolean;
             /** Summary */
             summary: string;
+            /** Undo Seconds */
+            undo_seconds: number;
         };
         /**
          * RuleBody
