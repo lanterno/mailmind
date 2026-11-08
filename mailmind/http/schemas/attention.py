@@ -1,19 +1,22 @@
 """What the page asks of Attention, and what it answers."""
 from typing import Literal
 
-from mailmind.http.schemas.common import Answer, Flag, Number, RequestBody
+from mailmind.http.schemas.common import ACopy, Answer, Flag, NamesAMessage, Number
 
 
-class NamesAThread(RequestBody):
-    """A thread, by its account and id, or by a message of it (`Threads.target`)."""
+class NamesAThread(NamesAMessage):
+    """A thread, by its account and id, or by a message of it (`Threads.target`), its key and the folder of the copy the
+    page has."""
     account: str | None = None
     thread_id: str | None = None
     pk: Number | None = None
 
 
 class NamesThreadOrMessages(NamesAThread):
-    """A whole thread, by its account and id, else the messages named by pk (`snooze.named_thread`, `named_pks`)."""
+    """A whole thread, by its account and id, else the copies named by key and folder (`snooze.named_thread`, `named_pks`):
+    `copies`, or the one `key` and `folder` name."""
     pks: list[Number] | None = None
+    copies: list[ACopy] | None = None
 
 
 class SnoozeBody(NamesThreadOrMessages):

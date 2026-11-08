@@ -13,14 +13,14 @@ from mailmind.http.shared import AI_OVER_HEADER, post_body_cap, tell_of_someone
 
 __all__ = ["AI_OVER_HEADER", "ROUTERS", "post_body_cap"]
 
-ROUTERS = [attention_routes.router(attention),
-           calendar_routes.router(calendar),
+ROUTERS = [attention_routes.router(attention, mailbox),
+           calendar_routes.router(calendar, mailbox),
            mailbox_routes.router(mailbox),
            accounts_routes.router(accounts, mailbox),
            debug.router(mailbox, compose, background, assistant),
-           curation_routes.router(curation),
+           curation_routes.router(curation, mailbox),
            assistant_routes.router(assistant, mailbox),
-           compose_routes.router(compose),
+           compose_routes.router(compose, mailbox),
            discovery_routes.router(discovery),
            events.router(),
            export.router(),

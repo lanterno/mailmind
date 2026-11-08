@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Query
 
-from mailmind.http import route
+from mailmind.http import named, route
 from mailmind.http.schemas.common import answers
 from mailmind.http.schemas.curation import (
     AuditArgs,
@@ -27,7 +27,7 @@ from mailmind.platform.logging import get_logger
 log = get_logger("cleanup")
 
 
-def router(curation):
+def router(curation, mailbox):
     r = route.router()
 
     @r.get("/api/rules", responses=answers(RuleBook))
@@ -36,7 +36,7 @@ def router(curation):
 
     @r.post("/api/rules", responses=answers(RuleChanged))
     def rule(body: RuleBody):
-        return curation.screener.rule(body.model_dump(exclude_unset=True))
+        return curation.screener.rule(named.with_copy(mailbox, body.model_dump(exclude_unset=True), gone=None))
 
     @r.get("/api/audit", responses=answers(AuditTrail))
     def audit(args: Annotated[AuditArgs, Query()]):

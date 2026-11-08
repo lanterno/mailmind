@@ -395,6 +395,6 @@ class Drafts:
                 "subject": reopening.subject_of(msg, subject_then),
                 "to": header_chips(msg, "To"), "cc": header_chips(msg, "Cc"), "bcc": bcc,
                 "text": own, "tail_text": tail, "in_reply_to": irt or "", "references": " ".join(refs),
-                "orig_pk": original["pk"] if original else None,
+                "orig_pk": original["pk"] if original else None, "original_key": original["message_key"] if original else None,
                 "participants": reopening.participants_of(original) if original else [], "files": files, "split": how,
                 "notes": {"inline": inline, "bcc_dropped": dropped, "plain": how == "whole" and bool(parsed["html"])}}

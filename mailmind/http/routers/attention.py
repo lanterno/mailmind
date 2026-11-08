@@ -1,5 +1,5 @@
 """What the page asks of Attention: snooze, mute, follow-ups and reply later."""
-from mailmind.http import route
+from mailmind.http import named, route
 from mailmind.http.schemas.attention import (
     MuteBody,
     NamesAThread,
@@ -14,31 +14,44 @@ from mailmind.http.schemas.attention import (
 from mailmind.http.schemas.common import answers
 
 
-def router(attention):
+def router(attention, mailbox):
     r = route.router()
+
+    def copies(body):
+        """What a snooze names, with `pks` for the copies it names that are still there, and `pk` for the one `key` and
+        `folder` name. A thread named by its account and id goes before them, as it always did."""
+        asked = body.model_dump(exclude_unset=True)
+        if body.copies is not None:
+            asked["pks"] = named.copies_pks(mailbox, asked["copies"])
+        return named.with_copy(mailbox, asked, gone=None)
+
+    def thread(body):
+        """What names a thread, with `pk` for the message of it the page has. One with no copy left names none, as a thread
+        the request names by its id goes first."""
+        return named.with_message(mailbox, body.model_dump(exclude_unset=True), gone=None)
 
     @r.post("/api/snooze", responses=answers(Snoozed))
     def snooze(body: SnoozeBody):
-        return attention.snoozing.snooze(body.model_dump(exclude_unset=True))
+        return attention.snoozing.snooze(copies(body))
 
     @r.post("/api/unsnooze", responses=answers(Unsnoozed))
     def unsnooze(body: NamesThreadOrMessages):
-        return attention.snoozing.unsnooze(body.model_dump(exclude_unset=True))
+        return attention.snoozing.unsnooze(copies(body))
 
     @r.post("/api/mute", responses=answers(OnThread))
     def mute(body: MuteBody):
-        return attention.muting.mute(body.model_dump(exclude_unset=True))
+        return attention.muting.mute(thread(body))
 
     @r.post("/api/unmute", responses=answers(OnThread))
     def unmute(body: NamesAThread):
-        return attention.muting.unmute(body.model_dump(exclude_unset=True))
+        return attention.muting.unmute(thread(body))
 
     @r.post("/api/followups/dismiss", responses=answers(OnThread))
     def dismiss_followup(body: NamesAThread):
-        return attention.followups.dismiss(body.model_dump(exclude_unset=True))
+        return attention.followups.dismiss(thread(body))
 
     @r.post("/api/replylater", responses=answers(RepliedLater))
     def reply_later(body: ReplyLaterBody):
-        return attention.followups.reply_later(body.model_dump(exclude_unset=True))
+        return attention.followups.reply_later(thread(body))
 
     return r

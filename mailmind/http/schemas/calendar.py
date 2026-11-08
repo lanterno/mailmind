@@ -1,10 +1,10 @@
 """What the page asks of Calendar, and what it answers."""
 from typing import Literal
 
-from mailmind.http.schemas.common import Answer, Number, RequestBody
+from mailmind.http.schemas.common import Answer, NamesAMessage, Number
 
 
-class RsvpBody(RequestBody):
+class RsvpBody(NamesAMessage):
     pk: Number | None = None
     decision: str | None = None
 
@@ -21,6 +21,7 @@ class RsvpQueued(Answer):
 class UpcomingEvent(Answer):
     pk: int
     key: int
+    folder: str
     account: str
     thread_id: str | None
     summary: str

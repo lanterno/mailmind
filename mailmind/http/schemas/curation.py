@@ -3,13 +3,14 @@ from typing import Literal
 
 from pydantic import Field
 
-from mailmind.http.schemas.common import Answer, Flag, Number, QueryArgs, RequestBody
+from mailmind.http.schemas.common import Answer, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 
-class RuleBody(RequestBody):
+class RuleBody(NamesAMessage):
+    """A block trashes the copy `key` and `folder` name too, if it is still there."""
     token: str | None = None
     verdict: str | None = None              # anything but keep, block or remove is the use case's `msg`
-    pk: Number | None = None                # a block trashes this message too
+    pk: Number | None = None
 
 
 class CleanupBody(RequestBody):
