@@ -133,6 +133,7 @@ and the Claude API.
 - **An email attached to an email stays one file.** Its chip shows its real size, the download
   is the whole message as an `.eml`, and a forward carries it intact. Its text and its files
   aren't taken for the outer message's.
+- **Summarize this sender** — an AI summary of one sender's recent threads, from their contact card, on your click.
 - **Who wrote this, at a glance.** Opening a message shows who the sender is and how much you've written, and warns
   when Reply-To leaves their organisation. The warning sits outside the mail, where a message can't forge or hide it.
 - **Click any sender for a relationship card** — how many emails they've sent, how
@@ -174,7 +175,7 @@ and the Claude API.
   when a reply lands. A draft of your reply doesn't count: a pin stays until it goes out.
 - **The Screener.** First-contact senders are gated one decision at a time — Allow
   keeps, Screen-out blocks — and each decision becomes a rule, so the same sender is
-  never re-litigated.
+  never re-litigated. On your click, the AI suggests a verdict for the senders it's sure of; you still decide.
 - **Purpose-built lanes.** **Feed** reads as a calm newsletter river of summary cards
   with read-and-archive; **Paper trail** reads as a money ledger with extracted amounts,
   refunds and monthly totals.
@@ -195,6 +196,8 @@ and the Claude API.
   rail. Mail already stored picks them up when a scan next fetches it.
 - **Move to any folder.** `m` moves the open message, a conversation or marked rows to a folder you find
   by typing, with Undo.
+- **Clean up several senders at once.** Mark them in the drawer and do it from one preview, each with its reason from
+  the AI, under one Undo.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
@@ -278,7 +281,8 @@ automatically.
 - **"Since you last looked."** The `▾ N new` pill, which names mail that landed outside the
   list on screen, is augmented with a two-to-three sentence summary of what actually arrived;
   the plain count is always the floor.
-- **Weekly Review** — an AI retrospective of the last 7 days: sent/received stats, who
+- **Weekly Review** — an AI retrospective of the last 7 days, with how much you filed away and the week's meetings and
+  deadlines: sent/received stats, who
   is still waiting on you, who you're waiting on, and three concrete things to start
   next week with. Each message it names opens in its thread.
 - **Draft.** One click writes an editable reply into the composer from the whole
@@ -305,7 +309,9 @@ automatically.
   search that touches nothing.
 - **Tidy.** One strip offers to file every low-importance info/other message to
   Archive, with a Review mode to inspect them first and one undo to reverse the batch.
-  User-triggered, never silent.
+  User-triggered unless you turn on **Tidy by itself** in Settings: once a day it files what Tidy offers, and says so
+  with one click to take it all back.
+- **Morning brief (opt-in).** Today's brief is ready before you open the Inbox, within the daily AI limit.
 - **Find dates.** On your click, Claude finds the meetings and dated tasks a message proposes, and you confirm or edit
   each. An event saves as an `.ics` file for your calendar and invites nobody; a task joins your list beside Commitments.
 - **Commitments.** Every AI-extracted next-step across the inbox as one checkable
@@ -667,7 +673,7 @@ python3 -m mailmind expire all --dry       # preview what the expiry rules would
 python3 -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
-> ⚠️ **`sweep`, `sweep-ai`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
+> ⚠️ **`sweep`, `sweep-stored`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
 > Always `--dry` first. Every sweep/reconcile is logged to `sweep_audit.jsonl` /
 > `reconcile_audit.jsonl`. Moves go to Trash and are recoverable; Gmail purges
 > its Trash after 30 days.

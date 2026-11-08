@@ -276,7 +276,7 @@ The app lives in `mailmind/`.
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
   logged and counted, and the job goes on. `mailmind.bootstrap.background.schedule(jobs)` is the job table: `snooze` in
-  every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `reconcile`, `expire` and `forget`
+  every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `brief-ahead` and `tidy` (each only for a person who turned it on), `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`background._kick`). With AI off, or triage held back
   by the cost governor (see AI calls), it tries nothing: `assistant.assessments.summarize_pending` returns 0
@@ -798,7 +798,7 @@ refuses to start on a profile name it doesn't know. `background.nosync()` asks t
   dozen, so no account's backlog, outage or busy gate holds another's mail back. A busy gate ends only that account's
   turn. A lost connection sets its message aside, a minute doubling up to six hours, and rests only its account for a
   minute. A body the server didn't give waits six hours. That is kept in memory, so a restart tries everything again.
-- Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`),
+- Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`; `undo_group` reaches one group wherever it stands, for Tidy's review strip),
   so it outlives a restart (decision D3). It holds 50 groups
   (`Undo.UNDO_MAX`, an action alone counts as one) or 24 hours of them (`undo.KEEP_FOR`), whichever comes first, and an entry leaves it, committed, before
   any server is asked to reverse it. It knows nothing of what an entry means: `mailmind.bootstrap.mailbox` hands it a reverser for each kind, the Mailbox's in `application.reversal` (`Reversals`). Bulk actions push one grouped entry with children. `mailbox.undo.undo_last` tries every child, newest first; the ones it
@@ -1038,7 +1038,8 @@ means no key, never a fall-through to the environment's. With no key the model i
 `DisabledModel`: `assistant.calls.engine()` is `"none"`, and a call raises `AIOff` (from
 `application.ports`) before anything is sent.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
-fire on their own — drafts wait, bulk commands require a preview and confirm.
+fire on their own — drafts wait, bulk commands require a preview and confirm. The two that do are opt-in and off by default: the morning's brief,
+written ahead of the first open, and Tidy's daily run, which files only what the brief's Tidy offers and reports it for one Undo.
 
 An assessment keeps how it came to be (migration 43, `kernel.assessment`): `served_by`, the model `Reply.model` names, which
 a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
@@ -1079,7 +1080,7 @@ asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanen
 cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
 dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
 `feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`, `extract`,
-`ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
+`screen`, `rationale`, `sender`, `brief-ahead`, `auto-tidy`, `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
 that fails is logged by class name and never fails the call.
 
@@ -1090,7 +1091,7 @@ What the ledger holds is read back in three places:
 
 The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 `assistant.governor()`) before every call it sends. `domain.features.kind` sorts each feature:
-`triage` is background, `draft-ahead` speculative, and every other feature interactive.
+`triage` is background, `draft-ahead` speculative, `brief-ahead` and `auto-tidy` scheduled (held to the background's bars, and what a person turned on), and every other feature interactive.
 - Slots. Two interactive calls at a time, and two background or speculative ones beside them.
 - Yielding. Background and speculative calls don't start while an interactive one runs, or for
   45 seconds after one ends (`YIELD_SECONDS`).

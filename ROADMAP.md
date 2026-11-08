@@ -1,6 +1,6 @@
 # MailMind — Roadmap
 
-Only outstanding work is listed, re-verified against the tree on 2026-11-07: shipped behaviour is
+Only outstanding work is listed, re-verified against the tree on 2026-11-08: shipped behaviour is
 described in the README and in the code itself, not here. The app is the React one in `web/src`, at `/`,
 served by `python -m mailmind serve`. Each item says what is still missing there or on the server.
 
@@ -9,45 +9,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## AI that acts, not just describes
 
-- **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
-  "auto-triage the ambiguous residual": `ScreenerPane` already is a learning Imbox that writes
-  `mailmind_rules.json` one sender at a time, so do not rebuild it. What is missing is a
-  confidence-filtered claude pass suggesting Allow / Screen-out — today `is_junk` is set purely
-  deterministically at ingest and no code path appends an AI verdict to the rules file. While in
-  there, rename `python -m mailmind sweep-ai`: `Sweeps.sweep_ai` reads the classifier's `is_junk`, and
-  only the command's name still promises an AI verdict.
-- **Scheduled morning briefing + summarize-this-sender** · medium value · effort M — Cross-message
-  synthesis ships in three flavours, but the every-minute job (`Clocked.round`) only calls
-  `Snoozing.wake_due()` and `FollowUps.tick()`, so `briefs` is written only once the app asks (`useBrief`,
-  as the Inbox opens), and a desktop notification goes only for new mail (`tell` in `NewMail.tsx`) and a meeting about to
-  start (`SoonPill`). Second half: a claude pass over one sender's recent threads, hung off `ContactCard` —
-  `Contacts.card` is pure SQL relationship stats with no AI call.
-- **Weekly Review v2** · effort M overall — three follow-ons of different shapes; treat separately:
-  - **Answer "you handled N this week"** · medium value · effort S — unanswerable today because no
-    `archived_at` column exists. Add it as a new migration in `mailmind/platform/db/migrations`,
-    stamp it as `MailCommands` settles an archive, and **clear it in `Reversals`** — otherwise the
-    column lies after every undo. `mail_commands` already keeps each applied archive for a month,
-    and would do instead if an Undo marked its row, which today it leaves as it was.
-  - **Meetings and deadlines in the retrospective** · medium value · effort M — feed `Invites.of()`'s
-    parsed VEVENTs into `Reviews` (`mailmind/assistant/application/review.py`), which has zero calendar/ics references today.
-  - **Scheduled delivery of the review** · needs a decision first, not a sub-bullet — it would be the
-    first time the server sends mail with no human in the loop.
-- **Tidy that runs itself, with review** · medium value · effort M — `fileTidy` in `BriefPane` is reachable only
-  from the brief's button and always goes through `askConfirm`. The intended v2 — run daily or on brief load, gated by
-  an opt-in preference, with a "we filed N — review / undo" surface — needs a persisted setting, a scheduled trigger and that
-  review strip.
+- **Scheduled delivery of the weekly review** · needs a decision first — it would be the first time the server sends mail with no
+  human in the loop.
 
 ## Search, rules and organization
 
 - **PDF preview in the Document Hub** · low value · effort M — The Hub previews images in a frame whose sandbox allows nothing
   (`perimeter.attachment_preview_headers`). Chromium won't show a PDF in a sandboxed frame, and a same-origin one would break the
   security model, so a PDF needs a renderer of its own (pdf.js, say), as a new dependency, running with no origin.
-- **Batch cleanup with a stated rationale** · medium value · effort M — Cleaning ten noisy senders
-  means ten preview-and-confirm cycles: rows in `Flood` (`features/curation/Curate.tsx`) are strictly one-at-a-time
-  through `previewCleanup`, with no marked set. Wanted: multi-select executing one batched block+sweep
-  under a single undo group, and a per-sender AI rationale ("you have never opened one of these 47 in
-  6 months") — `Cleanup.senders` is pure SQL `noise_score` today, with no claude call and no
-  rationale field.
 ## Speed and the connection layer
 
 - **Make a gate for each account the default** · high value · effort S — `MAILMIND_WORKERS=account`
