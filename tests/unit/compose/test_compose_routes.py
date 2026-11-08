@@ -188,7 +188,7 @@ def test_what_names_no_queued_send(app):
         r = app.post(path, {"id": 999999})
         assert (r.status, r.json) == (404, problems.not_found())
     r = app.post("/api/outbox/cancel", {"id": 999999})
-    assert (r.status, r.json) == (200, {"ok": False})
+    assert (r.status, r.json) == (409, problems.conflict("too late to cancel"))
 
 
 def test_how_much_of_the_outbox_it_lists(app):

@@ -17,6 +17,7 @@ from datetime import timedelta
 import pytest
 
 import gate
+import problems
 from fixtures import world as w
 from mailmind.accounts.domain import login_hold
 from mailmind.bootstrap import curation
@@ -821,7 +822,7 @@ def test_hwf_a_send_owing_its_sent_copy_is_listed_sent_and_retried_once_it_gives
     outbox.drain()
     item = listed()
     assert (item["state"], item["scheduled"], item["error"]) == ("sent", False, outbox_item.SENT_COPY_PENDING)
-    assert app.post("/api/outbox/cancel", {"id": oid}).json == {"ok": False}   # it went out: nothing to undo
+    assert app.post("/api/outbox/cancel", {"id": oid}).json == problems.conflict("too late to cancel")   # it went out
     for _ in range(outbox.MAX_ATTEMPTS - 1):
         app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
         outbox.drain()
