@@ -89,5 +89,5 @@ class Pool(KeptConnections[MailSession]):
 
     def stats(self) -> dict[str, Any]:
         live = self.slots()
-        target = environment.POOL.given()
-        return {"enabled": bool(target), "target": target, "counters": self.counters(), "slots": live}
+        return {"enabled": bool(environment.POOL.value()), "target": environment.POOL.given(), "counters": self.counters(),
+                "slots": live}

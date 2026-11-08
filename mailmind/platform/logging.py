@@ -204,18 +204,17 @@ def setup():
     """Open the log file in the data directory, on its first line (wiring.start), and
     read MAILMIND_LOG_LEVEL. Asked again it adds nothing, and under other Settings the file moves."""
     global _file
-    debug = environment.LOG_LEVEL.value() == "debug"
+    path = os.path.abspath(settings.current().log)
+    if _file is None or _file.baseFilename != path:
+        _close_file()
+        _file = _OwnFile(path, maxBytes=MAX_BYTES, backupCount=BACKUPS, encoding="utf-8", delay=True)
+        _file.setLevel(logging.INFO)
+        _file.addFilter(_redact)
+        _file.setFormatter(JsonFormatter())
+        _root.addHandler(_file)
+    debug = environment.LOG_LEVEL.value() == "debug"     # with the file open, which hears a level it doesn't take
     _root.setLevel(logging.DEBUG if debug else logging.INFO)
     (_terminal.removeFilter if debug else _terminal.addFilter)(_redact)
-    path = os.path.abspath(settings.current().log)
-    if _file is not None and _file.baseFilename == path:
-        return
-    _close_file()
-    _file = _OwnFile(path, maxBytes=MAX_BYTES, backupCount=BACKUPS, encoding="utf-8", delay=True)
-    _file.setLevel(logging.INFO)
-    _file.addFilter(_redact)
-    _file.setFormatter(JsonFormatter())
-    _root.addHandler(_file)
 
 
 def _close_file():

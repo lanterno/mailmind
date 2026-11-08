@@ -86,7 +86,7 @@ class Warming:
     def warm_tick(self, emails: Collection[str] | None = None) -> None:
         """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
         after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS enables the account."""
-        if not environment.WARM_FOLDERS.given():
+        if not environment.WARM_FOLDERS.value():
             return
         self._tick += 1
         for a in self._accounts.accounts():

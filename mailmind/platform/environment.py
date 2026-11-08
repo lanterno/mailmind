@@ -7,12 +7,22 @@ kept, so a test changes one with `monkeypatch.setenv` and the next read sees it,
 in place of os.environ. What is kept, its caller keeps: `settings.current()` the data directory, which
 `settings.use` swaps, and the module that reads the model or an interval as it loads keeps that.
 
+Unset and empty are the same, for every variable. A value a variable doesn't take reads as what its
+declaration says, and the log says so once (`[env] MAILMIND_WORKERS is set to a value it doesn't take, so
+it reads as global`), naming the variable and never the value.
+
 The types:
 
-- `Switch`: on or off.
-- `Choice`: one of a closed set of names, in any case, with spaces around.
-- `Accounts`: a switch for every account, or a comma-separated list of addresses.
-- `Seconds`: a whole number of seconds, where 0 or less turns its job off.
+- `Switch`: on or off, by one rule. On is 1, true, yes or on, and off is 0, false, no or off, in any case
+  with spaces around. Any other value reads as the switch's `typo` side: the one that writes, sends or
+  spends less, and where neither does, off. So MAILMIND_NOSYNC fails toward read-only, MAILMIND_NO_DRAFT_TICK
+  toward drafting nothing ahead, and MAILMIND_NO_BATCHES and MAILMIND_NO_SCHEMA toward their default.
+- `Choice`: one of a closed set of names, in any case, with spaces around. Any other reads as the one its
+  declaration says: MAILMIND_PROFILE as read-only (and the app refuses to start), MAILMIND_WORKERS as
+  global and MAILMIND_LOG_LEVEL as info.
+- `Accounts`: a switch, on for every account and off for none, or a comma-separated list of addresses.
+  An entry that is no address reads as no account, so a typo turns nothing on.
+- `Seconds`: a whole number of seconds, where 0 or less turns its job off. Any other value reads as unset.
 - `Text` and `Secret`: as set. Nothing here logs a variable's value, and a secret's least of all.
 - `Directory`: a path, which `settings` resolves.
 
@@ -26,6 +36,7 @@ from dataclasses import dataclass
 
 type Environ = Mapping[str, str]
 
+ON = frozenset({"1", "true", "yes", "on"})
 OFF = frozenset({"", "0", "false", "no", "off"})
 
 
@@ -53,18 +64,20 @@ class Variable:
 
 
 class Switch(Variable):
-    """On or off. `any_value`: any value at all turns it on, 0 included; else anything but empty, 0, false, no
-    or off does, in any case."""
+    """On or off: ON or OFF, and `typo` for any other value."""
 
-    def __init__(self, name: str, means: str, *, any_value: bool = False):
+    def __init__(self, name: str, means: str, *, typo: bool):
         super().__init__(name, means)
-        self.any_value = any_value
+        self.typo = typo
 
     def on(self, environ: Environ | None = None) -> bool:
-        raw = self.raw(environ)
-        if self.any_value:
-            return bool(raw)
-        return (raw or "").strip().lower() not in OFF
+        value = self.given(environ).lower()
+        if value in ON:
+            return True
+        if value in OFF:
+            return False
+        _unread(self, "on" if self.typo else "off", value)
+        return self.typo
 
 
 class Choice(Variable):
@@ -84,9 +97,12 @@ class Choice(Variable):
         return value if value in self.choices else None
 
     def value(self, environ: Environ | None = None) -> str:
-        """The choice it names, and `unknown` for a name that isn't one."""
+        """The choice it names, and `unknown` for a name that isn't one, which the log says."""
         named = self.named(environ)
-        return self.unknown if named is None else named
+        if named is None:
+            _unread(self, self.unknown, self.given(environ))
+            return self.unknown
+        return named
 
 
 @dataclass(frozen=True)
@@ -101,15 +117,20 @@ class Which:
 
 
 class Accounts(Variable):
-    """1, all, on, true or yes for every account, in any case; else a comma-separated list of addresses."""
+    """ON, or all, for every account, and OFF for none; else a comma-separated list of addresses, where an
+    entry that is no address names no account, which the log says."""
 
     def value(self, environ: Environ | None = None) -> Which:
         value = self.given(environ)
-        if not value:
-            return Which()
-        if value.lower() in ("1", "all", "on", "true", "yes"):
+        if value.lower() in ON | {"all"}:
             return Which(every=True)
-        return Which(listed=frozenset(x.strip() for x in value.split(",") if x.strip()))
+        if value.lower() in OFF:
+            return Which()
+        entries = {x.strip() for x in value.split(",") if x.strip()}
+        listed = frozenset(x for x in entries if "@" in x)
+        if listed != entries:
+            _unread(self, "the addresses it lists" if listed else "off", value)
+        return Which(listed=listed)
 
 
 class Seconds(Variable):
@@ -120,13 +141,13 @@ class Seconds(Variable):
         self.default = default
 
     def value(self, environ: Environ | None = None) -> int:
-        raw = self.raw(environ)
-        if raw is None:
+        value = self.given(environ)
+        if not value:
             return self.default
         try:
-            return int(raw)
+            return int(value)
         except ValueError:
-            _unread(self, str(self.default), raw)
+            _unread(self, str(self.default), value)
             return self.default
 
 
@@ -160,7 +181,8 @@ HOME = Directory("MAILMIND_HOME", "The data directory (settings). Unset, the rep
 PROFILE = Choice("MAILMIND_PROFILE", "How the process runs (profile): full, or read-only, which writes nothing outside. "
                                      "A name that is none reads as read-only, and the app refuses to start on it.",
                  choices=("full", "read-only"), unset="full", unknown="read-only")
-NOSYNC = Switch("MAILMIND_NOSYNC", "The older switch for the read-only profile, which wins over MAILMIND_PROFILE.")
+NOSYNC = Switch("MAILMIND_NOSYNC", "The older switch for the read-only profile, which wins over MAILMIND_PROFILE.",
+                typo=True)
 WORKERS = Choice("MAILMIND_WORKERS", "One gate for every account's IMAP work (global), or one each (account) (gates).",
                  choices=("global", "account"), unset="global", unknown="global")
 POOL = Accounts("MAILMIND_POOL", "Keep an IMAP connection for each account named, for reads (mailbox.pool). "
@@ -173,11 +195,11 @@ LOG_LEVEL = Choice("MAILMIND_LOG_LEVEL", "debug shows debug lines and each error
 RECONCILE_SECS = Seconds("MAILMIND_RECONCILE_SECS", "About how long reconcile takes to go round every account.",
                          default=1800)
 EXPIRE_SECS = Seconds("MAILMIND_EXPIRE_SECS", "The seconds between the expiry rules' rounds.", default=3600)
-NO_DRAFT_TICK = Switch("MAILMIND_NO_DRAFT_TICK", "Draft no replies ahead (the draft-ahead job).", any_value=True)
+NO_DRAFT_TICK = Switch("MAILMIND_NO_DRAFT_TICK", "Draft no replies ahead (the draft-ahead job).", typo=True)
 NO_BATCHES = Switch("MAILMIND_NO_BATCHES", "Triage a backlog one message at a time, at full price, rather than "
-                                           "as a batch.", any_value=True)
+                                           "as a batch.", typo=False)
 NO_SCHEMA = Switch("MAILMIND_NO_SCHEMA", "Ask the model for free-form JSON rather than structured output.",
-                   any_value=True)
+                   typo=False)
 MODEL = Text("MAILMIND_MODEL", "The Claude model every feature asks. Unset, models.DEFAULT.")
 PROTON_BRIDGE_PASS = Secret("MAILMIND_PROTON_BRIDGE_PASS", "The Proton Bridge password, before any other source.")
 PROTON_OP_ITEM = Text("MAILMIND_PROTON_OP_ITEM", "The 1Password item holding the Proton Bridge password.")
