@@ -160,7 +160,7 @@ def remove(token):
 def change(apply):
     """One change to the rules, as one step: `apply` changes a copy, and what it returns comes back. If it raises, nothing is
     saved."""
-    with _changing:
+    with _one_change():
         rules = load()
         out = apply(rules)
         save(rules)
