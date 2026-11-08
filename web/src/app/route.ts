@@ -1,12 +1,18 @@
 // Where you are lives in the URL, so a deep link, Back and a reload all come back to it. What the list shows is one
-// type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, or a search.
+// type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, a virtual one over every
+// account, or a search.
 import { useSyncExternalStore } from "react";
 import { navigate } from "../lib/backTrap";
 import type { Copy } from "../lib/copy";
 
+export const VIRTUAL_FOLDERS = ["__snoozed__", "__muted__", "__waiting__", "__replylater__"] as const;
+export type VirtualFolder = (typeof VIRTUAL_FOLDERS)[number];
+export const isVirtual = (name: string): name is VirtualFolder => (VIRTUAL_FOLDERS as readonly string[]).includes(name);
+
 export type ListSource =
   | { kind: "folder"; account: string; folder: string }
   | { kind: "allInboxes" }
+  | { kind: "across"; folder: VirtualFolder }
   | { kind: "search"; q: string; account: string; lane?: Lane; thread?: string; asked?: string }     // thread: only this conversation of the account. asked: the sentence `q` was translated from
   | ({ kind: "digest" } & DigestList);
 
@@ -31,6 +37,7 @@ export function pathOf({ source, opened, brief }: Route): string {
   const query = new URLSearchParams();
   if (source?.kind === "folder") path += `/m/${seg(source.account)}/${seg(source.folder)}`;
   else if (source?.kind === "allInboxes") path += "/all";
+  else if (source?.kind === "across") path += `/all/${source.folder}`;
   else if (source?.kind === "search") {
     path += "/search";
     query.set("q", source.q);
@@ -59,7 +66,7 @@ export function parseRoute(pathname: string, search: string): Route {
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   let source: ListSource | null = null;
   if (parts[0] === "m" && parts[1] && parts[2]) source = { kind: "folder", account: parts[1], folder: parts[2] };
-  else if (parts[0] === "all") source = { kind: "allInboxes" };
+  else if (parts[0] === "all") source = parts[1] && isVirtual(parts[1]) ? { kind: "across", folder: parts[1] } : { kind: "allInboxes" };
   else if (parts[0] === "search") {
     const lane = q.get("lane");
     const thread = q.get("thread"), asked = q.get("asked");
@@ -116,6 +123,7 @@ export const useRoute = () => useSyncExternalStore(subscribe, snapshot);
 export function sourceKey(s: ListSource | null): readonly unknown[] {
   if (!s) return ["none"];
   if (s.kind === "folder") return ["folder", s.account, s.folder];
+  if (s.kind === "across") return ["across", s.folder];
   if (s.kind === "search") return ["search", s.q, s.account, s.thread ?? ""];
   if (s.kind === "digest") return ["digest", s.list, s.list === "topic" ? s.label : ""];
   return ["all"];

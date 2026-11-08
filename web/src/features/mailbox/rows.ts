@@ -36,12 +36,12 @@ export interface Row {
   needsYou: boolean;
 }
 
-export function fromFolder(it: FolderRow, account: string): Row {
+export function fromFolder(it: FolderRow): Row {
   return {
     id: copyId(it),
     key: it.key,
     uid: it.uid,
-    account: it.account ?? account,
+    account: it.account,
     folder: it.folder,
     fromName: it.from_name,
     fromAddr: it.from_addr,

@@ -23,11 +23,17 @@ export const useDigest = () => useQuery({
 export const useFolders = (account: string | undefined) =>
   useQuery({ queryKey: ["folders", account], queryFn: () => get(`/api/folders?account=${q(account!)}`), enabled: Boolean(account) });
 
+// Snoozed, Muted, Waiting and Reply later counted over every account, for the rail on All inboxes.
+export const useFoldersAcross = (wanted: boolean) =>
+  useQuery({ queryKey: ["folders", "__across__"], queryFn: () => get("/api/folders/across"), enabled: wanted });
+
+// `account` is "" for a virtual folder over every account: each row names its own.
 async function folderPage(account: string, folder: string, grouped: boolean, offset: number): Promise<ListPage> {
   const group = grouped ? "&group=thread" : "";
-  const d: AnyOf<GetAnswers["/api/messages"]> = await get(`/api/messages?account=${q(account)}&folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
+  const whose = account ? `account=${q(account)}&` : "";
+  const d: AnyOf<GetAnswers["/api/messages"]> = await get(`/api/messages?${whose}folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
   return {
-    rows: d.items.map((it) => fromFolder(it, account)),
+    rows: d.items.map((it) => fromFolder(it)),
     hasMore: d.has_more,
     total: d.total,
     syncing: Boolean(d.syncing),
@@ -61,7 +67,7 @@ async function allInboxesPage(grouped: boolean, offset: number): Promise<ListPag
   const group = grouped ? "&group=thread" : "";
   const d = await get(`/api/inboxes?limit=${PAGE}&offset=${offset}${group}`);
   return {
-    rows: d.items.map((it) => fromFolder(it, it.account)),
+    rows: d.items.map((it) => fromFolder(it)),
     hasMore: d.has_more,
     total: d.total,
     syncing: Boolean(d.syncing),
@@ -90,6 +96,7 @@ export function useMessages(source: ListSource | null, grouped: boolean) {
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
+      if (source?.kind === "across") return folderPage("", source.folder, grouped, pageParam);
       if (source?.kind === "search") return searchPage(source.q, source.account, pageParam, scope, source.thread);
       if (source?.kind === "digest") return digestPage(source);
       return allInboxesPage(grouped, pageParam);

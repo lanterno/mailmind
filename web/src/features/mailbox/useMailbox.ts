@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
-import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
+import { go, isVirtual, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { pref } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { copyId, copyOf, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
@@ -42,8 +42,9 @@ export function useMailbox() {
 
   const searching = source?.kind === "search";
   const allInboxes = source?.kind === "allInboxes";
-  const folder = source?.kind === "folder" ? source.folder : allInboxes ? "INBOX" : "";
-  const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : allInboxes ? undefined : accounts[0];
+  const across = source?.kind === "across";
+  const folder = source?.kind === "folder" || source?.kind === "across" ? source.folder : allInboxes ? "INBOX" : "";
+  const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : allInboxes || across ? undefined : accounts[0];
   const { data: folderData } = useFolders(account);
   const everyFolder = useEveryAccountsFolders(accounts);
   const inInbox = allInboxes || folder.toUpperCase() === "INBOX";
@@ -97,7 +98,7 @@ export function useMailbox() {
   const sourceNow = JSON.stringify(source), hasFirst = Boolean(rows[0]);
   const stillReading = Boolean(pages[pages.length - 1]?.syncing);
   const openFirst = useEffectEvent(() => {
-    if (opened || source?.kind !== "folder" || inInbox || source.folder === "__screener__" || !rows[0]) return;
+    if (opened || (source?.kind !== "folder" && source?.kind !== "across") || inInbox || source.folder === "__screener__" || !rows[0]) return;
     if (!matchMedia("(max-width:820px)").matches) go({ source, opened: opening(rows[0]) }, { replace: true });
   });
   const openedFirstOf = useRef<string | null>(null);
@@ -242,6 +243,7 @@ export function useMailbox() {
     },
     unsnooze: () => onOpen((t, r, a) => void actions.unsnooze(qc, t, r, a)),
     goToFolder: (name: string) => {
+      if ((allInboxes || across) && isVirtual(name)) return go({ source: { kind: "across", folder: name }, opened: null });
       const acct = account ?? accounts[0];
       if (acct) go({ source: { kind: "folder", account: acct, folder: name } as ListSource, opened: null });
     },

@@ -19,7 +19,7 @@ import { copyOf, type Copy } from "../lib/copy";
 import { shortAddress } from "../lib/text";
 import { setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
-import { go } from "./route";
+import { go, VIRTUAL_FOLDERS } from "./route";
 
 export interface Command {
   id: string;
@@ -67,6 +67,9 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "all-inboxes", group: "Navigation", label: "All inboxes", run: () => go({ source: { kind: "allInboxes" }, opened: null }) });
   add({ id: "commitments", group: "Navigation", label: "Commitments — your to-dos", run: () => panel.set("commits") });
   add({ id: "review", group: "Navigation", label: "Weekly review — how your week went", run: () => panel.set("week") });
+  for (const name of VIRTUAL_FOLDERS) {
+    add({ id: `across:${name}`, group: "Navigation", label: `All inboxes / ${VIRTUAL_TITLE[name]}`, run: () => go({ source: { kind: "across", folder: name }, opened: null }) });
+  }
   for (const a of m.accounts) {
     add({ id: `acct:${a}`, group: "Navigation", label: `Account · ${nameOf(a)}`, run: () => go({ source: { kind: "folder", account: a, folder: "INBOX" }, opened: null }) });
     for (const f of m.everyFolder.get(a) ?? []) {

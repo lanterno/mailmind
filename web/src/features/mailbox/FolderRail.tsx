@@ -2,7 +2,7 @@
 // tab and Back works.
 import { useEffect, useRef } from "react";
 import { Button, Menu, MenuItem, MenuTrigger, Popover, Separator } from "react-aria-components";
-import { go, pathOf, type ListSource } from "../../app/route";
+import { go, pathOf, type ListSource, type VirtualFolder } from "../../app/route";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { post } from "../../lib/api/client";
@@ -10,7 +10,7 @@ import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScreener } from "../curation";
 import { settingsOpen } from "../settings";
-import { useFolders, useViews } from "./data";
+import { useFolders, useFoldersAcross, useViews } from "./data";
 import { FOLDER_ICON, roleLabel, type FolderInfo } from "./rows";
 
 const ALL = "__all__", MANAGE = "__manage__";
@@ -69,7 +69,7 @@ function RailRow({ source, on, icon, label, count }: { source: ListSource; on: b
     <a
       className={on ? "frow on" : "frow"}
       href={pathOf({ source, opened: null })}
-      data-folder={source.kind === "folder" ? source.folder : undefined}
+      data-folder={source.kind === "folder" || source.kind === "across" ? source.folder : undefined}
       aria-current={on ? "page" : undefined}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -140,23 +140,27 @@ function Views({ source, account }: { source: ListSource | null; account: string
 }
 
 export function FolderRail({ accounts, aliases, source, down }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null; down: string[] }) {
-  const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : source?.kind === "allInboxes" ? undefined : accounts[0];
+  const across = source?.kind === "allInboxes" || source?.kind === "across";
+  const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : across ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
+  const everyAccount = useFoldersAcross(across).data;
+  const counted = across ? everyAccount : data;
   const screener = useScreener(account).data?.total ?? 0;
-  const folder = source?.kind === "folder" ? source.folder : "";
+  const folder = source?.kind === "folder" || source?.kind === "across" ? source.folder : "";
   const to = (name: string): ListSource => ({ kind: "folder", account: account!, folder: name });
-  const current = source?.kind === "allInboxes" ? ALL : account ?? ALL;
-  const virtual: [string, string, string, number | undefined][] = data ? [
-    ["__replylater__", "bookmark", "Reply later", data.replylater],
-    ["__waiting__", "hourglass", "Waiting", data.waiting],
-    ["__snoozed__", "clock", "Snoozed", data.snoozed],
-    ["__muted__", "bell-off", "Muted", data.muted],
+  const lane = (name: VirtualFolder): ListSource => (across ? { kind: "across", folder: name } : to(name));
+  const current = across ? ALL : account ?? ALL;
+  const virtual: [VirtualFolder, string, string, number | undefined][] = counted ? [
+    ["__replylater__", "bookmark", "Reply later", counted.replylater],
+    ["__waiting__", "hourglass", "Waiting", counted.waiting],
+    ["__snoozed__", "clock", "Snoozed", counted.snoozed],
+    ["__muted__", "bell-off", "Muted", counted.muted],
   ] : [];
   return (
     <aside className="folderrail" id="rail" aria-label="Accounts and folders">
       <div id="monos">{accounts.length > 0 && <AccountSwitch accounts={accounts} aliases={aliases} current={current} down={down} />}</div>
       <nav className="frail-list" id="folderrail" aria-label="Folders">
-        {source?.kind === "allInboxes" && <div className="frow on"><span className="ic2"><Icon name="inbox" /></span><span className="fn">Inbox</span></div>}
+        {across && <RailRow source={{ kind: "allInboxes" }} on={source?.kind === "allInboxes"} icon="inbox" label="Inbox" />}
         {isError && !data && (
           <>
             <div className="frail-acct">Couldn’t list folders</div>
@@ -168,7 +172,7 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
         ))}
         <Views source={source} account={account ?? ""} />
         {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
-        {virtual.map(([name, icon, label, n]) => (n || name === "__snoozed__" ? <RailRow key={name} source={to(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
+        {virtual.map(([name, icon, label, n]) => (n || name === "__snoozed__" ? <RailRow key={name} source={lane(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
       </nav>
     </aside>
   );
