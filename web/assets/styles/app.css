@@ -213,7 +213,7 @@
   .acct-menu .acct-stack{width:30px;justify-content:center}
   .acct-menu .am-ttl{padding:6px 8px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
   .acct-menu .am-chk{flex:none;color:var(--primary-ink)}
-  .acct-menu hr{border:none;border-top:1px solid var(--line);margin:4px 2px}
+  .acct-menu [role="separator"]{border-top:1px solid var(--line);margin:4px 2px}   /* React Aria makes a menu's Separator a div */
   .acct-sw .as-txt,.acct-menu .am-txt{display:flex;flex-direction:column;min-width:0;flex:1}
   .acct-sw b,.acct-menu b{font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .acct-sw small,.acct-menu small{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
