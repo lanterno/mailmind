@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commitments, eventWhen, fromDigest, greeting, nameIn, needsNote, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";
+import { commitments, eventWhen, fromDigest, meetingWhen, greeting, nameIn, needsNote, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -41,6 +41,10 @@ describe("what the digest asks of you", () => {
 
 describe("the side column's words", () => {
   const now = new Date(2026, 10, 2, 12, 0);
+  it("says when a week's meeting or deadline is", () => {
+    expect(meetingWhen({ start: "2026-11-03T14:05", all_day: false })).toMatch(/Nov.*2:05/);
+    expect(meetingWhen({ start: "2026-11-03T00:00", all_day: true })).toMatch(/Nov.*all day$/);
+  });
   it("says when an event is", () => {
     expect(eventWhen({ start: new Date(2026, 10, 2, 15, 0).toISOString(), all_day: false }, now)[1]).toBe("today");
     expect(eventWhen({ start: new Date(2026, 10, 2).toISOString(), all_day: true }, now)).toEqual(["Today", "all day"]);

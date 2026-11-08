@@ -243,6 +243,18 @@ def test_commitments_lists_the_to_dos_and_done_files_one(page, world, ai):
     clean(page)
 
 
+def test_the_week_says_what_went_to_archive_and_what_the_invites_hold(page, app, world, ai):
+    lunch_needs_a_reply(world)
+    assert app.post("/api/archive", world.copy(RECEIPT)).status == 200
+    app.settle()
+    page.goto("/")
+    page.get_by_role("button", name="Your week").click()
+    panel = page.get_by_role("dialog", name="Weekly review")
+    expect(panel.locator(".rv-stats")).to_contain_text("handled")
+    expect(panel.locator(".rv-item", has_text="Design review")).to_contain_text("Nov")
+    clean(page)
+
+
 def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, world, ai):
     lunch_needs_a_reply(world)
     page.goto("/")
