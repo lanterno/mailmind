@@ -53,3 +53,4 @@ export type ReadSize = Schemas["ReadSize"];
 export type ReadFont = Schemas["ReadFont"];
 export type MailColors = Schemas["MailColors"];
 export type SearchScope = Schemas["SearchScope"];
+export type PictureType = Schemas["PictureType"];

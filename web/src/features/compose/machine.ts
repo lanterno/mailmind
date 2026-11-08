@@ -9,8 +9,8 @@ import type { DraftTone, RewriteOp } from "../../lib/api/types";
 import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
-  blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, looksLikeAddr, namesItself, nothingToSave, payloadOf,
-  QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, splitChips,
+  blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, isPicture, looksLikeAddr, namesItself, nothingToSave, payloadOf,
+  pictureMark, pictureParts, QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, splitChips, withoutMark, withPictures,
   type AnyWarning, type Attachment, type Composer, type Field, type OpenOptions, type OriginalMail, type Payload, type Person,
 } from "./model";
 
@@ -322,7 +322,7 @@ export function createComposing(env: Env) {
     publish();
     let d: Answer;
     try {
-      d = await env.post("/api/compose/preview", { text: x.body });
+      d = await env.post("/api/compose/preview", { text: x.body, pictures: pictureParts(x.attachments) });
     } catch (e) {
       if (c === x && turn === previewTurn) {
         leavePreview(x);
@@ -332,7 +332,7 @@ export function createComposing(env: Env) {
       return;
     }
     if (c !== x || turn !== previewTurn || !x.previewing) return;
-    x.preview = { html: String(d.html), formatted: Boolean(d.formatted) };
+    x.preview = { html: withPictures(String(d.html), x.attachments), formatted: Boolean(d.formatted) };
     publish();
   }
 
@@ -390,10 +390,14 @@ export function createComposing(env: Env) {
   }
 
   /* ---------- files ---------- */
-  function addFiles(files: Iterable<File>) {
+  // inText: a picture goes where the cursor is, as a mark the text shows it by. Its mark is there before the file has been read,
+  // so the words around it don't wait; any other kind of file is an attachment like the rest.
+  function addFiles(files: Iterable<File>, inText = false) {
     const x = c;
     if (!x) return;
     let total = x.attachments.reduce((s, a) => s + a.size, 0);
+    let [at, end] = env.selection();
+    let marked = false;
     for (const f of files) {
       if (total + f.size > env.limits.attach_bytes) {
         env.toast(`Attachments too large (${Math.round(env.limits.attach_bytes / 1048576)} MB max)`);
@@ -401,11 +405,18 @@ export function createComposing(env: Env) {
       }
       total += f.size;
       const id = randomId();
+      const cid = inText && isPicture(f.type) ? id.replace(/[^A-Za-z0-9]/g, "").slice(0, 16) : undefined;
+      if (cid) {
+        const mark = pictureMark(f.name, cid);
+        x.body = x.body.slice(0, at) + mark + x.body.slice(end);
+        at = end = at + mark.length;
+        marked = true;
+      }
       x.reading.set(id, f.name);
       env.readFile(f).then(
         (b64) => {
           x.reading.delete(id);
-          x.attachments = [...x.attachments, { filename: f.name, content_type: f.type || "application/octet-stream", size: f.size, b64 }];
+          x.attachments = [...x.attachments, { filename: f.name, content_type: f.type || "application/octet-stream", size: f.size, b64, ...(cid ? { cid } : {}) }];
           markEdited(x);
           if (c === x) {
             retireGuard(x);
@@ -414,6 +425,7 @@ export function createComposing(env: Env) {
         },
         () => {
           x.reading.delete(id);
+          if (cid) x.body = withoutMark(x.body, cid);
           if (c === x) {
             env.toast(`Couldn’t add ${f.name}`);
             env.say(`Couldn’t add ${f.name}.`);
@@ -423,11 +435,19 @@ export function createComposing(env: Env) {
         },
       );
     }
+    if (marked) {
+      leavePreview(x);
+      markEdited(x);
+      retireGuard(x);
+    }
     publish();
+    if (marked) env.select(at, at);
   }
   function removeAttachment(i: number) {
     if (!c) return;
+    const gone = c.attachments[i];
     c.attachments = c.attachments.filter((_, n) => n !== i);
+    if (gone?.cid) c.body = withoutMark(c.body, gone.cid);   // a picture's mark goes with it
     markEdited(c);
     retireGuard(c);
     publish();

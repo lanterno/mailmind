@@ -2,7 +2,7 @@
 // and the send-time check's input. The machine beside it runs these.
 import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning, type NearMiss } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
-import type { ComposeMode, DraftTone } from "../../lib/api/types";
+import type { ComposeMode, DraftTone, PictureType } from "../../lib/api/types";
 
 export type Field = "to" | "cc" | "bcc";
 export const FIELDS: Field[] = ["to", "cc", "bcc"];
@@ -10,7 +10,7 @@ export type Mode = ComposeMode;
 
 export interface Recipient { v: string; bad: boolean }
 export interface Preview { html: string; formatted: boolean }   // formatted: false is no Markdown, so it goes out as plain text
-export interface Attachment { filename: string; content_type: string; size: number; b64: string }
+export interface Attachment { filename: string; content_type: string; size: number; b64: string; cid?: string }   // cid: the token its mark in the text names it by
 export interface Quote { html: string | null; text: string; from?: string; date?: string }
 export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean; near: string[]; redirect: boolean }
 export interface Redirect { to: string; sender: string }   // a Reply-To sent the reply to `to`, not to who wrote the mail
@@ -154,12 +154,31 @@ export function quoteLabel(c: Pick<Composer, "mode" | "fwdAttach">, open: boolea
     + (c.fwdAttach ? ` · ${c.fwdAttach} attachment${c.fwdAttach > 1 ? "s" : ""}` : "");
 }
 
-const fileParts = (c: Composer) => c.attachments.map((a) => ({ filename: a.filename, content_type: a.content_type, b64: a.b64 }));
+const fileParts = (c: Composer) => c.attachments.map((a) => ({ filename: a.filename, content_type: a.content_type, b64: a.b64, ...(a.cid ? { cid: a.cid } : {}) }));
+
+// The kinds of file a message can show in its text, as the server takes them. A picture goes by its own part and a mark in the
+// text that names it, and the rest of the message's words around that are the Markdown they always were.
+const PICTURES: Record<PictureType, true> = { "image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true };
+export const isPicture = (type: string): type is PictureType => Object.hasOwn(PICTURES, type.toLowerCase());
+export const PICTURE_ACCEPT = Object.keys(PICTURES).join(",");
+
+// A mark's name is the file's, less what would end the mark early. A token is the server's to judge, from characters it takes.
+export const pictureMark = (name: string, cid: string) => `![${name.replace(/[[\]\r\n]/g, " ").slice(0, 120)}](cid:${cid})`;
+export const withoutMark = (body: string, cid: string) => body.replace(new RegExp(`!\\[[^\\[\\]\\n]*\\]\\(cid:${cid}\\)`, "g"), "");
+export const pictureParts = (files: Attachment[]) => files.flatMap((a) => (a.cid && isPicture(a.content_type) ? [{ cid: a.cid, content_type: a.content_type }] : []));
+
+// What the server answers for a preview names each picture as it would go out. The frame takes none of that, so each comes as
+// the data this composer already holds.
+export function withPictures(html: string, files: Attachment[]): string {
+  return files.reduce((out, a) => (a.cid
+    ? out.replace(new RegExp(`src="cid:${a.cid}(?:@[^"]*)?"`, "g"), () => `src="data:${a.content_type};base64,${a.b64}"`)
+    : out), html);
+}
 
 export interface Payload {
   account: string; mode: Mode; idempotency_key: string; draft_id: number | null;
   to: string[]; cc: string[]; bcc: string[]; subject: string; text: string; original_key: number | null;
-  attachments: { filename: string; content_type: string; b64: string }[];
+  attachments: { filename: string; content_type: string; b64: string; cid?: string }[];
   resume?: ResumeFields; send_after?: number; autosave?: boolean; base_version?: number;
 }
 

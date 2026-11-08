@@ -14,13 +14,22 @@ import { QuoteFrame } from "../mailbox";
 import { composing, draftTone, setDraftTone } from "./compose";
 import { cleanLinks } from "./linkClean";
 import type { SendFloat } from "./machine";
-import { DRAFT_TONES, fmtWhen, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
+import { DRAFT_TONES, fmtWhen, isPicture, PICTURE_ACCEPT, quoteLabel, rcptAddr, sendLaterPresets, type Composer, type Field } from "./model";
 import { useLayer } from "../../lib/backTrap";
 
 // A paste whose links carry tracking goes in without it, through the box's own edit so Undo still takes it back. Should the
-// browser not do that, the paste goes in as it came.
+// browser not do that, the paste goes in as it came. A picture copied by itself goes into the text, where the cursor is.
 function pasteClean(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-  const pasted = e.clipboardData.getData("text/plain"), clean = cleanLinks(pasted);
+  const pasted = e.clipboardData.getData("text/plain");
+  if (!pasted) {
+    const pictures = [...e.clipboardData.files].filter((f) => isPicture(f.type));
+    if (pictures.length) {
+      e.preventDefault();
+      composing.addFiles(pictures, true);
+    }
+    return;
+  }
+  const clean = cleanLinks(pasted);
   if (clean !== pasted && document.execCommand("insertText", false, clean)) e.preventDefault();
 }
 
@@ -282,6 +291,7 @@ function Foot({ c, ai }: { c: Composer; ai: boolean }) {
   const laterBtn = useRef<HTMLButtonElement>(null);
   const moreBtn = useRef<HTMLButtonElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const picture = useRef<HTMLInputElement>(null);
   const [drafting, setDrafting] = useState(false);
   const g = c.guard;
   const tone = draftTone.useValue();
@@ -307,7 +317,20 @@ function Foot({ c, ai }: { c: Composer; ai: boolean }) {
           e.target.value = "";
         }}
       />
+      <input
+        ref={picture}
+        type="file"
+        id="cmpPicture"
+        accept={PICTURE_ACCEPT}
+        multiple
+        hidden
+        onChange={(e) => {
+          composing.addFiles([...(e.target.files ?? [])], true);
+          e.target.value = "";
+        }}
+      />
       <button type="button" className="abtn" id="cmpAttachBtn" title="Attach files" onClick={() => file.current?.click()}><Icon name="clip" /> Attach</button>
+      <button type="button" className="abtn" id="cmpPictureBtn" title="Put a picture in the text" onClick={() => picture.current?.click()}><Icon name="image" /> Picture</button>
       {offered && (
         <span className="ai-split" id="cmpAiSplit">
           <button type="button" className="abtn ai" id="cmpAiDraft" disabled={c.ai === "draft"} title={`Draft a reply with AI, ${DRAFT_TONES[tone].toLowerCase()} tone`} onClick={() => void composing.aiDraft()}>
@@ -404,7 +427,7 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
         <div className="cmp-attach" id="cmpAttach" aria-live="polite">
           {c.attachments.map((a, i) => (
             <span key={`${i}:${a.filename}`} className="cmp-att">
-              <Icon name="clip" /> {a.filename} <span className="sz">{fileSize(a.size)}</span>
+              <Icon name={a.cid ? "image" : "clip"} /> {a.filename} {a.cid && <span className="sz">in the text</span>} <span className="sz">{fileSize(a.size)}</span>
               <button type="button" aria-label={`Remove ${a.filename}`} onClick={() => composing.removeAttachment(i)}>×</button>
             </span>
           ))}
