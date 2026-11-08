@@ -265,6 +265,47 @@ def test_a_conversation_opens_whole_with_its_latest_open_and_files_whole(page, w
     clean(page)
 
 
+def test_opening_a_conversation_warms_its_closed_members_once_each(page, world):
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url) if "prefetch=1" in r.url else None)
+    opened(page)
+    r = page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    r.click()
+    members = page.locator("#thread .tmsg")
+    expect(members).to_have_count(3)
+    keys = [int(k) for k in members.evaluate_all("ms => ms.map(m => m.dataset.key)")]
+    until(page, lambda: len(asked) == 2, "the closed members weren't warmed")
+    page.wait_for_timeout(200)
+    assert [re.search(r"[?&]key=(\d+)&", u).group(1) for u in asked] == [str(keys[1]), str(keys[0])]    # newest first
+    clean(page)
+
+
+def test_resting_on_a_row_warms_its_body_and_crossing_it_asks_for_nothing(page, world):
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url) if "prefetch=1" in r.url else None)
+    opened(page)
+    rows = page.locator("#rows .row.cmsg")
+    first, second = rows.nth(1), rows.nth(2)
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)
+    second.hover()
+    page.mouse.move(1, 1)                              # gone before a moment's rest
+    page.clock.run_for(1_000)
+    assert asked == []
+    first.hover()
+    page.clock.run_for(149)
+    assert asked == []                                  # not yet
+    page.clock.run_for(2)
+    until(page, lambda: len(asked) == 1, "resting on it warmed nothing")
+    assert f"?key={first.get_attribute('data-key')}&" in asked[0]
+    page.mouse.move(1, 1)
+    first.hover()
+    page.clock.run_for(200)
+    page.wait_for_timeout(100)
+    assert len(asked) == 1                              # once a page
+    page.clock.resume()
+    clean(page)
+
+
 def test_e_on_a_conversations_row_files_every_message_its_sent_copy_stays_and_z_brings_them_back(page, world):
     opened(page)
     convo = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday?")
