@@ -1,6 +1,9 @@
 """What the page asks of Attention, and what it answers."""
-from typing import Literal
+from typing import Annotated, Literal
 
+from pydantic import Field
+
+from mailmind.attention.api import BULK_CAP
 from mailmind.http.schemas.common import ACopy, Answer, Flag, NamesAMessage, Number
 from mailmind.kernel.snoozed import SnoozePreset
 
@@ -14,8 +17,9 @@ class NamesAThread(NamesAMessage):
 
 class NamesThreadOrMessages(NamesAThread):
     """A whole thread, by its account and id, else the copies named by key and folder (`snooze.named_thread`, `named_pks`):
-    `copies`, or the one `key` and `folder` name."""
-    copies: list[ACopy] | None = None
+    `copies`, or the one `key` and `folder` name. More copies than BULK_CAP is the `bad request`, never the first of them: the
+    page sends more as more requests, under one undo group."""
+    copies: Annotated[list[ACopy], Field(max_length=BULK_CAP)] | None = None
 
 
 class SnoozeBody(NamesThreadOrMessages):

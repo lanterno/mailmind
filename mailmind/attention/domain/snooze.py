@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import AccountId, Pk, ThreadRef
 from mailmind.kernel.parsed import required_int
 from mailmind.kernel.row import Row
 
-BULK_CAP = 500      # the most one request may snooze: the one bulk array the API takes, capped here and not only at plan time
+BULK_CAP = 500      # the most copies one request may name: more is refused, never cut short, and the page sends more as more requests
 MAX_AHEAD_DAYS = 366
 
 
@@ -69,9 +70,12 @@ def named_thread(body: Mapping[str, Any]) -> tuple[AccountId, ThreadRef] | None:
 
 
 def named_pks(body: Mapping[str, Any]) -> list[Pk]:
-    """The messages a request names by pk, up to BULK_CAP."""
+    """The messages a request names by pk. More than BULK_CAP is refused whole: cutting it short would leave the rest as they
+    were while whoever asked takes them all for done."""
     if isinstance(body.get("pks"), list):
-        return [Pk(required_int(x)) for x in body["pks"]][:BULK_CAP]
+        if len(body["pks"]) > BULK_CAP:
+            raise Refused()
+        return [Pk(required_int(x)) for x in body["pks"]]
     if body.get("pk") is not None:
         return [Pk(required_int(body["pk"]))]
     return []
