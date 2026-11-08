@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Row } from "../mailbox";
-import { extractAmount, fmtMoney, isRefund, ledger, monthName, parseMoney } from "./model";
+import { extractAmount, fmtMoney, isRefund, ledger, monthName, parseMoney, senderStats } from "./model";
 
 const row = (subject: string, date = "2026-11-02", snippet = "") => ({ id: "1:INBOX", key: 1, folder: "INBOX", subject, snippet, date }) as unknown as Row;
 
@@ -41,4 +41,16 @@ describe("the ledger", () => {
     expect(months[1]!.totals).toEqual([["$", 1.5]]);
   });
   it("is empty for no rows", () => expect(ledger([])).toEqual([]));
+});
+
+describe("what is said of a sender", () => {
+  it("counts, replies and first contact", () => {
+    expect(senderStats({ count: 12, replied: 3, first_ago: "2y" })).toBe("12 emails · replied 3× · first 2y ago");
+  });
+  it("says one email as one", () => {
+    expect(senderStats({ count: 1, replied: 0, first_ago: "3d" })).toBe("1 email · replied 0× · first 3d ago");
+  });
+  it("leaves out a first contact nothing knows", () => {
+    expect(senderStats({ count: 2, replied: 0, first_ago: null })).toBe("2 emails · replied 0×");
+  });
 });
