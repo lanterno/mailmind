@@ -3609,7 +3609,8 @@ export interface components {
         };
         /**
          * PoolStats
-         * @description `Pool.stats`. `target` is MAILMIND_POOL as it was set, and `slots` is by account: the addresses it names are the owner's.
+         * @description `Pool.stats`, in counts and with no address: `target` says whether MAILMIND_POOL names every account (`all`), a list of
+         *     them (`listed`) or none, and `slots` holds each connection kept, with no account named.
          */
         PoolStats: {
             counters: components["schemas"]["PoolCounters"];
@@ -3621,11 +3622,12 @@ export interface components {
              */
             ok: true;
             /** Slots */
-            slots: {
-                [key: string]: components["schemas"]["PoolSlot"];
-            };
-            /** Target */
-            target: string;
+            slots: components["schemas"]["PoolSlot"][];
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "all" | "listed" | "";
         };
         /** Prefetched */
         Prefetched: {
