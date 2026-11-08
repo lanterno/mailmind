@@ -8,7 +8,7 @@ import { seenRow, snooze, starRow } from "./actions";
 import type { Row } from "./rows";
 
 vi.mock("../../lib/api/client", () => ({ get: vi.fn(), post: vi.fn(), refusalOf: vi.fn() }));
-vi.mock("../../lib/toast", () => ({ toast: vi.fn() }));
+vi.mock("../../lib/toast", () => ({ toast: vi.fn(), OFFERS_MS: 8000, createFloat: () => ({ show: vi.fn(), clear: vi.fn() }) }));
 
 const aPageLoad = async () => {
   vi.resetModules();
