@@ -71,7 +71,7 @@ describe("day sections", () => {
 });
 
 describe("a folder's name", () => {
-  const folders = [{ name: "[Gmail]/All Mail", role: "all", total: 1, unseen: 0 }, { name: "Lists", role: "custom", total: 1, unseen: 0 }, { name: "Sent Items", role: "sent", total: 1, unseen: 0 }];
+  const folders = [{ name: "[Gmail]/All Mail", role: "all", total: 1, unseen: 0, takes_filing: false }, { name: "Lists", role: "custom", total: 1, unseen: 0, takes_filing: true }, { name: "Sent Items", role: "sent", total: 1, unseen: 0, takes_filing: false }];
   it("is its role's, or its own when it plays none", () => {
     expect(folders.map(roleLabel)).toEqual(["All mail", "Lists", "Sent"]);
   });
@@ -87,6 +87,12 @@ describe("what filing says", () => {
     expect(filedWords("Archived", {}, false)).toBe("Archived");
     expect(filedWords("Archived", { count: 3 }, false)).toBe("Archived 3 messages");
     expect(filedWords("Archived", { count: 2, failed: 1 }, false)).toBe("Archived 2 of 3 — the rest stayed");
+  });
+  it("says where it went, when a person picked that", () => {
+    expect(filedWords("Moved", {}, false, "Clients")).toBe("Moved to Clients");
+    expect(filedWords("Moved", { count: 3 }, false, "Clients")).toBe("Moved 3 messages to Clients");
+    expect(filedWords("Moved", { count: 2, failed: 1 }, false, "Clients")).toBe("Moved 2 of 3 to Clients — the rest stayed");
+    expect(filedWords("Moved", { status: "queued" }, false, "Clients")).toBe("Moved to Clients · once the server is back");
   });
   it("says when it will land", () => {
     expect(filedWords("Trashed", { status: "queued" }, false)).toBe("Trashed · once the server is back");

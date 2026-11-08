@@ -2,9 +2,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { get, post } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
-import type { Copy } from "../../lib/copy";
+import { copyOf, type Copy } from "../../lib/copy";
 import { toast } from "../../lib/toast";
-import { seenRow, snooze, starRow } from "./actions";
+import { moveMarked, moveRow, seenRow, snooze, starRow } from "./actions";
 import type { Row } from "./rows";
 
 vi.mock("../../lib/api/client", () => ({ get: vi.fn(), post: vi.fn(), refusalOf: vi.fn() }));
@@ -65,6 +65,60 @@ describe("snoozing marked rows", () => {
     await snoozing(marked(1200));
     expect(sent()).toHaveLength(3);
     expect(toast).toHaveBeenCalledWith("Couldn’t snooze: bad snooze time");
+  });
+});
+
+describe("moving to a folder someone picked", () => {
+  const qc = { setQueriesData: vi.fn(), setQueryData: vi.fn(), invalidateQueries: vi.fn() } as unknown as QueryClient;
+  const marked = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `${i + 1}:${1000 + i}:INBOX`, key: i + 1, folder: "INBOX", uid: 1000 + i, threadId: null })) as unknown as Row[];
+  const sent = () => vi.mocked(post).mock.calls.map(([path, body]) => ({ path, ...(body as { to: string; rows: unknown[]; undo_group: string }) }));
+
+  beforeEach(() => {
+    vi.mocked(post).mockReset().mockResolvedValue({ ok: true, count: 1, undoable: true, rows_failed: 0, partial: false });
+    vi.mocked(toast).mockReset();
+    vi.stubGlobal("location", { pathname: "/", search: "" });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const one: Copy = { key: 7, folder: "INBOX", uid: 70 };
+
+  it("sends one message with the folder, and says where it went", async () => {
+    await moveRow(qc, "Clients/Acme", "Acme", one, false, null);
+    expect(vi.mocked(post).mock.calls).toEqual([["/api/move", { ...one, to: "Clients/Acme" }]]);
+    expect(toast).toHaveBeenCalledWith("Moved to Acme");
+  });
+
+  it("sends a conversation to its own route", async () => {
+    await moveRow(qc, "Clients", "Clients", one, true, null);
+    expect(vi.mocked(post).mock.calls.map(([path]) => path)).toEqual(["/api/thread/move"]);
+  });
+
+  it("says why when the server won't", async () => {
+    vi.mocked(post).mockRejectedValueOnce(new Error("no such folder on this account"));
+    await moveRow(qc, "Gone", "Gone", one, false, null);
+    expect(toast).toHaveBeenCalledWith("Couldn’t move: no such folder on this account");
+  });
+
+  it("sends more marked rows than one request may name as more requests, under one undo group", async () => {
+    const rows = marked(LIMITS.bulk_rows + 3);
+    await moveMarked(qc, "Clients", "Clients", rows, () => false, null);
+    const asks = sent();
+    expect(asks.map((a) => [a.path, a.to, a.rows.length])).toEqual([["/api/bulk/move", "Clients", LIMITS.bulk_rows], ["/api/bulk/move", "Clients", 3]]);
+    expect(new Set(asks.map((a) => a.undo_group)).size).toBe(1);
+    expect(toast).toHaveBeenCalledWith(`Moved ${rows.length} to Clients`);
+  });
+
+  it("names each row's conversation only where the row stands for one", async () => {
+    const rows = marked(2);
+    await moveMarked(qc, "Clients", "Clients", rows, (r) => r === rows[1], null);
+    expect(sent()[0]!.rows).toEqual([{ ...copyOf(rows[0]!), whole: false }, { ...copyOf(rows[1]!), whole: true }]);
+  });
+
+  it("counts every row of a request that failed, and still sends the rest", async () => {
+    vi.mocked(post).mockRejectedValueOnce(new Error("HTTP 502"));
+    await moveMarked(qc, "Clients", "Clients", marked(LIMITS.bulk_rows + 3), () => false, null);
+    expect(sent()).toHaveLength(2);
+    expect(toast).toHaveBeenCalledWith("Moved 3 to Clients, " + LIMITS.bulk_rows + " failed");
   });
 });
 

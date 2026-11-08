@@ -627,6 +627,116 @@ def test_marked_rows_file_together_and_one_undo_brings_them_all_back(page, world
     clean(page)
 
 
+CLIENT = "bea-inbox-01-client.eml"
+
+
+def all_inboxes(page):
+    page.goto("/all")
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    expect(page.get_by_role("option").first).to_be_visible()
+
+
+def folder_picker(page):
+    box = page.get_by_role("combobox", name="Folder")
+    expect(box).to_be_focused()
+    return box
+
+
+def test_m_moves_what_is_open_to_a_folder_found_by_typing_and_z_brings_it_back(page, world):
+    all_inboxes(page)
+    r = row(page, world, CLIENT)
+    r.click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("m")
+    box = folder_picker(page)
+    offered = page.locator("#mvlist .pi")
+    expect(offered.filter(has_text="Clients")).to_have_count(1)
+    for closed in ("Inbox", "Drafts", "Sent"):                  # where it is, and two that take no filing
+        expect(offered.filter(has_text=closed)).to_have_count(0)
+    box.fill("clie")
+    expect(page.locator("#mvlist .pi.sel")).to_contain_text("Clients")
+    box.press("Enter")
+    expect(box).to_have_count(0)
+    expect(r).to_have_count(0)
+    until(page, lambda: mailbox(world, CLIENT) == "Folders/Clients", "the server never moved it")
+    expect(page.locator("#toast")).to_have_text(re.compile("^Moved to .*Clients$"))
+    page.keyboard.press("z")
+    until(page, lambda: mailbox(world, CLIENT) == "INBOX", "Undo never reached the server")
+    expect(page.locator("#toast")).to_have_text(re.compile("undone"))
+    clean(page)
+
+
+def test_escape_or_back_closes_the_folder_picker_and_moves_nothing(page, world):
+    opened(page)
+    row(page, world, RECEIPT).click()
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("m")
+    box = folder_picker(page)
+    box.press("Escape")
+    expect(box).to_have_count(0)
+    assert mailbox(world, RECEIPT) == "INBOX"
+    expect(row(page, world, RECEIPT)).to_have_count(1)
+    at = page.url
+    page.keyboard.press("m")                                   # Back closes it too, and stays on the message
+    box = folder_picker(page)
+    page.pw.go_back()
+    expect(box).to_have_count(0)
+    assert page.url == at
+    clean(page)
+
+
+def test_the_readers_move_button_takes_a_whole_conversation_and_z_brings_it_all_back(page, world):
+    opened(page)
+    convo = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday?")
+    convo.click()
+    page.locator('[data-tca="move"]').click()
+    box = folder_picker(page)
+    box.fill("arch")
+    box.press("Enter")
+    expect(convo).to_have_count(0)
+    until(page, lambda: all(mailbox(world, n) == "Archive" for n in LUNCH), "the conversation wasn't moved whole")
+    assert mailbox(world, "ada-sent-01-lunch-reply.eml") == "Sent"   # only the row's folder moves
+    expect(page.locator("#toast")).to_have_text("Moved 2 messages to Archive")
+    page.keyboard.press("z")
+    until(page, lambda: all(mailbox(world, n) == "INBOX" for n in LUNCH), "one Undo didn't bring both back")
+    clean(page)
+
+
+def test_marked_rows_move_together_and_one_undo_brings_them_all_back(page, world):
+    opened(page)
+    names = (RECEIPT, "ada-inbox-03-newsletter.eml")
+    for name in names:
+        one = row(page, world, name)
+        one.hover()
+        one.locator(".cbx").click()
+    asked = []
+    page.pw.on("request", lambda r: asked.append(r.url) if "/move" in r.url and r.method == "POST" else None)
+    page.locator(".bulkbar .bb").filter(has_text="Move").click()
+    box = folder_picker(page)
+    box.fill("arch")
+    box.press("Enter")
+    expect(page.locator("#toast")).to_have_text("Moved 2 to Archive")
+    assert asked == [page.origin + "/api/bulk/move"]
+    until(page, lambda: all(mailbox(world, n) == "Archive" for n in names), "they weren't moved")
+    expect(page.locator(".bulkbar")).to_have_count(0)
+    page.keyboard.press("z")
+    until(page, lambda: all(mailbox(world, n) == "INBOX" for n in names), "one Undo didn't reverse both")
+    clean(page)
+
+
+def test_marks_in_two_accounts_say_so_and_offer_no_folders(page, world):
+    all_inboxes(page)
+    for name in (RECEIPT, CLIENT):
+        one = row(page, world, name)
+        one.hover()
+        one.locator(".cbx").click()
+    page.keyboard.press("m")
+    expect(page.locator("#toast")).to_have_text(re.compile("different accounts"))
+    expect(page.get_by_role("combobox", name="Folder")).to_have_count(0)
+    assert mailbox(world, RECEIPT) == "INBOX" and mailbox(world, CLIENT) == "INBOX"
+    clean(page)
+
+
 def test_x_marks_the_open_row_and_escape_clears_the_marks_first(page, world):
     opened(page)
     r = row(page, world, RECEIPT)
