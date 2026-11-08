@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from mailmind.content.text import snippet_of
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.conversation import count_sql
 from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.mailbox.domain import identity
 from mailmind.mailbox.domain.events import ConversationsMerged
@@ -818,7 +819,8 @@ def _listed(where):
 
 
 def _conversation_rows(c, where, params, partition, limit, offset):
-    """One row per conversation (its latest message) + rollups, newest first. `partition` is what names a conversation here."""
+    """One row per conversation (its latest message) + rollups, newest first. `partition` is what names a conversation here, and
+    `cnt` is how many of it the list holds. `thread_count` is all of it, as opening it shows, asked of this page's rows only."""
     return c.execute(
         f"""WITH fm AS (
              SELECT m.*, s.importance, s.summary, s.action, s.category,
@@ -828,8 +830,9 @@ def _conversation_rows(c, where, params, partition, limit, offset):
                MAX(m.flagged)  OVER (PARTITION BY {partition}) any_flagged,
                MAX(m.has_attach) OVER (PARTITION BY {partition}) any_attach
              FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
-             WHERE {_listed(where)})
-           SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC, pk DESC LIMIT ? OFFSET ?""",
+             WHERE {_listed(where)}),
+           page AS (SELECT * FROM fm WHERE rn=1 ORDER BY ts DESC, pk DESC LIMIT ? OFFSET ?)
+           SELECT page.*, {count_sql("page")} AS thread_count FROM page ORDER BY ts DESC, pk DESC""",
         (*params, limit, offset)).fetchall()
 
 

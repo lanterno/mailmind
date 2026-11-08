@@ -2,6 +2,7 @@
 Each function takes its caller's connection and leaves the commit to it."""
 from mailmind.attention.domain import followups
 from mailmind.kernel import attention
+from mailmind.kernel.conversation import count_sql
 from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.kernel.when import now_iso
 
@@ -83,8 +84,7 @@ def unread_in_muted_threads(c, account):
 def list_muted(c, account):
     """One representative (latest) row per muted thread, for the Muted virtual folder."""
     return c.execute(
-        """SELECT m.*, (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account
-                          AND mm.thread_id=m.thread_id) AS thread_count
+        f"""SELECT m.*, {count_sql()} AS thread_count
            FROM messages m JOIN muted mu ON mu.account=m.account AND mu.thread_id=m.thread_id
            WHERE m.account=? AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account
                           AND m2.thread_id=m.thread_id ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)
@@ -214,8 +214,8 @@ def list_replylater(c, account):
     """One representative (latest) message per reply-later thread, most-recently-pinned first (a stack).
     A dismissed one has left it, until it is pinned again."""
     return c.execute(
-        """SELECT m.*, f.created_at AS f_created,
-                  (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account AND mm.thread_id=m.thread_id) AS thread_count
+        f"""SELECT m.*, f.created_at AS f_created,
+                  {count_sql()} AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
            WHERE f.account=? AND f.kind='replylater' AND f.state='due'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
@@ -242,8 +242,8 @@ def dismiss_followup(c, account, thread_id, when):
 def list_waiting(c, account):
     """One representative (latest) message per DUE followup thread, soonest-due first."""
     return c.execute(
-        """SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
-                  (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account AND mm.thread_id=m.thread_id) AS thread_count
+        f"""SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
+                  {count_sql()} AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
            WHERE f.account=? AND f.state='due' AND f.kind!='replylater'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id
@@ -254,8 +254,8 @@ def list_waiting(c, account):
 def waiting_on_others(c, accounts, limit):
     """A row like list_waiting's per sent thread still with no reply, in those accounts, the longest wait first."""
     return c.execute(
-        """SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
-                  (SELECT COUNT(*) FROM messages mm WHERE mm.account=m.account AND mm.thread_id=m.thread_id) AS thread_count
+        f"""SELECT m.*, f.kind AS f_kind, f.first_sent_ts AS f_first_sent, f.due_ts AS f_due,
+                  {count_sql()} AS thread_count
            FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id
            WHERE f.account IN (%s) AND f.state='due' AND f.kind='sent'
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id

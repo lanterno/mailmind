@@ -131,7 +131,8 @@ class FolderRow(_Listed, _Verdict):
     category: str | None
     ts: int | None
     account: str
-    count: int | None = None                # one row a conversation: how many it stands for
+    count: int | None = None                # one row a conversation: how many of it this list holds
+    thread_count: int | None = None         # and all of it, every folder's, each message once: what opening it shows
 
 
 class SnoozedRow(_Listed, _Verdict):

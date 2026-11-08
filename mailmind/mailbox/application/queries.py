@@ -30,7 +30,7 @@ def _listed_item(r: Row, group: bool) -> dict[str, Any]:
         "ts": r["ts"], "account": r["account"],
     }
     if group:
-        it.update({"count": r["cnt"], "seen": not r["unread"],
+        it.update({"count": r["cnt"], "thread_count": r["thread_count"] or r["cnt"], "seen": not r["unread"],
                    "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
     return it
 
