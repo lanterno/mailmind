@@ -4,6 +4,7 @@ Emits your synced mail to standard, portable formats so nothing is locked in Mai
   • eml  — one RFC822 .eml per message under  <out>/<account>/<folder>/<pk>.eml
   • mbox — one mboxrd file per account+folder  <out>/<account>/<folder>.mbox
   • db   — a consistent SQLite snapshot (checkpoint + .backup) to  <out>/mailmind-<stamp>.db
+  • the page's download is the first two packed:  <out>/mailmind-<format>-<stamp>.zip
 
 Bodies: when the raw RFC822 was fetched (body_fetched=1) it is written verbatim (lossless).
 Otherwise a minimal header-only RFC822 is synthesized from the stored row (From/Subject/Date/
@@ -18,14 +19,19 @@ corrupt the live database. Grep this file for `accounts.connect` — there is no
 """
 import os
 import re
+import shutil
 import sqlite3
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email import policy as _policy
+from typing import Literal
 
 from mailmind.platform import settings
 from mailmind.platform.db import database
+
+type ArchiveFormat = Literal["eml", "mbox"]
 
 _BAD = re.compile(r'[\x00-\x1f/\\:*?"<>|]+')        # path separators + control + shell-hostile
 
@@ -179,6 +185,27 @@ def export_mbox(out, account=None):
             h.close()
         c.close()
     return n, files
+
+
+_WRITERS = {"eml": export_eml, "mbox": export_mbox}
+
+
+def archive(out, form: ArchiveFormat):
+    """One zip of the mail in a standard format, in `out`: what `export_eml` or `export_mbox` writes, each file gone as it is packed,
+    so a large mailbox is on the disk about once and not twice."""
+    tree = os.path.join(out, "mail")
+    os.makedirs(tree)
+    _WRITERS[form](tree)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = os.path.join(out, f"mailmind-{form}-{stamp}.zip")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for where, _folders, names in os.walk(tree):
+            for name in sorted(names):
+                file = os.path.join(where, name)
+                z.write(file, os.path.relpath(file, tree))
+                os.unlink(file)
+    shutil.rmtree(tree)
+    return path
 
 
 def export_db(out):

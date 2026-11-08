@@ -1,7 +1,13 @@
 """What an export would hold."""
 from typing import Literal
 
-from mailmind.http.schemas.common import Answer
+from mailmind.http.schemas.common import Answer, QueryArgs
+from mailmind.platform.db.export import ArchiveFormat
+
+
+class ExportArgs(QueryArgs):
+    """The standard format the mail comes in. A request naming none has asked for nothing."""
+    format: ArchiveFormat
 
 
 class ExportGroup(Answer):
