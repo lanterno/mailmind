@@ -27,7 +27,7 @@ function setup(over: Partial<Env> = {}) {
       const q = answers.get(path);
       if (q?.length) return q.shift()!(body);
       if (path === "/api/draft") return { ok: true, draft_id: 7 };
-      if (path === "/api/send") return { ok: true, outbox_id: 9, recipients: 1 };
+      if (path === "/api/send") return { ok: true, outbox_id: 9, recipients: 1, undo_seconds: 6 };
       if (path === "/api/outbox/cancel") return { ok: true };
       if (path === "/api/contacts/known") return { ok: true, thin: false, items: {} };
       return { ok: true };
@@ -631,7 +631,7 @@ describe("sending", () => {
   });
 
   it("counts the server's window with an Undo, and Undo brings the words back", async () => {
-    const { m, posted, toasts } = setup({ limits: { ...LIMITS, undo_send_seconds: 6 } });
+    const { m, posted, toasts } = setup();
     ready(m);
     m.send();
     await flush();

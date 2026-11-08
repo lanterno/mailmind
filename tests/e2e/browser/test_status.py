@@ -267,3 +267,22 @@ def test_what_a_browser_already_held_comes_into_the_file_once_and_is_then_gone(p
     expect(page.locator("#cmpBody")).to_have_count(0)
     assert (world.dir / "mailmind.config.json").read_bytes() == world_before
     clean(page)
+
+
+def test_the_undo_send_window_is_set_in_preferences_and_held_to_its_bounds(page, world):
+    dialog = preferences_open(page)
+    field = dialog.get_by_label("Undo Send window, in seconds")
+    expect(field).to_have_value("10")
+    field.fill("30")
+    field.press("Enter")
+    until(page, lambda: file_of(world).get("preferences", {}).get("undo_send_seconds") == 30, "the file holds the window")
+    field.fill("1")                                     # past the shortest: the field holds it there
+    field.press("Enter")
+    expect(field).to_have_value("5")
+    until(page, lambda: file_of(world)["preferences"]["undo_send_seconds"] == 5, "the bound is what's kept")
+    field.fill("9000")
+    field.press("Enter")
+    expect(field).to_have_value("60")
+    until(page, lambda: file_of(world)["preferences"]["undo_send_seconds"] == 60, "the bound is what's kept")
+    clean(page)
+

@@ -855,6 +855,26 @@ def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(pa
 
 # ── an invitation ───────────────────────────────────────────────────────
 
+def test_a_chosen_undo_window_is_what_the_float_counts_down(page, app, world):
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"undo_send_seconds": 30})
+    opened(page)
+    compose(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
+    expect(page.locator("#sendFloat")).to_contain_text("Sending in 30s")
+    page.clock.run_for(5_000)
+    expect(page.locator("#sendFloat")).to_contain_text("Sending in 25s")
+    clean(page)
+
+
+def test_a_new_send_counts_what_preferences_says_now_though_the_page_loaded_before(page, app, world):
+    opened(page)
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"undo_send_seconds": 7})
+    compose(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
+    expect(page.locator("#sendFloat")).to_contain_text("Sending in 7s")
+    clean(page)
+
+
 def test_rsvp_goes_out_after_its_ten_seconds_and_undo_stops_it(page, app, world):
     opened(page)
     row(page, world, INVITE).click()
