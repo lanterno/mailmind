@@ -105,7 +105,7 @@ def router(mailbox):
 
     def _part(pk, part_id):
         """A part of a message as a download, or what says why not."""
-        if not re.match(r"^[0-9]+$", part_id):     # only the part ids mime gives
+        if not re.fullmatch(r"[0-9]+", part_id):   # only the part ids mime gives: `$` would let a newline after one through
             raise Refused("bad part id")
         found = mailbox.bodies.attachment(pk, part_id)
         if "error" in found:
