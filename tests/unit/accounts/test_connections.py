@@ -57,10 +57,30 @@ def test_a_draft_the_domain_refuses_reaches_no_server():
     assert probe.calls == []
 
 
-def test_a_draft_that_isnt_one_is_a_failed_test_rather_than_a_failed_request():
+@pytest.mark.parametrize("port", ["nine", 70000, -1, 2 ** 64, [993]], ids=repr)
+def test_a_draft_whose_port_no_connection_could_reach_says_so(port):
     probe = Probe()
-    assert connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": "nine"}})["connect"] is False
+    r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": port,
+                                           "credential": {"style": "plain", "value": "typed"}}})
+    assert r == {"ok": True, "connect": False, "email": "dee@example.test", "error": "port must be 1–65535"}
     assert probe.calls == []
+
+
+def test_a_draft_may_give_its_port_as_digits():
+    probe = Probe()
+    r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": "143",
+                                           "credential": {"style": "plain", "value": "typed"}}})
+    assert (r["connect"], probe.calls[0][1]["port"]) == (True, 143)
+
+
+@pytest.mark.parametrize("error, says", [(ValueError("invalid literal for int()"), "ValueError"),
+                                         (OSError("Invalid argument"), "OSError")], ids=lambda v: str(v))
+def test_what_merely_says_invalid_isnt_a_failed_login(error, says):
+    assert quiet(error) == says
+
+
+def test_a_refused_login_still_reads_as_one():
+    assert quiet(ValueError("b'[AUTHENTICATIONFAILED] Invalid credentials'")) == "AUTHENTICATIONFAILED"
 
 
 def test_an_account_no_one_saved_is_not_found():

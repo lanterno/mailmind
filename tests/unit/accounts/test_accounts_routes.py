@@ -74,6 +74,7 @@ def test_what_an_add_goes_without_is_the_use_cases_to_word(app, body, said):
 def test_a_draft_that_isnt_one_is_still_a_failed_test_and_not_a_failed_request(app, world):
     r = app.post("/api/accounts/test", {"draft": {**dee(world), "port": "nine"}})
     assert (r.status, r.json["ok"], r.json["connect"], r.json["email"]) == (200, True, False, NEW)
+    assert r.json["error"] == "port must be 1–65535"
 
 
 @pytest.mark.parametrize("credential", [{"style": "env", "var": "HOME"}, {"style": "proton_bridge"}, {"style": "op", "ref": "op://V/I/F"}])
