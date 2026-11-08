@@ -116,14 +116,18 @@ audit:
 build-web: _web-deps
     cd web && npx vite build
 
-# Write web/src/lib/api/types.gen.ts from the JSON answers the whole test suite sees (about 7 minutes)
-gen-api:
+# Write web/src/lib/api/schema.gen.ts, the API's types, from the routes' schemas: their OpenAPI document, through openapi-typescript
+gen-api: _web-deps
+    {{just_executable()}} _api-types web/src/lib/api/schema.gen.ts
+
+# The API's types, written to `out`: tests/openapi_doc.py writes the document, and openapi-typescript (web/gen-api) reads it
+_api-types out:
     #!/usr/bin/env bash
     set -euo pipefail
-    notes="$(mktemp)"
-    MAILMIND_RECORD_API="$notes" uv run pytest -q -p no:randomly
-    uv run python tests/gen_api_types.py "$notes" web/src/lib/api/types.gen.ts
-    rm -f "$notes"
+    doc="$(mktemp -d)"
+    trap 'rm -rf "$doc"' EXIT
+    uv run python tests/openapi_doc.py "$doc/openapi.json"
+    web/gen-api/node_modules/.bin/openapi-typescript "$doc/openapi.json" -o "{{out}}" --default-non-nullable false
 
 # ── mail ──────────────────────────────────────────────────────────────────────
 
