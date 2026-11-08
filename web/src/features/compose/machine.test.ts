@@ -525,6 +525,22 @@ describe("sending", () => {
     expect(m.view.get()).toBeNull();
   });
 
+  it("says too late when the server refuses the Undo with a 409, and Sent when it doesn't answer", async () => {
+    for (const [thrown, text] of [[{ status: 409, message: "too late to cancel" }, "✓ Sent — too late to undo"], [new Error("offline"), "✓ Sent"]] as const) {
+      const { m, answer } = setup();
+      ready(m);
+      m.send();
+      await flush();
+      const f = m.float.get();
+      if (f?.kind !== "countdown") throw new Error("no countdown");
+      answer("/api/outbox/cancel", () => { throw thrown; });
+      f.undo();
+      await flush();
+      expect(m.float.get()).toMatchObject({ kind: "done", text });
+      expect(m.view.get()).toBeNull();
+    }
+  });
+
   it("keeps the message a click away when the send fails", async () => {
     const { m, answer } = setup();
     answer("/api/send", () => { throw new Error("offline"); });
