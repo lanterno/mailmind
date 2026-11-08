@@ -426,11 +426,13 @@ automatically.
   before asking the server, so mail a sync stores while it runs is never taken for a ghost.
 - **Optional persistent per-account IMAP connections.** Set `MAILMIND_POOL=1` and repeated reads
   get dramatically faster, with connection validation, age/use recycling and extra-conservative
-  handling for Proton Bridge's low connection cap. Off by default while it's being tried out.
+  handling for Proton Bridge's low connection cap. An account's `"pool": true` asks for it between runs. Off by default while it's being tried out.
+- **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
+  the worker keeps trying. Two processes changing your rules can't lose each other's change.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
-- **Optional multi-folder warming.** Set `MAILMIND_WARM_FOLDERS=1` to also pull each
+- **Optional multi-folder warming.** Set `MAILMIND_WARM_FOLDERS=1`, or an account's `"warm_folders": true`, to also pull each
   account's Drafts / Archive / Sent alongside INBOX so search and threading cover more
   than the inbox — throttled, bounded, and never delaying new mail. Warming reads only a
   folder's newest mail, so opening the folder still reads the rest, and so does opening one
@@ -588,6 +590,9 @@ Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` is 
 key, in any credential style. `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
 in US dollars: `15` unless you set another positive number.
 
+An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
+Drafts, Archive and Sent beside the Inbox. A set `MAILMIND_POOL` or `MAILMIND_WARM_FOLDERS` decides over either.
+
 An account may also say `"imap_adapter": "imapclient"`. `python -m mailmind serve` then reaches
 it through the IMAPClient library instead of Python's own imaplib: the new IMAP code, tried on
 real mail before it becomes the default. The command line stays on imaplib, removing the key goes
@@ -676,8 +681,8 @@ The server's port is the first argument to `serve` (default `8721`).
 
 `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default**, so a plain
 run connects fresh for every operation and syncs INBOX only. `just run-fast` sets
-both for that run; export them from your shell profile or a launcher script to keep
-them on.
+both for that run. To keep them on, give an account `"pool": true` or `"warm_folders": true`
+in `mailmind.config.json`; a variable that is set decides over the file.
 
 ## Where your data lives (all local, all git-ignored)
 

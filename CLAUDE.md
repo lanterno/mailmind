@@ -673,7 +673,7 @@ again for it as it ends.
   account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
 `mailbox.pool` (persistent per-account IMAP sessions) and `mailbox.warm` (multi-folder sync)
-are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`. Code must
+are both **default-off** behind `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`, or an account's own `"pool"` / `"warm_folders"` key while the variable is unset. Code must
 work with them unset. `Pool` is a `KeptConnections`, which does the keeping. `Pool` says which accounts, that a
 NOOP checks and a LOGOUT closes, and that the provider gives the numbers (`recycle_seconds`, `recycle_uses`).
 
@@ -703,7 +703,7 @@ refuses to start on a profile name it doesn't know. `background.nosync()` asks t
   brief, the delta and what drafting ahead picks from leave a marked row out (`AND m.pending_removal IS NULL`); a new list query does too. What the AI
   reads of a whole thread doesn't, since its fingerprint would change twice over one move and pay for a summary each time. A
   flag change shows on the local row instead, and `params` keeps the flags it replaced (`was`). **Submit**: a try as a job
-  on the account's gate, which a click waits for only `FILE_WAIT` seconds. Past that the worker has it, and the answer's
+  on the account's gate, which a click waits for only `FILE_WAIT` seconds, and for each of the server's answers only `TRY_TIMEOUT`. Past that the worker has it, and the answer's
   `status` is `waiting`. **Settle**, under the same gate and in one transaction: `applied`, where the message went and what
   the server did on the way (`outcome`), and the local rows (`_local_mirror`).
 - A connection failure raises a member of `commands.UNREACHABLE`: the worker has the command, and the answer's `status` is
@@ -1157,7 +1157,7 @@ holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 `curation.adapters.rules_file` (`bootstrap.curation.rules`, the file's one reader) writes it whole (a temp file,
-owner-only, renamed over it), and a change reads, changes and saves as one step, within this process. A read parses it again only when it changed; one that won't parse leaves the last
+owner-only, renamed over it), and a change reads, changes and saves as one step, under a file lock (`.rules.lock`), so the command line and the server can't lose each other's. A read parses it again only when it changed; one that won't parse leaves the last
 rules read well, so a bad edit never stops a sync, and the next save moves it to `backups/` first. The classifier
 reads through `rules.sets()`.
 

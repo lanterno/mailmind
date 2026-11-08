@@ -136,24 +136,14 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   removing the key goes back. Then `front.build` calls `mailbox.use("imapclient")` and the ask
   goes.
 - **Turn the connection pool on by default** · high value · effort M — Waits on the owner's soak.
-  `Pool` is complete, safety-reviewed and wired into three read call sites (`Ingest.fetch_body`,
-  `Folders._live_folder_list` backing the folder rail, and `Sweeps.plan` ahead of a sweep), but
-  `_targets()` reads `MAILMIND_POOL`, which is unset by default, so every read falls through to a
+  `Pool` is complete, safety-reviewed and wired into four read call sites (`Ingest.fetch_body`,
+  `Folders._live_folder_list` backing the folder rail, `Sweeps.plan` ahead of a sweep, and reconcile's read of UIDs), but
+  `_targets()` reads `MAILMIND_POOL`, then each account's `"pool"` key, both unset by default, so every read falls through to a
   fresh session and a logout. Its docstring has a cold Proton body fetch at ~37s, against ~2s warm.
   Remaining: run it on real accounts for days; validate against Proton Bridge (`ProviderProfile`
   recycles a Bridge connection sooner, and `Pool._enabled` leaves Bridge out of the `MAILMIND_POOL=1`
   catch-all, so it has to be listed by address); extend borrowing to mutations (only reads borrow
   today); and default it on.
-- **Persist `MAILMIND_POOL` / `MAILMIND_WARM_FOLDERS`** · medium value · effort S — Both features
-  are hard default-off. The README documents them and `just run-fast` sets both for one run, but
-  nothing else does, so a plain `just run` silently reverts to
-  fresh-connect-per-op and INBOX-only sync. Pick a persistence story (a key in
-  `mailmind.config.json`, or derive the account list from it).
-- **Pool the reconcile read** · low value · effort S — Half done: `Reconciler.reconcile_account`
-  connects with `timeout=15`, capping the exposure, but it still opens its own session while holding
-  the IMAP gate instead of using `Pool.borrow` the way the three read call sites do. `borrow` would
-  have to take that timeout.
-
 ## The API, now that one client and one door read it
 
 - **Move the command line off `urllib_http.py`** · low value · effort S — `python3 -m mailmind` runs on Python alone, so
