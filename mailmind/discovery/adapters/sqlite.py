@@ -175,3 +175,17 @@ class StoredMail:
             thin = c.execute("SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE is_junk=0 LIMIT ?)",
                              (min_history,)).fetchone()[0] < min_history
         return known.Facts(holding, senders, synced, draft_folders, copies, envelopes, thin)
+
+    def written_copies(self, own, sent):
+        """Who stored mail went to, for mail from one of `own` or in a folder named in `sent`. Reads messages first and
+        each one's recipients after, so it costs what you've sent and not everything you've received."""
+        own, sent = list(own), list(sent)
+        where = " OR ".join(([f"lower(m.from_addr) IN ({','.join('?' * len(own))})"] if own else [])
+                            + ([f"m.folder IN ({','.join('?' * len(sent))})"] if sent else []))
+        if not where:
+            return []
+        with _uow.read() as c:
+            return c.execute(
+                "SELECT r.addr, m.account, m.folder, m.is_junk, lower(m.from_addr) sender, COUNT(*) n "
+                "FROM messages m JOIN message_recipients r ON r.message_pk=m.pk "
+                f"WHERE COALESCE(m.draft,0)=0 AND ({where}) GROUP BY 1,2,3,4,5", [*own, *sent]).fetchall()

@@ -164,6 +164,7 @@ class ContactCard(Answer):
 class KnownVerdict(Answer):
     known: bool
     self: bool
+    near: str | None = None             # someone you've written to whom this new address reads as a slip of
 
 
 class Known(Answer):

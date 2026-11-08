@@ -36,8 +36,9 @@ class KnownContacts:
 
     def ask(self, addrs: object, own: Iterable[str] | None = None,
             min_history: int = known.MIN_HISTORY) -> dict[str, Any]:
-        """Which of these addresses you've exchanged mail with. The answer carries no subjects, counts or dates.
-        `thin` means too little history to call anyone new."""
+        """Which of these addresses you've exchanged mail with, and for one you haven't, `near` if it reads as a slip of
+        someone you've written to. The answer carries no subjects, counts or dates. `thin` means too little history to call
+        anyone new."""
         try:
             question = known.asked(addrs)
         except ValueError as e:               # our own words: they hold nothing typed
@@ -49,4 +50,9 @@ class KnownContacts:
         wanted = set(question.want)
         hit = known.vouched(facts, wanted, yours, self._folders.role_by_name)
         hit |= self._rules.kept() & wanted
-        return {"ok": True, "items": known.verdicts(question, yours, hit), "bad": question.bad, "thin": facts.thin}
+        role = self._folders.role_by_name
+        items = known.verdicts(question, yours, hit)
+        if not all(v["known"] for v in items.values()):       # only someone new can be a slip of someone else
+            copies = self._mail.written_copies(yours, {folder for _, folder in known.sent_folders(facts, role)})
+            known.mark_near_misses(question, items, known.written_to(facts, copies, yours, role))
+        return {"ok": True, "items": items, "bad": question.bad, "thin": facts.thin}
