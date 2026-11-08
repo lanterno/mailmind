@@ -90,8 +90,17 @@ check-frontend:
             sys.exit(f"unbalanced CSS braces in {path}")
     print(f"frontend ok: theme.js parses, {len(styles)} stylesheets balanced, no inline script, no control bytes")
 
-# Type-check the TypeScript, lint it and run its tests (needs node)
+# Check the API's types still match the routes' schemas, then type-check the TypeScript, lint it and run its tests (needs node)
 check-web: _web-deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fresh="$(mktemp -d)"
+    trap 'rm -rf "$fresh"' EXIT
+    {{just_executable()}} _api-types "$fresh/schema.gen.ts"
+    if ! cmp -s "$fresh/schema.gen.ts" web/src/lib/api/schema.gen.ts; then
+        echo "web/src/lib/api/schema.gen.ts doesn't match the routes' schemas: run just gen-api, and review the diff" >&2
+        exit 1
+    fi
     cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent
 
 # ── web ───────────────────────────────────────────────────────────────────────
