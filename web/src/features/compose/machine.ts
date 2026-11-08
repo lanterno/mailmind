@@ -599,7 +599,7 @@ export function createComposing(env: Env) {
         }
         const r = await env.post("/api/send", payload);
         if (scheduled) showFloat({ kind: "done", clock: true, text: `Scheduled · ${fmtWhen(sendAfter)}` }, 2600);
-        else countdown(r.outbox_id, snap, r.recipients);   // the grace window, with Undo
+        else countdown(r.outbox_id, snap, r.recipients, r.undo_seconds);   // the grace window, with Undo
         env.sent(replyKey);
         env.outboxChanged();
       } catch (e) {
@@ -613,9 +613,9 @@ export function createComposing(env: Env) {
     showFloat({ kind: "failed", text, edit: () => void reopenFailed(), dismiss: () => showFloat(null) });
   }
 
-  function countdown(id: number, snap: Snapshot, recipients: number | undefined) {
+  // How long is the send's own to say: its answer names the window the server is holding it for.
+  function countdown(id: number, snap: Snapshot, recipients: number | undefined, total: number) {
     clearInterval(undoTimer);
-    const total = env.limits.undo_send_seconds;
     let left = total;
     const undo = () => void undoSend(id, snap);
     showFloat({ kind: "countdown", id, left, total, undo });
@@ -630,9 +630,8 @@ export function createComposing(env: Env) {
   }
 
   // Something the server built and queued, with the same window to undo it in: an RSVP.
-  function queued(id: number, what: string) {
+  function queued(id: number, what: string, total: number) {
     clearInterval(undoTimer);
-    const total = env.limits.undo_send_seconds;
     let left = total;
     const undo = () => {
       clearInterval(undoTimer);

@@ -90,7 +90,7 @@ function Rsvp({ invite }: { invite: Copy }) {
       const r = await post("/api/invite/rsvp", { ...copyOf(invite), decision });
       setSaid({ done: true, text: `${SAID[decision]} — reply sent to ${r.organizer || "organizer"}` });
       toast(`RSVP: ${SAID[decision]}`);
-      if (r.outbox_id) composing.queued(r.outbox_id, "RSVP");
+      if (r.outbox_id) composing.queued(r.outbox_id, "RSVP", r.undo_seconds);
     } catch (e) {
       setSaid({ done: false, text: e instanceof ApiError ? `Couldn’t RSVP: ${e.message}` : "Couldn’t RSVP" });
       toast("RSVP failed");

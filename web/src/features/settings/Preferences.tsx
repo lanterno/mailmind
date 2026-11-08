@@ -1,4 +1,6 @@
 // How MailMind looks and behaves. Each control saves on its own, to the block the server keeps beside the accounts (lib/prefs.ts).
+import { Input, Label, NumberField } from "react-aria-components";
+import { LIMITS } from "../../lib/api/limits.gen";
 import { entries } from "../../lib/entries";
 import { prefs, setPrefs } from "../../lib/prefs";
 import { THEME_LABEL } from "../../lib/theme";
@@ -20,6 +22,21 @@ export function PreferencesForm() {
           <span className="pref-name">Theme</span>
           <Seg label="Theme" value={p.theme} options={entries(THEME_LABEL)} onChange={(theme) => setPrefs({ theme })} />
         </div>
+      </div>
+      <div className="set-form">
+        <div className="lbl">Sending</div>
+        <NumberField
+          className="pref-line"
+          minValue={LIMITS.undo_send_shortest}
+          maxValue={LIMITS.undo_send_longest}
+          step={1}
+          value={p.undo_send_seconds}
+          onChange={(undo_send_seconds) => { if (Number.isFinite(undo_send_seconds)) setPrefs({ undo_send_seconds }); }}
+        >
+          <Label className="pref-name">Undo Send window, in seconds</Label>
+          <Input className="pref-num" id="prefUndoSend" />
+        </NumberField>
+        <div className="set-help">How long a message waits before it goes, so you can take it back ({LIMITS.undo_send_shortest}–{LIMITS.undo_send_longest} seconds).</div>
       </div>
       <div className="set-form">
         <div className="lbl">Keyboard</div>
