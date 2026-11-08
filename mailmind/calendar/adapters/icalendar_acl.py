@@ -7,8 +7,8 @@ can't read. Four things the libraries would do with that text are not done:
 
 - `_Parser` doesn't let `icalendar` act on a VTIMEZONE, which would remember a zone for the whole process, under a name the
   sender chose, made from rules it expands through to year 9999 however often they fire.
-- It doesn't let it look up a TZID either. One rule says what a TZID means, `invite.zone`: a name the zone database
-  doesn't know makes the time floating.
+- It doesn't let it look up a TZID either. One rule says what a TZID means, `invite.zone`: a name neither the zone database
+  nor its table of Windows' names knows makes the time floating.
 - It doesn't let it decode the escapes of what isn't text (`_AS_SAID`). An RSVP echoes a UID and writes to an organizer, and
   a stranger's `\\n` there would be a line of their own in the reply.
 - `Component.from_ical` opens a text with no line break in it as a path, if a file is there. The parser doesn't.
