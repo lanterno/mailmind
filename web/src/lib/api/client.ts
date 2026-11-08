@@ -83,9 +83,8 @@ export async function request<T>(path: string, options: ApiOptions = {}): Promis
   throw e;
 }
 
-// A path of the API with its {pk} filled in, and a query if it has one.
-type Filled<P extends string> = P extends `${infer A}{pk}${infer B}` ? `${A}${number}${Filled<B>}` : P;
-type WithQuery<P extends string> = Filled<P> | `${Filled<P>}?${string}`;
+// A path of the API, and a query if it has one.
+type WithQuery<P extends string> = P | `${P}?${string}`;
 
 type RouteOf<Answers, Path extends string> = {
   [P in keyof Answers & string]: Path extends WithQuery<P> ? P : never;
