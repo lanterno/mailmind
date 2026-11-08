@@ -89,15 +89,18 @@ New items (newest first, {count} total):
 {items}
 """)
 
-REVIEW = Template("review", 2, """You are writing a warm, concise WEEKLY REVIEW for a personal email dashboard — a Sunday-style \
+REVIEW = Template("review", 3, """You are writing a warm, concise WEEKLY REVIEW for a personal email dashboard — a Sunday-style \
 retrospective of the last 7 days. Write a 3-5 sentence plain-English narrative of the week: how much came in vs. how much the \
-person sent, what still needs them, and who they're waiting on. Be encouraging but honest; do not invent \
+person sent and filed away, what still needs them, who they're waiting on, and any meeting or deadline listed. Be encouraging but honest; do not invent \
 numbers beyond those given. Then propose up to 3 concrete "start next week with" actions drawn ONLY from the \
 open items listed (reference the real sender/subject). Reply with ONLY a JSON object \
 {"narrative": "...", "next": ["...", "..."]} (next may be empty).
 
 THE WEEK IN NUMBERS:
 {stats}
+
+MEETINGS AND DEADLINES (past week and next 7 days; all day is usually a deadline):
+{meetings}
 
 STILL NEEDS YOU (open, important, unanswered):
 {needs}

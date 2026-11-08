@@ -139,6 +139,11 @@ def command_forget_finished(c, now_ts, days=30):
     return c.execute("DELETE FROM mail_commands WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
 
 
+def command_mark_reversed(c, mid):
+    """An Undo took this move back: it was asked and it happened, so its row stays as it is but for saying so."""
+    c.execute("UPDATE mail_commands SET params=json_set(COALESCE(params, '{}'), '$.undone', 1) WHERE id=?", (mid,))
+
+
 def command_latest_move(c, account, message_id):
     """The newest move of a message, in any state: what an undo entry written before entries named their command
     goes by, to decide between a cancel and a counter-move and to find where the message went."""
@@ -693,6 +698,14 @@ def delta_rows(c, accounts, since_ts, n):
     sql += "ORDER BY m.ts DESC LIMIT ?"       # newest first
     params.append(n)
     return c.execute(sql, params).fetchall()
+
+
+def handled_since(c, accounts, since_iso):
+    """How many messages went to Archive since then, by the command log, which keeps each for a month. One an Undo took back
+    doesn't count (command_mark_reversed)."""
+    ac, ap = _among(accounts, "account")
+    return c.execute("SELECT COUNT(*) FROM mail_commands WHERE kind='archive' AND applied=1 AND done_at>=? "
+                     "AND json_extract(params, '$.undone') IS NULL" + ac, [since_iso, *ap]).fetchone()[0]
 
 
 def sent_since(c, accounts, since_ts):

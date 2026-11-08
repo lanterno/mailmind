@@ -156,6 +156,7 @@ class ReviewStats(Answer):
     waiting_on: int
     reply_later: int
     cleaned: int
+    handled: int | None = None      # none in a review stored before it counted that
 
 
 class ReviewNeeded(Answer):
@@ -224,6 +225,19 @@ class ScreenerSuggestions(Answer):
     suggestions: list[ScreenerSuggestion]
 
 
+class ReviewMeeting(Answer):
+    """An event in the week's invites, by its message's key and the folder and uid of its copy now."""
+    key: int | None
+    folder: str
+    uid: int | None
+    account: str
+    thread_id: str | None
+    summary: str
+    start: str
+    all_day: bool
+    past: bool
+
+
 class Review(Answer):
     ok: Literal[True]
     narrative: str
@@ -231,6 +245,7 @@ class Review(Answer):
     stats: ReviewStats
     needs: list[ReviewNeeded]
     waiting: list[ReviewAwaited]
+    meetings: list[ReviewMeeting]
     week_start: str
     model: str
     generated: str

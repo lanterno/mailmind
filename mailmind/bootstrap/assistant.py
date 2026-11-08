@@ -196,6 +196,13 @@ class _Mail:
     def senders_cleaned(self, c, since_iso, accounts):
         return curation.sqlite.senders_cleaned(c, since_iso, accounts)
 
+    def handled_since(self, c, accounts, since_iso):
+        return mailbox.store.handled_since(c, accounts, since_iso)
+
+    def events_from(self, when, limit):
+        from mailmind.bootstrap import calendar                 # the reader of invites, which the command line never loads
+        return calendar.agenda.upcoming(now=when, limit=limit)["items"]
+
     def draft_candidates(self, c, since_ts):
         return mailbox.store.draft_candidates(c, since_ts)
 

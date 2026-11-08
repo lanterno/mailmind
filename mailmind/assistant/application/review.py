@@ -7,14 +7,14 @@ threads into a short prose retrospective plus up to 3 "start next week with" sug
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.
 """
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.domain import prompts, review
-from mailmind.assistant.domain.review import Awaited, Needed, Retrospective, Stats
+from mailmind.assistant.domain.review import Awaited, Meeting, Needed, Retrospective, Stats
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
@@ -79,10 +79,24 @@ class Reviews:
         except Exception:
             cleaned = 0
 
+        handled = self._mail.handled_since(c, accounts_set, since_iso)
         stats: Stats = {"sent": sent, "received": received, "by_bucket": by_bucket,
                         "needs_you": len(needs), "waiting_on": len(waiting), "reply_later": replylater,
-                        "cleaned": cleaned}
+                        "cleaned": cleaned, "handled": handled}
         return stats, needs, waiting
+
+    def _meetings(self, since_ts: float) -> list[Meeting]:
+        """The week's meetings and deadlines, from the invites in the mail: what it read is what the prose and the list say. A
+        calendar that can't be read costs the review only its mention of them."""
+        now = datetime.now()
+        since = datetime.fromtimestamp(since_ts)
+        try:
+            gone = self._mail.events_from(since, review.EVENTS_READ)
+            coming = self._mail.events_from(now, review.EVENTS_READ)
+        except Exception as e:
+            log.warning("the week's meetings can't be read", exc_info=e)
+            return []
+        return review.meetings_of(gone, coming, since, now, now + timedelta(days=review.AHEAD_DAYS))
 
     def _items_now(self, c: Connection, items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         """A stored list, as the page reads it: each with the folder and uid of its message's copy now. One whose message has
@@ -98,10 +112,10 @@ class Reviews:
         return now
 
     def _result(self, stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]],
-                ai: Retrospective, model: str, created_at: str, cached: bool, stale: bool,
+                meetings: Sequence[Mapping[str, Any]], ai: Retrospective, model: str, created_at: str, cached: bool, stale: bool,
                 since_ts: float) -> dict[str, Any]:
         return {"ok": True, "narrative": ai["narrative"], "next": ai["next"],
-                "stats": stats, "needs": needs, "waiting": waiting,
+                "stats": stats, "needs": needs, "waiting": waiting, "meetings": meetings,
                 "week_start": datetime.fromtimestamp(since_ts, timezone.utc).isoformat(),
                 "model": model, "generated": created_at, "cached": cached, "stale": stale}
 
@@ -118,10 +132,12 @@ class Reviews:
         fp = review.fingerprint_of(stats, needs, waiting)
 
         def stored(row: Row) -> Result:
+            said = json.loads(row["stats_json"])
             with self._uow.read() as c:
                 stored_needs = self._items_now(c, json.loads(row["needs_json"]))
                 stored_waiting = self._items_now(c, json.loads(row["waiting_json"]))
-            return self._result(json.loads(row["stats_json"]), stored_needs, stored_waiting,
+                meetings = self._items_now(c, said.pop("meetings", []))     # kept beside its numbers, for what they were made from
+            return self._result(said, stored_needs, stored_waiting, meetings,
                            {"narrative": row["narrative"], "next": json.loads(row["next_json"])},
                            row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts)
 
@@ -141,12 +157,14 @@ class Reviews:
                          f"Still need your reply: {stats['needs_you']}\n"
                          f"Waiting to hear back: {stats['waiting_on']}\n"
                          f"Pinned to reply-later: {stats['reply_later']}\n"
-                         f"Senders cleaned up: {stats['cleaned']}")
+                         f"Senders cleaned up: {stats['cleaned']}\n"
+                         f"Filed away: {stats['handled']}")
+            meetings = self._meetings(since_ts)
             needs_txt = "\n".join(
                 f"- [{n['importance']}] {n['who']} — {n['subject']}" + (f" — {n['action'][:120]}" if n["action"] else "")
                 for n in needs) or "(nothing)"
             waiting_txt = "\n".join(f"- {w['subject']} → {w['to']}" for w in waiting) or "(nothing)"
-            prompt = prompts.REVIEW.fill(stats=stats_txt, needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
+            prompt = prompts.REVIEW.fill(stats=stats_txt, meetings=review.meeting_lines(meetings), needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
             try:
                 obj = self._calls.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
                 ai: Retrospective = review.clean(obj)
@@ -163,9 +181,9 @@ class Reviews:
 
             created = self._now()
             with self._uow.write() as c:
-                self._answers.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps(stats),
+                self._answers.save_review(c, accounts, day, fp, ai["narrative"], json.dumps(ai["next"]), json.dumps({**stats, "meetings": meetings}),
                                   json.dumps(needs), json.dumps(waiting), model, created)
-            return self._result(stats, needs, waiting, ai, model, created, False, False, since_ts)
+            return self._result(stats, needs, waiting, meetings, ai, model, created, False, False, since_ts)
 
         answer = self._FLIGHTS.run((accounts, day), make, read, wait=60, recheck=not force)   # a first load may be making it
         if answer is None:

@@ -1,9 +1,15 @@
 """A weekly review, with no I/O: its shapes, what is taken from a model's answer, what stands in when the answer won't do, and
 what makes one stale."""
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 from typing import Any, TypedDict
 
 from mailmind.assistant.domain import fingerprint
+
+EVENTS_READ = 40            # of each list asked of the calendar
+EVENTS_EACH_WAY = 6         # how many just gone, and how many to come
+EVENT_SUMMARY_MAX = 120
+AHEAD_DAYS = 7
 
 
 class Stats(TypedDict):
@@ -14,6 +20,20 @@ class Stats(TypedDict):
     waiting_on: int
     reply_later: int
     cleaned: int
+    handled: int                    # what went to Archive and stayed there
+
+
+class Meeting(TypedDict):
+    """An event in the week's invites. All day usually means a deadline."""
+    key: int | None
+    folder: str
+    uid: int | None
+    account: str
+    thread_id: str | None
+    summary: str
+    start: str                      # local, as the page reads it
+    all_day: bool
+    past: bool
 
 
 class Needed(TypedDict):
@@ -46,6 +66,30 @@ class Retrospective(TypedDict):
     next: list[str]
 
 
+def meetings_of(gone: Iterable[Mapping[str, Any]], coming: Iterable[Mapping[str, Any]],
+                since: datetime, now: datetime, until: datetime) -> list[Meeting]:
+    """The week's events, from the calendar's answer as of a week ago and its answer as of now, since each lists what hadn't
+    ended by then: the latest of what has started, then the soonest of what hasn't, each event once."""
+    def iso(when: datetime) -> str:
+        return when.isoformat(timespec="minutes")
+    start, then, end = iso(since), iso(now), iso(until)
+    each: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for event in (*gone, *coming):
+        each.setdefault((event["summary"], event["start"]), event)
+    within = sorted((e for e in each.values() if start <= e["start"] < end), key=lambda e: e["start"])
+    chosen = [e for e in within if e["start"] < then][-EVENTS_EACH_WAY:] + [e for e in within if e["start"] >= then][:EVENTS_EACH_WAY]
+    return [{"key": e["key"], "folder": e["folder"], "uid": e["uid"], "account": e["account"], "thread_id": e["thread_id"],
+             "summary": str(e["summary"] or "(no title)")[:EVENT_SUMMARY_MAX], "start": e["start"], "all_day": bool(e["all_day"]),
+             "past": e["start"] < then} for e in chosen]
+
+
+def meeting_lines(meetings: Sequence[Meeting]) -> str:
+    """The week's events as the model is told them."""
+    return "\n".join(f'- {m["start"][:10] if m["all_day"] else m["start"].replace("T", " ")}'
+                     f'{" (all day)" if m["all_day"] else ""}{" (already happened)" if m["past"] else ""}: {m["summary"]}'
+                     for m in meetings) or "(none)"
+
+
 def fingerprint_of(stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Sequence[Mapping[str, Any]]) -> str:
     """The week as reviewed: its counts, and the threads that need you or wait on others, named by
     account and thread so a renumbered folder changes nothing."""
@@ -59,6 +103,7 @@ def fallback(stats: Stats, needs: Sequence[Needed], waiting: Sequence[Awaited]) 
     n = (f"In the last 7 days you sent {stats['sent']} message"
          + ("s" if stats["sent"] != 1 else "")
          + f" and {stats['received']} came in. "
+         + (f"You filed away {stats['handled']}. " if stats["handled"] else "")
          + (f"{stats['needs_you']} still need a reply from you"
             + (f" and you're waiting to hear back on {stats['waiting_on']}." if stats["waiting_on"]
                else ".") if (stats["needs_you"] or stats["waiting_on"])

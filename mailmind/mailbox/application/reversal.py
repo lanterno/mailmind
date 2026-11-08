@@ -4,12 +4,15 @@ import json
 from typing import Any
 
 from mailmind.kernel.ids import INBOX, FolderName
+from mailmind.kernel.row import Connection, Row
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.platform.db.uow import UnitOfWork
+from mailmind.platform.logging import get_logger
 
+log = get_logger("undo")
 
 type Reversed = tuple[bool, str, str]       # (ok, the account it touched, the folder)
 
@@ -24,6 +27,20 @@ class Reversals:
         self._commands = commands
         self._ingest = ingest
 
+    def _command_of(self, c: Connection, d: dict[str, Any]) -> Row | None:
+        return (self._store.command_get(c, d["command"]) if d.get("command")
+                else self._store.command_latest_move(c, d["account"], d["message_id"]))
+
+    def _note_undone(self, d: dict[str, Any]) -> None:
+        """A counter-move ended this filing, so what counts a person's week leaves it out. The move has happened by now, and a
+        failure here mustn't put its entry back on the stack, so it is only logged."""
+        try:
+            with self._uow.write() as c:
+                if (q := self._command_of(c, d)) is not None:
+                    self._store.command_mark_reversed(c, q["id"])
+        except Exception as e:
+            log.warning("an undone move couldn't be marked", exc_info=e)
+
     def _settled_with_command(self, d: dict[str, Any]) -> tuple[Reversed | None, dict[str, Any]]:
         """Reconcile an entry with the command path. If its move hasn't reached the server (waiting, being tried or
         given up), CANCEL it and list its message again: its row waited, marked, for the move to settle, so no server is
@@ -32,8 +49,7 @@ class Reversals:
         if not d.get("message_id"):
             return None, d
         with self._uow.read() as c:
-            q = (self._store.command_get(c, d["command"]) if d.get("command")
-                 else self._store.command_latest_move(c, d["account"], d["message_id"]))
+            q = self._command_of(c, d)
         if q is not None and not q["applied"]:
             src: FolderName = d.get("src_folder") or INBOX
             with self._uow.write() as c:
@@ -70,6 +86,7 @@ class Reversals:
                                            unseen=bool(d.get("unseen")))
         if not ok:
             return False, d["account"], d["src_folder"]
+        self._note_undone(d)
         try:   # re-ingest the exact restored message (watermark sync would miss a re-used UID)
             self._ingest.ingest_message(self._accounts.get(d["account"]), d["src_folder"], d["message_id"])
         except Exception:
@@ -85,6 +102,7 @@ class Reversals:
         ok, _ = self._server.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
         if not ok:
             return False, d["account"], "INBOX"
+        self._note_undone(d)
         try:   # Gmail keeps the original INBOX UID on re-label -> targeted re-ingest, not watermark sync
             self._ingest.ingest_message(self._accounts.get(d["account"]), INBOX, d["message_id"])
         except Exception:
