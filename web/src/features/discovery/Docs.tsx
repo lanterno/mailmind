@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get } from "../../lib/api/client";
-import type { DocumentKind } from "../../lib/api/types";
+import type { DocumentGrouping, DocumentKind } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { useLayer } from "../../lib/backTrap";
 import { copyId, copyOf } from "../../lib/copy";
@@ -18,24 +18,28 @@ const PAGE = 200;
 // The server's kinds of document: each one's icon, and its words in the order the facets show them.
 const ICON: Record<DocumentKind, string> = { pdf: "file", image: "image", doc: "file", sheet: "table", slide: "slides", archive: "archive", text: "file", other: "clip" };
 const LABEL: Record<DocumentKind, string> = { pdf: "PDFs", image: "Images", doc: "Docs", sheet: "Sheets", slide: "Slides", archive: "Archives", text: "Text", other: "Other" };
+// The sections the server can put them in, and the plain list. Sections by sender come first, the newest sender at the top, so the newest file still is.
+const GROUPED: Record<DocumentGrouping | "newest", string> = { sender: "By sender", type: "By type", newest: "Newest" };
 
 function Hub({ m }: { m: Mailbox }) {
   const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [typed, setTyped] = useState("");
   const [q, setQ] = useState("");
   const [previewing, setPreviewing] = useState<string | null>(null);
+  const [group, setGroup] = useState<DocumentGrouping | "newest">("sender");
   useEffect(() => {
     const t = setTimeout(() => setQ(typed.trim()), 120);
     return () => clearTimeout(t);
   }, [typed]);
   const list = useInfiniteQuery({
-    queryKey: ["documents", kind, q],
+    queryKey: ["documents", kind, q, group],
     initialPageParam: 0,
     gcTime: 0,
     queryFn: ({ pageParam }) => {
       const p = new URLSearchParams({ limit: String(PAGE), offset: String(pageParam) });
       if (kind !== "all") p.set("kind", kind);
       if (q) p.set("q", q);
+      if (group !== "newest") p.set("group", group);
       return get(`/api/documents?${p}`);
     },
     // How far through the server's list, not how many rows are held: new mail moves the rest along.
@@ -64,6 +68,8 @@ function Hub({ m }: { m: Mailbox }) {
   const read = pages.reduce((n, p) => n + (p.docs?.length ?? 0), 0);
   const matched = first?.matched ?? 0, total = first?.total ?? 0, left = matched - read;
   const facets = (first?.facets ?? {}) as unknown as Record<string, number>;
+  const sections = new Map((first?.groups ?? []).map((g) => [g.id, g]));
+  const called = (x: (typeof docs)[number]) => (group === "type" ? LABEL[x.kind] : sections.get(x.group)?.name || "No sender");
   let body: React.ReactNode;
   if (list.isError && !first) body = <div className="doc-empty">Couldn’t load documents.</div>;
   else if (!first) body = <div className="doc-empty" role="status"><span className="spin">↻</span> Gathering your files…</div>;
@@ -71,10 +77,11 @@ function Hub({ m }: { m: Mailbox }) {
   else {
     body = (
       <>
-        {docs.map((x) => {
+        {docs.map((x, i) => {
           const id = `${copyId(x)}/${x.part_id}/${x.filename}`, showing = previewing === id;
           return (
             <Fragment key={id}>
+              {group !== "newest" && x.group !== docs[i - 1]?.group && <h2 className="doc-sec">{called(x)} <span className="c">{sections.get(x.group)?.count}</span></h2>}
               <div className="doc-row" data-doc-key={x.key}>
                 <div className="doc-ic"><Icon name={ICON[x.kind]} /></div>
                 <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(copyOf(x)); }}>
@@ -101,6 +108,9 @@ function Hub({ m }: { m: Mailbox }) {
       <div className="doc-filters" id="docFilters">
         <button className={kind === "all" ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind("all")}>All <span className="c">{total}</span></button>
         {entries(LABEL).filter(([k]) => facets[k]).map(([k, label]) => <button key={k} className={kind === k ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind(k)}>{label} <span className="c">{facets[k]}</span></button>)}
+      </div>
+      <div className="doc-filters" id="docGroups" role="group" aria-label="Show files">
+        {entries(GROUPED).map(([k, label]) => <button key={k} className={group === k ? "doc-fchip on" : "doc-fchip"} aria-pressed={group === k} onClick={() => setGroup(k)}>{label}</button>)}
       </div>
       <div className="rv-scroll" id="docList">{body}</div>
       <div className="commit-hint"><Icon name="download" /> download · click a file to open its email · Esc to close</div>

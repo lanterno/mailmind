@@ -56,3 +56,4 @@ export type SearchScope = Schemas["SearchScope"];
 export type PictureType = Schemas["PictureType"];
 export type Snippet = Schemas["Snippet"];
 export type SnippetVerb = Schemas["SnippetVerb"];
+export type DocumentGrouping = Schemas["DocumentGrouping"];
