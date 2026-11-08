@@ -156,7 +156,7 @@ class ReviewStats(Answer):
     waiting_on: int
     reply_later: int
     cleaned: int
-    handled: int | None = None      # none in a review stored before it counted that
+    handled: int
 
 
 class ReviewNeeded(Answer):

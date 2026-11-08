@@ -95,7 +95,7 @@ def fingerprint_of(stats: Stats, needs: Sequence[Mapping[str, Any]], waiting: Se
     account and thread so a renumbered folder changes nothing."""
     def threads(items: Iterable[Mapping[str, Any]]) -> str:
         return fingerprint.of(f'{i["account"]}|{i["thread_id"]}' for i in items)
-    counts = "%d:%d:%d:%d" % (stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"])
+    counts = "%d:%d:%d:%d:%d" % (stats["sent"], stats["received"], stats["needs_you"], stats["waiting_on"], stats["handled"])
     return f"{counts}|{threads(needs)}|{threads(waiting)}"
 
 

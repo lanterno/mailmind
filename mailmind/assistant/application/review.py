@@ -133,6 +133,7 @@ class Reviews:
 
         def stored(row: Row) -> Result:
             said = json.loads(row["stats_json"])
+            said["handled"] = stats["handled"]      # an Undo changes it: as it stands, not as it was written
             with self._uow.read() as c:
                 stored_needs = self._items_now(c, json.loads(row["needs_json"]))
                 stored_waiting = self._items_now(c, json.loads(row["waiting_json"]))
