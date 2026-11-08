@@ -164,6 +164,15 @@ function Quote({ c }: { c: Composer }) {
   );
 }
 
+function Preview({ preview }: { preview: Composer["preview"] }) {
+  return (
+    <div className="cmp-preview" id="cmpPreview" aria-busy={!preview}>
+      {preview && !preview.formatted && <p className="cmp-plainnote">No Markdown here: this goes out as plain text.</p>}
+      {preview && <QuoteFrame html={preview.html} title="How your message will read" />}
+    </div>
+  );
+}
+
 function Guard({ c }: { c: Composer }) {
   const g = c.guard;
   if (!g) return null;
@@ -385,7 +394,12 @@ function ComposerBox({ c, senders, aliases, ai }: { c: Composer; senders: string
             {c.rwUndo && <button type="button" className="airw air-undo" id="cmpRwUndo" onClick={composing.rewriteUndo}>↩ Undo</button>}
           </div>
         )}
-        <textarea id="cmpBody" className="cmp-textarea" placeholder="Write your message…" aria-label="message body" value={c.body} onChange={(e) => composing.edit("body", e.target.value)} onPaste={pasteClean} />
+        <div className="cmp-modes" role="group" aria-label="Write or preview the message">
+          <button type="button" id="cmpWriteMode" aria-pressed={!c.previewing} onClick={composing.write}>Write</button>
+          <button type="button" id="cmpPreviewMode" aria-pressed={c.previewing} onClick={() => void composing.preview()}>Preview</button>
+        </div>
+        <textarea id="cmpBody" className="cmp-textarea" placeholder="Write your message…" aria-label="message body" hidden={c.previewing} value={c.body} onChange={(e) => composing.edit("body", e.target.value)} onPaste={pasteClean} />
+        {c.previewing && <Preview preview={c.preview} />}
         <Quote key={c.id} c={c} />
         <div className="cmp-attach" id="cmpAttach" aria-live="polite">
           {c.attachments.map((a, i) => (

@@ -81,7 +81,7 @@ export function createComposing(env: Env) {
   let floatTimer: ReturnType<typeof setTimeout> | undefined;
   let closeSaves: Promise<unknown> | null = null;   // the saves close started, until all settle: Edit waits for them
   let failedSend: (Snapshot & { draftId: number | null }) | null = null;
-  let roomBusy = false, resumeTurn = 0, openingAhead: number | null = null;
+  let roomBusy = false, resumeTurn = 0, openingAhead: number | null = null, previewTurn = 0;
   const knownCache = new Map<string, Person>();     // page lifetime, known/self answers only
   let guardBack: unknown = null;
 
@@ -126,7 +126,7 @@ export function createComposing(env: Env) {
       autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null, redirect: opts.redirect ?? null,
       ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false, near: opts.ack?.near ?? [], redirect: Boolean(opts.ack?.redirect) },
       guard: null, pendingAfter: 0, participants: new Set((opts.participants ?? []).map((a) => a.toLowerCase())),
-      people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "",
+      people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "", previewing: false, preview: null,
     };
     autosaver = setInterval(autosaveTick, AUTOSAVE_MS);
     knownQueue(c, [...c.to, ...c.cc, ...c.bcc].map((x) => x.v), false);   // prefilled chips are marked silently
@@ -263,6 +263,7 @@ export function createComposing(env: Env) {
       const keep = c.body.length - c.sigBlock.length, [start, end] = env.selection();
       c.body = c.body.slice(0, keep) + block;
       caret = [Math.min(start, keep), Math.min(end, keep)];   // the caret stays in what you wrote
+      leavePreview(c);
     }
     c.sigBlock = block;
     markEdited(c);
@@ -306,6 +307,42 @@ export function createComposing(env: Env) {
     c.showCc = true;
     publish();
   };
+
+  /* ---------- Write and Preview ---------- */
+  function leavePreview(x: Composer) {   // what changed the text is what's on screen next
+    x.previewing = false;
+    x.preview = null;
+  }
+
+  async function preview() {
+    const x = c;
+    if (!x || x.previewing) return;
+    const turn = ++previewTurn;
+    x.previewing = true;
+    publish();
+    let d: Answer;
+    try {
+      d = await env.post("/api/compose/preview", { text: x.body });
+    } catch (e) {
+      if (c === x && turn === previewTurn) {
+        leavePreview(x);
+        publish();
+        env.toast(`Couldn’t show a preview: ${e instanceof Error ? e.message : ""}`);
+      }
+      return;
+    }
+    if (c !== x || turn !== previewTurn || !x.previewing) return;
+    x.preview = { html: String(d.html), formatted: Boolean(d.formatted) };
+    publish();
+  }
+
+  function write() {
+    const x = c;
+    if (!x || !x.previewing) return;
+    leavePreview(x);
+    publish();
+    env.focus("body");
+  }
 
   /* ---------- "new to you": a soft mark, never a block ---------- */
   function knownQueue(x: Composer, values: string[], say: boolean) {
@@ -750,6 +787,7 @@ export function createComposing(env: Env) {
 
   function placeBody(x: Composer, body: string) {
     x.body = body;
+    leavePreview(x);
     markEdited(x);
     retireGuard(x);   // a scripted write fires no input event
   }
@@ -814,6 +852,7 @@ export function createComposing(env: Env) {
     const { value, sel } = x.rwUndo;
     x.body = value;
     x.rwUndo = null;
+    leavePreview(x);
     retireGuard(x);
     publish();
     env.focus("body");
@@ -866,7 +905,7 @@ export function createComposing(env: Env) {
     view, float, laterOpen,
     isOpen: () => c !== null,
     open, close, discard, save, autosaveTick, send, makeRoom,
-    edit, setFrom, setTyped, commitChip, removeChip, showCopies, addFiles, removeAttachment,
+    edit, setFrom, setTyped, commitChip, removeChip, showCopies, addFiles, removeAttachment, preview, write,
     dismissGuard, confirmGuard, guardFix,
     reply, forward, editDraft, quickReply, openDraftAhead, queued,
     aiOffered, aiDraft, aiRewrite, rewriteUndo,

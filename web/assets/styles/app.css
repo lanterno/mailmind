@@ -972,6 +972,15 @@
   .cmp-textarea{width:100%;min-height:200px;resize:vertical;background:var(--bg);border:1px solid transparent;border-radius:var(--r-md);
     color:var(--ink);font-family:var(--font-reading);font-size:16px;line-height:1.6;padding:14px 16px}
   .cmp-textarea:focus{outline:none;border-color:var(--focus)}
+  .cmp-textarea[hidden]{display:none}
+  .cmp-modes{display:flex;gap:2px;justify-content:flex-end;margin:0 0 4px}
+  .cmp-modes button{background:none;border:none;border-radius:var(--r-pill);color:var(--mute);font:inherit;font-size:11.5px;font-weight:500;padding:3px 10px;cursor:pointer}
+  .cmp-modes button:hover{color:var(--ink)}
+  .cmp-modes button[aria-pressed="true"]{background:var(--sel);color:var(--primary-ink)}
+  .cmp-preview{min-height:200px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:#fff}
+  .cmp-preview[aria-busy="true"]{background:var(--bg)}
+  .cmp-preview iframe{display:block;width:100%;height:max(200px,40vh);border:none;background:#fff;color-scheme:light}
+  .cmp-plainnote{margin:0;padding:6px 14px;background:var(--bg2);color:var(--soft);font-size:12px}
   .cmp-airow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 6px}
   .cmp-airow .air-label{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ai);font-weight:600;margin-right:2px}
   .airw{background:color-mix(in srgb,var(--ai) 8%,transparent);border:none;border-radius:var(--r-pill);

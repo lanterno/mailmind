@@ -9,6 +9,7 @@ export const FIELDS: Field[] = ["to", "cc", "bcc"];
 export type Mode = ComposeMode;
 
 export interface Recipient { v: string; bad: boolean }
+export interface Preview { html: string; formatted: boolean }   // formatted: false is no Markdown, so it goes out as plain text
 export interface Attachment { filename: string; content_type: string; size: number; b64: string }
 export interface Quote { html: string | null; text: string; from?: string; date?: string }
 export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean; near: string[]; redirect: boolean }
@@ -73,6 +74,8 @@ export interface Composer {
   newSay: Set<string>;
   rwUndo: { value: string; sel: [number, number] } | null;
   ai: "" | "draft" | "rewrite";
+  previewing: boolean;            // the box shows how the message will read, not what you typed
+  preview: Preview | null;        // null while it's being asked for
 }
 
 export function parseAddrs(s: unknown): string[] { return String(s ?? "").match(/[^\s<>,;"]+@[^\s<>,;"]+/g) ?? []; }

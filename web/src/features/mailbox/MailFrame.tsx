@@ -134,11 +134,12 @@ export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; im
   );
 }
 
-// The message a reply quotes, in the composer. Nothing here reaches inside this one, so its sandbox allows nothing at all.
-export function QuoteFrame({ html }: { html: string }) {
+// The message a reply quotes, or how what you typed will read, in the composer. Nothing here reaches inside this one, so its
+// sandbox allows nothing at all.
+export function QuoteFrame({ html, title = "The message you’re answering" }: { html: string; title?: string }) {
   const name = themeStore.useValue();
   const prefs = readPrefs.useValue();
-  return <iframe sandbox="" title="The message you’re answering" srcDoc={quoteDoc(html, mailPrefs(prefs), frameTheme(name))} />;
+  return <iframe sandbox="" title={title} srcDoc={quoteDoc(html, mailPrefs(prefs), frameTheme(name))} />;
 }
 
 export function guardFrames() {
