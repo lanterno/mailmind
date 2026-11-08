@@ -8,7 +8,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { filing } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { useReview, type Review } from "./data";
-import { COMMIT_CAP, commitments } from "./model";
+import { COMMIT_CAP, commitments, meetingWhen } from "./model";
 import { dueWords, localDay } from "./fields";
 import { useTaskChanges, useTasks, type Task } from "./tasks";
 import { useLayer } from "../../lib/backTrap";
@@ -122,6 +122,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
         <Stat n={s?.waiting_on ?? 0} label="awaiting reply" />
         {s?.reply_later ? <Stat n={s.reply_later} label="reply-later" /> : null}
         {s?.cleaned ? <Stat n={s.cleaned} label="cleaned up" /> : null}
+        {s?.handled ? <Stat n={s.handled} label="handled" /> : null}
       </div>
       {(d.next?.length ?? 0) > 0 && <div className="rv-sec next"><Icon name="wind" /> Start next week with</div>}
       {d.next?.map((t) => <div className="rv-item" key={t}><span className="ic">→</span><div className="body"><div className="t">{t}</div></div></div>)}
@@ -132,6 +133,13 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
         <button className="rv-item need" key={n.key === null || n.uid === null ? `n${n.subject}` : copyId({ key: n.key, folder: n.folder, uid: n.uid })} onClick={() => open(n)}>
           <span className="ic">●</span>
           <div className="body"><div className="t">{n.subject}</div><div className="m"><span className="who">{n.who}</span>{n.action ? ` · ${n.action}` : ""}</div></div>
+        </button>
+      ))}
+      {(d.meetings?.length ?? 0) > 0 && <div className="rv-sec">Meetings and deadlines</div>}
+      {d.meetings?.map((e) => (
+        <button className="rv-item" key={`${e.start}|${e.summary}`} disabled={e.key === null || e.uid === null} onClick={() => open(e)}>
+          <span className="ic">◷</span>
+          <div className="body"><div className="t">{e.summary}</div><div className="m">{meetingWhen(e)}{e.past ? " · past" : ""}</div></div>
         </button>
       ))}
       {(d.waiting?.length ?? 0) > 0 && <div className="rv-sec">You’re waiting on a reply</div>}

@@ -70,6 +70,13 @@ export function eventWhen(e: Pick<Upcoming, "start" | "all_day">, now: Date): [s
   return [d.toLocaleDateString(undefined, days < 7 ? { weekday: "short" } : { weekday: "short", day: "numeric" }), time];
 }
 
+// A week's meeting or deadline, whichever side of now it falls on.
+export function meetingWhen(e: Pick<Upcoming, "start" | "all_day">): string {
+  const d = new Date(e.start);
+  const day = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return e.all_day ? `${day}, all day` : `${day}, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase()}`;
+}
+
 export function waitAge(ts: number, now: Date): string {
   const days = Math.floor((now.getTime() / 1000 - (ts || 0)) / 86400);
   return days < 1 ? "today" : days === 1 ? "1 day" : `${days} days`;
