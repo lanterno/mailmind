@@ -4,6 +4,7 @@ much of a person's instruction for a reply is read."""
 from mailmind.assistant.application.governor import allowing_over
 from mailmind.assistant.application.ports import AIOff, NotSent, OverLimit
 from mailmind.assistant.domain.action_plan import PlanVerb
+from mailmind.assistant.domain.limits import DEFAULT_DAILY_LIMIT_USD
 from mailmind.assistant.domain.prompts import INSTRUCTION_MAX, DraftTone, RewriteOp
 
-__all__ = ["AIOff", "DraftTone", "INSTRUCTION_MAX", "NotSent", "OverLimit", "PlanVerb", "RewriteOp", "allowing_over"]
+__all__ = ["AIOff", "DEFAULT_DAILY_LIMIT_USD", "DraftTone", "INSTRUCTION_MAX", "NotSent", "OverLimit", "PlanVerb", "RewriteOp", "allowing_over"]

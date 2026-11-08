@@ -44,11 +44,13 @@ def _problems(doc):
 
 def limits_module():
     """web/src/lib/api/limits.gen.ts: the limits the page holds a person to, each the server's, as one constant."""
-    from mailmind.http.page_limits import PAGE_LIMITS
+    from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
     said = "".join(f"  {name}: {value},\n" for name, value in PAGE_LIMITS.items())
-    return ("// Written by `just gen-api` from mailmind/http/page_limits.py: the limits the page holds a person to, each the server's\n"
-            "// own. Never edit it by hand: `just check-web` fails when it no longer matches.\n"
-            f"export const LIMITS = {{\n{said}}} as const;\n")
+    defaults = "".join(f"  {name}: {json.dumps(value)},\n" for name, value in PAGE_PREFERENCE_DEFAULTS.items())
+    return ("// Written by `just gen-api` from mailmind/http/page_limits.py: the limits the page holds a person to and what each\n"
+            "// preference is with nothing said, each the server's own. Never edit it by hand: `just check-web` fails when it no longer matches.\n"
+            f"export const LIMITS = {{\n{said}}} as const;\n\n"
+            f"export const PREFERENCE_DEFAULTS = {{\n{defaults}}} as const;\n")
 
 
 def main(out, limits_out=None):
