@@ -49,13 +49,13 @@ uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's t
 uv run pytest tests/contract/test_ics_reader_contract.py    # the reader of invites: never raises, plain data, bounded (180)
 uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (44)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
-uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (153)
+uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (162)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (52)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (198)
 uv run pytest tests/unit/http/test_problems.py              # the problem document each of kernel.errors answers (32)
 uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (183)
-uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (118)
+uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (127)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
 uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (17)
 ```
@@ -189,7 +189,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   search box is a combobox that acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
 - **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
-  `mailmind_rules.json`, `mailmind_views.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
+  `mailmind_rules.json`, `mailmind_views.json`, `mailmind_snippets.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
   The repo is public — treat any real address, employer or message count as a leak.
 
@@ -475,14 +475,14 @@ The app lives in `mailmind/`.
   since an RSVP echoes a UID and writes to an organizer. `Invite.rdates` is there only where the text has some.
   `tests/contract/test_ics_reader_contract.py` holds what the reader must do whatever the text says, and
   `tests/unit/calendar/test_invite_text.py` what a text comes to.
-- `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `builder` (`build_message`, which nothing
+- `mailmind.compose` is the seventh: drafts, building a message, the outbox and delivery. `domain` holds `markdown` (a body written in Markdown, run back through the sanitizer), `snippets`, `builder` (`build_message`, which nothing
   else builds with, and `reference_chain` and `thread_ids`), `reply`, `forward`, `composition` (what a request to send or save comes to: its text,
   its quote and the HTML that goes with it), `schedule` (the limits on a send's time), `draft` (what makes a save, whether one may go in, what
   is a draft and which copy is ours to remove), `draft_journal` (what a save records, when its push is due and what its row says), `resume` (a saved
   draft split back into your text, its quote and its files, and which copy may be believed), `attachments`, `limits`, `outbox_item` (a try's numbers,
   what one leaves on a row and what a delivered send still owes), `events` and `errors`. A row's state changes stay in `DurableQueue`, whose conditional
-  UPDATEs the worker can't race, so `outbox_item` holds no copy of them. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP)
-  and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Sending`, `Drafts`
+  UPDATEs the worker can't race, so `outbox_item` holds no copy of them. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP),
+  `snippets_file` and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Snippets`, `Sending`, `Drafts`
   and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the routers, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`

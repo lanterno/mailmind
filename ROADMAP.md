@@ -7,24 +7,6 @@ served by `python -m mailmind serve`. Each item says what is still missing there
 Items cite functions and symbols rather than line numbers, which drift. Value and effort are
 relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
-## Reply, compose and send
-
-- **Markdown body → clean HTML + text multipart** · high value · effort L — New messages still go
-  out text/plain only: `builder.build_message` adds an alternative only when `spec["html"]` is set,
-  and `mailmind.compose.domain.composition` sets it only for replies and forwards whose original had HTML. Needs a
-  markdown renderer run back through `content.sanitize` (already battle-tested, so
-  the safety half is free) plus a Write/Preview toggle over `#cmpBody` in `ComposerBox`. Blocker for
-  inline images.
-- **Inline `cid:` images in outgoing mail** · medium value · effort M — `cid:` handling is inbound
-  only (`Bodies._resolve_cids` and `_CID_IMG` rewrite to data: URIs when rendering received mail). Outbound,
-  `build_message` only calls `add_attachment` — no `Content-ID`, no `multipart/related`, and the
-  composer's `addFiles` marks nothing inline. Correctly blocked on the markdown work: there is no HTML
-  body for a cid to reference.
-- **Templates / snippets with `;trigger` expansion** · medium value · effort M — Completely absent:
-  no storage file, no route, no compose-time expansion. The pattern to copy exists twice —
-  `discovery.adapters.views_file` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
-  this is a snippets store plus an expander in `features/compose/machine.ts`, which stays free of the
-  DOM, and `{{placeholder}}` tab-through in `#cmpBody`.
 ## AI that acts, not just describes
 
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text

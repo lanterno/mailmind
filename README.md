@@ -381,6 +381,10 @@ automatically.
   A copy that was replaced after the list loaded is caught before it can overwrite the newer one,
   and a draft whose send is still waiting in the outbox stays shut until you cancel that send.
 
+- **Write in Markdown.** A message with Markdown goes out as plain text plus sanitized HTML, with
+  Write/Preview in the composer, and a draft reopens as you typed it.
+- **Pictures in the text.** A button or a paste puts a picture at the cursor, and it travels inline by `cid:`.
+- **Snippets.** Type `;name` and Tab to bring in saved words, and Tab through their `{{placeholders}}`.
 - **A last look before it goes.** MailMind catches an address one typo from someone you write
   to, says when Reply-To sends a reply elsewhere, counts your plus-addresses and send-as
   addresses as yours, and shows a forward's true file count.
@@ -698,6 +702,7 @@ in `mailmind.config.json`; a variable that is set decides over the file.
 In the repo folder, or in the directory `MAILMIND_HOME` names:
 
 - `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
+- `mailmind_snippets.json` — your saved snippets, written whole, readable by you only.
 - `mailmind_rules.json` — your learned keep/block lists, expiry rules and filters. It's written whole or
   not at all, readable by you only. A hand edit that breaks it leaves the rules last read in
   force, and the next save keeps the broken copy in `backups/`.
