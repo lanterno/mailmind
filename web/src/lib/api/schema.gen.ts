@@ -1840,6 +1840,8 @@ export interface components {
             part_id: string;
             /** Size */
             size: number;
+            /** Travels */
+            travels: boolean;
         };
         /**
          * AuditEvent
@@ -2524,12 +2526,16 @@ export interface components {
              * @constant
              */
             ok: true;
+            /** Original From */
+            original_from: string;
             /** Original Key */
             original_key: number | null;
             /** Participants */
             participants: string[];
             /** References */
             references: string;
+            /** Reply To */
+            reply_to: string;
             /** Split */
             split: string;
             /** Subject */
@@ -3011,6 +3017,8 @@ export interface components {
         KnownVerdict: {
             /** Known */
             known: boolean;
+            /** Near */
+            near?: string | null;
             /** Self */
             self: boolean;
         };
