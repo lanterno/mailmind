@@ -1,5 +1,11 @@
 """A change reads the rules, changes them and writes the whole file back, and the routes run on threads of their own. Two at
-once each keep what they came for, and neither loses the other's."""
+once each keep what they came for, and neither loses the other's. The command line and the server are two processes, so it holds
+across those too."""
+import fcntl
+import os
+import pathlib
+import subprocess
+import sys
 import threading
 
 import pytest
@@ -59,3 +65,35 @@ def test_two_changes_at_once_both_stand(data_dir, monkeypatch, first, second):
         t.join(10)
     monkeypatch.undo()
     assert did(first, rules.load()) and did(second, rules.load())
+
+
+def test_a_change_waits_for_whoever_holds_the_lock(data_dir):
+    """As another process would: flock goes by open file, so this holder and the module's own are two."""
+    held = os.open(data_dir / ".rules.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(held, fcntl.LOCK_EX)
+    try:
+        changing = threading.Thread(target=add, daemon=True)
+        changing.start()
+        changing.join(0.3)
+        assert changing.is_alive() and not (data_dir / "mailmind_rules.json").exists()
+    finally:
+        os.close(held)
+    changing.join(10)
+    assert not changing.is_alive() and did(add, rules.load())
+
+
+def test_the_lock_is_the_owners_alone_and_stays_for_next_time(data_dir):
+    rules.add(KEPT, "keep")
+    assert (data_dir / ".rules.lock").stat().st_mode & 0o777 == 0o600
+
+
+def test_two_processes_changing_the_rules_lose_nothing(data_dir):
+    """The server and `python -m mailmind rules` at once: every rule either added is there at the end."""
+    each, root = 25, pathlib.Path(__file__).resolve().parents[3]
+    code = ("import sys; from mailmind.curation.adapters import rules_file as rules; "
+            f"[rules.add(f'{{sys.argv[1]}}-{{i}}.example.test', 'keep') for i in range({each})]")
+    env = {**os.environ, "MAILMIND_HOME": str(data_dir)}
+    running = [subprocess.Popen([sys.executable, "-c", code, name], cwd=root, env=env) for name in ("cli", "server", "other")]
+    assert [p.wait(60) for p in running] == [0, 0, 0]
+    kept = rules.load()["keep_domains"]
+    assert len(kept) == 3 * each and {f"{n}-{i}.example.test" for n in ("cli", "server", "other") for i in range(each)} == set(kept)

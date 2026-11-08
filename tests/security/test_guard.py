@@ -147,7 +147,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     assert json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
     assert sorted(e["kind"] for e in curation.AUDIT.read()["events"]) == ["reconcile", "sender_cleanup"]
     assert sorted(p.name for p in data_dir.iterdir() if not p.name.startswith("mailmind.db")) == [
-        "mailmind.config.json", "mailmind_rules.json", "mailmind_views.json", "reconcile_audit.jsonl",
+        ".rules.lock", "mailmind.config.json", "mailmind_rules.json", "mailmind_views.json", "reconcile_audit.jsonl",
         "sweep_audit.jsonl"]
 
 
