@@ -985,6 +985,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_api_preferences_get"];
+        put?: never;
+        /** Change */
+        post: operations["change_api_preferences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/preferences/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bring In */
+        post: operations["bring_in_api_preferences_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reconcile": {
         parameters: {
             query?: never;
@@ -1987,6 +2022,40 @@ export interface components {
              */
             ok: true;
         };
+        /**
+         * ChangedPreferences
+         * @description What changes. What a request doesn't name keeps what it was, so two tabs can each change their own.
+         */
+        ChangedPreferences: {
+            /** Ai Daily Limit Usd */
+            ai_daily_limit_usd?: number | null;
+            /** Conversations */
+            conversations?: boolean | null;
+            density?: components["schemas"]["Density"] | null;
+            draft_tone?: components["schemas"]["DraftTone"] | null;
+            /** High Contrast */
+            high_contrast?: boolean | null;
+            mail_colors?: components["schemas"]["MailColors"] | null;
+            /** Notify Meetings */
+            notify_meetings?: boolean | null;
+            /** Notify New Mail */
+            notify_new_mail?: boolean | null;
+            /** Quiet From */
+            quiet_from?: string | null;
+            /** Quiet Hours */
+            quiet_hours?: boolean | null;
+            /** Quiet Until */
+            quiet_until?: string | null;
+            read_font?: components["schemas"]["ReadFont"] | null;
+            read_size?: components["schemas"]["ReadSize"] | null;
+            read_width?: components["schemas"]["ReadWidth"] | null;
+            search_scope?: components["schemas"]["SearchScope"] | null;
+            /** Single Keys */
+            single_keys?: boolean | null;
+            theme?: components["schemas"]["Theme"] | null;
+            /** Undo Send Seconds */
+            undo_send_seconds?: number | null;
+        };
         /** CleanedUp */
         CleanedUp: {
             block_scope: components["schemas"]["BlockScope"];
@@ -2224,6 +2293,8 @@ export interface components {
              */
             ok: true;
         };
+        /** @enum {string} */
+        Density: "comfortable" | "cozy" | "compact";
         /** Digest */
         Digest: {
             /** Accounts */
@@ -2889,6 +2960,17 @@ export interface components {
             /** Tail Text */
             tail_text: string;
         };
+        /**
+         * HeldPreferences
+         * @description What a browser kept under its old keys, once, in the block's words. Any value: one no preference can be is left out, since
+         *     nobody asked for it to be refused.
+         */
+        HeldPreferences: {
+            /** Held */
+            held: {
+                [key: string]: unknown;
+            };
+        };
         /** Idle */
         Idle: {
             /** Accounts */
@@ -3074,6 +3156,8 @@ export interface components {
              */
             ok: true;
         };
+        /** @enum {string} */
+        MailColors: "auto" | "dark" | "original";
         /** ManyFiled */
         ManyFiled: {
             /** Count */
@@ -3629,6 +3713,49 @@ export interface components {
              */
             target: "all" | "listed" | "";
         };
+        /**
+         * Preferences
+         * @description Every preference, as it stands: what the file says, or the default.
+         */
+        Preferences: {
+            /** Ai Daily Limit Usd */
+            ai_daily_limit_usd: number;
+            /** Conversations */
+            conversations: boolean;
+            density: components["schemas"]["Density"];
+            draft_tone: components["schemas"]["DraftTone"];
+            /** High Contrast */
+            high_contrast: boolean;
+            mail_colors: components["schemas"]["MailColors"];
+            /** Notify Meetings */
+            notify_meetings: boolean;
+            /** Notify New Mail */
+            notify_new_mail: boolean;
+            /** Quiet From */
+            quiet_from: string;
+            /** Quiet Hours */
+            quiet_hours: boolean;
+            /** Quiet Until */
+            quiet_until: string;
+            read_font: components["schemas"]["ReadFont"];
+            read_size: components["schemas"]["ReadSize"];
+            read_width: components["schemas"]["ReadWidth"];
+            search_scope: components["schemas"]["SearchScope"];
+            /** Single Keys */
+            single_keys: boolean;
+            theme: components["schemas"]["Theme"];
+            /** Undo Send Seconds */
+            undo_send_seconds: number;
+        };
+        /** PreferencesAnswer */
+        PreferencesAnswer: {
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            preferences: components["schemas"]["Preferences"];
+        };
         /** Prefetched */
         Prefetched: {
             /**
@@ -3679,6 +3806,12 @@ export interface components {
             /** Unseen */
             unseen: number;
         };
+        /** @enum {string} */
+        ReadFont: "sans" | "serif" | "mono";
+        /** @enum {string} */
+        ReadSize: "s" | "m" | "l" | "xl";
+        /** @enum {string} */
+        ReadWidth: "narrow" | "medium" | "wide";
         /** RecentMail */
         RecentMail: {
             /** Account */
@@ -4208,6 +4341,8 @@ export interface components {
             /** Scope */
             scope: string;
         };
+        /** @enum {string} */
+        SearchScope: "all" | "account";
         /** SeenBody */
         SeenBody: {
             /** Folder */
@@ -4545,6 +4680,8 @@ export interface components {
             /** Running */
             running: boolean;
         };
+        /** @enum {string} */
+        Theme: "day" | "dusk" | "night";
         /** Thread */
         Thread: {
             /** Account */
@@ -11490,6 +11627,344 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Done"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    current_api_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesAnswer"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    change_api_preferences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangedPreferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesAnswer"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    bring_in_api_preferences_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldPreferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesAnswer"];
                 };
             };
             /** @description Bad Request */
