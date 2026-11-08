@@ -1894,6 +1894,8 @@ export interface components {
             /** Waiting */
             waiting: number;
         };
+        /** @enum {string} */
+        BlockScope: "sender" | "domain";
         /** Brief */
         Brief: {
             /** Cached */
@@ -1962,8 +1964,7 @@ export interface components {
             rows?: components["schemas"]["BulkRow"][] | null;
             /** Undo Group */
             undo_group?: string | null;
-            /** Verb */
-            verb?: string | null;
+            verb?: components["schemas"]["FilingVerb"] | null;
         };
         /** BulkRow */
         BulkRow: {
@@ -1986,8 +1987,7 @@ export interface components {
         };
         /** CleanedUp */
         CleanedUp: {
-            /** Block Scope */
-            block_scope: string;
+            block_scope: components["schemas"]["BlockScope"];
             /** Blocked Token */
             blocked_token: string;
             /** Browser Url */
@@ -2017,8 +2017,7 @@ export interface components {
         };
         /** CleanupBody */
         CleanupBody: {
-            /** Block Scope */
-            block_scope?: string | null;
+            block_scope?: components["schemas"]["BlockScope"] | null;
             /** Confirm Token */
             confirm_token?: string | null;
             /** Do Unsubscribe */
@@ -2028,6 +2027,8 @@ export interface components {
             /** Undo Group */
             undo_group?: string | null;
         };
+        /** @enum {string} */
+        ComposeMode: "new" | "reply" | "replyall" | "forward";
         /** ConfirmBody */
         ConfirmBody: {
             /** Plan */
@@ -2329,8 +2330,7 @@ export interface components {
             from: string;
             /** Key */
             key: number;
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["DocumentKind"];
             /** Part Id */
             part_id: string;
             /** Size */
@@ -2344,6 +2344,8 @@ export interface components {
             /** When */
             when: string;
         };
+        /** @enum {string} */
+        DocumentKind: "pdf" | "image" | "doc" | "sheet" | "slide" | "archive" | "text" | "other";
         /** Documents */
         Documents: {
             /** Docs */
@@ -2424,8 +2426,7 @@ export interface components {
             forward_attachments?: boolean | null;
             /** Idempotency Key */
             idempotency_key?: string | null;
-            /** Mode */
-            mode?: string | null;
+            mode?: components["schemas"]["ComposeMode"] | null;
             /** Original Key */
             original_key?: number | null;
             /** Resume */
@@ -2516,8 +2517,7 @@ export interface components {
             files: components["schemas"]["DraftFile"][];
             /** In Reply To */
             in_reply_to: string;
-            /** Mode */
-            mode: string;
+            mode: components["schemas"]["ComposeMode"];
             notes: components["schemas"]["DraftNotes"];
             /**
              * Ok
@@ -2558,8 +2558,7 @@ export interface components {
             key?: number | null;
             /** Thread Id */
             thread_id?: string | null;
-            /** Tone */
-            tone?: string | null;
+            tone?: components["schemas"]["DraftTone"] | null;
             /** Uid */
             uid?: number | null;
         };
@@ -2584,6 +2583,8 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** @enum {string} */
+        DraftTone: "brief" | "balanced" | "warm" | "formal";
         /** DraftedReply */
         DraftedReply: {
             /** Body */
@@ -2707,10 +2708,11 @@ export interface components {
             /** Undoable */
             undoable: boolean;
         };
+        /** @enum {string} */
+        FilingVerb: "archive" | "trash" | "junk";
         /** FlagBody */
         FlagBody: {
-            /** Flag */
-            flag?: string | null;
+            flag?: components["schemas"]["FlagName"] | null;
             /** Folder */
             folder: string;
             /** Key */
@@ -2722,6 +2724,8 @@ export interface components {
             /** Uid */
             uid?: number | null;
         };
+        /** @enum {string} */
+        FlagName: "flagged" | "seen";
         /** FolderListing */
         FolderListing: {
             /** Account */
@@ -3508,8 +3512,7 @@ export interface components {
             queued: number;
             /** Undoable */
             undoable: boolean;
-            /** Verb */
-            verb: string;
+            verb: components["schemas"]["PlanVerb"];
         };
         /**
          * PlanIsASearch
@@ -3555,10 +3558,8 @@ export interface components {
             plan: string;
             /** Sample */
             sample: components["schemas"]["PlanSample"][];
-            /** Snooze Preset */
-            snooze_preset: string;
-            /** Verb */
-            verb: string;
+            snooze_preset: components["schemas"]["SnoozePreset"];
+            verb: components["schemas"]["PlanVerb"];
         };
         /** PlanSample */
         PlanSample: {
@@ -3569,6 +3570,8 @@ export interface components {
             /** When */
             when: string;
         };
+        /** @enum {string} */
+        PlanVerb: "archive" | "trash" | "junk" | "read" | "unread" | "star" | "snooze";
         /** PoolCounters */
         PoolCounters: {
             /** Created */
@@ -3963,11 +3966,12 @@ export interface components {
         RewriteBody: {
             /** Lang */
             lang?: string | null;
-            /** Op */
-            op?: string | null;
+            op?: components["schemas"]["RewriteOp"] | null;
             /** Text */
             text?: string | null;
         };
+        /** @enum {string} */
+        RewriteOp: "shorten" | "elaborate" | "formal" | "friendly" | "fix" | "translate";
         /** Rewritten */
         Rewritten: {
             /**
@@ -3975,8 +3979,7 @@ export interface components {
              * @constant
              */
             ok: true;
-            /** Op */
-            op: string;
+            op: components["schemas"]["RewriteOp"];
             /** Text */
             text: string;
         };
@@ -4009,8 +4012,7 @@ export interface components {
          * @description The invite, by its message's key, and the folder and uid of the copy the page has (`mailmind.http.named`).
          */
         RsvpBody: {
-            /** Decision */
-            decision?: string | null;
+            decision?: components["schemas"]["RsvpDecision"] | null;
             /** Folder */
             folder?: string | null;
             /** Key */
@@ -4018,10 +4020,11 @@ export interface components {
             /** Uid */
             uid?: number | null;
         };
+        /** @enum {string} */
+        RsvpDecision: "accept" | "decline" | "tentative";
         /** RsvpQueued */
         RsvpQueued: {
-            /** Decision */
-            decision: string;
+            decision: components["schemas"]["RsvpDecision"];
             /**
              * Ok
              * @constant
@@ -4049,13 +4052,13 @@ export interface components {
             token?: string | null;
             /** Uid */
             uid?: number | null;
-            /** Verdict */
-            verdict?: string | null;
+            verdict?: components["schemas"]["RuleChange"] | null;
         };
         /** RuleBook */
         RuleBook: {
             rules: components["schemas"]["Rules"];
         };
+        RuleChange: components["schemas"]["Verdict"] | "remove";
         /** RuleChanged */
         RuleChanged: {
             /**
@@ -4222,8 +4225,7 @@ export interface components {
             forward_attachments?: boolean | null;
             /** Idempotency Key */
             idempotency_key?: string | null;
-            /** Mode */
-            mode?: string | null;
+            mode?: components["schemas"]["ComposeMode"] | null;
             /** Original Key */
             original_key?: number | null;
             /** Resume */
@@ -4290,8 +4292,7 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Preset */
-            preset?: string | null;
+            preset?: components["schemas"]["SnoozePreset"] | null;
             /** Thread Id */
             thread_id?: string | null;
             /** Uid */
@@ -4301,6 +4302,8 @@ export interface components {
             /** Until */
             until?: number | string | null;
         };
+        /** @enum {string} */
+        SnoozePreset: "later_today" | "tomorrow" | "weekend" | "next_week";
         /** Snoozed */
         Snoozed: {
             /** Count */
@@ -4703,6 +4706,8 @@ export interface components {
             /** Uid */
             uid: number;
         };
+        /** @enum {string} */
+        Verdict: "keep" | "block";
         /** ViewChange */
         ViewChange: {
             /** Id */
@@ -4711,9 +4716,10 @@ export interface components {
             name?: string | null;
             /** Q */
             q?: string | null;
-            /** Verb */
-            verb?: string | null;
+            verb?: components["schemas"]["ViewVerb"] | null;
         };
+        /** @enum {string} */
+        ViewVerb: "create" | "delete";
         /** Views */
         Views: {
             /**
