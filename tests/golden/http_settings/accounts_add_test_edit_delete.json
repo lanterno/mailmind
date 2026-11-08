@@ -146,12 +146,14 @@
  },
  {
   "body": {
-   "error": "account not found",
-   "ok": false
+   "detail": "account not found",
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -160,7 +162,7 @@
    "x-frame-options": "DENY"
   },
   "request": "test an unknown account",
-  "status": 200
+  "status": 404
  },
  {
   "body": {
@@ -204,12 +206,14 @@
  },
  {
   "body": {
-   "error": "a host is required",
-   "ok": false
+   "detail": "a host is required",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -218,7 +222,7 @@
    "x-frame-options": "DENY"
   },
   "request": "test a draft with no host",
-  "status": 200
+  "status": 400
  },
  {
   "body": {
@@ -266,12 +270,14 @@
  },
  {
   "body": {
-   "error": "not found",
-   "ok": false
+   "detail": "not found",
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -280,7 +286,7 @@
    "x-frame-options": "DENY"
   },
   "request": "edit an unknown account",
-  "status": 200
+  "status": 404
  },
  {
   "note": "mailmind.config.json",
@@ -366,12 +372,14 @@
  },
  {
   "body": {
-   "error": "not found",
-   "ok": false
+   "detail": "not found",
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -380,7 +388,7 @@
    "x-frame-options": "DENY"
   },
   "request": "delete Dee again",
-  "status": 200
+  "status": 404
  },
  {
   "note": "accounts left",

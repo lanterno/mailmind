@@ -79,8 +79,8 @@ def test_a_draft_that_isnt_one_is_still_a_failed_test_and_not_a_failed_request(a
 @pytest.mark.parametrize("credential", [{"style": "env", "var": "HOME"}, {"style": "proton_bridge"}, {"style": "op", "ref": "op://V/I/F"}])
 def test_a_draft_naming_a_stored_secret_is_still_refused_in_its_own_words(app, world, credential):
     r = app.post("/api/accounts/test", {"draft": {**dee(world), "credential": credential}})
-    assert (r.status, r.json["ok"]) == (200, False)
-    assert "save the account" in r.json["error"]
+    assert (r.status, r.json["type"]) == (400, "/problems/refused")
+    assert "save the account" in r.json["detail"]
     assert world.server.commands_for(user=NEW, command="LOGIN") == []
 
 

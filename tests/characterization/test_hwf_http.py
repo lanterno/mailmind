@@ -108,8 +108,7 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
     draft = {"email": "dee@example.test", "type": "imap", "host": "127.0.0.1", "port": world.server.port,
              "starttls": True, "credential": credential}
     r = app.post("/api/accounts/test", {"draft": draft}).json
-    assert r == {"ok": False, "error": "save the account to test a stored secret; "
-                                       "before then only a typed password is tried"}
+    assert r == problems.refused("save the account to test a stored secret; before then only a typed password is tried")
     assert world.server.commands_for(user="dee@example.test", command="LOGIN") == []
 
 

@@ -4,6 +4,7 @@ import pytest
 
 from mailmind.accounts.application.connections import PROBE_TIMEOUT, Connections
 from mailmind.accounts.domain.conn_error import quiet
+from mailmind.kernel.errors import NotFound, Refused
 
 ADA = {"email": "ada@example.test", "kind": "imap", "host": "imap.example.test", "port": 993, "starttls": False,
        "credential": {"op": "op://Private/Ada/password"}}
@@ -50,9 +51,10 @@ def test_a_draft_goes_as_a_draft_with_what_was_typed():
 
 def test_a_draft_the_domain_refuses_reaches_no_server():
     probe = Probe()
-    r = connections(probe).test({"draft": {"email": "dee@example.test", "type": "imap", "host": "imap.example.test",
+    with pytest.raises(Refused, match="save the account"):
+        connections(probe).test({"draft": {"email": "dee@example.test", "type": "imap", "host": "imap.example.test",
                                            "credential": {"style": "env", "var": "HOME"}}})
-    assert probe.calls == [] and r["ok"] is False and "save the account" in r["error"]
+    assert probe.calls == []
 
 
 def test_a_draft_that_isnt_one_is_a_failed_test_rather_than_a_failed_request():
@@ -62,7 +64,8 @@ def test_a_draft_that_isnt_one_is_a_failed_test_rather_than_a_failed_request():
 
 
 def test_an_account_no_one_saved_is_not_found():
-    assert connections(Probe()).test({"email": "zed@example.test"}) == {"ok": False, "error": "account not found"}
+    with pytest.raises(NotFound, match="account not found"):
+        connections(Probe()).test({"email": "zed@example.test"})
 
 
 @pytest.mark.parametrize("error, says", [(ConnectionRefusedError("hunter2 was refused"), "connection refused"),
