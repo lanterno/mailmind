@@ -48,18 +48,9 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Search, rules and organization
 
-- **Document Hub v2** · high value · effort M — Three follow-ons in value order: an inline PDF/image
-  preview so you needn't download to check (a row's `doc-body` in `Hub` only opens the source email; no preview modal
-  exists), group-by-sender/type sections in place of the flat row list, and a persistent rail lane so
-  the Hub is a place rather than a ⌘K command.
-- **Cross-account virtual folders** · medium value · effort M — `Queries.snoozed_in`, `muted_in`,
-  `waiting_in` and `replylater_in` each read one account, and `Folders.of_account(account)` counts
-  per account, so there is no all-accounts Snoozed to match all inboxes: `virtual` in `FolderRail`
-  comes from `useFolders(account)`, and on All inboxes there is no account to ask. Saved lanes already work
-  across accounts because they ride `/api/search`'s `scope` param, and `Queries.all_inboxes` and
-  `waiting_on_others` are one query over every account. The four helpers and what they read
-  (`store.snoozed_rows`, `attention.book`'s `list_muted`, `list_waiting` and `list_replylater`) need
-  the same branch.
+- **PDF preview in the Document Hub** · low value · effort M — The Hub previews images in a frame whose sandbox allows nothing
+  (`perimeter.attachment_preview_headers`). Chromium won't show a PDF in a sandboxed frame, and a same-origin one would break the
+  security model, so a PDF needs a renderer of its own (pdf.js, say), as a new dependency, running with no origin.
 - **Batch cleanup with a stated rationale** · medium value · effort M — Cleaning ten noisy senders
   means ten preview-and-confirm cycles: rows in `Flood` (`features/curation/Curate.tsx`) are strictly one-at-a-time
   through `previewCleanup`, with no marked set. Wanted: multi-select executing one batched block+sweep

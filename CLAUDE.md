@@ -811,13 +811,13 @@ refuses to start on a profile name it doesn't know. `background.nosync()` asks t
   in is left where it went, and counted as `gone`. `Filing.carry_out` sends each message through its own route (`filing.do_write`, `do_trash`,
   `attention.snoozing.snooze`), under one undo group. A filter reaches Sent, Drafts, Trash and Junk only by naming a folder, a verb
   never reaches its own home (`action_plan.out_of_reach`), and each message counts once, by the copy search would show.
-- Whole-conversation archive/trash (`/api/thread/archive|trash` → `filing.do_thread_file`) resolves
+- Whole-conversation archive, trash and move (`/api/thread/archive|trash|move` → `filing.do_thread_file`) resolves
   the members server-side — the anchor's `thread_id` within the anchor's folder, or the anchor alone
   with no thread id — and accepts them all in one transaction (`commands.accept_move_within`, which a
   caller holding a write uses), under one undo group, so a crash can't leave half of them marked. Each
   is then tried on its own once that commits: a refusal gives back only its own message, and a try
   that raises counts as queued, with the rest still tried.
-- Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; each client sends more as more requests
+- Marked rows go as one request (`/api/bulk/file` and `/api/bulk/move` → `filing.file_many`, up to `BULK_MAX`; each client sends more as more requests
   under one undo group): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
   own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
   (`commands.leave_to_worker`), and every row has left the lists by then. A snooze of marked rows goes the same way, up to
@@ -1002,7 +1002,7 @@ alone cannot execute script. Preserve that ordering when touching either.
 The reader's frame loads `GET /api/message/body.html?key=<key>&folder=<folder>&uid=<uid>&images=0|1`
 (`Bodies.copy_document`), the same sanitized HTML as `/api/message/body` or the plain text escaped, under
 `perimeter.mail_frame_headers`: a policy of its own, with a `sandbox` that holds even if the frame's attribute goes (a `<meta>` can't
-do that), and the one answer this origin may frame. The folder and the uid name the copy, since one key spans a message's copies and
+do that), and with an attachment's preview (`perimeter.attachment_preview_headers`, an image typed from its bytes, in a sandbox that allows nothing) the only answers this origin may frame. The folder and the uid name the copy, since one key spans a message's copies and
 a sender who reuses a Message-ID puts two beside each other. The frame finds the copy as the reader's body route does
 (`store.copy_pk`): no uid names the only copy there, and a uid that won't read as a number names none. The row found must still
 hold that key and uid as its body is read (`Bodies.as_document`), so a renumber never shows another message, or another copy, under

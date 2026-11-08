@@ -180,14 +180,17 @@ and the Claude API.
   key. Ships with Unread, Flagged, Has attachments and Last 7 days, plus five
   auto-label lanes — Feed, Paper trail, Notifications, Action needed, Finance —
   which are just saved queries over the existing classifier buckets.
+- **Snoozed, Muted, Waiting and Reply later across every account,** with counts, on All inboxes.
 - **One "All inboxes" view** merges every connected account's INBOX by date with
   per-row account chips, as one list that pages back through all of it, and an account still on
   its first scan holds up no one. The switcher at the top of the rail shows each account as a colored dot
   (stacked for All inboxes) and says in words when one can't connect.
-- **Document Hub.** Every real attachment across every account in one searchable
-  overlay — type facets, live filename/sender/subject search that reaches every file, a
+- **Document Hub.** A place in the rail (`/documents`) holding every real attachment across every
+  account, in sections by sender or by type, with images previewed in a sandboxed frame — type facets, live filename/sender/subject search that reaches every file, a
   "show more" past the first page, direct download and click-through to the source email,
   with the same file synced to two accounts merged.
+- **Move to any folder.** `m` moves the open message, a conversation or marked rows to a folder you find
+  by typing, with Undo.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
