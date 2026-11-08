@@ -1,7 +1,7 @@
 // The composer: what you see of the machine in compose.ts. Each control asks the machine, and
 // what it shows is the copy the machine published.
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { toast } from "../../lib/toast";
+import { Float, toast } from "../../lib/toast";
 import { Dialog, Modal, ModalOverlay, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
@@ -450,20 +450,14 @@ export function ComposerModal({ senders, aliases, ai }: { senders: string[]; ali
 export function SendFloatView() {
   const f = composing.float.useValue();
   if (!f) return null;
-  if (f.kind === "countdown") {
-    return (
-      <div className="send-float sending" id="sendFloat" data-react-aria-top-layer="true">
-        <span>↑ Sending in {f.left}s…</span><button id="sfUndo" onClick={f.undo}>Undo</button>
-      </div>
-    );
-  }
-  if (f.kind === "failed") {
-    return (
-      <div className="send-float failed" id="sendFloat" data-react-aria-top-layer="true">
-        <span><Icon name="alert" /> {f.text}</span>
-        <button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button>
-      </div>
-    );
-  }
-  return <div className={f.kind === "done" ? "send-float sent" : "send-float sending"} id="sendFloat" data-react-aria-top-layer="true"><span>{f.clock && <Icon name="clock" />} {f.text}</span></div>;
+  const tone = f.kind === "done" ? "sent" : f.kind === "failed" ? "failed" : "sending";
+  const words = f.kind === "countdown" ? <>↑ Sending in {f.left}s…</>
+    : f.kind === "failed" ? <><Icon name="alert" /> {f.text}</>
+    : <>{f.clock && <Icon name="clock" />} {f.text}</>;
+  return (
+    <Float id="sendFloat" className={`send-float ${tone}`} shown={{ words, turn: 0 }}>
+      {f.kind === "countdown" && <button id="sfUndo" onClick={f.undo}>Undo</button>}
+      {f.kind === "failed" && <><button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button></>}
+    </Float>
+  );
 }

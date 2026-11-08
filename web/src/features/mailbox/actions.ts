@@ -7,7 +7,7 @@ import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../li
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
-import { toast } from "../../lib/toast";
+import { createFloat, OFFERS_MS, toast } from "../../lib/toast";
 import type { ListData } from "./data";
 import { filedWords, type Row } from "./rows";
 
@@ -38,13 +38,8 @@ export function toggleMark(id: string) {
 }
 export const clearMarks = () => marked.set(new Set());
 
-export const undoFloat = createStore<string | null>(null);
-let undoTimer: ReturnType<typeof setTimeout> | undefined;
-export function offerUndo(label: string) {
-  undoFloat.set(label);
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => undoFloat.set(null), 8000);
-}
+export const undoFloat = createFloat(OFFERS_MS);
+export const offerUndo = (label: string) => undoFloat.show(label);
 
 export const readOnly = createStore(false);
 
@@ -256,7 +251,7 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
 }
 
 export async function undo(qc: QueryClient) {
-  undoFloat.set(null);
+  undoFloat.clear();
   let d: PostAnswers["/api/undo"];
   try {
     d = await post("/api/undo", {});

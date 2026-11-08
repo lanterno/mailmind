@@ -34,7 +34,7 @@ import { ConfirmDialog } from "../lib/confirm";
 import { OverLimitDialog } from "../lib/overLimit";
 import { stored } from "../lib/store";
 import { shortAddress } from "../lib/text";
-import { toast, Toaster } from "../lib/toast";
+import { Float, toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
 import { buildCommands, commandForKey, goChord, goKeys, legendOf, onSavedView, type Command } from "./commands";
 import { Palette, paletteOpen } from "./Palette";
@@ -51,15 +51,14 @@ const sourceWhere = (s: ListSource | null) => JSON.stringify(s);
 
 function Floats() {
   const qc = useQueryClient();
-  const label = undoFloat.useValue();
+  const offer = undoFloat.shown.useValue();
   const build = newBuild.useValue();
   return (
     <>
       <SendFloatView />
-      {/* A dialog makes what's outside it inert, and a click goes straight through that: these stay in reach over one. */}
-      <div className="send-float undo-float" id="undoFloat" data-react-aria-top-layer="true" hidden={!label}>
-        <span>{label}</span><button id="ufUndo" onClick={() => void undo(qc)}>Undo · <kbd>z</kbd></button>
-      </div>
+      <Float id="undoFloat" className="send-float undo-float" shown={offer}>
+        <button id="ufUndo" onClick={() => void undo(qc)}>Undo · <kbd>z</kbd></button>
+      </Float>
       <div id="swipeBadge" aria-hidden="true"><span className="sw-archive"><Icon name="archive" /> Archive</span><span className="sw-snooze"><Icon name="clock" /> Tomorrow</span></div>
       <div className="send-float build-float" id="buildFloat" role="status" data-react-aria-top-layer="true" hidden={!build}>
         MailMind was updated or restarted. <button id="buildReload" onClick={() => location.reload()}>Reload</button>
