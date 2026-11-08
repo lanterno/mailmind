@@ -138,12 +138,12 @@ export function useMailbox() {
   };
 
   // What a verb on the open thing is about. A conversation is named whole; a message by its copy.
-  const target = (): actions.Target | null => {
+  const target = (): actions.OneTarget | null => {
     if (!opened) return null;
     if (opened.kind === "thread") return { account: opened.account, thread_id: opened.id };
     return copyOf(opened);
   };
-  const muteTarget = (): actions.Target | null => {
+  const muteTarget = (): actions.OneTarget | null => {
     if (!opened) return null;
     if (opened.kind === "thread") return { account: opened.account, thread_id: opened.id };
     return { ...copyOf(opened), thread_id: openRow?.threadId || null };
@@ -188,7 +188,7 @@ export function useMailbox() {
     }
   };
 
-  const onOpen = (run: (t: actions.Target, rows: string[], after: Route | null) => void, get = target) => {
+  const onOpen = (run: (t: actions.OneTarget, rows: string[], after: Route | null) => void, get = target) => {
     const t = get();
     if (t && openId !== null) run(t, [openId], afterLeaving([openId]));
   };

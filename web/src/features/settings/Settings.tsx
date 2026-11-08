@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
-import type { ArchiveFormat, GetAnswers } from "../../lib/api/types";
+import type { ArchiveFormat, GetAnswers, PostBodies } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
@@ -29,7 +29,7 @@ type Tested = { kind: "run" | "ok" | "err"; text: string } | null;
 const credentialOf = (c: Connection) => c.credential as unknown as Credential;
 const refOf = (c: Credential | null | undefined) => (Array.isArray(c?.ref) ? c.ref[0] : c?.ref) ?? "";
 
-async function testConnection(payload: unknown, say: (t: Tested) => void) {
+async function testConnection(payload: PostBodies["/api/accounts/test"], say: (t: Tested) => void) {
   say({ kind: "run", text: "Testing… (approve Touch ID if asked)" });
   try {
     const d = await post("/api/accounts/test", payload);

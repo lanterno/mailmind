@@ -1,6 +1,6 @@
 // The page's way to the API: same origin, the CSRF token on every request, and an error that says what went wrong.
 // Paths and answers are typed from types.ts, which reads them off schema.gen.ts: `just gen-api` writes that from the routes' schemas.
-import type { GetAnswers, PostAnswers } from "./types";
+import type { GetAnswers, PostAnswers, PostBodies } from "./types";
 
 export const AI_OVER_HEADER = "X-MailMind-AI-Over-Limit";
 
@@ -94,7 +94,7 @@ export function get<Path extends WithQuery<keyof GetAnswers & string>>(path: Pat
   return request<GetAnswers[RouteOf<GetAnswers, Path>]>(path, options);
 }
 
-export function post<Path extends WithQuery<keyof PostAnswers & string>>(path: Path, body: unknown, options: ApiOptions = {}) {
+export function post<Path extends WithQuery<keyof PostAnswers & string>>(path: Path, body: PostBodies[RouteOf<PostAnswers, Path>], options: ApiOptions = {}) {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   return request<PostAnswers[RouteOf<PostAnswers, Path>]>(path, { ...options, method: "POST", headers, body: JSON.stringify(body) });

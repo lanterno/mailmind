@@ -131,7 +131,9 @@ export function moveRow(qc: QueryClient, to: string, label: string, row: Copy, w
 }
 
 // What a verb is about: a copy, a whole thread, or the copies x marked. A copy may say its thread, for a verb on the thread.
-export type Target = (Copy & { thread_id?: string | null }) | { account: string; thread_id: string } | { copies: Copy[] };
+// One message or one conversation, as a route that acts on the message takes it. Only a snooze also takes `copies`.
+export type OneTarget = (Copy & { thread_id?: string | null }) | { account: string; thread_id: string };
+export type Target = OneTarget | { copies: Copy[] };
 
 export type Snoozing = { preset: SnoozePreset } | { until: string };
 
@@ -171,7 +173,7 @@ export function unsnooze(qc: QueryClient, target: Target, rows: string[], after:
   return act(qc, { rows, after, call: () => post("/api/unsnooze", target), say: () => "Unsnoozed", fail: () => "Couldn’t unsnooze" });
 }
 
-export function mute(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
+export function mute(qc: QueryClient, target: OneTarget, rows: string[], after: Route | null) {
   return act(qc, {
     rows,
     after,
@@ -182,11 +184,11 @@ export function mute(qc: QueryClient, target: Target, rows: string[], after: Rou
   });
 }
 
-export function unmute(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
+export function unmute(qc: QueryClient, target: OneTarget, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/unmute", target), say: () => "Unmuted", fail: () => "Couldn’t unmute" });
 }
 
-export function dismissFollowup(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
+export function dismissFollowup(qc: QueryClient, target: OneTarget, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/followups/dismiss", target), say: () => "Dismissed", fail: () => "Couldn’t dismiss" });
 }
 

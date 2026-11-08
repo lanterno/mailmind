@@ -2,7 +2,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { get, post } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
-import type { DraftTone, GetAnswers } from "../../lib/api/types";
+import type { DraftTone, GetAnswers, PostBodies } from "../../lib/api/types";
 import { go, parseRoute } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
 import { pref } from "../../lib/prefs";
@@ -37,7 +37,7 @@ const afterRender = (fn: () => void) => void setTimeout(fn);
 
 export const composing = createComposing({
   createStore,
-  post: (path, body, ai) => post(path as "/api/draft", body, ai ? { askOverLimit } : {}),
+  post: (path, body, ai) => post(path as "/api/draft", body as PostBodies["/api/draft"], ai ? { askOverLimit } : {}),
   get: (path) => get(path as "/api/digest"),
   toast,
   say: announce,

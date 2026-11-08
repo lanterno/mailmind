@@ -4,7 +4,7 @@ import type { PostAnswers } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
 import { askOverLimit } from "../../lib/overLimit";
 import { Icon } from "../../lib/ui/Icon";
-import type { Target } from "./actions";
+import type { OneTarget } from "./actions";
 import type { Row } from "./rows";
 
 type Summary = PostAnswers["/api/ai/summarize"];
@@ -13,9 +13,9 @@ type Card = { kind: "loading" } | { kind: "error"; error: string } | { kind: "do
 const cards = createStore<{ key: string; card: Card } | null>(null);
 const inFlight = new Set<string>();
 
-const keyOf = (t: Target) => JSON.stringify(t);
+const keyOf = (t: OneTarget) => JSON.stringify(t);
 
-export async function summarize(target: Target, force = false) {
+export async function summarize(target: OneTarget, force = false) {
   const key = keyOf(target);
   if (inFlight.has(key)) return;   // a second i asks nothing more of Claude
   inFlight.add(key);
@@ -33,7 +33,7 @@ export async function summarize(target: Target, force = false) {
   }
 }
 
-export function AiCard({ target, row }: { target: Target | null; row: Row | undefined }) {
+export function AiCard({ target, row }: { target: OneTarget | null; row: Row | undefined }) {
   const state = cards.useValue();
   const shown = target && state?.key === keyOf(target) ? state.card : null;
   const rerun = (force = true) => {
