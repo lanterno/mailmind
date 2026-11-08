@@ -5,6 +5,7 @@ from pydantic import Field
 
 from mailmind.assistant.api import DraftTone, PlanVerb, RewriteOp
 from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
+from mailmind.kernel.sender_verdict import Verdict
 from mailmind.kernel.snoozed import SnoozePreset
 
 
@@ -180,6 +181,25 @@ class ReviewAwaited(Answer):
     subject: str
     to: str
     sent_ts: int
+
+
+class ScreenerSuggestBody(RequestBody):
+    account: str | None = None
+
+
+class ScreenerSuggestion(Answer):
+    """What the AI would do about a sender, surely enough to say so. A person still clicks: nothing writes a rule from this."""
+    from_addr: str
+    verdict: Verdict
+    confidence: float
+    why: str
+
+
+class ScreenerSuggestions(Answer):
+    ok: Literal[True]
+    account: str | None
+    asked: int                              # how many senders the pass read
+    suggestions: list[ScreenerSuggestion]
 
 
 class Review(Answer):

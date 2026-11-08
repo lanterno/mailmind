@@ -11,13 +11,13 @@ from typing import Any, Final, Literal, TypedDict, get_args
 from mailmind.curation.domain import filters as filters_of_file
 from mailmind.curation.domain.filters import Filter
 from mailmind.kernel.row import Row
+from mailmind.kernel.sender_verdict import Verdict
 
 type ListKey = Literal["keep_senders", "block_senders", "keep_domains", "block_domains"]
 type RuleSets = Mapping[str, frozenset[str]]     # each of KEYS, as the classifier reads it
 
 KEYS: tuple[ListKey, ...] = ("keep_senders", "block_senders", "keep_domains", "block_domains")
 EXPIRE: Final = "expire_hours"   # {sender-or-domain: hours}
-type Verdict = Literal["keep", "block"]                 # what a rule says of a sender or a domain
 VERDICTS: tuple[Verdict, ...] = get_args(Verdict.__value__)
 type RuleChange = Verdict | Literal["remove"]          # what a request may ask of one: a request's schema names it so
 _LISTS: dict[tuple[str, bool], ListKey] = {("keep", False): "keep_senders", ("block", False): "block_senders",

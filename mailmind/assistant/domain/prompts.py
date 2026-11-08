@@ -201,4 +201,15 @@ Body:
 {body}
 """)
 
-BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT)
+SCREEN = Template("screen", 1, """You are helping the owner of a mailbox decide, sender by sender, who may reach their inbox. For \
+each sender below, say whether to keep them or to block them, and how sure you are, from 0 to 1. Keep people and services the \
+owner plainly deals with. Block mass marketing, cold outreach and anything that reads as a scam. Where the evidence is thin, \
+say so with a low number: a low number is a good answer, and the owner decides either way. Say why in at most 12 words, naming \
+what you saw. Reply with ONLY a JSON object {"verdicts": [{"id": N, "verdict": "keep", "confidence": 0.9, "why": "..."}]}, with \
+"keep" or "block" for each verdict and only the ids given below.
+
+Senders:
+{senders}
+""")
+
+BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT, SCREEN)

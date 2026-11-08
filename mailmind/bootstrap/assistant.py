@@ -34,6 +34,7 @@ from mailmind.assistant.application.prepared_replies import PreparedReplies
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.application.rewrite import Rewriter
+from mailmind.assistant.application.screening import Screening
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
 from mailmind.assistant.domain import limits
@@ -43,7 +44,7 @@ from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "screening", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = environment.ANTHROPIC_API_KEY.name
@@ -175,6 +176,12 @@ class _Mail:
     def needs_you_rows(self, c, accounts, n):
         return mailbox.store.needs_you_rows(c, accounts, n)
 
+    def sender_recent(self, c, addr, n):
+        return mailbox.store.sender_recent(c, addr, n)
+
+    def screener_items(self, account):
+        return curation.screener.queue(account)["items"]
+
     def awaited_threads(self, c, accounts, n):
         return attention.book.awaited_threads(c, accounts, n)
 
@@ -231,3 +238,4 @@ asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
 drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
 bulk = BulkCommands(calls, _Search())
+screening = Screening(calls, _uow, _mail)
