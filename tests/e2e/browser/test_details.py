@@ -515,12 +515,37 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
     opened(page)
     sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
     page.wait_for_timeout(200)
-    expect(page.locator("#toast")).not_to_have_text("1 snoozed message back")    # it's on the list you're looking at
+    expect(page.locator("#newPill")).to_have_count(0)     # it's on the list you're looking at
     page.locator("#search").fill("from:lin")
     page.keyboard.press("Enter")
     expect(page.locator("#clientCtx")).to_be_visible()
     sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 2})
-    expect(page.locator("#toast")).to_have_text("2 snoozed messages back")
+    pill = page.locator("#newPill")
+    expect(pill).to_contain_text("2 back from snooze")
+    page.pw.clock.run_for(10_000)                          # no toast's life: it stays said until it's looked at
+    expect(pill).to_contain_text("2 back from snooze")
+    pill.click()
+    expect(page.pw).to_have_url(re.compile(r"/INBOX"))
+    expect(pill).to_have_count(0)
+    clean(page)
+
+
+def test_mail_back_from_snooze_is_said_over_another_folder_of_its_account(page, world):
+    opened(page)
+    page.locator('.frow[data-folder="Sent"]').first.click()
+    expect(page.pw).to_have_url(re.compile(r"/Sent"))
+    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
+    expect(page.locator("#newPill")).to_contain_text("1 back from snooze")
+    clean(page)
+
+
+def test_new_mail_and_mail_back_from_snooze_share_the_pill(page, world):
+    opened(page)
+    page.locator('.frow[data-folder="Sent"]').first.click()
+    expect(page.pw).to_have_url(re.compile(r"/Sent"))
+    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 3})
+    expect(page.locator("#newPill")).to_contain_text("3 new, 1 back from snooze")
     clean(page)
 
 
