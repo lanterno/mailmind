@@ -6,6 +6,8 @@ from typing import Any
 from mailmind.content import frame, mime, sanitize
 from mailmind.content.mime import Parsed
 from mailmind.kernel.errors import NotFound
+from mailmind.kernel.ids import FolderName, MessageKey
+from mailmind.kernel.parsed import as_int
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.platform.db.uow import UnitOfWork
@@ -17,6 +19,7 @@ log = get_logger("mailbox")
 _CID_IMG = re.compile(r"""src\s*=\s*(['"])cid:([^'"]+)\1""", re.I)
 _RASTER = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
 _CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
+_GONE = "This message isn’t here any more."
 
 
 class Bodies:
@@ -87,7 +90,7 @@ class Bodies:
         safe_html, info = self._safe_html(pk, parsed, False)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
-            "ok": True, "pk": pk, "key": row["message_key"], "html": safe_html, "text": parsed.get("text"),
+            "ok": True, "pk": pk, "key": row["message_key"], "folder": row["folder"], "html": safe_html, "text": parsed.get("text"),
             "has_html": bool(parsed.get("html")), "attachments": parsed["attachments"],
             "invite": invite, "invite_part": invite_part,
             "blocked_images": info.get("blocked_images", 0),
@@ -116,13 +119,27 @@ class Bodies:
                 parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
                                    priority=gates.Priority.INTERACTIVE)
             if parsed is None:
-                return 404, frame.of_text("This message isn’t here any more.")
+                return 404, frame.of_text(_GONE)
             if not parsed.get("html"):
                 return 200, frame.of_text(parsed.get("text"))
             return 200, frame.of_html(self._safe_html(pk, parsed, load_images)[0])
         except Exception as e:                # scrub: log the detail, never echo it to the client
             log.error("message %(id)s: its document failed", {"id": pk}, exc_info=e)
             return 500, frame.of_text("Couldn’t load this message.")
+
+    def copy_document(self, key: str, folder: str, load_images: bool) -> tuple[int, str]:
+        """(status, the document the frame of the copy `key` and `folder` name loads), as `as_document` gives it. A key and
+        folder that name no copy now, whatever they say, are a document saying so."""
+        try:
+            number = as_int(key) if key.isascii() and key.isdigit() else None
+            with self._uow.read() as c:
+                pk = self._store.copy_pk(c, MessageKey(number), FolderName(folder)) if number is not None else None
+        except Exception as e:                # scrub: log the detail, never echo it to the client
+            log.error("a copy's document failed", exc_info=e)
+            return 500, frame.of_text("Couldn’t load this message.")
+        if pk is None:
+            return 404, frame.of_text(_GONE)
+        return self.as_document(pk, key, load_images)
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""

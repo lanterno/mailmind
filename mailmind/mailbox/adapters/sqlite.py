@@ -523,9 +523,41 @@ def copy_in_folder(c, message_key, folder):
 def pk_now(c, key, folder):
     """The pk a stored answer's message has now, or None if it has gone. Among its copies, the one in
     the folder it was read from."""
-    row = c.execute("SELECT pk FROM messages WHERE message_key=? AND pending_removal IS NULL "
-                    "ORDER BY folder=? DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+    row = copy_now(c, key, folder)
     return row["pk"] if row else None
+
+
+def copy_now(c, key, folder):
+    """The copy a stored answer's message has now, its pk and folder, or None if it has gone. Among its copies, the one in
+    the folder it was read from."""
+    return c.execute("SELECT pk, folder FROM messages WHERE message_key=? AND pending_removal IS NULL "
+                     "ORDER BY folder=? DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+
+
+def copy_pk(c, key, folder):
+    """The pk the copy of a message in `folder` has now, or None if it has none there. Of two copies in one folder (a client
+    that saves a draft again under its Message-ID), one listed goes first, then the newer."""
+    row = c.execute("SELECT pk FROM messages WHERE message_key=? AND folder=? "
+                    "ORDER BY pending_removal IS NULL DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+    return row["pk"] if row else None
+
+
+def message_pk(c, key, folder=None):
+    """The pk of a copy of the message now, or None if it has none: its copy in `folder` if there is one, else another,
+    one listed first, then the newer."""
+    row = c.execute("SELECT pk FROM messages WHERE message_key=? "
+                    "ORDER BY folder IS ? DESC, pending_removal IS NULL DESC, pk DESC LIMIT 1", (key, folder)).fetchone()
+    return row["pk"] if row else None
+
+
+def names_of(c, pks):
+    """{pk: (key, folder)} for each of `pks` that has a row: what names those copies on the wire."""
+    out = {}
+    for pk in pks:
+        row = c.execute("SELECT message_key, folder FROM messages WHERE pk=?", (pk,)).fetchone()
+        if row:
+            out[pk] = (row["message_key"], row["folder"])
+    return out
 
 
 def pk_in(c, key, folder):
@@ -804,7 +836,7 @@ def _conversation_rows(c, where, params, partition, limit, offset):
 
 def _message_rows(c, where, params, limit, offset):
     return c.execute(
-        f"""SELECT m.pk, m.message_key, m.account, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
+        f"""SELECT m.pk, m.message_key, m.account, m.folder, m.from_addr, m.from_name, m.subject, m.date_iso, m.ts, m.snippet,
                   m.seen, m.flagged, m.has_attach, m.is_junk, m.bucket, m.thread_id, s.importance,
                   s.summary, s.action, s.category
            FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key

@@ -9,12 +9,14 @@ from starlette.convertors import Convertor, register_url_convertor
 from starlette.responses import Response
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
-from mailmind.http import route
+from mailmind.http import named, route
 from mailmind.http.schemas.common import NoBody, NotJson, Number, answers
 from mailmind.http.schemas.mailbox import (
     BodyArgs,
     BodyDocumentArgs,
     BulkFileBody,
+    CopyBodyArgs,
+    CopyDocumentArgs,
     Digest,
     Done,
     Filed,
@@ -32,6 +34,7 @@ from mailmind.http.schemas.mailbox import (
     MutedListing,
     NamesAPending,
     NothingToUndo,
+    PartArgs,
     Pending,
     Prefetched,
     ReconcileBody,
@@ -116,8 +119,8 @@ def router(mailbox):
     def pending():
         return mailbox.commands.list_open()
 
-    @r.get("/api/message/{pk}/attachment/{part_id}", responses=answers(NotJson))
-    def attachment(pk: Number, part_id: str):
+    def _part(pk, part_id):
+        """A part of a message as a download, or what says why not."""
         if not re.match(r"^[0-9]+$", part_id):     # only the part ids mime gives
             raise Refused("bad part id")
         found = mailbox.bodies.attachment(pk, part_id)
@@ -134,6 +137,28 @@ def router(mailbox):
         return Response(data, headers={"Content-Type": ctype, "Content-Security-Policy": "default-src 'none'; sandbox",
                                        "Content-Disposition": disp})
 
+    def _document(answer, load_images):
+        code, doc = answer
+        return Response(doc.encode("utf-8", "replace"), code,
+                        headers={"Content-Type": "text/html; charset=utf-8", **dict(perimeter.mail_frame_headers(load_images))})
+
+    @r.get("/api/message/attachment", responses=answers(NotJson))
+    def copy_attachment(args: Annotated[PartArgs, Query()]):
+        return _part(named.copy_pk(mailbox, args.key, args.folder), args.part_id)
+
+    @r.get("/api/message/body", responses=answers(MessageOpened | Prefetched))
+    def copy_body(args: Annotated[CopyBodyArgs, Query()]):
+        return mailbox.bodies.message_body(named.copy_pk(mailbox, args.key, args.folder), prefetch=(args.prefetch == "1"))
+
+    @r.get("/api/message/body.html", responses=answers(NotJson))
+    def copy_document(args: Annotated[CopyDocumentArgs, Query()]):
+        load_images = args.images == "1"
+        return _document(mailbox.bodies.copy_document(args.key, args.folder, load_images), load_images)
+
+    @r.get("/api/message/{pk}/attachment/{part_id}", responses=answers(NotJson))
+    def attachment(pk: Number, part_id: str):
+        return _part(pk, part_id)
+
     @r.get("/api/message/{pk}/body", responses=answers(MessageOpened | Prefetched))
     def body(pk: Number, args: Annotated[BodyArgs, Query()]):
         return mailbox.bodies.message_body(pk, prefetch=(args.prefetch == "1"))
@@ -141,9 +166,7 @@ def router(mailbox):
     @r.get("/api/message/{pk:frame_pk}/body.html", responses=answers(NotJson))
     def body_document(pk: int, args: Annotated[BodyDocumentArgs, Query()]):
         load_images = args.images == "1"
-        code, doc = mailbox.bodies.as_document(pk, args.key, load_images)
-        return Response(doc.encode("utf-8", "replace"), code,
-                        headers={"Content-Type": "text/html; charset=utf-8", **dict(perimeter.mail_frame_headers(load_images))})
+        return _document(mailbox.bodies.as_document(pk, args.key, load_images), load_images)
 
     @r.post("/api/pending/retry", responses=answers(Done))
     def pending_retry(body: NamesAPending):
@@ -155,15 +178,15 @@ def router(mailbox):
 
     @r.post("/api/trash", responses=_FILED)
     def trash(body: MoveBody):
-        return mailbox.filing.do_trash(body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_trash(named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/thread/archive", responses=_THREAD_FILED)
     def thread_archive(body: MoveBody):
-        return mailbox.filing.do_thread_file("/api/thread/archive", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_thread_file("/api/thread/archive", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/thread/trash", responses=_THREAD_FILED)
     def thread_trash(body: MoveBody):
-        return mailbox.filing.do_thread_file("/api/thread/trash", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_thread_file("/api/thread/trash", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/bulk/file", responses=answers(RowsFiled))
     def bulk_file(body: BulkFileBody):
@@ -171,19 +194,19 @@ def router(mailbox):
 
     @r.post("/api/flag", responses=_FILED)
     def flag(body: FlagBody):
-        return mailbox.filing.do_write("/api/flag", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_write("/api/flag", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/seen", responses=_FILED)
     def seen(body: SeenBody):
-        return mailbox.filing.do_write("/api/seen", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_write("/api/seen", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/archive", responses=_FILED)
     def archive(body: MoveBody):
-        return mailbox.filing.do_write("/api/archive", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_write("/api/archive", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/junk", responses=_FILED)
     def junk(body: MoveBody):
-        return mailbox.filing.do_write("/api/junk", body.model_dump(exclude_unset=True))
+        return mailbox.filing.do_write("/api/junk", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
     @r.post("/api/undo", responses=answers(Undone, {404: NothingToUndo}))
     def undo(body: NoBody):

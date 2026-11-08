@@ -199,42 +199,62 @@ class Filing:
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             pks = self._conversation_of(c, pk)
+            names = self._store.names_of(c, pks)
             accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push)) for p in pks]
-        return self._heard(accepted, self._try_each(kind, accepted))
+        return self._heard(accepted, self._try_each(kind, accepted), names)
 
 
     def file_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Archive, trash or junk the marked rows as one: `rows` is [{pk, whole}], `whole` for a row that stands for its
-        conversation in its folder, which junk never does. As with a conversation, one transaction accepts them all under
-        one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed, and is
-        `partial` if some were. When no row was, it raises what the first message did."""
+        """Archive, trash or junk the marked rows as one: `rows` is [{key, folder, whole}], a copy each, `whole` for a row that
+        stands for its conversation in its folder, which junk never does. As with a conversation, one transaction accepts them
+        all under one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed,
+        a copy that is no longer there among them, and is `partial` if some were. When no row was, it raises what the first
+        message did."""
         verb, rows = body.get("verb"), body.get("rows")
         if verb not in ("archive", "trash", "junk") or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
-        wanted: list[tuple[int, bool]] = []
+        wanted: list[tuple[int | tuple[MessageKey, FolderName], bool]] = []
         for one in rows:
             if not is_object(one):
                 raise Refused()
-            pk = as_int(one.get("pk"))
-            if pk is None:
-                raise Refused()
-            wanted.append((pk, one.get("whole") is True and verb != "junk"))
+            wanted.append((self._row_named(one), one.get("whole") is True and verb != "junk"))
         push = self._pushing(body.get("undo_group") or "bulk:" + secrets.token_hex(6))
         accepted: list[tuple[int, command.Accepted | None]] = []
         taken: set[int] = set()
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
-            members = [self._conversation_of(c, pk) if whole else [pk] for pk, whole in wanted]    # before any leaves a list
+            members = [self._row_members(c, named, whole) for named, whole in wanted]    # before any leaves a list
+            names = self._store.names_of(c, {p for pks in members for p in pks})
             for pks in members:
                 for p in pks:
                     if p not in taken:               # two rows of one conversation
                         taken.add(p)
                         accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push)))
         results = self._try_each(verb, accepted)
-        heard = self._heard(accepted, results)
+        heard = self._heard(accepted, results, names)
         each = [sum(not isinstance(results[p], Problem) for p in pks) for pks in members]
         return {**heard, "rows_failed": each.count(0),
                 "partial": any(0 < n < len(pks) for n, pks in zip(each, members))}
 
+
+    @staticmethod
+    def _row_named(one: Mapping[str, Any]) -> int | tuple[MessageKey, FolderName]:
+        """What a marked row names: a copy by its key and folder, or a pk from a page before keys."""
+        if one.get("key") is not None:
+            key, folder = as_int(one.get("key")), one.get("folder")
+            if key is None or not isinstance(folder, str):
+                raise Refused()
+            return MessageKey(key), FolderName(folder)
+        pk = as_int(one.get("pk"))
+        if pk is None:
+            raise Refused()
+        return pk
+
+    def _row_members(self, c: Connection, named: int | tuple[MessageKey, FolderName], whole: bool) -> list[int]:
+        """The messages a marked row stands for, none if its copy has gone."""
+        pk = named if isinstance(named, int) else self._store.copy_pk(c, *named)
+        if pk is None:
+            return []
+        return self._conversation_of(c, pk) if whole else [pk]
 
     def _conversation_of(self, c: Connection, pk: int) -> list[int]:
         """The messages a conversation's row stands for: its thread in its folder. A message without a thread id is a
@@ -275,15 +295,17 @@ class Filing:
 
 
     def _heard(self, accepted: Sequence[tuple[int, command.Accepted | None]],
-               results: Mapping[int, Mapping[str, Any] | Problem]) -> dict[str, Any]:
-        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed. With none
-        filed, what the first raised, or NotFound when there was none to file."""
+               results: Mapping[int, Mapping[str, Any] | Problem],
+               names: Mapping[int, tuple[MessageKey, FolderName]]) -> dict[str, Any]:
+        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed, named by
+        their key and folder as they were. With none filed, what the first raised, or NotFound when there was none to file."""
         filed = {p: said for p, _ in accepted if not isinstance(said := results[p], Problem)}
         if not filed:
             raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(_GONE))
         queued = sum(said.get("status") == "queued" for said in filed.values())
         return {"ok": True, "msg": "queued" if queued else "filed",
-                "pks": list(filed), "count": len(filed), "failed": len(accepted) - len(filed),
+                "pks": list(filed), "filed": [{"key": names[p][0], "folder": names[p][1]} for p in filed if p in names],
+                "count": len(filed), "failed": len(accepted) - len(filed),
                 "queued": queued, "undoable": any(said.get("undoable") for said in filed.values())}
 
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from mailmind.kernel import attention as verdict
 from mailmind.kernel.errors import Refused
-from mailmind.kernel.ids import INBOX, AccountId, FolderName, ThreadRef
+from mailmind.kernel.ids import INBOX, AccountId, FolderName, MessageKey, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
@@ -20,7 +20,7 @@ def _attention(r: Row) -> dict[str, bool]:
 def _listed_item(r: Row, group: bool) -> dict[str, Any]:
     """A row of a list of a folder or of the Inboxes, one conversation's latest message if `group`."""
     it: dict[str, Any] = {
-        "pk": r["pk"], "key": r["message_key"], "from_name": r["from_name"] or r["from_addr"],
+        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
@@ -63,6 +63,18 @@ class Queries:
 
     def _emails(self) -> list[str]:
         return [str(a["email"]) for a in self._accounts.accounts()]
+
+    def pk_of_copy(self, key: int, folder: str) -> int | None:
+        """The row the page's copy, a message's key and a folder, is now, or None if the message has no copy there. A pk is
+        not stable: the page never holds one, and asks this at each request."""
+        with self._uow.read() as c:
+            return self._store.copy_pk(c, MessageKey(key), FolderName(folder))
+
+    def pk_of_message(self, key: int, folder: str | None = None) -> int | None:
+        """A row of the message the page names by key now, or None if no copy is left: its copy in `folder`, where it has
+        one, else another."""
+        with self._uow.read() as c:
+            return self._store.message_pk(c, MessageKey(key), None if folder is None else FolderName(folder))
 
     def snoozed_in(self, account: str, offset: int, limit: int) -> dict[str, Any]:
         """The 'Snoozed' virtual view: every snoozed message in the account, soonest wake first."""
@@ -204,4 +216,4 @@ class Queries:
             })
         reply_pk = items[-1]["pk"] if items else None
         return {"ok": True, "account": account, "thread_id": thread_id,
-                "items": items, "count": len(items), "reply_pk": reply_pk}
+                "items": items, "count": len(items), "reply_pk": reply_pk, "reply_key": items[-1]["key"] if items else None}

@@ -42,6 +42,19 @@ class NoBody(RequestBody):
     """A POST that reads nothing of its body, which must still be a JSON object."""
 
 
+class NamesAMessage(RequestBody):
+    """A message by its key, and the copy the page has of it by that key and its folder (`mailmind.http.named`). A route that
+    acts on the message takes that copy where there is one, else another."""
+    key: Number | None = None
+    folder: str | None = None
+
+
+class ACopy(RequestBody):
+    """A copy of a message, one of many a request names: its key and the folder it is in."""
+    key: Number
+    folder: str
+
+
 class QueryArgs(BaseModel):
     """A GET's query string, as `Annotated[Model, Query()]`. `Route` hands it to FastAPI as `parse_qs` reads it, each name's first
     value, and a blank one is none, so an optional field takes its default."""
@@ -55,6 +68,12 @@ class QueryArgs(BaseModel):
 class Answer(BaseModel):
     """What a route answers. It holds every field a route's answer may have, so a new one is a failure under test."""
     model_config = ConfigDict(extra="forbid")
+
+
+class Copy(Answer):
+    """What names a copy of a message on the wire: the message's key, and the folder the copy is in."""
+    key: int
+    folder: str
 
 
 class NotJson(Answer):
