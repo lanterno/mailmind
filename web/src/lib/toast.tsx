@@ -6,6 +6,7 @@ import { createStore, type Store } from "./store";
 export interface Shown {
   words: ReactNode;
   turn: number;      // a float of its own: another with the same words is still a new one
+  life?: number;     // ms, for one that goes by itself: what can be done about it drains over this
   over?: boolean;
 }
 
@@ -26,7 +27,7 @@ export function createFloat(life: number): FloatPlace {
     shown,
     show(words) {
       clearTimeout(timer);
-      const now: Shown = { words, turn: ++turn };
+      const now: Shown = { words, turn: ++turn, life };
       shown.set(now);
       timer = setTimeout(() => shown.set({ ...now, over: true }), life);
     },
@@ -44,6 +45,7 @@ export function Float({ id, className, shown, children }: { id: string; classNam
   return (
     <div id={id} key={shown.turn} className={className} data-react-aria-top-layer="true">
       <span>{shown.words}</span>{children}
+      {shown.life ? <div className="float-bar" aria-hidden="true" style={{ animationDuration: `${shown.life}ms` }} /> : null}
     </div>
   );
 }

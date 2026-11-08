@@ -54,7 +54,7 @@ export type Limits = { readonly [K in keyof typeof LIMITS]: number };
 
 export type SendFloat =
   | { kind: "progress"; text: string; clock?: boolean }
-  | { kind: "countdown"; left: number; undo: () => void }
+  | { kind: "countdown"; id: number; left: number; total: number; undo: () => void }
   | { kind: "done"; text: string; clock?: boolean }
   | { kind: "failed"; text: string; edit: () => void; dismiss: () => void };
 
@@ -617,23 +617,25 @@ export function createComposing(env: Env) {
 
   function countdown(id: number, snap: Snapshot, recipients: number | undefined) {
     clearInterval(undoTimer);
-    let left = env.limits.undo_send_seconds;
+    const total = env.limits.undo_send_seconds;
+    let left = total;
     const undo = () => void undoSend(id, snap);
-    showFloat({ kind: "countdown", left, undo });
+    showFloat({ kind: "countdown", id, left, total, undo });
     undoTimer = setInterval(() => {
       left -= 1;
       if (left <= 0) {
         clearInterval(undoTimer);
         showFloat({ kind: "done", text: `✓ Sent${recipients ? ` · ${recipients} recipient${recipients > 1 ? "s" : ""}` : ""}` }, 2400);
         env.outboxChanged();
-      } else showFloat({ kind: "countdown", left, undo });
+      } else showFloat({ kind: "countdown", id, left, total, undo });
     }, 1000);
   }
 
   // Something the server built and queued, with the same window to undo it in: an RSVP.
   function queued(id: number, what: string) {
     clearInterval(undoTimer);
-    let left = env.limits.undo_send_seconds;
+    const total = env.limits.undo_send_seconds;
+    let left = total;
     const undo = () => {
       clearInterval(undoTimer);
       void (async () => {
@@ -647,14 +649,14 @@ export function createComposing(env: Env) {
         }
       })();
     };
-    showFloat({ kind: "countdown", left, undo });
+    showFloat({ kind: "countdown", id, left, total, undo });
     undoTimer = setInterval(() => {
       left -= 1;
       if (left <= 0) {
         clearInterval(undoTimer);
         showFloat({ kind: "done", text: `✓ ${what} sent` }, 2400);
         env.outboxChanged();
-      } else showFloat({ kind: "countdown", left, undo });
+      } else showFloat({ kind: "countdown", id, left, total, undo });
     }, 1000);
     env.outboxChanged();
   }

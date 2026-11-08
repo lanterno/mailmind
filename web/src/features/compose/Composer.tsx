@@ -455,7 +455,7 @@ export function SendFloatView() {
     : f.kind === "failed" ? <><Icon name="alert" /> {f.text}</>
     : <>{f.clock && <Icon name="clock" />} {f.text}</>;
   return (
-    <Float id="sendFloat" className={`send-float ${tone}`} shown={{ words, turn: 0 }}>
+    <Float id="sendFloat" className={`send-float ${tone}`} shown={{ words, turn: f.kind === "countdown" ? f.id : 0, ...(f.kind === "countdown" ? { life: f.total * 1000 } : {}) }}>
       {f.kind === "countdown" && <button id="sfUndo" onClick={f.undo}>Undo</button>}
       {f.kind === "failed" && <><button id="sfEdit" onClick={f.edit}>Edit</button><button id="sfDismiss" onClick={f.dismiss}>Dismiss</button></>}
     </Float>
