@@ -2,7 +2,7 @@
 // refetches in place, so it never yanks the reader or the row you're on.
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { GetAnswers } from "../lib/api/types.gen";
+import type { GetAnswers } from "../lib/api/types";
 import { asking } from "../features/assistant/ask";
 import { onNewMail } from "../features/assistant/NewMail";
 import { composing } from "../features/compose/compose";

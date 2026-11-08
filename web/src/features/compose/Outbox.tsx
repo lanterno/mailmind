@@ -2,7 +2,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { toast } from "../../lib/toast";
 import { composing } from "./compose";
 import { fmtWhen } from "./model";
@@ -59,7 +59,7 @@ function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolea
   );
 }
 
-function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean }) => string, fail: string) => void }) {
+function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string) => void }) {
   const to = (o.to ?? []).join(", ") + (o.bcc_count ? ` +${o.bcc_count} bcc` : "");
   const label = o.scheduled ? "scheduled" : o.retrying ? "retrying" : o.unsure ? "unsure" : o.state;
   return (
@@ -123,7 +123,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     void qc.invalidateQueries({ queryKey: ["messages"] });
     void qc.invalidateQueries({ queryKey: ["folders"] });
   };
-  const call = async (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean }) => string, fail: string) => {
+  const call = async (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string) => {
     try {
       const r = await post(path as "/api/outbox/retry", { id });
       toast(ok(r));

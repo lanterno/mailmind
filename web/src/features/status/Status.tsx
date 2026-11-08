@@ -67,7 +67,7 @@ function AiLine({ digest }: { digest: Digest }) {
   if (a.engine === "none") return <div className="sm-sub sm-ai"><Icon name="wind" /><span>AI is off · no API key</span></div>;
   const failing = a.last_ok === false && a.last_error;
   const spent = a.spent_today_micros, limit = a.limit_micros, batch = (a as { batch_waiting?: number }).batch_waiting;
-  const what = `Claude API · ${a.model}${spent > 0 ? ` · ${usd(spent)}${limit ? ` of ${usd(limit)}` : ""} today` : ""}${batch ? ` · ${batch} out in a batch` : ""}`;
+  const what = `Claude API · ${a.model}${spent !== null && spent > 0 ? ` · ${usd(spent)}${limit ? ` of ${usd(limit)}` : ""} today` : ""}${batch ? ` · ${batch} out in a batch` : ""}`;
   return (
     <>
       <div className={failing ? "sm-sub sm-ai err" : "sm-sub sm-ai"}><Icon name="wind" /><span>{what}{failing ? ` · last call failed: ${a.last_error}` : ""}</span></div>

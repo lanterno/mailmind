@@ -1,18 +1,19 @@
 // What a list shows, the same shape from a folder and from a search. Each list row says what the AI's verdict asks of
 // you (`needsYou`); the page reads that and never works it out.
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { AnyOf, GetAnswers } from "../../lib/api/types";
 
-export type FolderRow = GetAnswers["/api/messages"]["items"][number];
-export type SearchRow = NonNullable<GetAnswers["/api/search"]["items"]>[number];
+// A row of any of a folder's lists: a folder's own, Snoozed, Muted, Waiting or Reply later.
+export type FolderRow = AnyOf<GetAnswers["/api/messages"]["items"][number]>;
+export type SearchRow = Extract<GetAnswers["/api/search"], { items: unknown }>["items"][number];
 export type FolderInfo = GetAnswers["/api/folders"]["folders"][number];
 
 export interface Row {
   pk: number;
-  key: number;
+  key: number | null;
   account: string;
   folder: string;
-  fromName: string;
-  fromAddr: string;
+  fromName: string | null;
+  fromAddr: string | null;
   subject: string;
   snippet: string;
   when: string;
@@ -23,7 +24,7 @@ export interface Row {
   hasAttach: boolean;
   isJunk: boolean;
   replyWorthy: boolean;
-  bucket: string;
+  bucket: string | null;
   threadId: string;
   count: number;
   action: string;
@@ -50,7 +51,7 @@ export function fromFolder(it: FolderRow, account: string, folder: string): Row 
     isJunk: Boolean(it.is_junk),
     replyWorthy: Boolean(it.reply_worthy),
     bucket: it.bucket,
-    threadId: it.thread_id,
+    threadId: it.thread_id ?? "",
     count: it.count ?? 1,
     action: String(it.action ?? "").trim(),
     summary: it.summary ?? "",
@@ -122,7 +123,7 @@ export function folderTitle(name: string, folders: FolderInfo[] | undefined): st
 }
 
 // How filing went, in words.
-export function filedWords(verb: string, r: { count?: number; failed?: number; status?: string; queued?: unknown }, readOnly: boolean): string {
+export function filedWords(verb: string, r: { count?: number; failed?: number; status?: string | null; queued?: unknown }, readOnly: boolean): string {
   const n = r.count || 1;
   const later = r.status === "queued" || r.queued ? (readOnly ? " · waits for a full run" : " · once the server is back") : "";
   return (r.failed ? `${verb} ${n} of ${n + r.failed} — the rest stayed` : n > 1 ? `${verb} ${n} messages` : verb) + later;

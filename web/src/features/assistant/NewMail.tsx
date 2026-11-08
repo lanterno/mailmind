@@ -41,9 +41,9 @@ async function headline(ai: boolean) {
   try {
     const since = Math.floor(p.since / 1000);
     let d = await get(`/api/briefing/since?since=${since}&account=${encodeURIComponent(p.account)}`);
-    if (d.missing) d = await post("/api/briefing/since", { since, account: p.account });
+    if ("missing" in d) d = await post("/api/briefing/since", { since, account: p.account });
     const now = pending.get();
-    if (d.ok && !d.empty && d.headline && now) pending.set({ ...now, headline: d.headline });
+    if (d.ok && !d.empty && "headline" in d && d.headline && now) pending.set({ ...now, headline: d.headline });
   } catch { /* the plain count stands */ } finally {
     writing = false;
   }

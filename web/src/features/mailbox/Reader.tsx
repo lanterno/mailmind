@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
 import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
@@ -11,7 +11,7 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { armDwell, cancelDwell, markSeen } from "./actions";
 import { AiCard, summarize } from "./AiCard";
-import { useBody, useThread } from "./data";
+import { useBody, useThread, type Opened } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
@@ -19,7 +19,7 @@ import { snoozeAsk } from "../attention";
 import type { Mailbox } from "./useMailbox";
 import { SenderButton } from "../discovery";
 
-type Body = GetAnswers["/api/message/{pk}/body"];
+type Body = Extract<Opened, { ok: true }>;
 
 export const readFocus = createStore(false);
 const narrow = () => matchMedia("(max-width:820px)").matches;
@@ -253,7 +253,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
     return cancelDwell;
   }, [m.qc, pk, row?.seen]);
   const flagged = row?.flagged ?? false;
-  const isDraft = Boolean(d?.is_draft);
+  const isDraft = Boolean(d?.ok && d.is_draft);
   useDraftAhead(d ? pk : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
   const quick = d?.ok && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
   return (
@@ -302,7 +302,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
   );
 }
 
-function Member({ m, startsOpen }: { m: GetAnswers["/api/thread"]["items"][number]; startsOpen: boolean }) {
+function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok: true }>["items"][number]; startsOpen: boolean }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(startsOpen);
   const [wasOpened, setWasOpened] = useState(startsOpen);
@@ -334,8 +334,8 @@ function Member({ m, startsOpen }: { m: GetAnswers["/api/thread"]["items"][numbe
 
 function ConversationView({ opened, m }: { opened: { id: string; account: string }; m: Mailbox }) {
   const { data: d, isError } = useThread(opened.account, opened.id);
-  const items = d?.items ?? [];
-  const replyPk = d?.reply_pk ?? null;
+  const items = d?.ok ? d.items : [];
+  const replyPk = d?.ok ? d.reply_pk : null;
   const latest = items.find((x) => x.pk === replyPk);
   useDraftAhead(replyPk, false, m.folder === "__muted__");
   const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
@@ -354,9 +354,9 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
       </div>
       {isError && <div className="nores">Couldn’t load.</div>}
       {d && !d.ok && <div className="nores">error</div>}
-      {items.length > 0 && (
+      {d?.ok && items.length > 0 && (
         <>
-          <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d!.count} message{d!.count === 1 ? "" : "s"}</span></div>
+          <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />
           <div className="thread" id="thread">
             {items.map((x, i) => <Member key={x.pk} m={x} startsOpen={i === items.length - 1} />)}

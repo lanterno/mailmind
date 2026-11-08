@@ -2,11 +2,12 @@
 // is none, and never asks at the daily limit: only a click does.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { askOverLimit } from "../../lib/overLimit";
 import type { Brief } from "./model";
 
-export type Review = GetAnswers["/api/review"];
+// A review written: a read that finds none stored writes one.
+export type Review = Exclude<GetAnswers["/api/review"], { missing: true }>;
 
 export const LIMIT = "limit";
 // What went wrong, for the words beside "Try again". AI off isn't a failure: the brief says so.
@@ -30,7 +31,7 @@ export function useBrief(ai: boolean | undefined) {
     retry: false,
     queryFn: async (): Promise<Brief> => {
       const d = await get("/api/briefing");
-      return d.missing && ai ? held(await post("/api/briefing", {})) as Brief : held(d);
+      return "missing" in d && ai ? held(await post("/api/briefing", {})) as Brief : held(d);
     },
   });
   const write = useMutation({
@@ -71,7 +72,7 @@ export function useReview(open: boolean) {
     retry: false,
     queryFn: async (): Promise<Review> => {
       const d = await get("/api/review");
-      return d.missing ? await post("/api/review", {}, { askOverLimit }) as Review : d;   // none yet: you opened it, so write it
+      return "missing" in d ? await post("/api/review", {}, { askOverLimit }) as Review : d;   // none yet: you opened it, so write it
     },
   });
   const again = useMutation({

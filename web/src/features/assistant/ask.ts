@@ -2,7 +2,7 @@
 // would touch is frozen by the server at the preview, and nothing happens until you confirm it, by the plan's id.
 import type { QueryClient } from "@tanstack/react-query";
 import { ApiError, post } from "../../lib/api/client";
-import type { PostAnswers } from "../../lib/api/types.gen";
+import type { PostAnswers } from "../../lib/api/types";
 import { readAgain, offerUndo, undoGroup } from "../mailbox";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore } from "../../lib/store";
@@ -50,7 +50,7 @@ export type Doing =
   | { state: "loading"; cmd: string }
   | { state: "error"; cmd: string; error: string }
   | { state: "nofilter"; cmd: string }
-  | { state: "plan"; cmd: string; plan: Plan; armed: boolean };
+  | { state: "plan"; cmd: string; plan: Extract<Plan, { intent: "act" }>; armed: boolean };
 
 export const doing = createStore<Doing | null>(null);
 let doSeq = 0;

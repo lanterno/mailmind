@@ -1,6 +1,6 @@
 // The page's way to the API: same origin, the CSRF token on every request, and an error that says what went wrong.
-// Paths and answers are typed from types.gen.ts, which `just gen-api` writes from what the routes really answer.
-import type { GetAnswers, PostAnswers } from "./types.gen";
+// Paths and answers are typed from types.ts, which reads them off schema.gen.ts: `just gen-api` writes that from the routes' schemas.
+import type { GetAnswers, PostAnswers } from "./types";
 
 export const AI_OVER_HEADER = "X-MailMind-AI-Over-Limit";
 

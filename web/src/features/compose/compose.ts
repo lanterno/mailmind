@@ -1,7 +1,7 @@
 // The app's one composer: the machine, on this page's server, storage and DOM.
 import type { QueryClient } from "@tanstack/react-query";
 import { get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { go, parseRoute } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
 import { createStore, store, stored } from "../../lib/store";

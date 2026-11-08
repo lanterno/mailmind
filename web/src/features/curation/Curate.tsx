@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { go } from "../../app/route";
 import { useLayer } from "../../lib/backTrap";
 import { createStore } from "../../lib/store";
@@ -16,7 +16,7 @@ import { curateOpen } from "./open";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
 
-type Sender = GetAnswers["/api/cleanup/sender"];
+type Sender = Extract<GetAnswers["/api/cleanup/sender"], { ok: true }>;     // a preview: one refused is never held
 interface Cleaning { d: Sender; scope: "sender" | "domain"; unsubscribe: boolean; armed: boolean }
 const cleaning = createStore<Cleaning | null>(null);
 const CLEANED: Record<string, string> = { unsubscribed_oneclick: "unsubscribed", mailto_sent: "unsub email sent", needs_browser: "opened the unsub page", no_method: "no unsub link", failed: "unsub couldn’t send — retry later", no_token: "unsub not sent — reopen to retry", read_only: "unsub not sent — MailMind is read-only", skipped: "" };

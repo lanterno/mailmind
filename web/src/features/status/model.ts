@@ -1,5 +1,5 @@
 // What the digest says about syncing and each account, in words. No DOM.
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { shortAddress } from "../../lib/text";
 
 export type Digest = GetAnswers["/api/digest"];

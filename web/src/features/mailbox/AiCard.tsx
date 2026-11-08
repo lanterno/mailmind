@@ -1,6 +1,6 @@
 // A summary above the mail: the one ingest already wrote, shown at once with no AI call, or the deeper one you ask for.
 import { ApiError, post } from "../../lib/api/client";
-import type { PostAnswers } from "../../lib/api/types.gen";
+import type { PostAnswers } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
 import { askOverLimit } from "../../lib/overLimit";
 import { Icon } from "../../lib/ui/Icon";

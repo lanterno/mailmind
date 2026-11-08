@@ -1,6 +1,6 @@
 // What the brief works out from the digest and the clock, with no DOM. The digest's rows say what the AI's verdict asks
 // of you; this only sorts and words them.
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import type { Row } from "../mailbox";
 
 export type DigestItem = GetAnswers["/api/digest"]["items"][number];
@@ -49,7 +49,7 @@ export function fromDigest(it: DigestItem): Row {
     isJunk: false,
     replyWorthy: Boolean(it.reply_worthy),
     bucket: it.bucket,
-    threadId: it.thread_id,
+    threadId: it.thread_id ?? "",
     count: 1,
     action: String(it.action ?? "").trim(),
     summary: it.summary ?? "",

@@ -2,7 +2,7 @@
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
 import { post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
@@ -65,7 +65,7 @@ export const readAgain = (qc: QueryClient) => {
   void qc.invalidateQueries({ queryKey: ["digest"] });
 };
 
-interface Answer { ok: boolean; error?: string; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string; queued?: unknown; undoable?: boolean }
+interface Answer { ok: boolean; error?: string; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
 
 // Take rows off the list, ask the server, and say how it went. A no or no answer puts them back.
 export async function act<R extends object>(qc: QueryClient, { rows, after, call, say, undoLabel, fail }: {
@@ -238,7 +238,7 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
 
 export async function undo(qc: QueryClient) {
   undoFloat.set(null);
-  let d: { ok?: boolean; empty?: boolean; failed?: number; label?: string; error?: string };
+  let d: { ok?: boolean; empty?: boolean; failed?: number | null; label?: string | null; error?: string };
   try {
     d = await post("/api/undo", {});
   } catch {

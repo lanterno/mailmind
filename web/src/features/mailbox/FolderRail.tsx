@@ -84,7 +84,7 @@ function RailRow({ source, on, icon, label, count }: { source: ListSource; on: b
 }
 
 // A view that changes with the day says so in its query.
-export function viewQuery(v: { q: string; dynamic?: string }, now = new Date()): string {
+export function viewQuery(v: { q: string; dynamic?: string | null }, now = new Date()): string {
   if (v.dynamic !== "last7" && v.q !== "__LAST7__") return v.q;
   return `after:${new Date(now.getTime() - 7 * 864e5).toISOString().slice(0, 10)}`;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { go, useRoute, type ListSource, type Opened, type Route } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
 import { settingsOpen } from "../settings";
@@ -151,7 +151,7 @@ export function useMailbox() {
   };
 
   // What a reply answers: the message, or the conversation's latest that isn't yours.
-  const replyPk = (): number | null => (opened?.kind === "thread" ? qc.getQueryData<GetAnswers["/api/thread"]>(["thread", opened.account, opened.id])?.reply_pk ?? null : openPk);
+  const replyPk = (): number | null => (opened?.kind === "thread" ? qc.getQueryData<AnyOf<GetAnswers["/api/thread"]>>(["thread", opened.account, opened.id])?.reply_pk ?? null : openPk);
 
   const file = (r: Pick<Row, "pk">, kind: actions.Filing, from?: "card") => {
     const whole = opened?.kind === "thread" && opened.pk === r.pk ? true : "threadId" in r ? isWhole(r as Row) : false;

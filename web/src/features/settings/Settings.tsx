@@ -4,7 +4,7 @@ import { useEffect, useState, useEffectEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types.gen";
+import type { GetAnswers } from "../../lib/api/types";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -82,7 +82,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
   const save = async () => {
     setError("");
     const c = credential(), address = row ? row.email : email.trim();
-    if (!row && !address.includes("@")) return setError("A valid email is required.");
+    if (!row && !address?.includes("@")) return setError("A valid email is required.");
     if (type === "imap" && !host.trim()) return setError("A host is required for a generic IMAP account.");
     if (!row && !c) return setError("Set a password (or 1Password ref / env var).");
     setSaving(true);
@@ -256,7 +256,7 @@ function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: 
           <Credentials c={credentialOf(r)} />
           {r.disabled && <span>· disabled</span>}
         </div>
-        <HealthLine h={h} email={r.email} again={again} />
+        <HealthLine h={h} email={r.email ?? ""} again={again} />
       </div>
       <div className="acts">
         {live?.error
@@ -333,7 +333,7 @@ function Connections() {
       <>
         <Backup />
         {!rows.length && <div className="nores" style={{ padding: 36 }}>No email connections yet.<br />Add one to get started.</div>}
-        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email)} live={liveOf(r.email)} status={statusOf(r.email)} edit={() => setEditing(r.email)} again={again} />)}
+        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email ?? "")} live={liveOf(r.email ?? "")} status={statusOf(r.email ?? "")} edit={() => setEditing(r.email)} again={again} />)}
       </>
     );
   }

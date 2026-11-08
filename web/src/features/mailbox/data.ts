@@ -2,6 +2,7 @@
 // refetches in place, so the row you are on and what you were reading stay put.
 import { useInfiniteQuery, useQuery, type InfiniteData, useQueries } from "@tanstack/react-query";
 import { get } from "../../lib/api/client";
+import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
@@ -23,7 +24,7 @@ export const useFolders = (account: string | undefined) =>
 
 async function folderPage(account: string, folder: string, grouped: boolean, offset: number): Promise<ListPage> {
   const group = grouped ? "&group=thread" : "";
-  const d = await get(`/api/messages?account=${q(account)}&folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
+  const d: AnyOf<GetAnswers["/api/messages"]> = await get(`/api/messages?account=${q(account)}&folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
   return {
     rows: d.items.map((it) => fromFolder(it, account, folder)),
     hasMore: d.has_more,
@@ -43,7 +44,7 @@ export function setSearchScope(s: SearchScope) {
 }
 
 async function searchPage(query: string, account: string, offset: number, scope: SearchScope): Promise<ListPage> {
-  const d = await get(`/api/search?q=${q(query)}&scope=${account ? scope : "all"}&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
+  const d: AnyOf<GetAnswers["/api/search"]> = await get(`/api/search?q=${q(query)}&scope=${account ? scope : "all"}&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
   return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
 }
 
@@ -98,10 +99,13 @@ export function useEveryAccountsFolders(accounts: string[]) {
   return new Map(accounts.map((a, i) => [a, answers[i]?.data?.folders ?? []]));
 }
 
+// A body as the reader opens it. Only a `prefetch` answers `prefetched`, and the reader never asks for one.
+export type Opened = Exclude<GetAnswers["/api/message/{pk}/body"], { prefetched: true }>;
+
 export const useBody = (pk: number | null) =>
   useQuery({
     queryKey: ["body", pk],
-    queryFn: () => get(`/api/message/${pk!}/body`),
+    queryFn: () => get(`/api/message/${pk!}/body`) as Promise<Opened>,
     enabled: pk !== null,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
