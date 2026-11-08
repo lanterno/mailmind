@@ -3,8 +3,10 @@ export interface GuardSnapshot {
   mode: string; subject: string; subject0: string; body: string; sigBlock: string;
   nAttach: number; fwdAttach: number; reading: string[]; sendAfter: number; now: number;
   to: string[]; cc: string[]; mine: string[]; autoCc: string[] | null; fresh: string[];
-  ack: { subject: boolean; attach: boolean; fanout: number };
+  near?: NearMiss[];     // recipients that read as someone you've written to, mistyped
+  ack: { subject: boolean; attach: boolean; fanout: number; near?: string[] };
 }
+export interface NearMiss { addr: string; near: string }
 export type GuardBlock = "hard" | "confirm" | "soft";
 export type GuardWarning =
   | { key: "reading"; block: "hard"; name: string; more: number }
@@ -12,6 +14,7 @@ export type GuardWarning =
   | { key: "subject"; block: "confirm" }
   | { key: "attach"; block: "confirm"; word: string }
   | { key: "fanout"; block: "confirm"; n: number; removable: number }
+  | { key: "near"; block: "confirm"; pairs: NearMiss[] }
   | { key: "new"; block: "soft"; addrs: string[] };
 // What a line can be written for: a check's warning, or what the composer itself finds before the checks.
 export type GuardLineOf =
@@ -20,9 +23,11 @@ export type GuardLineOf =
   | Omit<Extract<GuardWarning, { key: "subject" }>, "block">
   | Omit<Extract<GuardWarning, { key: "attach" }>, "block">
   | Omit<Extract<GuardWarning, { key: "fanout" }>, "block">
+  | Omit<Extract<GuardWarning, { key: "near" }>, "block">
   | Omit<Extract<GuardWarning, { key: "new" }>, "block">
   | { key: "unchecked" } | { key: "norcpt" } | { key: "bad"; v: string; more: number };
-export interface GuardFix { kind: string; label: string }
+export interface GuardFix { kind: string; label: string; swap?: GuardSwap }
+export interface GuardSwap { from: string; to: string }
 export interface GuardText { text: string; fix: GuardFix | null }
 
 export const GUARD_FANOUT=5, GUARD_ARM_MS=700, GUARD_SCAN_MAX=50000;
@@ -115,7 +120,11 @@ export function guardCheck(s:GuardSnapshot):GuardWarning[]{
     if(n>GUARD_FANOUT&&n>(s.ack.fanout||0)){ const mine=new Set(s.mine);
       const auto=s.autoCc, removable=auto?new Set(s.cc.filter(a=>auto.includes(a)&&!isMine(a,mine))).size:0;
       w.push({key:"fanout",block:"confirm",n,removable}); } }
-  if(s.fresh.length) w.push({key:"new",block:"soft",addrs:s.fresh});
+  const near=(s.near??[]).filter(p=>!s.ack.near?.includes(p.addr));
+  if(near.length) w.push({key:"near",block:"confirm",pairs:near});
+  const named=new Set(near.map(p=>p.addr));   // a line above names these already
+  const fresh=s.fresh.filter(a=>!named.has(a));
+  if(fresh.length) w.push({key:"new",block:"soft",addrs:fresh});
   return w; }
 export function guardBlocks(w:GuardWarning[]):boolean{ return w.some(x=>x.block!=="soft"); }
 export function guardHard(w:GuardWarning[]):boolean{ return w.some(x=>x.block==="hard"); }
@@ -127,6 +136,9 @@ export function guardLine(w:GuardLineOf):GuardText{   // whenText for "late" is 
     case "attach": return {text:`You wrote “${w.word}”, but nothing is attached.`, fix:{kind:"attach",label:"Attach a file"}};
     case "fanout": return {text:`This reply goes to ${w.n} people.`,
       fix:w.removable>0?{kind:"trim",label:`Remove the ${w.removable} copied from the original`}:{kind:"review",label:"Review recipients"}};
+    case "near": { const p=w.pairs[0]!, more=w.pairs.length-1;
+      return {text:`“${p.addr}” is one typo away from ${p.near}, someone you’ve written to.${more?` ${more} more ${more===1?"looks":"look"} the same.`:""}`,
+        fix:{kind:"near",label:`Use ${p.near}`,swap:{from:p.addr,to:p.near}}}; }
     case "new": return {text:`New to you: ${guardList(w.addrs)}.`, fix:null};
     case "unchecked": return {text:"The checks before sending couldn’t run.", fix:null};
     case "norcpt": return {text:"Add at least one recipient.", fix:{kind:"to",label:"Add one"}};

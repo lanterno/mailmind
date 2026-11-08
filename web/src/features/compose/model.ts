@@ -1,6 +1,6 @@
 // What a composer is, with no DOM and no server: addresses, the seeds a reply or forward opens with, the requests it makes
 // and the send-time check's input. The machine beside it runs these.
-import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning } from "./sendGuard";
+import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning, type NearMiss } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
 import type { ComposeMode, DraftTone } from "../../lib/api/types";
 
@@ -11,8 +11,8 @@ export type Mode = ComposeMode;
 export interface Recipient { v: string; bad: boolean }
 export interface Attachment { filename: string; content_type: string; size: number; b64: string }
 export interface Quote { html: string | null; text: string; from?: string; date?: string }
-export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean }
-export interface Person { known: boolean; self: boolean }
+export interface Ack { subject: boolean; attach: boolean; fanout: number; unchecked: boolean; near: string[] }
+export interface Person { known: boolean; self: boolean; near?: string }   // near: someone you've written to, whom this reads as a typo of
 
 export interface GuardLine { key: string; soft: boolean; text: string; fix: GuardFix | null; field?: Field }
 export interface GuardView {
@@ -185,6 +185,16 @@ export function isNewToYou(c: Composer, a: string, mine: Set<string>): boolean {
   return Boolean(p) && !p!.known && !p!.self && !c.thin && !isMine(a, mine) && !c.participants.has(a);
 }
 
+// Recipients the lookup said read as someone you've written to, mistyped, as far as it has answered: each once.
+export function nearMisses(c: Composer, mine: Set<string>): NearMiss[] {
+  const out = new Map<string, NearMiss>();
+  for (const r of [...c.to, ...c.cc, ...c.bcc]) {
+    const a = rcptAddr(r.v), near = c.people.get(a)?.near;
+    if (near && !r.bad && !isMine(a, mine) && !c.participants.has(a)) out.set(a, { addr: a, near });
+  }
+  return [...out.values()];
+}
+
 export function guardSnapshot(c: Composer, sendAfter: number, nowSeconds: number, mine: Set<string>): GuardSnapshot {
   const n = (x: Recipient) => rcptAddr(x.v);
   return {
@@ -193,6 +203,7 @@ export function guardSnapshot(c: Composer, sendAfter: number, nowSeconds: number
     to: c.to.map(n), cc: c.cc.map(n), mine: [...mine, ...[...c.people].filter(([, p]) => p.self).map(([a]) => a)],
     autoCc: c.autoCc, ack: c.ack,
     fresh: [...new Set([...c.to, ...c.cc, ...c.bcc].filter((x) => !x.bad).map(n))].filter((a) => isNewToYou(c, a, mine)),
+    near: nearMisses(c, mine),
   };
 }
 

@@ -2,7 +2,7 @@
 // one left; a save clears `dirty` only if no edit landed while it was in flight; the send-time check runs synchronously, so
 // nothing is awaited before the composer closes and a double submit can't happen; and what is closed with unsaved words
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
-import { GUARD_ARM_MS, guardFanout, guardLine, guardList, isMine } from "./sendGuard";
+import { GUARD_ARM_MS, guardFanout, guardLine, guardList, isMine, type GuardSwap, type NearMiss } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
 import type { LIMITS } from "../../lib/api/limits.gen";
 import type { DraftTone, RewriteOp } from "../../lib/api/types";
@@ -58,7 +58,7 @@ export type SendFloat =
   | { kind: "done"; text: string; clock?: boolean }
   | { kind: "failed"; text: string; edit: () => void; dismiss: () => void };
 
-type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout"> };
+type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout" | "near"> };
 
 const AUTOSAVE_MS = 8000;
 const KNOWN_WAIT_MS = 150;
@@ -124,7 +124,7 @@ export function createComposing(env: Env) {
       fwdAttach: opts.fwdAttach ?? 0, attachments: opts.attachments ?? [], reading: new Map(), idk: randomId(),
       dirty: false, edits: 0, saving: null, lastSaveHash: null, savedLine: "", note: opts.note ?? "",
       autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null,
-      ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false },
+      ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false, near: opts.ack?.near ?? [] },
       guard: null, pendingAfter: 0, participants: new Set((opts.participants ?? []).map((a) => a.toLowerCase())),
       people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "",
     };
@@ -144,7 +144,7 @@ export function createComposing(env: Env) {
     return {
       mode: x.mode, from: x.from, to: x.to, cc: x.cc, bcc: x.bcc, subject: x.subject, body: x.body, origKey: x.origKey, quote: x.quote, fwdAttach: x.fwdAttach,
       attachments: x.attachments, draftId: x.draftId, resume: x.resume, autoCc: x.autoCc, subject0: x.subject0, participants: [...x.participants],
-      ack: { subject: x.ack.subject, attach: x.ack.attach, fanout: x.ack.fanout },
+      ack: { subject: x.ack.subject, attach: x.ack.attach, fanout: x.ack.fanout, near: x.ack.near },
     };
   }
 
@@ -342,7 +342,7 @@ export function createComposing(env: Env) {
     if (c !== x) return;
     x.thin = Boolean(d.thin);
     for (const [a, p] of Object.entries<Answer>(d.items ?? {})) {
-      const v = { known: Boolean(p.known), self: Boolean(p.self) };
+      const v: Person = { known: Boolean(p.known), self: Boolean(p.self), ...(p.near ? { near: String(p.near) } : {}) };
       x.people.set(a, v);
       if (v.known || v.self) knownCache.set(a, v);
     }
@@ -512,6 +512,7 @@ export function createComposing(env: Env) {
     }
     for (const k of g.keys) {
       if (k === "fanout") x.ack.fanout = Math.max(x.ack.fanout, g.fanN);
+      else if (k === "near") x.ack.near = [...x.ack.near, ...(now.find((w) => w.key === "near") as { pairs: NearMiss[] } | undefined)?.pairs.map((p) => p.addr) ?? []];
       else if (k === "subject" || k === "attach" || k === "unchecked") x.ack[k] = true;
     }
     const after = g.sendAfter;
@@ -534,10 +535,22 @@ export function createComposing(env: Env) {
     env.say(`Removed ${k} ${k === 1 ? "person" : "people"}. This reply goes to ${m} ${m === 1 ? "person" : "people"}.`);
   }
 
-  function guardFix(kind: string, field?: Field) {
+  // A line's fix that names the right address: the chip keeps its name and takes that one.
+  function swapAddress(x: Composer, { from, to }: GuardSwap) {
+    const named = (v: string) => (/<[^<>]*>\s*$/.test(v) ? v.replace(/<[^<>]*>\s*$/, `<${to}>`) : to);
+    for (const f of FIELDS) x[f] = x[f].map((r) => (rcptAddr(r.v) === from ? chip(named(r.v)) : r));
+    markEdited(x);
+    hideGuard(x);
+    publish();
+    env.focus("send");
+    env.say(`Changed to ${to}.`);
+  }
+
+  function guardFix(kind: string, field?: Field, swap?: GuardSwap) {
     const x = c;
     if (!x) return;
     if (kind === "trim") return trimCc();
+    if (swap) return swapAddress(x, swap);
     hideGuard(x);
     if (kind === "review") x.showCc = true;
     if (kind === "bad" && field) {   // back in the input, to fix it

@@ -166,7 +166,7 @@ function Guard({ c }: { c: Composer }) {
         {g.lines.map((l) => (
           <li key={l.key} className={l.soft ? "cg-line cg-soft" : "cg-line"}>
             <span>{l.text}</span>
-            {l.fix && <button type="button" className="cg-fix" onClick={() => composing.guardFix(l.fix!.kind, l.field)}>{l.fix.label}</button>}
+            {l.fix && <button type="button" className="cg-fix" onClick={() => composing.guardFix(l.fix!.kind, l.field, l.fix!.swap)}>{l.fix.label}</button>}
           </li>
         ))}
       </ul>
