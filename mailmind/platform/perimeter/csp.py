@@ -1,4 +1,4 @@
-"""The content security policies: the page's, and a mail body's own."""
+"""The content security policies: the page's, a mail body's own and an attachment preview's."""
 
 
 def page_policy():
@@ -31,6 +31,20 @@ def mail_frame_policy(load_images):
         "img-src data: https:" if load_images else "img-src data:",
         "style-src 'unsafe-inline'",
         "font-src data:",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+    ])
+
+
+def attachment_preview_policy():
+    """The policy on a preview of a stranger's image. Its sandbox allows nothing, so no script runs and the document has no origin
+    to speak with; unlike a mail body's, nothing in the page reaches into it. It fetches nothing: the image is in the document."""
+    return "; ".join([
+        "sandbox",
+        "default-src 'none'",
+        "img-src data:",
+        "style-src 'unsafe-inline'",
         "base-uri 'none'",
         "form-action 'none'",
         "frame-ancestors 'self'",

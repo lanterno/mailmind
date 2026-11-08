@@ -1,5 +1,5 @@
 """The headers every answer carries."""
-from mailmind.platform.perimeter.csp import mail_frame_policy
+from mailmind.platform.perimeter.csp import attachment_preview_policy, mail_frame_policy
 from mailmind.platform.perimeter.fetch_metadata import is_api
 
 # What every answer carries, unless its route set the header itself.
@@ -27,6 +27,11 @@ def answer_headers(path):
 
 
 def mail_frame_headers(load_images):
-    """What a mail body's document sets itself: its own policy, and that this origin alone may frame it, which is the one
-    answer that isn't DENY."""
+    """What a mail body's document sets itself: its own policy, and that this origin alone may frame it, which with an attachment's
+    preview are the only answers that aren't DENY."""
     return (("Content-Security-Policy", mail_frame_policy(load_images)), ("X-Frame-Options", "SAMEORIGIN"))
+
+
+def attachment_preview_headers():
+    """What an attachment's preview sets itself: its own policy, and that this origin alone may frame it."""
+    return (("Content-Security-Policy", attachment_preview_policy()), ("X-Frame-Options", "SAMEORIGIN"))

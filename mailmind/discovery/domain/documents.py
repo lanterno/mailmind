@@ -14,6 +14,10 @@ EXCLUDE = ("text/calendar", "application/ics", "pkcs7", "pgp-signature", "pgp-ke
            "x-pkcs7", "application/x-pkcs7-signature")
 
 
+_IMAGE_TYPES = ("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp")
+_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "gif", "webp")
+
+
 def is_document(ct: str | None) -> bool:
     ct = (ct or "").lower()
     return not any(x in ct for x in EXCLUDE)
@@ -37,6 +41,16 @@ def kind_of(ct: str | None, fn: str | None) -> DocumentKind:
     if ct.startswith("text/") or ext in ("txt", "md", "log", "json", "xml"):
         return "text"
     return "other"
+
+
+def previewable(ct: str | None, fn: str | None) -> bool:
+    """Whether to offer a preview of a file: what it says it is, or by its name where its type says nothing. What its bytes are
+    decides what the preview shows (`frame.image_type`)."""
+    ct = (ct or "").lower().split(";")[0].strip()
+    fn = (fn or "").lower()
+    if ct in ("", "application/octet-stream"):
+        return "." in fn and fn.rsplit(".", 1)[-1] in _IMAGE_EXTENSIONS
+    return ct in _IMAGE_TYPES
 
 
 @dataclass(frozen=True)
@@ -95,11 +109,13 @@ def page(rows: Iterable[Row], want: Asked, when: Callable[[str | None], str]) ->
         matched += 1
         if matched <= want.offset or len(docs) >= want.limit:
             continue
+        names = urlencode({"key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "part_id": r["part_id"]})
         docs.append({"key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "part_id": r["part_id"],
                      "filename": r["filename"], "kind": kind,
                      "size": r["size"] or 0, "account": r["account"],
                      "from": r["from_name"] or r["from_addr"] or "", "subject": r["subject"] or "(no subject)",
                      "when": when(r["date_iso"]),
-                     "url": "/api/message/attachment?" + urlencode({"key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-                                                                     "part_id": r["part_id"]})})
+                     "url": "/api/message/attachment?" + names,
+                     "preview": ("/api/message/attachment/preview.html?" + names
+                                 if previewable(r["content_type"], r["filename"]) else None)})
     return {"ok": True, "total": sum(facets.values()), "matched": matched, "shown": len(docs), "facets": facets, "docs": docs}

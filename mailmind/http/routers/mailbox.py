@@ -34,6 +34,7 @@ from mailmind.http.schemas.mailbox import (
     NamesAPending,
     NothingToUndo,
     PartArgs,
+    PreviewArgs,
     Pending,
     Prefetched,
     ReconcileBody,
@@ -132,6 +133,12 @@ def router(mailbox):
         code, doc = answer
         return Response(doc.encode("utf-8", "replace"), code,
                         headers={"Content-Type": "text/html; charset=utf-8", **dict(perimeter.mail_frame_headers(load_images))})
+
+    @r.get("/api/message/attachment/preview.html", responses=answers(NotJson))
+    def attachment_preview(args: Annotated[PreviewArgs, Query()]):
+        code, doc = mailbox.bodies.preview_document(args.key, args.folder, args.uid, args.part_id)
+        return Response(doc.encode("utf-8", "replace"), code,
+                        headers={"Content-Type": "text/html; charset=utf-8", **dict(perimeter.attachment_preview_headers())})
 
     @r.get("/api/message/attachment", responses=answers(NotJson))
     def copy_attachment(args: Annotated[PartArgs, Query()]):

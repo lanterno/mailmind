@@ -20,6 +20,8 @@ _CID_IMG = re.compile(r"""src\s*=\s*(['"])cid:([^'"]+)\1""", re.I)
 _RASTER = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
 _CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
 _GONE = "This message isn’t here any more."
+_NO_PREVIEW = "This file can’t be previewed. Download it to see it."
+PREVIEW_MAX_BYTES = 10 << 20   # what a preview holds of one image, as its document carries the bytes
 
 
 
@@ -139,17 +141,41 @@ class Bodies:
         as the reader's body route reads them (`StoredMail.copy_pk`): a uid left out ("") is the only copy there. A key,
         folder and uid that name no copy now, whatever they say, are a document saying so."""
         try:
-            number = _as_number(key)
-            at = None if uid == "" else _as_number(uid)
-            with self._uow.read() as c:
-                pk = (self._store.copy_pk(c, MessageKey(number), FolderName(folder), at)
-                      if number is not None and (uid == "" or at is not None) else None)
+            pk, number, at = self._copy_named(key, folder, uid)
         except Exception as e:                # scrub: log the detail, never echo it to the client
             log.error("a copy's document failed", exc_info=e)
             return 500, frame.of_text("Couldn’t load this message.")
         if pk is None:
             return 404, frame.of_text(_GONE)
         return self.as_document(pk, str(number), load_images, at)     # the key as read, so "007" names what 7 does
+
+    def _copy_named(self, key: str, folder: str, uid: str) -> tuple[int | None, int | None, int | None]:
+        """(the row of the copy these name, its key as read, its uid as read). A uid left out ("") is the only copy there."""
+        number = _as_number(key)
+        at = None if uid == "" else _as_number(uid)
+        with self._uow.read() as c:
+            pk = (self._store.copy_pk(c, MessageKey(number), FolderName(folder), at)
+                  if number is not None and (uid == "" or at is not None) else None)
+        return pk, number, at
+
+    def preview_document(self, key: str, folder: str, uid: str, part_id: str) -> tuple[int, str]:
+        """(status, the document the preview of a part of the copy these name loads): the image it holds, of the kinds
+        `frame.image_type` finds in its bytes, whatever its sender called it, and otherwise a document saying why not. A frame
+        shows what it is sent, so a failure comes as a document too."""
+        try:
+            pk, _, _ = self._copy_named(key, folder, uid)
+            if pk is None:
+                return 404, frame.of_text(_NO_PREVIEW)
+            found = self.attachment(pk, part_id)
+            if "error" in found:
+                return 404, frame.of_text(_NO_PREVIEW)
+            media_type = frame.image_type(found["data"])
+            if media_type is None or len(found["data"]) > PREVIEW_MAX_BYTES:
+                return 200, frame.of_text(_NO_PREVIEW)
+            return 200, frame.of_image(found["data"], media_type)
+        except Exception as e:                # scrub: log the detail, never echo it to the client
+            log.error("a preview failed", exc_info=e)
+            return 500, frame.of_text("Couldn’t load this file.")
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""

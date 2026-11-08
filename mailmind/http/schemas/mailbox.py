@@ -43,6 +43,14 @@ class PartArgs(CopyArgs):
     part_id: str
 
 
+class PreviewArgs(QueryArgs):
+    """Text and nothing but, as `CopyDocumentArgs` is: what names no part is the use case's document saying so."""
+    key: str = ""
+    folder: str = ""
+    uid: str = ""
+    part_id: str = ""
+
+
 class CopyDocumentArgs(QueryArgs):
     """Text and nothing but, so nothing here is ever refused: a frame shows what it's sent, and a JSON 400 isn't a document. A
     key, folder and uid that name no copy are the use case's document saying so."""

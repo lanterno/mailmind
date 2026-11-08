@@ -132,6 +132,7 @@ class Document(Answer):
     subject: str
     when: str
     url: str
+    preview: str | None         # where its preview loads from, for an image of a kind one shows
 
 
 class Documents(Answer):
