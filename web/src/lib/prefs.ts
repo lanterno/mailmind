@@ -56,6 +56,8 @@ function showing(p: Prefs) {
   const body = document.body;
   body.classList.toggle("theme-light", p.theme !== "night");
   body.classList.toggle("theme-dusk", p.theme === "dusk");
+  body.classList.toggle("hc", p.high_contrast);
+  body.dataset["density"] = p.density;
 }
 
 function settle(p: Prefs) {
