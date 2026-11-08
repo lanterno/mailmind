@@ -13,7 +13,7 @@ import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
 import { snoozeAsk } from "../features/attention/SnoozeMenu";
 import { setGrouping, type Mailbox } from "../features/mailbox/useMailbox";
-import { helpOpen } from "../features/status/Help";
+import { helpOpen, type Legend } from "../features/status/Help";
 import { reconcile, syncNow } from "../features/status/Status";
 import { copyOf, type Copy } from "../lib/copy";
 import { shortAddress } from "../lib/text";
@@ -27,6 +27,7 @@ export interface Command {
   label: string;
   keys?: string[];     // what presses it, by KeyboardEvent.key with letters lowered
   hint?: string;       // what the palette shows for it
+  legend?: string;     // what the keys legend says of it, where its label says less
   run: () => void;
 }
 
@@ -44,14 +45,23 @@ export function goChord(m: Mailbox, key: string) {
   else toast(`No ${role} folder on this account`);
 }
 
+// Where g then a letter goes, as the legend and the hint name it.
+export const goKeys = (): Legend["go"] => [
+  ...Object.entries(ROLE_KEYS).map(([key, where]) => ({ key, where })),
+  ...Object.entries(VIRTUAL_KEYS).map(([key, name]) => ({ key, where: VIRTUAL_TITLE[name]!.toLowerCase() })),
+];
+
 // A saved view is saved already: nothing offers to save it again.
 export const onSavedView = (m: Pick<Mailbox, "source" | "views">) => m.source?.kind === "search" && m.views.some((v) => viewQuery(v) === (m.source as { q: string }).q);
 
-export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSearch: () => void; openSearchBar: () => void }): Command[] {
+interface Ui { toggleRail: () => void; saveSearch: () => void; openSearchBar: () => void }
+
+// `whatever`: every command there is, whatever is open or marked now, for the legend, which never runs one.
+export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   const out: Command[] = [];
   const add = (c: Command) => out.push(c);
   const any = m.marks.size > 0;
-  const on = m.openId !== null;
+  const on = whatever || m.openId !== null;
   const nameOf = (a: string) => m.aliases[a] || shortAddress(a);
 
   add({ id: "all-inboxes", group: "Navigation", label: "All inboxes", run: () => go({ source: { kind: "allInboxes" }, opened: null }) });
@@ -68,7 +78,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   }
 
   add({ id: "move-down", group: "Actions", label: "Next message", keys: ["j", "ArrowDown"], hint: "j", run: () => m.move(1) });
-  add({ id: "move-up", group: "Actions", label: "Previous message", keys: ["k", "ArrowUp"], hint: "k", run: () => m.move(-1) });
+  add({ id: "move-up", group: "Actions", label: "Previous message", legend: "Previous message (at the top: today’s brief)", keys: ["k", "ArrowUp"], hint: "k", run: () => m.move(-1) });
   add({ id: "next-unread", group: "Actions", label: "Next unread", keys: ["n"], hint: "n", run: () => { if (!m.moveUnread(1)) toast("No more unread below"); } });
   add({ id: "prev-unread", group: "Actions", label: "Previous unread", keys: ["p"], hint: "p", run: () => { if (!m.moveUnread(-1)) toast("No more unread above"); } });
 
@@ -79,7 +89,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     add({ id: "star", group: "Actions", label: "Star", keys: ["s"], hint: "s", run: () => (any ? m.bulk("star") : m.star()) });
     add({ id: "unread", group: "Actions", label: "Mark unread", keys: ["u"], hint: "u", run: () => (any ? m.bulk("unread") : m.unread()) });
     add({
-      id: "snooze", group: "Actions", label: "Snooze…", keys: ["h"], hint: "h",
+      id: "snooze", group: "Actions", label: "Snooze…", legend: "Snooze (then 1–4)", keys: ["h"], hint: "h",
       run: () => {
         if (any) snoozeAsk.set({ target: { copies: m.markedRows.map(copyOf) }, rows: [...m.marks], anchor: document.querySelector("#bulkbar"), canUnsnooze: false });
         else {
@@ -116,7 +126,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   }
 
   add({ id: "compose", group: "Commands", label: "Compose new message", keys: ["c"], hint: "c", run: () => void composing.open({ mode: "new" }) });
-  add({ id: "undo", group: "Commands", label: "Undo last action", keys: ["z"], hint: "z", run: m.undo });
+  add({ id: "undo", group: "Commands", label: "Undo last action", legend: "Undo last action (archive · delete · junk · snooze · mute)", keys: ["z"], hint: "z", run: m.undo });
   add({
     id: "brief", group: "Commands", label: "Today’s brief",
     run: () => {
@@ -137,14 +147,17 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     add({ id: `view:${v.id}`, group: "Views", label: `${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
   }
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
-  add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", keys: ["["], hint: "[", run: ui.toggleRail });
-  add({ id: "search", group: "Commands", label: "Search", keys: ["/"], hint: "/", run: ui.openSearchBar });
-  if (m.searching && !onSavedView(m)) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
+  add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", legend: "Folders: icons ⇄ names · drag the list edge to resize", keys: ["["], hint: "[", run: ui.toggleRail });
+  add({ id: "search", group: "Commands", label: "Search", legend: "Search · ?question asks your inbox · !command plans a bulk action", keys: ["/"], hint: "/", run: ui.openSearchBar });
+  if (whatever || (m.searching && !onSavedView(m))) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
   for (const t of (["day", "dusk", "night"] as const).filter((x) => x !== theme.get())) {
     add({ id: `theme:${t}`, group: "Commands", label: `Theme → ${THEME_LABEL[t]}`, run: () => { setTheme(t); toast(`${THEME_LABEL[t]} theme`); } });
   }
   return out;
 }
+
+// What the keys legend shows: every command that has keys, and where g goes.
+export const legendOf = (m: Mailbox, ui: Ui): Legend => ({ commands: buildCommands(m, ui, true).filter((c) => c.keys), go: goKeys() });
 
 export function commandForKey(commands: Command[], key: string): Command | undefined {
   return commands.find((c) => c.keys?.includes(key));

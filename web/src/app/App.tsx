@@ -36,7 +36,7 @@ import { stored } from "../lib/store";
 import { shortAddress } from "../lib/text";
 import { toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
-import { buildCommands, commandForKey, goChord, onSavedView, type Command } from "./commands";
+import { buildCommands, commandForKey, goChord, goKeys, legendOf, onSavedView, type Command } from "./commands";
 import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
 import { go, type ListSource } from "./route";
@@ -45,7 +45,7 @@ import { clearSearchBox, closeRailDrawer, openSearchBar, RailScrim, TopBar, togg
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS: [InboxTab, string][] = [["needs", "Needs you"], ["all", "Everything"], ["unread", "Unread"]];
-const GO_HINT = "Go to folder:  i·s·a·t·k·d·z·w·l";
+const goHint = () => `Go to folder:  ${goKeys().map((g) => g.key).join("·")}`;
 const narrow = () => matchMedia("(max-width:820px)").matches;
 const sourceWhere = (s: ListSource | null) => JSON.stringify(s);
 
@@ -150,7 +150,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
       }
       if (key === "g") {
         e.preventDefault();
-        toast(GO_HINT);
+        toast(goHint());
         chord.current = setTimeout(() => { chord.current = null; }, 1800);
         return;
       }
@@ -222,7 +222,8 @@ export function App() {
     (copy) => m.file(all.find((r) => r.id === copyId(copy)) ?? copy, "archive"),
     (copy) => m.snooze(copy, { preset: "tomorrow" }, [copyId(copy)]),
   );
-  const commands = buildCommands(m, { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m) });
+  const ui = { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m) };
+  const commands = buildCommands(m, ui);
   useKeys(m, commands);
 
   const pages = list.data?.pages ?? [];
@@ -351,7 +352,7 @@ export function App() {
       />
       <Panels m={m} />
       <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
-      <Help />
+      <Help legend={() => legendOf(m, ui)} />
       <Settings />
       <Docs m={m} />
       <Curate />

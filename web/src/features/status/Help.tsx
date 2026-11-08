@@ -5,40 +5,49 @@ import { createStore, store, stored } from "../../lib/store";
 import { setTheme, theme, THEME_LABEL, type ThemeName } from "../../lib/theme";
 import { Icon } from "../../lib/ui/Icon";
 import { useLayer } from "../../lib/backTrap";
+import type { Command } from "../../app/commands";
 
 export const helpOpen = createStore(false);
 const THEMES: ThemeName[] = ["day", "dusk", "night"];
 
-function Keys() {
+// What the app's own list of commands says about keys, so the legend can't drift from what they do: `commands` are those
+// with keys, and `go` where g then a letter goes.
+export interface Legend {
+  commands: Command[];
+  go: { key: string; where: string }[];
+}
+
+const GLYPH: Record<string, string> = { ArrowDown: "↓", ArrowUp: "↑", Enter: "↵", Backspace: "⌫", Delete: "⌦" };
+// Keys no command owns: Esc steps back from whatever is open, and the rest hold down ⌘ (the palette's, the composer's).
+const NOT_COMMANDS: [string[], string][] = [[["⌘K"], "Commands"], [["Esc"], "Back or close"], [["⌘↵"], "Send, while composing"], [["⌘S"], "Save the draft, while composing"]];
+
+function Row({ keys, children }: { keys: string[]; children: React.ReactNode }) {
+  return <><span className="legkeys">{keys.map((k) => <kbd key={k}>{GLYPH[k] ?? k}</kbd>)}</span><span>{children}</span></>;
+}
+
+function Keys({ legend }: { legend: () => Legend }) {
   const [noKeys, setNoKeys] = useState(() => stored("mm_nokeys") === "1");
   const current = theme.useValue();
+  const { commands, go } = legend();
+  const groups = [...new Set(commands.map((c) => c.group))];
   return (
     <>
       <h3 id="legendTitle">Keyboard</h3>
       <div className="legcols">
-        <div>
-          <div className="legh">Mail</div>
-          <div className="g">
-            <kbd>j</kbd><span>/ <kbd>k</kbd> move (<kbd>k</kbd> at the top: today’s brief) · <kbd>↵</kbd> focus reading</span>
-            <kbd>[</kbd><span>folders: icons ⇄ names · drag the list edge to resize</span>
-            <kbd>n</kbd><span>/ <kbd>p</kbd> next / prev unread</span>
-            <kbd>r</kbd><span>reply · <kbd>a</kbd> all · <kbd>f</kbd> forward · <kbd>c</kbd> compose</span>
-            <kbd>e</kbd><span>archive · <kbd>d</kbd>/<kbd>⌫</kbd>/<kbd>#</kbd> delete · <kbd>b</kbd> junk</span>
-            <kbd>s</kbd><span>star · <kbd>u</kbd> unread · <kbd>x</kbd> select</span>
-            <kbd>i</kbd><span>AI summary · <kbd>h</kbd> snooze (then <kbd>1</kbd>–<kbd>4</kbd>) · <kbd>w</kbd> mute thread</span>
-            <kbd>g</kbd><span>go to folder → <kbd>i</kbd>nbox <kbd>s</kbd>ent <kbd>a</kbd>rchive <kbd>t</kbd>rash <kbd>k</kbd> junk <kbd>d</kbd>rafts <kbd>z</kbd> snoozed <kbd>w</kbd> waiting</span>
+        {groups.map((group, i) => (
+          <div key={group}>
+            <div className="legh">{group}</div>
+            <div className="g">
+              {commands.filter((c) => c.group === group).map((c) => <Row key={c.id} keys={c.keys ?? []}>{c.legend ?? c.label}</Row>)}
+              {i === groups.length - 1 && (
+                <>
+                  <Row keys={["g"]}>Go to folder, then {go.map(({ key, where }) => <span key={key}><kbd>{key}</kbd> {where} </span>)}</Row>
+                  {NOT_COMMANDS.map(([keys, words]) => <Row key={words} keys={keys}>{words}</Row>)}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="legh">Anywhere</div>
-          <div className="g">
-            <kbd>/</kbd><span>search · <kbd>?</kbd>question asks your inbox · <kbd>!</kbd>command plans a bulk action · <kbd>⌘K</kbd> commands</span>
-            <kbd>z</kbd><span>undo last action (archive · delete · junk · snooze · mute)</span>
-            <kbd>v</kbd><span>save the current search as a pinned View</span>
-            <kbd>,</kbd><span>settings · <kbd>?</kbd> help · <kbd>Esc</kbd> back/close</span>
-            <kbd>⌘</kbd><span>+<kbd>↵</kbd> send · +<kbd>S</kbd> draft (composing)</span>
-          </div>
-        </div>
+        ))}
       </div>
       <div className="legh">Search operators</div>
       <div className="legsearch"><code>from:</code> <code>to:</code> <code>cc:</code> <code>subject:</code> <code>body:</code> <code>is:unread</code> <code>is:flagged</code> <code>category:finance</code> <code>is:newsletter</code> <code>is:snoozed</code> <code>bucket:receipt</code> <code>has:attachment</code> <code>in:Sent</code> <code>account:</code> <code>before:</code>/<code>after:</code> <code>"quoted phrase"</code> <code>-exclude</code></div>
@@ -63,13 +72,13 @@ function Keys() {
   );
 }
 
-export function Help() {
+export function Help({ legend }: { legend: () => Legend }) {
   const open = helpOpen.useValue();
   useLayer(open, () => helpOpen.set(false));
   return (
     <ModalOverlay className="legend show" isOpen={open} isDismissable onOpenChange={helpOpen.set}>
       <Modal className="modal-through">
-        <Dialog aria-labelledby="legendTitle" className="box"><Keys /></Dialog>
+        <Dialog aria-labelledby="legendTitle" className="box"><Keys legend={legend} /></Dialog>
       </Modal>
     </ModalOverlay>
   );
