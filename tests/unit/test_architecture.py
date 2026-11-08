@@ -13,7 +13,7 @@ OWNER = {
     "accounts": (),
     "assistant": ("ai_batch_items", "ai_batches", "ai_usage", "assessments", "briefs", "deltas", "draft_ahead", "reviews",
                   "thread_summaries"),
-    "attention": ("followups", "muted", "snoozes"),
+    "attention": ("followups", "muted", "snoozes", "tasks"),
     "calendar": (),
     "compose": ("drafts", "draft_journal", "outbox"),
     "curation": ("sender_unsub", "unsub_log"),
