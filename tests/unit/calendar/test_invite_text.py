@@ -10,7 +10,7 @@ import pytest
 
 from mailmind.bootstrap.calendar import ics
 from mailmind.calendar.application.agenda import Agenda
-from mailmind.calendar.domain import rsvp
+from mailmind.calendar.domain import agenda, rsvp
 
 BEFORE = datetime(2026, 9, 1, 12)           # naive is this machine's clock, and every series here starts after it
 NOW = datetime(2026, 11, 1, 12)
@@ -442,6 +442,102 @@ def test_a_revision_count_is_read_and_what_wont_read_is_none():
     assert ics.parse(cal(MON))["sequence"] == 0
     for said in ("SEQUENCE:later", "SEQUENCE:-3", "SEQUENCE:" + "9" * 5000, f"SEQUENCE:{2 ** 31}"):
         assert ics.parse(cal(MON, said))["sequence"] == 0, said
+
+
+@pytest.mark.parametrize("line", ["RECURRENCE-ID;RANGE=THISANDFUTURE:20261102T100000", "RECURRENCE-ID;RANGE=thisandfuture:20261102T100000"])
+def test_a_range_says_so_and_only_where_it_said_it(line):
+    assert ics.parse(cal(MON, line))["this_and_future"] is True
+
+
+@pytest.mark.parametrize("lines", [(), ("RECURRENCE-ID:20261102T100000",), ("RECURRENCE-ID;RANGE=THISANDPRIOR:20261102T100000",), ("RECURRENCE-ID;RANGE=THISANDFUTURE:x",)])
+def test_nothing_else_says_a_range(lines):
+    assert "this_and_future" not in ics.parse(cal(MON, *lines))
+
+
+_ROOT = ["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Standup", MON, MON_END, "RRULE:FREQ=WEEKLY", "END:VEVENT"]
+
+
+def _moved_on(summary, recurrence_id, start, end, *rest):
+    return ["BEGIN:VEVENT", "UID:s@example.test", f"SUMMARY:{summary}", f"RECURRENCE-ID;RANGE=THISANDFUTURE:{recurrence_id}",
+            f"DTSTART:{start}", f"DTEND:{end}", *rest, "END:VEVENT"]
+
+
+def _series(*parts, method="REQUEST"):
+    return "\r\n".join(["BEGIN:VCALENDAR", "VERSION:2.0", f"METHOD:{method}", *[line for part in parts for line in part], "END:VCALENDAR", ""])
+
+
+def test_this_and_future_moves_every_occurrence_from_that_one_on():
+    text = _series(_ROOT, _moved_on("Standup (later)", "20261116T100000", "20261116T150000", "20261116T153000"))
+    assert _listed(text) == ["Standup 2026-11-02T10:00 to 2026-11-02T10:30", "Standup (later) 2026-11-16T15:00 to 2026-11-16T15:30"]
+    after = Agenda(_Stored(text), ics).upcoming(now=datetime(2026, 11, 17, 12), days=4000)["items"]
+    assert [(x["summary"], x["start"]) for x in after] == [("Standup (later)", "2026-11-23T15:00")]
+
+
+def test_once_the_old_part_is_over_the_new_part_goes_on_week_on_week():
+    text = _series(_ROOT, _moved_on("Standup (later)", "20261005T100000", "20261005T150000", "20261005T160000"))
+    assert _listed(text) == ["Standup (later) 2026-11-02T15:00 to 2026-11-02T16:00"]
+
+
+def test_this_and_future_may_move_to_another_day_as_the_rule_still_counts_mondays():
+    text = _series(_ROOT, _moved_on("Standup (Wed)", "20261005T100000", "20261007T100000", "20261007T103000"))
+    assert _listed(text) == ["Standup (Wed) 2026-11-04T10:00 to 2026-11-04T10:30"]
+
+
+def test_this_and_future_may_move_earlier():
+    text = _series(_ROOT, _moved_on("Standup (early)", "20261005T100000", "20261005T080000", "20261005T083000"))
+    assert _listed(text) == ["Standup (early) 2026-11-02T08:00 to 2026-11-02T08:30"]
+
+
+def test_a_series_that_ran_out_stays_run_out_after_a_range_moves_it():
+    text = _series(["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Standup", MON, MON_END, "RRULE:FREQ=WEEKLY;COUNT=5", "END:VEVENT"],
+                   _moved_on("Standup (later)", "20261019T100000", "20261019T150000", "20261019T153000"))
+    assert _listed(text) == ["Standup (later) 2026-11-02T15:00 to 2026-11-02T15:30"]
+    assert Agenda(_Stored(text), ics).upcoming(now=datetime(2026, 11, 3, 12), days=4000)["items"] == []
+
+
+def test_the_rule_cuts_at_the_first_of_two_ranges_and_each_runs_to_the_next():
+    text = _series(_ROOT, _moved_on("Later", "20261109T100000", "20261109T150000", "20261109T153000"),
+                   _moved_on("Later still", "20261123T100000", "20261123T170000", "20261123T173000"))
+    assert _listed(text) == ["Standup 2026-11-02T10:00 to 2026-11-02T10:30", "Later 2026-11-09T15:00 to 2026-11-09T15:30",
+                             "Later still 2026-11-23T17:00 to 2026-11-23T17:30"]
+    later = Agenda(_Stored(text), ics).upcoming(now=datetime(2026, 11, 17, 12), days=4000)["items"]
+    assert [(x["summary"], x["start"]) for x in later] == [("Later still", "2026-11-23T17:00")]
+
+
+def test_a_range_from_the_first_occurrence_leaves_nothing_of_the_old_one():
+    assert _listed(_series(_ROOT, _moved_on("Later", "20261005T100000", "20261005T150000", "20261005T153000"))) == ["Later 2026-11-02T15:00 to 2026-11-02T15:30"]
+
+
+def test_an_occurrence_moved_on_its_own_after_a_range_is_still_struck_from_it():
+    alone = ("BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Just once", "RECURRENCE-ID:20261102T100000", "DTSTART:20261103T090000", "DTEND:20261103T093000", "END:VEVENT")
+    text = _series(_ROOT, _moved_on("Later", "20261005T100000", "20261005T150000", "20261005T153000"), alone)
+    assert _listed(text) == ["Just once 2026-11-03T09:00 to 2026-11-03T09:30", "Later 2026-11-09T15:00 to 2026-11-09T15:30"]
+
+
+def test_a_cancelled_range_ends_the_series_there():
+    gone = ["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Standup", "RECURRENCE-ID;RANGE=THISANDFUTURE:20261109T100000", "DTSTART:20261109T100000", "STATUS:CANCELLED", "END:VEVENT"]
+    text = _series(_ROOT, gone)
+    assert _listed(text) == ["Standup 2026-11-02T10:00 to 2026-11-02T10:30"]
+    assert Agenda(_Stored(text), ics).upcoming(now=datetime(2026, 11, 3, 12), days=4000)["items"] == []
+
+
+def test_a_range_with_no_series_beside_it_is_a_word_about_one_date():
+    assert _listed(_series(_moved_on("Later", "20261109T100000", "20261109T150000", "20261109T153000"))) == ["Later 2026-11-09T15:00 to 2026-11-09T15:30"]
+
+
+def test_a_range_over_a_cancelled_series_is_gone_with_it():
+    text = _series(["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Standup", MON, "RRULE:FREQ=WEEKLY", "STATUS:CANCELLED", "END:VEVENT"],
+                   _moved_on("Later", "20261109T100000", "20261109T150000", "20261109T153000"))
+    assert _listed(text) == []
+
+
+def test_a_range_in_a_zone_keeps_its_wall_clock_across_a_change_of_clocks():
+    root = ["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Standup", "DTSTART;TZID=W. Europe Standard Time:20261005T100000",
+            "DTEND;TZID=W. Europe Standard Time:20261005T103000", "RRULE:FREQ=WEEKLY", "END:VEVENT"]
+    moved = ["BEGIN:VEVENT", "UID:s@example.test", "SUMMARY:Later", "RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=W. Europe Standard Time:20261012T100000",
+             "DTSTART;TZID=W. Europe Standard Time:20261012T120000", "DTEND;TZID=W. Europe Standard Time:20261012T123000", "END:VEVENT"]
+    [_series_part, (_, later)] = agenda.cut_up([(1, inv) for inv in ics.events(_series(root, moved))])
+    assert [d.isoformat() for d in ics.next_occurrence(later, datetime(2026, 11, 1, 12))] == ["2026-11-02T12:00:00+01:00", "2026-11-02T12:30:00+01:00"]
 
 
 def test_a_moved_occurrence_names_the_slot_it_left_in_its_zone():

@@ -68,6 +68,10 @@ GARBAGE = {
     "year-0": event("DTSTART:00000101T000000"),
     "sequence-letters": event("DTSTART:20261102T100000", "SEQUENCE:later"), "sequence-empty": event("DTSTART:20261102T100000", "SEQUENCE:"),
     "sequence-negative": event("DTSTART:20261102T100000", "SEQUENCE:-3"), "sequence-past-any-int": event("DTSTART:20261102T100000", "SEQUENCE:" + "9" * 5000),
+    "range-of-nonsense": event("DTSTART:20261102T100000", "RECURRENCE-ID;RANGE=NOT-A-RANGE:20261102T100000"),
+    "range-on-no-date": event("DTSTART:20261102T100000", "RECURRENCE-ID;RANGE=THISANDFUTURE:x"),
+    "range-empty": event("DTSTART:20261102T100000", "RECURRENCE-ID;RANGE=:20261102T100000"),
+    "range-in-year-1": event("DTSTART:00010101T000000", "RECURRENCE-ID;RANGE=THISANDFUTURE:00010101T000000Z", "RRULE:FREQ=DAILY"),
 }
 
 
@@ -90,6 +94,7 @@ def test_a_broken_invite_raises_nothing_when_asked_when_it_next_happens(inv):
 
 
 _LINES = FULL + [r"UID:x\ny", r"ORGANIZER;CN=a^nb:mailto:c\nd@example.test", r"ATTENDEE;CN=a^nb:mailto:ada@example.test", r"SUMMARY:a\nb", r"LOCATION:a\,b",
+                 "RECURRENCE-ID;RANGE=THISANDFUTURE:20261019T100000", "RECURRENCE-ID;RANGE=THISANDFUTURE;TZID=W. Europe Standard Time:20261019T100000",
                  "DTSTART;TZID=W. Europe Standard Time:20261005T100000", "SEQUENCE:12"]
 
 
