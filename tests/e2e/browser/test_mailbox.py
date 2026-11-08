@@ -188,6 +188,23 @@ def test_archive_files_it_opens_the_next_and_undo_brings_it_back(page, world):
     clean(page)
 
 
+def test_a_message_undo_brought_back_opens_though_its_uid_changed(page, world):
+    opened(page)
+    subject = world.row(RECEIPT)["subject"]
+    row(page, world, RECEIPT).click()
+    frame = page.frame_locator("iframe.rd-iframe").locator("body")
+    expect(frame).to_contain_text("Thanks for your order")
+    page.keyboard.press("e")
+    until(page, lambda: mailbox(world, RECEIPT) == "Archive", "the server never filed it")
+    page.keyboard.press("z")
+    until(page, lambda: mailbox(world, RECEIPT) == "INBOX", "Undo never reached the server")
+    expect(page.locator("#toast")).to_have_text(re.compile("undone"))
+    page.locator("#rows .row[data-key]").filter(has_text=subject).click()
+    expect(frame).to_contain_text("Thanks for your order")
+    expect(page.locator("#reader .nores")).to_have_count(0)
+    clean(page)
+
+
 def test_a_refused_archive_puts_the_row_back_and_says_so(page, world):
     opened(page)
     r = row(page, world, RECEIPT)
