@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from mailmind.attention.domain import snooze
+from mailmind.kernel.errors import Refused
 
 ZONE = timezone(timedelta(hours=2))
 NOW = datetime(2026, 11, 4, 10, 30, tzinfo=ZONE)          # a Wednesday
@@ -92,8 +93,10 @@ def test_a_thread_needs_its_account_and_goes_before_any_pks():
     assert snooze.named_thread({"account": "ada@example.test", "pk": 3}) is None
 
 
-def test_bulk_pks_are_capped():
-    assert len(snooze.named_pks({"pks": list(range(snooze.BULK_CAP + 1))})) == snooze.BULK_CAP == 500
+def test_more_pks_than_one_request_may_name_are_refused_never_cut_short():
+    assert len(snooze.named_pks({"pks": list(range(snooze.BULK_CAP))})) == snooze.BULK_CAP == 500
+    with pytest.raises(Refused):
+        snooze.named_pks({"pks": list(range(snooze.BULK_CAP + 1))})
 
 
 def test_pks_go_before_a_pk():
