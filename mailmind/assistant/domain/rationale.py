@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mailmind.kernel.parsed import is_list, is_object
+from mailmind.kernel.row import Row
 
 MAX_SENDERS = 40            # how many one pass reads: what the list of noisy senders shows
 TEXT_MAX = 200              # of one rationale
@@ -38,19 +39,19 @@ def span(seconds: float) -> str:
     return f"{days // 365} years"
 
 
-def line(n: int, row: Mapping[str, Any], now: float) -> str:
+def line(n: int, row: Row, now: float) -> str:
     """One sender's numbers as the model is told them, under number `n`."""
     return (f'[{n}] {row["name"] or row["addr"]} <{row["addr"]}>: {row["n"]} messages over {span(now - row["first_ts"])}, '
             f'{row["unseen"]} of them never opened, {row["replied"]} replied to, the latest {span(now - row["last_ts"])} ago.')
 
 
-def fallback(row: Mapping[str, Any], now: float) -> str:
+def fallback(row: Row, now: float) -> str:
     """The same numbers in plain words, for a sender the model said nothing about."""
     return (f'{row["unseen"]} of {row["n"]} unopened over {span(now - row["first_ts"])}, '
             f'{row["replied"]} replied to.')[:TEXT_MAX]
 
 
-def clean(obj: Mapping[str, Any], rows: Sequence[Mapping[str, Any]], now: float) -> dict[str, str]:
+def clean(obj: Mapping[str, Any], rows: Sequence[Row], now: float) -> dict[str, str]:
     """One rationale for each sender in `rows`, the first of which was told as number 1: what the model said of it, or else
     `fallback`. A number it wasn't shown says nothing of anyone, and the first word on a sender stands."""
     told = obj.get("rationales")
