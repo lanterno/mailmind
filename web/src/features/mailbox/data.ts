@@ -108,7 +108,7 @@ export function useEveryAccountsFolders(accounts: string[]) {
 }
 
 // A body as the reader opens it. Only a `prefetch` answers `prefetched`, and the reader never asks for one.
-export type Opened = Exclude<GetAnswers["/api/message/{pk}/body"], { prefetched: true }>;
+export type Opened = Exclude<GetAnswers["/api/message/{pk}/body"], { prefetched: boolean }>;
 
 export const useBody = (pk: number | null) =>
   useQuery({
