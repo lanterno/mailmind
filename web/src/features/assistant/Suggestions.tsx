@@ -81,7 +81,7 @@ function EventForm({ copy, event, drop }: { copy: Copy; event: Suggested; drop: 
       {refused && <div className="sg-refused" role="alert">{refused}</div>}
       <div className="sg-acts">
         <button type="submit" className="cab">Add to calendar</button>
-        <button type="button" className="ai-rerun" onClick={drop}>Dismiss</button>
+        <button type="button" className="btn-retry" onClick={drop}>Dismiss</button>
       </div>
     </form>
   );
@@ -113,7 +113,7 @@ function TaskForm({ copy, task, drop }: { copy: Copy; task: SuggestedTask; drop:
       {refused && <div className="sg-refused" role="alert">{refused}</div>}
       <div className="sg-acts">
         <button type="submit" className="cab">Add to tasks</button>
-        <button type="button" className="ai-rerun" onClick={drop}>Dismiss</button>
+        <button type="button" className="btn-retry" onClick={drop}>Dismiss</button>
       </div>
     </form>
   );
@@ -151,7 +151,7 @@ export function SuggestionCard({ copy }: { copy: Copy | null }) {
     );
   }
   if (shown.kind === "error") {
-    return <div className="ai-card" id="sgCard"><div className="ai-err">{shown.error} <button className="ai-rerun" onClick={() => void findSuggestions(copy)}>Retry</button></div></div>;
+    return <div className="ai-card" id="sgCard"><div className="ai-err">{shown.error} <button className="btn-retry" onClick={() => void findSuggestions(copy)}>Retry</button></div></div>;
   }
   return (
     <div className="ai-card" id="sgCard">
