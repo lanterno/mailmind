@@ -68,9 +68,9 @@ function settle(p: Prefs) {
 showing(prefs.get());
 
 // Change what this names: on the page at once, on the server right after. A value the server refuses puts back what it holds.
-export function setPrefs(changes: Changes) {
+export function setPrefs(changes: Changes, saved?: () => void) {
   settle({ ...prefs.get(), ...changes } as Prefs);
-  post("/api/preferences", changes).catch((e: unknown) => {
+  post("/api/preferences", changes).then(() => saved?.(), (e: unknown) => {
     toast(refusalOf(e)?.detail || "Couldn’t save that setting");
     void loadPrefs();
   });
@@ -88,6 +88,22 @@ export function pref<K extends keyof Prefs>(key: K): Store<Prefs[K]> {
 }
 
 export const singleKeys = pref("single_keys");
+
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+
+// Whether quiet hours cover this moment, by this computer's clock. A span that crosses midnight is that evening and the morning
+// after; one that starts where it ends covers nothing.
+export function quietNow(at: Date, p: Pick<Prefs, "quiet_hours" | "quiet_from" | "quiet_until">) {
+  if (!p.quiet_hours || p.quiet_from === p.quiet_until) return false;
+  const now = at.getHours() * 60 + at.getMinutes(), from = minutes(p.quiet_from), until = minutes(p.quiet_until);
+  return from < until ? now >= from && now < until : now >= from || now < until;
+}
+
+// Whether a desktop notification of this kind may go now. What else a person hears of it (the title's count, the pill) isn't asked.
+export function mayNotify(kind: "notify_new_mail" | "notify_meetings", at = new Date()) {
+  const p = prefs.get();
+  return p[kind] && !quietNow(at, p);
+}
 
 // As the page loads, once. What this browser still holds under its old keys goes to the server first, for what the server doesn't
 // say yet; only an answer from the server lets go of them, so a failed try comes round again on the next page load.

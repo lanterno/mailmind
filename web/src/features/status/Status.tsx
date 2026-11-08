@@ -6,6 +6,7 @@ import { Dialog, Popover } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
+import { mayNotify } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
 import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
@@ -185,7 +186,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
   const tell = useEffectEvent(() => {
     if (!key || told.has(key)) return;
     told.add(key);
-    if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    if (document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted" && mayNotify("notify_meetings", new Date(now))) {
       try {
         const n = new Notification(message, { body: [event && eventWhen(event, new Date(now))[0], event?.location].filter(Boolean).join(" · "), tag: `mailmind-soon-${key}` });
         n.onclick = () => {

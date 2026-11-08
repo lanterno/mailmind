@@ -2,6 +2,7 @@
 // rest, with a line from the AI on what came in since you last looked. The line never asks at the daily limit.
 import { get, post } from "../../lib/api/client";
 import { go, type ListSource, type Route } from "../../app/route";
+import { mayNotify } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { announce } from "../../lib/toast";
 
@@ -69,7 +70,7 @@ function tell(account: string, count: number, name: string) {
   }
   cameIn += count;
   showTitle();
-  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted" || !mayNotify("notify_new_mail")) return;
   try {
     const n = new Notification(`New mail · ${name}`, { body: `${count} new message${count > 1 ? "s" : ""}`, tag: `mailmind-${account}`, silent: false });
     n.onclick = () => {
