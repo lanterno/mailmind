@@ -28,7 +28,7 @@ class ReplyDrafts:
         self._mail = mail
 
     def draft(self, account: AccountId, thread_id: ThreadRef | None = None, pk: Pk | None = None, instruction: str = "",
-              tone: str = "balanced", me: str = "", feature: str = "draft") -> Result:
+              tone: str = prompts.DEFAULT_TONE, me: str = "", feature: str = "draft") -> Result:
         """Gathers a thread (thread_id) or a single message (pk).
         `feature` names the call in the usage ledger: "draft-ahead" when it is drafted ahead."""
         with self._uow.read() as c:
@@ -43,8 +43,8 @@ class ReplyDrafts:
 
         blocks, _omitted = self._context.gather(rows)
         subject = rows[0]["subject"] or "(no subject)"
-        tone_word = prompts.TONES.get(tone, prompts.TONES["balanced"])
-        instr = (prompts.REPLY_INSTRUCTED.replace("{instruction}", instruction.strip()[:400])
+        tone_word = prompts.TONES[tone] if tone in prompts.TONES else prompts.TONES[prompts.DEFAULT_TONE]
+        instr = (prompts.REPLY_INSTRUCTED.replace("{instruction}", instruction.strip()[:prompts.INSTRUCTION_MAX])
                  if (instruction or "").strip() else prompts.REPLY_UNINSTRUCTED)
         prompt = prompts.REPLY.fill(ctx=("thread" if thread_id else "message"), me=(me or "the user"),
                                     tone=tone_word, instr=instr, subject=subject, blocks="\n".join(blocks))

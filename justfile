@@ -96,11 +96,13 @@ check-web: _web-deps
     set -euo pipefail
     fresh="$(mktemp -d)"
     trap 'rm -rf "$fresh"' EXIT
-    {{just_executable()}} _api-types "$fresh/schema.gen.ts"
-    if ! cmp -s "$fresh/schema.gen.ts" web/src/lib/api/schema.gen.ts; then
-        echo "web/src/lib/api/schema.gen.ts doesn't match the routes' schemas: run just gen-api, and review the diff" >&2
-        exit 1
-    fi
+    {{just_executable()}} _api-types "$fresh"
+    for gen in schema.gen.ts limits.gen.ts; do
+        if ! cmp -s "$fresh/$gen" "web/src/lib/api/$gen"; then
+            echo "web/src/lib/api/$gen doesn't match the server's: run just gen-api, and review the diff" >&2
+            exit 1
+        fi
+    done
     cd web && npx tsc --noEmit && npx eslint --max-warnings 0 && npx vitest run --silent
 
 # ── web ───────────────────────────────────────────────────────────────────────
@@ -125,18 +127,20 @@ audit:
 build-web: _web-deps
     cd web && npx vite build
 
-# Write web/src/lib/api/schema.gen.ts, the API's types, from the routes' schemas: their OpenAPI document, through openapi-typescript
+# Write web/src/lib/api/schema.gen.ts, the API's types, from the routes' schemas: their OpenAPI document, through openapi-typescript;
+# and web/src/lib/api/limits.gen.ts, the limits the page holds a person to, from mailmind/http/page_limits.py
 gen-api: _web-deps
-    {{just_executable()}} _api-types web/src/lib/api/schema.gen.ts
+    {{just_executable()}} _api-types web/src/lib/api
 
-# The API's types, written to `out`: tests/openapi_doc.py writes the document, and openapi-typescript (web/gen-api) reads it
-_api-types out:
+# The API's types and the page's limits, written into `dir`: tests/openapi_doc.py writes the document and limits.gen.ts, and
+# openapi-typescript (web/gen-api) reads the document
+_api-types dir:
     #!/usr/bin/env bash
     set -euo pipefail
     doc="$(mktemp -d)"
     trap 'rm -rf "$doc"' EXIT
-    uv run python tests/openapi_doc.py "$doc/openapi.json"
-    web/gen-api/node_modules/.bin/openapi-typescript "$doc/openapi.json" -o "{{out}}" --default-non-nullable false
+    uv run python tests/openapi_doc.py "$doc/openapi.json" "{{dir}}/limits.gen.ts"
+    web/gen-api/node_modules/.bin/openapi-typescript "$doc/openapi.json" -o "{{dir}}/schema.gen.ts" --default-non-nullable false
 
 # ── mail ──────────────────────────────────────────────────────────────────────
 

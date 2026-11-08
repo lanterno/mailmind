@@ -8,7 +8,7 @@ import hashlib
 import json
 import mimetypes
 import re
-from typing import TypedDict
+from typing import Literal, TypedDict, get_args
 
 from mailmind.compose.domain import limits
 from mailmind.kernel.errors import Unreadable
@@ -17,7 +17,8 @@ from mailmind.content.mime import Parsed, decoded, parse
 from mailmind.kernel import addresses
 from mailmind.kernel.row import Row
 
-MODES = ("new", "reply", "replyall", "forward")
+type ComposeMode = Literal["new", "reply", "replyall", "forward"]     # what a composer is: a request's schema names it so
+MODES: tuple[ComposeMode, ...] = get_args(ComposeMode.__value__)
 REPLIES = ("reply", "replyall")
 PARTICIPANT = re.compile(r'[^\s<>,;"]+@[^\s<>,;"]+')
 ELSEWHERE = " Edit it in the app that made it."
@@ -116,7 +117,7 @@ def split_to_fit(text: str | None, record: Row, exact: bool, files: list[Resumed
     return split
 
 
-def mode_of(stored: str | None, in_reply_to: str | None) -> str:
+def mode_of(stored: str | None, in_reply_to: str | None) -> ComposeMode:
     """How a draft reopens. MailMind's own new drafts never carry an In-Reply-To, so one that does was written as a reply."""
     mode = stored if stored in MODES else "new"
     return "reply" if mode == "new" and in_reply_to else mode

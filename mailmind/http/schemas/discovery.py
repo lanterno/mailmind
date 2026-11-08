@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from mailmind.discovery.api import DocumentKind, ViewVerb
 from mailmind.http.schemas.common import Answer, QueryArgs, RequestBody
 
 
@@ -34,7 +35,7 @@ class ContactArgs(QueryArgs):
 
 
 class ViewChange(RequestBody):
-    verb: str | None = None                 # unknown to the use case is its `verb must be create|delete`
+    verb: ViewVerb | None = None            # left out is the use case's `verb must be create|delete`
     id: str | None = None
     name: str | None = None
     q: str | None = None
@@ -107,7 +108,7 @@ class Document(Answer):
     uid: int
     part_id: str
     filename: str
-    kind: str
+    kind: DocumentKind
     size: int
     account: str
     from_: str = Field(alias="from")

@@ -21,9 +21,9 @@ class Rewriter:
         text = (text or "").strip()
         if not text:
             raise Refused("nothing to rewrite")
-        instr = prompts.REWRITE_OPS.get(op)
-        if not instr:
+        if op not in prompts.REWRITE_OPS:
             raise Refused("unknown op")
+        instr = prompts.REWRITE_OPS[op]
         prompt = prompts.REWRITE.fill(instr=instr.replace("{lang}", (lang or "English")[:40]), text=text[:8000])
         try:
             obj = self._calls.call_claude_json(prompt, REWRITE_SCHEMA, feature="rewrite")

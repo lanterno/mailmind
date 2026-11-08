@@ -3,7 +3,9 @@ from typing import Literal
 
 from pydantic import Field
 
+from mailmind.assistant.api import DraftTone, PlanVerb, RewriteOp
 from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
+from mailmind.kernel.snoozed import SnoozePreset
 
 
 class SummarizeBody(NamesAMessage):
@@ -17,13 +19,13 @@ class DraftReplyBody(NamesAMessage):
     """What to reply to as a summary names it, and `account` says who replies, which may not be whose mail it is."""
     account: str | None = None
     thread_id: str | None = None
-    tone: str | None = None
+    tone: DraftTone | None = None
     instruction: str | None = None
 
 
 class RewriteBody(RequestBody):
     text: str | None = None
-    op: str | None = None                   # unknown to the use case is its `unknown op`
+    op: RewriteOp | None = None             # left out is the use case's `unknown op`
     lang: str | None = None
 
 
@@ -217,7 +219,7 @@ class DraftAheadReady(Answer):
 class Rewritten(Answer):
     ok: Literal[True]
     text: str
-    op: str
+    op: RewriteOp
 
 
 class AskSource(Answer):
@@ -250,9 +252,9 @@ class PlanSample(Answer):
 class PlanPreview(Answer):
     ok: Literal[True]
     intent: Literal["act"]
-    verb: str
+    verb: PlanVerb
     filter: str
-    snooze_preset: str
+    snooze_preset: SnoozePreset            # what a snooze waits for, and "tomorrow" for any other verb
     count: int
     cap: int
     capped: bool
@@ -270,7 +272,7 @@ class PlanIsASearch(Answer):
 
 class PlanCarriedOut(Answer):
     ok: Literal[True]
-    verb: str
+    verb: PlanVerb
     count: int
     failed: int
     gone: int

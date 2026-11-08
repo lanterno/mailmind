@@ -2,10 +2,13 @@
 and key blobs are excluded as non-documents."""
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 from mailmind.kernel.row import Row
+
+# Which kind of file a document is: an answer names it so, and the page's words for each are its own.
+type DocumentKind = Literal["pdf", "image", "doc", "sheet", "slide", "archive", "text", "other"]
 
 EXCLUDE = ("text/calendar", "application/ics", "pkcs7", "pgp-signature", "pgp-keys",
            "x-pkcs7", "application/x-pkcs7-signature")
@@ -16,7 +19,7 @@ def is_document(ct: str | None) -> bool:
     return not any(x in ct for x in EXCLUDE)
 
 
-def kind_of(ct: str | None, fn: str | None) -> str:
+def kind_of(ct: str | None, fn: str | None) -> DocumentKind:
     ct = (ct or "").lower(); fn = (fn or "").lower()
     ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
     if "pdf" in ct or ext == "pdf":

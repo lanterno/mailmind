@@ -14,6 +14,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import NotSent, Result, Search
 from mailmind.assistant.domain import action_plan, prompts
 from mailmind.kernel.errors import Refused, Unreachable
+from mailmind.kernel.snoozed import SNOOZE_PRESETS
 
 DO_PLAN_SCHEMA = {
     "type": "object",
@@ -25,10 +26,8 @@ DO_PLAN_SCHEMA = {
         # a query in the search-operator grammar ONLY — never SQL, never message ids.
         "filter": {"type": "string", "maxLength": 400},
         # the verb enum IS the allowlist; the model cannot emit anything else.
-        "verb": {"type": "string",
-                 "enum": ["archive", "trash", "junk", "read", "unread", "star", "snooze"]},
-        "snooze_preset": {"type": "string",
-                          "enum": ["later_today", "tomorrow", "weekend", "next_week"]},
+        "verb": {"type": "string", "enum": list(action_plan.VERBS)},
+        "snooze_preset": {"type": "string", "enum": list(SNOOZE_PRESETS)},
     },
 }
 

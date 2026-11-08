@@ -2,6 +2,7 @@
 from typing import Literal
 
 from mailmind.http.schemas.common import ACopy, Answer, Copy, Failure, Flag, Number, QueryArgs, RequestBody
+from mailmind.mailbox.api import FilingVerb, FlagName
 
 # ── what a request says ──────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ class MoveBody(ACopy):
 
 
 class FlagBody(ACopy):
-    flag: str | None = None                 # left out it's `flagged`; one of no use is the use case's `unknown flag`
+    flag: FlagName | None = None            # left out it's `flagged`
     on: Flag | None = None                  # left out, it sets
     mutation_id: str | None = None
 
@@ -76,7 +77,7 @@ class BulkRow(ACopy):
 
 
 class BulkFileBody(RequestBody):
-    verb: str | None = None
+    verb: FilingVerb | None = None
     rows: list[BulkRow] | None = None
     undo_group: str | None = None
     mutation_id: str | None = None

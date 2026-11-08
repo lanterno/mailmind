@@ -2,13 +2,14 @@
 sweep can be undone, so they stand whatever comes of the unsubscribe, which can't be and wants a preview's token."""
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from mailmind.curation.domain import rulebook
 
 SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
-SENDER: Final = "sender"
-DOMAIN: Final = "domain"
+type BlockScope = Literal["sender", "domain"]           # how far a block goes: a request's schema names it so
+SENDER: Final[BlockScope] = "sender"
+DOMAIN: Final[BlockScope] = "domain"
 REVERSIBLE: Final[Mapping[str, bool]] = {"block": True, "sweep": True, "unsubscribe": False}
 
 
@@ -32,7 +33,7 @@ def within_cap[T](read: Sequence[T]) -> tuple[Sequence[T], bool]:
 class CleanupPlan:
     """What a person confirmed for one sender. `scope` says how far the block goes: this sender or their whole domain."""
     from_addr: str
-    scope: str
+    scope: BlockScope
     do_unsubscribe: bool
     confirm_token: str
 

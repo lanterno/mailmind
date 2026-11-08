@@ -1,6 +1,7 @@
 """What the page asks of Compose, and what it answers."""
 from typing import Any, Literal
 
+from mailmind.compose.api import ComposeMode
 from mailmind.http.schemas.common import Answer, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 # As a person typed them: a string of addresses, or one for each chip (`addresses.parse_addr_list`, which judges each).
@@ -19,7 +20,7 @@ class Composition(RequestBody):
     """What a send and a save share (`Composing.spec`, `composition.composed`, `draft.composer_key`). `mode` left out is a new
     message, and `forward_attachments` left out takes the original's files along, so what was left out must stay out."""
     account: str | None = None
-    mode: str | None = None
+    mode: ComposeMode | None = None
     to: Recipients = None
     cc: Recipients = None
     bcc: Recipients = None
@@ -153,7 +154,7 @@ class DraftOpened(Answer):
     ok: Literal[True]
     draft_id: int
     version: int
-    mode: str
+    mode: ComposeMode
     account: str
     subject: str
     to: list[str]

@@ -1,11 +1,14 @@
 """An iMIP RSVP (METHOD:REPLY): what it says and how it's keyed. Total: nothing here raises."""
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from typing import Literal
 
 from mailmind.calendar.domain.invite import Invite, Party
 
-PARTSTAT = {"accept": "ACCEPTED", "decline": "DECLINED", "tentative": "TENTATIVE"}
-VERB = {"accept": "Accepted", "decline": "Declined", "tentative": "Tentatively accepted"}
+# What a person may answer an invite: a request's schema names it so, and each table holds every one.
+type RsvpDecision = Literal["accept", "decline", "tentative"]
+PARTSTAT: dict[RsvpDecision, str] = {"accept": "ACCEPTED", "decline": "DECLINED", "tentative": "TENTATIVE"}
+VERB: dict[RsvpDecision, str] = {"accept": "Accepted", "decline": "Declined", "tentative": "Tentatively accepted"}
 
 
 def name_for(invite: Invite, me_email: str, fallback: str) -> str:

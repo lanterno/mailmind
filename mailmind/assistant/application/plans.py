@@ -13,7 +13,8 @@ import threading
 import time
 from collections.abc import Iterable
 
-from mailmind.assistant.domain.action_plan import KEPT, TTL, ActionPlan
+from mailmind.assistant.domain.action_plan import KEPT, TTL, ActionPlan, PlanVerb
+from mailmind.kernel.snoozed import SnoozePreset
 
 
 class PlanBook:
@@ -21,7 +22,7 @@ class PlanBook:
         self._lock = threading.Lock()
         self._plans: dict[str, ActionPlan] = {}
 
-    def open(self, verb: str, preset: str | None, messages: Iterable[tuple[int, str]]) -> ActionPlan:
+    def open(self, verb: PlanVerb, preset: SnoozePreset | None, messages: Iterable[tuple[int, str]]) -> ActionPlan:
         plan = ActionPlan(secrets.token_urlsafe(24), verb, preset, tuple(messages), time.time() + TTL)
         with self._lock:
             self._plans[plan.id] = plan

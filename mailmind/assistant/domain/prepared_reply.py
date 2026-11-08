@@ -10,6 +10,7 @@ what is served: a draft someone already paid for stays good whatever the verdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from mailmind.assistant.domain import prompts
 from mailmind.kernel.ids import AccountId
 from mailmind.kernel.row import Row
 
@@ -72,7 +73,7 @@ def backing_off(stored: Row | None, now: int) -> bool:
 def default_shaped(instruction: str, tone: str) -> bool:
     """A reply asked for with no instruction and the default tone: what a prepared one is, so it can answer such a request
     and be kept from one. Anything else is a personal one-off."""
-    return not instruction.strip() and tone == "balanced"
+    return not instruction.strip() and tone == prompts.DEFAULT_TONE
 
 
 @dataclass

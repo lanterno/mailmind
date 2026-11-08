@@ -1,11 +1,12 @@
-"""`just gen-api`'s first step: the OpenAPI document of the app the routers make, which openapi-typescript turns into the page's types.
+"""`just gen-api`'s first step: the OpenAPI document of the app the routers make, which openapi-typescript turns into the page's types,
+and the page's limits (`mailmind.http.page_limits`) as a module of its own, web/src/lib/api/limits.gen.ts.
 
 It lives in tests/, beside what holds the routes to their schemas, and not in the package: the served app has no OpenAPI page, and
 the command line (`python -m mailmind`) must never load FastAPI. It builds the app as `front.build` does, over `web.ROUTERS`, but
 picks no SDK and starts nothing. Nothing it loads reads the data directory, and to be sure of that it points the settings at an
 empty one of its own. It sends nothing: an attempt to connect anywhere or run a program stops it.
 
-    python tests/openapi_doc.py <out.json>
+    python tests/openapi_doc.py <out.json> [<limits.gen.ts>]
 """
 import json
 import os
@@ -41,7 +42,16 @@ def _problems(doc):
     return doc
 
 
-def main(out):
+def limits_module():
+    """web/src/lib/api/limits.gen.ts: the limits the page holds a person to, each the server's, as one constant."""
+    from mailmind.http.page_limits import PAGE_LIMITS
+    said = "".join(f"  {name}: {value},\n" for name, value in PAGE_LIMITS.items())
+    return ("// Written by `just gen-api` from mailmind/http/page_limits.py: the limits the page holds a person to, each the server's\n"
+            "// own. Never edit it by hand: `just check-web` fails when it no longer matches.\n"
+            f"export const LIMITS = {{\n{said}}} as const;\n")
+
+
+def main(out, limits_out=None):
     for name in ("MAILMIND_HOME", "ANTHROPIC_API_KEY"):
         os.environ.pop(name, None)
     sys.addaudithook(_refuse)
@@ -49,13 +59,17 @@ def main(out):
         from mailmind.platform import settings
         settings.configure(settings.Settings(home=home))
         doc = document()
+        limits = limits_module()
         if os.listdir(home):
             sys.exit(f"writing the OpenAPI document left {os.listdir(home)} in the data directory")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=1, sort_keys=True)
         f.write("\n")
+    if limits_out:
+        with open(limits_out, "w", encoding="utf-8") as f:
+            f.write(limits)
 
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))     # the repo root, where the package is
-    main(sys.argv[1])
+    main(*sys.argv[1:3])

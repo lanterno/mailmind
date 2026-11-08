@@ -6,7 +6,7 @@ Expiry rules are separate from keep and block: a kept sender can also expire. Ke
 classifier shows, expiry how long it stays.
 """
 from collections.abc import Collection, Iterable, Iterator, Mapping
-from typing import Any, Final, Literal, TypedDict
+from typing import Any, Final, Literal, TypedDict, get_args
 
 from mailmind.kernel.row import Row
 
@@ -15,7 +15,9 @@ type RuleSets = Mapping[str, frozenset[str]]     # each of KEYS, as the classifi
 
 KEYS: tuple[ListKey, ...] = ("keep_senders", "block_senders", "keep_domains", "block_domains")
 EXPIRE: Final = "expire_hours"   # {sender-or-domain: hours}
-VERDICTS: Final = ("keep", "block")
+type Verdict = Literal["keep", "block"]                 # what a rule says of a sender or a domain
+VERDICTS: tuple[Verdict, ...] = get_args(Verdict.__value__)
+type RuleChange = Verdict | Literal["remove"]          # what a request may ask of one: a request's schema names it so
 _LISTS: dict[tuple[str, bool], ListKey] = {("keep", False): "keep_senders", ("block", False): "block_senders",
                                            ("keep", True): "keep_domains", ("block", True): "block_domains"}
 
@@ -106,7 +108,7 @@ def keep_ruled(addr: str | None, rules: Mapping[str, Collection[str]]) -> bool:
     return addr in rules["keep_senders"] or domain_listed(addr.partition("@")[2], rules["keep_domains"])
 
 
-def add(rules: Rules, token: str, verdict: str) -> ListKey:
+def add(rules: Rules, token: str, verdict: Verdict) -> ListKey:
     """Put `token` under `verdict` ('keep' or 'block') and take it out of the opposite one, so a token is
     never in both. Returns the list it went in."""
     domain = is_domain(token)

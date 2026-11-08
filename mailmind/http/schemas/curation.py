@@ -3,18 +3,19 @@ from typing import Literal
 
 from pydantic import Field
 
+from mailmind.curation.api import BlockScope, RuleChange
 from mailmind.http.schemas.common import Answer, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 
 class RuleBody(NamesAMessage):
     """A block trashes the copy `key` and `folder` name too, if it is still there."""
     token: str | None = None
-    verdict: str | None = None              # anything but keep, block or remove is the use case's `msg`
+    verdict: RuleChange | None = None       # left out is the use case's `verdict must be keep|block|remove`
 
 
 class CleanupBody(RequestBody):
     from_addr: str | None = None
-    block_scope: str | None = None          # only "domain" widens a block
+    block_scope: BlockScope | None = None   # left out is the sender
     do_unsubscribe: Flag | None = None
     confirm_token: str | None = None        # the preview's, as it gave it
     undo_group: str | None = None
@@ -153,7 +154,7 @@ class CleanedUp(Answer):
     status: str
     method: str
     blocked_token: str
-    block_scope: str
+    block_scope: BlockScope
     swept: int
     sweep_failed: int
     sweep_queued: int

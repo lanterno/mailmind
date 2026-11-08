@@ -6,9 +6,11 @@ they always appear, can't be deleted, and are never written to disk.
 """
 import secrets
 from collections.abc import Iterable
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from mailmind.kernel.parsed import is_list, is_object
+
+type ViewVerb = Literal["create", "delete"]          # what a request may do to the views: its schema names it so
 
 
 class View(TypedDict):

@@ -15,7 +15,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
-from mailmind.mailbox.domain import command
+from mailmind.mailbox.domain import command, filing
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -33,7 +33,7 @@ _NOT_FILED = (NotFound, Conflict)    # what filing one message raises: it is whe
 
 class Filing:
     PENDING_WAIT = 15       # seconds the tray's Discard waits for a try at the change to end
-    BULK_MAX = 500          # rows one request may file: the page sends more as more requests, under one undo group
+    BULK_MAX = filing.BULK_MAX
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, commands: MailCommands, ingest: Ingest,
                  undo: Undo, stats: LiveStats, folders: Folders, attention: Attention):
@@ -150,9 +150,7 @@ class Filing:
         pk = as_int(body.get("pk"))
         if pk is None:
             raise Refused("bad request")
-        if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
-            # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
-            # request's: \Deleted from here would bypass Trash and undo.
+        if path == "/api/flag" and body.get("flag", "flagged") not in filing.FLAG_NAMES:
             raise Refused("unknown flag")
         if path in ("/api/seen", "/api/flag"):
             flags = ({"seen": bool(body.get("seen", True))} if path == "/api/seen"
@@ -211,7 +209,7 @@ class Filing:
         a copy that is no longer there among them, and is `partial` if some were. When no row was, it raises what the first
         message did."""
         verb, rows = body.get("verb"), body.get("rows")
-        if verb not in ("archive", "trash", "junk") or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
+        if verb not in filing.FILING_VERBS or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
         wanted: list[tuple[tuple[MessageKey, FolderName, int | None], bool]] = []
         for one in rows:

@@ -6,6 +6,7 @@ tests/unit/assistant/test_prompts.py holds the two together.
 """
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 _SLOT = re.compile(r"\{([a-z]+)\}")
 
@@ -111,12 +112,18 @@ Subject: {subject}
 Conversation (oldest first):
 {blocks}
 """)
-TONES = {
+# The tones a reply may be drafted in, and the ways a text may be rewritten: what a request may name, as `DraftTone` and
+# `RewriteOp` in its schema, so the page has them as types and keeps only its words for each. Each table holds every member,
+# which tests/unit/http/test_closed_sets.py holds it to.
+type DraftTone = Literal["brief", "balanced", "warm", "formal"]
+DEFAULT_TONE: DraftTone = "balanced"
+TONES: dict[DraftTone, str] = {
     "brief": "brief and to-the-point",
     "balanced": "clear, friendly and professional",
     "warm": "warm and personable",
     "formal": "polished and formal",
 }
+INSTRUCTION_MAX = 400          # how much of what a person says a reply should say is read: the page holds them to it too
 REPLY_INSTRUCTED = 'Follow this instruction for the reply: "{instruction}".'
 REPLY_UNINSTRUCTED = "Write a helpful, context-appropriate reply that moves the conversation forward."
 
@@ -128,7 +135,8 @@ REWRITE = Template("rewrite", 2, """You are an email-writing assistant, working 
 Text:
 {text}
 """)
-REWRITE_OPS = {
+type RewriteOp = Literal["shorten", "elaborate", "formal", "friendly", "fix", "translate"]
+REWRITE_OPS: dict[RewriteOp, str] = {
     "shorten": "Make it noticeably shorter and tighter while keeping every key point.",
     "elaborate": "Expand it with helpful detail and clearer structure, without padding.",
     "formal": "Rewrite in a polished, professional, formal tone.",

@@ -1,6 +1,7 @@
 """What the page asks of Calendar, and what it answers."""
 from typing import Literal
 
+from mailmind.calendar.api import RsvpDecision
 from mailmind.http.schemas.common import Answer, Number, RequestBody
 
 
@@ -9,14 +10,14 @@ class RsvpBody(RequestBody):
     key: Number
     folder: str | None = None
     uid: Number | None = None
-    decision: str | None = None
+    decision: RsvpDecision | None = None    # left out is the use case's `bad decision`
 
 
 class RsvpQueued(Answer):
     ok: Literal[True]
     outbox_id: int
     queued: bool
-    decision: str
+    decision: RsvpDecision
     organizer: str
     summary: str
 

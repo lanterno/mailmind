@@ -2,6 +2,7 @@
 from typing import Literal
 
 from mailmind.http.schemas.common import ACopy, Answer, Flag, NamesAMessage, Number
+from mailmind.kernel.snoozed import SnoozePreset
 
 
 class NamesAThread(NamesAMessage):
@@ -18,7 +19,7 @@ class NamesThreadOrMessages(NamesAThread):
 
 
 class SnoozeBody(NamesThreadOrMessages):
-    preset: str | None = None               # unknown to the use case is its `bad snooze time`
+    preset: SnoozePreset | None = None
     until: Number | str | None = None       # seconds, or an ISO time
     undo_group: str | None = None
 

@@ -16,7 +16,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
 from mailmind.assistant.application.reply_draft import ReplyDrafts
-from mailmind.assistant.domain import fingerprint, prepared_reply
+from mailmind.assistant.domain import fingerprint, prepared_reply, prompts
 from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.ids import AccountId, Pk, ThreadRef
 from mailmind.kernel.parsed import as_int, required_int
@@ -231,8 +231,8 @@ class PreparedReplies:
         account = body.get("account")
         thread_id = body.get("thread_id")
         pk = None if body.get("pk") is None else Pk(required_int(body["pk"]))
-        tone = str(body.get("tone") or "balanced")[:16]
-        instruction = str(body.get("instruction") or "")[:400]
+        tone = str(body.get("tone") or prompts.DEFAULT_TONE)[:16]
+        instruction = str(body.get("instruction") or "")[:prompts.INSTRUCTION_MAX]
         default_shape = prepared_reply.default_shaped(instruction, tone)
         row: Row | None = None
         fp: str | None = None

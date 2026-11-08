@@ -6,11 +6,16 @@ contexts carry them out. Whether a filter narrows, and whether what it reaches i
 """
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, get_args
+
+from mailmind.kernel.snoozed import SNOOZE_PRESETS, SnoozePreset
 
 TTL = 600            # seconds a preview stays good for
 KEPT = 16            # plans held at a time, the newest
-VERBS = frozenset({"archive", "trash", "junk", "read", "unread", "star", "snooze"})
+# What a command may do, the allowlist: the plan's schema offers the model these and no others, and an answer names one as
+# `PlanVerb`, so the page has them as a type.
+type PlanVerb = Literal["archive", "trash", "junk", "read", "unread", "star", "snooze"]
+VERBS: tuple[PlanVerb, ...] = get_args(PlanVerb.__value__)
 CAP = 500            # hard ceiling on how many messages one command may touch
 TRASH_CAP = 200      # trash and junk are extra-dangerous, so a lower ceiling
 SAMPLE = 8           # how many a preview shows
@@ -23,8 +28,8 @@ ALREADY = {"archive": frozenset({"archive", "all"}), "trash": frozenset({"trash"
 @dataclass(frozen=True)
 class ActionPlan:
     id: str
-    verb: str
-    preset: str | None
+    verb: PlanVerb
+    preset: SnoozePreset | None
     messages: tuple[tuple[int, str], ...]         # (message key, folder)
     expires: float
 
@@ -37,16 +42,18 @@ def filter_told(said: Mapping[str, Any]) -> str:
     return str(said.get("filter") or "").strip()[:FILTER_MAX]
 
 
-def verb_told(said: Mapping[str, Any]) -> str | None:
+def verb_told(said: Mapping[str, Any]) -> PlanVerb | None:
     """The verb a model's plan acts with, or None when the plan isn't a clean act on the allowlist, which degrades to a
     search: it acts on nothing."""
     verb = said.get("verb")
     return verb if said.get("intent") == "act" and verb in VERBS else None
 
 
-def preset_told(said: Mapping[str, Any], verb: str) -> str:
-    """What a snooze waits for: only a snooze has one to name, and one that names none waits until tomorrow."""
-    return (said.get("snooze_preset") if verb == "snooze" else None) or "tomorrow"
+def preset_told(said: Mapping[str, Any], verb: str) -> SnoozePreset:
+    """What a snooze waits for: only a snooze has one to name, and one that names none, or none there is, waits until
+    tomorrow, as its preview then says."""
+    preset = said.get("snooze_preset") if verb == "snooze" else None
+    return preset if preset in SNOOZE_PRESETS else "tomorrow"
 
 
 def cap_of(verb: str) -> int:
