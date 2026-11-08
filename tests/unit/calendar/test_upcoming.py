@@ -376,7 +376,7 @@ class _FakeSession:
     def __init__(self, raws):
         self.raws = raws
 
-    def headers(self, uids, fields, gmail_thread=False):
+    def headers(self, uids, fields, gmail_thread=False, gmail_labels=False):
         return [Headers(int(u), frozenset(), self.raws[int(u)].split(b"\n\n")[0] + b"\n\n") for u in uids]
 
     def body(self, uid):

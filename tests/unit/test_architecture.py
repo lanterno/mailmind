@@ -18,7 +18,7 @@ OWNER = {
     "compose": ("drafts", "draft_journal", "outbox"),
     "curation": ("sender_unsub", "unsub_log"),
     "discovery": ("msg_fts",),
-    "mailbox": ("attachments", "bodies", "message_identity", "message_recipients", "messages", "mail_commands", "sync_state", "thread_links"),
+    "mailbox": ("attachments", "bodies", "message_identity", "message_labels", "message_recipients", "messages", "mail_commands", "sync_state", "thread_links"),
     "platform": ("undo_entries",),
 }
 
