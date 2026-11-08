@@ -65,7 +65,7 @@ def test_unset_each_borrow_is_a_fresh_session_logged_out_after(pool, opened, mon
     assert first is not second and opened == [first, second]
     assert (first.logouts, first.noops, second.logouts) == (1, 0, 1)
     assert pool.stats() == {"enabled": False, "target": "",
-                            "counters": {"created": 0, "reused": 0, "validate_fail": 0, "discard_dirty": 0}, "slots": {}}
+                            "counters": {"created": 0, "reused": 0, "validate_fail": 0, "discard_dirty": 0}, "slots": []}
 
 
 def test_unset_a_borrow_that_raises_is_logged_out_too(pool, opened, monkeypatch):
@@ -89,7 +89,7 @@ def test_which_accounts_it_keeps_a_connection_for(pool, monkeypatch, setting, ad
 def test_an_off_word_or_a_typo_keeps_nothing_and_says_it_is_off(pool, opened, monkeypatch, setting):
     monkeypatch.setenv("MAILMIND_POOL", setting)
     assert borrow(pool, ADA) is not borrow(pool, ADA) and borrow(pool, BRIDGE) is not borrow(pool, BRIDGE)
-    assert (pool.stats()["enabled"], pool.stats()["target"], pool.stats()["slots"]) == (False, setting, {})
+    assert (pool.stats()["enabled"], pool.stats()["target"], pool.stats()["slots"]) == (False, "", [])
 
 
 def test_a_kept_session_is_checked_before_each_reuse_and_stays_logged_in(pool, opened, monkeypatch):
@@ -139,7 +139,7 @@ def test_a_borrow_that_raises_poisons_the_slot(pool, opened, monkeypatch):
         with pool.borrow({"email": ADA}):
             raise ValueError("a read went wrong")
     assert first.logouts == 1
-    assert pool.stats()["slots"][ADA] == {"open": False, "uses": 2, "age": None}
+    assert pool.stats()["slots"] == [{"open": False, "uses": 2, "age": None}]
     assert borrow(pool) is not first
     assert pool.stats()["counters"] == {"created": 2, "reused": 1, "validate_fail": 0, "discard_dirty": 1}
 
@@ -149,9 +149,9 @@ def test_stats_say_how_each_slot_stands(pool, monkeypatch, clock):
     borrow(pool)
     borrow(pool)
     clock.shift(timedelta(seconds=7.5))
-    assert pool.stats() == {"enabled": True, "target": ADA,
+    assert pool.stats() == {"enabled": True, "target": "listed",
                             "counters": {"created": 1, "reused": 1, "validate_fail": 0, "discard_dirty": 0},
-                            "slots": {ADA: {"open": True, "uses": 2, "age": 7.5}}}
+                            "slots": [{"open": True, "uses": 2, "age": 7.5}]}
 
 
 def test_close_all_logs_each_kept_session_out(pool, opened, monkeypatch):
@@ -160,7 +160,7 @@ def test_close_all_logs_each_kept_session_out(pool, opened, monkeypatch):
     borrow(pool, BRIDGE)
     pool.close_all()
     assert [s.logouts for s in opened] == [1, 1]
-    assert {e: s["open"] for e, s in pool.stats()["slots"].items()} == {ADA: False, BRIDGE: False}
+    assert [s["open"] for s in pool.stats()["slots"]] == [False, False]
     pool.close_all()
     assert [s.logouts for s in opened] == [1, 1]
 

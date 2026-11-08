@@ -33,9 +33,19 @@ def test_a_pool_in_use_shows_its_slots(app, monkeypatch):
     with mailbox.pool.borrow(accounts.get(w.ADA)):
         pass
     r = app.get("/api/debug/pool")
-    assert (r.json["ok"], r.json["enabled"], r.json["target"], r.json["counters"]["created"]) == (True, True, w.ADA, 1)
-    assert r.json["slots"][w.ADA]["open"] is True and r.json["slots"][w.ADA]["uses"] == 1
+    assert (r.json["ok"], r.json["enabled"], r.json["target"], r.json["counters"]["created"]) == (True, True, "listed", 1)
+    [slot] = r.json["slots"]
+    assert slot["open"] is True and slot["uses"] == 1
+    assert "example.test" not in json.dumps(r.json)
     mailbox.pool.close_all()
+
+
+@pytest.mark.parametrize("given, target", [("1", "all"), ("all", "all"), (w.ADA, "listed"), ("", "")])
+def test_the_pool_says_how_it_was_set_and_never_who(app, monkeypatch, given, target):
+    monkeypatch.setenv("MAILMIND_POOL", given)
+    answer = app.get("/api/debug/pool").json
+    assert (answer["target"], answer["enabled"]) == (target, bool(target))
+    assert "example.test" not in json.dumps(answer)
 
 
 def test_a_ledger_that_cant_be_read_shows_as_no_spending_known(app, monkeypatch):
