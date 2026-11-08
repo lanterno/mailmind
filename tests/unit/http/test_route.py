@@ -22,7 +22,7 @@ from mailmind.assistant.application import governor
 from mailmind.http import shared
 from mailmind.http.app import THREADS, create_app
 from mailmind.http.route import Route, router
-from mailmind.http.schemas.common import Answer, Failure, Flag, NoBody, Number, QueryArgs, RequestBody, answers
+from mailmind.http.schemas.common import Answer, Failure, Flag, NoBody, NotJson, Number, QueryArgs, RequestBody, answers
 from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.platform import profile, settings
 from mailmind.platform.db import txguard
@@ -555,6 +555,21 @@ def test_a_union_of_answers_reads_as_one(data_dir):
         return {"ok": True, "got": {}}
     schema = get_openapi(title="MailMind", version="0", routes=create_app(routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
     assert len(schema["paths"]["/api/either"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["anyOf"]) == 2
+
+
+def test_an_answer_that_isnt_json_says_so(data_dir):
+    """Its 200 holds no model and no media type, so the page's types give it no JSON. What it answers when it can't is still JSON."""
+    r = router()
+
+    @r.get("/api/file", responses=answers(NotJson))
+    def file():
+        return Response(b"bytes", headers={"Content-Type": "application/octet-stream"})
+    route = r.routes[0]
+    assert "model" not in route.responses[200] and route.response_class is Response
+    schema = get_openapi(title="MailMind", version="0", routes=create_app(routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
+    said = schema["paths"]["/api/file"]["get"]["responses"]
+    assert "content" not in said["200"] and "NotJson" not in schema["components"]["schemas"]
+    assert said["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/Failure")
 
 
 def test_a_failure_says_nothing_it_doesnt_name():

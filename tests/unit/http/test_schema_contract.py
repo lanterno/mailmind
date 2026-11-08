@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import route_tables
 import schema_contract
 from mailmind.http.route import router
-from mailmind.http.schemas.common import Answer, Failure, NoBody, QueryArgs, RequestBody, answers
+from mailmind.http.schemas.common import Answer, Failure, NoBody, NotJson, QueryArgs, RequestBody, answers
 
 
 class Said(Answer):
@@ -51,6 +51,17 @@ def test_a_union_takes_either():
     assert schema_contract.fault_in(route, 200, {"ok": False, "msg": "no"}) is None
     assert schema_contract.fault_in(route, 200, {"ok": True, "count": 1}) is None
     assert schema_contract.fault_in(route, 200, {"ok": True}) is not None
+
+
+def test_json_from_a_route_that_says_it_answers_none_is_a_fault():
+    files = router()
+
+    @files.get("/api/file", responses=answers(NotJson))
+    def file():
+        return {}
+    route = files.routes[0]
+    assert "isn't JSON" in schema_contract.fault_in(route, 200, {"ok": True})
+    assert schema_contract.fault_in(route, 404, {"ok": False, "error": "not found"}) is None
 
 
 def test_each_failure_a_route_shares_has_a_model():
@@ -105,6 +116,6 @@ def test_a_route_says_what_it_takes_and_answers(route):
     def is_answer(model):
         members = getattr(model, "__args__", (model,))
         return all(issubclass(member, Answer) for member in members)
-    assert 200 in route.responses and all(is_answer(said["model"]) for said in route.responses.values())
+    assert 200 in route.responses and all(is_answer(said["model"]) for said in route.responses.values() if "model" in said)
     if "POST" in route.methods:
         assert issubclass(body_model(route), RequestBody)

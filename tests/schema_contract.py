@@ -33,7 +33,9 @@ def fault_in(route, status, answer):
     declared = route.responses.get(status)
     if declared is None:
         return f"{route.path} answered {status}, which it doesn't declare: {answer!r}"
-    model = declared["model"]
+    model = declared.get("model")
+    if model is None:
+        return f"{route.path} answered {status} with JSON, which it says isn't JSON: {answer!r}"
     try:
         _adapters.setdefault(model, TypeAdapter(model)).validate_python(answer, strict=True)
     except ValidationError as e:
