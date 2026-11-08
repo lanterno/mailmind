@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
-import { composing, isMine, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
+import { composing, guardLine, isMine, myAddresses, redirectOf, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
 import { fileSize } from "../../lib/text";
@@ -14,6 +14,7 @@ import { armDwell, cancelDwell, markSeen } from "./actions";
 import { AiCard, summarize } from "./AiCard";
 import { useBody, useThread, warmMembers, type Opened } from "./data";
 import { MailFrame, type MailBody } from "./MailFrame";
+import { leavesOrganisation } from "./linkRisk";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
 import { snoozeAsk } from "../attention";
@@ -158,6 +159,15 @@ function ExternalBar({ d, blocked }: { d: Body; blocked: number }) {
   );
 }
 
+// A Reply-To that would take an answer out of the sender's organisation. It is drawn here, above the frame, so nothing in the mail
+// can draw over it or hide it. The composer asks a wider question, where a reply goes, of any address but the sender's, and shares
+// only its reading of the headers (`redirectOf`) and its words: here it has to be worth saying before anyone has decided to reply.
+function ReplyGoesElsewhere({ d, mine }: { d: Body; mine: ReadonlySet<string> }) {
+  const r = redirectOf(d.reply_to, d.from_addr);
+  if (!r || d.is_draft || isMine(r.to, mine) || isMine(r.sender, mine) || !leavesOrganisation(r.to, r.sender)) return null;
+  return <div className="rd-replyto" role="note"><Icon name="alert" /> {guardLine({ key: "redirect", ...r }).text}</div>;
+}
+
 function Invite({ d }: { d: Body }) {
   const v = d.invite;
   if (!v) return null;
@@ -221,7 +231,7 @@ function Fetching({ whole }: { whole: boolean }) {
   );
 }
 
-function MailContent({ copy, minHeight, pad, whole = false }: { copy: Copy; minHeight: number; pad: number; whole?: boolean }) {
+function MailContent({ copy, mine, minHeight, pad, whole = false }: { copy: Copy; mine: ReadonlySet<string>; minHeight: number; pad: number; whole?: boolean }) {
   const [images, setImages] = useState(false);
   const { data: d, error, isError, refetch } = useBody(copy);
   const gone = refusalOf(error);     // no such message: it says so, and a retry wouldn't find it either
@@ -232,6 +242,7 @@ function MailContent({ copy, minHeight, pad, whole = false }: { copy: Copy; minH
   return (
     <>
       <ExternalBar d={d} blocked={blocked} />
+      <ReplyGoesElsewhere d={d} mine={mine} />
       <Invite d={d} />
       {blocked > 0 && (
         <div className="rd-imgbar">
@@ -298,14 +309,14 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
         </>
       )}
       <AiCard target={m.target()} row={row} />
-      <MailContent key={copyId(copy)} copy={copy} minHeight={400} pad={30} whole />
+      <MailContent key={copyId(copy)} copy={copy} mine={mine} minHeight={400} pad={30} whole />
       {quick && <QuickReplies to={copy} />}
       <UpNext m={m} canArchive={!isDraft} />
     </>
   );
 }
 
-function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok: true }>["items"][number]; startsOpen: boolean }) {
+function Member({ m, mine, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok: true }>["items"][number]; mine: ReadonlySet<string>; startsOpen: boolean }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(startsOpen);
   const [wasOpened, setWasOpened] = useState(startsOpen);
@@ -331,7 +342,7 @@ function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok:
         <span className="tsnip">{m.snippet}</span>
       </button>
       {/* Kept once opened, so closing and opening again doesn't reload the frame. */}
-      <div className="tmsg-body">{wasOpened && <MailContent copy={copyOf(m)} minHeight={300} pad={24} />}</div>
+      <div className="tmsg-body">{wasOpened && <MailContent copy={copyOf(m)} mine={mine} minHeight={300} pad={24} />}</div>
     </div>
   );
 }
@@ -342,7 +353,8 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
   const latest = items.find((x) => x.key === d?.reply_key);
   const replyTo = latest ? copyOf(latest) : null;
   useDraftAhead(replyTo, false, m.folder === "__muted__");
-  const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
+  const mine = myAddresses(m.digest);
+  const quick = latest && canQuickReply(latest.from_addr, mine, { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
   // The members still closed, made ready: the last opens by itself.
   const closed = items.slice(0, -1);
   const closedNow = closed.map(copyId).join("\n");   // by value: the array itself is new each render
@@ -372,7 +384,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />
           <div className="thread" id="thread">
-            {items.map((x, i) => <Member key={copyId(x)} m={x} startsOpen={i === items.length - 1} />)}
+            {items.map((x, i) => <Member key={copyId(x)} m={x} mine={mine} startsOpen={i === items.length - 1} />)}
           </div>
           {quick && replyTo && <QuickReplies to={replyTo} />}
           <UpNext m={m} canArchive />

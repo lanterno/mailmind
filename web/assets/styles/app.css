@@ -305,6 +305,10 @@
   .rd-imgbar{background:var(--panel-hi);border:none;border-left:3px solid var(--line-hi);border-radius:var(--r-sm);
     padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:var(--soft);display:flex;align-items:center;gap:10px}
   .rd-imgbar button{background:var(--primary);color:var(--on-primary);border:none;border-radius:var(--r-xs);font:inherit;font-size:12px;font-weight:600;padding:5px 11px;cursor:pointer;flex:none}
+  /* drawn by the page, above the frame, so a message can neither forge this warning nor hide it */
+  .rd-replyto{background:var(--panel-hi);border-left:3px solid var(--err);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:12px;
+    font-size:12.5px;color:var(--soft);display:flex;align-items:center;gap:10px;overflow-wrap:anywhere}
+  .rd-replyto .ico{color:var(--err);flex:none}
   /* parent-rendered external-email delimiter + protection shield — sender content can't spoof/erase it.
      The ONE uppercase element left in the app: scarcity makes the trust signal pop. */
   .rd-extbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:9px;font-size:11px;

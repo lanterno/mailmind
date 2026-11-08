@@ -1,6 +1,12 @@
 // Links in a sandboxed body are inert, so the parent takes each click and warns on a look-alike before it opens one.
 // Pure: it reads the link's href and text, and nothing else.
-const registrable = (h: string) => h.split(".").slice(-2).join(".");
+// The domain an organisation registers: the last two labels of a host, or three under a country's own second level (co.uk).
+const SECOND_LEVEL = new Set(["ac", "co", "com", "edu", "go", "gob", "gouv", "gov", "k12", "ltd", "me", "mil", "ne", "net", "nom", "or", "org", "plc", "sch"]);
+export function registrable(host: string): string {
+  const labels = host.toLowerCase().split(".");
+  const [second, top] = labels.slice(-2);
+  return labels.slice(top?.length === 2 && second && SECOND_LEVEL.has(second) ? -3 : -2).join(".");
+}
 
 // The href's own host, and the host of any http(s) URL inside it: legitimate redirectors put it there.
 export function linkHosts(href: string): string[] {
@@ -19,6 +25,15 @@ export function linkHosts(href: string): string[] {
 const hostHolds = (claimed: string, hosts: string[]) => hosts.some((h) => h === claimed || h.endsWith(`.${claimed}`) || claimed.endsWith(`.${h}`));
 
 const SENSITIVE = /\b(sign[ -]?in|log[ -]?in|verify|confirm|account|password|reset|unlock|billing|invoice|payment|suspend)\b/i;
+
+const domainOf = (addr: string) => addr.slice(addr.lastIndexOf("@") + 1).trim().replace(/\.$/, "");
+
+// Whether an answer to `sender` would go to `replyTo` outside the sender's organisation: a subdomain of it, or another under the
+// domain it registers, is still theirs.
+export function leavesOrganisation(replyTo: string, sender: string): boolean {
+  const to = domainOf(replyTo), from = domainOf(sender);
+  return Boolean(to && from) && registrable(to) !== registrable(from);
+}
 
 // Why a link deserves a warning, in words, or null.
 export function linkRisk(href: string, text: string, senderDomain: string | undefined): string | null {
