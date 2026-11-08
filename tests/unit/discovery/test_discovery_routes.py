@@ -2,6 +2,7 @@
 from urllib.parse import quote
 
 import problems
+from fixtures import world as w
 from mailmind.bootstrap import assistant, discovery
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Refused
@@ -96,6 +97,13 @@ def test_a_card_for_what_cant_be_an_address(app):
 def test_a_card_for_who_you_know(app):
     r = app.get("/api/contact?addr=lin@example.test")
     assert (r.status, r.json["ok"], r.json["addr"]) == (200, True, "lin@example.test")
+
+
+def test_a_message_in_two_folders_counts_once_on_the_card(app, world):
+    """Gmail's All Mail holds a copy of everything: the card counts messages, not copies."""
+    world.deliver(w.ADA, "Archive", w.raw("ada-inbox-05-receipt.eml"), flags=(w.ANSWERED,))
+    r = app.get("/api/contact?addr=orders@thimble.example.test")
+    assert (r.json["count"], r.json["replied"]) == (1, 1), r.json
 
 
 # ── saved views ──────────────────────────────────────────────────────────────────────────────────
