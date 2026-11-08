@@ -154,6 +154,36 @@ def test_moving_or_cancelling_one_occurrence_leaves_the_series(data_dir):
         ("Standup (moved)", "2026-10-31T12:00"), ("Standup", "2026-11-13T12:00")]
 
 
+def _revised(uid, start, sequence, summary="Studio sync", **kw):
+    return _ics(uid, start, summary=summary, **kw).replace("END:VEVENT", f"SEQUENCE:{sequence}\r\nEND:VEVENT")
+
+
+def test_a_later_revision_counts_though_a_copy_of_an_older_one_came_after_it(data_dir):
+    wins = _msg(_revised("r", NOW + timedelta(days=3), 2, summary="Moved here"), ts=NOW - timedelta(days=3))
+    _msg(_revised("r", NOW + timedelta(days=1), 1, summary="Where it was"), ts=NOW - timedelta(days=1))
+    items = _up()
+    assert [(x["summary"], x["start"]) for x in items] == [("Moved here", "2026-11-02T12:00")] and _named(items[0]) == w.copy_of(wins)
+
+
+def test_the_same_revision_goes_by_the_newest_message(data_dir):
+    _msg(_revised("r", NOW + timedelta(days=3), 2, summary="Older copy"), ts=NOW - timedelta(days=3))
+    _msg(_revised("r", NOW + timedelta(days=1), 2, summary="Newer copy"), ts=NOW - timedelta(days=1))
+    assert [x["summary"] for x in _up()] == ["Newer copy"]
+
+
+def test_a_stale_invite_doesnt_bring_back_what_a_later_revision_cancelled(data_dir):
+    _msg(_revised("r", NOW + timedelta(days=3), 3, method="CANCEL", status="CANCELLED"), ts=NOW - timedelta(days=3))
+    _msg(_revised("r", NOW + timedelta(days=3), 1), ts=NOW - timedelta(days=1))
+    assert _up() == []
+
+
+def test_a_revision_is_weighed_within_one_occurrence(data_dir):
+    _msg(_weekly(), ts=NOW - timedelta(days=20))
+    _msg(_one(NOW + timedelta(days=2), NOW, summary="Revised").replace("END:VEVENT", "SEQUENCE:2\r\nEND:VEVENT"), ts=NOW - timedelta(days=4))
+    _msg(_one(NOW + timedelta(days=1), NOW, summary="First go").replace("END:VEVENT", "SEQUENCE:1\r\nEND:VEVENT"), ts=NOW - timedelta(days=3))
+    assert [(x["summary"], x["start"]) for x in _up()] == [("Revised", "2026-11-01T12:00"), ("Standup", "2026-11-06T12:00")]
+
+
 def test_a_stored_invite_from_outlook_shows_at_its_own_hour_in_your_zone(machine_zone, data_dir):
     start = NOW + timedelta(days=1)
     in_berlin = start.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/Berlin"))

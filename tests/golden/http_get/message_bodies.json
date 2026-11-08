@@ -83,6 +83,7 @@
     "recurrence": "",
     "recurrence_id": "",
     "rrule": "",
+    "sequence": 0,
     "start_iso": "2026-11-03T14:00:00+01:00",
     "status": "CONFIRMED",
     "summary": "Design review",

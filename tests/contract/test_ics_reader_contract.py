@@ -66,6 +66,8 @@ GARBAGE = {
     "only-a-name": event("ATTENDEE;CN=", "ORGANIZER;CN=\"unterminated:mailto:x"), "valarm-broken": event("DTSTART:20261102T100000", "BEGIN:VALARM", "TRIGGER:x", "END:VALARM"),
     "year-1": event("DTSTART:00010101T000000Z"), "year-9999": event("DTSTART:99991231T235959Z", "RRULE:FREQ=DAILY"),
     "year-0": event("DTSTART:00000101T000000"),
+    "sequence-letters": event("DTSTART:20261102T100000", "SEQUENCE:later"), "sequence-empty": event("DTSTART:20261102T100000", "SEQUENCE:"),
+    "sequence-negative": event("DTSTART:20261102T100000", "SEQUENCE:-3"), "sequence-past-any-int": event("DTSTART:20261102T100000", "SEQUENCE:" + "9" * 5000),
 }
 
 
@@ -88,7 +90,7 @@ def test_a_broken_invite_raises_nothing_when_asked_when_it_next_happens(inv):
 
 
 _LINES = FULL + [r"UID:x\ny", r"ORGANIZER;CN=a^nb:mailto:c\nd@example.test", r"ATTENDEE;CN=a^nb:mailto:ada@example.test", r"SUMMARY:a\nb", r"LOCATION:a\,b",
-                 "DTSTART;TZID=W. Europe Standard Time:20261005T100000"]
+                 "DTSTART;TZID=W. Europe Standard Time:20261005T100000", "SEQUENCE:12"]
 
 
 def _mangled():
@@ -104,7 +106,7 @@ def _plain(value):
         return type(value) is dict and all(type(k) is str and _plain(v) for k, v in value.items())
     if isinstance(value, list):
         return type(value) is list and all(_plain(v) for v in value)
-    return type(value) in (str, bool, type(None))
+    return type(value) in (str, bool, int, type(None))
 
 
 @given(text=st.text(max_size=300) | _mangled())
@@ -147,7 +149,7 @@ def test_nothing_in_an_invite_puts_a_line_of_its_own_in_an_rsvp():
 def test_an_invite_has_these_fields():
     assert set(ics.parse("\r\n".join(FULL))) == {"summary", "location", "description", "when", "all_day", "start_iso", "end_iso",
                                                   "organizer", "attendees", "recurrence", "method", "status", "uid", "rrule",
-                                                  "exdates", "recurrence_id", "tzid"}
+                                                  "exdates", "recurrence_id", "tzid", "sequence"}
 
 
 def test_what_the_reader_gives_is_plain_data_nothing_of_a_library():

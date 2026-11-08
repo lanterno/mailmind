@@ -437,6 +437,13 @@ def test_a_moved_occurrence_takes_its_slot_from_the_series_in_either_order(parts
     assert ics.parse(text)["summary"] == "Standup"
 
 
+def test_a_revision_count_is_read_and_what_wont_read_is_none():
+    assert ics.parse(cal(MON, "SEQUENCE:4"))["sequence"] == 4
+    assert ics.parse(cal(MON))["sequence"] == 0
+    for said in ("SEQUENCE:later", "SEQUENCE:-3", "SEQUENCE:" + "9" * 5000, f"SEQUENCE:{2 ** 31}"):
+        assert ics.parse(cal(MON, said))["sequence"] == 0, said
+
+
 def test_a_moved_occurrence_names_the_slot_it_left_in_its_zone():
     inv = ics.parse(cal("DTSTART;TZID=Europe/Berlin:20261110T150000", "RECURRENCE-ID;TZID=Europe/Berlin:20261109T100000"))
     assert (inv["start_iso"], inv["recurrence_id"]) == ("2026-11-10T15:00:00+01:00", "2026-11-09T10:00:00+01:00")
