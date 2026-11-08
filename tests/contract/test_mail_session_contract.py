@@ -553,3 +553,22 @@ def test_no_command_goes_while_a_transaction_is_open(world, session):
         c.rollback()
         c.close()
     assert session.noop()
+
+
+def test_a_timeout_set_later_holds_for_the_next_answer(world, session):
+    """A connection kept was opened for its usual minute, and a borrower who can't wait that long says so."""
+    world.server.stall("NOOP", user=w.ADA)
+    session.set_timeout(0.3)
+    started = time.perf_counter()
+    try:
+        with pytest.raises(TimeoutError):
+            session.noop()
+    finally:
+        world.server.release_stalls()
+    assert time.perf_counter() - started < 5
+
+
+def test_setting_a_timeout_sends_nothing(world, session):
+    since = len(world.server.commands)
+    session.set_timeout(30)
+    assert sent(world, since) == [] and session.noop() is True
