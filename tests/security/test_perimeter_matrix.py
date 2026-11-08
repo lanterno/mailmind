@@ -7,7 +7,6 @@ included, with nothing happening, and an honest request reaching each shows the 
 """
 import json
 
-import app_client
 import pytest
 from fastapi.routing import iter_route_contexts
 
@@ -76,7 +75,6 @@ class Table:
 def table(app, monkeypatch):
     spy = Table()
     route_tables.stand_in(monkeypatch, spy.ran)
-    monkeypatch.setattr(app_client, "RECORD_API", None)     # what these answer isn't what the routes answer
     monkeypatch.setattr(schema_contract, "HOLDING", False)
     return spy
 
