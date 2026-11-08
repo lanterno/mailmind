@@ -22,6 +22,7 @@ from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
 from mailmind.kernel import send_window, snoozed
 from mailmind.mailbox.application.filing import Filing
 from mailmind.mailbox.domain import filing
+from mailmind.platform.db import export
 
 # Each, as the page has it: by its name in the document.
 SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "RewriteOp": prompts.RewriteOp,
@@ -29,7 +30,8 @@ SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "R
         "Verdict": rulebook.Verdict, "BlockScope": cleanup_plan.BlockScope, "RsvpDecision": rsvp.RsvpDecision,
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
-        "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope}
+        "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
+        "ArchiveFormat": export.ArchiveFormat}
 
 
 def members(alias):
@@ -51,7 +53,8 @@ def test_a_rule_change_is_a_verdict_or_a_removal(schemas):
 
 
 @pytest.mark.parametrize("table, alias", [(prompts.TONES, prompts.DraftTone), (prompts.REWRITE_OPS, prompts.RewriteOp),
-                                          (rsvp.PARTSTAT, rsvp.RsvpDecision), (rsvp.VERB, rsvp.RsvpDecision)])
+                                          (rsvp.PARTSTAT, rsvp.RsvpDecision), (rsvp.VERB, rsvp.RsvpDecision),
+                                          (export._WRITERS, export.ArchiveFormat)])
 def test_a_table_a_use_case_reads_holds_every_member_of_its_set(table, alias):
     assert list(table) == members(alias)
 

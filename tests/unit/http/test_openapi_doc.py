@@ -45,7 +45,7 @@ def test_an_answer_is_closed_and_what_it_may_leave_out_isnt_required(doc):
 
 
 def test_a_route_that_answers_no_json_has_no_json_type(doc):
-    for path in ("/api/events", "/api/export", "/api/message/body.html", "/api/message/attachment", "/"):
+    for path in ("/api/events", "/api/export", "/api/export/archive", "/api/message/body.html", "/api/message/attachment", "/"):
         assert "content" not in answered(doc, path), path
     assert list(answered(doc, "/api/events", status="503")["content"]) == ["application/problem+json"]
 

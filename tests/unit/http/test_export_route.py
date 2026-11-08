@@ -1,13 +1,18 @@
 """/api/export: a snapshot of the database as a download, read in chunks, and its folder gone afterwards however that went. What it
-holds, and the headers, are in tests/golden/http_get/.
+holds, and the headers, are in tests/golden/http_get/. /api/export/archive: the mail in a standard format, the same way.
 """
 import asyncio
+import collections
+import email
+import io
+import mailbox
 import os
 import re
 import socket
 import tempfile
 import threading
 import time
+import zipfile
 
 import pytest
 from anyio import from_thread, to_thread
@@ -124,6 +129,85 @@ def test_a_client_that_reads_slowly_holds_no_thread_of_the_pool(app, big_export,
         assert app.get("/api/stats").json == {"tokens": 1}
     finally:
         s.close()
+
+
+# ── the mail in a standard format ──────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def archives(monkeypatch):
+    """The folder of each archive the test made."""
+    made, real = [], export.archive
+
+    def noting(out, form):
+        made.append(out)
+        return real(out, form)
+    monkeypatch.setattr(export, "archive", noting)
+    return made
+
+
+def safely(group):
+    return export._safe(group["account"], "acct"), export._safe(group["folder"], "folder")
+
+
+def test_an_eml_archive_holds_each_message_as_a_file_under_its_account_and_folder(app, archives):
+    plan = app.get("/api/export/plan").json
+    assert plan["total"] > 0
+    r = app.get("/api/export/archive?format=eml")
+    assert r.status == 200 and r.headers["content-type"] == "application/zip" and int(r.headers["content-length"]) == len(r.body)
+    assert re.fullmatch(r"attachment; filename=mailmind-eml-\d{8}T\d{6}Z\.zip", r.headers["content-disposition"])
+    with zipfile.ZipFile(io.BytesIO(r.body)) as z:
+        assert z.testzip() is None
+        names = z.namelist()
+        assert all(name.endswith(".eml") for name in names)
+        assert collections.Counter(name.rsplit("/", 1)[0] for name in names) == {"/".join(safely(g)): g["messages"] for g in plan["groups"]}
+        said = [email.message_from_bytes(z.read(name)) for name in names]
+    assert all(m["From"] and m["Message-ID"] for m in said)
+    assert until(lambda: not os.path.exists(archives[0]))
+
+
+def test_an_mbox_archive_holds_a_file_for_each_folder_that_a_mail_program_can_read(app, archives, tmp_path):
+    plan = app.get("/api/export/plan").json
+    r = app.get("/api/export/archive?format=mbox")
+    assert r.status == 200 and r.headers["content-type"] == "application/zip"
+    assert re.fullmatch(r"attachment; filename=mailmind-mbox-\d{8}T\d{6}Z\.zip", r.headers["content-disposition"])
+    with zipfile.ZipFile(io.BytesIO(r.body)) as z:
+        z.extractall(tmp_path)
+        assert len(z.namelist()) == len(plan["groups"])
+    for group in plan["groups"]:
+        account, folder = safely(group)
+        box = mailbox.mbox(tmp_path / account / f"{folder}.mbox", create=False)
+        assert len(box) == group["messages"] and all(m["From"] and m["Message-ID"] for m in box)
+        box.close()
+    assert until(lambda: not os.path.exists(archives[0]))
+
+
+@pytest.mark.parametrize("form", ["eml", "mbox"])
+def test_only_the_zip_is_left_of_what_an_archive_wrote(app, tmp_path, form):
+    out = tmp_path / "out"
+    out.mkdir()
+    path = export.archive(str(out), form)
+    assert os.listdir(out) == [os.path.basename(path)]
+
+
+@pytest.mark.parametrize("query", ["", "?format=", "?format=db", "?format=pst", "?format=EML"])
+def test_a_format_we_do_not_offer_is_the_bad_request_and_nothing_is_written(app, archives, query):
+    r = app.get("/api/export/archive" + query)
+    assert (r.status, r.json) == (400, problems.refused())
+    assert archives == []
+
+
+def test_a_failed_archive_is_the_fixed_failure_and_leaves_no_folder(app, monkeypatch, capsys):
+    made = []
+
+    def boom(out, form):
+        made.append(out)
+        raise OSError(13, "hunter2", "hunter2")
+    monkeypatch.setattr(export, "archive", boom)
+    r = app.get("/api/export/archive?format=mbox")
+    assert (r.status, r.json) == (500, problems.FAILED)
+    assert not os.path.exists(made[0])
+    said = capsys.readouterr().out
+    assert "[http] GET /api/export/archive failed: PermissionError" in said and "hunter2" not in said
 
 
 # ── the response itself ──────────────────────────────────────────────────────────────────────────────
