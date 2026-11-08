@@ -3,6 +3,7 @@ Each read is of the database alone, but that a folder opening may start its sync
 from typing import Any
 
 from mailmind.kernel import attention as verdict
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import INBOX, AccountId, FolderName, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
@@ -181,9 +182,9 @@ class Queries:
 
     def thread_json(self, account: AccountId, thread_id: ThreadRef) -> dict[str, Any]:
         """All messages in a conversation within an account, oldest->newest, de-duped by
-        Message-ID (so a Gmail INBOX+All-Mail copy shows once)."""
+        Message-ID (so a Gmail INBOX+All-Mail copy shows once). Raises Refused when either isn't named."""
         if not account or not thread_id:
-            return {"ok": False, "error": "missing account/thread"}
+            raise Refused("missing account/thread")
         with self._uow.read() as c:
             rows = self._store.thread_rows(c, account, thread_id)
         items: list[dict[str, Any]] = []

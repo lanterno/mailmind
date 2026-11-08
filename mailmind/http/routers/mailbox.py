@@ -31,8 +31,6 @@ from mailmind.http.schemas.mailbox import (
     MoveBody,
     MutedListing,
     NamesAPending,
-    NoMessage,
-    NoThread,
     NothingToUndo,
     Pending,
     Prefetched,
@@ -110,7 +108,7 @@ def router(mailbox):
     def waiting_on_others():
         return mailbox.queries.waiting_on_others()
 
-    @r.get("/api/thread", responses=answers(Thread | NoThread))
+    @r.get("/api/thread", responses=answers(Thread))
     def thread(args: Annotated[ThreadArgs, Query()]):
         return mailbox.queries.thread_json(args.account, args.thread_id)
 
@@ -136,7 +134,7 @@ def router(mailbox):
         return Response(data, headers={"Content-Type": ctype, "Content-Security-Policy": "default-src 'none'; sandbox",
                                        "Content-Disposition": disp})
 
-    @r.get("/api/message/{pk}/body", responses=answers(MessageOpened | Prefetched | NoMessage))
+    @r.get("/api/message/{pk}/body", responses=answers(MessageOpened | Prefetched))
     def body(pk: Number, args: Annotated[BodyArgs, Query()]):
         return mailbox.bodies.message_body(pk, prefetch=(args.prefetch == "1"))
 

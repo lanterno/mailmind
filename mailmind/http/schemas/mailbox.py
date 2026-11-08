@@ -222,11 +222,6 @@ class Thread(Answer):
     reply_pk: int | None
 
 
-class NoThread(Answer):
-    ok: Literal[False]
-    error: str
-
-
 class RailFolder(Answer):
     name: str
     role: str
@@ -442,14 +437,7 @@ class MessageOpened(Answer):
 
 class Prefetched(Answer):
     ok: Literal[True]
-    prefetched: Literal[True]
-
-
-class NoMessage(Answer):
-    """No such message, or a prefetch that gave way to another job on the account's gate."""
-    ok: Literal[False]
-    error: str | None = None
-    busy: Literal[True] | None = None
+    prefetched: bool                        # false: it gave way to another job on the account's gate
 
 
 # ── filing ───────────────────────────────────────────────────────────────────────────────────────────────────────────

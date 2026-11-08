@@ -5,6 +5,7 @@ from typing import Any
 
 from mailmind.content import frame, mime, sanitize
 from mailmind.content.mime import Parsed
+from mailmind.kernel.errors import NotFound
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.platform.db.uow import UnitOfWork
@@ -63,10 +64,12 @@ class Bodies:
         return safe_html, info
 
     def message_body(self, pk: int, prefetch: bool = False) -> dict[str, Any]:
+        """A message opened, or for a `prefetch` whether its body is stored now. Raises NotFound for one that has gone, or
+        whose body the server no longer has."""
         with self._uow.read() as c:
             row = self._store.get_message(c, pk)
         if not row:
-            return {"ok": False, "error": "not found"}
+            raise NotFound("not found")
         if prefetch:
             # background cache-warm: NEVER block a foreground op. If the lock is busy or the
             # body still needs a (slow) IMAP fetch, just skip — the real open will fetch later.
@@ -75,12 +78,12 @@ class Bodies:
             try:
                 gates.run(row["account"], lambda: self._ingest.fetch_body(pk),
                           priority=gates.Priority.MAINTENANCE, wait=False)
-            except gates.Busy:
-                return {"ok": False, "busy": True}
+            except gates.Busy:                   # it gave way: nothing went wrong, and the open will fetch it
+                return {"ok": True, "prefetched": False}
             return {"ok": True, "prefetched": True}
         parsed = gates.run(row["account"], lambda: self._ingest.fetch_body(pk), priority=gates.Priority.INTERACTIVE)
         if parsed is None:
-            return {"ok": False, "error": "not found"}
+            raise NotFound("not found")
         safe_html, info = self._safe_html(pk, parsed, False)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
