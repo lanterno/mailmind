@@ -583,16 +583,16 @@ def test_nosync_unset_is_off(monkeypatch):
 
 
 def test_one_place_reads_nosync():
-    """So every check agrees."""
+    """So every check agrees: the one module that reads the environment."""
     readers = []
     for dirpath, dirs, files in os.walk(ROOT):
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("tests", "node_modules", "__pycache__")]
         for name in files:
             if name.endswith(".py") and not name.startswith("test"):
                 with open(os.path.join(dirpath, name), encoding="utf-8") as f:
-                    if re.search(r"""(\.get\(|\[)\s*["']MAILMIND_NOSYNC["']""", f.read()):
+                    if re.search(r"""["']MAILMIND_NOSYNC["']""", f.read()):
                         readers.append(name)
-    assert len(readers) == 1, f"read MAILMIND_NOSYNC in one place only, not {readers}"
+    assert readers == ["environment.py"], f"read MAILMIND_NOSYNC in one place only, not {readers}"
 
 
 def _queued(mid):
