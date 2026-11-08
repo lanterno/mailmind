@@ -149,7 +149,7 @@ guarded became the checks that with no key AI is off and nothing is sent.
 | `test_other_apps_draft_opens_whole_as_plain_text` | `tests/unit/compose/test_draft_resume.py` |
 | `test_many_files_come_back_in_order_from_one_parse` | `tests/unit/compose/test_draft_resume.py` |
 | `test_html_only_draft_is_refused` | `tests/unit/compose/test_draft_resume.py` |
-| `test_attached_email_is_refused` | `tests/unit/compose/test_draft_resume.py` |
+| `test_attached_email_is_refused` | `tests/unit/compose/test_draft_resume.py` `test_an_attached_email_comes_back_as_one_file` |
 | `test_text_after_a_file_is_refused_not_dropped` | `tests/unit/compose/test_draft_resume.py` |
 | `test_nameless_file_is_refused_unless_marked_an_attachment` | `tests/unit/compose/test_draft_resume.py` |
 | `test_empty_extra_text_is_no_loss` | `tests/unit/compose/test_draft_resume.py` |

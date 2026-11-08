@@ -760,16 +760,86 @@ def test_html_only_draft_is_refused(calls):
     assert code == 422 and "only has formatted text" in r["detail"], (code, r)
 
 
-def test_attached_email_is_refused(calls):
+def _old_thread():
+    """An email of its own, with a file of its own, to attach to a draft."""
     inner = EmailMessage()
-    inner["Subject"] = "Old thread"
-    inner.set_content("hello")
+    inner["From"], inner["Subject"] = "lin@example.test", "Old thread"
+    inner.set_content("the inner note")
+    inner.add_attachment(b"%PDF-1.4 swatch", maintype="application", subtype="pdf", filename="swatch.pdf")
+    return inner
 
+
+def test_an_attached_email_comes_back_as_one_file(calls):
     def body(m):
         m.set_content("See the thread below.")
-        m.add_attachment(inner)
+        m.add_attachment(b"%PDF-1.4 map", maintype="application", subtype="pdf", filename="map.pdf")
+        m.add_attachment(_old_thread(), filename="Old thread.eml")
     r, code = _resume(_synced(_foreign([body]), 11))
-    assert code == 422 and "email attached as a file" in r["detail"], (code, r)
+    assert code == 200 and r["text"] == "See the thread below.", (code, r)
+    assert [(f["filename"], f["content_type"]) for f in r["files"]] == [
+        ("map.pdf", "application/pdf"), ("Old thread.eml", "message/rfc822")], r["files"]
+    assert base64.b64decode(r["files"][0]["b64"]) == b"%PDF-1.4 map"
+    data = base64.b64decode(r["files"][1]["b64"])
+    assert b"Subject: Old thread" in data and r["files"][1]["size"] == len(data), r["files"]
+
+
+def test_an_attached_email_with_no_file_name_still_comes_back(calls):
+    def body(m):
+        m.set_content("See below.")
+        m.add_attachment(_old_thread())
+    r, code = _resume(_synced(_foreign([body]), 12))
+    assert code == 200 and [f["filename"] for f in r["files"]] == ["message.eml"], (code, r)
+
+
+def test_an_attached_email_goes_out_whole_when_the_draft_is_sent(calls):
+    def body(m):
+        m.set_content("See the thread below.")
+        m.add_attachment(_old_thread(), filename="Old thread.eml")
+    r, code = _resume(_synced(_foreign([body]), 13))
+    assert code == 200, (code, r)
+    answered(sending.send, _payload(r))
+    m, _, _ = _sent(calls)
+    [att] = list(m.iter_attachments())
+    assert att.get_content_type() == "message/rfc822" and att["Content-Transfer-Encoding"] != "base64", att.as_string()
+    inner = att.get_content()
+    assert inner["Subject"] == "Old thread"
+    assert [a.get_filename() for a in inner.iter_attachments()] == ["swatch.pdf"]
+
+
+def test_a_draft_saved_with_an_attached_email_reopens_and_saves_again(calls):
+    r1, code = _resume(_synced(_foreign([lambda m: (m.set_content("See below."), m.add_attachment(_old_thread()))]), 14))
+    assert code == 200, (code, r1)
+    res = _save(account=r1["account"], draft_id=r1["draft_id"], text=r1["text"], attachments=[
+        {k: f[k] for k in ("filename", "content_type", "b64")} for f in r1["files"]])
+    assert res["ok"]
+    raw = calls.appended[-1]["raw"]
+    assert [a["content_type"] for a in mime.parse(raw)["attachments"]] == ["message/rfc822"]
+    r2, code = _resume(_synced(raw, 15))
+    assert code == 200 and [f["content_type"] for f in r2["files"]] == ["message/rfc822"], (code, r2)
+    assert b"Subject: Old thread" in base64.b64decode(r2["files"][0]["b64"])
+
+
+def test_a_part_inside_an_attached_email_is_not_the_drafts_own(calls):
+    """Its text is the attached email's, whatever it says, so it is neither the draft's text nor a part left unread."""
+    inner = _old_thread()
+
+    def body(m):
+        m.add_attachment(inner, filename="Old thread.eml")
+        m.attach(_part("See below."))
+    r, code = _resume(_synced(_foreign([body]), 16))
+    assert code == 200 and r["text"] == "See below." and len(r["files"]) == 1, (code, r)
+
+
+def test_a_delivery_report_is_not_one_file(calls):
+    report = EmailMessage()
+    report.add_header("Reporting-MTA", "dns; mail.example.test")
+
+    def body(m):
+        m.set_content("Bounced.")
+        m.add_attachment(report)
+        m.get_payload()[-1].set_type("message/delivery-status")
+    r, code = _resume(_synced(_foreign([body]), 17))
+    assert code == 422 and "can’t reopen without losing it" in r["detail"], (code, r)
 
 
 def _part(content, **kw):
