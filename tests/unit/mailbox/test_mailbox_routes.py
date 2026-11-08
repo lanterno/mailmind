@@ -100,7 +100,6 @@ def named(said, world):
     ("/api/bulk/file", {"verb": "archive", "rows": [{**COPY, "whole": "yes"}]}),
     ("/api/bulk/file", {"verb": "archive", "rows": [COPY], "undo_group": 5}),
     ("/api/reconcile", {"dry_run": "no"}),
-    ("/api/reconcile", {"dry_run": True, "force": 1}),
     ("/api/sync-retry-account", {"account": 5}),
     ("/api/pending/retry", {"id": "x"}),
     ("/api/pending/discard", {"id": PAST_2_53}),
@@ -217,15 +216,16 @@ def test_filing_is_handed_all_the_request_said_and_nothing_else(app, world, monk
 
 
 @pytest.mark.parametrize("body, handed", [
-    ({}, ("all", False, False)),
-    ({"account": None, "dry_run": None, "force": None}, (None, False, False)),
-    ({"account": w.ADA, "dry_run": True, "force": True}, (w.ADA, True, True)),
+    ({}, ("all", False)),
+    ({"account": None, "dry_run": None}, (None, False)),
+    ({"account": w.ADA, "dry_run": True}, (w.ADA, True)),
+    ({"account": w.ADA, "force": True}, (w.ADA, False)),
 ])
 def test_a_reconcile_is_handed_what_it_always_was(app, monkeypatch, body, handed):
     got = []
 
-    def spy(account, dry_run, force=False):
-        got.append((account, dry_run, force))
+    def spy(account, dry_run):
+        got.append((account, dry_run))
         return {"ok": True, "dry_run": dry_run, "results": [], "total_ghosts": 0, "total_pruned": 0, "generated": "now"}
     monkeypatch.setattr(mailbox.reconciler, "do_reconcile", spy)
     assert app.post("/api/reconcile", body).status == 200

@@ -464,13 +464,12 @@ def test_hwf_reconcile_connects_with_a_short_timeout_and_always_logs_out(world, 
     assert timeouts == [15, 15, 15]
 
 
-def test_hwf_an_inbox_emptied_elsewhere_can_be_pruned(app, world):
+@pytest.mark.parametrize("body", [{}, {"force": True}], ids=["plain", "whatever-it-says"])
+def test_hwf_an_empty_answer_is_no_reason_to_prune_a_stored_inbox(app, world, body):
     with world.server.lock:
         world.server.mailbox(w.ADA, "INBOX").messages.clear()
-    app.post("/api/reconcile", {"account": w.ADA})
+    app.post("/api/reconcile", {"account": w.ADA, **body})
     assert stored() != {}                                        # an empty answer may be the server's fault
-    app.post("/api/reconcile", {"account": w.ADA, "force": True})
-    assert stored() == {}
 
 
 def test_hwf_mail_deleted_from_another_folder_leaves_the_list(app, world):
