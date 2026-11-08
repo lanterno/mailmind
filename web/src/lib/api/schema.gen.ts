@@ -1524,13 +1524,16 @@ export interface components {
     schemas: {
         /**
          * ACopy
-         * @description A copy of a message, one of many a request names: its key and the folder it is in.
+         * @description A copy of a message, one of many a request names: its key, the folder it is in and its uid there. Without a uid it is
+         *     the only copy of that key in that folder, or none.
          */
         ACopy: {
             /** Folder */
             folder: string;
             /** Key */
             key: number;
+            /** Uid */
+            uid?: number | null;
         };
         /**
          * AccountBody
@@ -1801,6 +1804,8 @@ export interface components {
             snippet: string;
             /** Subject */
             subject: string;
+            /** Uid */
+            uid: number;
         };
         /** AtAGlance */
         AtAGlance: {
@@ -1966,6 +1971,8 @@ export interface components {
             folder: string;
             /** Key */
             key: number;
+            /** Uid */
+            uid?: number | null;
             /** Whole */
             whole?: boolean | null;
         };
@@ -2056,13 +2063,15 @@ export interface components {
         };
         /**
          * Copy
-         * @description What names a copy of a message on the wire: the message's key, and the folder the copy is in.
+         * @description What names a copy of a message on the wire: the message's key, the folder the copy is in and its uid there.
          */
         Copy: {
             /** Folder */
             folder: string;
             /** Key */
             key: number;
+            /** Uid */
+            uid: number;
         };
         /**
          * CouldntLogIn
@@ -2290,6 +2299,8 @@ export interface components {
             thread_id: string | null;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -2326,6 +2337,8 @@ export interface components {
             size: number;
             /** Subject */
             subject: string;
+            /** Uid */
+            uid: number;
             /** Url */
             url: string;
             /** When */
@@ -2547,6 +2560,8 @@ export interface components {
             thread_id?: string | null;
             /** Tone */
             tone?: string | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** DraftSaved */
         DraftSaved: {
@@ -2704,6 +2719,8 @@ export interface components {
             mutation_id?: string | null;
             /** On */
             on?: boolean | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** FolderListing */
         FolderListing: {
@@ -2781,6 +2798,8 @@ export interface components {
             thread_id: string | null;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -3113,6 +3132,8 @@ export interface components {
             thread_id: string | null;
             /** To */
             to: string;
+            /** Uid */
+            uid: number;
         };
         /** MoveBody */
         MoveBody: {
@@ -3122,6 +3143,8 @@ export interface components {
             key: number;
             /** Mutation Id */
             mutation_id?: string | null;
+            /** Uid */
+            uid?: number | null;
             /** Undo Group */
             undo_group?: string | null;
         };
@@ -3135,6 +3158,8 @@ export interface components {
             key?: number | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
             /** Undo Group */
             undo_group?: string | null;
         };
@@ -3198,6 +3223,8 @@ export interface components {
             thread_id: string | null;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -3225,6 +3252,8 @@ export interface components {
             key?: number | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** NamesAnAccount */
         NamesAnAccount: {
@@ -3247,6 +3276,8 @@ export interface components {
             key?: number | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
         };
         /**
          * NoBody
@@ -3642,6 +3673,8 @@ export interface components {
             subject: string;
             /** Thread Id */
             thread_id: string | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -3715,6 +3748,8 @@ export interface components {
             on?: boolean | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** ReplyLaterListing */
         ReplyLaterListing: {
@@ -3776,6 +3811,8 @@ export interface components {
             thread_id: string | null;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /** Waiting Label */
             waiting_label: string;
             /** When */
@@ -3792,6 +3829,8 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** Retried */
         Retried: {
@@ -3858,6 +3897,8 @@ export interface components {
             thread_id: string;
             /** To */
             to: string;
+            /** Uid */
+            uid: number | null;
         };
         /**
          * ReviewMissing
@@ -3877,7 +3918,7 @@ export interface components {
         };
         /**
          * ReviewNeeded
-         * @description A message that still needs you, by its key and the folder its copy is in now.
+         * @description A message that still needs you, by its key and the folder and uid of its copy now.
          */
         ReviewNeeded: {
             /** Account */
@@ -3894,6 +3935,8 @@ export interface components {
             subject: string;
             /** Thread Id */
             thread_id: string | null;
+            /** Uid */
+            uid: number | null;
             /** Who */
             who: string;
         };
@@ -3963,7 +4006,7 @@ export interface components {
         };
         /**
          * RsvpBody
-         * @description The invite, by its message's key, and the folder of the copy the page has (`mailmind.http.named`).
+         * @description The invite, by its message's key, and the folder and uid of the copy the page has (`mailmind.http.named`).
          */
         RsvpBody: {
             /** Decision */
@@ -3972,6 +4015,8 @@ export interface components {
             folder?: string | null;
             /** Key */
             key: number;
+            /** Uid */
+            uid?: number | null;
         };
         /** RsvpQueued */
         RsvpQueued: {
@@ -4002,6 +4047,8 @@ export interface components {
             key?: number | null;
             /** Token */
             token?: string | null;
+            /** Uid */
+            uid?: number | null;
             /** Verdict */
             verdict?: string | null;
         };
@@ -4121,6 +4168,8 @@ export interface components {
             subject: string;
             /** Thread Id */
             thread_id: string | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -4154,6 +4203,8 @@ export interface components {
             mutation_id?: string | null;
             /** Seen */
             seen?: boolean | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** SendBody */
         SendBody: {
@@ -4243,6 +4294,8 @@ export interface components {
             preset?: string | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
             /** Undo Group */
             undo_group?: string | null;
             /** Until */
@@ -4323,6 +4376,8 @@ export interface components {
             subject: string;
             /** Thread Id */
             thread_id: string | null;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -4382,6 +4437,8 @@ export interface components {
             key?: number | null;
             /** Thread Id */
             thread_id?: string | null;
+            /** Uid */
+            uid?: number | null;
         };
         /** Summary */
         Summary: {
@@ -4515,6 +4572,8 @@ export interface components {
             snippet: string;
             /** Subject */
             subject: string;
+            /** Uid */
+            uid: number;
             /** When */
             when: string;
         };
@@ -4641,6 +4700,8 @@ export interface components {
             summary: string;
             /** Thread Id */
             thread_id: string | null;
+            /** Uid */
+            uid: number;
         };
         /** ViewChange */
         ViewChange: {
@@ -4749,6 +4810,8 @@ export interface components {
             to: string;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /**
              * Waiting
              * @constant
@@ -4793,6 +4856,8 @@ export interface components {
             to: string;
             /** Ts */
             ts: number | null;
+            /** Uid */
+            uid: number;
             /**
              * Waiting
              * @constant
@@ -6186,6 +6251,7 @@ export interface operations {
             query: {
                 key: number;
                 folder?: string | null;
+                uid?: number | null;
                 peek?: string | null;
             };
             header?: never;
@@ -10142,6 +10208,7 @@ export interface operations {
             query: {
                 key: number;
                 folder: string;
+                uid?: number | null;
                 part_id: string;
             };
             header?: never;
@@ -10254,6 +10321,7 @@ export interface operations {
             query: {
                 key: number;
                 folder: string;
+                uid?: number | null;
                 prefetch?: string | null;
             };
             header?: never;
@@ -10368,6 +10436,7 @@ export interface operations {
             query?: {
                 key?: string;
                 folder?: string;
+                uid?: string;
                 images?: string;
             };
             header?: never;
