@@ -2,7 +2,7 @@
 // one left; a save clears `dirty` only if no edit landed while it was in flight; the send-time check runs synchronously, so
 // nothing is awaited before the composer closes and a double submit can't happen; and what is closed with unsaved words
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
-import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "./sendGuard";
+import { GUARD_ARM_MS, guardFanout, guardLine, guardList, isMine } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
 import type { LIMITS } from "../../lib/api/limits.gen";
 import type { DraftTone, RewriteOp } from "../../lib/api/types";
@@ -314,7 +314,7 @@ export function createComposing(env: Env) {
     const mine = env.mine();
     for (const v of values) {
       const a = rcptAddr(v);
-      if (!a || !looksLikeAddr(a) || mine.has(a) || x.participants.has(a)) continue;
+      if (!a || !looksLikeAddr(a) || isMine(a, mine) || x.participants.has(a)) continue;
       const cached = knownCache.get(a);
       if (cached) {
         x.people.set(a, cached);

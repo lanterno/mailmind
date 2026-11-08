@@ -26,6 +26,11 @@ export interface GuardFix { kind: string; label: string }
 export interface GuardText { text: string; fix: GuardFix | null }
 
 export const GUARD_FANOUT=5, GUARD_ARM_MS=700, GUARD_SCAN_MAX=50000;
+// you+tag@host names the mailbox you@host does, on every server that reads a tag at all.
+export function untagged(a:string):string{ const at=a.lastIndexOf("@"), plus=a.indexOf("+"); return plus>0&&plus<at?a.slice(0,plus)+a.slice(at):a; }
+export function isMine(a:string,mine:ReadonlySet<string>):boolean{ return mine.has(a)||mine.has(untagged(a)); }
+// Your addresses as a set to ask isMine of. An account that is itself tagged has its plain mailbox along with it.
+export function mineSet(addrs:string[]):Set<string>{ return new Set(addrs.map(a=>a.toLowerCase()).flatMap(a=>[a,untagged(a)])); }
 // Sources are in folded form (NFD, marks removed, lowercase). Strong words present a file of your
 // own ("attached", "ci-joint", "te adjunto"), so they fire in every mode. Weak ones are the bare
 // nouns ("the attachment", "la pièce jointe", "l'allegato"), which in a reply are usually about the
@@ -92,7 +97,7 @@ export function guardSubjectEmpty(subject:unknown,mode:string):boolean{ const s=
   return !s||(mode==="new"&&!s.replace(_RE_PFX,"").trim()); }   // a reply's inherited bare "Re:" is not empty
 export function guardSubjectAuthored(subject:unknown,subject0:unknown,mode:string):boolean{ const f=(x:unknown)=>guardFold(String(x||"").replace(_RE_PFX,"")).t.trim();
   return mode==="new"||f(subject)!==f(subject0); }               // "Re: Contract attached" is the other sender's
-export function guardFanout(to:string[],cc:string[],mine:string[]):number{ const m=new Set(mine); return new Set([...to,...cc].filter(a=>a&&!m.has(a))).size; }
+export function guardFanout(to:string[],cc:string[],mine:string[]):number{ const m=new Set(mine); return new Set([...to,...cc].filter(a=>a&&!isMine(a,m))).size; }
 export function guardList(a:string[]):string{ if(a.length<=1)return a[0]||""; if(a.length===2)return a[0]+" and "+a[1];
   if(a.length===3)return a[0]+", "+a[1]+" and "+a[2]; return a[0]+", "+a[1]+" and "+(a.length-2)+" more"; }
 // Addresses are lowercased bare addresses. Bcc is left out: it's hidden from the others and typed on purpose.
@@ -108,7 +113,7 @@ export function guardCheck(s:GuardSnapshot):GuardWarning[]{
     if(word) w.push({key:"attach",block:"confirm",word}); }
   if(s.mode==="replyall"){ const n=guardFanout(s.to,s.cc,s.mine);
     if(n>GUARD_FANOUT&&n>(s.ack.fanout||0)){ const mine=new Set(s.mine);
-      const auto=s.autoCc, removable=auto?new Set(s.cc.filter(a=>auto.includes(a)&&!mine.has(a))).size:0;
+      const auto=s.autoCc, removable=auto?new Set(s.cc.filter(a=>auto.includes(a)&&!isMine(a,mine))).size:0;
       w.push({key:"fanout",block:"confirm",n,removable}); } }
   if(s.fresh.length) w.push({key:"new",block:"soft",addrs:s.fresh});
   return w; }

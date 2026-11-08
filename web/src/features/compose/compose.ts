@@ -9,6 +9,7 @@ import { createStore, store, stored } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";
 import { createComposing, type Focus } from "./machine";
 import { isDraftTone } from "./model";
+import { mineSet } from "./sendGuard";
 
 let qc: QueryClient | undefined;
 export const bindComposer = (client: QueryClient) => void (qc = client);
@@ -18,7 +19,7 @@ const route = () => parseRoute(location.pathname, location.search);
 const again = (...keys: string[]) => keys.forEach((key) => void qc?.invalidateQueries({ queryKey: [key] }));
 
 export function myAddresses(d = digest()): Set<string> {
-  return new Set([...(d?.send_accounts ?? []), ...(d?.accounts ?? [])].map((a) => a.toLowerCase()));
+  return mineSet([...(d?.send_accounts ?? []), ...(d?.accounts ?? [])]);
 }
 
 const savedTone = stored("mm_draft_tone");

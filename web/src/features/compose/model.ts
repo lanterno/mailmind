@@ -1,6 +1,6 @@
 // What a composer is, with no DOM and no server: addresses, the seeds a reply or forward opens with, the requests it makes
 // and the send-time check's input. The machine beside it runs these.
-import { guardBlocks, guardCheck, guardHard, guardLine, type GuardFix, type GuardSnapshot, type GuardWarning } from "./sendGuard";
+import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
 import type { ComposeMode, DraftTone } from "../../lib/api/types";
 
@@ -105,10 +105,10 @@ export function replySeed(d: OriginalMail, all: boolean, mine: Set<string>): Ope
   const to = toAddr ? [toAddr] : [];
   const cc: string[] = [];
   if (all) {
-    const seen = new Set([toAddr.toLowerCase(), ...mine]);
+    const seen = new Set([toAddr.toLowerCase()]);
     for (const a of [...parseAddrs(d.to), ...parseAddrs(d.cc)]) {
       const k = a.toLowerCase();
-      if (!seen.has(k)) {
+      if (!seen.has(k) && !isMine(k, mine)) {
         seen.add(k);
         cc.push(a);
       }
@@ -182,7 +182,7 @@ export const draftHash = (p: Payload) => cheapHash(JSON.stringify([p.to, p.cc, p
 
 export function isNewToYou(c: Composer, a: string, mine: Set<string>): boolean {
   const p = c.people.get(a);
-  return Boolean(p) && !p!.known && !p!.self && !c.thin && !mine.has(a) && !c.participants.has(a);
+  return Boolean(p) && !p!.known && !p!.self && !c.thin && !isMine(a, mine) && !c.participants.has(a);
 }
 
 export function guardSnapshot(c: Composer, sendAfter: number, nowSeconds: number, mine: Set<string>): GuardSnapshot {
@@ -268,7 +268,7 @@ export const QUICK: { key: string; chip: string; line: string; ask: string }[] =
 // A person you could answer: not you, not a no-reply robot, not junk or a receipt.
 export function canQuickReply(addr: string | null | undefined, mine: Set<string>, row?: { isJunk?: boolean; bucket?: string | null }): boolean {
   const a = (addr ?? "").toLowerCase();
-  if (!a || mine.has(a) || /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|bounces?)\b/.test(a)) return false;
+  if (!a || isMine(a, mine) || /^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|bounces?)\b/.test(a)) return false;
   return !(row?.isJunk || /^(receipts|automated|newsletters|spam|blocked)/.test(row?.bucket ?? ""));
 }
 
