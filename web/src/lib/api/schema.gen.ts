@@ -2634,6 +2634,8 @@ export interface components {
         DraftFile: {
             /** B64 */
             b64: string;
+            /** Cid */
+            cid?: string | null;
             /** Content Type */
             content_type: string;
             /** Filename */
@@ -3701,6 +3703,8 @@ export interface components {
             /** Subject */
             subject: string | null;
         };
+        /** @enum {string} */
+        PictureType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
         /** PlanBody */
         PlanBody: {
             /** Cmd */
@@ -3892,8 +3896,19 @@ export interface components {
         };
         /** PreviewBody */
         PreviewBody: {
+            /** Pictures */
+            pictures?: components["schemas"]["PreviewPicture"][] | null;
             /** Text */
             text?: string | null;
+        };
+        /**
+         * PreviewPicture
+         * @description A file the message carries in its text. `content_type` is what it has to be to go there.
+         */
+        PreviewPicture: {
+            /** Cid */
+            cid: string;
+            content_type: components["schemas"]["PictureType"];
         };
         /** Queued */
         Queued: {
