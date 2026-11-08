@@ -2804,6 +2804,8 @@ export interface components {
             subject: string;
             /** Summary */
             summary: string;
+            /** Thread Count */
+            thread_count?: number | null;
             /** Thread Id */
             thread_id: string | null;
             /** Ts */
