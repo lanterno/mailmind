@@ -11,6 +11,15 @@ import { inDaySections, type Row } from "./rows";
 // A row's DOM id, from its copy's (`Row.id`): a folder's name can hold a space, which an id can't.
 const rowId = (id: string) => `row-${encodeURIComponent(id)}`;
 
+// One of a row's own actions, for the pointer: an option can't hold a control, so these are hidden from assistive tech with
+// the rest of `.racts`, and the key in the title is the keyboard's way to the same thing.
+function Ract({ icon, title, danger, mark, onPress }: { icon: string; title: string; danger?: boolean; mark?: string; onPress: (el: Element) => void }) {
+  return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the key in its title is the keyboard's
+    <span className={danger ? "ract del" : "ract"} data-racts={mark} title={title} onClick={(e) => { e.stopPropagation(); onPress(e.currentTarget); }}><Icon name={icon} /></span>
+  );
+}
+
 function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, onSnooze, onFocusRead }: {
   row: Row;
   whole: boolean;
@@ -25,10 +34,6 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   const needs = Boolean(row.action);
   const what = whole ? " conversation" : "";
   const className = `row cmsg${row.seen ? "" : " unread"}${needs ? " needs" : ""}${selected ? " sel" : ""}${isMarked ? " marked" : ""}`;
-  const act = (kind: Filing) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onFile(kind);
-  };
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the listbox, which names this through aria-activedescendant, and the app's keys act on it
     <div id={rowId(row.id)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-key={row.key} data-folder={row.folder} data-uid={row.uid} data-tid={row.threadId || undefined} onClick={onOpen} onDoubleClick={(e) => { if (!(e.target as Element).closest(".cbx,.racts")) onFocusRead(); }}>
@@ -52,12 +57,9 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
         {needs && <div className="r4"><span className="rchip need" title={row.action}><span className="visually-hidden">Next step: </span>{row.action}</span></div>}
       </div>
       <div className="racts" aria-hidden="true">
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the e key is the keyboard's */}
-        <span className="ract" title={`Archive${what} (e)`} onClick={act("archive")}><Icon name="archive" /></span>
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the d key is the keyboard's */}
-        <span className="ract del" title={`Delete${what} (d)`} onClick={act("trash")}><Icon name="trash" /></span>
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the pointer's shortcut, hidden from assistive tech with its parent: the h key is the keyboard's */}
-        <span className="ract" data-racts="snooze" title="Snooze (h)" onClick={(e) => { e.stopPropagation(); onSnooze(e.currentTarget); }}><Icon name="clock" /></span>
+        <Ract icon="archive" title={`Archive${what} (e)`} onPress={() => onFile("archive")} />
+        <Ract icon="trash" title={`Delete${what} (d)`} danger onPress={() => onFile("trash")} />
+        <Ract icon="clock" title="Snooze (h)" mark="snooze" onPress={onSnooze} />
       </div>
     </div>
   );
