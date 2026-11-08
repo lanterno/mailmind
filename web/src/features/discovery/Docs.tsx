@@ -1,6 +1,6 @@
 // One findable place for every attachment across accounts. The server filters and pages, so a search reaches every file
 // and not only those loaded.
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get } from "../../lib/api/client";
@@ -23,6 +23,7 @@ function Hub({ m }: { m: Mailbox }) {
   const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [typed, setTyped] = useState("");
   const [q, setQ] = useState("");
+  const [previewing, setPreviewing] = useState<string | null>(null);
   useEffect(() => {
     const t = setTimeout(() => setQ(typed.trim()), 120);
     return () => clearTimeout(t);
@@ -70,17 +71,24 @@ function Hub({ m }: { m: Mailbox }) {
   else {
     body = (
       <>
-        {docs.map((x) => (
-          <div className="doc-row" key={`${copyId(x)}/${x.part_id}/${x.filename}`} data-doc-key={x.key}>
-            <div className="doc-ic"><Icon name={ICON[x.kind]} /></div>
-            <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(copyOf(x)); }}>
-              <div className="doc-fn">{x.filename}</div>
-              <div className="doc-meta"><span className="who">{x.from}</span> · {x.subject} · {x.when}</div>
-            </button>
-            <span className="doc-sz">{fileSize(x.size)}</span>
-            <a className="doc-dl" href={x.url} download={x.filename} title="Download" aria-label={`Download ${x.filename}`}><Icon name="download" /></a>
-          </div>
-        ))}
+        {docs.map((x) => {
+          const id = `${copyId(x)}/${x.part_id}/${x.filename}`, showing = previewing === id;
+          return (
+            <Fragment key={id}>
+              <div className="doc-row" data-doc-key={x.key}>
+                <div className="doc-ic"><Icon name={ICON[x.kind]} /></div>
+                <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(copyOf(x)); }}>
+                  <div className="doc-fn">{x.filename}</div>
+                  <div className="doc-meta"><span className="who">{x.from}</span> · {x.subject} · {x.when}</div>
+                </button>
+                <span className="doc-sz">{fileSize(x.size)}</span>
+                {x.preview && <button className="doc-dl" title="Preview" aria-label={`Preview ${x.filename}`} aria-expanded={showing} onClick={() => setPreviewing(showing ? null : id)}><Icon name="eye" /></button>}
+                <a className="doc-dl" href={x.url} download={x.filename} title="Download" aria-label={`Download ${x.filename}`}><Icon name="download" /></a>
+              </div>
+              {x.preview && showing && <iframe className="doc-preview" sandbox="" src={x.preview} title={`Preview of ${x.filename}`} />}
+            </Fragment>
+          );
+        })}
         {left > 0 && <button className="doc-more" disabled={list.isFetchingNextPage} onClick={() => void more(docs.length)}>{list.isFetchingNextPage ? "Loading…" : `Show more · ${left} left`}</button>}
       </>
     );
