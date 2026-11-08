@@ -16,6 +16,7 @@ import type { Mailbox } from "../mailbox";
 import { LIMIT, useBrief, useSide } from "./data";
 import { BRIEF_CAP, commitments, eventWhen, fromDigest, greeting, nameIn, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";
 import { panel } from "./Panels";
+import { useTasks } from "./tasks";
 
 const narrow = () => matchMedia("(max-width:820px)").matches;
 export const AI_PRIVACY = "With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; nothing else leaves this machine.";
@@ -137,7 +138,8 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const needs = needsYou(items);
   const shown = needs.slice(0, BRIEF_CAP);
   const tidy = safeToFile(items);
-  const commits = commitments(items).length;
+  const { data: tasks } = useTasks();
+  const commits = commitments(items).length + (tasks?.filter((t) => !t.done).length ?? 0);
   const multi = m.accounts.length > 1;
   const waiting = m.folders?.waiting ?? 0, later = m.folders?.replylater ?? 0;
   const topics = (brief?.groups ?? []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);

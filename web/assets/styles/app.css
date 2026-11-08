@@ -1121,6 +1121,16 @@
   /* the one retry-and-confirm button: quiet by default, .strong for the step that carries out a plan */
   .btn-retry{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
   .btn-retry:hover{color:var(--ai)}
+  .sg-row{border-top:1px solid var(--line);padding:12px 0 2px;margin-top:10px}
+  .sg-row:first-of-type{border-top:none;margin-top:2px;padding-top:4px}
+  .sg-kind{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--mute);margin-bottom:8px}
+  .sg-kind .ico{width:14px;height:14px}
+  .sg-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px}
+  .sg-field{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--faint);min-width:0}
+  .sg-field input{font:inherit;font-size:13.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-sm);padding:6px 8px;min-width:0;width:100%}
+  .sg-field:has(.sg-title){grid-column:1/-1}
+  .sg-refused{margin-top:8px;font-size:12.5px;color:var(--err)}
+  .sg-acts{display:flex;align-items:center;gap:10px;margin-top:10px}
   .invite-card{border:none;border-left:3px solid var(--keep);background:var(--panel);
     border-radius:var(--r-md);padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh-1)}
   .invite-card .inv-hd{font-size:11px;color:var(--keep);font-weight:600;margin-bottom:5px}
@@ -1311,6 +1321,13 @@
   .cm-side{flex:none;display:flex;gap:6px}
   .cm-side button{background:var(--sel);border:none;border-radius:var(--r-sm);color:var(--mute);font-size:12px;padding:6px 9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
   .cm-side button:hover{background:var(--raise-hi);color:var(--ink)}
+  .commit-hd.task-hd{margin-top:2px}
+  .task-list{flex:none;max-height:32vh;margin-bottom:18px}
+  .commit-row.task .cm-meta .due{color:var(--mute)}
+  .commit-row.task .cm-meta .due.late{color:var(--err)}
+  .commit-row.task.done .cm-action{text-decoration:line-through;color:var(--faint)}
+  .commit-row.task.done .cm-check{color:var(--keep);border-color:var(--keep)}
+  .commit-row.task .cm-main:disabled{cursor:default}
   .commit-empty{font-family:var(--font-reading);color:var(--mute);font-size:16.5px;text-align:center;padding:36px 0;font-style:italic}
   .commit-hint{margin-top:13px;font-size:11.5px;color:var(--faint)}
   /* ── Weekly Review overlay ── */

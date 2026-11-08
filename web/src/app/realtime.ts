@@ -65,6 +65,7 @@ export function useRealtime() {
       again("pending");
     });
     es.addEventListener("commands-changed", () => again("pending"));
+    es.addEventListener("tasks-changed", () => again("tasks"));
     es.addEventListener("draft-ready", (e) => onDraftReady((JSON.parse((e as MessageEvent<string>).data) as { key?: number }).key));
     es.addEventListener("hello", (e) => {
       const { build } = JSON.parse((e as MessageEvent<string>).data) as { build?: string };

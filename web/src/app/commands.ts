@@ -7,6 +7,7 @@ import { curateOpen, filterForm, newFilter } from "../features/curation/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
+import { findSuggestions } from "../features/assistant/Suggestions";
 import { viewQuery } from "../features/mailbox/FolderRail";
 import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
@@ -120,6 +121,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
     });
     if (m.folder === "__waiting__") add({ id: "dismiss", group: "Actions", label: "Dismiss follow-up", run: m.dismissFollowup });
     add({ id: "summarize", group: "Actions", label: "AI summarize", keys: ["i"], hint: "i", run: () => { const t = m.target(); if (t) void summarize(t); } });
+    add({ id: "extract", group: "Actions", label: "Find events and tasks in this message", run: () => { const to = m.replyTo(); if (to) void findSuggestions(to); } });
     add({ id: "mark", group: "Actions", label: "Select", keys: ["x"], hint: "x", run: () => actions.toggleMark(m.openId!) });
     add({ id: "read-settings", group: "Commands", label: "Reading settings — width, text, mail colors", run: () => void setTimeout(() => document.querySelector<HTMLElement>("#reader [data-readset]")?.click()) });
     add({

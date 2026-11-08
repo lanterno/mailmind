@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
-import { BriefPane } from "../assistant";
+import { BriefPane, findSuggestions, SuggestionCard } from "../assistant";
 import { composing, guardLine, isMine, myAddresses, redirectOf, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
@@ -120,6 +120,7 @@ function Triage({ m, thread }: { m: Mailbox; thread: boolean }) {
   return (
     <>
       <Cab ca="summarize" thread={thread} icon="wind" label="Summarize" title="AI summary (i)" onClick={() => { if (target) void summarize(target); }} />
+      <Cab ca="extract" thread={thread} icon="todo" label="Find events and tasks" title="Find events and tasks in this message" onClick={() => { const to = m.replyTo(); if (to) void findSuggestions(to); }}>Find dates</Cab>
       <Cab ca="snooze" thread={thread} icon="clock" label="Snooze" title="Snooze (h)" onClick={(e) => { if (target && m.openId !== null) snoozeAsk.set({ target, rows: [m.openId], anchor: e.currentTarget, canUnsnooze: m.folder === "__snoozed__" }); }} />
       {later
         ? <Cab ca="rldone" thread={thread} icon="check" label="Done" title="Done — remove from Reply later" onClick={m.replyLaterDone} />
@@ -310,6 +311,7 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
         </>
       )}
       <AiCard target={m.target()} row={row} />
+      <SuggestionCard copy={copy} />
       <MailContent key={copyId(copy)} copy={copy} mine={mine} minHeight={400} pad={30} whole />
       {quick && <QuickReplies to={copy} />}
       <UpNext m={m} canArchive={!isDraft} />
@@ -384,6 +386,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
         <>
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />
+          <SuggestionCard copy={m.replyTo()} />
           <div className="thread" id="thread">
             {items.map((x, i) => <Member key={copyId(x)} m={x} mine={mine} startsOpen={i === items.length - 1} />)}
           </div>

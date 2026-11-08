@@ -9,6 +9,8 @@ import { filing } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { useReview, type Review } from "./data";
 import { COMMIT_CAP, commitments } from "./model";
+import { dueWords, localDay } from "./fields";
+import { useTaskChanges, useTasks, type Task } from "./tasks";
 import { useLayer } from "../../lib/backTrap";
 
 export const panel = createStore<"commits" | "week" | null>(null);
@@ -24,12 +26,53 @@ function Overlay({ open, label, wide, children }: { open: boolean; label: string
   );
 }
 
+function TaskRow({ task, m }: { task: Task; m: Mailbox }) {
+  const { mark, remove } = useTaskChanges();
+  const { words, late } = dueWords(task.due, localDay());
+  const { key, folder, uid } = task;
+  const open = key !== null && folder !== null && uid !== null
+    ? () => { close(); m.openNamed({ key, folder, uid }, task.account, task.thread_id); }
+    : undefined;
+  return (
+    <div className={task.done ? "commit-row task done" : "commit-row task"} data-task={task.id}>
+      <button className="cm-check" title={task.done ? "Not done yet" : "Done"} aria-label={task.done ? "Mark not done" : "Mark done"} aria-pressed={task.done} onClick={() => mark(task.id, !task.done)}>✓</button>
+      <button className="cm-main" disabled={!open} title={open ? "Open the message" : "That message is no longer here"} onClick={open}>
+        <div className="cm-action">{task.title}</div>
+        <div className="cm-meta">
+          {words && <span className={late && !task.done ? "due late" : "due"}>{words}</span>}
+          {words && (task.from_name || task.from_addr || task.subject) ? " · " : ""}
+          {(task.from_name || task.from_addr) && <span className="who">{task.from_name || task.from_addr}</span>}
+          {task.subject ? ` · ${task.subject.slice(0, 64)}` : ""}
+        </div>
+      </button>
+      <div className="cm-side">
+        <button title="Remove this task" aria-label="Remove task" onClick={() => remove(task.id)}><Icon name="trash" /></button>
+      </div>
+    </div>
+  );
+}
+
+function Tasks({ m }: { m: Mailbox }) {
+  const { data: tasks } = useTasks();
+  if (!tasks?.length) return null;
+  const open = tasks.filter((t) => !t.done).length;
+  return (
+    <>
+      <div className="commit-hd task-hd"><Icon name="check" /> Your tasks <span className="n" id="taskN">{open}</span><span className="sub">the ones you confirmed from your mail</span></div>
+      <div className="commit-list task-list" id="taskList">
+        {tasks.map((t) => <TaskRow key={t.id} task={t} m={m} />)}
+      </div>
+    </>
+  );
+}
+
 function Commitments({ m }: { m: Mailbox }) {
   const hidden = filing.useValue();
   const all = commitments((m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it))));
   const shown = all.slice(0, COMMIT_CAP);
   return (
     <>
+      <Tasks m={m} />
       <div className="commit-hd"><Icon name="todo" /> Commitments <span className="n" id="commitN">{all.length > COMMIT_CAP ? `${all.length} · top ${COMMIT_CAP}` : all.length}</span><span className="sub">the AI's to-dos pulled from your mail</span></div>
       <div className="commit-list" id="commitList">
         {!shown.length && <div className="commit-empty">{EMPTY.commitments}</div>}
