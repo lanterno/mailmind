@@ -12,7 +12,7 @@ _NOT_JSON = answers(NotJson)
 
 def _is_place(path):
     """A place in the app, as `app/route.ts` writes one."""
-    return path in ("/all", "/search") or path.startswith(("/m/", "/brief/", "/all/"))
+    return path in ("/all", "/search", "/documents") or path.startswith(("/m/", "/brief/", "/all/"))
 
 
 def router():
@@ -22,6 +22,7 @@ def router():
     @r.get("/all", responses=_NOT_JSON)
     @r.get("/all/{place:path}", responses=_NOT_JSON)
     @r.get("/search", responses=_NOT_JSON)
+    @r.get("/documents", responses=_NOT_JSON)
     @r.get("/m/{place:path}", responses=_NOT_JSON)
     @r.get("/brief/{place:path}", responses=_NOT_JSON)
     def page():
