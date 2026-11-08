@@ -457,6 +457,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cleanup/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cleanup Batch */
+        post: operations["cleanup_batch_api_cleanup_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cleanup/batch/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cleanup Batch Preview */
+        post: operations["cleanup_batch_preview_api_cleanup_batch_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cleanup/execute": {
         parameters: {
             query?: never;
@@ -468,6 +502,23 @@ export interface paths {
         put?: never;
         /** Cleanup Execute */
         post: operations["cleanup_execute_api_cleanup_execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cleanup/rationale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cleanup Rationale */
+        post: operations["cleanup_rationale_api_cleanup_rationale_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2268,6 +2319,68 @@ export interface components {
             /** Waiting */
             waiting: number;
         };
+        /** BatchCleanedUp */
+        BatchCleanedUp: {
+            /** Blocked */
+            blocked: string[];
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            reversible: components["schemas"]["Reversible"];
+            /** Sweep Capped */
+            sweep_capped: boolean;
+            /** Sweep Failed */
+            sweep_failed: number;
+            /** Sweep Queued */
+            sweep_queued: number;
+            /** Swept */
+            swept: number;
+            /** Undo Group */
+            undo_group: string;
+        };
+        /** BatchCleanupBody */
+        BatchCleanupBody: {
+            /** Senders */
+            senders?: string[] | null;
+            /** Undo Group */
+            undo_group?: string | null;
+        };
+        /**
+         * BatchPreview
+         * @description What cleaning up these senders together would do. Only the block and the sweep: each unsubscribe wants its own preview.
+         */
+        BatchPreview: {
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            reversible: components["schemas"]["Reversible"];
+            /** Senders */
+            senders: components["schemas"]["BatchSender"][];
+            /** Sweep Capped */
+            sweep_capped: boolean;
+            /** Sweep Count */
+            sweep_count: number;
+        };
+        /** BatchSender */
+        BatchSender: {
+            /** Count */
+            count: number;
+            /** From Addr */
+            from_addr: string;
+            /** Sweep Count */
+            sweep_count: number;
+            /** Unseen */
+            unseen: number;
+        };
+        /** BatchSendersBody */
+        BatchSendersBody: {
+            /** Senders */
+            senders?: string[] | null;
+        };
         /** @enum {string} */
         BlockScope: "sender" | "domain";
         /** Brief */
@@ -2447,6 +2560,18 @@ export interface components {
             from_addr?: string | null;
             /** Undo Group */
             undo_group?: string | null;
+        };
+        /** CleanupRationales */
+        CleanupRationales: {
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            /** Rationales */
+            rationales: {
+                [key: string]: string;
+            };
         };
         /** @enum {string} */
         ComposeMode: "new" | "reply" | "replyall" | "forward";
@@ -4346,6 +4471,11 @@ export interface components {
             total: number;
             /** Unseen */
             unseen: number;
+        };
+        /** RationaleBody */
+        RationaleBody: {
+            /** Senders */
+            senders?: string[] | null;
         };
         /** @enum {string} */
         ReadFont: "sans" | "serif" | "mono";
@@ -8944,6 +9074,234 @@ export interface operations {
             };
         };
     };
+    cleanup_batch_api_cleanup_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCleanupBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchCleanedUp"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    cleanup_batch_preview_api_cleanup_batch_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchSendersBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchPreview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
     cleanup_execute_api_cleanup_execute_post: {
         parameters: {
             query?: never;
@@ -9054,6 +9412,120 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    cleanup_rationale_api_cleanup_rationale_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RationaleBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CleanupRationales"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
