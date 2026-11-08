@@ -1130,6 +1130,43 @@ def test_another_apps_formatting_on_a_text_that_has_markdown_is_still_said_to_go
     assert r["split"] == "whole" and r["notes"]["plain"] is True
 
 
+def _picture(cid="pic1"):
+    return {"filename": "chart.png", "content_type": "image/png", "b64": base64.b64encode(b"\x89PNG").decode(), "cid": cid}
+
+
+def test_a_picture_in_the_text_reopens_at_its_mark_and_goes_out_again(calls):
+    pk, res = _saved_and_synced(calls, text="![a chart](cid:pic1) *here*", attachments=[_picture()])
+    r, code = _resume(pk)
+    assert code == 200, r
+    assert r["text"] == "![a chart](cid:pic1) *here*"
+    assert [(f["filename"], f["cid"]) for f in r["files"]] == [("chart.png", "pic1")]
+    assert r["notes"]["inline"] == 0 and r["notes"]["plain"] is False
+    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": r["text"], "draft_id": r["draft_id"],
+                  "attachments": [{k: f[k] for k in ("filename", "content_type", "b64", "cid")} for f in r["files"]]})
+    m, _, _ = _sent(calls)
+    picture = next(p for p in m.walk() if p.get_content_type() == "image/png")
+    assert picture["Content-ID"] == "<pic1@mailmind>" and picture.get_content() == b"\x89PNG"
+    assert 'src="cid:pic1@mailmind"' in m.get_body(preferencelist=("html",)).get_content()
+
+
+def test_a_draft_saved_before_its_mark_was_taken_out_has_the_picture_as_a_file(calls):
+    pk, _ = _saved_and_synced(calls, text="no mark here", attachments=[_picture()])
+    r, _ = _resume(pk)
+    assert [(f["filename"], f.get("cid")) for f in r["files"]] == [("chart.png", None)]
+    assert r["notes"]["inline"] == 0
+
+
+def test_a_picture_with_someone_elses_content_id_comes_back_as_a_file_and_is_said_to(calls):
+    def picture(m):
+        m.get_body().add_related(b"\x89PNG", maintype="image", subtype="png", cid="<photo@elsewhere.example.test>", filename="photo.png", disposition="inline")
+    raw = _foreign([lambda m: m.set_content("Hello\n"), lambda m: m.add_alternative('<img src="cid:photo@elsewhere.example.test">', subtype="html"),
+                    lambda m: picture(m)])
+    r, code = _resume(_synced(raw, 12))
+    assert code == 200, r
+    assert r["files"][0]["filename"] == "photo.png" and "cid" not in r["files"][0]
+    assert r["notes"]["inline"] == 1
+
+
 def test_whole_resume_sends_as_typed(calls):
     raw = _foreign([lambda m: m.set_content("On my way.\n\n> Shall we meet?\n")],
                    [("In-Reply-To", "<orig1@example.test>")])

@@ -307,6 +307,23 @@ def test_the_preview_of_plain_text_says_it_goes_as_text(app):
     assert (r.status, r.json) == (200, {"ok": True, "html": "<div>a &lt;b&gt;</div><br>", "formatted": False})
 
 
+def test_the_preview_shows_a_picture_it_is_told_of_as_its_content_id(app):
+    r = app.post("/api/compose/preview", {"text": "![a](cid:pic1)", "pictures": [{"cid": "pic1", "content_type": "image/png"}]})
+    assert (r.status, r.json["formatted"]) == (200, True)
+    assert 'src="cid:pic1@mailmind"' in r.json["html"]
+
+
+def test_a_mark_the_preview_isnt_told_of_stays_as_typed(app):
+    r = app.post("/api/compose/preview", {"text": "![a](cid:pic1)"})
+    assert (r.status, r.json["formatted"]) == (200, False)
+
+
+@pytest.mark.parametrize("pictures", [5, "x", [{"cid": "a"}], [{"cid": "a", "content_type": "image/svg+xml"}], [{"cid": 5, "content_type": "image/png"}]])
+def test_a_picture_the_preview_cant_read_is_the_400(app, pictures):
+    r = app.post("/api/compose/preview", {"text": "x", "pictures": pictures})
+    assert (r.status, r.json) == (400, BAD_REQUEST)
+
+
 def test_the_preview_of_nothing_is_nothing_to_show(app):
     r = app.post("/api/compose/preview", {})
     assert (r.status, r.json["formatted"]) == (200, False)

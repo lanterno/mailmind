@@ -15,7 +15,7 @@ from mailmind.assistant.domain import action_plan, prompts
 from mailmind.assistant.domain import limits as limits_of_ai
 from mailmind.attention.domain import snooze
 from mailmind.calendar.domain import rsvp
-from mailmind.compose.domain import limits, resume
+from mailmind.compose.domain import attachments, limits, resume
 from mailmind.curation.domain import cleanup_plan, filters, rulebook
 from mailmind.discovery.domain import documents, views
 from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
@@ -31,7 +31,7 @@ SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "R
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
         "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
-        "ArchiveFormat": export.ArchiveFormat}
+        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType}
 
 
 def members(alias):
