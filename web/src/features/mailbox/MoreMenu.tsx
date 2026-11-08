@@ -2,6 +2,7 @@
 // verb keeps a single code path.
 import { useState } from "react";
 import { Button, Menu, MenuItem, MenuTrigger, Popover } from "react-aria-components";
+import { EMPTY } from "../../lib/emptyWords";
 import { Icon } from "../../lib/ui/Icon";
 
 interface Hidden { id: string; name: string; button: HTMLElement }
@@ -22,7 +23,7 @@ export function MoreMenu() {
     <MenuTrigger onOpenChange={(open) => { if (open) setHidden(hiddenVerbs(document.querySelector("#reader .rd-actions"))); }}>
       <Button className="cab rd-more" aria-label="More actions"><span><Icon name="more" /></span></Button>
       <Popover className="snooze-menu rac" placement="bottom end" offset={4}>
-        <Menu items={hidden} onAction={(key) => hidden.find((h) => h.id === key)?.button.click()} renderEmptyState={() => <div className="nores">Nothing else here.</div>}>
+        <Menu items={hidden} onAction={(key) => hidden.find((h) => h.id === key)?.button.click()} renderEmptyState={() => <div className="nores">{EMPTY.menu}</div>}>
           {(h) => <MenuItem className="am-item" textValue={h.name}>{h.name}</MenuItem>}
         </Menu>
       </Popover>

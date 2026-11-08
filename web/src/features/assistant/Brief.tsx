@@ -2,6 +2,7 @@
 // column come from the digest, so they stand with AI off.
 import { useEffect } from "react";
 import { go, type DigestList, type ListSource } from "../../app/route";
+import { EMPTY } from "../../lib/emptyWords";
 import { minute } from "../../lib/clock";
 import { copyFromId, copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
@@ -152,7 +153,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
   else if (brief?.narrative) narrative = <p className="ai-tldr bf-narr">{brief.narrative}</p>;
   else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="btn-retry" onClick={() => write(false)}>Write it</button></p>;
   else if (error) narrative = <p className="bf-wait">The brief isn’t available right now ({failing || error}). <button className="btn-retry" onClick={() => write(false)}>Try again</button></p>;
-  else narrative = <p className="bf-wait">Nothing to brief yet.</p>;
+  else narrative = <p className="bf-wait">{EMPTY.briefNone}</p>;
 
   const fileTidy = async () => {
     const n = tidy.length;
@@ -198,7 +199,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
                 {needs.length > BRIEF_CAP && <button className="bf-tally" data-brief="needs" onClick={() => openDigestList(m.source, { list: "needs" }, needs)}>Show all {needs.length}</button>}
               </>
             )
-            : <p className="bf-calm">Nothing needs you right now.</p>}
+            : <p className="bf-calm">{EMPTY.briefCalm}</p>}
           {tidy.length > 0 && (
             <div className="bf-tidy">
               <span><Icon name="wind" /> <b>{tidy.length}</b> low-priority message{tidy.length > 1 ? "s" : ""} the AI rates as safe to file: no next step, nothing asked of you.</span>

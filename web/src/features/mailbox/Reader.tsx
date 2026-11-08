@@ -1,6 +1,7 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
@@ -400,7 +401,7 @@ export function Reader({ m }: { m: Mailbox }) {
   if (!opened && m.inInbox && !m.searching) return <section className="reader brief-pane" id="reader"><BriefPane m={m} /></section>;
   if (!opened) {
     const reading = m.list.data?.pages.at(-1)?.syncing;
-    return <section className="reader empty-pane" id="reader">{m.all.length ? "No message selected." : m.list.isPending ? "" : reading ? "Reading this folder for the first time…" : "No messages in this folder."}</section>;
+    return <section className="reader empty-pane" id="reader">{m.all.length ? EMPTY.noneOpen : m.list.isPending ? "" : reading ? "Reading this folder for the first time…" : EMPTY.folder}</section>;
   }
   return (
     <section className="reader" id="reader" aria-label="Message">

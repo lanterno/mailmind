@@ -1,5 +1,6 @@
 // Two saved searches that read better as something other than rows: newsletters as a river, receipts as a ledger.
 import { useEffect } from "react";
+import { EMPTY } from "../../lib/emptyWords";
 import type { Copy } from "../../lib/copy";
 import { shortAddress } from "../../lib/text";
 import type { Row, Mailbox } from "../mailbox";
@@ -17,7 +18,7 @@ function useOpenInView(open: Copy | null) {
 
 export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }) {
   useOpenInView(m.openCopy);
-  if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">Your Feed is clear — no newsletters waiting.</div></div>;
+  if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">{EMPTY.feed}</div></div>;
   return (
     <div id="rows">
       <div className="feed-river">
@@ -41,7 +42,7 @@ export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }
 
 export function PaperTrail({ m, footer }: { m: Mailbox; footer: React.ReactNode }) {
   useOpenInView(m.openCopy);
-  if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">No receipts or invoices yet.</div></div>;
+  if (!m.rows.length && m.list.isSuccess) return <div id="rows"><div className="nores">{EMPTY.receipts}</div></div>;
   return (
     <div id="rows">
       <div className="paper-trail">

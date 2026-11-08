@@ -1,0 +1,23 @@
+// What a place says when there's nothing in it. One table, so that two places empty in the same way say so in the same words.
+export const EMPTY = {
+  matches: "No matches.",
+  digest: "Nothing left here.",
+  list: "Nothing here.",
+  folder: "No messages in this folder.",
+  noneOpen: "No message selected.",
+  needsYou: "Nothing needs you.",
+  unread: "Nothing unread.",
+  menu: "Nothing else here.",
+  queued: "Nothing queued.",
+  feed: "Your Feed is clear — no newsletters waiting.",
+  receipts: "No receipts or invoices yet.",
+  briefNone: "Nothing to brief yet.",
+  briefCalm: "Nothing needs you right now.",
+  week: "Nothing important is unanswered.",
+  noFile: "No files match.",
+  noDocuments: "No documents found in your synced mail.",
+  commitments: "No open commitments — you’re on top of it.",
+  connections: "No email connections yet.",
+  flooding: "No sender is flooding you right now.",
+  activity: "No activity yet.",
+} as const;

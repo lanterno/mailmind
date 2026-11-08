@@ -1,6 +1,7 @@
 // ⌘K: everything you can do from here, found by typing.
 import { useRef, useState } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
+import { EMPTY } from "../lib/emptyWords";
 import { rankByLabel } from "../lib/fuzzy";
 import { createStore } from "../lib/store";
 import { toast } from "../lib/toast";
@@ -69,7 +70,7 @@ export function Entries({ entries, close, placeholder, label, listLabel, idPrefi
         }}
       />
       <div className="plist" id={`${idPrefix}list`} role="listbox" aria-label={listLabel} ref={list}>
-        {!shown.length && <div className="pnone">No matches.</div>}
+        {!shown.length && <div className="pnone">{EMPTY.matches}</div>}
         {shown.map((c, i) => {
           const heading = !typed && c.group !== (shown[i - 1]?.group ?? "") ? <div key={`g-${c.group}`} className="pgrp" role="presentation">{c.group}</div> : null;
           return [

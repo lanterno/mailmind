@@ -1,6 +1,7 @@
 // The tray the top bar's ↑ opens: changes waiting for a server, and what the outbox holds, each with its way out.
 import { useEffect, useEffectEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { toast } from "../../lib/toast";
@@ -148,7 +149,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
           {drafts.length > 0 && <h4>Drafts waiting</h4>}
           {drafts.map((d) => <DraftRow key={d.id} d={d} readOnly={readOnly} edit={() => editDraft(d.id)} discard={() => void discardDraft(d.id)} />)}
           {(items.length > 0 || (!held.length && !drafts.length)) && <h4>Outbox</h4>}
-          {!items.length && !held.length && !drafts.length && <div className="ob-row"><span className="ob-sub">Nothing queued.</span></div>}
+          {!items.length && !held.length && !drafts.length && <div className="ob-row"><span className="ob-sub">{EMPTY.queued}</span></div>}
           {items.map((o) => <SentRow key={o.id} o={o} call={(...args) => void call(...args)} />)}
         </div>
       )}

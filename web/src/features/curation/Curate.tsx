@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
+import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
 import type { BlockScope, GetAnswers, RuleChange } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
@@ -117,7 +118,7 @@ function Flood() {
   if (isError) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Couldn’t load.</div>;
   if (!data) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Measuring…</div>;
   const senders = data.senders ?? [];
-  if (!senders.length) return <div style={{ color: "var(--faint)", fontSize: 11.5, padding: "6px 2px" }}>No sender is flooding you right now.</div>;
+  if (!senders.length) return <div style={{ color: "var(--faint)", fontSize: 11.5, padding: "6px 2px" }}>{EMPTY.flooding}</div>;
   return (
     <>
       {senders.map((x) => (
@@ -257,7 +258,7 @@ function Audit() {
     curateOpen.set(false);
     go({ source: { kind: "folder", account: a, folder: "INBOX" }, opened: null });
   };
-  if (!events.length) return <div className="console" id="console"><div style={{ color: "var(--faint)" }}>No activity yet.</div></div>;
+  if (!events.length) return <div className="console" id="console"><div style={{ color: "var(--faint)" }}>{EMPTY.activity}</div></div>;
   return (
     <div className="console" id="console">
       {events.map((e, i) => (

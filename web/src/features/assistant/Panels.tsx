@@ -1,5 +1,6 @@
 // Two looks over the same mail, each its own overlay: the AI's to-dos as one checkable agenda, and the week behind you.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
+import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, refusalOf } from "../../lib/api/client";
 import { copyId, copyOf } from "../../lib/copy";
 import { createStore } from "../../lib/store";
@@ -31,7 +32,7 @@ function Commitments({ m }: { m: Mailbox }) {
     <>
       <div className="commit-hd"><Icon name="todo" /> Commitments <span className="n" id="commitN">{all.length > COMMIT_CAP ? `${all.length} · top ${COMMIT_CAP}` : all.length}</span><span className="sub">the AI's to-dos pulled from your mail</span></div>
       <div className="commit-list" id="commitList">
-        {!shown.length && <div className="commit-empty">No open commitments — you’re on top of it.</div>}
+        {!shown.length && <div className="commit-empty">{EMPTY.commitments}</div>}
         {shown.map((it) => {
           const level = Math.max(1, Math.min(5, it.importance || 1));
           const link = typeof it.link === "string" && it.link.startsWith("https://") ? it.link : null;
@@ -83,7 +84,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
       {d.next?.map((t) => <div className="rv-item" key={t}><span className="ic">→</span><div className="body"><div className="t">{t}</div></div></div>)}
       {(d.needs?.length ?? 0) > 0
         ? <div className="rv-sec">Still needs you ({d.needs!.length})</div>
-        : <><div className="rv-sec">Still needs you</div><div className="rv-empty">Nothing important is unanswered.</div></>}
+        : <><div className="rv-sec">Still needs you</div><div className="rv-empty">{EMPTY.week}</div></>}
       {d.needs?.map((n) => (
         <button className="rv-item need" key={n.key === null || n.uid === null ? `n${n.subject}` : copyId({ key: n.key, folder: n.folder, uid: n.uid })} onClick={() => open(n)}>
           <span className="ic">●</span>

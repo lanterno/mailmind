@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
+import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
 import type { ArchiveFormat, GetAnswers } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
@@ -321,7 +322,7 @@ function Connections() {
     body = (
       <>
         <Backup />
-        {!rows.length && <div className="nores" style={{ padding: 36 }}>No email connections yet.<br />Add one to get started.</div>}
+        {!rows.length && <div className="nores" style={{ padding: 36 }}>{EMPTY.connections}<br />Add one to get started.</div>}
         {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email ?? "")} live={liveOf(r.email ?? "")} status={statusOf(r.email ?? "")} edit={() => setEditing(r.email)} again={again} />)}
       </>
     );

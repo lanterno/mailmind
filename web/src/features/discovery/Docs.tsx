@@ -2,6 +2,7 @@
 // every file and not only those loaded.
 import { Fragment, useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { EMPTY } from "../../lib/emptyWords";
 import { get } from "../../lib/api/client";
 import type { DocumentGrouping, DocumentKind } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
@@ -70,7 +71,7 @@ export function Hub({ m }: { m: Mailbox }) {
   let body: React.ReactNode;
   if (list.isError && !first) body = <div className="doc-empty">Couldn’t load documents.</div>;
   else if (!first) body = <div className="doc-empty" role="status"><span className="spin">↻</span> Gathering your files…</div>;
-  else if (!docs.length) body = <div className="doc-empty">{total ? "No files match." : "No documents found in your synced mail."}</div>;
+  else if (!docs.length) body = <div className="doc-empty">{total ? EMPTY.noFile : EMPTY.noDocuments}</div>;
   else {
     body = (
       <>
