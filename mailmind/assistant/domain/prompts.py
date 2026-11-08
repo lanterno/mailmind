@@ -212,4 +212,15 @@ Senders:
 {senders}
 """)
 
-BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT, SCREEN)
+
+
+RATIONALE = Template("rationale", 1, """You are telling the owner of a mailbox why each sender below is worth cleaning up. Write \
+one plain sentence for each, at most 20 words, to the owner as "you", using ONLY the numbers given for that sender and inventing \
+none (for example: "You have never opened one of these 47 in 6 months."). Reply with ONLY a JSON object {"rationales": \
+[{"id": N, "text": "..."}]}, with only the ids given below.
+
+Senders:
+{senders}
+""")
+
+BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT, SCREEN, RATIONALE)

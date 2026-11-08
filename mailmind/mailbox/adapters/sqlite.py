@@ -727,6 +727,18 @@ def sender_recent(c, addr, n):
         "GROUP BY m.message_key ORDER BY m.ts DESC LIMIT ?", (addr, n)).fetchall()
 
 
+def sender_stats(c, addrs):
+    """How each of these senders stands in the stored mail, one row a sender and each message counted once however many
+    folders hold it. For the Assistant, which is told these numbers."""
+    ph = ",".join("?" for _ in addrs)
+    return c.execute(
+        f"""SELECT addr, MAX(name) name, COUNT(*) n, SUM(seen=0) unseen, SUM(answered) replied, MIN(ts) first_ts, MAX(ts) last_ts
+            FROM (SELECT lower(from_addr) addr, from_name name, MAX(seen) seen, MAX(COALESCE(answered, 0)) answered, MAX(ts) ts
+                  FROM messages WHERE lower(from_addr) IN ({ph}) AND pending_removal IS NULL
+                  GROUP BY lower(from_addr), COALESCE(message_key, -pk))
+            GROUP BY addr ORDER BY n DESC""", addrs).fetchall()
+
+
 def needs_you_rows(c, accounts, n):
     """Who's waiting on the person to reply: open, important, unanswered INBOX mail (mirrors the brief's "needs you"
     set; joins assessments so we get importance/action, excludes junk/snoozed/muted/answered)."""

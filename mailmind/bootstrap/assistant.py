@@ -33,6 +33,7 @@ from mailmind.assistant.application.governor import CostGovernor, allowing_over
 from mailmind.assistant.application.prepared_replies import PreparedReplies
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.application.review import Reviews
+from mailmind.assistant.application.rationale import Rationales
 from mailmind.assistant.application.rewrite import Rewriter
 from mailmind.assistant.application.screening import Screening
 from mailmind.assistant.application.status import Status
@@ -44,7 +45,7 @@ from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "screening", "status", "threads", "transport", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = environment.ANTHROPIC_API_KEY.name
@@ -179,6 +180,9 @@ class _Mail:
     def sender_recent(self, c, addr, n):
         return mailbox.store.sender_recent(c, addr, n)
 
+    def sender_stats(self, c, addrs):
+        return mailbox.store.sender_stats(c, addrs)
+
     def screener_items(self, account):
         return curation.screener.queue(account)["items"]
 
@@ -239,3 +243,4 @@ asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
 drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
 bulk = BulkCommands(calls, _Search())
 screening = Screening(calls, _uow, _mail)
+rationales = Rationales(calls, _uow, _mail)

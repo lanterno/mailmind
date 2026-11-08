@@ -23,12 +23,14 @@ from mailmind.http.schemas.assistant import (
     DraftAheadStatus,
     DraftedReply,
     DraftReplyBody,
+    CleanupRationales,
     Expired,
     Extracted,
     PlanBody,
     PlanCarriedOut,
     PlanIsASearch,
     PlanPreview,
+    RationaleBody,
     Review,
     ReviewMissing,
     Rewritten,
@@ -122,6 +124,11 @@ def router(assistant, mailbox):
         if plan is None:
             return route.problem(410, "this plan has expired", expired=True)
         return mailbox.filing.carry_out(plan.verb, plan.preset, plan.messages, body.undo_group)
+
+    @r.post("/api/cleanup/rationale", responses=answers(CleanupRationales, _MAY_FAIL))     # why each is worth cleaning up; it does nothing
+    @_scrubbed("cleanup rationale error", "rationale failed")
+    def cleanup_rationale(body: RationaleBody):
+        return assistant.rationales.explain(body.senders)
 
     @r.post("/api/screener/suggest", responses=answers(ScreenerSuggestions, _MAY_FAIL))     # suggests; only a person's click writes a rule
     @_scrubbed("screener suggest error", "suggestions failed")

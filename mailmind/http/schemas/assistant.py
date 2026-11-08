@@ -183,6 +183,15 @@ class ReviewAwaited(Answer):
     sent_ts: int
 
 
+class RationaleBody(RequestBody):
+    senders: list[str] | None = None        # left out is the use case's `bad senders`
+
+
+class CleanupRationales(Answer):
+    ok: Literal[True]
+    rationales: dict[str, str]              # by sender
+
+
 class ScreenerSuggestBody(RequestBody):
     account: str | None = None
 
