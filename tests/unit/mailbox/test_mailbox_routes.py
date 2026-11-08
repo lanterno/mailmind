@@ -268,7 +268,7 @@ def test_a_key_that_reads_and_names_nothing_is_no_message(app, path, key):
     assert (r.status, r.json) == (404, problems.not_found("not found"))
 
 
-@pytest.mark.parametrize("part", ["1x", "1.0", "-1", "%D9%A3", "x"])
+@pytest.mark.parametrize("part", ["1x", "1.0", "-1", "%D9%A3", "x", "1%0A", "1%0D%0A", "%0A1"])
 def test_a_part_id_that_isnt_one_is_refused(app, world, part):
     r = app.get("/api/message/attachment?key={key}&folder={folder}&part_id=".format(**world.copy(RECEIPT)) + part)
     assert (r.status, r.json) == (400, problems.refused("bad part id"))
