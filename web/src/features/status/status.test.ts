@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { coachPlace, guideOffers, guideSteps } from "./guideSteps";
 import { pillLabel } from "./model";
 
 const digest = (over: object = {}) => ({ accounts: ["a@example.test"], aliases: {}, status: {}, sync: { last: null }, profile: "full", ...over }) as never;
@@ -27,5 +28,48 @@ describe("what the pill says", () => {
     expect(today.text).toMatch(/^Synced 9:05/);
     expect(pillLabel(digest({ sync: { last: new Date(2026, 9, 30).toISOString() } }), false, false, now).text).toMatch(/^Synced Oct 30/);
     expect(pillLabel(digest(), false, false, now).text).toBe("Not synced yet");
+  });
+});
+
+describe("the first-run guide", () => {
+  const gate = { prefsRead: true, offered: false, accounts: 1, inboxHasMail: true, busy: false };
+  const ids = (ai: boolean, singleKeys = true) => guideSteps({ ai, singleKeys }).map((s) => s.id);
+
+  it("is offered once, with mail and nothing in the way", () => {
+    expect(guideOffers(gate)).toBe(true);
+    expect(guideOffers({ ...gate, offered: true })).toBe(false);
+    expect(guideOffers({ ...gate, accounts: 0 })).toBe(false);
+    expect(guideOffers({ ...gate, inboxHasMail: false })).toBe(false);
+    expect(guideOffers({ ...gate, busy: true })).toBe(false);
+  });
+  it("isn't offered on a guess: only once the server has answered", () => expect(guideOffers({ ...gate, prefsRead: false })).toBe(false));
+  it("covers what it should, and drops what needs an AI that's off", () => {
+    expect(ids(true)).toEqual(["brief", "rail", "palette", "ask", "screener"]);
+    expect(ids(false)).toEqual(["brief", "rail", "palette", "screener"]);
+  });
+  it("doesn't teach a key that is switched off", () => {
+    const rail = (singleKeys: boolean) => guideSteps({ ai: false, singleKeys }).find((s) => s.id === "rail")!.text;
+    expect(rail(true)).toContain("↵");
+    expect(rail(false)).not.toContain("↵");
+    expect(rail(false)).toContain("Focus reading");
+  });
+});
+
+describe("where a coach-mark sits", () => {
+  const view = { width: 1000, height: 800 }, card = { width: 300, height: 200 };
+
+  it("centres with nothing to point at", () => expect(coachPlace(null, view, card)).toEqual({ top: 300, left: 350 }));
+  it("goes beside what it points at", () => expect(coachPlace({ top: 100, left: 20, width: 200, height: 400 }, view, card)).toEqual({ top: 100, left: 232 }));
+  it("goes to the other side when there's no room", () => expect(coachPlace({ top: 100, left: 690, width: 300, height: 400 }, view, card)).toEqual({ top: 100, left: 378 }));
+  it("goes under, then over, a target as wide as the window", () => {
+    expect(coachPlace({ top: 40, left: 0, width: 1000, height: 100 }, view, card)).toEqual({ top: 152, left: 12 });
+    expect(coachPlace({ top: 600, left: 0, width: 1000, height: 190 }, view, card)).toEqual({ top: 388, left: 12 });
+  });
+  it("stays inside the window", () => {
+    const { top, left } = coachPlace({ top: 780, left: 900, width: 90, height: 10 }, view, card);
+    expect(top).toBeLessThanOrEqual(view.height - card.height);
+    expect(left).toBeLessThanOrEqual(view.width - card.width);
+    expect(top).toBeGreaterThan(0);
+    expect(left).toBeGreaterThan(0);
   });
 });

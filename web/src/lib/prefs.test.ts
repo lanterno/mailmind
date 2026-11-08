@@ -72,6 +72,21 @@ describe("loading what the server holds", () => {
     expect(client.post).not.toHaveBeenCalled();
     expect(prefs.get().density).toBe("cozy");
   });
+  it("says the server has answered only once it has", async () => {
+    browserHolding({});
+    client.get.mockResolvedValue(answer({}));
+    const { loadPrefs, prefsRead } = await load();
+    expect(prefsRead.get()).toBe(false);
+    await loadPrefs();
+    expect(prefsRead.get()).toBe(true);
+  });
+  it("doesn't say so when the server didn't answer", async () => {
+    browserHolding({});
+    client.get.mockRejectedValue(new Error("down"));
+    const { loadPrefs, prefsRead } = await load();
+    await loadPrefs();
+    expect(prefsRead.get()).toBe(false);
+  });
   it("brings old keys in, once, and lets go of them only then", async () => {
     const kept = browserHolding(OLD);
     client.post.mockResolvedValue(answer({ theme: "night" }));
