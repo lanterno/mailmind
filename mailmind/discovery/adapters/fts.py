@@ -47,6 +47,10 @@ def to_sql(spec):
             column, unlike = _EXACT[c.kind]
             where.append(f"{column} {unlike if c.negated else '='} ?")
             params.append(c.value)
+        elif c.kind is Kind.LABEL:          # as written, or a system one: label:important is Gmail's \\Important
+            where.append(("NOT " if c.negated else "") + "EXISTS (SELECT 1 FROM message_labels l WHERE l.message_pk = m.pk "
+                         "AND l.label COLLATE NOCASE IN (?, ?))")
+            params += [c.value, "\\" + c.value]
         elif c.kind is Kind.ATTACHMENT:
             where.append("m.has_attach = ?")
             params.append(0 if c.negated else 1)

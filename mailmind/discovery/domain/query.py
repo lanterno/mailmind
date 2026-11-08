@@ -9,6 +9,7 @@ Grammar (tokenized with shlex so "quoted phrases" stay intact):
   bucket:VALUE  category:VALUE                    -> exact
   has:attachment                                  -> has one
   in:FOLDER  account:EMAIL                        -> exact
+  label:NAME                                      -> a Gmail label the message carries, in any case
   before:YYYY-MM-DD  after:YYYY-MM-DD             -> a time, at local midnight
   -TOKEN                                          -> negation
 
@@ -33,6 +34,7 @@ class Kind(Enum):
     CATEGORY = "category"      # value: the AI's category
     ATTACHMENT = "attachment"
     FOLDER = "folder"          # value: its name
+    LABEL = "label"            # value: a Gmail label's name
     ACCOUNT = "account"        # value: its address
     BEFORE = "before"          # value: seconds
     AFTER = "after"            # value: seconds
@@ -52,7 +54,7 @@ BUCKET_ALIAS = {                                  # shorthand -> the real classi
 }
 # What the search box offers as you type (domain.suggest), in the order it offers them: the operators this parser reads, and
 # the is: and has: values worth a line. BUCKET_ALIAS has several words for most buckets, and one of each is enough to offer.
-OPERATORS = ("from", "to", "cc", "subject", "body", "is", "has", "in", "account", "before", "after", "bucket", "category")
+OPERATORS = ("from", "to", "cc", "subject", "body", "is", "has", "in", "label", "account", "before", "after", "bucket", "category")
 IS_OFFERED = ("unread", "read", "flagged", "answered", "junk", "snoozed", "newsletter", "receipt", "notification")
 HAS_OFFERED = ("attachment",)
 # is:<x> values that pick out part of the mailbox: a content lane or a minority flag. Not "read", which
@@ -101,6 +103,8 @@ def _clause(token: str) -> Clause | None:
         return Clause(Kind.ATTACHMENT, negated=negated, narrows=True)
     if sep and name == "in" and value:
         return Clause(Kind.FOLDER, value, None, negated)
+    if sep and name == "label" and value:
+        return Clause(Kind.LABEL, value, None, negated, narrows=True)
     if sep and name == "account" and value:
         return Clause(Kind.ACCOUNT, value, None, negated)
     if sep and name in ("before", "after") and value:
