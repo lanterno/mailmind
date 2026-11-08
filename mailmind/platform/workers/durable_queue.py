@@ -66,11 +66,11 @@ class DurableQueue:
                          (self.running, id_, QUEUED)).fetchall()
         return rows[0] if rows else None
 
-    def put_back(self, c: Connection, id_: int) -> None:
-        """A claimed row wasn't tried, or its try says nothing against it: back in the queue, due now, with no
-        attempt counted."""
-        c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=0 WHERE id=? AND state=?",
-                  (QUEUED, id_, self.running))
+    def put_back(self, c: Connection, id_: int, due: int = 0) -> None:
+        """A claimed row wasn't tried, or its try says nothing against it: back in the queue, with no attempt counted,
+        due now unless `due`, a time, says otherwise."""
+        c.execute(f"UPDATE {self.table} SET state=?, next_attempt_at=? WHERE id=? AND state=?",
+                  (QUEUED, due, id_, self.running))
 
     def backoff(self, attempts: int) -> int:
         """Seconds to wait after the `attempts`-th attempt failed."""

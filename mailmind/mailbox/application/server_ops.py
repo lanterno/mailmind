@@ -80,16 +80,21 @@ class ServerOps:
             return self._store.account_of(c, pk)
 
 
-    def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T]) -> T:
-        """Open a session, run fn(session), log out. A connection failure raises (a member of
-        UNREACHABLE) so the caller can queue/retry; a clean command-level IMAP4.error from fn propagates
-        as a logical error."""
-        s = self._open_session(acct)        # OSError/timeout/ssl/abort here → UNREACHABLE propagates
+    def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T], timeout: int | None = None) -> T:
+        """Open a session, run fn(session), log out; `timeout` is seconds for each step, the session's own when None. A
+        connection failure raises (a member of UNREACHABLE) so the caller can queue/retry, and hangs up with no LOGOUT: a
+        server that didn't answer the last command won't answer that one, and waiting to hear so is a second timeout. A
+        clean command-level IMAP4.error from fn propagates as a logical error."""
+        s = self._open_session(acct, timeout=timeout) if timeout else self._open_session(acct)   # a failure here propagates too
+        lost = False
         try:
             return fn(s)
+        except UNREACHABLE:
+            lost = True
+            raise
         finally:
             try:
-                s.logout()
+                s.shutdown() if lost else s.logout()
             except Exception:
                 pass
 
@@ -138,10 +143,11 @@ class ServerOps:
         return uid if same_epoch else None
 
 
-    def apply(self, row: Row, first_try: bool = False) -> command.ServerAnswer:
+    def apply(self, row: Row, first_try: bool = False, timeout: int | None = None) -> command.ServerAnswer:
         """One try at the command `row`, on the account's gate: a ServerAnswer. Raises a UNREACHABLE member when the
         connection fails. Unless this is the first try, an earlier one may have got part of the way, so it asks the
-        server before it repeats anything: exactly once, however many tries it takes."""
+        server before it repeats anything: exactly once, however many tries it takes. `timeout` is how long each step
+        waits for the server, when someone is waiting on the try."""
         profile.refuse_writes("an IMAP change")      # read-only: raised before any connection, so it queues
         acct = self._accounts.get(row["account"])
         kind, src = row["kind"], row["src_folder"]
@@ -181,7 +187,7 @@ class ServerOps:
             return command.ServerAnswer(dest=where.folder, unseen=unseen)
 
         try:
-            return self._do_imap(acct, run)
+            return self._do_imap(acct, run, timeout)
         except UNREACHABLE:
             raise                                    # connection-level: the caller queues or backs off
         except imaplib.IMAP4.error:                  # NO or BAD: it didn't happen, and won't

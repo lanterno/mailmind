@@ -58,6 +58,8 @@ class MailCommands:
     UNREACHABLE = UNREACHABLE
     MAX_ATTEMPTS = 101      # about a day of tries, as the backoff goes: an outage isn't a reason to put mail back
     FILE_WAIT = 2.5         # seconds a click waits for the account's gate before the worker takes it over
+    TRY_TIMEOUT = 12        # seconds a click's try waits for each answer: FILE_WAIT and this are all a hung server costs a click
+    AFTER_SILENCE = 60      # seconds the worker leaves a try that heard nothing: see submit
     _BACKOFF_BASE = 20      # secs; doubles per attempt
     _BACKOFF_CAP = 900
     _POLL = 30
@@ -209,7 +211,7 @@ class MailCommands:
             first_try = just_accepted or not fresh["begun"]
             if not fresh["begun"]:
                 self._commit(lambda c: self._store.command_mark_begun(c, mid))
-            answer = self._server.apply(fresh, first_try)
+            answer = self._server.apply(fresh, first_try, timeout=self.TRY_TIMEOUT if just_accepted else None)
             if answer.won_t:
                 return answer.won_t
         self._settle(fresh, answer)
@@ -218,8 +220,11 @@ class MailCommands:
 
     def submit(self, accepted: command.Accepted) -> str:
         """A try now, for the person waiting: what became of the command. It waits for the gate only FILE_WAIT seconds,
-        and a server that can't be reached leaves the command for the worker. A change that won't happen leaves nothing
-        behind, since whoever is waiting hears of it now: the message is as it was, and the tray stays clear."""
+        and for each answer only TRY_TIMEOUT, and a server that can't be reached leaves the command for the worker. A try
+        that heard nothing may have left a command running on the server, so the worker waits AFTER_SILENCE before asking
+        it, as long as a try of its own would have listened: a retry asks the server first, and gets the wrong answer while
+        the server is still busy with the last. A change that won't happen leaves nothing behind, since whoever is waiting
+        hears of it now: the message is as it was, and the tray stays clear."""
         row = accepted.claimed
         if row is None:
             return command.QUEUED
@@ -231,6 +236,10 @@ class MailCommands:
             self._commit(lambda c: (self.QUEUE.put_back(c, mid), self._store.command_never_begun(c, mid)))
             self.kick()
             return command.WAITING
+        except TimeoutError:                 # a member of UNREACHABLE, the one that may still be going on over there
+            self._commit(lambda c: self.QUEUE.put_back(c, mid, _now() + self.AFTER_SILENCE))
+            self.kick()
+            return command.QUEUED
         except UNREACHABLE:
             self._commit(lambda c: self.QUEUE.put_back(c, mid))
             self.kick()
