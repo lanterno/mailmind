@@ -5,9 +5,8 @@ from mailmind.compose.domain.errors import Unanswered
 from mailmind.compose.domain.events import DraftCopyRemoved, Failed, Sent
 from mailmind.compose.domain.forward import forward_bodies
 from mailmind.compose.domain.limits import MAX_ATTACH_BYTES, MAX_SEND_POST
-from mailmind.compose.domain.outbox_item import SEND_DELAY
 from mailmind.compose.domain.reply import reply_bodies
 from mailmind.compose.domain.resume import ComposeMode, lf, resume_split
 
-__all__ = ["Built", "ComposeMode", "DraftCopyRemoved", "Failed", "MAX_ATTACH_BYTES", "MAX_SEND_POST", "MessageSpec", "SEND_DELAY", "Sent", "Unanswered", "build_message", "forward_bodies", "lf", "reference_chain", "reply_bodies", "resume_split",
+__all__ = ["Built", "ComposeMode", "DraftCopyRemoved", "Failed", "MAX_ATTACH_BYTES", "MAX_SEND_POST", "MessageSpec", "Sent", "Unanswered", "build_message", "forward_bodies", "lf", "reference_chain", "reply_bodies", "resume_split",
            "thread_ids"]

@@ -60,12 +60,18 @@ class Outbox:
                                   backoff_base=self._BACKOFF_BASE, backoff_cap=self._BACKOFF_CAP, poll=self._POLL,
                                   lane="account", unsure=("wire_begun", outbox_item.UNSURE))
 
+    def send_delay(self) -> int:
+        """The seconds a send waits before it goes, so Undo can stop it: what a person has set, or the default. What Undo Send's
+        countdown counts, so the page takes it from the answer and never keeps a number of its own."""
+        chosen = self._accounts.undo_send_seconds()
+        return self.SEND_DELAY if chosen is None else chosen
+
     def enqueue(self, built: Built, meta: SendMeta) -> tuple[int | None, bool]:
         """Persist a queued send. `built` = compose.build_message(...) output; `meta` =
         {account, idempotency_key, in_reply_to_pk, orig_message_id, subject, to, cc, bcc}. Returns
         (outbox_id, created). Kicks the worker."""
         orig = self._mail.original(meta.get("in_reply_to_pk"))         # its row may be gone by the time this goes out
-        row = outbox_item.new_row(built, meta, orig, _now() + self.SEND_DELAY, datetime.now(timezone.utc).isoformat())
+        row = outbox_item.new_row(built, meta, orig, _now() + self.send_delay(), datetime.now(timezone.utc).isoformat())
         with self._uow.write() as c:
             oid, created = self._book.outbox_insert(c, row)
         self.kick()

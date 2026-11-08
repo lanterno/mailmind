@@ -76,4 +76,4 @@ class Rsvp:
         }
         oid, created = self._send.enqueue(built, meta)
         return {"ok": True, "outbox_id": oid, "queued": created, "decision": decision,
-                "organizer": organizer, "summary": summary}
+                "organizer": organizer, "summary": summary, "undo_seconds": self._send.undo_seconds()}

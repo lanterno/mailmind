@@ -20,6 +20,7 @@ class RsvpQueued(Answer):
     decision: RsvpDecision
     organizer: str
     summary: str
+    undo_seconds: int                       # how long the reply can still be undone
 
 
 class UpcomingEvent(Answer):

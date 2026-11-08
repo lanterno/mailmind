@@ -71,6 +71,9 @@ class Accounts(Protocol):
     """An account as the configuration has it, until Accounts holds it."""
     def get(self, email: str) -> Account: ...
     def saves_sent(self, acct: Account) -> bool: ...
+    def undo_send_seconds(self) -> int | None:
+        """How long a person has asked a send to wait, within the window's bounds, or None when they haven't said."""
+        ...
 
 
 class Messages(Protocol):

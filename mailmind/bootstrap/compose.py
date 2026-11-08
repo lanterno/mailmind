@@ -45,6 +45,14 @@ class _Accounts:
     def saves_sent(self, acct):
         return provider_of(acct).saves_sent
 
+    def undo_send_seconds(self):
+        """A file that can't be read leaves a send at the default, as it does the AI's daily limit: mail still goes."""
+        from mailmind.bootstrap import accounts
+        try:
+            return accounts.config.preference("undo_send_seconds")
+        except (OSError, ValueError):
+            return None
+
 
 class _Messages:
     """A message's row and its body, until the Mailbox holds them."""

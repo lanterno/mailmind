@@ -101,6 +101,7 @@ class Queued(Answer):
     queued: bool
     scheduled: bool
     recipients: int
+    undo_seconds: int                         # how long it can still be undone, which the page's countdown counts
 
 
 class DraftFile(Answer):

@@ -7,6 +7,7 @@ import json
 from typing import Any, NotRequired, TypedDict
 
 from mailmind.compose.domain.builder import Built
+from mailmind.kernel import send_window
 from mailmind.kernel.row import Row
 
 UNSURE = "May have gone out: the server stopped answering once it had the whole message"
@@ -16,7 +17,7 @@ SENT_COPY_FAILED = "Delivered, but its copy couldn't be saved in Sent"
 MAX_ATTEMPTS = 5
 BACKOFF_BASE = 20      # secs; doubles per attempt
 BACKOFF_CAP = 900
-SEND_DELAY = 10        # grace window before the wire send, so Undo Send can cancel it
+SEND_DELAY = send_window.DEFAULT    # grace window before the wire send, so Undo Send can cancel it, unless a person has set another
 
 GRACE, SCHEDULED, BACKOFF = "grace", "scheduled", "backoff"    # what a queued send waits for: outbox.wait_kind
 RETRIED: Mapping[str, int | str] = {"wire_begun": 0, "wait_kind": GRACE}   # a person's Retry

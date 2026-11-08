@@ -52,6 +52,10 @@ class _Send:
         from mailmind.bootstrap import compose
         return compose.outbox.enqueue(built, meta)
 
+    def undo_seconds(self):
+        from mailmind.bootstrap import compose
+        return compose.outbox.send_delay()
+
 
 _stored = StoredInvites(_Folders())
 ics = icalendar_acl

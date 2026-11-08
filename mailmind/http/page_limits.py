@@ -8,7 +8,8 @@ reload. A limit the page doesn't hold anyone to stays out.
 from mailmind.accounts.api import AI_DAILY_LIMIT_MAX, PREFERENCE_DEFAULTS
 from mailmind.assistant.api import DEFAULT_DAILY_LIMIT_USD, INSTRUCTION_MAX
 from mailmind.attention.api import BULK_CAP
-from mailmind.compose.api import MAX_ATTACH_BYTES, SEND_DELAY
+from mailmind.compose.api import MAX_ATTACH_BYTES
+from mailmind.kernel import send_window
 from mailmind.mailbox.api import BULK_MAX
 
 PAGE_LIMITS: dict[str, int] = {
@@ -17,7 +18,8 @@ PAGE_LIMITS: dict[str, int] = {
     "bulk_rows": BULK_MAX,                   # the rows one /api/bulk/file may name: the page sends more as more requests
     "instruction_chars": INSTRUCTION_MAX,    # what is read of a person's word on what a drafted reply should say
     "snooze_copies": BULK_CAP,               # the copies one /api/snooze may name: the page sends more as more requests
-    "undo_send_seconds": SEND_DELAY,         # how long a send waits in the outbox, which Undo Send's countdown counts
+    "undo_send_longest": send_window.LONGEST,    # the most seconds a person may set Undo Send's window to
+    "undo_send_shortest": send_window.SHORTEST,  # the fewest: the window itself is read off each send's answer, not fixed for a build
 }
 
 # What each preference is with nothing said, so the page starts from the server's own defaults and keeps no copy of them.

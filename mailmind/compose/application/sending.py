@@ -38,4 +38,4 @@ class Sending:
                 "subject": spec["subject"], "draft_id": draft_id, "to": built["to_disp"], "cc": built["cc_disp"], "bcc": built["bcc_disp"], "send_after": send_after}
         oid, created = self._outbox.enqueue(built, meta)
         return {"ok": True, "outbox_id": oid, "queued": created, "scheduled": bool(send_after),
-                "recipients": len(built["envelope"])}
+                "recipients": len(built["envelope"]), "undo_seconds": self._outbox.send_delay()}
