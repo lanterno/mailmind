@@ -8,10 +8,11 @@ export type FolderRow = AnyOf<GetAnswers["/api/messages"]["items"][number]>;
 export type SearchRow = Extract<GetAnswers["/api/search"], { items: unknown }>["items"][number];
 export type FolderInfo = GetAnswers["/api/folders"]["folders"][number];
 
-// A row is a copy: its key and folder name it to the server, and `id` (`copyId`) on the page.
+// A row is a copy: its key, folder and uid name it to the server, and `id` (`copyId`) on the page.
 export interface Row {
   id: string;
   key: number;
+  uid: number;
   account: string;
   folder: string;
   fromName: string | null;
@@ -38,6 +39,7 @@ export function fromFolder(it: FolderRow, account: string): Row {
   return {
     id: copyId(it),
     key: it.key,
+    uid: it.uid,
     account: it.account ?? account,
     folder: it.folder,
     fromName: it.from_name,
@@ -65,6 +67,7 @@ export function fromSearch(it: SearchRow): Row {
   return {
     id: copyId(it),
     key: it.key,
+    uid: it.uid,
     account: it.account,
     folder: it.folder,
     fromName: it.from_name,

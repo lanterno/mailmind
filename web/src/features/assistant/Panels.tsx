@@ -36,7 +36,7 @@ function Commitments({ m }: { m: Mailbox }) {
           const level = Math.max(1, Math.min(5, it.importance || 1));
           const link = typeof it.link === "string" && it.link.startsWith("https://") ? it.link : null;
           return (
-            <div className="commit-row" key={copyId(it)} data-key={it.key} data-folder={it.folder}>
+            <div className="commit-row" key={copyId(it)} data-key={it.key} data-folder={it.folder} data-uid={it.uid}>
               <button className="cm-check" title="Done — archive" aria-label="Done" onClick={() => m.file(copyOf(it), "archive", "card")}>✓</button>
               <button className="cm-main" onClick={() => { close(); m.openAny(it); }}>
                 <div className="cm-action">{it.action}</div>
@@ -62,10 +62,10 @@ function Stat({ n, label, hot }: { n: number; label: string; hot?: boolean }) {
 function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void }) {
   const s = d.stats;
   // An item names its message's copy as it is now, and one that names no message (a follow-up whose thread has no row) none.
-  const open = (item: { key: number | null; folder: string | null; account: string; thread_id: string | null | undefined }) => {
-    if (item.key === null || !item.folder) return;
+  const open = (item: { key: number | null; folder: string | null; uid: number | null; account: string; thread_id: string | null | undefined }) => {
+    if (item.key === null || !item.folder || item.uid === null) return;
     close();
-    m.openNamed({ key: item.key, folder: item.folder }, item.account, item.thread_id);
+    m.openNamed({ key: item.key, folder: item.folder, uid: item.uid }, item.account, item.thread_id);
   };
   return (
     <>
@@ -85,14 +85,14 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
         ? <div className="rv-sec">Still needs you ({d.needs!.length})</div>
         : <><div className="rv-sec">Still needs you</div><div className="rv-empty">Nothing important is unanswered.</div></>}
       {d.needs?.map((n) => (
-        <button className="rv-item need" key={n.key === null ? `n${n.subject}` : copyId({ key: n.key, folder: n.folder })} onClick={() => open(n)}>
+        <button className="rv-item need" key={n.key === null || n.uid === null ? `n${n.subject}` : copyId({ key: n.key, folder: n.folder, uid: n.uid })} onClick={() => open(n)}>
           <span className="ic">●</span>
           <div className="body"><div className="t">{n.subject}</div><div className="m"><span className="who">{n.who}</span>{n.action ? ` · ${n.action}` : ""}</div></div>
         </button>
       ))}
       {(d.waiting?.length ?? 0) > 0 && <div className="rv-sec">You’re waiting on a reply</div>}
       {d.waiting?.map((w, i) => (
-        <button className="rv-item wait" key={w.key === null ? `w${i}` : `${w.key}:${w.folder ?? ""}`} disabled={w.key === null} onClick={() => open(w)}>
+        <button className="rv-item wait" key={w.key === null ? `w${i}` : `${w.key}:${w.uid ?? ""}:${w.folder ?? ""}`} disabled={w.key === null || w.uid === null} onClick={() => open(w)}>
           <span className="ic">◷</span>
           <div className="body"><div className="t">{w.subject}</div><div className="m">to {w.to || "—"}</div></div>
         </button>

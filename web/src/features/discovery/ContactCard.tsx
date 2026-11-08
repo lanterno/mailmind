@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import { go } from "../../app/route";
+import { copyId, copyOf } from "../../lib/copy";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
@@ -28,7 +29,7 @@ function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void 
       {recent.length > 0 && (
         <div className="cc-recent">
           {recent.map((x) => (
-            <button className="cc-thread" key={`${x.key}:${x.folder}`} onClick={() => { close(); m.openNamed({ key: x.key, folder: x.folder }, x.account, x.thread_id); }}>
+            <button className="cc-thread" key={copyId(x)} onClick={() => { close(); m.openNamed(copyOf(x), x.account, x.thread_id); }}>
               <span>{x.subject}</span><span className="cc-when">{x.when}</span>
             </button>
           ))}

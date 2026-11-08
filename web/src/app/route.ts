@@ -16,8 +16,9 @@ export type DigestList = { list: "needs" | "tidy" } | { list: "topic"; label: st
 // Two built-in views read better as something other than rows. The query is the same either way.
 export type Lane = "feed" | "papertrail";
 
-// What is open names a copy, by its key and folder: a link kept from before a move or a renumber still opens the message it
-// named, or nothing. A conversation names the copy it opened on, and the thread.
+// What is open names a copy, by its key, folder and uid: a link kept from before a move or a renumber opens the copy it
+// named, or nothing, and never another message or another copy beside it. A conversation names the copy it opened on, and
+// the thread.
 export type Opened = ({ kind: "message" } & Copy) | ({ kind: "thread"; id: string; account: string } & Copy) | null;
 
 // `brief` is the phone's way to say the brief is showing: there a pane is either the list or what's open.
@@ -45,6 +46,7 @@ export function pathOf({ source, opened, brief }: Route): string {
   if (opened) {
     query.set("key", String(opened.key));
     query.set("folder", opened.folder);
+    query.set("uid", String(opened.uid));
   }
   const q = query.toString();
   return `${path || "/"}${q ? `?${q}` : ""}`;
@@ -62,11 +64,12 @@ export function parseRoute(pathname: string, search: string): Route {
   }
   else if (parts[0] === "brief" && (parts[1] === "needs" || parts[1] === "tidy")) source = { kind: "digest", list: parts[1] };
   else if (parts[0] === "brief" && parts[1] === "topic" && parts[2]) source = { kind: "digest", list: "topic", label: parts[2] };
-  const key = Number(q.get("key")), folder = q.get("folder");
+  const key = Number(q.get("key")), folder = q.get("folder"), uid = Number(q.get("uid"));
+  const whole = (n: number, text: string | null) => /^[1-9]\d*$/.test(text ?? "") && Number.isSafeInteger(n);
   let opened: Opened = null;
-  if (/^[1-9]\d*$/.test(q.get("key") ?? "") && Number.isSafeInteger(key) && folder) {
+  if (whole(key, q.get("key")) && whole(uid, q.get("uid")) && folder) {
     const thread = q.get("c");
-    opened = thread ? { kind: "thread", id: thread, account: q.get("ca") ?? "", key, folder } : { kind: "message", key, folder };
+    opened = thread ? { kind: "thread", id: thread, account: q.get("ca") ?? "", key, folder, uid } : { kind: "message", key, folder, uid };
   }
   return q.get("brief") === "1" ? { source, opened, brief: true } : { source, opened };
 }

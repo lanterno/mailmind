@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { go, type DigestList, type ListSource } from "../../app/route";
 import { minute } from "../../lib/clock";
-import { copyId, copyOf } from "../../lib/copy";
+import { copyFromId, copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
 import { avatarHue, initialsOf, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
@@ -44,7 +44,7 @@ function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean
   const subject = it.subject || "(no subject)";
   const action = String(it.action ?? "").trim();
   return (
-    <article className="bf-need" data-key={it.key} data-folder={it.folder}>
+    <article className="bf-need" data-key={it.key} data-folder={it.folder} data-uid={it.uid}>
       <span className="av" style={{ "--h": avatarHue(it.from_addr || it.from_name) } as React.CSSProperties} aria-hidden="true">{initialsOf(it.from_name, it.from_addr)}</span>
       <div style={{ minWidth: 0 }}>
         <div className="bf-n1">
@@ -142,7 +142,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const topics = (brief?.groups ?? []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);
   const peekList = shown.map((x) => copyId(x)).join("\n");
   useEffect(() => {
-    if (peekList) void peekCards(peekList.split("\n").map((id) => ({ key: Number(id.slice(0, id.indexOf(":"))), folder: id.slice(id.indexOf(":") + 1) })));
+    if (peekList) void peekCards(peekList.split("\n").map(copyFromId));
   }, [peekList]);
 
   const failing = ai && ai.engine !== "none" && ai.last_ok === false && ai.last_error;

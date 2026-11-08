@@ -19,7 +19,7 @@ export function useSwipe(archive: (copy: Copy) => void, snooze: (copy: Copy) => 
       const target = e.target as Element, row = target.closest<HTMLElement>("#rows .row.cmsg");
       if (!row || target.closest(".cbx")) return;     // the select box stays what it is
       const t = e.touches[0]!;
-      at = { row, copy: { key: Number(row.dataset["key"]), folder: row.dataset["folder"] ?? "" }, x0: t.clientX, y0: t.clientY, dx: 0, lock: false };
+      at = { row, copy: { key: Number(row.dataset["key"]), folder: row.dataset["folder"] ?? "", uid: Number(row.dataset["uid"]) }, x0: t.clientX, y0: t.clientY, dx: 0, lock: false };
     };
     const move = (e: TouchEvent) => {
       if (!at) return;

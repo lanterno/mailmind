@@ -70,10 +70,10 @@ export function onDraftReady(key: number | null | undefined) {
 }
 
 export function useDraftAhead(copy: Copy | null, wanted: boolean, skip: boolean) {
-  const key = copy?.key ?? null, folder = copy?.folder ?? "";
+  const key = copy?.key ?? null, folder = copy?.folder ?? "", uid = copy?.uid ?? 0;
   useEffect(() => {
     if (key === null || skip) return;
-    const here = { key, folder };
+    const here = { key, folder, uid };
     viewing = here;
     if (chips.get().get(key) !== "ready") {
       void peek(here);
@@ -87,7 +87,7 @@ export function useDraftAhead(copy: Copy | null, wanted: boolean, skip: boolean)
       clearTimeout(dwell);
       viewing = null;
     };
-  }, [key, folder, wanted, skip]);
+  }, [key, folder, uid, wanted, skip]);
 }
 
 // Which of the brief's cards already have a reply written: peeks only, once a message.

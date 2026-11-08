@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { Dialog, Popover } from "react-aria-components";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
-import type { Copy } from "../../lib/copy";
+import { copyId, copyOf, type Copy } from "../../lib/copy";
 import { createStore } from "../../lib/store";
 import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
@@ -174,9 +174,9 @@ export function SoonPill({ m }: { m: Mailbox }) {
   const gone = soonGone.useValue();
   const event = (data?.items ?? []).find((x) => {
     const d = new Date(x.start).getTime() - now;
-    return !x.all_day && !gone.has(`${x.key}:${x.folder}|${x.start}`) && d <= SOON_MS && d > -SOON_AFTER;
+    return !x.all_day && !gone.has(`${copyId(x)}|${x.start}`) && d <= SOON_MS && d > -SOON_AFTER;
   });
-  const key = event ? `${event.key}:${event.folder}|${event.start}` : "";
+  const key = event ? `${copyId(event)}|${event.start}` : "";
   const minutes = event ? Math.ceil((new Date(event.start).getTime() - now) / 60000) : 0;
   const when = minutes > 0 ? `in ${minutes} min` : "now";
   const title = event?.summary || "(no title)";
@@ -191,7 +191,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
         n.onclick = () => {
           window.focus();
           n.close();
-          if (event) openInvite({ key: event.key, folder: event.folder });
+          if (event) openInvite(copyOf(event));
         };
       } catch { /* the pill still shows */ }
     } else announce(message);
@@ -205,7 +205,7 @@ export function SoonPill({ m }: { m: Mailbox }) {
         id="soonOpen"
         title={[eventWhen(event, new Date(now))[0], event.location, event.organizer].filter(Boolean).join(" · ")}
         aria-label={`${message}${event.location ? `, ${event.location}` : ""}. Open the invite`}
-        onClick={() => m.openAny({ key: event.key, folder: event.folder })}
+        onClick={() => m.openAny(copyOf(event))}
       >
         <Icon name="cal" /><b id="soonTitle">{title}</b><span id="soonIn">{when}</span>
       </button>

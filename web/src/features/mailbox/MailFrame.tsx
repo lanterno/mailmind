@@ -20,7 +20,7 @@ function frameTheme(name: ThemeName): FrameTheme {
   return { light: name !== "night", bg: tk("--bg"), panel: tk("--panel"), ink: tk("--ink"), primaryInk: tk("--primary-ink"), lineHi: tk("--line-hi"), mute: tk("--mute") };
 }
 
-export interface MailBody { key: number; folder: string; has_html?: boolean; from_addr?: string; from_name?: string; subject?: string }
+export interface MailBody { key: number; folder: string; uid: number; has_html?: boolean; from_addr?: string; from_name?: string; subject?: string }
 
 function wireLinks(doc: Document, senderDomain: string | undefined) {
   const take = (e: MouseEvent) => {

@@ -1,4 +1,5 @@
 // The answer to a question, in the list's place, with the mail it cites. Opening a source leaves it on screen.
+import { copyId, copyOf } from "../../lib/copy";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
 import type { Mailbox } from "../mailbox";
@@ -39,7 +40,7 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
               <div className="ask-srcs-hd">{sources.length} cited source{sources.length === 1 ? "" : "s"}</div>
               <div className="ask-srcs">
                 {sources.map((s) => (
-                  <button className={m.openId === `${s.key}:${s.folder}` ? "ask-src reading" : "ask-src"} key={`${s.key}:${s.folder}`} onClick={() => m.openAny({ key: s.key, folder: s.folder })}>
+                  <button className={m.openId === copyId(s) ? "ask-src reading" : "ask-src"} key={copyId(s)} onClick={() => m.openAny(copyOf(s))}>
                     <div className="ask-src-from">{s.from}{s.account ? ` · ${shortAddress(s.account)}` : ""}</div>
                     <div className="ask-src-subj">{s.subject || "(no subject)"}</div>
                     <div className="ask-src-snip">{(s.snippet || "").slice(0, 140)}</div>

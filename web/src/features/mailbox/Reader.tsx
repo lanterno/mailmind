@@ -248,11 +248,11 @@ function MailContent({ copy, minHeight, pad, whole = false }: { copy: Copy; minH
 function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
   const { data: d, error } = useBody(copy);
   const row = m.openRow;
-  const { key, folder } = copy;
+  const { key, folder, uid } = copy;
   useEffect(() => {
-    if (row?.seen === false) armDwell(m.qc, { key, folder });
+    if (row?.seen === false) armDwell(m.qc, { key, folder, uid });
     return cancelDwell;
-  }, [m.qc, key, folder, row?.seen]);
+  }, [m.qc, key, folder, uid, row?.seen]);
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
   useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
@@ -307,12 +307,12 @@ function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok:
   const qc = useQueryClient();
   const [open, setOpen] = useState(startsOpen);
   const [wasOpened, setWasOpened] = useState(startsOpen);
-  const { key, folder } = m;
+  const { key, folder, uid } = m;
   useEffect(() => {
-    if (open && !m.seen) void markSeen(qc, { key, folder });
-  }, [qc, open, key, folder, m.seen]);
+    if (open && !m.seen) void markSeen(qc, { key, folder, uid });
+  }, [qc, open, key, folder, uid, m.seen]);
   return (
-    <div className={open ? "tmsg open" : "tmsg"} data-key={m.key} data-folder={m.folder}>
+    <div className={open ? "tmsg open" : "tmsg"} data-key={m.key} data-folder={m.folder} data-uid={m.uid}>
       <button
         className="tmsg-hd"
         aria-expanded={open}

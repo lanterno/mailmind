@@ -31,7 +31,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
   };
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- focus stays on the listbox, which names this through aria-activedescendant, and the app's keys act on it
-    <div id={rowId(row.id)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-key={row.key} data-folder={row.folder} data-tid={row.threadId || undefined} onClick={onOpen} onDoubleClick={(e) => { if (!(e.target as Element).closest(".cbx,.racts")) onFocusRead(); }}>
+    <div id={rowId(row.id)} role="option" aria-selected={selected} aria-checked={isMarked} className={className} data-key={row.key} data-folder={row.folder} data-uid={row.uid} data-tid={row.threadId || undefined} onClick={onOpen} onDoubleClick={(e) => { if (!(e.target as Element).closest(".cbx,.racts")) onFocusRead(); }}>
       <div className="avwrap"><span className="av" style={{ "--h": avatarHue(row.fromAddr || row.fromName) } as React.CSSProperties} aria-hidden="true">{initialsOf(row.fromName, row.fromAddr)}</span>
         <span className={isMarked ? "cbx on" : "cbx"} aria-hidden="true" title="Select (x)" onClick={(e) => { e.stopPropagation(); toggleMark(row.id); }}>{isMarked ? "✓" : ""}</span>
       </div>

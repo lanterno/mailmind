@@ -9,10 +9,10 @@ const accountOf = (m: Mailbox, r: Row) => m.aliases[r.account] || shortAddress(r
 
 // j and k move here too, so what opens stays in view. `open` is the open copy (`copyId`).
 function useOpenInView(open: Copy | null) {
-  const key = open?.key ?? null, folder = open?.folder ?? "";
+  const key = open?.key ?? null, folder = open?.folder ?? "", uid = open?.uid ?? 0;
   useEffect(() => {
-    if (key !== null) document.querySelector(`#rows [data-key="${key}"][data-folder="${CSS.escape(folder)}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [key, folder]);
+    if (key !== null) document.querySelector(`#rows [data-key="${key}"][data-uid="${uid}"][data-folder="${CSS.escape(folder)}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [key, folder, uid]);
 }
 
 export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }) {
@@ -23,7 +23,7 @@ export function FeedRiver({ m, footer }: { m: Mailbox; footer: React.ReactNode }
       <div className="feed-river">
         {m.rows.map((r) => (
           // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the pointer's shortcut: the button in its heading is the keyboard's way in
-          <article key={r.id} className={`fr-card${r.seen ? "" : " unread"}${r.id === m.openId ? " reading" : ""}`} data-key={r.key} data-folder={r.folder} onClick={() => m.open(r)}>
+          <article key={r.id} className={`fr-card${r.seen ? "" : " unread"}${r.id === m.openId ? " reading" : ""}`} data-key={r.key} data-folder={r.folder} data-uid={r.uid} onClick={() => m.open(r)}>
             <div className="fr-kicker">
               <span className="fr-pub">{r.fromName || r.fromAddr}</span><span className="fr-dot">·</span><span className="fr-when">{r.when}</span>
               <span className="fr-dot">·</span><span className="fr-acct">{accountOf(m, r)}</span>
@@ -56,7 +56,7 @@ export function PaperTrail({ m, footer }: { m: Mailbox; footer: React.ReactNode 
               </span>
             </div>
             {month.lines.map(({ row, amount, refund, shown }) => (
-              <button key={row.id} className={`pt-row${row.seen ? "" : " unread"}${row.id === m.openId ? " reading" : ""}`} data-key={row.key} data-folder={row.folder} onClick={() => m.open(row)}>
+              <button key={row.id} className={`pt-row${row.seen ? "" : " unread"}${row.id === m.openId ? " reading" : ""}`} data-key={row.key} data-folder={row.folder} data-uid={row.uid} onClick={() => m.open(row)}>
                 <div className="pt-main">
                   <div className="pt-merch">{row.fromName || row.fromAddr} <span className="fr-acct" style={{ fontSize: 10 }}>· {accountOf(m, row)}</span></div>
                   <div className="pt-desc">{refund ? "↩ " : ""}{row.subject || "(no subject)"}</div>

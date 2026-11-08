@@ -677,7 +677,7 @@ export function createComposing(env: Env) {
   // The copy on screen is read for the quote; the reply names the message by its key, which any copy of it answers to.
   const original = async (copy: Copy): Promise<OriginalMail | null> => {
     try {
-      return await env.get(`/api/message/body?key=${copy.key}&folder=${encodeURIComponent(copy.folder)}`);
+      return await env.get(`/api/message/body?key=${copy.key}&folder=${encodeURIComponent(copy.folder)}&uid=${copy.uid}`);
     } catch {
       return null;
     }
@@ -712,7 +712,7 @@ export function createComposing(env: Env) {
     }
     let d: ReopenedDraft & { text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
     try {
-      d = await env.post("/api/draft/resume", copy === null ? { draft_id: draftId } : { key: copy.key, folder: copy.folder });
+      d = await env.post("/api/draft/resume", copy === null ? { draft_id: draftId } : { key: copy.key, folder: copy.folder, uid: copy.uid });
     } catch (e) {
       if (turn !== resumeTurn) return;
       const m = (e instanceof Error && e.message) || "Couldn’t open this draft.";
@@ -828,7 +828,7 @@ export function createComposing(env: Env) {
       if (!x || !stillOpen(x)) return;
       let body: string | null = null;
       try {
-        const d = await env.get(`/api/ai/draft-ahead?key=${to.key}&folder=${encodeURIComponent(to.folder)}&peek=1`);
+        const d = await env.get(`/api/ai/draft-ahead?key=${to.key}&folder=${encodeURIComponent(to.folder)}&uid=${to.uid}&peek=1`);
         if (d?.status === "ready" && d.body) body = d.body;
       } catch { /* treated as not fresh */ }
       if (!stillOpen(x)) return;

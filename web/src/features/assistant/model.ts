@@ -35,6 +35,7 @@ export function fromDigest(it: DigestItem): Row {
   return {
     id: copyId(it),
     key: it.key,
+    uid: it.uid,
     account: it.account,
     folder: it.folder,
     fromName: it.from_name,

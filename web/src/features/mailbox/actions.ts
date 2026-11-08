@@ -253,7 +253,7 @@ export async function undo(qc: QueryClient) {
   readAgain(qc);
 }
 
-export async function setStar(qc: QueryClient, row: Pick<Row, "key" | "folder" | "flagged">) {
+export async function setStar(qc: QueryClient, row: Pick<Row, "key" | "folder" | "uid" | "flagged">) {
   const on = !row.flagged;
   patchRow(qc, row, { flagged: on });
   try {
