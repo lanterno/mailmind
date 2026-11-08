@@ -44,6 +44,10 @@ export const offerUndo = (label: string) => undoFloat.show(label, "Undo is avail
 
 export const readOnly = createStore(false);
 
+// What a move to a folder is about: whose folders it may go to, and the one folder it is in, which it isn't offered.
+export interface MoveAsk { account: string; from: string | null }
+export const moveAsk = createStore<MoveAsk | null>(null);
+
 // One id per bulk action, so one z reverses all of it. Unique across reloads: the undo stack outlives the page.
 export const undoGroup = () => `ug-${crypto.randomUUID()}`;
 
@@ -110,6 +114,19 @@ export function fileRow(qc: QueryClient, kind: Filing, row: Copy, whole: boolean
     },
     undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `${verb} ${n(r)}` : card?.undo ?? verb) : null),
     fail: () => `Couldn’t ${doing}`,
+  });
+}
+
+// One message, or the conversation its row stands for, to a folder of its account's that a person picked.
+export function moveRow(qc: QueryClient, to: string, label: string, row: Copy, whole: boolean, after: Route | null) {
+  const n = (r: Answer) => r.count || 1;
+  return act(qc, {
+    rows: [copyId(row)],
+    after,
+    call: () => post(whole ? "/api/thread/move" : "/api/move", { ...copyOf(row), to }),
+    say: (r) => filedWords("Moved", r, readOnly.get(), label),
+    undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `Moved ${n(r)}` : "Moved") : null),
+    fail: (why) => `Couldn’t move${why ? `: ${why}` : ""}`,
   });
 }
 
@@ -226,16 +243,31 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
     });
     return;
   }
-  const { verb: said } = WORDS[verb];
+  const said = (n: number) => `${WORDS[verb].verb} ${n}`;
+  await inChunks(qc, rows, after, { said, undo: said, couldnt: `Couldn’t ${WORDS[verb].act}` }, (chunk) =>
+    post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group }));
+}
+
+// Marked rows of one account to a folder of its own that a person picked.
+export async function moveMarked(qc: QueryClient, to: string, label: string, rows: Row[], isWhole: (r: Row) => boolean, after: Route | null) {
+  clearMarks();
+  const group = undoGroup();
+  await inChunks(qc, rows, after, { said: (n) => `Moved ${n} to ${label}`, undo: (n) => `Moved ${n}`, couldnt: "Couldn’t move" }, (chunk) =>
+    post("/api/bulk/move", { to, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group }));
+}
+
+// As many requests as what one may file allows, each saying how its rows went. A request that fails counts all of its rows.
+async function inChunks(qc: QueryClient, rows: Row[], after: Route | null, words: { said: (n: number) => string; undo: (n: number) => string; couldnt: string }, send: (chunk: Row[]) => Promise<PostAnswers["/api/bulk/file"]>) {
+  const ids = rows.map((r) => r.id);
   let failed = 0, partial = false, undoable = false;
   await act(qc, {
     rows: ids,
     after,
     call: async () => {
-      for (let at = 0; at < rows.length; at += LIMITS.bulk_rows) {     // what one request may file: more go as more requests
+      for (let at = 0; at < rows.length; at += LIMITS.bulk_rows) {
         const chunk = rows.slice(at, at + LIMITS.bulk_rows);
         try {
-          const a = await post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group });
+          const a = await send(chunk);
           failed += a.rows_failed;
           partial ||= a.partial;
           undoable ||= Boolean(a.undoable);
@@ -245,9 +277,9 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
       }
       return { ok: true };
     },
-    say: () => (failed ? `${said} ${ids.length - failed}, ${failed} failed` : partial ? `${said} ${ids.length} — some messages stayed` : `${said} ${ids.length}`),
-    undoLabel: () => (undoable ? `${said} ${ids.length - failed}` : null),
-    fail: () => `Couldn’t ${WORDS[verb].act}`,
+    say: () => (failed ? `${words.said(ids.length - failed)}, ${failed} failed` : partial ? `${words.said(ids.length)} — some messages stayed` : words.said(ids.length)),
+    undoLabel: () => (undoable ? words.undo(ids.length - failed) : null),
+    fail: () => words.couldnt,
   });
 }
 

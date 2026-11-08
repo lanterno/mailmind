@@ -39,6 +39,7 @@ import { shortAddress } from "../lib/text";
 import { Float, toast, Toaster } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
 import { buildCommands, commandForKey, goChord, goKeys, legendOf, onSavedView, type Command } from "./commands";
+import { MoveTo } from "./MoveTo";
 import { Palette, paletteOpen } from "./Palette";
 import { newBuild, useRealtime } from "./realtime";
 import { go, type ListSource } from "./route";
@@ -118,6 +119,7 @@ function BulkBar({ m }: { m: Mailbox }) {
       {verb("Star", "star", "star")}
       {verb("Junk", "junk", "ban", true)}
       <button className="bb" onClick={(e) => snoozeAsk.set({ target: { copies: m.markedRows.map(copyOf) }, rows: [...m.marks], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /> Snooze</button>
+      <button className="bb" id="bbMove" onClick={m.askMove}><Icon name="folder" /> Move</button>
       {verb("Mute", "mute", "bell-off")}
       <button className="bclear" onClick={clearMarks}>Clear</button>
     </div>
@@ -383,6 +385,7 @@ export function App() {
       <RailScrim />
       <SnoozeMenu onSnooze={m.snooze} onUnsnooze={m.unsnooze} />
       <Palette commands={commands} />
+      <MoveTo m={m} />
       <ComposerModal
         senders={m.digest?.send_accounts?.length ? m.digest.send_accounts : accounts}
         aliases={aliases}

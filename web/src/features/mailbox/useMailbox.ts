@@ -7,6 +7,7 @@ import { go, isVirtual, useRoute, type ListSource, type Opened, type Route } fro
 import { pref } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { copyId, copyOf, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
+import { toast } from "../../lib/toast";
 import { settingsOpen } from "../settings";
 import * as actions from "./actions";
 import { useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews, warmBody } from "./data";
@@ -156,14 +157,36 @@ export function useMailbox() {
     return latest ? copyOf(latest) : null;
   };
 
+  const wholeOf = (r: Copy & Partial<Row>) => (opened?.kind === "thread" && sameCopy(opened, r) ? true : "threadId" in r ? isWhole(r as Row) : false);
   const file = (r: Copy & Partial<Row>, kind: actions.Filing, from?: "card") => {
-    const whole = opened?.kind === "thread" && sameCopy(opened, r) ? true : "threadId" in r ? isWhole(r as Row) : false;
-    void actions.fileRow(qc, kind, copyOf(r), whole, afterLeaving([copyId(r)]), from);
+    void actions.fileRow(qc, kind, copyOf(r), wholeOf(r), afterLeaving([copyId(r)]), from);
   };
   const fileOpen = (kind: actions.Filing) => {
     if (openCopy !== null) file(openRow ?? openCopy, kind);
   };
   const bulk = (verb: actions.BulkVerb) => void actions.bulk(qc, verb, markedRows, isWhole, afterLeaving(markedRows.map((r) => r.id)));
+
+  // Whose folders a move may go to: what is marked, all of one account, or what is open, whichever list it came from.
+  const askMove = () => {
+    if (markedRows.length) {
+      const whose = new Set(markedRows.map((r) => r.account)), from = new Set(markedRows.map((r) => r.folder));
+      if (whose.size > 1) return toast("Those are in different accounts — mark one account’s mail to move it");
+      actions.moveAsk.set({ account: markedRows[0]!.account, from: from.size === 1 ? markedRows[0]!.folder : null });
+      return;
+    }
+    if (openCopy === null) return;
+    const account = openRow?.account ?? (opened?.kind === "thread" ? opened.account : qc.getQueryData<{ account: string }>(["body", openCopy.key, openCopy.folder, openCopy.uid])?.account);
+    if (account) actions.moveAsk.set({ account, from: openCopy.folder });
+  };
+  const moveTo = (to: string, label: string) => {
+    if (markedRows.length) {
+      const going = markedRows.filter((r) => r.folder !== to);
+      void actions.moveMarked(qc, to, label, going, isWhole, afterLeaving(going.map((r) => r.id)));
+    } else if (openCopy !== null) {
+      const r = openRow ?? openCopy;
+      void actions.moveRow(qc, to, label, copyOf(r), wholeOf(r), afterLeaving([copyId(r)]));
+    }
+  };
 
   const onOpen = (run: (t: actions.Target, rows: string[], after: Route | null) => void, get = target) => {
     const t = get();
@@ -218,6 +241,8 @@ export function useMailbox() {
     file,
     fileOpen,
     bulk,
+    askMove,
+    moveTo,
     target,
     replyTo,
     undo: () => void actions.undo(qc),

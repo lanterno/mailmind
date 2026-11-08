@@ -266,6 +266,7 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
           : <><Answering to={copy} thread={false} drafts /><Triage m={m} thread={false} /></>}
         <span className="rd-sp" aria-hidden="true" />
         {!isDraft && <Cab ca="archive" thread={false} icon="archive" label="Archive" title="Archive (e)" onClick={() => m.fileOpen("archive")} />}
+        {!isDraft && <Cab ca="move" thread={false} icon="folder" label="Move" title="Move to folder (m)" onClick={m.askMove} />}
         <Cab ca="trash" thread={false} icon="trash" label="Delete" title="Delete (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")} />
         {!isDraft && (
           <>
@@ -358,6 +359,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
         <Triage m={m} thread />
         <span className="rd-sp" aria-hidden="true" />
         <Cab ca="archive" thread icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => m.fileOpen("archive")}>Archive</Cab>
+        <Cab ca="move" thread icon="folder" label="Move conversation" title="Move conversation to folder (m)" onClick={m.askMove}>Move</Cab>
         <Cab ca="trash" thread icon="trash" label="Delete conversation" title="Delete conversation (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")}>Delete</Cab>
         <ReadMenu />
         <MoreMenu />

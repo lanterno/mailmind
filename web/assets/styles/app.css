@@ -716,7 +716,7 @@
   }
   @container pane (max-width:660px){
     .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready]){font-size:0;gap:0}
-    .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk]){display:none}
+    .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=move],[data-tca=move]){display:none}
   }
   @container pane (max-width:460px){
     body .rd-actions{padding:0 6px}

@@ -89,6 +89,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
     add({ id: "archive", group: "Actions", label: "Archive", keys: ["e"], hint: "e", run: () => (any ? m.bulk("archive") : m.fileOpen("archive")) });
     add({ id: "trash", group: "Actions", label: "Delete", keys: ["d", "#", "Delete", "Backspace"], hint: "d", run: () => (any ? m.bulk("trash") : m.fileOpen("trash")) });
     add({ id: "junk", group: "Actions", label: "Mark junk", keys: ["b"], hint: "b", run: () => (any ? m.bulk("junk") : m.fileOpen("junk")) });
+    add({ id: "move-to", group: "Actions", label: "Move to folder…", keys: ["m"], hint: "m", run: m.askMove });
     add({ id: "star", group: "Actions", label: "Star", keys: ["s"], hint: "s", run: () => (any ? m.bulk("star") : m.star()) });
     add({ id: "unread", group: "Actions", label: "Mark unread", keys: ["u"], hint: "u", run: () => (any ? m.bulk("unread") : m.unread()) });
     add({
