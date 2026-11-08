@@ -15,7 +15,7 @@ from mailmind.assistant.domain import action_plan, prompts
 from mailmind.assistant.domain import limits as limits_of_ai
 from mailmind.attention.domain import snooze
 from mailmind.calendar.domain import rsvp
-from mailmind.compose.domain import attachments, limits, resume
+from mailmind.compose.domain import attachments, limits, resume, snippets
 from mailmind.curation.domain import cleanup_plan, filters, rulebook
 from mailmind.discovery.domain import documents, views
 from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
@@ -31,7 +31,7 @@ SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "R
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
         "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
-        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType}
+        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType, "SnippetVerb": snippets.SnippetVerb}
 
 
 def members(alias):
@@ -107,6 +107,7 @@ def test_a_plan_that_names_no_preset_there_is_waits_until_tomorrow_as_its_previe
     ("/api/send", {"account": "ada@example.test", "mode": "draft", "to": "bea@example.test", "text": "hi"}),
     ("/api/draft", {"account": "ada@example.test", "mode": "draft", "text": "hi"}),
     ("/api/views", {"verb": "rename", "id": "x"}),
+    ("/api/snippets", {"verb": "rename", "trigger": "x"}),
 ])
 def test_a_value_outside_its_set_is_the_schemas_400(app, path, body):
     r = app.post(path, body)
@@ -117,6 +118,7 @@ def test_a_value_outside_its_set_is_the_schemas_400(app, path, body):
     ("/api/ai/rewrite", {"text": "hello"}, "unknown op"),
     ("/api/rules", {"token": "news@loom.example.test"}, "verdict must be keep|block|remove"),
     ("/api/views", {"name": "x", "q": "from:x"}, "verb must be create|delete"),
+    ("/api/snippets", {"trigger": "x", "text": "y"}, "verb must be save|delete"),
 ])
 def test_one_left_out_is_still_the_use_cases_to_word(app, path, body, said):
     r = app.post(path, body)
