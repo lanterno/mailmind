@@ -9,7 +9,9 @@ no auto-label, and in this version no filter moves mail.
 """
 import secrets
 from collections.abc import Iterable
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypedDict
+
+from mailmind.kernel.parsed import is_list, is_object
 
 type FilterVerb = Literal["create", "update", "delete"]        # what a request may do to the filters: its schema names it so
 MOST = 100                                                     # each is a query against every new message
@@ -22,12 +24,16 @@ class Filter(TypedDict):
     read: bool
 
 
-def normalized(raw: Any) -> list[Filter]:
-    """The filters a file held. Raises on a shape that isn't filters (ValueError, TypeError, AttributeError), as the rest of the
-    file's reading does: a bad hand edit keeps the last rules read well, and a save moves the file aside first."""
+def normalized(raw: object) -> list[Filter]:
+    """The filters a file held. Raises ValueError on a shape that isn't filters, as the rest of the file's reading does: a bad hand
+    edit keeps the last rules read well, and a save moves the file aside first."""
+    if raw is None:
+        return []
+    if not is_list(raw):
+        raise ValueError("not filters")
     out: list[Filter] = []
-    for f in raw or []:
-        if not isinstance(f.get("id"), str) or not isinstance(f.get("q"), str):
+    for f in raw:
+        if not is_object(f) or not isinstance(f.get("id"), str) or not isinstance(f.get("q"), str):
             raise ValueError("not a filter")
         out.append({"id": f["id"], "q": f["q"], "star": bool(f.get("star")), "read": bool(f.get("read"))})
     return out
