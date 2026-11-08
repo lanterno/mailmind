@@ -77,7 +77,7 @@ def test_a_pass_reads_who_is_waiting_and_suggests_for_those_it_is_sure_of(app, w
     r = app.post("/api/screener/suggest", {"account": w.ADA})
     assert (r.status, r.json["ok"], r.json["account"], r.json["asked"]) == (200, True, w.ADA, len(who))
     assert r.json["suggestions"] == [{"from_addr": who[0], "verdict": "block", "confidence": 0.9, "why": "bulk mail"}]
-    assert f"[1] " in ai.requests[0].prompt and who[0] in ai.requests[0].prompt
+    assert "[1] " in ai.requests[0].prompt and who[0] in ai.requests[0].prompt
     assert ai.requests[0].body["max_tokens"]
 
 
