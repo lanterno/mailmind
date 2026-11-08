@@ -61,6 +61,14 @@ def test_an_undone_gmail_archive_is_taken_back_out_too(app, world, ai):
     assert stats(app, ai)["handled"] == 0
 
 
+def test_a_review_already_written_says_how_many_after_an_undo(app, world, ai):
+    archive(app, world, LUNCH)
+    assert stats(app, ai)["handled"] == 1
+    assert app.get("/api/review").json["stats"]["handled"] == 1
+    assert app.post("/api/undo", {}).status == 200
+    assert app.get("/api/review").json["stats"]["handled"] == 0
+
+
 def test_a_failure_marking_it_doesnt_put_the_undo_back(app, world, ai, monkeypatch):
     archive(app, world, LUNCH)
     monkeypatch.setattr(store, "command_mark_reversed", lambda c, mid: 1 / 0)
@@ -193,7 +201,7 @@ def test_a_review_stored_before_this_still_reads(app, world):
     c.commit()
     c.close()
     r = app.get("/api/review").json
-    assert (r["narrative"], r["meetings"], r["stats"].get("handled")) == ("Written earlier today.", [], None)
+    assert (r["narrative"], r["meetings"], r["stats"]["handled"]) == ("Written earlier today.", [], 0)
 
 
 def _enabled():

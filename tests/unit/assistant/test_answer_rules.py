@@ -152,6 +152,7 @@ def test_a_reviews_fingerprint_moves_with_its_counts_and_its_threads_and_nothing
     fp = review.fingerprint_of(STATS, [NEEDED], [])
     assert fp == review.fingerprint_of(STATS, [{**NEEDED, "pk": 9, "subject": "Renamed"}], [])
     assert fp != review.fingerprint_of({**STATS, "sent": 9}, [NEEDED], [])
+    assert fp != review.fingerprint_of({**STATS, "handled": 9}, [NEEDED], [])
     assert fp != review.fingerprint_of(STATS, [{**NEEDED, "thread_id": "t2"}], [])
     assert fp != review.fingerprint_of(STATS, [], [NEEDED])
 
