@@ -88,6 +88,8 @@ class Pool(KeptConnections[MailSession]):
 
 
     def stats(self) -> dict[str, Any]:
-        live = self.slots()
-        return {"enabled": bool(environment.POOL.value()), "target": environment.POOL.given(), "counters": self.counters(),
-                "slots": live}
+        """How the pool stands, in counts: whether it serves every account or a list of them, never which, and how each
+        connection kept stands, with no account named."""
+        which = environment.POOL.value()
+        return {"enabled": bool(which), "target": "all" if which.every else "listed" if which.listed else "",
+                "counters": self.counters(), "slots": list(self.slots().values())}

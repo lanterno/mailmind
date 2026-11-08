@@ -92,12 +92,13 @@ class PoolSlot(Answer):
 
 
 class PoolStats(Answer):
-    """`Pool.stats`. `target` is MAILMIND_POOL as it was set, and `slots` is by account: the addresses it names are the owner's."""
+    """`Pool.stats`, in counts and with no address: `target` says whether MAILMIND_POOL names every account (`all`), a list of
+    them (`listed`) or none, and `slots` holds each connection kept, with no account named."""
     ok: Literal[True]
     enabled: bool
-    target: str
+    target: Literal["all", "listed", ""]
     counters: PoolCounters
-    slots: dict[str, PoolSlot]
+    slots: list[PoolSlot]
 
 
 class Jobs(Answer):
