@@ -7,10 +7,11 @@ from typing import Any
 from mailmind.compose.domain.attachments import Attachment
 from mailmind.compose.domain.builder import Composed, reference_chain, thread_ids
 from mailmind.compose.domain.forward import forward_bodies
+from mailmind.compose.domain import markdown
 from mailmind.compose.domain.reply import Original, reply_bodies
 from mailmind.compose.domain.resume import lf
 from mailmind.content import sanitize
-from mailmind.content.quote import own_html, quote_tail
+from mailmind.content.quote import own_html, quote_tail, quoted_text_html
 from mailmind.kernel.row import Row
 
 
@@ -25,8 +26,23 @@ class Body:
     references: list[str] | None = None
 
 
+def _html_with(own: str, tail_text: str | None, tail_html: str | None) -> str | None:
+    """The HTML that goes beside the text. What you typed in Markdown is its own HTML, then the quote's, or the quote's text
+    where that has none. With no Markdown in it, a quote's HTML is what makes there be any at all."""
+    mine = markdown.render(own)
+    if mine is None:
+        return own_html(own) + tail_html if tail_html else None
+    return mine + (tail_html or (quoted_text_html(tail_text) if tail_text else ""))
+
+
+def preview(text: str) -> tuple[str, bool]:
+    """What the Preview shows of what you typed, and whether it goes out as HTML at all."""
+    mine = markdown.render(text)
+    return (own_html(text), False) if mine is None else (mine, True)
+
+
 def as_typed(text: str) -> Body:
-    return Body(text, text)
+    return Body(text, text, _html_with(text, None, None))
 
 
 def tail_of(resume: Mapping[str, Any]) -> str:
@@ -40,12 +56,11 @@ def as_drafted(text: str, tail: str, recorded: Row | None, in_reply_to: object, 
     quote. Its HTML goes only where that vouches for this exact quote: built and sanitized by us at that save, it isn't
     sanitized again."""
     own = lf(text)
-    html = tail_html = None
+    tail_html = None
     if tail and recorded and recorded["tail_html"] and lf(recorded["tail_text"] or "") == tail:
         tail_html = sanitize.without_fold(recorded["tail_html"])
-        html = own_html(own) + tail_html
     irt, refs = thread_ids(in_reply_to, references)
-    return Body(own, own + tail, html, tail or None, tail_html, irt, refs)
+    return Body(own, own + tail, _html_with(own, tail or None, tail_html), tail or None, tail_html, irt, refs)
 
 
 def named_original(named: Row | None, in_reply_to: str) -> Row | None:
@@ -62,7 +77,7 @@ def as_reply(own: str, original: Row, parsed: Mapping[str, Any]) -> Body:
     """`original` is the message's row, `parsed` its body as far as it could be read."""
     text, html = reply_bodies(own, _original(original, parsed))
     tail_text, tail_html = quote_tail(own, text, html)
-    return Body(own, text, html, tail_text, tail_html, original["message_id"],
+    return Body(own, text, _html_with(own, tail_text, tail_html), tail_text, tail_html, original["message_id"],
                 reference_chain(original["message_id"], original["refs"], original["in_reply_to"]))
 
 
@@ -70,7 +85,7 @@ def as_forward(own: str, original: Row, parsed: Mapping[str, Any]) -> Body:
     """A forward starts a thread of its own, so it names no original."""
     text, html = forward_bodies(own, _original(original, parsed))
     tail_text, tail_html = quote_tail(own, text, html)
-    return Body(own, text, html, tail_text, tail_html)
+    return Body(own, text, _html_with(own, tail_text, tail_html), tail_text, tail_html)
 
 
 def composed(acct: Mapping[str, Any], body: Mapping[str, Any], made: Body, attachments: list[Attachment],

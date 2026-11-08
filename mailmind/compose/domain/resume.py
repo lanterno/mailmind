@@ -10,7 +10,7 @@ import mimetypes
 import re
 from typing import Literal, TypedDict, get_args
 
-from mailmind.compose.domain import limits
+from mailmind.compose.domain import limits, markdown
 from mailmind.kernel.errors import Unreadable
 from mailmind.content.headers import header_chips, header_text
 from mailmind.content.mime import Parsed, decoded, parse, part_bytes, walk
@@ -115,6 +115,12 @@ def split_to_fit(text: str | None, record: Row, exact: bool, files: list[Resumed
         raise Unreadable("This draft is too large for MailMind to save or send, with its files "
                          "and the text it quotes." + ELSEWHERE)
     return split
+
+
+def loses_formatting(how: str, own: str, html: str | None) -> bool:
+    """Whether a draft comes back as bare text with formatting beside it that saving would lose. Not where that formatting
+    is only what this text's Markdown comes to, which the next save writes again."""
+    return how == "whole" and bool(html) and lf(html).strip() != (markdown.render(own) or "").strip()
 
 
 def mode_of(stored: str | None, in_reply_to: str | None) -> ComposeMode:
