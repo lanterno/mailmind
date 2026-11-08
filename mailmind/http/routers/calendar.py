@@ -1,6 +1,6 @@
-"""What the page asks of Calendar: Today & next, and an answer to an invite."""
+"""What the page asks of Calendar: Today & next, an answer to an invite, and a file for an event someone confirmed."""
 from mailmind.http import named, route
-from mailmind.http.schemas.calendar import RsvpBody, RsvpQueued, Upcoming
+from mailmind.http.schemas.calendar import EventBody, EventFile, RsvpBody, RsvpQueued, Upcoming
 from mailmind.http.schemas.common import answers
 from mailmind.kernel.errors import Problem
 from mailmind.platform.logging import get_logger
@@ -24,5 +24,9 @@ def router(calendar, mailbox):
         except Exception as ex:            # never leak a raw exception on a send route
             log.error("error", exc_info=ex)
             return route.problem(500, "RSVP failed")
+
+    @r.post("/api/calendar/event", responses=answers(EventFile))     # a file for the person's calendar: nothing is sent or made
+    def event_file(body: EventBody):
+        return calendar.publishing.event(named.with_message(mailbox, body.model_dump(exclude_unset=True)))
 
     return r

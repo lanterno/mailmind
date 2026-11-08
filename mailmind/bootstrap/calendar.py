@@ -8,6 +8,7 @@ from mailmind.calendar.adapters import icalendar_acl
 from mailmind.calendar.adapters.sqlite import StoredInvites
 from mailmind.calendar.application.agenda import Agenda
 from mailmind.calendar.application.invites import Invites
+from mailmind.calendar.application.publishing import Publishing
 from mailmind.calendar.application.rsvp import Rsvp
 from mailmind.mailbox.domain import roles
 from mailmind.platform.db.uow import UnitOfWork
@@ -15,7 +16,7 @@ from mailmind.platform.workers import gates
 from mailmind.compose.api import Built, MessageSpec, build_message, reference_chain
 from mailmind.bootstrap import accounts
 
-__all__ = ["agenda", "ics", "invites", "rsvp"]
+__all__ = ["agenda", "ics", "invites", "publishing", "rsvp"]
 
 class _Folders:
     def role_by_name(self, folder):
@@ -62,3 +63,4 @@ ics = icalendar_acl
 invites = Invites(_stored, ics)
 agenda = Agenda(_stored, ics)
 rsvp = Rsvp(invites, _stored, _Messages(), _Send())
+publishing = Publishing(_Messages())

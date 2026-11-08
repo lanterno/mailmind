@@ -2,7 +2,7 @@
 from typing import Literal
 
 from mailmind.calendar.api import RsvpDecision
-from mailmind.http.schemas.common import Answer, Number, RequestBody
+from mailmind.http.schemas.common import Answer, NamesAMessage, Number, RequestBody
 
 
 class RsvpBody(RequestBody):
@@ -11,6 +11,22 @@ class RsvpBody(RequestBody):
     folder: str | None = None
     uid: Number | None = None
     decision: RsvpDecision | None = None    # left out is the use case's `bad decision`
+
+
+class EventBody(NamesAMessage):
+    """An event someone confirmed from the message `key` names, each field as they left it. Which are missing or won't do is
+    the use case's to word."""
+    title: str | None = None
+    start: str | None = None
+    end: str | None = None
+    place: str | None = None
+
+
+class EventFile(Answer):
+    """A METHOD:PUBLISH calendar, as text, for the page to save."""
+    ok: Literal[True]
+    filename: str
+    ics: str
 
 
 class RsvpQueued(Answer):
