@@ -1065,8 +1065,8 @@
   .tmsg-body{display:none;padding:12px 14px} .tmsg.open>.tmsg-body{display:block}
   .scopetog{cursor:pointer;color:var(--primary-ink);border-bottom:1px dotted var(--primary-ink)}
   .scopetog:hover{color:var(--primary-hi)}
-  .ctx-save{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:2px 8px;cursor:pointer}
-  .ctx-save:hover{color:var(--primary-ink)}
+  .ctx-save,.ctx-filter{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:2px 8px;cursor:pointer}
+  .ctx-save:hover,.ctx-filter:hover{color:var(--primary-ink)}
   .ctx-chip{display:inline-flex;align-items:center;gap:4px;background:var(--sel);border-radius:var(--r-xs);color:var(--mute);font-size:11px;padding:2px 6px;margin-left:4px}
   .ctx-chip button{background:none;border:none;color:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0 1px}
   .ctx-chip button:hover{color:var(--primary-ink)}

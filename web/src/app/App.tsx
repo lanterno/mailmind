@@ -319,7 +319,7 @@ export function App() {
               <div className="client-ctx" id="clientCtx">
                 <Icon name="search" /> <b>{source.q}</b> · {all.length} {!source.thread && <ScopeToggle account={source.account} />}<ConversationScope m={m} source={source} /> <TranslatedChip source={source} />
                 {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
-                {!source.thread && <> · <button className="ctx-save" id="createFilter" title="Star or mark read new mail that fits this search" onClick={() => createFilter(m)}>+ Create filter</button></>}
+                {!source.thread && <> · <button className="ctx-filter" id="createFilter" title="Star or mark read new mail that fits this search" onClick={() => createFilter(m)}>+ Create filter</button></>}
               </div>
             )}
             {m.source?.kind === "digest" && (
