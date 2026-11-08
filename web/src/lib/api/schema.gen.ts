@@ -3511,6 +3511,7 @@ export interface components {
             references: string | null;
             /** Reply To */
             reply_to: string;
+            sender: components["schemas"]["SenderFacts"] | null;
             /** Subject */
             subject: string | null;
             /** Text */
@@ -4757,6 +4758,18 @@ export interface components {
             count: number;
             /** Email */
             email: string;
+        };
+        /**
+         * SenderFacts
+         * @description What the reader says beside a sender's name: what their card opens with.
+         */
+        SenderFacts: {
+            /** Count */
+            count: number;
+            /** First Ago */
+            first_ago: string | null;
+            /** Replied */
+            replied: number;
         };
         /** SenderPreview */
         SenderPreview: {
