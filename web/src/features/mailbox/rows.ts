@@ -29,7 +29,8 @@ export interface Row {
   replyWorthy: boolean;
   bucket: string | null;
   threadId: string;
-  count: number;
+  count: number;       // how many of its conversation this list holds, which is what filing the row takes
+  threadCount: number; // all of it, in every folder, which is what opening it shows
   action: string;
   summary: string;
   needsYou: boolean;
@@ -57,6 +58,7 @@ export function fromFolder(it: FolderRow, account: string): Row {
     bucket: it.bucket,
     threadId: it.thread_id ?? "",
     count: it.count ?? 1,
+    threadCount: it.thread_count ?? it.count ?? 1,
     action: String(it.action ?? "").trim(),
     summary: it.summary ?? "",
     needsYou: Boolean(it.needs_you),
@@ -85,6 +87,7 @@ export function fromSearch(it: SearchRow): Row {
     bucket: it.bucket,
     threadId: it.thread_id ?? "",
     count: 1,
+    threadCount: 1,
     action: String(it.action ?? "").trim(),
     summary: (it as { summary?: string }).summary ?? "",
     needsYou: Boolean(it.needs_you),

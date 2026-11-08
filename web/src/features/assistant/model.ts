@@ -53,6 +53,7 @@ export function fromDigest(it: DigestItem): Row {
     bucket: it.bucket,
     threadId: it.thread_id ?? "",
     count: 1,
+    threadCount: 1,
     action: String(it.action ?? "").trim(),
     summary: it.summary ?? "",
     needsYou: Boolean(it.needs_you),

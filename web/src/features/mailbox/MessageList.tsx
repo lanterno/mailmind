@@ -38,7 +38,7 @@ function RowItem({ row, whole, selected, isMarked, showAccount, onOpen, onFile, 
       <div className="cmsg-body">
         <div className="r1">
           <span className="from">{row.fromName}</span>
-          {row.count > 1 && <span className="thr-count" title={`${row.count} messages`}>{row.count}</span>}
+          {row.count > 1 && row.threadCount > 1 && <span className="thr-count" title={`${row.threadCount} messages`}>{row.threadCount}</span>}
           {row.flagged && <span className="rflag" style={{ color: "var(--gold)" }}><Icon name="star" className="fill" /></span>}
           {row.hasAttach && <span className="rflag" style={{ color: "var(--mute)" }}><Icon name="clip" /></span>}
           {row.isJunk && <span className="tags"><span className="jb">{(row.bucket || "junk").split("/")[0]}</span></span>}
