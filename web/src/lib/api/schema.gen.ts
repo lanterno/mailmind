@@ -4855,7 +4855,7 @@ export interface components {
             /** Cleaned */
             cleaned: number;
             /** Handled */
-            handled?: number | null;
+            handled: number;
             /** Needs You */
             needs_you: number;
             /** Received */
