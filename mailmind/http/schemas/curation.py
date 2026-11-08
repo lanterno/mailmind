@@ -29,6 +29,14 @@ class CleanupBody(RequestBody):
     undo_group: str | None = None
 
 
+class BatchSendersBody(RequestBody):
+    senders: list[str] | None = None        # left out is the use case's `bad senders`
+
+
+class BatchCleanupBody(BatchSendersBody):
+    undo_group: str | None = None
+
+
 class SweepBody(RequestBody):
     account: str | None = "all"
     dry_run: Flag | None = None
@@ -183,6 +191,33 @@ class CleanedUp(Answer):
     sweep_capped: bool
     browser_url: str | None
     http_status: int | None
+    undo_group: str
+    reversible: Reversible
+
+
+class BatchSender(Answer):
+    from_addr: str
+    count: int
+    unseen: int
+    sweep_count: int
+
+
+class BatchPreview(Answer):
+    """What cleaning up these senders together would do. Only the block and the sweep: each unsubscribe wants its own preview."""
+    ok: Literal[True]
+    senders: list[BatchSender]
+    sweep_count: int
+    sweep_capped: bool
+    reversible: Reversible
+
+
+class BatchCleanedUp(Answer):
+    ok: Literal[True]
+    blocked: list[str]
+    swept: int
+    sweep_failed: int
+    sweep_queued: int
+    sweep_capped: bool
     undo_group: str
     reversible: Reversible
 

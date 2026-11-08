@@ -70,6 +70,9 @@ class _Filing:
     def trash_now(self, pk):
         return mailbox.filing.trash_now(pk)
 
+    def trash_many(self, rows, undo_group):
+        return mailbox.filing.file_many({"verb": "trash", "rows": list(rows), "undo_group": undo_group})
+
     def undo_push(self, descriptor, group):
         mailbox.undo.push(descriptor, group)
 

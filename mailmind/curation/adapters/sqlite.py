@@ -84,7 +84,7 @@ class SenderMail:
         it is — already filtered."""
         with _uow.read() as c:
             return c.execute(
-                "SELECT pk, account, folder, subject, seen FROM messages "
+                "SELECT pk, message_key, uid, account, folder, subject, seen FROM messages "
                 "WHERE lower(from_addr)=? AND folder='INBOX' AND pending_removal IS NULL ORDER BY ts DESC LIMIT ?",
                 (from_addr, limit)).fetchall()
 

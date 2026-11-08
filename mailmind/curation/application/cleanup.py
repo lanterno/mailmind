@@ -2,6 +2,7 @@
 and stand whatever the unsubscribe does; the unsubscribe can't be taken back, so it wants the preview's token."""
 import secrets
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -66,6 +67,60 @@ class Cleanup:
                 "unsub": unsubscribe.preview(info), "sweep_count": len(affected), "sweep_capped": capped,
                 "reversible": cleanup_plan.REVERSIBLE,
                 "confirm_token": tokens.mint(self._secret(), unsubscribe.TOKEN_PURPOSE, unsubscribe.preview_said(addr, info), time.time())}
+
+    def _batch_sweeps(self, addrs: Sequence[str]) -> tuple[list[tuple[str, Sequence[Any]]], bool]:
+        """What a batch of these senders would sweep of each, and whether any of it is left behind."""
+        read = [(a, *cleanup_plan.within_cap(self._mail.sweep_targets(a, cleanup_plan.to_read()))) for a in addrs]
+        return cleanup_plan.within_batch(read)
+
+    def batch_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """What cleaning up these senders together would do, before anyone says yes: each one's mail and how many of its INBOX
+        copies go. Raises Refused for a list that won't read and NotFound when none of them has mail stored."""
+        addrs = cleanup_plan.senders_named(body.get("senders"))
+        if addrs is None:
+            raise Refused("bad senders")
+        sweeps, capped = self._batch_sweeps(addrs)
+        senders: list[dict[str, Any]] = []
+        for addr, targets in sweeps:
+            n, unseen = self._mail.counts(addr)
+            if n:
+                senders.append({"from_addr": addr, "count": n, "unseen": unseen, "sweep_count": len(targets)})
+        if not senders:
+            raise NotFound("no such sender")
+        return {"ok": True, "senders": senders, "sweep_count": sum(s["sweep_count"] for s in senders), "sweep_capped": capped,
+                "reversible": cleanup_plan.REVERSIBLE}
+
+    def batch_execute(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Commit for MANY senders: each one's block, then every sweep, under one undo group, so a single `z` reverses the whole
+        batch. Only the reversible half: an unsubscribe can't be taken back, and each wants its own preview's token."""
+        addrs = cleanup_plan.senders_named(body.get("senders"))
+        if addrs is None:
+            raise Refused("bad senders")
+        grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))        # never shared with an earlier cleanup
+        sweeps, capped = self._batch_sweeps(addrs)
+        for addr, _targets in sweeps:
+            self._rules.add(addr, "block")
+            self._filing.undo_push({"kind": "unblock", "token": addr, "label": f"Cleaned up {len(addrs)} senders"}, grp)
+        sender_of = {(t["message_key"], t["folder"], t["uid"]): addr for addr, targets in sweeps for t in targets
+                     if t["message_key"] is not None}
+        said = self._sweep_many(sender_of, grp)
+        for addr, _targets in sweeps:
+            self._filing.reclassify(addr)            # what stays, in other folders, reads as blocked too
+        self._filing.stats_changed()
+        swept_of = Counter(sender_of[(f["key"], f["folder"], f["uid"])] for f in said["filed"] if (f["key"], f["folder"], f["uid"]) in sender_of)
+        for addr, _targets in sweeps:
+            self._audit.cleaned_up(addr, addr, swept_of[addr], "skipped")
+        return {"ok": True, "blocked": addrs, "swept": said["count"], "sweep_failed": said["failed"], "sweep_queued": said["queued"],
+                "sweep_capped": capped, "undo_group": grp, "reversible": cleanup_plan.REVERSIBLE}
+
+    def _sweep_many(self, sender_of: Mapping[tuple[int, str, int], str], grp: str) -> Mapping[str, Any]:
+        """Trash these copies as filing marked rows does: one transaction accepts them all under `grp`, then each is tried."""
+        if not sender_of:
+            return {"count": 0, "failed": 0, "queued": 0, "filed": []}
+        try:
+            return self._filing.trash_many([{"key": k, "folder": f, "uid": u} for k, f, u in sender_of], grp)
+        except Exception:                            # none of them went: each is where it was
+            return {"count": 0, "failed": len(sender_of), "queued": 0, "filed": []}
 
     def _trash(self, pk: int, grp: str) -> Mapping[str, Any]:
         try:

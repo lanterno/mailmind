@@ -8,6 +8,10 @@ from mailmind.http.schemas.common import answers
 from mailmind.http.schemas.curation import (
     AuditArgs,
     AuditTrail,
+    BatchCleanedUp,
+    BatchCleanupBody,
+    BatchPreview,
+    BatchSendersBody,
     CleanedUp,
     CleanupBody,
     FilterChange,
@@ -64,6 +68,20 @@ def router(curation, mailbox):
     def cleanup_execute(body: CleanupBody):
         try:
             return curation.cleanup.execute(body.model_dump(exclude_unset=True))
+        except Problem:
+            raise
+        except Exception as ex:
+            log.error("error", exc_info=ex)
+            return route.problem(500, "cleanup failed")
+
+    @r.post("/api/cleanup/batch/preview", responses=answers(BatchPreview))     # reads only: a POST for the list it names
+    def cleanup_batch_preview(body: BatchSendersBody):
+        return curation.cleanup.batch_preview(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/cleanup/batch", responses=answers(BatchCleanedUp))
+    def cleanup_batch(body: BatchCleanupBody):
+        try:
+            return curation.cleanup.batch_execute(body.model_dump(exclude_unset=True))
         except Problem:
             raise
         except Exception as ex:

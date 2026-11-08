@@ -5,8 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Final, Literal
 
 from mailmind.curation.domain import rulebook
+from mailmind.kernel.parsed import is_list
 
 SWEEP_CAP = 200          # bound the per-sender IMAP-move burst; report if capped
+BATCH_MAX = 40           # senders one batch may name: what the list of them shows
+BATCH_SWEEP_CAP = 500    # moves one batch makes, in all: its undo group is rewritten with each, and a click waits on it
 type BlockScope = Literal["sender", "domain"]           # how far a block goes: a request's schema names it so
 SENDER: Final[BlockScope] = "sender"
 DOMAIN: Final[BlockScope] = "domain"
@@ -27,6 +30,29 @@ def to_read() -> int:
 def within_cap[T](read: Sequence[T]) -> tuple[Sequence[T], bool]:
     """What a sweep takes of `read`, the messages `to_read` asked for, and whether that leaves any behind."""
     return read[:SWEEP_CAP], len(read) > SWEEP_CAP
+
+
+def senders_named(raw: object) -> list[str] | None:
+    """The distinct senders a batch names, as rules and rows go by them, or None if it names none, too many, or anything that
+    isn't an address."""
+    if not is_list(raw) or not raw or len(raw) > BATCH_MAX:
+        return None
+    named = [sender_named(one) if isinstance(one, str) else None for one in raw]
+    return None if None in named else list(dict.fromkeys(a for a in named if a))
+
+
+def within_batch[T](read: Iterable[tuple[str, Sequence[T], bool]]) -> tuple[list[tuple[str, Sequence[T]]], bool]:
+    """(what a batch sweeps of each sender, whether anything was left behind), from each sender's own `within_cap`. The moves are
+    shared out in the order the senders came."""
+    left = BATCH_SWEEP_CAP
+    taken: list[tuple[str, Sequence[T]]] = []
+    capped = False
+    for addr, targets, hit_own_cap in read:
+        kept = targets[:left]
+        capped = capped or hit_own_cap or len(kept) < len(targets)
+        left -= len(kept)
+        taken.append((addr, kept))
+    return taken, capped
 
 
 @dataclass(frozen=True)
