@@ -781,6 +781,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/message/attachment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Copy Attachment */
+        get: operations["copy_attachment_api_message_attachment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/message/body": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Copy Body */
+        get: operations["copy_body_api_message_body_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/message/body.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Copy Document */
+        get: operations["copy_document_api_message_body_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/message/{pk}/attachment/{part_id}": {
         parameters: {
             query?: never;
@@ -1523,6 +1574,16 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ACopy
+         * @description A copy of a message, one of many a request names: its key and the folder it is in.
+         */
+        ACopy: {
+            /** Folder */
+            folder: string;
+            /** Key */
+            key: number;
+        };
+        /**
          * AccountBody
          * @description An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `trash`, `smtp_*`,
          *     `strip_spaces` and `disabled`, which the use case still reads.
@@ -1783,8 +1844,12 @@ export interface components {
             account: string;
             /** Date */
             date: string;
+            /** Folder */
+            folder: string;
             /** From */
             from: string | null;
+            /** Key */
+            key: number;
             /** Pk */
             pk: number;
             /** Snippet */
@@ -1905,6 +1970,8 @@ export interface components {
             count: number;
             /** Label */
             label: string;
+            /** Messages */
+            messages: components["schemas"]["Copy"][];
             /** Pks */
             pks: number[];
         };
@@ -1952,6 +2019,10 @@ export interface components {
         };
         /** BulkRow */
         BulkRow: {
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Whole */
@@ -2041,6 +2112,16 @@ export interface components {
             recent: components["schemas"]["RecentMail"][];
             /** Replied */
             replied: number;
+        };
+        /**
+         * Copy
+         * @description What names a copy of a message on the wire: the message's key, and the folder the copy is in.
+         */
+        Copy: {
+            /** Folder */
+            folder: string;
+            /** Key */
+            key: number;
         };
         /**
          * CouldntLogIn
@@ -2292,8 +2373,12 @@ export interface components {
             account: string;
             /** Filename */
             filename: string;
+            /** Folder */
+            folder: string;
             /** From */
             from: string;
+            /** Key */
+            key: number;
             /** Kind */
             kind: string;
             /** Part Id */
@@ -2393,6 +2478,8 @@ export interface components {
             in_reply_to_pk?: number | null;
             /** Mode */
             mode?: string | null;
+            /** Original Key */
+            original_key?: number | null;
             /** Resume */
             resume?: {
                 [key: string]: unknown;
@@ -2491,6 +2578,8 @@ export interface components {
             ok: true;
             /** Orig Pk */
             orig_pk: number | null;
+            /** Original Key */
+            original_key: number | null;
             /** Participants */
             participants: string[];
             /** References */
@@ -2515,8 +2604,12 @@ export interface components {
         DraftReplyBody: {
             /** Account */
             account?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Instruction */
             instruction?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Thread Id */
@@ -2672,6 +2765,10 @@ export interface components {
         FlagBody: {
             /** Flag */
             flag?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Mutation Id */
             mutation_id?: string | null;
             /** On */
@@ -2723,6 +2820,8 @@ export interface components {
             count?: number | null;
             /** Flagged */
             flagged: boolean;
+            /** Folder */
+            folder: string;
             /** From Addr */
             from_addr: string | null;
             /** From Name */
@@ -3017,6 +3116,8 @@ export interface components {
             count: number;
             /** Failed */
             failed: number;
+            /** Filed */
+            filed: components["schemas"]["Copy"][];
             /** Msg */
             msg: string;
             /**
@@ -3049,6 +3150,8 @@ export interface components {
             draft_id?: number | null;
             /** Draft Mode */
             draft_mode?: string | null;
+            /** Folder */
+            folder: string;
             /** From Addr */
             from_addr: string | null;
             /** From Name */
@@ -3090,6 +3193,10 @@ export interface components {
         };
         /** MoveBody */
         MoveBody: {
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Mutation Id */
             mutation_id?: string | null;
             /** Pk */
@@ -3101,6 +3208,10 @@ export interface components {
         MuteBody: {
             /** Account */
             account?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Thread Id */
@@ -3185,11 +3296,16 @@ export interface components {
         };
         /**
          * NamesAThread
-         * @description A thread, by its account and id, or by a message of it (`Threads.target`).
+         * @description A thread, by its account and id, or by a message of it (`Threads.target`), its key and the folder of the copy the
+         *     page has.
          */
         NamesAThread: {
             /** Account */
             account?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Thread Id */
@@ -3202,11 +3318,18 @@ export interface components {
         };
         /**
          * NamesThreadOrMessages
-         * @description A whole thread, by its account and id, else the messages named by pk (`snooze.named_thread`, `named_pks`).
+         * @description A whole thread, by its account and id, else the copies named by key and folder (`snooze.named_thread`, `named_pks`):
+         *     `copies`, or the one `key` and `folder` name.
          */
         NamesThreadOrMessages: {
             /** Account */
             account?: string | null;
+            /** Copies */
+            copies?: components["schemas"]["ACopy"][] | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Pks */
@@ -3598,6 +3721,10 @@ export interface components {
         RecentMail: {
             /** Account */
             account: string;
+            /** Folder */
+            folder: string;
+            /** Key */
+            key: number;
             /** Pk */
             pk: number;
             /** Seen */
@@ -3671,6 +3798,10 @@ export interface components {
         ReplyLaterBody: {
             /** Account */
             account?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** On */
             on?: boolean | null;
             /** Pk */
@@ -3745,10 +3876,17 @@ export interface components {
             /** When */
             when: string;
         };
-        /** ResumeBody */
+        /**
+         * ResumeBody
+         * @description A draft MailMind saved, by its id, or a copy of one in Drafts by its key and folder.
+         */
         ResumeBody: {
             /** Draft Id */
             draft_id?: number | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
         };
@@ -3906,6 +4044,8 @@ export interface components {
             count: number;
             /** Failed */
             failed: number;
+            /** Filed */
+            filed: components["schemas"]["Copy"][];
             /** Msg */
             msg: string;
             /**
@@ -3928,6 +4068,10 @@ export interface components {
         RsvpBody: {
             /** Decision */
             decision?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
         };
@@ -3949,8 +4093,15 @@ export interface components {
             /** Summary */
             summary: string;
         };
-        /** RuleBody */
+        /**
+         * RuleBody
+         * @description A block trashes the copy `key` and `folder` name too, if it is still there.
+         */
         RuleBody: {
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Token */
@@ -4059,7 +4210,7 @@ export interface components {
             /** Is Junk */
             is_junk: boolean;
             /** Key */
-            key: number | null;
+            key: number;
             /** Needs You */
             needs_you: boolean;
             /** Pk */
@@ -4101,6 +4252,10 @@ export interface components {
         };
         /** SeenBody */
         SeenBody: {
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Mutation Id */
             mutation_id?: string | null;
             /** Pk */
@@ -4128,6 +4283,8 @@ export interface components {
             in_reply_to_pk?: number | null;
             /** Mode */
             mode?: string | null;
+            /** Original Key */
+            original_key?: number | null;
             /** Resume */
             resume?: {
                 [key: string]: unknown;
@@ -4186,6 +4343,12 @@ export interface components {
         SnoozeBody: {
             /** Account */
             account?: string | null;
+            /** Copies */
+            copies?: components["schemas"]["ACopy"][] | null;
+            /** Folder */
+            folder?: string | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Pks */
@@ -4322,13 +4485,17 @@ export interface components {
         };
         /**
          * SummarizeBody
-         * @description A message by pk, or a thread by its account and id.
+         * @description A message by its key, or a thread by its account and id.
          */
         SummarizeBody: {
             /** Account */
             account?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Force */
             force?: boolean | null;
+            /** Key */
+            key?: number | null;
             /** Pk */
             pk?: number | null;
             /** Thread Id */
@@ -4437,6 +4604,8 @@ export interface components {
              * @constant
              */
             ok: true;
+            /** Reply Key */
+            reply_key: number | null;
             /** Reply Pk */
             reply_pk: number | null;
             /** Thread Id */
@@ -4576,6 +4745,8 @@ export interface components {
             all_day: boolean;
             /** End */
             end: string;
+            /** Folder */
+            folder: string;
             /** Invite */
             invite: boolean;
             /** Key */
@@ -6142,6 +6313,8 @@ export interface operations {
         parameters: {
             query?: {
                 pk?: string | null;
+                key?: number | null;
+                folder?: string | null;
                 peek?: string | null;
             };
             header?: never;
@@ -10000,6 +10173,344 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Filed"];
                 };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    copy_attachment_api_message_attachment_get: {
+        parameters: {
+            query: {
+                key: number;
+                folder: string;
+                part_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    copy_body_api_message_body_get: {
+        parameters: {
+            query: {
+                key: number;
+                folder: string;
+                prefetch?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOpened"] | components["schemas"]["Prefetched"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    copy_document_api_message_body_html_get: {
+        parameters: {
+            query?: {
+                key?: string;
+                folder?: string;
+                images?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Bad Request */
             400: {
