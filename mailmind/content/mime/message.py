@@ -198,6 +198,49 @@ def _decode(part: AnyMessage) -> str:
         return ""
 
 
+_SIGNATURE = "-- "
+
+
+def _marked(depth: int, text: str) -> str:
+    return ">" * depth + (" " + text if text else "") if depth else text
+
+
+def _unflowed(text: str, delsp: bool) -> str:
+    """A format=flowed text (RFC 3676) as it was written. Of each line: its quote depth, then one stuffing space off, and one
+    still ending in a space flows on to the next at its depth. `-- ` above a signature ends in one and is neither, and another
+    depth or an empty line ends a paragraph all the same."""
+    joint = "" if delsp else " "
+    out: list[str] = []
+    paragraph: list[str] = []
+    depth = 0
+    for line in text.replace("\r\n", "\n").split("\n"):
+        at = len(line) - len(line.lstrip(">"))
+        piece = line[at:].removeprefix(" ")
+        if paragraph and (at != depth or not piece or piece == _SIGNATURE):
+            out.append(_marked(depth, joint.join(paragraph)))
+            paragraph = []
+        depth = at
+        if piece.endswith(" ") and piece != _SIGNATURE:
+            paragraph.append(piece[:-1])
+        else:
+            out.append(_marked(at, joint.join([*paragraph, piece])))
+            paragraph = []
+    if paragraph:
+        out.append(_marked(depth, joint.join(paragraph)))
+    return "\n".join(out)
+
+
+def as_written(part: AnyMessage, text: str) -> str:
+    """A text/plain part's decoded text as its writer typed it: format=flowed's soft breaks undone, any other as it came."""
+    try:
+        if part.get_content_type() != "text/plain" or str(part.get_param("format") or "").lower() != "flowed":
+            return text
+        delsp = str(part.get_param("delsp") or "").lower() == "yes"
+    except Exception:
+        return text
+    return _unflowed(text, delsp)
+
+
 def parse(raw_bytes: bytes) -> Parsed:
     try:
         msg: AnyMessage = email.message_from_bytes(raw_bytes, policy=policy.default)
@@ -237,7 +280,7 @@ def parse(raw_bytes: bytes) -> Parsed:
             })
             continue
         if ctype == "text/plain" and text is None:
-            text = _decode(part)
+            text = as_written(part, _decode(part))
         elif ctype == "text/html" and html is None:
             html = _decode(part)
         elif ctype == "text/calendar" and cal is None:

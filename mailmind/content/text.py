@@ -2,7 +2,7 @@
 import html
 import re
 
-from mailmind.content.mime import AnyMessage, Parsed, decoded, holds_no_parts, walk
+from mailmind.content.mime import AnyMessage, Parsed, as_written, decoded, holds_no_parts, walk
 
 BODY_CHARS = 3000
 
@@ -81,7 +81,7 @@ def text_body(msg: AnyMessage) -> str:
             continue
         ct = "text/plain" if holds_no_parts(part) else part.get_content_type()
         if ct == "text/plain" and plain is None:
-            plain = text
+            plain = as_written(part, text)
         elif ct == "text/html" and htmltxt is None:
             htmltxt = text
     body = plain
