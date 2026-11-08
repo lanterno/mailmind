@@ -135,12 +135,20 @@ and strict ones on what `[tool.pyright]` lists, which a package joins once it re
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint and runs its Vitest suites; it installs `web/node_modules` from the lockfile if they
-are missing. First it writes the API's types afresh and fails if they differ from `web/src/lib/api/schema.gen.ts`, saying to run
-`just gen-api`. That takes a second or two: `tests/openapi_doc.py` writes the OpenAPI document of the app the routers make (no data
-directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes `schema.gen.ts` from it. Run it when a
-schema in `mailmind/http/schemas/` or a route changes, and review the diff, in a commit of its own. `lib/api/types.ts` reads that by path:
-`GetAnswers` and `PostAnswers`, each a route's JSON answer at 200 (a file, a document or a stream has none), `PostBodies`, and `AnyOf`,
-a union read field by field for code that takes each of its shapes as one, as a list's rows do.
+are missing. First it writes the API's types and the page's limits afresh and fails if they differ from `web/src/lib/api/schema.gen.ts`
+and `limits.gen.ts`, saying to run `just gen-api`. That takes a second or two: `tests/openapi_doc.py` writes the OpenAPI document of the
+app the routers make (no data directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes
+`schema.gen.ts` from it. The same program writes `limits.gen.ts`, `LIMITS`, from `mailmind/http/page_limits.py`'s `PAGE_LIMITS`: each
+limit the page holds a person to before it asks (what one message's files may come to, the rows one `/api/bulk/file` names, the length of
+an instruction for a drafted reply, Undo Send's window), as the constant its use case enforces. They are a build's, as the types are, so nothing serves them
+and nothing waits for them to load. Run it when a schema in `mailmind/http/schemas/`, a route or a limit changes, and review the diff, in a
+commit of its own. `lib/api/types.ts` reads the types by path: `GetAnswers` and `PostAnswers`, each a route's JSON answer at 200 (a
+file, a document or a stream has none), `PostBodies`, and `AnyOf`, a union read field by field for code that takes each of its shapes as
+one, as a list's rows do. It also names each closed set the server takes (`SnoozePreset`, `DraftTone`, `RewriteOp`, `PlanVerb`,
+`FilingVerb`, `RuleChange`, `BlockScope`, `RsvpDecision`, `ComposeMode`, `DocumentKind` and the like). The page never keeps its own copy of a closed set or
+a limit the server owns: its words for a set are a `Record<Set, string>` in its menu's order (`lib/entries.ts` walks one with its keys'
+type), so tsc fails when the server adds or drops a member, and a limit is `LIMITS`'s. A choice of the page's alone (the send-later
+times, a page's size) stays the page's.
 
 `web/eslint.config.js` covers `web/src` only: typescript-eslint, `react-hooks` and `jsx-a11y`, each finding an error. A disable sits on its
 line with a reason. Three rules are our own:
@@ -520,6 +528,12 @@ def snooze(body: SnoozeBody):
   (`kernel.parsed`'s reading, nothing past 2^53) and `Flag`. It stays optional unless going without already answers `bad request`,
   so a use case keeps its own words for what is left out. What the model refuses answers the `bad request` problem
   (`/problems/refused`) with 400, GET included.
+- A field that names one of a closed set (a snooze preset, a tone, a rewrite, a verb, a verdict, a decision, a mode) is typed as the
+  set, a `type Name = Literal[...]` declared once in the domain beside what its use case checks against (a tuple of `get_args`, or a
+  table keyed by it, which `tests/unit/http/test_closed_sets.py` holds to every member), and reached through the context's `api`: a
+  set two contexts name is the kernel's (`kernel.snoozed.SnoozePreset`). Pydantic names it in the OpenAPI document, so the page has it
+  as a type. A value outside it is the `bad request`, and one left out is still the use case's to word. An answer that names one says
+  so too (`PlanPreview.verb`). Accounts' `type` and credential stay `Any`, since Accounts words its own refusals of them.
 - An answer's model (`schemas.common.Answer`) is documentation: `responses=answers(Ok, {409: MoreSaid})`, never `response_model`,
   which would filter and refuse. `Ok` may be a union of what a route answers when it can, and is never a refusal. `answers` gives
   each failure status `Failure`, the problem document, which `tests/openapi_doc.py` gives as `application/problem+json`; a route
