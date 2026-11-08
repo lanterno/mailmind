@@ -4699,6 +4699,8 @@ export interface components {
             cached: boolean;
             /** Generated */
             generated: string;
+            /** Meetings */
+            meetings: components["schemas"]["ReviewMeeting"][];
             /** Model */
             model: string;
             /** Narrative */
@@ -4739,6 +4741,30 @@ export interface components {
             thread_id: string;
             /** To */
             to: string;
+            /** Uid */
+            uid: number | null;
+        };
+        /**
+         * ReviewMeeting
+         * @description An event in the week's invites, by its message's key and the folder and uid of its copy now.
+         */
+        ReviewMeeting: {
+            /** Account */
+            account: string;
+            /** All Day */
+            all_day: boolean;
+            /** Folder */
+            folder: string;
+            /** Key */
+            key: number | null;
+            /** Past */
+            past: boolean;
+            /** Start */
+            start: string;
+            /** Summary */
+            summary: string;
+            /** Thread Id */
+            thread_id: string | null;
             /** Uid */
             uid: number | null;
         };
@@ -4790,6 +4816,8 @@ export interface components {
             };
             /** Cleaned */
             cleaned: number;
+            /** Handled */
+            handled?: number | null;
             /** Needs You */
             needs_you: number;
             /** Received */
