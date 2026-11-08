@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bodyUrl, foldPlainQuote, lookOf, quoteDoc, type FrameTheme, type MailPrefs } from "./mailDoc";
 
-const theme: FrameTheme = { light: true, bg: "#111", panel: "#eee", ink: "#fff", primaryInk: "#9cf", lineHi: "#555", mute: "#888" };
+const theme: FrameTheme = { light: true, panel: "#eee", night: { bg: "#111", ink: "#fff", primaryInk: "#9cf", lineHi: "#555", mute: "#888" } };
 const prefs: MailPrefs = { colors: "auto", font: "serif", lineHeight: 1.6, sizePx: 16 };
 
 describe("a body's URL", () => {
@@ -25,6 +25,12 @@ describe("a mail's look", () => {
     expect(lookOf(false, prefs, { ...theme, light: false })).toMatchObject({ inverted: false });
     expect(lookOf(false, prefs, { ...theme, light: false }).css).toContain("color:#fff;background:#111");
     expect(lookOf(false, prefs, theme).css).toContain("color:#24221E;background:#FFFDF8");
+  });
+  it("sets dark mail on the night palette under a paper theme too", () => {
+    expect(lookOf(false, { ...prefs, colors: "dark" }, theme).css).toContain("color:#fff;background:#111");
+    expect(lookOf(false, { ...prefs, colors: "dark" }, theme).css).toContain("a{color:#9cf}");
+    expect(lookOf(false, { ...prefs, colors: "dark" }, theme).css).toContain("border-left:3px solid #555");
+    expect(lookOf(true, { ...prefs, colors: "dark" }, theme).css).toContain("html{background:#111}");
   });
   it("typesets plain text by the reading settings, and leaves rich mail the sender's own type", () => {
     expect(lookOf(false, { ...prefs, font: "mono", sizePx: 20 }, theme).css).toContain("font:20px/1.6 mono");

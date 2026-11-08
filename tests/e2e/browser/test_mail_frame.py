@@ -287,6 +287,40 @@ def test_a_reading_setting_changes_a_plain_mail_without_fetching_it(page, world)
     clean(page)
 
 
+NIGHT_PAPER, NIGHT_INK = "rgb(22, 33, 58)", "rgb(237, 231, 215)"      # :root's --bg and --ink in app.css
+THEMES = {"day": 0, "dusk": 1, "night": 2}      # clicks of the theme button, from the Day the page opens on
+
+
+def _dark_mail_colors(page):
+    page.get_by_role("button", name="Reading settings").click()
+    page.get_by_role("dialog", name="Reading settings").get_by_role("button", name="Dark").click()
+
+
+@pytest.mark.parametrize("clicks", THEMES.values(), ids=THEMES.keys())
+def test_dark_plain_mail_is_on_night_paper_whichever_theme_the_app_is_in(page, world, clicks):
+    pk, key = arrives(world, "Plain words.", "text/plain")
+    frame = reading(page, key)
+    for _ in range(clicks):
+        page.locator("#themeBtn").click()
+    _dark_mail_colors(page)
+    body = "getComputedStyle(f.contentDocument.body)"
+    until(page, lambda: frame.evaluate(f"f => {body}.backgroundColor") == NIGHT_PAPER, "the paper stayed the theme's")
+    assert frame.evaluate(f"f => {body}.color") == NIGHT_INK
+    clean(page)
+
+
+@pytest.mark.parametrize("clicks", THEMES.values(), ids=THEMES.keys())
+def test_dark_rich_mail_is_inverted_onto_night_paper_whichever_theme_the_app_is_in(page, world, clicks):
+    pk, key = arrives(world, "<p>Rich words.</p>")
+    frame = reading(page, key)
+    for _ in range(clicks):
+        page.locator("#themeBtn").click()
+    _dark_mail_colors(page)
+    until(page, lambda: "invert" in frame.evaluate("f => getComputedStyle(f.contentDocument.body).filter"), "it wasn't inverted")
+    until(page, lambda: frame.evaluate("f => getComputedStyle(f.contentDocument.documentElement).backgroundColor") == NIGHT_PAPER, "the page stayed the theme's")
+    clean(page)
+
+
 def test_a_reading_setting_darkens_rich_mail_without_fetching_it(page, world):
     pk, key = arrives(world, "<p>Rich words.</p>")
     documents = asked(page, "/body.html")
