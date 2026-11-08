@@ -36,10 +36,6 @@ def nothing_asked() -> dict[str, Any]:
     return {"ok": True, "query": "", "items": [], "total": 0, "has_more": False}
 
 
-def bad_query() -> dict[str, Any]:
-    return {"ok": False, "error": "bad query"}
-
-
 def first_copies(rows: Iterable[Row], limit: int, offset: int) -> list[Row]:
     """One result a message, out of rows in the order to show with the copy to show first: after `offset` of them, up to one
     more than `limit`, which says there is more. It reads no further than that, so newest first stops early. A row with no key

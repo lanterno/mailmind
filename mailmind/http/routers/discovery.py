@@ -6,7 +6,6 @@ from fastapi import Query
 from mailmind.http import route
 from mailmind.http.schemas.common import answers
 from mailmind.http.schemas.discovery import (
-    BadQuery,
     ContactArgs,
     ContactCard,
     ContactsArgs,
@@ -19,7 +18,6 @@ from mailmind.http.schemas.discovery import (
     SearchPage,
     Suggestions,
     ViewChange,
-    ViewRefused,
     Views,
 )
 from mailmind.kernel.errors import Problem
@@ -31,7 +29,7 @@ log = get_logger("contacts")
 def router(discovery):
     r = route.router()
 
-    @r.get("/api/search", responses=answers(SearchPage | NothingAsked | BadQuery))
+    @r.get("/api/search", responses=answers(SearchPage | NothingAsked))
     def search(args: Annotated[SearchArgs, Query()]):
         return discovery.search.answer(args.as_query())
 
@@ -39,7 +37,7 @@ def router(discovery):
     def views():
         return {"ok": True, "views": discovery.views.merged()}
 
-    @r.post("/api/views", responses=answers(Views | ViewRefused))
+    @r.post("/api/views", responses=answers(Views))
     def views_post(body: ViewChange):
         return discovery.views.post(body.model_dump(exclude_unset=True))
 

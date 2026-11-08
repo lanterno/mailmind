@@ -5,6 +5,7 @@ from typing import Any
 from mailmind.discovery.application.ports import AccountNames, SearchIndex
 from mailmind.discovery.domain import guard, search
 from mailmind.discovery.domain.query import QuerySpec
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso, rel_time
 
@@ -15,14 +16,14 @@ class Search:
         self._accounts = accounts
 
     def answer(self, qs: Mapping[str, list[str]]) -> dict[str, Any]:
-        """Local FTS5 + operator search across synced mail."""
+        """Local FTS5 + operator search across synced mail. Raises Refused for a query the index won't take."""
         want = search.asked(qs)
         if want is None:
             return search.nothing_asked()
         aliases = self._accounts.aliases()
         rows = self._index.search(want.spec, want.account, want.limit, want.offset)
         if rows is None:
-            return search.bad_query()
+            raise Refused("bad query")
         return search.page(rows, want, aliases, rel_time, now_iso())
 
     def for_asking(self, match: str, accounts: str | list[str], limit: int) -> list[Row] | None:

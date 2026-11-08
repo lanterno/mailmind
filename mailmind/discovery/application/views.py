@@ -32,15 +32,15 @@ class SavedViews:
         return True
 
     def post(self, b: Mapping[str, Any]) -> dict[str, Any]:
-        """A change /api/views asked for, and the views after it."""
+        """A change /api/views asked for, and the views after it. Raises Refused for one it can't make."""
         if any(not isinstance(b.get(name), str | None) for name in ("id", "name", "q")):
             raise Refused()
         verb = b.get("verb")
         if verb == "create":
             if not self.add(b.get("name"), b.get("q")):
-                return {"ok": False, "msg": "need a name and a query", "views": self.merged()}
+                raise Refused("need a name and a query")
         elif verb == "delete":
             self.remove(b.get("id"))            # no-op (returns False) for a builtin/lane
         else:
-            return {"ok": False, "msg": "verb must be create|delete", "views": self.merged()}
+            raise Refused("verb must be create|delete")
         return {"ok": True, "views": self.merged()}

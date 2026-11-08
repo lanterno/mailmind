@@ -34,7 +34,7 @@ class ContactArgs(QueryArgs):
 
 
 class ViewChange(RequestBody):
-    verb: str | None = None                 # unknown to the use case is its `verb must be create|delete`, with a 200
+    verb: str | None = None                 # unknown to the use case is its `verb must be create|delete`
     id: str | None = None
     name: str | None = None
     q: str | None = None
@@ -88,11 +88,6 @@ class NothingAsked(Answer):
     has_more: bool
 
 
-class BadQuery(Answer):
-    ok: Literal[False]
-    error: str
-
-
 class ListedView(Answer):
     id: str
     name: str
@@ -103,12 +98,6 @@ class ListedView(Answer):
 
 class Views(Answer):
     ok: Literal[True]
-    views: list[ListedView]
-
-
-class ViewRefused(Answer):
-    ok: Literal[False]
-    msg: str
     views: list[ListedView]
 
 
