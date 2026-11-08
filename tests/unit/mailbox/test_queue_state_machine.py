@@ -180,7 +180,10 @@ class Machine(RuleBasedStateMachine):
                 for name in NAMES:
                     if w.message_id(name) == d.get("message_id"):
                         self.allow(name, d.get("src_folder"))
-        mailbox.undo.undo_last()
+        try:
+            answered(mailbox.undo.undo_last)
+        except Exception:                             # the route's 500: the entry is back on the stack
+            pass
 
     @rule(which=st.integers(0, 3))
     @precondition(lambda self: self.open_rows() or self.stuck_rows())

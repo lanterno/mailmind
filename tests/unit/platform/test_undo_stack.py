@@ -4,10 +4,13 @@ tests/e2e/test_front_door.py undoes across a restart; the routes' undo is in tes
 test_hwf_http.py."""
 from datetime import datetime, timedelta, timezone
 
+import pytest
 import time_machine
 
+import problems
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.mailbox import store
+from mailmind.kernel.errors import Conflict
 
 
 def move(n):
@@ -46,7 +49,8 @@ def test_an_undo_that_fails_puts_its_entry_back_on_top(data_dir, monkeypatch):
     mailbox.undo.push(move(1))
     mailbox.undo.push(move(2))
     monkeypatch.setattr(mailbox.undo, "_reverse_one", lambda d: (False, d["account"], None))
-    assert mailbox.undo.undo_last()[0]["ok"] is False
+    with pytest.raises(Conflict):
+        mailbox.undo.undo_last()
     assert ids(mailbox.undo.entries()) == ["<m1@example.test>", "<m2@example.test>"]
 
 
@@ -66,8 +70,8 @@ def test_an_entry_a_day_old_can_no_longer_be_undone(app, world):
     assert ids(mailbox.undo.entries()) == ["<m1@example.test>"]
     app.clock.shift(timedelta(minutes=2))
     assert mailbox.undo.entries() == []
-    answer = app.post("/api/undo", {}).json
-    assert answer["ok"] is False and answer["empty"] is True
+    r = app.post("/api/undo", {})
+    assert (r.status, r.json) == (404, problems.not_found(empty=True))
 
 
 def test_a_new_entry_ends_what_has_grown_too_old(data_dir):

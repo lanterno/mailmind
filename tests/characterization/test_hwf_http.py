@@ -215,8 +215,8 @@ def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_s
 def test_hwf_a_failed_undo_stays_on_the_stack_for_a_retry(app, world):
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     world.server.fail("UID SEARCH", user=w.ADA)              # the server can't find it this once
-    r = app.post("/api/undo", {}).json
-    assert r["ok"] is False and server_boxes(world, RECEIPT) == [(w.ADA, "Archive")]
+    r = app.post("/api/undo", {})
+    assert r.status == 409 and server_boxes(world, RECEIPT) == [(w.ADA, "Archive")]
     assert app.post("/api/undo", {}).json["ok"]
     assert server_boxes(world, RECEIPT) == [(w.ADA, "INBOX")]
 
@@ -226,8 +226,8 @@ def test_hwf_undo_keeps_the_last_50_actions(app, world):
     for _ in range(51):
         assert app.post("/api/snooze", {"pk": pk, "preset": "tomorrow"}).json["ok"]
     answers = [app.post("/api/undo", {}).json for _ in range(51)]
-    assert [a["ok"] for a in answers] == [True] * 50 + [False]
-    assert answers[-1] == {"ok": False, "empty": True}
+    assert [a.get("ok") for a in answers] == [True] * 50 + [None]
+    assert answers[-1] == problems.not_found(empty=True)
 
 
 def test_marking_read_while_the_server_is_away_is_queued(app, world):
@@ -263,8 +263,7 @@ def test_a_refusal_partway_through_a_group_undo_still_reports_what_it_reversed(a
 def test_a_group_undo_that_reverses_nothing_keeps_the_whole_group(app, world):
     archived_pair(app, world)
     world.server.drop("LOGIN", user=w.ADA, times=2)          # neither member can reach the server
-    r = app.post("/api/undo", {}).json
-    assert r["ok"] is False
+    assert app.post("/api/undo", {}).status == 409
     r = app.post("/api/undo", {}).json
     assert (r["ok"], r["reversed"], r["failed"]) == (True, 2, 0)
     assert server_boxes(world, RECEIPT) == server_boxes(world, FOLDED) == [(w.ADA, "INBOX")]
@@ -493,7 +492,7 @@ def test_a_json_body_that_isnt_an_object_is_a_bad_request(app, body):
 def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):
     r = app.post("/api/seen", b"[1, 2]", headers={"X-CSRF-Token": None})
     assert r.status == 403
-    assert app.post("/api/undo", b"").status == 200             # no body at all is still {}
+    assert app.post("/api/undo", b"").json == problems.not_found(empty=True)   # no body at all is still {}: nothing to undo
 
 
 def test_a_reply_marks_its_original_answered_after_the_original_is_archived(app, world):

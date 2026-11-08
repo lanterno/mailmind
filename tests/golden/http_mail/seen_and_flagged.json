@@ -408,11 +408,13 @@
  {
   "body": {
    "empty": true,
-   "ok": false
+   "status": 404,
+   "title": "Not found",
+   "type": "/problems/not-found"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -421,7 +423,7 @@
    "x-frame-options": "DENY"
   },
   "request": "undo with nothing to undo",
-  "status": 200
+  "status": 404
  },
  {
   "note": "undo with nothing to undo: server writes",

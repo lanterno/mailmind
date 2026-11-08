@@ -185,7 +185,7 @@ def test_hwf_a_folded_message_id_never_carries_its_line_break_to_imap(app, world
     assert "\r\n" in row["message_id"]
     since = len(world.server.commands)
     assert app.post("/api/archive", {"pk": row["pk"]}).json["ok"]
-    assert app.post("/api/undo", {}).json["ok"] is False             # it can't be found by that ID
+    assert app.post("/api/undo", {}).status == 409                    # it can't be found by that ID
     lines = [c["line"] for c in world.server.commands[since:]]
     assert not [line for line in lines if "DELETE" in line or "fold@" in line], lines
 
@@ -490,7 +490,7 @@ def test_hwf_a_refused_gmail_unarchive_is_not_reported_as_undone(app, world):
     name = "cy-inbox-03-unrelated.eml"
     assert app.post("/api/archive", {"pk": world.pk(name)}).json["ok"]
     world.server.fail("UID STORE", user=w.CY)
-    assert app.post("/api/undo", {}).json["ok"] is False
+    assert app.post("/api/undo", {}).status == 409
     assert app.post("/api/undo", {}).json["ok"]                  # kept for a retry, which works
     assert (w.CY, "INBOX") in boxes(world, name)[0]
 
@@ -499,7 +499,7 @@ def test_hwf_a_refused_move_back_is_not_reported_as_undone(app, world):
     assert app.post("/api/archive", {"pk": world.pk(RECEIPT)}).json["ok"]
     world.server.fail("UID MOVE", user=w.ADA)
     world.server.fail("UID COPY", user=w.ADA)
-    assert app.post("/api/undo", {}).json["ok"] is False
+    assert app.post("/api/undo", {}).status == 409
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "Archive")]
     assert app.post("/api/undo", {}).json["ok"]
     assert boxes(world, RECEIPT)[0] == [(w.ADA, "INBOX")]

@@ -330,7 +330,7 @@ def test_undo_of_an_older_entry_goes_by_the_move_and_not_a_later_flag_change(app
     c.execute("UPDATE undo_entries SET entry=json_remove(entry, '$.command') WHERE id=?", (top["id"],))
     c.commit()
     c.close()
-    assert mailbox.undo.undo_last()[0]["ok"]
+    assert mailbox.undo.undo_last()["ok"]
     assert [r["kind"] for r in rows()] == ["flag"]
     assert not hidden(pk)
 

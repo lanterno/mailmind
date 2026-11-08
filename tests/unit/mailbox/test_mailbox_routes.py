@@ -109,10 +109,11 @@ def test_a_field_nothing_here_reads_is_nothing_to_refuse(app, world, path, field
 
 @pytest.mark.parametrize("path", ["/api/undo", "/api/refresh"])
 def test_a_route_that_reads_no_body_still_wants_an_object(app, path):
+    done = 404 if path == "/api/undo" else 200            # read as {}: with nothing to undo, Undo says so
     assert app.post(path, b"[]").status == 400
     assert app.post(path, b"not json").status == 400
-    assert app.post(path, {"subject": 5}).status == 200
-    assert app.post(path, b"").status == 200
+    assert app.post(path, {"subject": 5}).status == done
+    assert app.post(path, b"").status == done
 
 
 @pytest.mark.parametrize("path, status, answer", [
@@ -367,7 +368,7 @@ def test_folders_with_no_account_named_say_so_with_an_empty_list(app):
 
 def test_undo_with_nothing_to_undo_says_so(app):
     r = app.post("/api/undo", {})
-    assert (r.status, r.json) == (200, {"ok": False, "empty": True})
+    assert (r.status, r.json) == (404, problems.not_found(empty=True))
 
 
 @pytest.mark.parametrize("path, counts", [("/api/digest", True), ("/api/inboxes", True), ("/api/message/999999/body", True),

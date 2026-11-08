@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule, run_state_machine_as_test
 
 from mailmind.bootstrap.mailbox import store
+from mailmind.kernel.errors import Conflict, NotFound
 from mailmind.platform import undo
 from mailmind.platform.db.uow import UnitOfWork
 from property_runs import runs
@@ -120,11 +121,16 @@ class Machine(RuleBasedStateMachine):
         self.raises = outcome == "raises"
         self.refuses = {"works": lambda n: False, "refused": lambda n: True, "raises": lambda n: True,
                         "odd ones refused": lambda n: n % 2 == 1}[outcome]
-        answer, code = self.undo.undo_last()
-        assert code == 200
-        if not self.model:
-            assert answer == {"ok": False, "empty": True} and self.tried == []
+        try:
+            answer = self.undo.undo_last()
+        except NotFound as nothing:
+            assert (nothing.more, self.model, self.tried) == ({"empty": True}, [], [])
             return
+        except Conflict:                                 # none of it went back
+            answer = {"ok": False}
+        except RuntimeError:                             # a move alone whose reversal raised: it goes on up
+            assert self.raises and self.model[-1].group is None
+            answer = {"ok": False}
         top = self.model.pop()
         assert self.tried == top.moves[::-1], "a group is undone newest first, and every member is tried"
         left = [n for n in top.moves if self.refuses(n)]
