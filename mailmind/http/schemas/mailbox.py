@@ -415,6 +415,7 @@ class Invite(Answer):
     tzid: str
     sequence: int
     rdates: list[str] | None = None         # only where the text has some
+    this_and_future: bool | None = None     # only where RANGE=THISANDFUTURE said so
 
 
 class MessageOpened(Answer):

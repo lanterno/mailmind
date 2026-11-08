@@ -41,7 +41,7 @@ class Agenda:
         moved, gone = agenda.changed_occurrences([inv for _r, inv in found])
         items: list[dict[str, Any]] = []
         expand_until = time.thread_time() + _EXPAND_SECONDS
-        for r, inv in found:
+        for r, inv in agenda.cut_up(found):
             if agenda.dead(inv) or (inv.get("recurrence_id") and inv.get("uid") in gone):
                 continue
             if agenda.repeats(inv) and not inv.get("recurrence_id"):

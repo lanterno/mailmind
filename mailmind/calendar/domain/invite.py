@@ -17,6 +17,14 @@ class Party(TypedDict, total=False):
     email: str
 
 
+class Span(TypedDict, total=False):
+    """The part of a series an invite stands for, where a RANGE=THISANDFUTURE override cut the series up (`agenda.cut_up`). Never from
+    a text. Each is an ISO time, an occurrence's as the series' rule puts it."""
+    origin: str                             # where the rule starts counting from, when that isn't the invite's own start
+    since: str                              # the first occurrence that's this part's
+    before: str                             # the first that isn't any more
+
+
 class Invite(TypedDict):
     summary: str
     location: str
@@ -37,6 +45,8 @@ class Invite(TypedDict):
     tzid: str
     sequence: int                           # the organizer's count of its revisions
     rdates: NotRequired[list[str]]          # only where the text has some
+    this_and_future: NotRequired[bool]      # only where RANGE=THISANDFUTURE said so: what it says goes for each occurrence from this one on
+    span: NotRequired[Span]
 
 
 class Fields(TypedDict, total=False):
@@ -56,6 +66,7 @@ class Fields(TypedDict, total=False):
     exdates: list[datetime | date]          # a date strikes that whole day from a timed series
     rdates: list[datetime]
     recurrence_id: datetime | None
+    this_and_future: bool
     sequence: int
 
 
@@ -221,6 +232,8 @@ def invite_of(e: Fields, method: str) -> Invite:
         "tzid": e.get("tzid", ""),
         "sequence": e.get("sequence", 0),
     }
+    if recurrence_id and e.get("this_and_future"):
+        inv["this_and_future"] = True
     if e.get("rdates"):
         inv["rdates"] = [d.isoformat() for d in e.get("rdates", [])]
     return inv

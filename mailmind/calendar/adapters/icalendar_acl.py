@@ -26,7 +26,7 @@ from icalendar.cal import ComponentFactory
 from icalendar.parser.ical.component import ComponentIcalParser
 
 from mailmind.calendar.domain.agenda import local_naive
-from mailmind.calendar.domain.invite import Fields, Invite, invite_of, length, party, read_time, rule_parts, until_bound, zone
+from mailmind.calendar.domain.invite import Fields, Invite, Span, invite_of, length, party, read_time, rule_parts, until_bound, zone
 
 _READ_SECONDS = 0.2
 _EXPAND_SECONDS = 0.1
@@ -214,6 +214,7 @@ def _fields(ev: Any) -> Fields:
         e["organizer"] = party(str(organizer), _param(organizer, "CN"))
     if (recurrence_id := _last(ev, "RECURRENCE-ID")) is not None:
         e["recurrence_id"] = _time(recurrence_id)[0]
+        e["this_and_future"] = _param(recurrence_id, "RANGE").upper() == "THISANDFUTURE"
     if (sequence := _last(ev, "SEQUENCE")) is not None:
         e["sequence"] = _sequence(sequence)
     # A whole day struck from a timed series stays a date, which says so; from an all-day one it's that day's midnight.
@@ -276,13 +277,29 @@ def _series(inv: Invite, start: datetime, kv: dict[str, str]) -> Any:
     return recurring_ical_events.of(cal)
 
 
+def _in_its_zone(iso: str, tzid: str | None) -> datetime:
+    d = datetime.fromisoformat(iso)
+    tz = zone(tzid) if d.tzinfo else None
+    return d.astimezone(tz) if tz else d    # back into its zone: DST moves wall-clock time
+
+
+def _moved(was: datetime, to: datetime) -> timedelta:
+    """How far an occurrence moved. Where only one of them floats, by the wall clock, as `length` reads a duration."""
+    return to - (was if bool(was.tzinfo) == bool(to.tzinfo) else was.replace(tzinfo=to.tzinfo))
+
+
 def _next(inv: Invite, after: datetime) -> tuple[datetime, datetime] | None:
-    start = datetime.fromisoformat(inv["start_iso"])
+    start = _in_its_zone(inv["start_iso"], inv.get("tzid"))
     end = datetime.fromisoformat(inv["end_iso"]) if inv.get("end_iso") else None
-    tz = zone(inv.get("tzid")) if start.tzinfo else None
-    if tz:                                  # back into its zone: DST moves wall-clock time
-        start = start.astimezone(tz)
     dur = length(start, end, inv.get("all_day", False))
+    span = inv.get("span") or Span()
+    rule_start, since_iso, before_iso = span.get("origin"), span.get("since"), span.get("before")
+    origin = _in_its_zone(rule_start, inv.get("tzid")) if rule_start else start
+    shift = _moved(datetime.fromisoformat(since_iso), start) if rule_start and since_iso else timedelta(0)
+    first = local_naive(datetime.fromisoformat(since_iso)) if since_iso else None
+    stop = local_naive(datetime.fromisoformat(before_iso)) if before_iso else None
+    if stop and local_naive(origin) >= stop:
+        return None
     now = local_naive(after)
     kv = rule_parts(inv.get("rrule"))
     if not kv and not inv.get("rdates"):
@@ -294,19 +311,22 @@ def _next(inv: Invite, after: datetime) -> tuple[datetime, datetime] | None:
             struck.add(local_naive(datetime.fromisoformat(x)))
         except ValueError:
             pass
-    since = after.astimezone(start.tzinfo) if start.tzinfo else now
+    since = after.astimezone(origin.tzinfo) if origin.tzinfo else now
     try:
-        since -= dur + _DAY                 # a day over: at a change of clocks, an hour may be missing from `dur`
+        since -= dur + shift + _DAY         # a day over: at a change of clocks, an hour may be missing from `dur`
     except OverflowError:
-        since = start
-    for occurrence in _series(inv, start, kv).after(since):
+        since = origin
+    for occurrence in _series(inv, origin, kv).after(since):
         s = occurrence["DTSTART"].dt
         s = s if isinstance(s, datetime) else datetime.combine(s, day_time())
-        if local_naive(s) in struck or s.date().isoformat() in whole_days \
+        said = local_naive(s)
+        if stop and said >= stop:
+            return None
+        if (first and said < first) or said in struck or s.date().isoformat() in whole_days \
                 or (inv.get("all_day") and any(x.date() == s.date() for x in struck)):
             continue
-        if local_naive(s + dur) > now:
-            return s, s + dur
+        if local_naive(s + shift + dur) > now:
+            return s + shift, s + shift + dur
     return None
 
 
