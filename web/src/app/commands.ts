@@ -15,6 +15,7 @@ import { snoozeAsk } from "../features/attention/SnoozeMenu";
 import { setGrouping, type Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
 import { reconcile, syncNow } from "../features/status/Status";
+import { copyOf, type Copy } from "../lib/copy";
 import { shortAddress } from "../lib/text";
 import { setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
@@ -50,7 +51,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
   const out: Command[] = [];
   const add = (c: Command) => out.push(c);
   const any = m.marks.size > 0;
-  const on = m.openPk !== null;
+  const on = m.openId !== null;
   const nameOf = (a: string) => m.aliases[a] || shortAddress(a);
 
   add({ id: "all-inboxes", group: "Navigation", label: "All inboxes", run: () => go({ source: { kind: "allInboxes" }, opened: null }) });
@@ -80,10 +81,10 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     add({
       id: "snooze", group: "Actions", label: "Snooze…", keys: ["h"], hint: "h",
       run: () => {
-        if (any) snoozeAsk.set({ target: { pks: [...m.marks] }, rows: [...m.marks], anchor: document.querySelector("#bulkbar"), canUnsnooze: false });
+        if (any) snoozeAsk.set({ target: { copies: m.markedRows.map(copyOf) }, rows: [...m.marks], anchor: document.querySelector("#bulkbar"), canUnsnooze: false });
         else {
           const target = m.target();
-          if (target && m.openPk !== null) snoozeAsk.set({ target, rows: [m.openPk], anchor: document.querySelector('#reader [data-ca="snooze"],#reader [data-tca="snooze"]'), canUnsnooze: m.folder === "__snoozed__" });
+          if (target && m.openId !== null) snoozeAsk.set({ target, rows: [m.openId], anchor: document.querySelector('#reader [data-ca="snooze"],#reader [data-tca="snooze"]'), canUnsnooze: m.folder === "__snoozed__" });
         }
       },
     });
@@ -93,12 +94,12 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     });
   }
   if (on) {
-    const replying = (run: (pk: number) => unknown) => () => {
-      const pk = m.replyPk();
-      if (pk !== null) void run(pk);
+    const replying = (run: (to: Copy) => unknown) => () => {
+      const to = m.replyTo();
+      if (to !== null) void run(to);
     };
     add({ id: "reply", group: "Actions", label: "Reply", keys: ["r"], hint: "r", run: replying(answer) });
-    add({ id: "reply-all", group: "Actions", label: "Reply all", keys: ["a"], hint: "a", run: replying((pk) => composing.reply(pk, true)) });
+    add({ id: "reply-all", group: "Actions", label: "Reply all", keys: ["a"], hint: "a", run: replying((to) => composing.reply(to, true)) });
     add({ id: "forward", group: "Actions", label: "Forward", keys: ["f"], hint: "f", run: replying(composing.forward) });
     add({
       id: "later", group: "Actions", label: m.folder === "__replylater__" ? "Reply later — Done" : "Reply later", keys: ["l"], hint: "l",
@@ -106,7 +107,7 @@ export function buildCommands(m: Mailbox, ui: { toggleRail: () => void; saveSear
     });
     if (m.folder === "__waiting__") add({ id: "dismiss", group: "Actions", label: "Dismiss follow-up", run: m.dismissFollowup });
     add({ id: "summarize", group: "Actions", label: "AI summarize", keys: ["i"], hint: "i", run: () => { const t = m.target(); if (t) void summarize(t); } });
-    add({ id: "mark", group: "Actions", label: "Select", keys: ["x"], hint: "x", run: () => actions.toggleMark(m.openPk!) });
+    add({ id: "mark", group: "Actions", label: "Select", keys: ["x"], hint: "x", run: () => actions.toggleMark(m.openId!) });
     add({ id: "read-settings", group: "Commands", label: "Reading settings — width, text, mail colors", run: () => void setTimeout(() => document.querySelector<HTMLElement>("#reader [data-readset]")?.click()) });
     add({
       id: "focus", group: "Commands", label: readFocus.get() ? "Leave focus reading" : "Focus reading — hide folders and list", keys: ["Enter"], hint: "↵",

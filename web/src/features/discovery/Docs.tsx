@@ -51,7 +51,7 @@ function Hub({ m }: { m: Mailbox }) {
   const first = pages[0];
   const seen = new Set<string>();
   const docs = pages.flatMap((p) => p.docs ?? []).filter((x) => {
-    const id = `${x.pk}/${x.part_id}/${x.filename}`;
+    const id = `${x.key}:${x.folder}/${x.part_id}/${x.filename}`;
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
@@ -67,9 +67,9 @@ function Hub({ m }: { m: Mailbox }) {
     body = (
       <>
         {docs.map((x) => (
-          <div className="doc-row" key={`${x.pk}/${x.part_id}/${x.filename}`} data-doc-pk={x.pk}>
+          <div className="doc-row" key={`${x.key}:${x.folder}/${x.part_id}/${x.filename}`} data-doc-key={x.key}>
             <div className="doc-ic"><Icon name={ICON[x.kind] ?? "clip"} /></div>
-            <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(x.pk); }}>
+            <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny({ key: x.key, folder: x.folder }); }}>
               <div className="doc-fn">{x.filename}</div>
               <div className="doc-meta"><span className="who">{x.from}</span> · {x.subject} · {x.when}</div>
             </button>

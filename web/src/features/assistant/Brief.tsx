@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { go, type DigestList, type ListSource } from "../../app/route";
 import { minute } from "../../lib/clock";
+import { copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
 import { avatarHue, initialsOf, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
@@ -25,7 +26,7 @@ export const backFromDigest = (accounts: string[]): ListSource | null =>
 
 export function openDigestList(from: ListSource | null, list: DigestList, items: DigestItem[]) {
   cameFrom = from;
-  go({ source: { kind: "digest", ...list }, opened: !narrow() && items[0] ? { kind: "message", pk: items[0].pk } : null });
+  go({ source: { kind: "digest", ...list }, opened: !narrow() && items[0] ? { kind: "message", ...copyOf(items[0]) } : null });
 }
 
 function AiOff() {
@@ -39,11 +40,11 @@ function AiOff() {
 }
 
 function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean }) {
-  const chip = useDraftChip(it.pk);
+  const chip = useDraftChip(it.key);
   const subject = it.subject || "(no subject)";
   const action = String(it.action ?? "").trim();
   return (
-    <article className="bf-need" data-pk={it.pk}>
+    <article className="bf-need" data-key={it.key} data-folder={it.folder}>
       <span className="av" style={{ "--h": avatarHue(it.from_addr || it.from_name) } as React.CSSProperties} aria-hidden="true">{initialsOf(it.from_name, it.from_addr)}</span>
       <div style={{ minWidth: 0 }}>
         <div className="bf-n1">
@@ -51,18 +52,18 @@ function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean
           {multi && <span className="acctchip">{it.alias || shortAddress(it.account)}</span>}
           <time>{it.when}</time>
         </div>
-        <button className="bf-subj" onClick={() => m.openAny(it.pk)}>{subject}</button>
+        <button className="bf-subj" onClick={() => m.openAny(it)}>{subject}</button>
         {it.summary && <p className="bf-gist">{it.summary}</p>}
         {action && <span className="rchip need">{action}</span>}
         <footer className="bf-acts">
           {chip === "ready"
-            ? <button className="bf-act ai" title="Opens the pre-written reply in the composer; nothing sends until you do" onClick={() => void answer(it.pk)}><Icon name="wind" />Use draft</button>
-            : <button className="bf-act" onClick={() => void answer(it.pk)}><Icon name="reply" />Reply</button>}
-          <button className="bf-act quiet" onClick={() => m.openAny(it.pk)}><Icon name="eye" />Read</button>
+            ? <button className="bf-act ai" title="Opens the pre-written reply in the composer; nothing sends until you do" onClick={() => void answer(copyOf(it))}><Icon name="wind" />Use draft</button>
+            : <button className="bf-act" onClick={() => void answer(copyOf(it))}><Icon name="reply" />Reply</button>}
+          <button className="bf-act quiet" onClick={() => m.openAny(it)}><Icon name="eye" />Read</button>
           <span className="sp" />
-          <button className="bf-ic" title="Snooze" aria-label={`Snooze “${subject}”`} onClick={(e) => snoozeAsk.set({ target: { pk: it.pk }, rows: [it.pk], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /></button>
-          <button className="bf-ic" title="Archive" aria-label={`Archive “${subject}”`} onClick={() => m.file({ pk: it.pk }, "archive", "card")}><Icon name="archive" /></button>
-          <button className="bf-ic del" title="Delete" aria-label={`Delete “${subject}”`} onClick={() => m.file({ pk: it.pk }, "trash", "card")}><Icon name="trash" /></button>
+          <button className="bf-ic" title="Snooze" aria-label={`Snooze “${subject}”`} onClick={(e) => snoozeAsk.set({ target: copyOf(it), rows: [copyId(it)], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /></button>
+          <button className="bf-ic" title="Archive" aria-label={`Archive “${subject}”`} onClick={() => m.file(copyOf(it), "archive", "card")}><Icon name="archive" /></button>
+          <button className="bf-ic del" title="Delete" aria-label={`Delete “${subject}”`} onClick={() => m.file(copyOf(it), "trash", "card")}><Icon name="trash" /></button>
         </footer>
       </div>
     </article>
@@ -83,10 +84,10 @@ function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
             const [big, small] = eventWhen(e, now);
             const sub = [e.location, e.organizer].filter(Boolean).join(" · ");
             return (
-              <div className="bs-ev" key={`${e.pk}|${e.start}|${i}`}>
+              <div className="bs-ev" key={`${copyId(e)}|${e.start}|${i}`}>
                 <time dateTime={e.start}>{big}<small>{small}</small></time>
                 <div style={{ minWidth: 0 }}>
-                  <button className="bs-t" onClick={() => m.openAny(e.pk)}>{e.summary || "(no title)"}</button>
+                  <button className="bs-t" onClick={() => m.openAny(e)}>{e.summary || "(no title)"}</button>
                   {(sub || e.invite) && <small className="m">{sub}{e.invite ? `${sub ? " · " : ""}invite` : ""}</small>}
                 </div>
               </div>
@@ -100,7 +101,7 @@ function Side({ m, multi }: { m: Mailbox; multi: boolean }) {
           {waiting.slice(0, 3).map((w) => {
             const who = nameIn(w.to) || "—";
             return (
-              <button className="bs-wt" key={w.pk} onClick={() => m.openAny(w.pk)}>
+              <button className="bs-wt" key={copyId(w)} onClick={() => m.openAny(w)}>
                 <span className="av" style={{ "--h": avatarHue(w.to) } as React.CSSProperties} aria-hidden="true">{initialsOf(who, w.to)}</span>
                 <span style={{ minWidth: 0 }}><b>{who}</b><small>{w.subject || "(no subject)"} · {waitAge(w.ts ?? 0, now)}{multi ? ` · ${m.aliases[w.account] || shortAddress(w.account)}` : ""}</small></span>
               </button>
@@ -128,7 +129,7 @@ function Hero() {
 
 export function BriefPane({ m }: { m: Mailbox }) {
   const hidden = filing.useValue();
-  const items = (m.digest?.items ?? []).filter((it) => !hidden.has(it.pk));
+  const items = (m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it)));
   const ai = m.digest?.ai;
   const aiOn = ai ? ai.engine !== "none" : undefined;
   const { brief, writing, error, write } = useBrief(aiOn);
@@ -138,10 +139,10 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const commits = commitments(items).length;
   const multi = m.accounts.length > 1;
   const waiting = m.folders?.waiting ?? 0, later = m.folders?.replylater ?? 0;
-  const topics = (brief?.groups ?? []).map((g) => ({ label: g.label, items: topicItems(g.pks, items) })).filter((g) => g.items.length);
-  const peekList = shown.map((x) => x.pk).join();
+  const topics = (brief?.groups ?? []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);
+  const peekList = shown.map((x) => copyId(x)).join("\n");
   useEffect(() => {
-    if (peekList) void peekCards(peekList.split(",").map(Number));
+    if (peekList) void peekCards(peekList.split("\n").map((id) => ({ key: Number(id.slice(0, id.indexOf(":"))), folder: id.slice(id.indexOf(":") + 1) })));
   }, [peekList]);
 
   const failing = ai && ai.engine !== "none" && ai.last_ok === false && ai.last_error;
@@ -193,7 +194,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
           {needs.length > 0
             ? (
               <>
-                <div className="bf-needs">{shown.map((it) => <NeedCard key={it.pk} it={it} m={m} multi={multi} />)}</div>
+                <div className="bf-needs">{shown.map((it) => <NeedCard key={copyId(it)} it={it} m={m} multi={multi} />)}</div>
                 {needs.length > BRIEF_CAP && <button className="bf-tally" data-brief="needs" onClick={() => openDigestList(m.source, { list: "needs" }, needs)}>Show all {needs.length}</button>}
               </>
             )
@@ -215,7 +216,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
 // The row above the Inbox's list that comes back to the brief.
 export function BriefRow({ m }: { m: Mailbox }) {
   const hidden = filing.useValue();
-  const n = needsYou((m.digest?.items ?? []).filter((it) => !hidden.has(it.pk))).length;
+  const n = needsYou((m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it)))).length;
   const word = n ? `${n} need${n === 1 ? "s" : ""} you` : "Nothing needs you";
   return (
     <button className={m.opened ? "brief-row" : "brief-row sel"} data-brief-row onClick={m.showBrief}>

@@ -1,15 +1,17 @@
 // What a list shows, the same shape from a folder and from a search. Each list row says what the AI's verdict asks of
 // you (`needsYou`); the page reads that and never works it out.
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
+import { copyId } from "../../lib/copy";
 
 // A row of any of a folder's lists: a folder's own, Snoozed, Muted, Waiting or Reply later.
 export type FolderRow = AnyOf<GetAnswers["/api/messages"]["items"][number]>;
 export type SearchRow = Extract<GetAnswers["/api/search"], { items: unknown }>["items"][number];
 export type FolderInfo = GetAnswers["/api/folders"]["folders"][number];
 
+// A row is a copy: its key and folder name it to the server, and `id` (`copyId`) on the page.
 export interface Row {
-  pk: number;
-  key: number | null;
+  id: string;
+  key: number;
   account: string;
   folder: string;
   fromName: string | null;
@@ -32,12 +34,12 @@ export interface Row {
   needsYou: boolean;
 }
 
-export function fromFolder(it: FolderRow, account: string, folder: string): Row {
+export function fromFolder(it: FolderRow, account: string): Row {
   return {
-    pk: it.pk,
+    id: copyId(it),
     key: it.key,
     account: it.account ?? account,
-    folder: it.folder ?? folder,
+    folder: it.folder,
     fromName: it.from_name,
     fromAddr: it.from_addr,
     subject: it.subject,
@@ -61,7 +63,7 @@ export function fromFolder(it: FolderRow, account: string, folder: string): Row 
 
 export function fromSearch(it: SearchRow): Row {
   return {
-    pk: it.pk,
+    id: copyId(it),
     key: it.key,
     account: it.account,
     folder: it.folder,
@@ -93,9 +95,9 @@ export const isConversation = (r: Row, grouped: boolean, folder = r.folder) =>
 export type InboxTab = "needs" | "all" | "unread";
 
 // The Inbox's tabs. A message you just opened stays put until you move on.
-export function inTab(rows: Row[], tab: InboxTab, openPk: number | null): Row[] {
-  if (tab === "needs") return rows.filter((r) => r.needsYou || r.pk === openPk);
-  if (tab === "unread") return rows.filter((r) => !r.seen || r.pk === openPk);
+export function inTab(rows: Row[], tab: InboxTab, openId: string | null): Row[] {
+  if (tab === "needs") return rows.filter((r) => r.needsYou || r.id === openId);
+  if (tab === "unread") return rows.filter((r) => !r.seen || r.id === openId);
   return rows;
 }
 

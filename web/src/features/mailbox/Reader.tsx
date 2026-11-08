@@ -6,6 +6,7 @@ import type { GetAnswers } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
 import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
+import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -41,7 +42,7 @@ function Cab({ ca, thread, icon, label, title, onClick, danger, on, children }: 
 
 function ReaderNav({ m }: { m: Mailbox }) {
   const focusing = readFocus.useValue();
-  const i = m.rows.findIndex((r) => r.pk === m.openPk), n = m.rows.length;
+  const i = m.rows.findIndex((r) => r.id === m.openId), n = m.rows.length;
   return (
     <span className="rd-nav">
       <button className="cab rd-focus" aria-pressed={focusing} title="Focus reading — hide folders and list (↵)" aria-label="Focus reading" onClick={() => setReadFocus(!focusing)}><span><Icon name="expand" /></span></button>
@@ -52,41 +53,41 @@ function ReaderNav({ m }: { m: Mailbox }) {
   );
 }
 
-// Reply says which of three it is: a draft written ahead, one being written, or just Reply.
-function Answering({ pk, thread, drafts }: { pk: number | null; thread: boolean; drafts: boolean }) {
-  const chip = useDraftChip(pk);
-  if (pk === null) return null;
+// Reply says which of three it is: a draft written ahead, one being written, or just Reply. `to` is the copy it answers.
+function Answering({ to, thread, drafts }: { to: Copy | null; thread: boolean; drafts: boolean }) {
+  const chip = useDraftChip(to?.key ?? null);
+  if (to === null) return null;
   const verb = (ca: string) => (thread ? { "data-tca": ca } : { "data-ca": ca });
   return (
     <>
       {chip === "ready"
-        ? <button {...verb("draftready")} className="cab cab-draft" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)" onClick={() => void answer(pk)}><span><Icon name="wind" /></span> Draft ready</button>
+        ? <button {...verb("draftready")} className="cab cab-draft" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)" onClick={() => void answer(to)}><span><Icon name="wind" /></span> Draft ready</button>
         : drafts && chip === "drafting"
-          ? <button {...verb("reply")} className="cab cab-drafting" title="AI is drafting a reply in the background — click for a plain reply now" onClick={() => { forget(pk); void composing.reply(pk); }}><span><Icon name="wind" /></span> Drafting…</button>
-          : <button {...verb("reply")} className="cab" title="Reply (r)" onClick={() => void composing.reply(pk)}><span><Icon name="reply" /></span> Reply</button>}
-      <Cab ca="replyall" thread={thread} icon="replyall" label="Reply all" title="Reply all (a)" onClick={() => void composing.reply(pk, true)}>All</Cab>
-      <Cab ca="forward" thread={thread} icon="forward" label="Forward" title="Forward (f)" onClick={() => void composing.forward(pk)} />
+          ? <button {...verb("reply")} className="cab cab-drafting" title="AI is drafting a reply in the background — click for a plain reply now" onClick={() => { forget(to.key); void composing.reply(to); }}><span><Icon name="wind" /></span> Drafting…</button>
+          : <button {...verb("reply")} className="cab" title="Reply (r)" onClick={() => void composing.reply(to)}><span><Icon name="reply" /></span> Reply</button>}
+      <Cab ca="replyall" thread={thread} icon="replyall" label="Reply all" title="Reply all (a)" onClick={() => void composing.reply(to, true)}>All</Cab>
+      <Cab ca="forward" thread={thread} icon="forward" label="Forward" title="Forward (f)" onClick={() => void composing.forward(to)} />
     </>
   );
 }
 
-function QuickReplies({ pk }: { pk: number }) {
+function QuickReplies({ to }: { to: Copy }) {
   return (
     <div className="qr-row" role="group" aria-label="Quick replies">
       <span className="qr-k"><Icon name="reply" />Quick reply</span>
-      {QUICK.map((q) => <button key={q.key} className="qr" data-qr={q.key} onClick={() => void composing.quickReply(pk, q.key)}>{q.chip}</button>)}
+      {QUICK.map((q) => <button key={q.key} className="qr" data-qr={q.key} onClick={() => void composing.quickReply(to, q.key)}>{q.chip}</button>)}
     </div>
   );
 }
 
 const SAID: Record<string, string> = { accept: "Accepted ✓", tentative: "Tentative ?", decline: "Declined ✕" };
 
-function Rsvp({ pk }: { pk: number }) {
+function Rsvp({ invite }: { invite: Copy }) {
   const [said, setSaid] = useState<{ done: boolean; text: string } | null>(null);
   const reply = async (decision: string) => {
     setSaid({ done: false, text: "Sending RSVP…" });
     try {
-      const r = await post("/api/invite/rsvp", { pk, decision });
+      const r = await post("/api/invite/rsvp", { ...copyOf(invite), decision });
       setSaid({ done: true, text: `${SAID[decision]} — reply sent to ${r.organizer || "organizer"}` });
       toast(`RSVP: ${SAID[decision]}`);
       if (r.outbox_id) composing.queued(r.outbox_id, "RSVP");
@@ -96,7 +97,7 @@ function Rsvp({ pk }: { pk: number }) {
     }
   };
   return (
-    <div className="inv-rsvp" data-rsvp-pk={pk}>
+    <div className="inv-rsvp" data-rsvp-key={invite.key}>
       {said
         ? <span className={said.done ? "inv-done" : "inv-sending"}>{said.text}</span>
         : (
@@ -117,7 +118,7 @@ function Triage({ m, thread }: { m: Mailbox; thread: boolean }) {
   return (
     <>
       <Cab ca="summarize" thread={thread} icon="wind" label="Summarize" title="AI summary (i)" onClick={() => { if (target) void summarize(target); }} />
-      <Cab ca="snooze" thread={thread} icon="clock" label="Snooze" title="Snooze (h)" onClick={(e) => { if (target && m.openPk !== null) snoozeAsk.set({ target, rows: [m.openPk], anchor: e.currentTarget, canUnsnooze: m.folder === "__snoozed__" }); }} />
+      <Cab ca="snooze" thread={thread} icon="clock" label="Snooze" title="Snooze (h)" onClick={(e) => { if (target && m.openId !== null) snoozeAsk.set({ target, rows: [m.openId], anchor: e.currentTarget, canUnsnooze: m.folder === "__snoozed__" }); }} />
       {later
         ? <Cab ca="rldone" thread={thread} icon="check" label="Done" title="Done — remove from Reply later" onClick={m.replyLaterDone} />
         : <Cab ca="replylater" thread={thread} icon="bookmark" label="Reply later" title="Reply later (l)" onClick={m.replyLater}>Later</Cab>}
@@ -130,7 +131,7 @@ function Triage({ m, thread }: { m: Mailbox; thread: boolean }) {
 }
 
 function UpNext({ m, canArchive }: { m: Mailbox; canArchive: boolean }) {
-  const i = m.rows.findIndex((r) => r.pk === m.openPk);
+  const i = m.rows.findIndex((r) => r.id === m.openId);
   if (i < 0) return null;
   const next = m.rows[i + 1];
   if (!next) return <div className="rd-next end">{m.hasMore ? "That’s the last one loaded — “Load more” at the end of the list keeps going." : "That’s the last one in this list."}</div>;
@@ -171,11 +172,14 @@ function Invite({ d }: { d: Body }) {
       {v.location && <div className="inv-line"><Icon name="pin" /> {v.location}</div>}
       {v.organizer?.email && <div className="inv-line inv-sub">organizer: {v.organizer.name || v.organizer.email}</div>}
       {names && <div className="inv-line inv-sub">{attendees.length} attendee{attendees.length === 1 ? "" : "s"}: {names}{attendees.length > 8 ? ` +${attendees.length - 8}` : ""}</div>}
-      {(v.method === "REQUEST" || !v.method) && v.organizer?.email && <Rsvp pk={d.pk!} />}
-      {d.invite_part != null && <div className="inv-actions"><a className="inv-dl" href={`/api/message/${d.pk}/attachment/${encodeURIComponent(d.invite_part)}`} download="invite.ics">＋ Add to calendar</a></div>}
+      {(v.method === "REQUEST" || !v.method) && v.organizer?.email && <Rsvp invite={copyOf(d)} />}
+      {d.invite_part != null && <div className="inv-actions"><a className="inv-dl" href={partUrl(d, d.invite_part)} download="invite.ics">＋ Add to calendar</a></div>}
     </div>
   );
 }
+
+// A file of a message, from the copy the reader opened.
+const partUrl = (copy: Copy, part: string) => `/api/message/attachment?${copyQuery(copy)}&part_id=${encodeURIComponent(part)}`;
 
 function Attachments({ d }: { d: Body }) {
   const files = (d.attachments ?? []).filter((a) => !(a.is_inline && a.content_id));
@@ -183,7 +187,7 @@ function Attachments({ d }: { d: Body }) {
   return (
     <div className="rd-attach">
       {files.map((a) => (
-        <a key={a.part_id} className="rd-att" href={`/api/message/${d.pk}/attachment/${encodeURIComponent(a.part_id)}`} download={a.filename} title={`Download ${a.filename}`}>
+        <a key={a.part_id} className="rd-att" href={partUrl(d, a.part_id)} download={a.filename} title={`Download ${a.filename}`}>
           <Icon name="clip" /> <span className="fn">{a.filename}</span> <span className="sz">{fileSize(a.size)}</span> <span className="dl"><Icon name="download" /></span>
         </a>
       ))}
@@ -217,9 +221,9 @@ function Fetching({ whole }: { whole: boolean }) {
   );
 }
 
-function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHeight: number; pad: number; whole?: boolean }) {
+function MailContent({ copy, minHeight, pad, whole = false }: { copy: Copy; minHeight: number; pad: number; whole?: boolean }) {
   const [images, setImages] = useState(false);
-  const { data: d, error, isError, refetch } = useBody(pk);
+  const { data: d, error, isError, refetch } = useBody(copy);
   const gone = refusalOf(error);     // no such message: it says so, and a retry wouldn't find it either
   if (gone) return <div className="nores">{gone.detail || "error"}</div>;
   if (isError) return <div className="nores">Couldn’t load. <button className="ai-rerun" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
@@ -241,24 +245,25 @@ function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHei
   );
 }
 
-function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
-  const { data: d, error } = useBody(pk);
+function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
+  const { data: d, error } = useBody(copy);
   const row = m.openRow;
+  const { key, folder } = copy;
   useEffect(() => {
-    if (row?.seen === false) armDwell(m.qc, pk);
+    if (row?.seen === false) armDwell(m.qc, { key, folder });
     return cancelDwell;
-  }, [m.qc, pk, row?.seen]);
+  }, [m.qc, key, folder, row?.seen]);
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
-  useDraftAhead(d ? pk : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
+  useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
   const quick = d && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
   return (
     <>
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
         {isDraft
-          ? <Cab ca="edit" thread={false} icon="pen" label="Edit" title="Edit draft" onClick={() => void composing.editDraft(pk)} />
-          : <><Answering pk={pk} thread={false} drafts /><Triage m={m} thread={false} /></>}
+          ? <Cab ca="edit" thread={false} icon="pen" label="Edit" title="Edit draft" onClick={() => void composing.editDraft(copy)} />
+          : <><Answering to={copy} thread={false} drafts /><Triage m={m} thread={false} /></>}
         <span className="rd-sp" aria-hidden="true" />
         {!isDraft && <Cab ca="archive" thread={false} icon="archive" label="Archive" title="Archive (e)" onClick={() => m.fileOpen("archive")} />}
         <Cab ca="trash" thread={false} icon="trash" label="Delete" title="Delete (d / ⌫ / #)" danger onClick={() => m.fileOpen("trash")} />
@@ -291,8 +296,8 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
         </>
       )}
       <AiCard target={m.target()} row={row} />
-      <MailContent key={pk} pk={pk} minHeight={400} pad={30} whole />
-      {quick && <QuickReplies pk={pk} />}
+      <MailContent key={copyId(copy)} copy={copy} minHeight={400} pad={30} whole />
+      {quick && <QuickReplies to={copy} />}
       <UpNext m={m} canArchive={!isDraft} />
     </>
   );
@@ -302,11 +307,12 @@ function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok:
   const qc = useQueryClient();
   const [open, setOpen] = useState(startsOpen);
   const [wasOpened, setWasOpened] = useState(startsOpen);
+  const { key, folder } = m;
   useEffect(() => {
-    if (open && !m.seen) void markSeen(qc, m.pk);
-  }, [qc, open, m.pk, m.seen]);
+    if (open && !m.seen) void markSeen(qc, { key, folder });
+  }, [qc, open, key, folder, m.seen]);
   return (
-    <div className={open ? "tmsg open" : "tmsg"} data-pk={m.pk}>
+    <div className={open ? "tmsg open" : "tmsg"} data-key={m.key} data-folder={m.folder}>
       <button
         className="tmsg-hd"
         aria-expanded={open}
@@ -323,23 +329,23 @@ function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok:
         <span className="tsnip">{m.snippet}</span>
       </button>
       {/* Kept once opened, so closing and opening again doesn't reload the frame. */}
-      <div className="tmsg-body">{wasOpened && <MailContent pk={m.pk} minHeight={300} pad={24} />}</div>
+      <div className="tmsg-body">{wasOpened && <MailContent copy={copyOf(m)} minHeight={300} pad={24} />}</div>
     </div>
   );
 }
 
 function ConversationView({ opened, m }: { opened: { id: string; account: string }; m: Mailbox }) {
   const { data: d, isError } = useThread(opened.account, opened.id);
-  const items = d?.items ?? [];
-  const replyPk = d?.reply_pk ?? null;
-  const latest = items.find((x) => x.pk === replyPk);
-  useDraftAhead(replyPk, false, m.folder === "__muted__");
+  const items = eachCopyOnce(d?.items ?? []);
+  const latest = items.find((x) => x.key === d?.reply_key);
+  const replyTo = latest ? copyOf(latest) : null;
+  useDraftAhead(replyTo, false, m.folder === "__muted__");
   const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
   return (
     <>
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
-        <Answering pk={replyPk} thread drafts={false} />
+        <Answering to={replyTo} thread drafts={false} />
         <Triage m={m} thread />
         <span className="rd-sp" aria-hidden="true" />
         <Cab ca="archive" thread icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => m.fileOpen("archive")}>Archive</Cab>
@@ -354,9 +360,9 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />
           <div className="thread" id="thread">
-            {items.map((x, i) => <Member key={x.pk} m={x} startsOpen={i === items.length - 1} />)}
+            {items.map((x, i) => <Member key={copyId(x)} m={x} startsOpen={i === items.length - 1} />)}
           </div>
-          {quick && <QuickReplies pk={replyPk!} />}
+          {quick && replyTo && <QuickReplies to={replyTo} />}
           <UpNext m={m} canArchive />
         </>
       )}
@@ -375,7 +381,7 @@ export function Reader({ m }: { m: Mailbox }) {
   return (
     <section className="reader" id="reader" aria-label="Message">
       {opened.kind === "message"
-        ? <MessageView key={opened.pk} pk={opened.pk} m={m} />
+        ? <MessageView key={copyId(opened)} copy={copyOf(opened)} m={m} />
         : <ConversationView key={opened.id} opened={opened} m={m} />}
     </section>
   );

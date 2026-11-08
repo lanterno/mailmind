@@ -20,7 +20,7 @@ function frameTheme(name: ThemeName): FrameTheme {
   return { light: name !== "night", bg: tk("--bg"), panel: tk("--panel"), ink: tk("--ink"), primaryInk: tk("--primary-ink"), lineHi: tk("--line-hi"), mute: tk("--mute") };
 }
 
-export interface MailBody { pk: number; key: number; has_html?: boolean; from_addr?: string; from_name?: string; subject?: string }
+export interface MailBody { key: number; folder: string; has_html?: boolean; from_addr?: string; from_name?: string; subject?: string }
 
 function wireLinks(doc: Document, senderDomain: string | undefined) {
   const take = (e: MouseEvent) => {
@@ -71,7 +71,7 @@ export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; im
   const prefs = readPrefs.useValue();
   const isHtml = Boolean(body.has_html);
   const look = lookOf(isHtml, mailPrefs(prefs), frameTheme(name));
-  const src = bodyUrl(body.pk, body.key, images);
+  const src = bodyUrl(body, images);
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number | null>(null);
   const fit = () => {

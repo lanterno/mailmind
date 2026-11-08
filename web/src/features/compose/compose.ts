@@ -86,18 +86,19 @@ export const composing = createComposing({
   draftsChanged: () => again("messages", "folders"),
   foldersChanged: () => again("folders"),
   outboxChanged: () => again("outbox", "pending"),
-  sent: (replyPk) => {
+  sent: (replyKey) => {
     again("messages", "thread", "folders");
-    if (replyPk !== null) forgetDraftAhead(replyPk);
+    if (replyKey !== null) forgetDraftAhead(replyKey);
   },
-  draftGone: (pk) => {
+  draftGone: (copy) => {
     const here = route();
-    if (here.opened?.pk === pk) go({ source: here.source, opened: null });
+    if (here.opened && here.opened.key === copy.key && here.opened.folder === copy.folder) go({ source: here.source, opened: null });
   },
   now: () => Date.now() / 1000,
   clock: () => performance.now(),
 });
 
-// A reply sent: its draft written ahead must not be offered again. draftAhead.ts holds those, and says how to forget one here.
-let forgetDraftAhead: (pk: number) => void = () => {};
-export const onForgetDraftAhead = (fn: (pk: number) => void) => void (forgetDraftAhead = fn);
+// A reply sent: its draft written ahead must not be offered again. draftAhead.ts holds those by the message's key, and says how
+// to forget one here.
+let forgetDraftAhead: (key: number) => void = () => {};
+export const onForgetDraftAhead = (fn: (key: number) => void) => void (forgetDraftAhead = fn);

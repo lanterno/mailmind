@@ -1,10 +1,11 @@
 // On a touch screen, a row swiped left archives and swiped right snoozes to tomorrow. Both undo with z. Vertical movement
 // stays the list's: the gesture is only ours once it's clearly sideways.
 import { useEffect, useRef } from "react";
+import type { Copy } from "../../lib/copy";
 
 const THRESHOLD = 80;
 
-export function useSwipe(archive: (pk: number) => void, snooze: (pk: number) => void) {
+export function useSwipe(archive: (copy: Copy) => void, snooze: (copy: Copy) => void) {
   const verbs = useRef({ archive, snooze });
   useEffect(() => {
     verbs.current = { archive, snooze };
@@ -12,13 +13,13 @@ export function useSwipe(archive: (pk: number) => void, snooze: (pk: number) => 
   useEffect(() => {
     const list = document.getElementById("list"), badge = document.getElementById("swipeBadge");
     if (!list || !badge) return;
-    let at: { row: HTMLElement; pk: number; x0: number; y0: number; dx: number; lock: boolean } | null = null;
+    let at: { row: HTMLElement; copy: Copy; x0: number; y0: number; dx: number; lock: boolean } | null = null;
     const start = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       const target = e.target as Element, row = target.closest<HTMLElement>("#rows .row.cmsg");
       if (!row || target.closest(".cbx")) return;     // the select box stays what it is
       const t = e.touches[0]!;
-      at = { row, pk: Number(row.dataset["pk"]), x0: t.clientX, y0: t.clientY, dx: 0, lock: false };
+      at = { row, copy: { key: Number(row.dataset["key"]), folder: row.dataset["folder"] ?? "" }, x0: t.clientX, y0: t.clientY, dx: 0, lock: false };
     };
     const move = (e: TouchEvent) => {
       if (!at) return;
@@ -48,15 +49,15 @@ export function useSwipe(archive: (pk: number) => void, snooze: (pk: number) => 
     };
     const end = () => {
       if (!at) return;
-      const { row, pk, dx, lock } = at;
+      const { row, copy, dx, lock } = at;
       at = null;
       badge.className = "";
       if (!lock) return;
       if (Math.abs(dx) > THRESHOLD) {
         row.style.transition = "";
         row.style.transform = "";
-        if (dx < 0) verbs.current.archive(pk);
-        else verbs.current.snooze(pk);
+        if (dx < 0) verbs.current.archive(copy);
+        else verbs.current.snooze(copy);
       } else {
         row.style.transition = "transform .2s var(--ease,ease)";
         row.style.transform = "";

@@ -5,6 +5,7 @@ import { post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, PostAnswers } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
+import { copyId, copyOf, type Copy } from "../../lib/copy";
 import { toast } from "../../lib/toast";
 import type { ListData } from "./data";
 import { filedWords, type Row } from "./rows";
@@ -22,16 +23,16 @@ const FROM_A_CARD: Partial<Record<Filing, { said: string; undo: string }>> = {
   trash: { said: "Deleted · in the mailbox's Trash", undo: "Deleted" },
 };
 
-// Rows on their way out, by pk. A refetch that lands meanwhile can't bring one back.
-export const filing = createStore<ReadonlySet<number>>(new Set());
-const hide = (pks: number[]) => filing.set(new Set([...filing.get(), ...pks]));
-const unhide = (pks: number[]) => filing.set(new Set([...filing.get()].filter((pk) => !pks.includes(pk))));
+// Rows on their way out, by copy (`copyId`). A refetch that lands meanwhile can't bring one back.
+export const filing = createStore<ReadonlySet<string>>(new Set());
+const hide = (ids: string[]) => filing.set(new Set([...filing.get(), ...ids]));
+const unhide = (ids: string[]) => filing.set(new Set([...filing.get()].filter((id) => !ids.includes(id))));
 
-// The rows x has marked. With any marked, the verb keys act on the whole set.
-export const marked = createStore<ReadonlySet<number>>(new Set());
-export function toggleMark(pk: number) {
+// The rows x has marked, by copy. With any marked, the verb keys act on the whole set.
+export const marked = createStore<ReadonlySet<string>>(new Set());
+export function toggleMark(id: string) {
   const next = new Set(marked.get());
-  if (!next.delete(pk)) next.add(pk);
+  if (!next.delete(id)) next.add(id);
   marked.set(next);
 }
 export const clearMarks = () => marked.set(new Set());
@@ -54,8 +55,8 @@ function editRows(qc: QueryClient, edit: (rows: Row[]) => Row[]) {
     data && { ...data, pages: data.pages.map((page) => ({ ...page, rows: edit(page.rows) })) });
 }
 
-const patchRow = (qc: QueryClient, pk: number, change: Partial<Row>) =>
-  editRows(qc, (rows) => rows.map((r) => (r.pk === pk ? { ...r, ...change } : r)));
+const patchRow = (qc: QueryClient, copy: Copy, change: Partial<Row>) =>
+  editRows(qc, (rows) => rows.map((r) => (r.id === copyId(copy) ? { ...r, ...change } : r)));
 
 let inFlight = 0;
 
@@ -65,11 +66,11 @@ export const readAgain = (qc: QueryClient) => {
   void qc.invalidateQueries({ queryKey: ["digest"] });
 };
 
-interface Answer { ok: true; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
+interface Answer { ok: true; msg?: string; filed?: Copy[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
 
-// Take rows off the list, ask the server, and say how it went. A no or no answer puts them back.
+// Take rows off the list, ask the server, and say how it went. A no or no answer puts them back. `rows` are copies, by `copyId`.
 export async function act<R extends object>(qc: QueryClient, { rows, after, call, say, undoLabel, fail }: {
-  rows: number[];
+  rows: string[];
   after?: Route | null | undefined;
   call: () => Promise<R>;
   say: (r: R & Answer) => string;
@@ -82,9 +83,9 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   inFlight++;
   try {
     const r = (await call()) as R & Answer;
-    const gone = new Set([...rows, ...(r.pks ?? [])]);
-    editRows(qc, (list) => list.filter((x) => !gone.has(x.pk)));
-    qc.setQueryData<GetAnswers["/api/digest"]>(["digest"], (d) => d && { ...d, items: d.items.filter((x) => !gone.has(x.pk)) });
+    const gone = new Set([...rows, ...(r.filed ?? []).map(copyId)]);
+    editRows(qc, (list) => list.filter((x) => !gone.has(x.id)));
+    qc.setQueryData<GetAnswers["/api/digest"]>(["digest"], (d) => d && { ...d, items: d.items.filter((x) => !gone.has(copyId(x))) });
     toast(say(r));
     const label = undoLabel?.(r);
     if (label) offerUndo(label);
@@ -97,15 +98,15 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   }
 }
 
-export function fileRow(qc: QueryClient, kind: Filing, row: Pick<Row, "pk">, whole: boolean, after: Route | null, from?: "card") {
+export function fileRow(qc: QueryClient, kind: Filing, row: Copy, whole: boolean, after: Route | null, from?: "card") {
   const { verb, act: doing } = WORDS[kind];
   const card = from === "card" ? FROM_A_CARD[kind] : undefined;
   const path = whole && kind !== "junk" ? (`/api/thread/${kind}` as const) : (`/api/${kind}` as const);
   const n = (r: Answer) => r.count || 1;
   return act(qc, {
-    rows: [row.pk],
+    rows: [copyId(row)],
     after,
-    call: () => post(path, { pk: row.pk }),
+    call: () => post(path, copyOf(row)),
     say: (r) => {
       const said = filedWords(verb, r, readOnly.get());
       return card && said === verb ? card.said : said;
@@ -115,11 +116,12 @@ export function fileRow(qc: QueryClient, kind: Filing, row: Pick<Row, "pk">, who
   });
 }
 
-export type Target = { pk: number } | { account: string; thread_id: string } | { pks: number[] };
+// What a verb is about: a copy, a whole thread, or the copies x marked. A copy may say its thread, for a verb on the thread.
+export type Target = (Copy & { thread_id?: string | null }) | { account: string; thread_id: string } | { copies: Copy[] };
 
 export type Snoozing = { preset: string } | { until: string };
 
-export function snooze(qc: QueryClient, target: Target, when: Snoozing, rows: number[], after: Route | null) {
+export function snooze(qc: QueryClient, target: Target, when: Snoozing, rows: string[], after: Route | null) {
   return act(qc, {
     rows,
     after,
@@ -130,11 +132,11 @@ export function snooze(qc: QueryClient, target: Target, when: Snoozing, rows: nu
   });
 }
 
-export function unsnooze(qc: QueryClient, target: Target, rows: number[], after: Route | null) {
+export function unsnooze(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/unsnooze", target), say: () => "Unsnoozed", fail: () => "Couldn’t unsnooze" });
 }
 
-export function mute(qc: QueryClient, target: Target, rows: number[], after: Route | null) {
+export function mute(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
   return act(qc, {
     rows,
     after,
@@ -145,11 +147,11 @@ export function mute(qc: QueryClient, target: Target, rows: number[], after: Rou
   });
 }
 
-export function unmute(qc: QueryClient, target: Target, rows: number[], after: Route | null) {
+export function unmute(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/unmute", target), say: () => "Unmuted", fail: () => "Couldn’t unmute" });
 }
 
-export function dismissFollowup(qc: QueryClient, target: Target, rows: number[], after: Route | null) {
+export function dismissFollowup(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/followups/dismiss", target), say: () => "Dismissed", fail: () => "Couldn’t dismiss" });
 }
 
@@ -158,7 +160,7 @@ export function replyLater(qc: QueryClient, target: Target, after: Route | null)
   return act(qc, { rows: [], after, call: () => post("/api/replylater", { ...target, on: true }), say: () => "Saved to Reply later", fail: (why) => `Couldn’t save${why ? `: ${why}` : ""}` });
 }
 
-export function replyLaterDone(qc: QueryClient, target: Target, rows: number[], after: Route | null) {
+export function replyLaterDone(qc: QueryClient, target: Target, rows: string[], after: Route | null) {
   return act(qc, { rows, after, call: () => post("/api/replylater", { ...target, on: false }), say: () => "Done", fail: () => "Couldn’t update" });
 }
 
@@ -170,20 +172,20 @@ const BULK_MAX = 500;
 // A verb on every marked row, under one undo group: filing as one request, the rest one request each.
 export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole: (r: Row) => boolean, after: Route | null) {
   clearMarks();
-  const pks = rows.map((r) => r.pk);
+  const ids = rows.map((r) => r.id);
   if (verb === "read" || verb === "unread" || verb === "star") {
     const change = verb === "star" ? { flagged: true } : { seen: verb === "read" };
-    for (const pk of pks) patchRow(qc, pk, change);
+    for (const r of rows) patchRow(qc, r, change);
     let failed = 0;
-    for (const pk of pks) {
+    for (const r of rows) {
       try {
-        if (verb === "star") await post("/api/flag", { pk, flag: "flagged", on: true });
-        else await post("/api/seen", { pk, seen: verb === "read" });
+        if (verb === "star") await post("/api/flag", { ...copyOf(r), flag: "flagged", on: true });
+        else await post("/api/seen", { ...copyOf(r), seen: verb === "read" });
       } catch {
         failed++;
       }
     }
-    toast(failed ? `Updated ${pks.length - failed}, ${failed} failed` : `Updated ${pks.length}`);
+    toast(failed ? `Updated ${rows.length - failed}, ${failed} failed` : `Updated ${rows.length}`);
     readAgain(qc);
     return;
   }
@@ -192,7 +194,7 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
     const threads = new Map(rows.filter((r) => r.threadId).map((r) => [`${r.account}\0${r.threadId}`, r]));
     let done = 0;
     await act(qc, {
-      rows: pks,
+      rows: ids,
       after,
       call: async () => {
         for (const r of threads.values()) {
@@ -212,13 +214,13 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
   const { verb: said } = WORDS[verb];
   let failed = 0, partial = false, undoable = false;
   await act(qc, {
-    rows: pks,
+    rows: ids,
     after,
     call: async () => {
       for (let at = 0; at < rows.length; at += BULK_MAX) {
         const chunk = rows.slice(at, at + BULK_MAX);
         try {
-          const a = await post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ pk: r.pk, whole: isWhole(r) })), undo_group: group });
+          const a = await post("/api/bulk/file", { verb, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group });
           failed += a.rows_failed;
           partial ||= a.partial;
           undoable ||= Boolean(a.undoable);
@@ -228,8 +230,8 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
       }
       return { ok: true };
     },
-    say: () => (failed ? `${said} ${pks.length - failed}, ${failed} failed` : partial ? `${said} ${pks.length} — some messages stayed` : `${said} ${pks.length}`),
-    undoLabel: () => (undoable ? `${said} ${pks.length - failed}` : null),
+    say: () => (failed ? `${said} ${ids.length - failed}, ${failed} failed` : partial ? `${said} ${ids.length} — some messages stayed` : `${said} ${ids.length}`),
+    undoLabel: () => (undoable ? `${said} ${ids.length - failed}` : null),
     fail: () => `Couldn’t ${WORDS[verb].act}`,
   });
 }
@@ -251,14 +253,14 @@ export async function undo(qc: QueryClient) {
   readAgain(qc);
 }
 
-export async function setStar(qc: QueryClient, row: Pick<Row, "pk" | "flagged">) {
+export async function setStar(qc: QueryClient, row: Pick<Row, "key" | "folder" | "flagged">) {
   const on = !row.flagged;
-  patchRow(qc, row.pk, { flagged: on });
+  patchRow(qc, row, { flagged: on });
   try {
-    await post("/api/flag", { pk: row.pk, flag: "flagged", on });
+    await post("/api/flag", { ...copyOf(row), flag: "flagged", on });
     toast(on ? "Starred" : "Unstarred");
   } catch {
-    patchRow(qc, row.pk, { flagged: !on });
+    patchRow(qc, row, { flagged: !on });
     toast("Couldn’t star");
   }
 }
@@ -268,24 +270,24 @@ const DWELL_MS = 1200;
 let dwell: ReturnType<typeof setTimeout> | undefined;
 export const cancelDwell = () => clearTimeout(dwell);
 
-export async function markSeen(qc: QueryClient, pk: number, seen = true) {
-  patchRow(qc, pk, { seen });
+export async function markSeen(qc: QueryClient, copy: Copy, seen = true) {
+  patchRow(qc, copy, { seen });
   try {
-    await post("/api/seen", { pk, seen });
+    await post("/api/seen", { ...copyOf(copy), seen });
     void qc.invalidateQueries({ queryKey: ["folders"] });
     return true;
   } catch {
-    patchRow(qc, pk, { seen: !seen });
+    patchRow(qc, copy, { seen: !seen });
     return false;
   }
 }
 
-export function armDwell(qc: QueryClient, pk: number) {
+export function armDwell(qc: QueryClient, copy: Copy) {
   cancelDwell();
-  dwell = setTimeout(() => void markSeen(qc, pk), DWELL_MS);
+  dwell = setTimeout(() => void markSeen(qc, copy), DWELL_MS);
 }
 
-export async function markUnread(qc: QueryClient, pk: number) {
+export async function markUnread(qc: QueryClient, copy: Copy) {
   cancelDwell();
-  toast((await markSeen(qc, pk, false)) ? "Marked unread" : "Couldn’t update");
+  toast((await markSeen(qc, copy, false)) ? "Marked unread" : "Couldn’t update");
 }

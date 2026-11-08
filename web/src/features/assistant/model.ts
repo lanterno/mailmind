@@ -1,6 +1,7 @@
 // What the brief works out from the digest and the clock, with no DOM. The digest's rows say what the AI's verdict asks
 // of you; this only sorts and words them.
 import type { GetAnswers } from "../../lib/api/types";
+import { copyId, type Copy } from "../../lib/copy";
 import type { Row } from "../mailbox";
 
 export type DigestItem = GetAnswers["/api/digest"]["items"][number];
@@ -15,7 +16,7 @@ export function greeting(hour: number): string {
 }
 
 export const needsYou = (items: DigestItem[]) =>
-  items.filter((it) => it.needs_you).sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.pk - a.pk);
+  items.filter((it) => it.needs_you).sort((a, b) => (b.importance || 0) - (a.importance || 0) || b.key - a.key);
 
 export const safeToFile = (items: DigestItem[]) => items.filter((it) => it.safe_to_file);
 
@@ -24,15 +25,15 @@ export const commitments = (items: DigestItem[]) =>
 
 export const needsNote = (n: number) => (n ? `${n} need${n === 1 ? "s" : ""} you` : "Nothing needs you");
 
-// A group can name mail the digest no longer holds.
-export function topicItems(pks: number[], items: DigestItem[]): DigestItem[] {
-  const by = new Map(items.map((x) => [x.pk, x]));
-  return pks.flatMap((pk) => by.get(pk) ?? []);
+// A group names its mail by copy, and can name mail the digest no longer holds.
+export function topicItems(copies: Copy[], items: DigestItem[]): DigestItem[] {
+  const by = new Map(items.map((x) => [copyId(x), x]));
+  return copies.flatMap((c) => by.get(copyId(c)) ?? []);
 }
 
 export function fromDigest(it: DigestItem): Row {
   return {
-    pk: it.pk,
+    id: copyId(it),
     key: it.key,
     account: it.account,
     folder: it.folder,

@@ -5,6 +5,7 @@ import { get, refusalOf } from "../../lib/api/client";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
+import { copyQuery, type Copy } from "../../lib/copy";
 import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
@@ -26,7 +27,7 @@ async function folderPage(account: string, folder: string, grouped: boolean, off
   const group = grouped ? "&group=thread" : "";
   const d: AnyOf<GetAnswers["/api/messages"]> = await get(`/api/messages?account=${q(account)}&folder=${q(folder)}&limit=${PAGE}&offset=${offset}${group}`);
   return {
-    rows: d.items.map((it) => fromFolder(it, account, folder)),
+    rows: d.items.map((it) => fromFolder(it, account)),
     hasMore: d.has_more,
     total: d.total,
     syncing: Boolean(d.syncing),
@@ -62,7 +63,7 @@ async function allInboxesPage(grouped: boolean, offset: number): Promise<ListPag
   const group = grouped ? "&group=thread" : "";
   const d = await get(`/api/inboxes?limit=${PAGE}&offset=${offset}${group}`);
   return {
-    rows: d.items.map((it) => fromFolder(it, it.account, "INBOX")),
+    rows: d.items.map((it) => fromFolder(it, it.account)),
     hasMore: d.has_more,
     total: d.total,
     syncing: Boolean(d.syncing),
@@ -77,7 +78,7 @@ async function digestPage(source: Extract<ListSource, { kind: "digest" }>): Prom
   let chosen: DigestItem[];
   if (source.list === "topic") {
     const groups = (await get("/api/briefing")).groups ?? [];
-    chosen = topicItems(groups.find((g) => g.label === source.label)?.pks ?? [], items);
+    chosen = topicItems(groups.find((g) => g.label === source.label)?.messages ?? [], items);
   } else chosen = source.list === "needs" ? needsYou(items) : safeToFile(items);
   const rows = chosen.map(fromDigest);
   return { rows, hasMore: false, total: rows.length, syncing: false, syncFailed: false, catchingUp: false };
@@ -107,14 +108,14 @@ export function useEveryAccountsFolders(accounts: string[]) {
   return new Map(accounts.map((a, i) => [a, answers[i]?.data?.folders ?? []]));
 }
 
-// A body as the reader opens it. Only a `prefetch` answers `prefetched`, and the reader never asks for one.
-export type Opened = Exclude<GetAnswers["/api/message/{pk}/body"], { prefetched: boolean }>;
+// A body as the reader opens it, by the copy it is. Only a `prefetch` answers `prefetched`, and the reader never asks for one.
+export type Opened = Exclude<GetAnswers["/api/message/body"], { prefetched: boolean }>;
 
-export const useBody = (pk: number | null) =>
+export const useBody = (copy: Copy | null) =>
   useQuery({
-    queryKey: ["body", pk],
-    queryFn: () => get(`/api/message/${pk!}/body`) as Promise<Opened>,
-    enabled: pk !== null,
+    queryKey: ["body", copy?.key, copy?.folder],
+    queryFn: () => get(`/api/message/body?${copyQuery(copy!)}`) as Promise<Opened>,
+    enabled: copy !== null,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });

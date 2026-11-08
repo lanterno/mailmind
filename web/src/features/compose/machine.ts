@@ -4,6 +4,7 @@
 // keeps them a click away. CLAUDE.md's "Writes, undo, and offline" says why each of these is so.
 import { GUARD_ARM_MS, guardFanout, guardLine, guardList } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
+import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, looksLikeAddr, namesItself, nothingToSave, payloadOf,
@@ -40,8 +41,8 @@ export interface Env {
   draftsChanged(): void;
   foldersChanged(): void;
   outboxChanged(): void;
-  sent(replyPk: number | null): void;
-  draftGone(pk: number): void;
+  sent(replyKey: number | null): void;   // the key of the message a reply answered
+  draftGone(copy: Copy): void;
   now(): number;     // epoch seconds
   clock(): number;   // ms, for the arm delay
 }
@@ -52,7 +53,7 @@ export type SendFloat =
   | { kind: "done"; text: string; clock?: boolean }
   | { kind: "failed"; text: string; edit: () => void; dismiss: () => void };
 
-type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origPk" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout"> };
+type Snapshot = Pick<Composer, "mode" | "from" | "to" | "cc" | "bcc" | "subject" | "body" | "origKey" | "quote" | "fwdAttach" | "attachments" | "draftId" | "resume" | "autoCc" | "subject0"> & { participants: string[]; ack: Pick<Composer["ack"], "subject" | "attach" | "fanout"> };
 
 const MAX_ATTACH = 25 * 1024 * 1024;
 const AUTOSAVE_MS = 8000;
@@ -116,7 +117,7 @@ export function createComposing(env: Env) {
     c = {
       id: nextId++, mode: opts.mode ?? "new", from, to, cc, bcc, typed: { to: "", cc: "", bcc: "" }, showCc: cc.length > 0 || bcc.length > 0,
       subject: opts.subject ?? "", subject0: opts.subject0 ?? opts.subject ?? "", body, sigBlock,
-      origPk: opts.origPk ?? null, quote: opts.quote ?? null, draftId: opts.draftId ?? null, version: opts.version ?? null, conflict: false, resume: opts.resume ?? null,
+      origKey: opts.origKey ?? null, quote: opts.quote ?? null, draftId: opts.draftId ?? null, version: opts.version ?? null, conflict: false, resume: opts.resume ?? null,
       fwdAttach: opts.fwdAttach ?? 0, attachments: opts.attachments ?? [], reading: new Map(), idk: randomId(),
       dirty: false, edits: 0, saving: null, lastSaveHash: null, savedLine: "", note: opts.note ?? "",
       autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null,
@@ -138,7 +139,7 @@ export function createComposing(env: Env) {
 
   function snapshot(x: Composer): Snapshot {
     return {
-      mode: x.mode, from: x.from, to: x.to, cc: x.cc, bcc: x.bcc, subject: x.subject, body: x.body, origPk: x.origPk, quote: x.quote, fwdAttach: x.fwdAttach,
+      mode: x.mode, from: x.from, to: x.to, cc: x.cc, bcc: x.bcc, subject: x.subject, body: x.body, origKey: x.origKey, quote: x.quote, fwdAttach: x.fwdAttach,
       attachments: x.attachments, draftId: x.draftId, resume: x.resume, autoCc: x.autoCc, subject0: x.subject0, participants: [...x.participants],
       ack: { subject: x.ack.subject, attach: x.ack.attach, fanout: x.ack.fanout },
     };
@@ -148,7 +149,7 @@ export function createComposing(env: Env) {
   function reopen(s: Snapshot) {
     const opened = open({
       mode: s.mode, from: s.from, to: s.to.map((x) => x.v), cc: s.cc.map((x) => x.v), bcc: s.bcc.map((x) => x.v), subject: s.subject, subject0: s.subject0,
-      origPk: s.origPk, quote: s.quote, fwdAttach: s.fwdAttach, draftId: s.draftId, resume: s.resume, noSig: true, autoCc: s.autoCc, participants: s.participants,
+      origKey: s.origKey, quote: s.quote, fwdAttach: s.fwdAttach, draftId: s.draftId, resume: s.resume, noSig: true, autoCc: s.autoCc, participants: s.participants,
       ack: s.ack, body: s.body, attachments: s.attachments,
     });
     if (opened) {
@@ -567,7 +568,7 @@ export function createComposing(env: Env) {
     hideGuard(x);
     const scheduled = sendAfter > 0;
     const payload: Payload = { ...payloadOf(x), send_after: scheduled ? sendAfter : 0 };
-    const replyPk = x.mode === "reply" || x.mode === "replyall" ? x.origPk : null;
+    const replyKey = x.mode === "reply" || x.mode === "replyall" ? x.origKey : null;
     const snap = snapshot(x);   // Undo → resend unchanged isn't asked again
     const saving = x.saving;   // a save still in flight: the send must name the copy it leaves
     x.dirty = false;
@@ -585,7 +586,7 @@ export function createComposing(env: Env) {
         const r = await env.post("/api/send", payload);
         if (scheduled) showFloat({ kind: "done", clock: true, text: `Scheduled · ${fmtWhen(sendAfter)}` }, 2600);
         else countdown(r.outbox_id, snap, r.recipients);   // the grace window, with Undo
-        env.sent(replyPk);
+        env.sent(replyKey);
         env.outboxChanged();
       } catch (e) {
         failedSend = { ...snap, draftId: x.draftId };
@@ -673,34 +674,35 @@ export function createComposing(env: Env) {
   }
 
   /* ---------- from the mail ---------- */
-  const original = async (pk: number): Promise<OriginalMail | null> => {
+  // The copy on screen is read for the quote; the reply names the message by its key, which any copy of it answers to.
+  const original = async (copy: Copy): Promise<OriginalMail | null> => {
     try {
-      return await env.get(`/api/message/${pk}/body`);
+      return await env.get(`/api/message/body?key=${copy.key}&folder=${encodeURIComponent(copy.folder)}`);
     } catch {
       return null;
     }
   };
 
-  async function reply(pk: number, all = false): Promise<Composer | null> {
-    const d = await original(pk);
+  async function reply(to: Copy, all = false): Promise<Composer | null> {
+    const d = await original(to);
     if (!d) {
       env.toast("Couldn’t load the message");
       return null;
     }
-    return open({ ...replySeed(d, all, env.mine()), origPk: pk });
+    return open({ ...replySeed(d, all, env.mine()), origKey: to.key });
   }
 
-  async function forward(pk: number): Promise<Composer | null> {
-    const d = await original(pk);
+  async function forward(of: Copy): Promise<Composer | null> {
+    const d = await original(of);
     if (!d) {
       env.toast("Couldn’t load the message");
       return null;
     }
-    return open({ ...forwardSeed(d), origPk: pk });
+    return open({ ...forwardSeed(d), origKey: of.key });
   }
 
   // Your text in the box, the quote folded below, files, Bcc and thread as saved.
-  async function editDraft(pk: number | null, draftId?: number) {   // by its row, or by its id for one the list can't show yet
+  async function editDraft(copy: Copy | null, draftId?: number) {   // by its copy, or by its id for one the list can't show yet
     const busy = "Close the message you’re writing first";
     if (c) return env.toast(busy);
     const turn = ++resumeTurn;
@@ -710,14 +712,14 @@ export function createComposing(env: Env) {
     }
     let d: ReopenedDraft & { text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
     try {
-      d = await env.post("/api/draft/resume", pk === null ? { draft_id: draftId } : { pk });
+      d = await env.post("/api/draft/resume", copy === null ? { draft_id: draftId } : { key: copy.key, folder: copy.folder });
     } catch (e) {
       if (turn !== resumeTurn) return;
       const m = (e instanceof Error && e.message) || "Couldn’t open this draft.";
       env.toast(m);
       env.say(m);
       const status = (e as { status?: number }).status;
-      if (pk !== null && (status === 404 || status === 409)) env.draftGone(pk);   // that copy is gone: don't keep showing it
+      if (copy !== null && (status === 404 || status === 409)) env.draftGone(copy);   // that copy is gone: don't keep showing it
       env.draftsChanged();
       return;
     }
@@ -729,7 +731,7 @@ export function createComposing(env: Env) {
   }
 
   /* ---------- the AI's words ---------- */
-  const aiOffered = (x: Pick<Composer, "mode" | "origPk" | "resume" | "quote">) => (x.mode === "reply" || x.mode === "replyall") && x.origPk !== null && !resumeHidesAi(x);
+  const aiOffered = (x: Pick<Composer, "mode" | "origKey" | "resume" | "quote">) => (x.mode === "reply" || x.mode === "replyall") && x.origKey !== null && !resumeHidesAi(x);
 
   function placeBody(x: Composer, body: string) {
     x.body = body;
@@ -740,12 +742,12 @@ export function createComposing(env: Env) {
   async function aiDraft(opts: { tone?: string; instruction?: string; unless?: string; quiet?: boolean } = {}) {
     const x = c;
     if (!x) return;
-    if (x.origPk === null) return env.toast("Open a reply to draft one");
+    if (x.origKey === null) return env.toast("Open a reply to draft one");
     if (x.ai) return;   // a generation is already in flight for this composer
     x.ai = "draft";
     publish();
     try {
-      const d = await env.post("/api/ai/draft-reply", { pk: x.origPk, account: x.from, tone: opts.tone ?? env.tone(), instruction: opts.instruction ?? "" }, !opts.quiet);
+      const d = await env.post("/api/ai/draft-reply", { key: x.origKey, account: x.from, tone: opts.tone ?? env.tone(), instruction: opts.instruction ?? "" }, !opts.quiet);
       if (c !== x) return;   // closed (or replaced by another reply) while drafting: not this composer's text
       if (opts.unless !== undefined && x.body !== opts.unless) return;   // a quick reply you've started editing: yours wins
       const had = x.body.trim() && x.body.trim() !== x.sigBlock.trim();
@@ -804,10 +806,10 @@ export function createComposing(env: Env) {
     env.toast("Back to what you had");
   }
 
-  async function quickReply(pk: number, kind: string) {
+  async function quickReply(to: Copy, kind: string) {
     const q = QUICK.find((x) => x.key === kind);
     if (!q || c) return;
-    const x = await reply(pk);
+    const x = await reply(to);
     if (!x || !stillOpen(x)) return;
     const start = q.line + x.sigBlock;
     x.body = start;   // not an edit: nothing to save until you touch it
@@ -818,15 +820,15 @@ export function createComposing(env: Env) {
   }
 
   // Always ask again: the server checks the thread hasn't moved on, so a stale draft is never put in the box.
-  async function openDraftAhead(pk: number, forget: () => void) {
-    if (openingAhead === pk || c) return;
-    openingAhead = pk;
+  async function openDraftAhead(to: Copy, forget: () => void) {
+    if (openingAhead === to.key || c) return;
+    openingAhead = to.key;
     try {
-      const x = await reply(pk);
+      const x = await reply(to);
       if (!x || !stillOpen(x)) return;
       let body: string | null = null;
       try {
-        const d = await env.get(`/api/ai/draft-ahead?pk=${pk}&peek=1`);
+        const d = await env.get(`/api/ai/draft-ahead?key=${to.key}&folder=${encodeURIComponent(to.folder)}&peek=1`);
         if (d?.status === "ready" && d.body) body = d.body;
       } catch { /* treated as not fresh */ }
       if (!stillOpen(x)) return;

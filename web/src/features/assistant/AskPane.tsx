@@ -39,7 +39,7 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
               <div className="ask-srcs-hd">{sources.length} cited source{sources.length === 1 ? "" : "s"}</div>
               <div className="ask-srcs">
                 {sources.map((s) => (
-                  <button className={m.openPk === s.pk ? "ask-src reading" : "ask-src"} key={s.pk} onClick={() => m.openAny(s.pk)}>
+                  <button className={m.openId === `${s.key}:${s.folder}` ? "ask-src reading" : "ask-src"} key={`${s.key}:${s.folder}`} onClick={() => m.openAny({ key: s.key, folder: s.folder })}>
                     <div className="ask-src-from">{s.from}{s.account ? ` · ${shortAddress(s.account)}` : ""}</div>
                     <div className="ask-src-subj">{s.subject || "(no subject)"}</div>
                     <div className="ask-src-snip">{(s.snippet || "").slice(0, 140)}</div>

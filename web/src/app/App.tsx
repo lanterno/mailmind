@@ -1,6 +1,7 @@
 // The app's one view: the rail, the list and the reader, and the keys that work across them.
 import { useEffect, useEffectEvent, useRef } from "react";
 import { post, refusalOf } from "../lib/api/client";
+import { copyId, copyOf } from "../lib/copy";
 import { composing } from "../features/compose/compose";
 import { asking, stopAsking } from "../features/assistant/ask";
 import { AskPane } from "../features/assistant/AskPane";
@@ -88,7 +89,7 @@ function BulkBar({ m }: { m: Mailbox }) {
       {verb("Mark unread", "unread")}
       {verb("Star", "star", "star")}
       {verb("Junk", "junk", "ban", true)}
-      <button className="bb" onClick={(e) => snoozeAsk.set({ target: { pks: [...m.marks] }, rows: [...m.marks], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /> Snooze</button>
+      <button className="bb" onClick={(e) => snoozeAsk.set({ target: { copies: m.markedRows.map(copyOf) }, rows: [...m.marks], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /> Snooze</button>
       {verb("Mute", "mute", "bell-off")}
       <button className="bclear" onClick={clearMarks}>Clear</button>
     </div>
@@ -218,8 +219,8 @@ export function App() {
   useEffect(() => document.body.style.setProperty("--measure", `${WIDTHS[prefs.width]}px`), [prefs.width]);
 
   useSwipe(
-    (pk) => m.file(all.find((r) => r.pk === pk) ?? { pk }, "archive"),
-    (pk) => m.snooze({ pk }, { preset: "tomorrow" }, [pk]),
+    (copy) => m.file(all.find((r) => r.id === copyId(copy)) ?? copy, "archive"),
+    (copy) => m.snooze(copy, { preset: "tomorrow" }, [copyId(copy)]),
   );
   const commands = buildCommands(m, { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m) });
   useKeys(m, commands);
@@ -324,7 +325,7 @@ export function App() {
           {asked ? <AskPane at={asked} m={m} /> : screening ? <ScreenerPane account={m.account} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
-            openPk={m.openPk}
+            openId={m.openId}
             marks={m.marks}
             label={title}
             folder={folder}
@@ -332,7 +333,7 @@ export function App() {
             accountChip={(r) => (source?.kind === "folder" ? null : aliases[r.account] || shortAddress(r.account))}
             onOpen={m.open}
             onFile={m.file}
-            onSnooze={(r, anchor) => snoozeAsk.set({ target: r.count > 1 && r.threadId ? { account: r.account, thread_id: r.threadId } : { pk: r.pk }, rows: [r.pk], anchor, canUnsnooze: false })}
+            onSnooze={(r, anchor) => snoozeAsk.set({ target: r.count > 1 && r.threadId ? { account: r.account, thread_id: r.threadId } : copyOf(r), rows: [r.id], anchor, canUnsnooze: false })}
             onFocusRead={() => setReadFocus(true)}
             empty={empty}
             footer={footer}

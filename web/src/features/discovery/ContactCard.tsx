@@ -28,7 +28,7 @@ function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void 
       {recent.length > 0 && (
         <div className="cc-recent">
           {recent.map((x) => (
-            <button className="cc-thread" key={x.pk} onClick={() => { close(); m.openNamed(x.pk, x.account, x.thread_id); }}>
+            <button className="cc-thread" key={`${x.key}:${x.folder}`} onClick={() => { close(); m.openNamed({ key: x.key, folder: x.folder }, x.account, x.thread_id); }}>
               <span>{x.subject}</span><span className="cc-when">{x.when}</span>
             </button>
           ))}

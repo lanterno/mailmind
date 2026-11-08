@@ -7,7 +7,7 @@ import type { Snoozing, Target } from "../mailbox";
 
 const PRESETS: [string, string][] = [["later_today", "Later today"], ["tomorrow", "Tomorrow 8am"], ["weekend", "This weekend"], ["next_week", "Next week"]];
 
-export interface SnoozeAsk { target: Target; rows: number[]; anchor: Element | null; canUnsnooze: boolean }
+export interface SnoozeAsk { target: Target; rows: string[]; anchor: Element | null; canUnsnooze: boolean }
 export const snoozeAsk = createStore<SnoozeAsk | null>(null);
 
 // A verb the window is too narrow to show opens under ⋯.
@@ -27,7 +27,7 @@ function Choices({ ask, pick, unsnooze }: { ask: SnoozeAsk; pick: (when: Snoozin
   );
 }
 
-export function SnoozeMenu({ onSnooze, onUnsnooze }: { onSnooze: (t: Target, when: Snoozing, rows: number[]) => void; onUnsnooze: () => void }) {
+export function SnoozeMenu({ onSnooze, onUnsnooze }: { onSnooze: (t: Target, when: Snoozing, rows: string[]) => void; onUnsnooze: () => void }) {
   const ask = snoozeAsk.useValue();
   const close = () => snoozeAsk.set(null);
   if (!ask) return null;

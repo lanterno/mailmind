@@ -2,6 +2,7 @@
 // type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, or a search.
 import { useSyncExternalStore } from "react";
 import { navigate } from "../lib/backTrap";
+import type { Copy } from "../lib/copy";
 
 export type ListSource =
   | { kind: "folder"; account: string; folder: string }
@@ -15,7 +16,9 @@ export type DigestList = { list: "needs" | "tidy" } | { list: "topic"; label: st
 // Two built-in views read better as something other than rows. The query is the same either way.
 export type Lane = "feed" | "papertrail";
 
-export type Opened = { kind: "message"; pk: number } | { kind: "thread"; id: string; pk: number; account: string } | null;
+// What is open names a copy, by its key and folder: a link kept from before a move or a renumber still opens the message it
+// named, or nothing. A conversation names the copy it opened on, and the thread.
+export type Opened = ({ kind: "message" } & Copy) | ({ kind: "thread"; id: string; account: string } & Copy) | null;
 
 // `brief` is the phone's way to say the brief is showing: there a pane is either the list or what's open.
 export interface Route { source: ListSource | null; opened: Opened; brief?: boolean }
@@ -35,11 +38,13 @@ export function pathOf({ source, opened, brief }: Route): string {
   }
   else if (source?.kind === "digest") path += source.list === "topic" ? `/brief/topic/${seg(source.label)}` : `/brief/${source.list}`;
   if (brief) query.set("brief", "1");
-  if (opened?.kind === "message") query.set("m", String(opened.pk));
-  else if (opened?.kind === "thread") {
+  if (opened?.kind === "thread") {
     query.set("c", opened.id);
-    query.set("m", String(opened.pk));
     query.set("ca", opened.account);
+  }
+  if (opened) {
+    query.set("key", String(opened.key));
+    query.set("folder", opened.folder);
   }
   const q = query.toString();
   return `${path || "/"}${q ? `?${q}` : ""}`;
@@ -57,11 +62,11 @@ export function parseRoute(pathname: string, search: string): Route {
   }
   else if (parts[0] === "brief" && (parts[1] === "needs" || parts[1] === "tidy")) source = { kind: "digest", list: parts[1] };
   else if (parts[0] === "brief" && parts[1] === "topic" && parts[2]) source = { kind: "digest", list: "topic", label: parts[2] };
-  const pk = Number(q.get("m"));
+  const key = Number(q.get("key")), folder = q.get("folder");
   let opened: Opened = null;
-  if (Number.isInteger(pk) && pk > 0) {
+  if (/^[1-9]\d*$/.test(q.get("key") ?? "") && Number.isSafeInteger(key) && folder) {
     const thread = q.get("c");
-    opened = thread ? { kind: "thread", id: thread, pk, account: q.get("ca") ?? "" } : { kind: "message", pk };
+    opened = thread ? { kind: "thread", id: thread, account: q.get("ca") ?? "", key, folder } : { kind: "message", key, folder };
   }
   return q.get("brief") === "1" ? { source, opened, brief: true } : { source, opened };
 }

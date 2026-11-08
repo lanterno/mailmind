@@ -1,6 +1,8 @@
 // How a mail looks in its frame, where its frame loads it from, and the whole document a composer's quote shows. A body's
 // document comes from the server with no style of its own, so its look is the page's to give and a change of it fetches
 // nothing. Pure, given the theme's colors.
+import type { Copy } from "../../lib/copy";
+
 export interface FrameTheme { light: boolean; bg: string; panel: string; ink: string; primaryInk: string; lineHi: string; mute: string }
 export interface MailPrefs { colors: "auto" | "dark" | "original"; font: string; lineHeight: number; sizePx: number }
 // What a frame's document is given: a stylesheet, and whether the mail is inverted to darken it.
@@ -10,7 +12,9 @@ const POLICY = "default-src 'none'; script-src 'none'; object-src 'none'; base-u
 const HEAD = `<meta http-equiv="Content-Security-Policy" content="${POLICY}"><meta name="referrer" content="no-referrer">`;
 const QUOTE = "details.mm-quote{margin:10px 0}details.mm-quote>summary{cursor:pointer;list-style:none;color:#8a8a8a;font-size:12px;padding:3px 9px;border:1px solid #8a8a8a66;border-radius:6px;display:inline-block}details.mm-quote>summary::-webkit-details-marker{display:none}details.mm-quote[open]>summary{margin-bottom:8px}";
 
-export const bodyUrl = (pk: number, key: number, images: boolean) => `/api/message/${pk}/body.html?key=${key}&images=${images ? 1 : 0}`;
+// A copy's document: the message's key and the folder of the copy, which name no other message's however its row moves.
+export const bodyUrl = (copy: Copy, images: boolean) =>
+  `/api/message/body.html?key=${copy.key}&folder=${encodeURIComponent(copy.folder)}&images=${images ? 1 : 0}`;
 
 export function foldPlainQuote(t: string): { head: string; quoted: string } | null {
   const lines = t.split("\n");

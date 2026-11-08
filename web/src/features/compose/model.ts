@@ -27,7 +27,7 @@ export interface GuardView {
 
 export interface OpenOptions {
   mode?: Mode; from?: string | undefined; to?: string[]; cc?: string[]; bcc?: string[];
-  subject?: string; subject0?: string; origPk?: number | null; quote?: Quote | null; draftId?: number | null | undefined; version?: number | null;
+  subject?: string; subject0?: string; origKey?: number | null; quote?: Quote | null; draftId?: number | null | undefined; version?: number | null;
   resume?: ResumeFields | null; fwdAttach?: number; noSig?: boolean; autoCc?: string[] | null;
   participants?: string[]; ack?: Partial<Ack> | null; body?: string; attachments?: Attachment[]; note?: string;
 }
@@ -43,7 +43,7 @@ export interface Composer {
   subject: string; subject0: string;
   body: string;
   sigBlock: string;
-  origPk: number | null;
+  origKey: number | null;   // the message a reply or forward is of, by its key
   quote: Quote | null;
   draftId: number | null;
   version: number | null;   // the save this composer last saw, so one it never saw isn't overwritten
@@ -136,7 +136,7 @@ const fileParts = (c: Composer) => c.attachments.map((a) => ({ filename: a.filen
 
 export interface Payload {
   account: string; mode: Mode; idempotency_key: string; draft_id: number | null;
-  to: string[]; cc: string[]; bcc: string[]; subject: string; text: string; in_reply_to_pk: number | null;
+  to: string[]; cc: string[]; bcc: string[]; subject: string; text: string; original_key: number | null;
   attachments: { filename: string; content_type: string; b64: string }[];
   resume?: ResumeFields; send_after?: number; autosave?: boolean; base_version?: number;
 }
@@ -145,7 +145,7 @@ export function payloadOf(c: Composer): Payload {
   return {
     account: c.from, mode: c.mode, idempotency_key: c.idk, draft_id: c.draftId,
     to: c.to.map((x) => x.v), cc: c.cc.map((x) => x.v), bcc: c.bcc.map((x) => x.v),
-    subject: c.subject, text: c.body, in_reply_to_pk: c.origPk, attachments: fileParts(c),
+    subject: c.subject, text: c.body, original_key: c.origKey, attachments: fileParts(c),
     ...resumeFields(c.resume),
   };
 }
