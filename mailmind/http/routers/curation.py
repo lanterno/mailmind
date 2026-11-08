@@ -14,12 +14,10 @@ from mailmind.http.schemas.curation import (
     RuleBody,
     RuleBook,
     RuleChanged,
-    RuleRefused,
     ScreenerArgs,
     ScreenerQueue,
     SenderArgs,
     SenderPreview,
-    SenderRefused,
     SweepBody,
     Swept,
 )
@@ -36,7 +34,7 @@ def router(curation):
     def rules():
         return {"rules": curation.rules.load()}
 
-    @r.post("/api/rules", responses=answers(RuleChanged | RuleRefused))
+    @r.post("/api/rules", responses=answers(RuleChanged))
     def rule(body: RuleBody):
         return curation.screener.rule(body.model_dump(exclude_unset=True))
 
@@ -52,7 +50,7 @@ def router(curation):
     def cleanup_senders():
         return curation.cleanup.senders()
 
-    @r.get("/api/cleanup/sender", responses=answers(SenderPreview | SenderRefused))
+    @r.get("/api/cleanup/sender", responses=answers(SenderPreview))
     def cleanup_sender(args: Annotated[SenderArgs, Query()]):
         return curation.cleanup.sender(args.as_query())
 

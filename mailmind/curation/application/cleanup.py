@@ -8,7 +8,7 @@ from typing import Any
 from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBookRepository, SenderMail
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
-from mailmind.kernel.errors import Refused
+from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.when import now_iso, rel_time
 from mailmind.platform.perimeter import tokens
 
@@ -49,13 +49,14 @@ class Cleanup:
 
     def sender(self, qs: Query) -> dict[str, Any]:
         """Mandatory-preview detail for ONE sender: authoritative unsubscribe method + the exact INBOX
-        messages a sweep would move + a confirm_token that the execute route requires."""
+        messages a sweep would move + a confirm_token that the execute route requires. Raises Refused for an address that
+        won't read, and NotFound for a sender with no mail stored."""
         addr = cleanup_plan.sender_named((qs.get("addr") or [""])[0])
         if addr is None:
-            return {"ok": False, "error": "bad address"}
+            raise Refused("bad address")
         n, unseen = self._mail.counts(addr)
         if not n:
-            return {"ok": False, "error": "no such sender"}
+            raise NotFound("no such sender")
         targets, capped = cleanup_plan.within_cap(self._mail.sweep_targets(addr, cleanup_plan.to_read()))
         info, accts = self._unsub.resolve(addr)
         affected = [{"pk": t["pk"], "account": t["account"], "folder": t["folder"],

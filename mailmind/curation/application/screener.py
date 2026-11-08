@@ -4,6 +4,7 @@ from typing import Any
 
 from mailmind.curation.application.ports import FilingCommands, Mailboxes, RuleBookRepository, SenderMail
 from mailmind.curation.domain import rulebook
+from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import rel_time
 
 SHOWN = 100         # the most the queue lists, of however many are left to decide on
@@ -24,19 +25,20 @@ class Screener:
         return {"ok": True, "account": account, "items": items[:SHOWN], "total": len(items)}
 
     def rule(self, b: Mapping[str, Any]) -> dict[str, Any]:
-        """A keep, block or remove from the person, on a sender or a domain."""
+        """A keep, block or remove from the person, on a sender or a domain. Raises Refused for one that names neither, or
+        no verdict it knows."""
         token = rulebook.token_of(b.get("token") or "")
         verdict = b.get("verdict")
         pk = b.get("pk")
         if not rulebook.is_token(token):
-            return {"ok": False, "msg": "invalid token (need a domain or an address)"}
+            raise Refused("invalid token (need a domain or an address)")
         if verdict == "remove":
             self._rules.remove(token)
             placed = None
         elif verdict in rulebook.VERDICTS:
             _, placed = self._rules.add(token, verdict)
         else:
-            return {"ok": False, "msg": "verdict must be keep|block|remove"}
+            raise Refused("verdict must be keep|block|remove")
         trashed = False
         if verdict == "block" and pk is not None:  # close the loop: block also trashes now
             try:                                   # serialized with every other live-IMAP op

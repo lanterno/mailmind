@@ -58,11 +58,6 @@ class RuleChanged(Answer):
     rules: Rules
 
 
-class RuleRefused(Answer):
-    ok: Literal[False]
-    msg: str
-
-
 class AuditEvent(Answer):
     """A line of an audit trail: a sweep's message, a sender's cleanup or a reconcile's count."""
     kind: str
@@ -151,11 +146,6 @@ class SenderPreview(Answer):
     sweep_capped: bool
     reversible: Reversible
     confirm_token: str
-
-
-class SenderRefused(Answer):
-    ok: Literal[False]
-    error: str
 
 
 class CleanedUp(Answer):
