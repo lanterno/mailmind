@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-SANDBOX_REFUSAL = re.compile(r"Blocked script execution in '(about:srcdoc|about:blank|[^']*/api/message/body\.html\?[^']*)' because the "
+SANDBOX_REFUSAL = re.compile(r"Blocked script execution in '(about:srcdoc|about:blank|[^']*/api/message/(?:body|attachment/preview)\.html\?[^']*)' because the "
                              r"document's frame is sandboxed and the 'allow-scripts' permission is not set\.")
 # What Chromium says of anything a content security policy refuses.
 CSP_VIOLATION = "violates the following Content Security Policy directive"

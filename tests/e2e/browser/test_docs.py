@@ -1,5 +1,8 @@
 """The Document Hub: every attachment across accounts, filtered and paged by the server."""
 import re
+import struct
+import zlib
+from email.message import EmailMessage
 
 import pytest
 from axe_playwright_python.sync_playwright import Axe
@@ -59,6 +62,71 @@ def docs(page):
 
 def matched(page):
     return page.evaluate("fetch('/api/documents?limit=1').then(r => r.json()).then(d => d.matched)")
+
+
+def a_png(side=24):
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+    pixels = b"".join(b"\x00" + b"\xd0\x30\x30" * side for _ in range(side))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
+
+
+def a_stored_file(world, data, filename, maintype, subtype):
+    """A message that really holds the file, with its body stored as the backfill would."""
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = "Dee <dee@example.test>", w.ADA, "A file for you"
+    m["Message-ID"], m["Date"] = f"<hub-{filename}@example.test>", "Mon, 02 Nov 2026 09:00:00 +0000"
+    m.set_content("Attached.")
+    m.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
+    uid = world.deliver(w.ADA, "INBOX", m.as_bytes())
+    from mailmind.bootstrap.mailbox import ingest, store
+    c = store.conn()
+    try:
+        pk = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", (w.ADA, uid)).fetchone()["pk"]
+    finally:
+        c.close()
+    ingest.fetch_body(pk)
+
+
+def test_an_image_previews_in_place_in_a_frame_that_can_do_nothing(page, world):
+    a_stored_file(world, a_png(), "photo.png", "image", "png")
+    docs(page)
+    button = page.get_by_role("button", name="Preview photo.png")
+    expect(button).to_have_attribute("aria-expanded", "false")
+    with page.pw.expect_response(re.compile(r"/api/message/attachment/preview\.html")) as answer:
+        button.click()
+    assert answer.value.status == 200
+    frame = page.locator("iframe.doc-preview")
+    expect(frame).to_have_attribute("sandbox", "")
+    expect(frame).to_have_attribute("title", "Preview of photo.png")
+    expect(button).to_have_attribute("aria-expanded", "true")
+    assert page.pw.evaluate("document.querySelector('iframe.doc-preview').contentDocument") is None   # no origin to share
+    expect(page.frame_locator("iframe.doc-preview").locator("img")).to_be_visible(timeout=5000)
+    button.click()
+    expect(frame).to_have_count(0)
+    clean(page)
+
+
+def test_a_file_that_isnt_an_image_offers_no_preview(page, world):
+    a_stored_file(world, b"%PDF-1.4 x", "paper.pdf", "application", "pdf")
+    a_stored_file(world, b'<svg xmlns="http://www.w3.org/2000/svg"/>', "logo.svg", "image", "svg+xml")
+    docs(page)
+    expect(page.locator(".doc-row", has_text="paper.pdf")).to_have_count(1)
+    expect(page.get_by_role("button", name=re.compile("Preview"))).to_have_count(0)
+    clean(page)
+
+
+def test_only_one_image_previews_at_a_time(page, world):
+    a_stored_file(world, a_png(), "one.png", "image", "png")
+    a_stored_file(world, a_png(30), "two.png", "image", "png")
+    docs(page)
+    page.get_by_role("button", name="Preview one.png").click()
+    expect(page.locator("iframe.doc-preview")).to_have_attribute("title", "Preview of one.png")
+    page.get_by_role("button", name="Preview two.png").click()
+    expect(page.locator("iframe.doc-preview")).to_have_count(1)
+    expect(page.locator("iframe.doc-preview")).to_have_attribute("title", "Preview of two.png")
+    clean(page)
 
 
 def test_the_hub_shows_more_and_keeps_your_place(page, world):
