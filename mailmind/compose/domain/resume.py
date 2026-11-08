@@ -13,7 +13,7 @@ from typing import Literal, TypedDict, get_args
 from mailmind.compose.domain import limits
 from mailmind.kernel.errors import Unreadable
 from mailmind.content.headers import header_chips, header_text
-from mailmind.content.mime import Parsed, decoded, parse
+from mailmind.content.mime import Parsed, decoded, parse, part_bytes, walk
 from mailmind.kernel import addresses
 from mailmind.kernel.row import Row
 
@@ -161,19 +161,18 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
     many were pictures in the text: every part must come back as the text or a file, or this
     raises Unreadable. Headers parse as they're read, so a hostile one raises here as well."""
     lost = "Part of this draft is something MailMind can’t reopen without losing it." + ELSEWHERE
-    if any(p.get_content_maintype() == "message" for p in msg.walk() if p is not msg):
-        raise Unreadable("This draft has an email attached as a file, which MailMind can’t "
-                         "reattach yet." + ELSEWHERE)
     if any(p.get_content_maintype() == "multipart" and not p.is_multipart() and str(p.get_payload() or "").strip()
-           for p in msg.walk()):                         # data in a "container" with no boundary: no reader lists it
+           for p in walk(msg)):                          # data in a "container" with no boundary: no reader lists it
         raise Unreadable(lost)
-    leaves = [p for p in msg.walk() if p.get_content_maintype() != "multipart"]   # parse()'s part_id order
+    leaves = [p for p in walk(msg) if p.get_content_maintype() != "multipart"]    # parse()'s part_id order
+    if any(p.get_content_maintype() == "message" and p.get_content_type() != "message/rfc822" for p in leaves):
+        raise Unreadable(lost)                           # a delivery report and the like: its file wouldn't be whole
     listed = {int(a["part_id"]) for a in parsed["attachments"]}
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
     covered: set[int] = set()                            # HTML that the text parse() read is the alternative to
-    for p in msg.walk():
+    for p in walk(msg):
         if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
-            covered |= {id(x) for x in p.walk() if x.get_content_type() == "text/html"}
+            covered |= {id(x) for x in walk(p) if x.get_content_type() == "text/html"}
     bodies: set[str] = set()
     for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
         ct = p.get_content_type()
@@ -192,7 +191,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
     total = inline = 0
     for a in parsed["attachments"]:
         part = leaves[int(a["part_id"]) - 1]
-        data = decoded(part) or b""
+        data = part_bytes(part)                          # an attached email is one part, parsed, with nothing to decode
         ct = (part.get_content_type() or "application/octet-stream").lower()
         total += len(data)
         if total > limits.MAX_ATTACH_BYTES:
