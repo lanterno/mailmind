@@ -2,7 +2,7 @@
   "name": "mailmind-web",
   "private": true,
   "type": "module",
-  "workspaces": ["lint"],
+  "workspaces": ["lint", "gen-api"],
   "scripts": {
     "build": "vite build",
     "lint": "eslint --max-warnings 0",
